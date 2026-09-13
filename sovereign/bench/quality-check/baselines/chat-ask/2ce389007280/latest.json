@@ -1,0 +1,17 @@
+{
+  "schema": "quality-check/chat-ask-baseline/v1",
+  "stage_ms": {
+    "q1:audit": 16632.0,
+    "q1:citation": 9639.0,
+    "q1:draft": 16489.0,
+    "q1:gate — unattributed": 603.0,
+    "q1:retrieval": 232.0,
+    "q1:turn — unattributed": 22.0,
+    "q2:audit": 15286.0,
+    "q2:draft": 27688.0,
+    "q2:gate — unattributed": 3.0,
+    "q2:retrieval": 142.0,
+    "q2:turn — unattributed": 23.0
+  },
+  "host_load_1m": 2.36572265625
+}

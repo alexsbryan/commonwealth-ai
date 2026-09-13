@@ -358,7 +358,21 @@ pub async fn run(args: &[String]) -> i32 {
     }
 
     let base = sovereign_cli_shared::urls::daemon_base_url();
-    let fingerprint = match compute_fingerprint(&repo, &lanes, &base).await {
+    // THE VENUE'S DECLARED LANES, NOT THIS RUN'S SELECTION. The fingerprint
+    // names the STACK a number may be compared against, and which lanes an
+    // operator happened to pass `--lane` for is not a property of the stack.
+    // Folding the SELECTED lanes' bank hashes in made every `--lane` run
+    // compute an id no full run could ever match: on 2026-09-13 the same box,
+    // same primary/fast/embed, same smoke subsets and same bank bytes produced
+    // `2ce389007280` for the 8-lane run and `46f129ed0860` for a single-lane
+    // one — so every lane reported "first run for stack X, no baseline" twice
+    // in a row and minting one would have created a third orphan namespace.
+    // Hashing the venue's declared set keeps the guarantee the bank hashes are
+    // here for (a changed bank still moves the id, so a number is never
+    // compared across banks) while making the id stable across lane selection
+    // and identical on any box with the same repo and models — which is the
+    // point on CI and on a second workstation.
+    let fingerprint = match compute_fingerprint(&repo, &in_venue, &base).await {
         Ok(f) => f,
         Err(e) => {
             eprintln!("error: {e}");

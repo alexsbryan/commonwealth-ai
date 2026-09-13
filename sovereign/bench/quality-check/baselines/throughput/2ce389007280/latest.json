@@ -1,0 +1,77 @@
+{
+  "lane": "throughput",
+  "captured_at": "2026-09-13T16:34:21.264354245+00:00",
+  "model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K",
+  "model_attribution": {
+    "file_stem": "Qwen3.6-35B-A3B-MTP-UD-Q6_K",
+    "quant": "Q6_K"
+  },
+  "host_load_1m": 3.43505859375,
+  "metrics": {
+    "e2e.total_latency_ms": {
+      "value": 13397.0,
+      "direction": "lower_is_better",
+      "tolerance": 0.3
+    },
+    "fast/long.decode_tps": {
+      "value": 55.91243959972872,
+      "direction": "higher_is_better",
+      "tolerance": 0.1
+    },
+    "fast/long.prefill_tps": {
+      "value": 772.2484009714036,
+      "direction": "higher_is_better",
+      "tolerance": 0.25
+    },
+    "fast/long.ttft_ms": {
+      "value": 3866.631509037688,
+      "direction": "lower_is_better",
+      "tolerance": 0.25
+    },
+    "fast/short.decode_tps": {
+      "value": 46.16409986573209,
+      "direction": "higher_is_better",
+      "tolerance": 0.1
+    },
+    "fast/short.prefill_tps": {
+      "value": 163.94630273347866,
+      "direction": "higher_is_better",
+      "tolerance": 0.25
+    },
+    "fast/short.ttft_ms": {
+      "value": 402.5708350818604,
+      "direction": "lower_is_better",
+      "tolerance": 0.25
+    },
+    "primary/long.decode_tps": {
+      "value": 53.41911419809644,
+      "direction": "higher_is_better",
+      "tolerance": 0.1
+    },
+    "primary/long.prefill_tps": {
+      "value": 786.0095725612421,
+      "direction": "higher_is_better",
+      "tolerance": 0.25
+    },
+    "primary/long.ttft_ms": {
+      "value": 10212.34381897375,
+      "direction": "lower_is_better",
+      "tolerance": 0.25
+    },
+    "primary/short.decode_tps": {
+      "value": 46.3747163615999,
+      "direction": "higher_is_better",
+      "tolerance": 0.1
+    },
+    "primary/short.prefill_tps": {
+      "value": 165.1115093009247,
+      "direction": "higher_is_better",
+      "tolerance": 0.25
+    },
+    "primary/short.ttft_ms": {
+      "value": 399.7298569884151,
+      "direction": "lower_is_better",
+      "tolerance": 0.25
+    }
+  }
+}
