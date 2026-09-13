@@ -1446,6 +1446,42 @@ action**: `LocalCorpusManager::reset_enrichment_state`, reachable at `POST
 sidecar; the corpus then enriches again on the normal path. Every skip says
 so at `info` and names that path.
 
+**The NER inference seam is input-bounded (2026-09-12).**
+`sovereign/crates/sovereign-gliner/src/bounded_input.rs` is the ONE
+implementation: `BoundedInputs::plan` splits a caller's texts into batches
+of at most `MAX_BATCH_CHUNKS` (16) and holds back anything over
+`MAX_CHUNK_CHARS` (2,048); `BoundedInputs::extract` drives the batches and
+reassembles results in input order. Both `GlinerChunkExtractor` entry
+points — `extract_for_conversation` and `extract_delta_for_corpus`
+(`sovereign/crates/sovereign-gliner/src/chunk_extractor.rs`) — go through
+it, and neither hands `LabeledEntityExtractor::extract_mentions_batch` a
+raw slice any more.
+
+`MAX_BATCH_CHUNKS` is the bound that stops the incident: gline-rs runs one
+`inference()` per batch, so peak arena is linear in N, and
+`extract_for_conversation` previously passed EVERY chunk of a conversation
+in one call. `MAX_CHUNK_CHARS` is derived from the model — gline-rs's
+`Parameters::default().max_length` is `Some(512)` WORDS, enforced by
+breaking out of `RegexSplitter`'s token loop, i.e. a silent truncation
+with no error and no report — and 512 × 4 chars/word is 2,048. Both
+numbers, and what would change them, are in
+[`sovereign/DEFAULTS_LEDGER.md`](DEFAULTS_LEDGER.md).
+
+**A refused chunk is reported, not truncated (ARCH 6).** Over-cap chunks
+are not sent and not shortened. Each gets a `warn` naming corpus,
+conversation, chunk id and length; the count leaves the pass on
+`ChunkNerOutcome::refused_over_cap`
+(`corpus-engine/src/enrichment/tiered.rs`, which replaced both extractor
+methods' bare `usize` so a caller cannot drop the number), and the runners
+stamp it onto `_enrichment_state.json` as `refused_over_cap_chunks` via
+`EnrichmentStateFile::record_refused_over_cap`. So "this corpus's entities
+are thin because N chunks were too long for the model" is a fact on disk.
+A large `refused_over_cap_chunks` is a signal about the CHUNKER, not a
+reason to raise the ceiling — `threaded_turns`
+(`corpus-engine/src/chunkers/threaded_turns.rs`) already caps a chunk at
+2,100 chars, which is why the incident was thousands of SHORT chunks in
+one call rather than a few long ones.
+
 The incident: corpus `agent-sessions` (this machine's Claude Code
 transcripts as `threaded_turns` chunks, `[enrichment] type = "tiered"`)
 stalled at 12:09 local on 2026-09-12 and was re-entered on every daemon

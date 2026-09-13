@@ -175,6 +175,17 @@ pub struct EnrichmentState {
     pub completed_at: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// Chunks the per-chunk NER pass REFUSED because they exceeded the
+    /// inference seam's per-chunk input bound
+    /// (`sovereign-gliner/src/bounded_input.rs::MAX_CHUNK_CHARS`). Refused
+    /// whole — never truncated — so this is the honest reason a corpus's
+    /// `chunk_entities` are thinner than its chunk count implies, rather
+    /// than a silent half-answer (ARCH 6). Written by
+    /// [`EnrichmentStateFile::record_refused_over_cap`] at the end of a
+    /// run; `serde(default)` so every sidecar written before 2026-09-12
+    /// still parses.
+    #[serde(default)]
+    pub refused_over_cap_chunks: u64,
 }
 
 fn default_schema_version() -> u32 {
@@ -252,6 +263,7 @@ impl EnrichmentState {
             last_progress_at: now,
             completed_at: None,
             error: None,
+            refused_over_cap_chunks: 0,
         }
     }
 }
@@ -344,6 +356,27 @@ impl EnrichmentStateFile {
     /// this gate prevents (the same rule `watched_folder_errored` follows).
     pub fn declared_dead_at(index_dir: &Path) -> bool {
         matches!(Self::read(index_dir), Ok(Some(s)) if s.declared_dead())
+    }
+
+    /// Record how many chunks the per-chunk NER pass REFUSED for
+    /// exceeding the inference seam's per-chunk input bound. Written once
+    /// at the end of a run, on top of whatever terminal phase the runner
+    /// stamped — it describes the run, not a phase transition, so it does
+    /// not touch `phase`, `last_progress_at` or `error`.
+    ///
+    /// No-op when `refused == 0` (the happy path pays one branch, not one
+    /// read + one write) and when the sidecar is absent. This is a report,
+    /// never a verdict: a refusal is not a failure, it is the pass saying
+    /// which inputs it declined instead of quietly shipping a truncation.
+    pub fn record_refused_over_cap(index_dir: &Path, refused: u64) -> Result<()> {
+        if refused == 0 {
+            return Ok(());
+        }
+        let Some(mut state) = Self::read(index_dir)? else {
+            return Ok(());
+        };
+        state.refused_over_cap_chunks = refused;
+        Self::write(index_dir, &state)
     }
 
     /// Mark the state file as failed, capturing the error message.

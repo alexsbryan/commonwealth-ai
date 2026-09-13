@@ -20,8 +20,8 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use corpus_engine::enrichment::tiered::{
-    run_tiered_enrichment, ChunkEntityExtractor, ChunkEntityExtractorHandle, ConvBucket,
-    TieredEnrichmentProvider, TieredProviderHandle,
+    run_tiered_enrichment, ChunkEntityExtractor, ChunkEntityExtractorHandle, ChunkNerOutcome,
+    ConvBucket, TieredEnrichmentProvider, TieredProviderHandle,
 };
 use corpus_engine::index::{EnrichmentChunkRow, InsertChunk, InsertCodeMeta};
 use corpus_engine::recipe::Recipe;
@@ -77,13 +77,13 @@ impl ChunkEntityExtractor for RecordingExtractor {
         corpus_id: &str,
         conv_uuid: &str,
         chunks: Vec<EnrichmentChunkRow>,
-    ) -> Result<usize> {
+    ) -> Result<ChunkNerOutcome> {
         self.calls.lock().unwrap().push((
             corpus_id.to_string(),
             conv_uuid.to_string(),
             chunks.iter().map(|c| c.content.clone()).collect(),
         ));
-        Ok(chunks.len() * 2)
+        Ok(ChunkNerOutcome::mentions(chunks.len() * 2))
     }
 }
 

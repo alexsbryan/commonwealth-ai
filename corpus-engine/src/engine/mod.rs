@@ -908,15 +908,22 @@ impl CorpusEngine {
         }
         let index_path = self.index_dir.join(corpus_id);
         if let Some(extractor) = self.chunk_entity_extractor.as_ref() {
-            if let Err(e) = extractor
+            match extractor
                 .extract_delta_for_corpus(corpus_id, &index_path)
                 .await
             {
-                tracing::warn!(
+                // A refusal is not a failure, but it is not nothing
+                // either — record it where the operator already looks.
+                Ok(o) => crate::enrichment::tiered::report_refused_over_cap(
+                    &index_path,
+                    corpus_id,
+                    o.refused_over_cap as u64,
+                ),
+                Err(e) => tracing::warn!(
                     corpus = corpus_id,
                     error = %e,
                     "tiered incremental: chunk-entity delta extraction failed; continuing"
-                );
+                ),
             }
         }
         if let Some(provider) = self.tiered_provider.as_ref() {

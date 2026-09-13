@@ -30,6 +30,58 @@ store (ids cited per row).
 
 ## DARK — proven or plausible, awaiting a named condition
 
+### GLiNER input bound — `MAX_CHUNK_CHARS` 2,048 / `MAX_BATCH_CHUNKS` 16, shipped ON (enrich-bounded-1, 2026-09-12)
+
+**What ships.** `sovereign-gliner/src/bounded_input.rs` bounds every input
+reaching the per-chunk NER seam: a text over `MAX_CHUNK_CHARS` is REFUSED
+(never truncated) and counted, and no single `extract_mentions_batch` call
+carries more than `MAX_BATCH_CHUNKS` texts. Both `GlinerChunkExtractor`
+entry points go through it. There is no env knob and no off switch — this
+is a guard, not an experiment — but the two numbers are defaults and this
+row is where they come from.
+
+**Where 2,048 came from — the model, not a guess.** gline-rs's
+`Parameters::default()` sets `max_length: Some(512)`
+(`gline-rs-1.0.1/src/model/params.rs:23`, `Default` impl at :33) and
+`sovereign-gliner` passes `Parameters::default()` verbatim; a grep for
+`Parameters::new|with_max_length` across `sovereign-gliner/src` returns
+nothing (2026-09-12). The unit is WORDS from `RegexSplitter`
+(`gline-rs-1.0.1/src/text/splitter.rs:38-47`, pattern
+`\w+(?:[-_]\w+)*|\S`), and the limit is enforced by BREAKING out of the
+token loop — a silent truncation with no error and no report. 512 words ×
+4 chars/word = 2,048, conservative for English prose and about right for
+punctuation-dense agent transcripts where `|\S` makes every bracket its own
+word. So a text under the ceiling is one gline-rs would not have cut.
+
+**Where 16 came from — nowhere, and that is the point of this row.** It is
+a batch-size default: the smallest power of two that still keeps v1's
+native batching worth having (the trait's looping fallback is N=1). It is
+NOT tuned. Peak arena is linear in it (gline-rs runs one `inference()` per
+batch), so 16 turns tens of GB into hundreds of MB; the THROUGHPUT cost of
+choosing 16 over 32 or 64 has not been measured.
+
+**Flip condition.** Two, independent:
+- `MAX_BATCH_CHUNKS`: a measured NER wall-clock comparison at 16 / 32 / 64
+  on a real conversation corpus, with peak RSS recorded per arm. Raise to
+  the largest arm whose peak RSS stays inside the daemon's idle budget.
+  Until that run exists, 16 stands on the incident, not on a number.
+- `MAX_CHUNK_CHARS`: the first corpus whose
+  `_enrichment_state.json.refused_over_cap_chunks` is a large fraction of
+  its chunk count. That is not a signal to raise the ceiling — the model
+  cannot read those inputs either way — it is a signal that the CHUNKER is
+  emitting units the model cannot use, and the fix belongs there.
+
+**Settles via.** The `refused_over_cap_chunks` field is the instrument for
+the second; the first needs a bench arm that does not exist yet, and is
+banked rather than claimed.
+
+**Review by 2026-12-12.**
+
+**Why it is not off.** The incident it prevents is a host-level failure:
+corpus `agent-sessions` took the daemon 20.2 GB → 79.9 GB in eight minutes
+with zero requests and two jetsam SIGTERMs (pid 47944, 2026-09-12).
+A default-off guard would have been off during that.
+
 ### `search_web` stays in the app — a DECLARED exception on egress custody (sv-surface svt-3b, 2026-09-11)
 
 **What stays local.** `search_web` (`commands/models.rs`) dispatches a web

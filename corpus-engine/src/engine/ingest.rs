@@ -1927,13 +1927,16 @@ impl CorpusEngine {
                         .extract_delta_for_corpus(&recipe.corpus.id, index_path)
                         .await
                     {
-                        Ok(0) => tracing::debug!(
+                        Ok(o) if o.mentions == 0 && o.refused_over_cap == 0 => {
+                            tracing::debug!(
+                                corpus = %recipe.corpus.id,
+                                "phase_b: incremental NER — no new chunks since last extraction"
+                            )
+                        }
+                        Ok(o) => tracing::info!(
                             corpus = %recipe.corpus.id,
-                            "phase_b: incremental NER — no new chunks since last extraction"
-                        ),
-                        Ok(n) => tracing::info!(
-                            corpus = %recipe.corpus.id,
-                            new_mentions = n,
+                            new_mentions = o.mentions,
+                            refused_over_cap = o.refused_over_cap,
                             "phase_b: incremental NER complete"
                         ),
                         Err(e) => tracing::warn!(

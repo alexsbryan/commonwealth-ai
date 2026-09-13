@@ -50,5 +50,8 @@ tokenizers = "0.21"
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 anyhow = { workspace = true }
+# `tests/bounded_seam.rs` drives the real GlinerChunkExtractor against a
+# recording inference seam and a throwaway state store.
+tempfile = { workspace = true }
 # `ndarray` for tensor I/O in the SP1 spike probe (examples/gliner2_probe.rs).
 ndarray = "0.16"

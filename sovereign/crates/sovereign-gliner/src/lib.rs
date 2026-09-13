@@ -11,6 +11,9 @@
 //! exactly the four binaries that need it and absent everywhere else, so
 //! there is no feature and no unification split.
 //!
+//! - [`bounded_input`] — the input bound every ingest path applies
+//!   before inference: a per-chunk char ceiling and a per-call batch
+//!   ceiling, with over-cap chunks REFUSED and counted, never truncated.
 //! - [`gliner_ner`] — the v1 `GlinerExtractor` model wrapper + the
 //!   model-management helpers shared by BOTH generations (`models_root`,
 //!   `model_spec`, `probe_model_available`, `download_model`, …).
@@ -27,6 +30,7 @@
 //! constructor refuses the other's model ids by generation rather than
 //! failing deep inside `ort` with a shape error.
 
+pub mod bounded_input;
 pub mod gliner2;
 pub mod gliner_ner;
 pub mod labeled;

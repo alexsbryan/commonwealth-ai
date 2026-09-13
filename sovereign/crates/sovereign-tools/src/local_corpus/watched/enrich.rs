@@ -679,11 +679,22 @@ impl EnrichmentDriver {
                     .extract_delta_for_corpus(&corpus_id_owned, &index_path_owned)
                     .await
                 {
-                    Ok(n) => tracing::info!(
-                        corpus_id = %corpus_id_owned,
-                        mentions = n,
-                        "tiered_driver: GliNER delta complete"
-                    ),
+                    Ok(o) => {
+                        // A refusal is not a failure, but it is not
+                        // nothing either — record it where the operator
+                        // already looks (ARCH 6).
+                        corpus_engine::enrichment::tiered::report_refused_over_cap(
+                            &index_path_owned,
+                            &corpus_id_owned,
+                            o.refused_over_cap as u64,
+                        );
+                        tracing::info!(
+                            corpus_id = %corpus_id_owned,
+                            mentions = o.mentions,
+                            refused_over_cap = o.refused_over_cap,
+                            "tiered_driver: GliNER delta complete"
+                        )
+                    }
                     Err(e) => tracing::warn!(
                         corpus_id = %corpus_id_owned,
                         error = %e,

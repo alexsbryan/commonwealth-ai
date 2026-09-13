@@ -12536,6 +12536,7 @@ dependencies = [
  "serde_json",
  "sovereign-core",
  "sovereign-store",
+ "tempfile",
  "tokenizers",
  "tokio",
  "tracing",
