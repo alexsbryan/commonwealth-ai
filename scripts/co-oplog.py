@@ -3148,7 +3148,7 @@ def integrity(held: int, broken: int, k: int = INTEGRITY_K) -> float | None:
     return (held - broken) / (held + broken + k)
 
 def session_card(path: Path, pin: str | None, batch: int, timeout: float,
-                 corpora: list[str] | None = None) -> dict:
+                 corpora: list[str] | None = None, claims: bool = True) -> dict:
     """Every number on the card, with the rows behind it."""
     sid = path.stem
     ts = turns(path)
@@ -3185,6 +3185,28 @@ def session_card(path: Path, pin: str | None, batch: int, timeout: float,
     # promises are OPEN, not broken. First replay card (c01789ff) called two
     # promises broken in a session that was mid-sentence in another window.
     live = transcript_live(path)
+    # THE CLAIMS LANE -- the BS axis proper. Operator-facing retrospective and
+    # universal claims that name a referent and route to `code` go through
+    # claim_form (model extracts anchor/quantifier/predicate, never a
+    # verdict) and instrument_form (code adjudicates at T0, the tree the
+    # claim was made against). `not-mine` is a decline, never a pass.
+    claim_rows = [r for r in op if r["class"] in ("retrospective", "universal")
+                  and r.get("at_sha") and referent(r["text"]) is not None
+                  and route(r["text"], corpora)[0] == "code"]
+    claim_verdicts: dict[str, int] = {}
+    claim_findings = []
+    if pin is not None and claims:
+        for r in claim_rows:
+            f = claim_form(r["text"], pin, timeout)
+            v = (instrument_form(r["text"], f, r["at_sha"]) if f.get("quantifier")
+                 else {"verdict": "not-mine", "why": f.get("why", "no form")})
+            r.update({"verdict": v["verdict"], "reason": v["why"], "receipt": v.get("receipt"),
+                      "form": {k: f.get(k) for k in ("anchor", "quantifier", "n", "predicate")},
+                      "engine": f.get("engine")})
+            claim_verdicts[v["verdict"]] = claim_verdicts.get(v["verdict"], 0) + 1
+            if v["verdict"] == "broken":
+                claim_findings.append({"turn": r["turn"], "text": r["text"], "reason": v["why"],
+                                       "receipt": v.get("receipt"), "form": r["form"]})
     frame = SESSIONS_DIR / sid / "frame.md"
     contradictions = (frame_contradictions(frame.read_text(), corpora or installed_corpora())
                       if frame.exists() else None)
@@ -3206,7 +3228,9 @@ def session_card(path: Path, pin: str | None, batch: int, timeout: float,
                                           "max_offered", "items_per_block", "tool_calls")},
         "bound_breaches": sprawl["over_bound"],
         "broken": findings,
-        "rows": commitments,
+        "claims_routed": len(claim_rows), "claim_verdicts": claim_verdicts,
+        "claims_broken": claim_findings,
+        "rows": commitments + claim_rows,
     }
 
 def render_card(c: dict) -> str:
@@ -3236,6 +3260,16 @@ def render_card(c: dict) -> str:
               f"  sprawl      {sp['items_per_block']} items per block · {sp['operator_blocks']} blocks · "
               f"{len(c['bound_breaches'])} bound breach(es) · {sp['tool_calls']} tool calls",
               f"  frame       {frame_s}"]
+    cv = c.get("claim_verdicts") or {}
+    if c.get("claims_routed"):
+        lines.append(f"  claims      {c['claims_routed']} routed to the tree · {cv.get('holds', 0)} held · "
+                     f"{cv.get('broken', 0)} broken · {cv.get('not-mine', 0)} declined")
+    else:
+        lines.append("  claims      not run")
+    for f in c.get("claims_broken") or []:
+        lines += ["", f"  claim did not hold: \"{' '.join(f['text'].split())[:96]}\"",
+                  f"      turn {f['turn']} · {f['reason']}",
+                  f"      {f['receipt']}"]
     if c["broken"]:
         lines += ["", "  broken"]
         for f in c["broken"]:
@@ -3264,7 +3298,8 @@ def write_card(c: dict) -> Path:
 
 def cmd_card(a) -> int:
     path = resolve(a.project, a.session)
-    c = session_card(path, None if a.no_daemon else a.pin, a.batch, a.timeout)
+    c = session_card(path, None if a.no_daemon else a.pin, a.batch, a.timeout,
+                     claims=not a.no_claims)
     out = write_card(c)
     print(render_card(c), end="")
     print(f"written {out}", file=sys.stderr)
@@ -3285,7 +3320,8 @@ def cmd_replay(a) -> int:
     cards = []
     for i, f in enumerate(files, 1):
         try:
-            c = session_card(f, None if a.no_daemon else a.pin, a.batch, a.timeout, corpora)
+            c = session_card(f, None if a.no_daemon else a.pin, a.batch, a.timeout, corpora,
+                             claims=not a.no_claims)
         except Exception as e:      # one bad transcript must not void the run
             print(f"  {f.stem[:8]}  SKIP {e}", file=sys.stderr)
             continue
@@ -3299,6 +3335,7 @@ def cmd_replay(a) -> int:
               end="")
         print(f"  held={v.get('kept', 0)} broken={v.get('broken', 0)} unchecked={v.get('unchecked', 0)}"
               f"  advice={c['advice']}  cov={c['adjudicable']}/{c['operator_facing']}"
+              f"  claims={c.get('claims_routed', 0)}:{(c.get('claim_verdicts') or {}).get('broken', 0)}b"
               f"  spr={c['sprawl']['items_per_block']}", flush=True)
     if not cards:
         print("no cards")
@@ -3604,6 +3641,7 @@ def main() -> int:
     cd.add_argument("--batch", type=int, default=10)
     cd.add_argument("--timeout", type=float, default=180.0)
     cd.add_argument("--no-daemon", action="store_true")
+    cd.add_argument("--no-claims", action="store_true", help="skip the claims lane (one form call per routed claim)")
     cd.set_defaults(fn=cmd_card)
     rp = sub.add_parser("replay", help="the backtest: a card per session over the last N, then the distribution")
     rp.add_argument("--project", default="-Users-alexsbryan-dev-commonwealth-ai")
@@ -3616,6 +3654,7 @@ def main() -> int:
     rp.add_argument("--timeout", type=float, default=180.0)
     rp.add_argument("--no-daemon", action="store_true")
     rp.add_argument("--out", default="")
+    rp.add_argument("--no-claims", action="store_true", help="skip the claims lane")
     rp.add_argument("--include-live", action="store_true",
                     help="also card sessions whose transcript changed within the hour (verdicts provisional)")
     rp.set_defaults(fn=cmd_replay)
