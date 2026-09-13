@@ -1,0 +1,534 @@
+{
+  "schema": "bs-corrections/v1",
+  "rule": "Each `false_claim` is quoted verbatim inside a commit body that declares it wrong. The label is the correcting author's, not this tool's and not a model's. `labelled_by` is the commit that says so.",
+  "cases": [
+    {
+      "false_claim": "biases toward follows",
+      "labelled_by": "f8b89c2bc",
+      "subject": "fix(oplog): the BS judge is order-sensitive, and the evidence window was wrong",
+      "why": "READER has in front of them, and it answers the question actually asked: does this follow from what you just said. Zero-overlap fell 43% to 17%. A correction to the reasoning in the previous commit, which rejected relevance-selecting tool results because it \"biases toward follows\". True, and the consequence was backwards: handed the best available evidence, a claim that still does not follow is a STRONG accusation, w"
+    },
+    {
+      "false_claim": "computed, found nothing",
+      "labelled_by": "3096c6eab",
+      "subject": "fix(grounding): vl-6 \u2014 segments follow whether admission RAN, not whether it decided",
+      "why": "e badge distribution is vl-7's input, not this rung's bar, and it was already this rendering on any host with a reranker. The opted-out arm is untouched: `Disabled` summarizes to `NotRun`, the wire field stays absent rather than empty, and \"not computed\" and \"computed, found nothing\" stay distinguishable. Side effect, not design: `bench/calibration/ab/p1_verdict.py` reports \"no transcript row carried answer_segments "
+    },
+    {
+      "false_claim": "no transcript row carried answer_segments \u2014 the native path did not run on this arm",
+      "labelled_by": "3096c6eab",
+      "subject": "fix(grounding): vl-6 \u2014 segments follow whether admission RAN, not whether it decided",
+      "why": "r. The opted-out arm is untouched: `Disabled` summarizes to `NotRun`, the wire field stays absent rather than empty, and \"not computed\" and \"computed, found nothing\" stay distinguishable. Side effect, not design: `bench/calibration/ab/p1_verdict.py` reports \"no transcript row carried answer_segments \u2014 the native path did not run on this arm\". Before this that reason was wrong on a no-instrument host; now it is exactl"
+    },
+    {
+      "false_claim": "kept because `main`'s exit path cancels it",
+      "labelled_by": "ab079922b",
+      "subject": "refactor(desktop): the index build takes the route that was built for it four commits ago and never called",
+      "why": "ason is missing and names the job, which is the honest report of a daemon that failed without saying why. One correction to the commit before this one, because it was wrong in the way that matters most. R1's surviving-field comment said `health_shutdown` was \"kept because `main`'s exit path cancels it\". It is not: `cargo check` reports the field as never read, and a grep finds exactly two mentions \u2014 the declaration a"
+    },
+    {
+      "false_claim": "what is commonwealth",
+      "labelled_by": "94e16311e",
+      "subject": "docs(commonwealth): the front door said \"six crates and no binary\" and both halves were false",
+      "why": "`commonwealth/README.md` is the repo's answer to \"what is commonwealth\", and its first two paragraphs are right. Its third was wrong on both clauses: the package is NINE crates, and `commonwealth-rails` ships `[[bin]] name = \"cw-rails\"` \u2014 a daemon you run. The newest thing in the package is precisely the binary the README told a"
+    },
+    {
+      "false_claim": "three crates this buys",
+      "labelled_by": "fc2086637",
+      "subject": "refactor(desktop): the manifest and the harnesses catch up with svt-2",
+      "why": "gn-service`, `sovereign-tdd` and the whole clap family come with them. Measured: `cargo tree -p sovereign-desktop` 4869 -> 4748 lines, 1073 -> 1055 unique deps. `sovereign-runtime-recipe` and `sovereign-store` do NOT leave here, contrary to the svt-2 order's \"three crates this buys\". Both are reached from `state.rs` and `state/builders/*` \u2014 the in-process Runtime and `sovereign.db`, live on both bootstrap modes. That"
+    },
+    {
+      "false_claim": "wizard-verify.sh behaves as before",
+      "labelled_by": "fc2086637",
+      "subject": "refactor(desktop): the manifest and the harnesses catch up with svt-2",
+      "why": "te/builders/*` \u2014 the in-process Runtime and `sovereign.db`, live on both bootstrap modes. That is svt-3's route migration, and the order was wrong to price them here. THREE HARNESSES ASSERTED THE SHAPE svt-2 DELETED, and the svt-2 order's own exit criterion (\"wizard-verify.sh behaves as before\") was therefore not achievable. They assert the new architecture instead: - `wizard-verify.sh` looked for a `--daemon-child` "
+    },
+    {
+      "false_claim": "defeats hole-punching on its own",
+      "labelled_by": "bf88e79c1",
+      "subject": "bench(media): the reversed relay leg is taken \u2014 could-not-judge by construction, and the runbook's CGNAT premi",
+      "why": "100/10 route, the tailnet address 100% loss). Kept 0, discarded 1. Two findings, both about the pair. The probe read `path=mixed direct=[69.181.167.209:43327]`: the Mac punched to RuggedFox's PUBLIC UDP endpoint, so the runbook's sentence that cellular CGNAT \"defeats hole-punching on its own\" was wrong \u2014 CGNAT stops inbound punches to the phone side; it does nothing about a home NAT that admits them. Rewritten. Then "
+    },
+    {
+      "false_claim": "key must be a string",
+      "labelled_by": "b25c04b3e",
+      "subject": "feat(rails): the minimal daemon a media shim installs \u2014 join, gossip, three loopback routes, lifted and run ou",
+      "why": "and it does not join over LAN/mDNS (an invite with no iroh dial is refused by name, because the legacy paths mean plaintext HTTP to an address). THREE CORRECTIONS MADE RATHER THAN PASSED. 1. `mesh.json` was serde of `Mesh` and `serde_json` refuses it \u2014 `\"key must be a string\"`, because `members` is keyed by a `NodeId` that serializes as a byte array. That is the ONE reason `MeshWire` exists and this daemon already li"
+    },
+    {
+      "false_claim": "keeps ~28 GB resident after the window closes",
+      "labelled_by": "a9c0cdf27",
+      "subject": "quality(sv-surface): the bar was wrong about which half is load-bearing \u2014 it is the dependency edge, not the s",
+      "why": "ommit, they add a retry, then a backoff, then a health check. So the gate is the dependency edge PLUS a census that no surface retains a process handle or tracks a lifecycle. And a correction to this file's own product trade: it said a service-managed daemon \"keeps ~28 GB resident after the window closes\" and treated quitting as the way to free it. A user never wants the daemon DOWN \u2014 they want not to pay for idle, w"
+    },
+    {
+      "false_claim": "is written where the retrieval that honours it will never look",
+      "labelled_by": "c4019115e",
+      "subject": "fix(desktop, mesh): the corpus chips and the rename cross the wire with a validator, and the readiness gate st",
+      "why": "ady answers on /v1/models. The boot split buys ~300 ms and ~50 MB, so the spine is not what was wrong. The WRITES were. A CORRECTION FIRST, because this commit inherited a claim and it is wrong. The comment at set_conversation_enabled_corpora said the toggle \"is written where the retrieval that honours it will never look\". Driven against a real attached desktop (command bridge, scratch profile, live daemon on :9741):"
+    },
+    {
+      "false_claim": "silently ignored",
+      "labelled_by": "c4019115e",
+      "subject": "fix(desktop, mesh): the corpus chips and the rename cross the wire with a validator, and the readiness gate st",
+      "why": "/v1/conversations on the DAEMON's store and is ABSENT from this process's, so the local write hit zero rows and returned NotFound. In the shipped shape, where setup mirrors data_dir into the CLI config, it is one sqlite FILE and the write did land. Neither is \"silently ignored\", and the code now says so with the method beside it. What IS wrong, and why both writes cross: - NO VALIDATION on the local path. It stored a"
+    },
+    {
+      "false_claim": "passed under sabotage",
+      "labelled_by": "4c45a1fc9",
+      "subject": "feat(mesh): the local-corpus manager and the conversation browse cross the wire, and the loopback census becom",
+      "why": "moved path). Watched red on this tree with mesh_router's layer deleted: the new gate failed left 405 right 403 while the three old tests stayed green \u2014 f6a633519's NOT-A-GATE reproduced, then closed. The batch-2 record that the meshapp uninstalled-corpus leg \"passed under sabotage\" was WRONG: re-watched behind an empty router it fails at its body line, because an empty 404 body cannot name the corpus \u2014 unwrap_or_defa"
+    },
+    {
+      "false_claim": "refused three soak nodes with three data dirs under one HOME",
+      "labelled_by": "827f4f6ab",
+      "subject": "fix(setup): a second node on one host was documented, flagged for, and impossible",
+      "why": "a silent substitution (\u00a718.3). It is wrong about a root nobody could have resolved by accident. And it re-closed at this layer what `run_lock` opened at another: the lock was re-keyed off `$HOME` onto the data root in 2026-08-24 precisely because the old key \"refused three soak nodes with three data dirs under one HOME\". A fourth verdict, `RootConflict::Fresh` \u2014 empty, another root is live, AND this root is not one o"
+    },
+    {
+      "false_claim": "both unbuilt and unmeasured",
+      "labelled_by": "caf6ebbd7",
+      "subject": "docs(work-plane): CORRECTION \u2014 the byte plane is built and streaming, and the degraded case is already express",
+      "why": "0cadf0a06 said the media leg was \"both unbuilt and unmeasured\". The first half was wrong, and wrong in the expensive direction: it priced the federated-media capstone as further away than it is. `commonwealth-transport::HttpBridge` is `tokio::io::copy` in BOTH directions (`iroh.rs:816,820`) \u2014 a raw splice between the lo"
+    },
+    {
+      "false_claim": "WorkUnitCompleted",
+      "labelled_by": "9eb723b37",
+      "subject": "feat(cw-lift): 5h \u2014 the ledger credits the donor, and the donor is the only one who can",
+      "why": "the time, and `two_runs_of_one_unit_are_two_credits_on_two_donors` pins that as intended rather than leaving it to be read as a bug. THE NAME WAS WRONG ON THE FIRST PASS and `sovereign code converge noun` caught it before it landed. The rejected spelling \u2014 a \"WorkUnitCompleted\" variant, which deliberately exists nowhere in this tree \u2014 would have put a THIRD `WorkUnit*` name in the very crate where `WorkUnit` already "
+    },
+    {
+      "false_claim": "two ACTIVE members share one pubkey",
+      "labelled_by": "77a834f31",
+      "subject": "fix(mesh): a gossip round stops dialing the dead, because the dead share the living's bridge",
+      "why": "The peer-path decay of note a3f3fbff, root-caused live this afternoon (1ca75415) and fixed here. It is not the fix I proposed, and the difference matters. WHAT I HAD WRONG. I reported \"two ACTIVE members share one pubkey\" and recommended writing roster dedup. Both halves were wrong. `BeefyMac` is `active=false` \u2014 a TOMBSTONE \u2014 and `Alexs-MacBook-Pro-2` is the live row, and the alias rule deliberately PERMITS that pai"
+    },
+    {
+      "false_claim": "the file was saved, here are its edges",
+      "labelled_by": "fb1f32864",
+      "subject": "feat(reindexer): a warm tier that asks the running analyzer \u2014 shipped OFF, because the measurement says so",
+      "why": "a collision for any two same-named items in one file. Adopting it would have put a second symbol-id scheme in the graph, which is the thing the order forbids. 927 lines not taken. ## The wipe this could have been, and why it cannot be The obvious write for \"the file was saved, here are its edges\" is delete-the-file's-rows-then-insert. That was the first implementation here and it was wrong twice over: - The exporter "
+    },
+    {
+      "false_claim": "this node donated nothing",
+      "labelled_by": "3338f43e4",
+      "subject": "feat(cw-lift): 5d \u2014 the daemon projects `work`, seals it, and donates",
+      "why": "tradicts this build is wrong whether or not this boot would have donated, and a local-only run must not be the reason nobody finds out (ARCH \u00a718.3). Watched red: `startup_refuses_offer_of_unregistered_kind`. `MeshService::WorkDonor` joins the boot census, so \"this node donated nothing\" is two distinguishable facts \u2014 local-only, or an offer naming no kind \u2014 and the trace says which. Watched red by sabotage: `a_local_o"
+    },
+    {
+      "false_claim": "fanout >= 4/8 -> live",
+      "labelled_by": "a32d98d0b",
+      "subject": "measure(retrieval): fan-out over formulations loses to a larger k \u2014 and my bar was mis-specified",
+      "why": "y an oracle query and said reachability is not a strategy. This removes the oracle: sub-queries from the QUESTION ALONE on the resident 4B, three arms through one instrument, bench matcher throughout. THE BAR WAS WRONG AND THAT IS PART OF THE RESULT. It read \"fanout >= 4/8 -> live\". Fan-out returned 4/8 and the script printed LIVE. The baseline in the same harness returned 5/8. An absolute bar with no paired control "
+    },
+    {
+      "false_claim": "the strategy works",
+      "labelled_by": "a32d98d0b",
+      "subject": "measure(retrieval): fan-out over formulations loses to a larger k \u2014 and my bar was mis-specified",
+      "why": ", bench matcher throughout. THE BAR WAS WRONG AND THAT IS PART OF THE RESULT. It read \"fanout >= 4/8 -> live\". Fan-out returned 4/8 and the script printed LIVE. The baseline in the same harness returned 5/8. An absolute bar with no paired control cannot tell \"the strategy works\" from \"anything at this budget works\". Verdict is NEGATIVE. baseline 1 query @ 40 hard 5/8 138/158 = 87.3% 21 retrievals 182,339 chars fan-ou"
+    },
+    {
+      "false_claim": "anything at this budget works",
+      "labelled_by": "a32d98d0b",
+      "subject": "measure(retrieval): fan-out over formulations loses to a larger k \u2014 and my bar was mis-specified",
+      "why": ". THE BAR WAS WRONG AND THAT IS PART OF THE RESULT. It read \"fanout >= 4/8 -> live\". Fan-out returned 4/8 and the script printed LIVE. The baseline in the same harness returned 5/8. An absolute bar with no paired control cannot tell \"the strategy works\" from \"anything at this budget works\". Verdict is NEGATIVE. baseline 1 query @ 40 hard 5/8 138/158 = 87.3% 21 retrievals 182,339 chars fan-out 4 subqs @ 10 hard 4/8 13"
+    },
+    {
+      "false_claim": "its cost is unbounded",
+      "labelled_by": "3f7fd1eac",
+      "subject": "measure(verifier): depth terminates at two passes \u2014 the residual is a mutual fixed point, robust to tau",
+      "why": "y \u2014 and do not move (median shift +0.04 over four passes, 18/35 drifting toward tau, a coin flip). 34 of 35 have a pass-5 revision byte-identical to pass 4. The verifier says unsupported, the reviser says there is nothing to fix, and both are confident. \u00a710's \"its cost is unbounded\" is wrong in a way that is good news: the loop is idling, not spinning. So termination is free and it is not the gate clearing. A revisio"
+    },
+    {
+      "false_claim": "restart between runs",
+      "labelled_by": "19eed063b",
+      "subject": "feat(inference): the tail-logits prefill graduates default-ON \u2014 21 GiB a request, identical draft",
+      "why": "able allocation: n_vocab * n_prompt_tokens * 4 = 993,280 bytes PER PROMPT TOKEN at the qwen35 family's 248,320 vocab, past the 4 GiB device cap falling back to a host buffer that grows and never shrinks until process exit. It is why a 128 GB box OOMs, and why \"restart between runs\" kept being proposed. WHY THE 35B ARM IS NOT A PRECONDITION, a correction to the position I held one turn earlier. I wanted the arm re-run"
+    },
+    {
+      "false_claim": "` (Saturdays 07:00 UTC), job `soak`. `runs_in` is now `[",
+      "labelled_by": "e4488491d",
+      "subject": "fix(quality): four soak-family rows were wrong about themselves \u2014 one scheduled, one not an instrument, one un",
+      "why": "Four corrections to `quality/instruments.toml`, none of them a relabel. **`mesh-soak` is SCHEDULED and the row said `by-hand`.** `.github/workflows/mesh-soak-nightly.yml` runs `scripts/mesh-soak.sh` on `cron: \"0 7 * * 6\"` (Saturdays 07:00 UTC), job `soak`. `runs_in` is now `[\"weekly:soak\", \"by-hand\"]`. Two things the row did not say are recorded as `load_bearing` rather than fixed here: the job carries `continue-on-e"
+    },
+    {
+      "false_claim": "` (:126, :133) and its own comments say",
+      "labelled_by": "e4488491d",
+      "subject": "fix(quality): four soak-family rows were wrong about themselves \u2014 one scheduled, one not an instrument, one un",
+      "why": "w did not say are recorded as `load_bearing` rather than fixed here: the job carries `continue-on-error: true`, so a red soak fails nothing; and the declared `binary:podman` precondition matches NO code path \u2014 the script compares `BACKEND` only against `\"local\"` (:126, :133) and its own comments say \"all rootless, no podman\" (:63, :836), while MESH_QA.md:100 documents `MESH_SOAK_BACKEND=podman`. Which of the three is"
+    },
+    {
+      "false_claim": ", written for a correction that states no replacement, where",
+      "labelled_by": "5924526d0",
+      "subject": "fix(ring): a seal in the terminal stops reading as a withdrawal",
+      "why": "Found by running `svrn ring seal` against a live daemon for the first time \u2014 4a shipped the verb having only compiled it. `op_line` had one fallback for \"no payload\", written for a correction that states no replacement, where \"(no replacement)\" is the truth: cy voided X and offered nothing back. A seal also carries no payload, by design \u2014 it is delivery, not meaning, so `AdmittedOp::applies` is false and no reducer s"
+    },
+    {
+      "false_claim": "an abstention must not widen the evidence",
+      "labelled_by": "85d0ca1b2",
+      "subject": "fix(atlas): the abstained row is the status quo ante, and the status quo included summaries",
+      "why": "WHAT WAS WRONG. I gave `WalkPolicy::unfiltered()` the source list `[atoms]` alone and argued for it with \"an abstention must not widen the evidence\". That is wrong against this row's own definition. `unfiltered()` is documented as the STATUS QUO ANTE written down \u2014 and the status quo ante for whole-work summaries was `apply_raptor_grounding`, gated on `SOVEREIGN_RAPTOR_GROUNDING` and `raptor_late_inject_e"
+    },
+    {
+      "false_claim": "reachable but never at a leaf's expense",
+      "labelled_by": "4e88b47d6",
+      "subject": "feat(atlas): RAPTOR is a source the map composes, not a path that was deleted",
+      "why": "id as much (\"the walk spends the fixed 10-chunk pool on a wider, less on-target title set, 81 -> 107 distinct\") and I over-read it into a seed race. `SeedPolicy::budgets` survives as a GUARD, not as a result: a score-ordered pool cannot otherwise say \"reachable but never at a leaf's expense\", twenty summaries against twelve slots do starve every leaf seed, and that is watched in both directions. It is a bound that ha"
+    },
+    {
+      "false_claim": "Ollama does not work here",
+      "labelled_by": "824f3b660",
+      "subject": "feat(ei-3c): the Ollama arm now says whether a failing default is the endpoint or the pick",
+      "why": "Run 4 failed at step 0b with `corpus-mcp against Ollama exited non-zero` and nothing else. That is one sentence for two very different worlds \u2014 \"Ollama does not work here\" and \"the endpoint is fine, the MODEL PICK is wrong\" \u2014 and a reader of the log could not tell which. Only my run unit's fourth leg knew, and nobody running acceptance.sh has that. So the arm runs both invocations and reports both halves. The DEFAULT"
+    },
+    {
+      "false_claim": "the endpoint is fine, the MODEL PICK is wrong",
+      "labelled_by": "824f3b660",
+      "subject": "feat(ei-3c): the Ollama arm now says whether a failing default is the endpoint or the pick",
+      "why": "Run 4 failed at step 0b with `corpus-mcp against Ollama exited non-zero` and nothing else. That is one sentence for two very different worlds \u2014 \"Ollama does not work here\" and \"the endpoint is fine, the MODEL PICK is wrong\" \u2014 and a reader of the log could not tell which. Only my run unit's fourth leg knew, and nobody running acceptance.sh has that. So the arm runs both invocations and reports both halves. The DEFAULT"
+    },
+    {
+      "false_claim": "the seed table and the queries that search it share one space",
+      "labelled_by": "f04b1f9de",
+      "subject": "test(atlas): the stored summary vector IS the live embed, measured before it is trusted",
+      "why": "`write_summary_atoms` reuses the vector sitting beside each summary rather than re-embedding it. That is only sound if the stored vector is in the space the live query slot embeds into \u2014 and \"the seed table and the queries that search it share one space\" is the kind of claim that degrades grounding silently when it is wrong, so it is measured rather than assumed. Bar registered before the run, and BORROWED rather tha"
+    },
+    {
+      "false_claim": "adds no marginal compile cost",
+      "labelled_by": "9f1ed6692",
+      "subject": "docs(mesh): the iroh forcing is one line to remove and forty-five to survive, so it stays",
+      "why": "at never runs in production is the drift mesh-of-one exists to prevent, moved from runtime to compile time. iroh leaves WITH the mesh when the mesh becomes optional. Two corrections to claims that were in the tree. The sovereign-mesh comment said the forcing \"adds no marginal compile cost\" because iroh is already in the default build via sovereign-server; `cargo tree -p sovereign-cli-daemon -e features --invert iroh`"
+    },
+    {
+      "false_claim": "triage the application layer (unscoped until 2 settles)",
+      "labelled_by": "28a1312aa",
+      "subject": "docs(cw-lift): phase 3 is the local-only daemon, and its bar overstates the problem by 2x",
+      "why": "Phase 3 was \"triage the application layer (unscoped until 2 settles)\". Phase 2 settled it, in a direction the plan did not anticipate: retention becomes its own phase, and Phase 3 becomes the campaign's own done-when \u2014 the half Phase 2 moved by ZERO while costing +2,789 lines. Two corrections to `cw-local-only-daemon`, both me"
+    },
+    {
+      "false_claim": "where the installed one has fewer. run.sh's leg 3 now passes `--atlas-dir",
+      "labelled_by": "9bb58c434",
+      "subject": "evidence(atlas): leg 3 re-run against the store the rebuild actually built",
+      "why": "res really do differ, which is the proof the first probe was reading the wrong one: \"Albert Einstein\" ranks `Spacetime` first here and `Hebrew University of Jerusalem` first in the installed store, and the rebuilt store returns 10 neighbours for \"Jigsaw puzzle\" where the installed one has fewer. run.sh's leg 3 now passes `--atlas-dir \"$OUT/atlas\"` and probes the two Jigsaw titles alongside the three originals, so the"
+    },
+    {
+      "false_claim": "returning 0 results meant",
+      "labelled_by": "9bb58c434",
+      "subject": "evidence(atlas): leg 3 re-run against the store the rebuild actually built",
+      "why": "probes the two Jigsaw titles alongside the three originals, so the leg proves the thing it was staged to prove. Its comment says why, so nobody removes the flag as redundant. ONE CORRECTION TO MY OWN CORRECTION. I retracted the explanation that \"Jigsaw Puzzle\" returning 0 results meant \"present, no outgoing edges\". The verb now answers that question directly, and the explanation was RIGHT \u2014 the article is present wit"
+    },
+    {
+      "false_claim": "the Lance write of ~1.67M article rows and ~7.3M edge rows",
+      "labelled_by": "a0e55e4a5",
+      "subject": "run(atlas): the wikipedia rebuild at full scale \u2014 51,781 atoms, no collision",
+      "why": "not an absence: the article is present, it simply has no in-store outgoing edges. The byte check is what answers the question `neighbors` cannot. THE FORECAST WAS 15x PESSIMISTIC AND THE REASON IS WORTH KEEPING. The manifest predicted 20-35 min, dominated by \"the Lance write of ~1.67M article rows and ~7.3M edge rows\". It took 2 minutes. Streaming was already known cheap (1.9 s); what was wrong was assuming the write"
+    },
+    {
+      "false_claim": ", Album}, {WING, WinG, Wing}, {Polar BEAR, Polar Bear, Polar bear}, {TIME (magazine), Time (magazine), TIME Magazine}. The guard's own advice \u2014",
+      "labelled_by": "f4524b0ab",
+      "subject": "fix(atlas): a Wikipedia title is an identifier, not a description",
+      "why": "one title, and 40,869 titles \u2014 2.62% of the corpus \u2014 that the build would have merged away. Restricted to the 51,280 in-scope L5 articles it is 530 keys / 539 articles (1.05%). Representative groups: {C, C++, C--, &c, \u00b0C}, {\"+ (album)\", \"- (album)\", \"= (album)\", Album}, {WING, WinG, Wing}, {Polar BEAR, Polar Bear, Polar bear}, {TIME (magazine), Time (magazine), TIME Magazine}. The guard's own advice \u2014 \"widen wiki_ato"
+    },
+    {
+      "false_claim": "-> lookup, classified;",
+      "labelled_by": "115a866e1",
+      "subject": "feat(atlas): one walk, driven by the map \u2014 and `ask`",
+      "why": "y retunes its classifier by editing its declaration. An empty row is switched off; every row empty means no classifier, reported as such and distinguished from a dead embedder. Measured on this box against a bare llama-server embedding endpoint: \"Who is Offa?\" -> lookup, classified; \"What themes does this book establish, and what grounds each one?\" -> thematic, classified, sim 0.571 margin 0.097. DEFAULT_BUDGET 6 -> "
+    },
+    {
+      "false_claim": "-> thematic, classified, sim 0.571 margin 0.097. DEFAULT_BUDGET 6 -> 12, WHICH IS A CORRECTION, NOT A TUNE `EPISTEMIC_INDEX.md` \u00a71's Walk row said",
+      "labelled_by": "115a866e1",
+      "subject": "feat(atlas): one walk, driven by the map \u2014 and `ask`",
+      "why": "ow empty means no classifier, reported as such and distinguished from a dead embedder. Measured on this box against a bare llama-server embedding endpoint: \"Who is Offa?\" -> lookup, classified; \"What themes does this book establish, and what grounds each one?\" -> thematic, classified, sim 0.571 margin 0.097. DEFAULT_BUDGET 6 -> 12, WHICH IS A CORRECTION, NOT A TUNE `EPISTEMIC_INDEX.md` \u00a71's Walk row said \"budget 6\" a"
+    },
+    {
+      "false_claim": "no private kinds",
+      "labelled_by": "6ddfc45b8",
+      "subject": "feat(wikipedia): the walk gets a second backend, so wikipedia is read without being migrated",
+      "why": "ith `EdgeProvenance::WikilinkStructural`. The relationship axis (topical / causal / contested / defines / action / see-also) is OPEN text and stays a column on `edges.lance`, read by the neighbor face \u2014 not five new arms on a closed enum (principle 9; spec \u00a73 \"no private kinds\"). `confidence` is 1.0 because a wikilink has none: `occurrence_count` is PROMINENCE, and putting it in a slot named confidence would label it"
+    },
+    {
+      "false_claim": "count what shipped",
+      "labelled_by": "fa69be382",
+      "subject": "fix(cw-lift): this bar cannot state its position, and has not been able to since 1b",
+      "why": "re deliverable was \"the instrument, and watch it fail\" \u2014 and this bar counts test lines; the production column overcounts too, because inline `#[cfg(test)]` modules are not excluded, and most of 2f's +779 is exactly that. The tension between \"count tests\" and \"count what shipped\" is real, and it is what the hand-curation was groping at without saying so. The correction in f460df57a two commits ago is itself supersede"
+    },
+    {
+      "false_claim": "I need nothing at or below this",
+      "labelled_by": "b6ed7bf3d",
+      "subject": "chore(quality): the three ceilings the rail's sealed floor earned",
+      "why": "h reading. `Digest` stays `BTreeMap<String, u64>`: a peer uses it for exactly one decision \u2014 which ops to send \u2014 and `ops_missing_from` answers `(mark, infinity)`, which is the same answer whether the run started at zero or at a floor. So `mark` is re-read as \"I need nothing at or below this\". Byte-identical for any unsealed holding, no version tag, no defaulting, no cliff. The seat's own sketch put a floor on the wi"
+    },
+    {
+      "false_claim": "SUBSUMES these three blocks and exceeds them",
+      "labelled_by": "f61d8eea4",
+      "subject": "fix(layers): the rail's \"commonwealth-core must stay absent\" was prose, and my last fix for that class was wro",
+      "why": "Two corrections in one block, the second of them to a claim I committed in 4c98dfb59 and repeated in f60fa6a4c. WHAT I GOT WRONG. I wrote that `[[package]] commonwealth` membership \"SUBSUMES these three blocks and exceeds them\". It does not, for the family that matters most. Membership refuses only what is not a member or a leaf, so it catches `commonwealth-{inference,api}` and PERMITS `commonwealth-rail -> commonwea"
+    },
+    {
+      "false_claim": "neither instrument can see that and neither ever could",
+      "labelled_by": "09ccfaf97",
+      "subject": "measure(cw-lift): correcting order T \u2014 converge shape found the fork class I said no instrument could see",
+      "why": "My order T conclusion was wrong and this corrects it the same day. I wrote \"neither instrument can see that and neither ever could\" and proposed a hand census as the successor. Both were mistakes, and the tool was already installed. `svrn code converge --help` lists FOUR discovery feeds. I ran one \u2014 dry-report \u2014 and stopped surveying. `converge shape` matches on (field name, field type)"
+    },
+    {
+      "false_claim": "`ProcessKind` and what it strands ... `git revert`, trivial \u2014 this is why it is its own commit.",
+      "labelled_by": "cfa70611f",
+      "subject": "fix(commonwealth-core): active_processes is vestigial and gossiped \u2014 default it now, delete it after the fleet",
+      "why": "Phase 0c, and the plan was wrong about it being trivial. It reads: \"`ProcessKind` and what it strands ... `git revert`, trivial \u2014 this is why it is its own commit.\" Verified instead of recalled (\u00a711.1), the chain is: ProcessKind <- ProcessInfo <- NodeCapabilities.active_processes and `NodeCapabilities` is GOSSIPED. So this is not a dead-code deletion, it is a wire migration wearing one. The field is genuinely dead"
+    },
+    {
+      "false_claim": "MUST FAIL LOUDLY",
+      "labelled_by": "1199abbf2",
+      "subject": "fix(corpus): ST-8 resolved \u2014 geometry fails closed, the model NAME does not",
+      "why": "ypes`, are 768-dim against a 1024-dim model and record the SAME name as the 43 compatible ones. Zero true positives. So the exact-string check was backwards: it fired only where nothing was wrong and was blind to the only real conflict. AND THE CLAUSE'S \"MUST FAIL LOUDLY\" WAS ENFORCED NOWHERE. `open_index` only warned. `validate_corpus_readiness` does return `Err` on a width mismatch, but it has exactly one caller \u2014 "
+    },
+    {
+      "false_claim": "N operational record(s) withheld",
+      "labelled_by": "9f9cf47b9",
+      "subject": "feat(awareness): the leakage rate, and the trap catalogue that could not fire",
+      "why": "0, 32 scorable injectable notes: 0.0% -> 87.5% The instrument was wrong on its first run and the fix matters: it scored all 57 attempt notes, but 19 are anchored to comaintainer-seat and the daemon WITHHOLDS operational records from ordinary sessions -- the \"N operational record(s) withheld\" line on every injection. Scoring notes the mechanism cannot deliver understated it (70.7%). Excluding them is what the 87.5% me"
+    },
+    {
+      "false_claim": ", naming `[[enrichment.ontology.patterns]]` as the way to get the same detectors while keeping ONE graph. PRIMITIVES \u00a74 said the agent",
+      "labelled_by": "851bf1784",
+      "subject": "Actual custom ontologies (#59)",
+      "why": "ch type resolved to, the question shapes. Those are inferences, and when one is wrong the fix is a declaration, not a retry \u2014 which is the whole point of printing them (PRIMITIVES \u00a76). `type = \"investigation\"` is demoted to \"ADVANCED; prefer declared patterns\", naming `[[enrichment.ontology.patterns]]` as the way to get the same detectors while keeping ONE graph. PRIMITIVES \u00a74 said the agent \"already asks the first\" "
+    },
+    {
+      "false_claim": "Custom ontology (version 1)",
+      "labelled_by": "851bf1784",
+      "subject": "Actual custom ontologies (#59)",
+      "why": "ipped template; three test modules were each parsing it themselves. Docs, per \u00a71.1: - `SYSTEM_OVERVIEW.md` custom_atlas entry: the generated schema, the ParsePolicy, `type_index.rs`, `atlas/ontology.json`, summary schema 3. - `corpus-engine/ENRICHMENT.md` \u00a7\"Custom ontology (version 1)\": replaces \"the generated extraction schema is P2\" with what it actually does. - `sovereign/docs/specs/CUSTOM_ATLAS.md`: leads with th"
+    },
+    {
+      "false_claim": "the generated extraction schema is P2",
+      "labelled_by": "851bf1784",
+      "subject": "Actual custom ontologies (#59)",
+      "why": "ch parsing it themselves. Docs, per \u00a71.1: - `SYSTEM_OVERVIEW.md` custom_atlas entry: the generated schema, the ParsePolicy, `type_index.rs`, `atlas/ontology.json`, summary schema 3. - `corpus-engine/ENRICHMENT.md` \u00a7\"Custom ontology (version 1)\": replaces \"the generated extraction schema is P2\" with what it actually does. - `sovereign/docs/specs/CUSTOM_ATLAS.md`: leads with the correction \u2014 CA2's \"entity `Other` label"
+    },
+    {
+      "false_claim": "entity `Other` labels survive",
+      "labelled_by": "851bf1784",
+      "subject": "Actual custom ontologies (#59)",
+      "why": "tlas/ontology.json`, summary schema 3. - `corpus-engine/ENRICHMENT.md` \u00a7\"Custom ontology (version 1)\": replaces \"the generated extraction schema is P2\" with what it actually does. - `sovereign/docs/specs/CUSTOM_ATLAS.md`: leads with the correction \u2014 CA2's \"entity `Other` labels survive\" was wrong and stayed wrong; the reader dropped every `Other` as a hedge, which guidance prose could never reach. Claude-Session: htt"
+    },
+    {
+      "false_claim": "33 of 49 claims carry declared attributes",
+      "labelled_by": "851bf1784",
+      "subject": "Actual custom ontologies (#59)",
+      "why": "ed behaviours resolved \u2014 the metal tally reads `gold: 2, silver: 4` where it read `(unset): 13`, and reconcile's zero is now a correct zero with a test that has watched the external-key merge fire. One correction to the board's own numbers while I was in it: \"33 of 49 claims carry declared attributes\" overstated. Ten carried a declared attribute; the other 28 carried `grade`, which is the reserved enum slot, not the "
+    },
+    {
+      "false_claim": "` the fixture invented, and `label` is SINGULAR by its own contract (",
+      "labelled_by": "851bf1784",
+      "subject": "Actual custom ontologies (#59)",
+      "why": "n tests too. Swapping the fixtures onto the shipped declaration failed exactly one test, and it was the fixture that was wrong. `enumerate_a_declared_type_\u2026` asserted `7 coins in this atlas`, which no user has ever seen: the plural came from a `label = \"coins\"` the fixture invented, and `label` is SINGULAR by its own contract (\"what the UI calls instances of this type\"). Every shipped template rendered `7 coin in thi"
+    },
+    {
+      "false_claim": "` ran the whole workspace for that entry. TWO REGISTRY POINTERS WERE WRONG ABOUT WHICH TEST PROVES THE CLAUSE. FE-76 (",
+      "labelled_by": "af62eb6c8",
+      "subject": "test(ledger): 38 records adjudicated by watched mutation, and the sweep that was lying about two of them",
+      "why": "s: 0 fail: 0` when it cannot attribute the JUnit report to its own run (real FAIL lines, no counts \u2014 gate on the counts); and an inline `python3 -c` inside the loop died on a macOS codesign policy error, so the package variable came back empty and `--package \"\"` ran the whole workspace for that entry. TWO REGISTRY POINTERS WERE WRONG ABOUT WHICH TEST PROVES THE CLAUSE. FE-76 (\"cannot judge MUST be distinct from pass\""
+    },
+    {
+      "false_claim": "3 passed in 0.00s",
+      "labelled_by": "a20503305",
+      "subject": "feat(tdd): rec-1 ring 0 passes its seven bars; the explicit-stack driver is real",
+      "why": "The first cut of `commonwealth-tdd/src/recur/` landed inside abbd08b6f with its three ring-0 tests silently SKIPPING (the probe looked for a `pytest` binary; this host has only `python3 -m pytest`), so \"3 passed in 0.00s\" had verified nothing. Run for real, the driver was wrong four ways. All fixed; all three tests now exercise pytest, git worktrees and merges, ~32s. - A setup error was terminal before the evaluator "
+    },
+    {
+      "false_claim": "This act was wrong and it never comes back",
+      "labelled_by": "5cb35d112",
+      "subject": "  feat(ring-rail): the rail carries an opaque payload, and the money is an app",
+      "why": ")` becomes `admit() -> (acts in ONE order, gaps)`, and the exhaustive 720-permutation property is asserted over that admission rather than over balances \u2014 stronger, and true for every app that will ever sit on this rail. Correction stays in the rail. \"This act was wrong and it never comes back\" is generic, and it is the rule most easily got wrong: the void set has to be built from every correction at once, never by w"
+    },
+    {
+      "false_claim": "a new journey that no lane runs is a doc comment with a TOML syntax.",
+      "labelled_by": "4441be7dc",
+      "subject": "fix(contract): drop the terminal-onboard journey \u2014 nothing can run it",
+      "why": "`steps_no_lane_runs_do_not_grow` was red on main. The journey added five steps to the never-run bucket, 62 -> 67, against a cap the test documents as a one-way ratchet: \"a new journey that no lane runs is a doc comment with a TOML syntax.\" The cap is right and the journey was wrong. It was added on the reasoning that a verb no journey names is invisible to `contract map`, and that declared- unproven beats invisible. "
+    },
+    {
+      "false_claim": "Not in your sources \u2014 from general knowledge:",
+      "labelled_by": "1a39afdd6",
+      "subject": "fix(grounding): an unsearchable corpus is a could-not-judge, so it must not trigger the GK rescue",
+      "why": "The OOD rescue turns a gated abstention over a probe-confirmed uncovered topic into a caveated parametric answer, with GK_CAVEAT_PREFIX (\"Not in your sources \u2014 from general knowledge: \") decode-committed so the provenance flag is structural rather than an instruction the model may drop. Its precondition was wrong in one case. TopicUncovered asserts \"the enabled corpora have no region near this question\" \u2014 but a corpu"
+    },
+    {
+      "false_claim": "the enabled corpora have no region near this question",
+      "labelled_by": "1a39afdd6",
+      "subject": "fix(grounding): an unsearchable corpus is a could-not-judge, so it must not trigger the GK rescue",
+      "why": "ed parametric answer, with GK_CAVEAT_PREFIX (\"Not in your sources \u2014 from general knowledge: \") decode-committed so the provenance flag is structural rather than an instruction the model may drop. Its precondition was wrong in one case. TopicUncovered asserts \"the enabled corpora have no region near this question\" \u2014 but a corpus that could NOT be searched contributed no region to that probe. Its silence is a could-not"
+    },
+    {
+      "false_claim": "parenthetical and `an_all_errored_run_is_unmeasured_not_regressed` tests it. Only this parser was wrong, because `grep -oE",
+      "labelled_by": "5dde3e6e6",
+      "subject": "Flash next serving (#52)",
+      "why": "errored)\" enrichment:\u2026 the same all-zero tally, corpus not installed locally Both posted PASS(warn:setup) \u2014 a green built on five errored questions and an absent corpus. The BINARY was already right: bench_cmd/all.rs prints the \"unmeasured\" parenthetical and `an_all_errored_run_is_unmeasured_not_regressed` tests it. Only this parser was wrong, because `grep -oE \"[0-9]+ regressed\"` cannot tell 0-of-0 from 0-of-30. A l"
+    },
+    {
+      "false_claim": "Gated on `no_host` because that is what MAKES the claim true \u2026",
+      "labelled_by": "5dde3e6e6",
+      "subject": "Flash next serving (#52)",
+      "why": "and were not re-run. * fix(inference): delete the comment that says the fit-gate discount is gated on no_host \u2014 it is not, and it misled the docs `local_fit` carried TWO comment paragraphs making opposite claims, adjacent, with the superseded one FIRST: \"Gated on `no_host` because that is what MAKES the claim true \u2026\" \"Not gated on `no_host` \u2014 that pairing was WRONG and the measurement said so.\" The code does the seco"
+    },
+    {
+      "false_claim": "Not gated on `no_host` \u2014 that pairing was WRONG and the measurement said so.",
+      "labelled_by": "5dde3e6e6",
+      "subject": "Flash next serving (#52)",
+      "why": "ys the fit-gate discount is gated on no_host \u2014 it is not, and it misled the docs `local_fit` carried TWO comment paragraphs making opposite claims, adjacent, with the superseded one FIRST: \"Gated on `no_host` because that is what MAKES the claim true \u2026\" \"Not gated on `no_host` \u2014 that pairing was WRONG and the measurement said so.\" The code does the second. `host_resident` is read unconditionally, and `wants_no_host` "
+    },
+    {
+      "false_claim": "model file: 0.0 GB on disk; detected host RAM: 128.0 GB",
+      "labelled_by": "5dde3e6e6",
+      "subject": "Flash next serving (#52)",
+      "why": "risk profile \u2014 see note 5abc821a. 2. A MISSING SHARD DIAGNOSED ITSELF AS \"IT DIDN'T FIT IN MEMORY\". Shard `00001` of this model is 10.4 MB of header against ~104 GB total. `describe_model_load_failure` stat'd the path it was given, so a failed load printed \"model file: 0.0 GB on disk; detected host RAM: 128.0 GB\" and then offered \"likely causes: it didn't fit in memory (pick a smaller quant)\". Every word of that is w"
+    },
+    {
+      "false_claim": "likely causes: it didn't fit in memory (pick a smaller quant)",
+      "labelled_by": "5dde3e6e6",
+      "subject": "Flash next serving (#52)",
+      "why": "\"IT DIDN'T FIT IN MEMORY\". Shard `00001` of this model is 10.4 MB of header against ~104 GB total. `describe_model_load_failure` stat'd the path it was given, so a failed load printed \"model file: 0.0 GB on disk; detected host RAM: 128.0 GB\" and then offered \"likely causes: it didn't fit in memory (pick a smaller quant)\". Every word of that is wrong, and it is the message someone reads at the exact moment they need i"
+    },
+    {
+      "false_claim": "` is the obvious minimal fix and it is wrong: the spike tree is repo-relative with no leading slash, and this file's own test asserts `!admits(",
+      "labelled_by": "27c0fe031",
+      "subject": "Noun convergence (#47)",
+      "why": "y. The four already carrying a leading slash (`/tests/`, `/benches/`, `/examples/`, `/build.rs`) never misfired, which is the tell. The field is renamed `exclude_contains` -> `exclude_segments`, because it no longer holds substrings. Anchoring to `\"/research/\"` is the obvious minimal fix and it is wrong: the spike tree is repo-relative with no leading slash, and this file's own test asserts `!admits(\"research/spike/s"
+    },
+    {
+      "false_claim": "sovereign-contracts",
+      "labelled_by": "27c0fe031",
+      "subject": "Noun convergence (#47)",
+      "why": "ARCH_LAYERS puts `sovereign-contracts` in the `contract` layer, so every such edge reads as downward and legal, while `nc-boundary.py` classifies by PATH and calls the same edge BACKFLOW. A new `[[forbid]] from = \"corpus-engine*\" to = \"sovereign-*\" except = [\"sovereign-contracts\"]` records which reading binds new code. The `knowledge` layer's own comment claimed \"neither sovereign nor commonwealth types appear here\" "
+    },
+    {
+      "false_claim": "neither sovereign nor commonwealth types appear here",
+      "labelled_by": "27c0fe031",
+      "subject": "Noun convergence (#47)",
+      "why": "legal, while `nc-boundary.py` classifies by PATH and calls the same edge BACKFLOW. A new `[[forbid]] from = \"corpus-engine*\" to = \"sovereign-*\" except = [\"sovereign-contracts\"]` records which reading binds new code. The `knowledge` layer's own comment claimed \"neither sovereign nor commonwealth types appear here\" \u2014 false until the previous commit, and the four types it was wrong about are now named in it. The claim i"
+    },
+    {
+      "false_claim": "which workspace owns this crate",
+      "labelled_by": "27c0fe031",
+      "subject": "Noun convergence (#47)",
+      "why": "re guards that bare cargo has no equivalent of. That is already spelled out under \"Compilation and test feedback\"; this paragraph now points there instead of inventing a structural explanation. Found while placing types during noun-convergence rung 2b, where \"which workspace owns this crate\" is the question being answered all day. The old text sends you looking for manifests that do not exist. Correction noted inline"
+    },
+    {
+      "false_claim": "~26 metadata custody/source reads",
+      "labelled_by": "27c0fe031",
+      "subject": "Noun convergence (#47)",
+      "why": "e` \u2014 both would be doors. Its `Acquired` arm has no public constructor, so sovereign can READ provenance and can only WRITE `Manufactured`. MEASURED, NOT ESTIMATED, and both prior claims were wrong toward more work. The repoint surface is FIVE sites, not the \"~26 metadata custody/source reads\" the design named: 26 was every `metadata.get` on a chunk and most of those keys are not provenance. Estate was the only behav"
+    },
+    {
+      "false_claim": "the one-loop rule is structural; the desktop is a driver, never an implementation",
+      "labelled_by": "a50d2fdf3",
+      "subject": "refactor(deep-research): the port and the launch leave the host layer",
+      "why": "s the root cause of several separate-looking bugs. Config does not cross a process boundary, so the operator's configured search provider and `SOVEREIGN_DR_COMPOSED_REPORT` both stopped at the process edge. The stated rationale for the subprocess was right \u2014 \"the one-loop rule is structural; the desktop is a driver, never an implementation\" \u2014 and the mechanism was wrong. The real constraint is that `quality/ARCH_LAYE"
+    },
+    {
+      "false_claim": "follows verbatim:",
+      "labelled_by": "69804d6a9",
+      "subject": "fix(judge): guard-disclosure strip matches the shipped wording; disclosed numerals reported, never silently dr",
+      "why": "t measures. Seat LIFTED the no-touch freeze on this file for exactly this repair (the freeze existed because the file had just been repaired; the repair is now what is wrong). Fix, watched failing first (self-test exit 4 before, 0 after): - GUARD_RE ends at \"follows verbatim:\" OR first blank line OR EOF; - strip_guard_preamble -> split_guard_header: the strip is BOUNDED to the disclosure paragraph, and disclosed nume"
+    },
+    {
+      "false_claim": "No new install UI",
+      "labelled_by": "1c5de2d52",
+      "subject": "feat(recipes): sec-filings-company installs by ticker, one company at a time",
+      "why": "block edit would produce a corpus that installs green and cannot answer a figure. The script keeps CIK-derived ids, so the by-ticker and by-script namespaces cannot collide. Two spec claims corrected where they were wrong, leading with what was wrong. \u00a77.1's \"No new install UI\": the Tauri commands and their TS wrappers exist and the daemon threads parameters end to end, but no component calls them \u2014 the form does not"
+    },
+    {
+      "false_claim": "interpolated into [acquire]",
+      "labelled_by": "1c5de2d52",
+      "subject": "feat(recipes): sec-filings-company installs by ticker, one company at a time",
+      "why": "claims corrected where they were wrong, leading with what was wrong. \u00a77.1's \"No new install UI\": the Tauri commands and their TS wrappers exist and the daemon threads parameters end to end, but no component calls them \u2014 the form does not exist. \u00a77.2 scene 2's \"interpolated into [acquire]\": [parameters] substitutes, ticker -> filing resolves, and the URL must be composed from three parallel arrays no JSONPath can reac"
+    },
+    {
+      "false_claim": "needs peer-side work plus a gossip signal, neither measurable from here",
+      "labelled_by": "649d9c944",
+      "subject": "docs(scale): \u00a79.1.3 \u2014 the second gate is closed in code, and what is still unmeasured",
+      "why": "\u00a79.1.2 named the binding constraint and declined to work around it, saying the fix \"needs peer-side work plus a gossip signal, neither measurable from here\". Half of that was wrong: the re-dial half needs nothing from the peer, because it only reads refusals this node already receives. Both halves are now built and the section says which is which. Records the design call that the order did not anticipate: the fi"
+    },
+    {
+      "false_claim": "the bench is broken",
+      "labelled_by": "08013c315",
+      "subject": "feat(backlog): a failed HARD bench lane files its own candidate, once per lane",
+      "why": "gym-gate, ci-bench:knowledge-gym-gate, ci-bench:agent-coding-gate \u2014 and the run still ended VERDICT: FAIL, unchanged. Zero writes. Live proof, into a scratch store rather than the operator's real backlog (the run was deliberately sabotaged, so items claiming \"the bench is broken\" would have been true of the run and misleading about the system): filing 1 ci-bench:routing -> filed 31150855, 2 \u2014 F Viable, cost S filing "
+    },
+    {
+      "false_claim": "unvetted \u2014 not pullable",
+      "labelled_by": "08013c315",
+      "subject": "feat(backlog): a failed HARD bench lane files its own candidate, once per lane",
+      "why": "0855, 2 \u2014 F Viable, cost S filing 2 ci-bench:routing -> UPDATED bf4a6536, supersedes 31150855 filing 3 ci-bench:chaos-gate -> filed 6fe0256c Store afterwards: 4 rows, 3 live, 1 retired. Two lanes, two items; the repeat did not duplicate. Rendered: \"unvetted \u2014 not pullable\", naming commonwealth/primary first among its reasons, and the pull banner reads \"3 item(s) present, 0 vetted. Nothing is pullable.\" Also adds `--c"
+    },
+    {
+      "false_claim": "scan_item_dropped",
+      "labelled_by": "18dc5f52f",
+      "subject": "fix(grounding): the ledger holds claims, not the judge's commentary",
+      "why": "The fix \u2014 one decider `normalize_scan_item` \u2192 `anchor_scan_item`, returning `Option<String>`: an item that is not wording of the ANSWER is not a claim about the world, and gets no holding. `None` is a verdict, and `scan_items_from_reply` traces it (`event = \"scan_item_dropped\"`) \u2014 dropped loudly, never silently reshaped into something claim-shaped. Anchoring is emphasis-tolerant (`anchor_key`, the one normal form for"
+    },
+    {
+      "false_claim": "on-disk-state addition, not a precondition for indexing",
+      "labelled_by": "137b09ddf",
+      "subject": "refactor(cli): hoist the project model into sovereign-cli-shared",
+      "why": "`project_toml.rs` (the durable record derived from it) move verbatim behind a new `project-model` feature. Neither file's contents changed beyond one import; both keep their unit tests. Correction to the inherited plan, which said to DROP project_toml as an \"on-disk-state addition, not a precondition for indexing\". True of indexing, wrong about the file: `.sovereign/project.toml` is read by sovereign-server (main.rs:"
+    },
+    {
+      "false_claim": "Rename RelationKey to RelationTriplet",
+      "labelled_by": "9b420825f",
+      "subject": "feat(gym): a React/TypeScript bank \u2014 and the exhaustion bug it exposed",
+      "why": "uiet; the open question is recall, not precision. THE BANK WAS BUILT TWICE AND THE FIRST BUILD WAS WRONG. It reported wrong-fire 21.5%, all `neg_exhausted`. Checked against the commits, 18 of those 26 were THE SYSTEM BEING RIGHT \u2014 backstage 49a9998 is titled \"Rename RelationKey to RelationTriplet\" and takes the count 9 -> 0, while the episode was labelled a negative whose correct answer is silence. `n_exhausted` aske"
+    },
+    {
+      "false_claim": "stop running tests",
+      "labelled_by": "2b9dc4f55",
+      "subject": "feat(gym): transcript episodes carry a session digest and a situated/standing scope",
+      "why": "The operator caveat from the M0 audit, now structural: a transcript correction (\"stop running tests\") was only judgeable with the session behind it. Every transcript episode's situation now opens with a mechanical digest \u2014 opening task, tool tally, edited files, last two operator steers, all verdict-masked \u2014 and carries scope=standing (matches a feedback mem"
+    },
+    {
+      "false_claim": "fixes type-collapse",
+      "labelled_by": "50252916a",
+      "subject": "docs: purge the stale GLiNER2 claims from every design doc that carried them",
+      "why": "of six rows were wrong. ~/.claude/plans/let-s-make-a-plan-gleaming-dove.md (operator's plan) - Step 3 marked BUILT AND REJECTED with the vault table, and each of its three planning numbers annotated: 2.8x -> 1.0x on target, RSS 6-7 GB -> inverted, \"fixes type-collapse\" -> false. Also the desktop demo's \"correctly-typed entities\" secondary win, which no longer exists. Docs-only; no .rs touched since the last green gat"
+    },
+    {
+      "false_claim": "is really 16 -> 15 registered / 27 -> 26 total: net -1. Third correction, for whoever plans P2.3(a): SOVEREIGN_ATLAS_INCREMENTAL is not",
+      "labelled_by": "0f867d5f3",
+      "subject": "  docs(ratchet): the seven enrichment numbers get predicates, and two were wrong",
+      "why": "nsus corrects two of the seven \u2014 stores ~9 -> 11 (mem_raptor_nodes, asset_motifs, conv_motifs are live and unlisted) and env knobs ~12 -> 26 (15 registered + 11 grandfathered in env_unregistered.txt; the roadmap counted registered only). T1's \"12 -> 10\" is really 16 -> 15 registered / 27 -> 26 total: net -1. Third correction, for whoever plans P2.3(a): SOVEREIGN_ATLAS_INCREMENTAL is not \"read today and unused\" as two"
+    },
+    {
+      "false_claim": "how does photosynthesis work",
+      "labelled_by": "9e592863f",
+      "subject": "persona-qa: stop the value-extraction scorer vetoing grounded explanation answers",
+      "why": "ed scorer (bench score-answer -> assess_asserted_value) is value-extraction-shaped: it returns honest_abstention / caveated_ood whenever an answer asserts no single checkable atomic value. But that is the NORMAL shape of a grounded process/explanation answer (\"how does photosynthesis work\", a source-cited argumentative correction) -- fully grounded and answered, just no single \"value\". classifyOutcome treated that ve"
+    },
+    {
+      "false_claim": "how do they turn light into energy",
+      "labelled_by": "9e592863f",
+      "subject": "persona-qa: stop the value-extraction scorer vetoing grounded explanation answers",
+      "why": "er. evp-false (genuine no-evidence decline) and judge-broken cases never qualify, so honest graceful declines and real failures stay in the gap family. Receipts (grace-retest journals): exactly 3/12 gap-family turns flip to answered_grounded (photosynthesis, \"how do they turn light into energy\", George Mason correction) -- all judge-good + evp-true substantive explanations. Pooled across 9 representative mixed journa"
+    },
+    {
+      "false_claim": "runner-up below the floor",
+      "labelled_by": "409813e96",
+      "subject": "fix(grounding): citation snap hardening \u2014 margin always, composite date veto, qualifier snap, bounded brackets",
+      "why": "Four hardening fixes from replay-observed escapes of the bc0dd31f snap/veto: 1. The snap's uniqueness margin now applies UNCONDITIONALLY. The \"runner-up below the floor\" escape hatch let a barely-over-floor best snap out of a crowded label FAMILY: \"Maple House Charter, Articles II\u2013XI\" \u2014 an aggregate RANGE citation \u2014 measured 0.763 against \"Article VI \u2014 Pets\" (runner-up 0.738) and was wrongly rewritten to the Pets art"
+    },
+    {
+      "false_claim": "Maple House Charter, Articles II\u2013XI",
+      "labelled_by": "409813e96",
+      "subject": "fix(grounding): citation snap hardening \u2014 margin always, composite date veto, qualifier snap, bounded brackets",
+      "why": "Four hardening fixes from replay-observed escapes of the bc0dd31f snap/veto: 1. The snap's uniqueness margin now applies UNCONDITIONALLY. The \"runner-up below the floor\" escape hatch let a barely-over-floor best snap out of a crowded label FAMILY: \"Maple House Charter, Articles II\u2013XI\" \u2014 an aggregate RANGE citation \u2014 measured 0.763 against \"Article VI \u2014 Pets\" (runner-up 0.738) and was wrongly rewritten to the Pets art"
+    },
+    {
+      "false_claim": "Article VI \u2014 Pets",
+      "labelled_by": "409813e96",
+      "subject": "fix(grounding): citation snap hardening \u2014 margin always, composite date veto, qualifier snap, bounded brackets",
+      "why": "uniqueness margin now applies UNCONDITIONALLY. The \"runner-up below the floor\" escape hatch let a barely-over-floor best snap out of a crowded label FAMILY: \"Maple House Charter, Articles II\u2013XI\" \u2014 an aggregate RANGE citation \u2014 measured 0.763 against \"Article VI \u2014 Pets\" (runner-up 0.738) and was wrongly rewritten to the Pets article. Shared family prefixes inflate full-string similarity; only the margin catches it. An"
+    }
+  ]
+}

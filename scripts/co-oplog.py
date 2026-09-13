@@ -1792,6 +1792,86 @@ def cmd_bs_preference(a) -> int:
         print(f"    {p['claim'][:96]}")
     return 0
 
+# ---- harvested corrections: ground truth nobody here authored ----------
+#
+# Every bank this order built failed the same way: one person wrote the
+# claims AND the labels, so the bank could only confirm that person is
+# consistent with themselves. A surface classifier scored well on it because
+# surface correlated with label by construction.
+#
+# This repo has been labelling its own false claims for months. The
+# convention is that a correction leads with what was wrong, so a correcting
+# commit QUOTES the false claim verbatim, states the true version, and names
+# the receipt:
+#
+#   94e16311  the README said "six crates and no binary" -- the package is
+#             NINE crates and `commonwealth-rails` ships `[[bin]] cw-rails`
+#   c780d571  f462eff3c's body describes a closeout as landed; `git show
+#             --stat` on it is 0 insertions, 0 deletions
+#   ab079922  a comment said a field was "kept because `main`'s exit path
+#             cancels it"; `cargo check` reports it never read
+#
+# The label comes from whoever found the error and wrote it down. Not from
+# me, not from a model, and not from the surface of the sentence.
+
+RX_CORRECTION = re.compile(
+    r"(said .{0,40}until 20|CORRECTION|(?:was|were|is) wrong|said the opposite"
+    r"|supersedes|and (?:both halves|it) (?:were|was) false)", re.I)
+RX_QUOTED = re.compile(r'"([^"]{16,220})"')
+
+def harvest_corrections(since: str = "2026-06-01") -> list[dict]:
+    """(false claim, the commit that labelled it, the body that says why).
+
+    Only commits whose body BOTH signals a correction and quotes something
+    are taken: the quote is the false claim in its author's own words, and a
+    correction that quotes nothing gives us no claim to score."""
+    import subprocess
+    out = subprocess.run(
+        ["git", "log", f"--since={since}", "--format=%H%x00%s%x00%b%x1e"],
+        capture_output=True, text=True).stdout
+    rows = []
+    for rec in out.split("\x1e"):
+        if not rec.strip():
+            continue
+        parts = rec.strip().split("\x00")
+        if len(parts) < 3:
+            continue
+        sha, subj, body = parts[0], parts[1], parts[2]
+        if not RX_CORRECTION.search(body):
+            continue
+        for m in RX_QUOTED.finditer(body):
+            q = " ".join(m.group(1).split())
+            if len(q) < 16 or q.startswith("http"):
+                continue
+            ctx_start = max(0, m.start() - 260)
+            ctx = " ".join(body[ctx_start:m.end() + 260].split())
+            if not RX_CORRECTION.search(ctx):
+                continue        # quoted, but not inside the correction
+            rows.append({"false_claim": q, "labelled_by": sha[:9],
+                         "subject": subj[:110], "why": ctx[:420]})
+    return rows
+
+def cmd_harvest(a) -> int:
+    rows = harvest_corrections(a.since)
+    seen, uniq = set(), []
+    for r in rows:
+        k = r["false_claim"].lower()
+        if k in seen:
+            continue
+        seen.add(k)
+        uniq.append(r)
+    Path(a.out).write_text(json.dumps(
+        {"schema": "bs-corrections/v1",
+         "rule": "Each `false_claim` is quoted verbatim inside a commit body that "
+                 "declares it wrong. The label is the correcting author's, not this "
+                 "tool's and not a model's. `labelled_by` is the commit that says so.",
+         "cases": uniq}, indent=2) + "\n")
+    print(f"wrote {a.out} — {len(uniq)} known-false claims from "
+          f"{len({r['labelled_by'] for r in uniq})} correcting commits")
+    for r in uniq[:a.show]:
+        print(f"\n  [{r['labelled_by']}] {r['false_claim'][:104]}")
+    return 0
+
 # ---- routing: which referent can settle this claim ---------------------
 #
 # The analytical correction of 2026-09-13. A verdict is a comparison against
@@ -1935,7 +2015,69 @@ def instrument_ran(claim: str, anchor: str, evidence: str) -> dict:
             "why": f"`{anchor}` is not in this turn's output, and this instrument "
                    f"cannot tell an unsupported claim from an anchor it misread"}
 
-INSTRUMENTS = {"record": "instrument_record", "ran": "instrument_ran"}
+RX_UNIQUE = re.compile(r"\b(the only|only one|sole|no other|nothing else|never|no \w+ (?:calls|reads|uses))\b", re.I)
+RX_ABSENCE = re.compile(r"\b(there is no|there are no|no \w+ (?:exists|remains)|nothing|never|zero|not present|does not exist|no longer)\b", re.I)
+
+def instrument_code(claim: str, anchor: str, sha: str) -> dict:
+    """A claim about the TREE, checked against the tree at the sha it was
+    made against.
+
+    The operator's framing, 2026-09-13: the BS is an agent handing you a map
+    and calling it the territory. So resolve the anchor in the territory at
+    that moment, and say what is actually there.
+
+    Three claim shapes this can settle, and it DECLINES on everything else
+    rather than guessing:
+
+      uniqueness  "the only X" / "no other X"  -> count occurrences; >1 kills it
+      absence     "there is no X"              -> any occurrence kills it
+      existence   "X is at/does/has ..."       -> zero occurrences kills it
+    """
+    a = anchor.strip().strip("`'\"")
+    if not a or len(a) < 4:
+        return {"verdict": "not-mine", "why": "no resolvable anchor"}
+    hits = git("grep", "-cF", a, sha)
+    files = [l for l in hits.splitlines() if l.strip()]
+    total = 0
+    for l in files:
+        try:
+            total += int(l.rsplit(":", 1)[1])
+        except (ValueError, IndexError):
+            pass
+    cmd = f"git grep -cF {a!r} {sha[:9]}"
+    if RX_ABSENCE.search(claim):
+        if total == 0:
+            return {"verdict": "holds", "why": f"{cmd} — nothing, which is the claim"}
+        return {"verdict": "broken", "why": f"{cmd} — {total} occurrence(s) across "
+                                            f"{len(files)} file(s)", "receipt": cmd}
+    if RX_UNIQUE.search(claim):
+        if total == 0:
+            return {"verdict": "not-mine", "why": f"{cmd} — anchor does not resolve at this sha"}
+        if len(files) > 1:
+            return {"verdict": "broken",
+                    "why": f"{cmd} — {len(files)} files carry it, an `only` needs one",
+                    "receipt": cmd}
+        return {"verdict": "holds", "why": f"{cmd} — one file"}
+    # A NON-RESOLVING ANCHOR IS `not-mine`, NEVER `broken`.
+    #
+    # This branch returned `broken` for one run and scored 8 of 18 "caught".
+    # Every one was an artifact: the anchors were a log line, a `cargo tree`
+    # invocation, a `--help` command -- things that of course do not appear
+    # in the tree, on claims that were not about them. It is the same
+    # polarity error the v4 checker had (an empty result does not disprove a
+    # positive claim), reintroduced here and caught only because the
+    # externally-labelled bank made the "successes" readable.
+    #
+    # Only ABSENCE and UNIQUENESS have polarity that a count can settle. A
+    # bare positive claim needs the anchor to BE a code identifier and the
+    # claim to say something checkable about it, and this instrument can
+    # establish neither -- so it declines.
+    return {"verdict": "not-mine",
+            "why": f"{cmd} — {total} occurrence(s); a bare positive claim is not "
+                   f"settled by a count, and this anchor may not be a code symbol"}
+
+INSTRUMENTS = {"record": "instrument_record", "ran": "instrument_ran",
+               "code": "instrument_code"}
 
 def resolution_control(files: list[Path], corpora: list[str]) -> dict:
     """The control whose answer key is the world, not the author.
@@ -2614,6 +2756,11 @@ def main() -> int:
     bp.add_argument("--pin", default=DEFAULT_PIN)
     bp.add_argument("--timeout", type=float, default=120.0)
     bp.set_defaults(fn=cmd_bs_preference)
+    hv = sub.add_parser("harvest", help="known-false claims the repo already labelled in commit bodies")
+    hv.add_argument("--since", default="2026-06-01")
+    hv.add_argument("--show", type=int, default=8)
+    hv.add_argument("--out", default="quality/report-audit/bs-corrections.json")
+    hv.set_defaults(fn=cmd_harvest)
     rt = sub.add_parser("route", help="which referent can settle each claim; exits 4 if its control fails")
     rt.add_argument("--project", default="-Users-alexsbryan-dev-commonwealth-ai")
     rt.add_argument("--sessions", type=int, default=40)
