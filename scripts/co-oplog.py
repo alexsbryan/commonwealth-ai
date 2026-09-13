@@ -1854,9 +1854,10 @@ def route(claim: str, corpora: list[str] | None = None) -> tuple[str, str]:
         return "prose", referent(claim)
     return "none", ""
 
-# The router's known-answer input. Each case is unambiguous BY SURFACE, which
-# is the property that makes a hand bank legitimate here and illegitimate for
-# the judge. A control failure voids the run; it never condemns a candidate.
+# A SMOKE TEST, NOT THE CONTROL. It catches a router that has stopped working
+# outright; it said 7/7 while the router was ~45% right on real claims, so it
+# must never be reported as evidence the routing is good. The real control is
+# `resolution_control()` below, whose answers come from the world.
 ROUTER_CONTROL = [
     ("widget-corpus is ingested and done", "record"),
     ("The suite came back 4,451 pass, 0 fail", "ran"),
@@ -1936,13 +1937,46 @@ def instrument_ran(claim: str, anchor: str, evidence: str) -> dict:
 
 INSTRUMENTS = {"record": "instrument_record", "ran": "instrument_ran"}
 
+def resolution_control(files: list[Path], corpora: list[str]) -> dict:
+    """The control whose answer key is the world, not the author.
+
+    A route is demonstrably RIGHT when its instrument resolves the anchor --
+    the corpus state file exists, the token is in this turn's output -- and
+    demonstrably wrong when every instrument declines. Neither depends on my
+    reading of the claim, which is exactly what was wrong with the seven
+    hand-written cases: I wrote the claims AND the answers, so the control
+    could only confirm that I am consistent with myself.
+
+    Unambiguous breakage, and the only thing this gates on: a route carrying
+    claims where NOTHING ever resolves. No invented threshold -- a populated
+    route that never once resolves is broken whatever the right rate is."""
+    stats = {r: {"routed": 0, "resolved": 0} for r in REFERENTS}
+    for f in files:
+        try:
+            bundles = turn_bundles(f)
+        except Exception:
+            continue
+        for b in bundles:
+            for s in sentences(b["text"]):
+                r, tok = route(s, corpora)
+                stats[r]["routed"] += 1
+                if r == "record":
+                    if instrument_record(s, tok)["verdict"] != "not-mine":
+                        stats[r]["resolved"] += 1
+                elif r == "ran":
+                    if instrument_ran(s, tok, b["evidence"])["verdict"] != "not-mine":
+                        stats[r]["resolved"] += 1
+    broken = [r for r in ("record", "ran")
+              if stats[r]["routed"] >= 20 and stats[r]["resolved"] == 0]
+    return {"stats": stats, "broken": broken}
+
 def cmd_route(a) -> int:
     """Route real claims and report the distribution. Exits 4 -- INSTRUMENT
     BROKEN, not candidate failed -- if the control does not hold."""
     bad = router_control()
     if bad:
-        print("CONTROL FAILED — the router is broken, this run says nothing "
-              "about the claims:")
+        print("SMOKE TEST FAILED — the router is broken outright, this run says "
+              "nothing about the claims:")
         for b in bad:
             print(f"  {b}")
         return 4
@@ -1950,6 +1984,13 @@ def cmd_route(a) -> int:
     src_dir = TRANSCRIPTS / a.project
     files = sorted(src_dir.glob("*.jsonl"), key=lambda q: q.stat().st_mtime,
                    reverse=True)[:a.sessions]
+    ctl = resolution_control(files, corpora)
+    if ctl["broken"]:
+        print("CONTROL FAILED — these routes carry claims and resolve NOTHING, "
+              "so the instrument or the route is broken:")
+        for r in ctl["broken"]:
+            print(f"  {r}: {ctl['stats'][r]['routed']} routed, 0 resolved")
+        return 4
     from collections import Counter
     c, examples = Counter(), {}
     for f in files:
@@ -1973,6 +2014,12 @@ def cmd_route(a) -> int:
         if r in examples:
             s, tok = examples[r]
             print(f"           e.g. [{tok[:28]}] {' '.join(s.split())[:78]}")
+    print("\n  resolution — the share of each route whose instrument found its")
+    print("  anchor in the world. This is the control; the smoke test is not.")
+    for r in ("record", "ran"):
+        s = ctl["stats"][r]
+        rate = s["resolved"] / s["routed"] if s["routed"] else 0.0
+        print(f"    {r:<8} {s['resolved']:>5}/{s['routed']:<6} ({rate:.0%}) resolved")
     need_model = c.get("prose", 0)
     print(f"\n  needs a model: {need_model}/{tot} ({need_model/tot:.0%}). "
           f"The rest is deterministic or never graded.")
