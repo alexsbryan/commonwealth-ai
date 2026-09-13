@@ -63,7 +63,18 @@ holder_key() {
   key="$(api GET /Auth/Keys | sed 's/},{/}\
 {/g' | grep '"AppName":"cw-media-demo"' | sed -n 's/.*"AccessToken":"\([^"]*\)".*/\1/p' | head -1)"
   [ -n "$key" ] || { say "no API key came back -- skipping the declaration"; return 1; }
-  printf 'MediaBrowser Token="%s"' "$key" | "${SVRN:-svrn}" mesh media declare authorization
+  local cli="${SVRN:-svrn}"
+  command -v "$cli" >/dev/null \
+    || { say "'$cli' is not on PATH -- set SVRN to your CLI (this repo ships it as both \`svrn\` and \`sovereign\`)"; return 1; }
+  printf 'MediaBrowser Token="%s"' "$key" | "$cli" mesh media declare authorization || return 1
+  # Declaring is not serving. `read_declared_in` runs once, while the acceptor
+  # is built (sovereign-mesh/src/iroh_access.rs:620), so the key reaches no
+  # request until the daemon is rebuilt -- and `reload` reports "no config
+  # changes detected" rather than saying so. Restart here, or holder-up ends
+  # with a stored credential and a library that still 401s the house.
+  say "restarting the daemon so the declaration reaches the acceptor…"
+  "$cli" daemon stop >/dev/null 2>&1 || true
+  "$cli" daemon start >/dev/null || { say "daemon did not come back -- \`$cli daemon start\`"; return 1; }
 }
 
 holder_up() {

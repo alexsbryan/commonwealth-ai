@@ -485,7 +485,10 @@ pub(crate) fn cmd_media_declare(args: &[String]) -> i32 {
         eprintln!("config.toml on purpose: a secret there rides along with anything that is");
         eprintln!("shared, synced, backed up, or gossiped to a peer.");
         eprintln!();
-        eprintln!("Run `svrn daemon reload` after changing a declaration.");
+        eprintln!("Run `svrn daemon stop && svrn daemon start` after changing a");
+        eprintln!("declaration — NOT `reload`. The declarations are read once, while the");
+        eprintln!("acceptor is built, so a reload cannot apply one and will tell you there");
+        eprintln!("was nothing to do.");
         return 0;
     }
 
@@ -522,7 +525,8 @@ pub(crate) fn cmd_media_declare(args: &[String]) -> i32 {
         return match commonwealth_media::write_declared_in(&dir, name, "") {
             Ok(()) => {
                 println!(
-                    "Cleared {}. Run `svrn daemon reload` to apply.",
+                    "Cleared {}. Run `svrn daemon stop && svrn daemon start` to apply \
+                     (a reload cannot: declarations are read once, at acceptor build).",
                     name.to_ascii_lowercase()
                 );
                 0
@@ -557,7 +561,9 @@ pub(crate) fn cmd_media_declare(args: &[String]) -> i32 {
         Ok(()) => {
             // What is SET, never what it is.
             println!(
-                "Stored {} (0600, {}). Run `svrn daemon reload` to apply.",
+                "Stored {} (0600, {}). Run `svrn daemon stop && svrn daemon start` to \
+                 apply — NOT `reload`, which is read once at acceptor build and will \
+                 report nothing to do.",
                 name.to_ascii_lowercase(),
                 dir.display()
             );

@@ -339,6 +339,25 @@ impl ConfigDiff {
             // installed at startup.
             d.restart_required.push("iroh.transport");
         }
+        // The three below reach the acceptor the same way `iroh.enabled` does
+        // — read once while it is constructed, never re-read — and until
+        // 2026-09-12 none of them was compared here. A change to any one made
+        // `is_noop()` true, so `svrn daemon reload` printed "no config changes
+        // detected" over a config that had demonstrably changed and the daemon
+        // silently kept the old value (ARCH §18.3: absence is reported, never
+        // defaulted). Observed setting `media_origin` on this host: the verb
+        // said stored, reload said nothing changed, the fanout still 401'd.
+        if old.iroh.media_origin != new.iroh.media_origin {
+            d.restart_required.push("iroh.media_origin");
+        }
+        if old.iroh.media_allow != new.iroh.media_allow {
+            d.restart_required.push("iroh.media_allow");
+        }
+        if old.iroh.apps != new.iroh.apps {
+            // `[iroh.apps]` is the durable publish tier; the ephemeral one
+            // (`svrn run`) goes through `PublishedApps` and needs no restart.
+            d.restart_required.push("iroh.apps");
+        }
         d
     }
 
@@ -491,6 +510,59 @@ mod tests {
 
         let d = ConfigDiff::diff(&base, &base.clone());
         assert!(d.restart_required.is_empty());
+    }
+
+    /// The failing input this exists for, and it was a live one: adding
+    /// `[iroh] media_origin` and running `svrn daemon reload` printed
+    /// "✓ no config changes detected — nothing to reload" while the daemon
+    /// went on serving the old value, because none of these three fields was
+    /// compared. A house is converted along exactly this path — "one config
+    /// line and a join" — so the reload saying nothing happened is the
+    /// difference between a working demo and a silent one.
+    ///
+    /// Each is asserted ALONE. A single config differing in all three would
+    /// pass even if only one comparison existed.
+    #[test]
+    fn a_media_or_app_config_change_is_never_reported_as_no_change() {
+        let base = SetupConfig {
+            engine: Default::default(),
+            compute: Default::default(),
+            search: Default::default(),
+            models: None,
+            node: Default::default(),
+            daemon: DaemonSection::default(),
+            data: DataSection::default(),
+            watched_folders: Default::default(),
+            memory: Default::default(),
+            iroh: Default::default(),
+            shared_model: Default::default(),
+            discovery: Default::default(),
+            mcp_servers: Vec::new(),
+        };
+
+        let mut origin_set = base.clone();
+        origin_set.iroh.media_origin = Some("127.0.0.1:8096".into());
+        let d = ConfigDiff::diff(&base, &origin_set);
+        assert_eq!(d.restart_required, vec!["iroh.media_origin"]);
+        assert!(!d.is_noop(), "a changed config must never read as a no-op");
+
+        let mut allow_set = base.clone();
+        allow_set.iroh.media_allow = vec!["LittleMac".into()];
+        let d = ConfigDiff::diff(&base, &allow_set);
+        assert_eq!(d.restart_required, vec!["iroh.media_allow"]);
+        assert!(!d.is_noop());
+
+        let mut app_published = base.clone();
+        app_published
+            .iroh
+            .apps
+            .insert("chores".into(), "127.0.0.1:5000".into());
+        let d = ConfigDiff::diff(&base, &app_published);
+        assert_eq!(d.restart_required, vec!["iroh.apps"]);
+        assert!(!d.is_noop());
+
+        // The other half of the claim: an unchanged config still reads as one.
+        assert!(ConfigDiff::diff(&base, &base.clone()).is_noop());
     }
 
     async fn spawn(daemon: Arc<EmbeddedDaemon>) -> String {
