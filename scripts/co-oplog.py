@@ -604,8 +604,19 @@ def promise_ladder(text: str, t0: str, t1: str, record: str,
     verdict, engine, why = promise_judge(text, t0, t1, pin, timeout, own)
     receipt = (f"git show --stat {' '.join(own)}" if own else
                f"git log --format='%h %s' {t0[:10]}..{t1[:10]}; git diff --name-only {t0[:10]}..{t1[:10]}")
+    if verdict == "broken":
+        # THE JUDGE CORROBORATES; IT DOES NOT ACCUSE. Read one row at a time
+        # across the first eight replay cards (2026-09-13), its BROKEN
+        # verdicts on real sessions were 5 of 5 unfair -- `import`, `entry`,
+        # `step-3`, `commonwealth-ai-68`, `merge`: a term absent from a
+        # record, never a promise unkept -- against 10/10 on its own bank.
+        # A prose commitment is not settled by a term's absence. KEPT is the
+        # cheap error and stays; BROKEN is downgraded here, reason kept, so
+        # the row is a named abstention and not a silent drop (ARCH 6).
+        return {"verdict": "unchecked", "objects": [], "engine": engine or "judge",
+                "reason": f"judge would accuse ({why}); a prose commitment is not settled by a term"}
     return {"verdict": verdict, "objects": [], "reason": why, "engine": engine or "judge",
-            "receipt": receipt if verdict in ("kept", "broken") else None}
+            "receipt": receipt if verdict == "kept" else None}
 
 def promise_verdict(text: str, t0: str, t1: str, record: str,
                     own: list[str] | None = None) -> dict:
@@ -3477,6 +3488,19 @@ def cmd_self_test(_a) -> int:
         eq(_has("652209b"), False, "an 11-char subject is no fingerprint")
     eq(promise_verdict("I'll add `helm_chart`", "a", "b", "", own=[])["reason"],
        "this session committed nothing in the interval", "no own commits declines by name")
+    # The judge's BROKEN never reaches the card as an accusation.
+    _pj = globals()["promise_judge"]
+    globals()["promise_judge"] = lambda *a, **k: ("broken", "stub", "no `merge` in 62 record lines")
+    try:
+        _v = promise_ladder("I'll merge onto theirs rather than overwrite.", "a", "b",
+                            "feat: x\n+y", "stub-pin", 1.0, ["abc1234"])
+        eq(_v["verdict"], "unchecked", "the judge's broken is downgraded")
+        eq("judge would accuse" in _v["reason"], True, "and the downgrade names itself")
+        globals()["promise_judge"] = lambda *a, **k: ("kept", "stub", "`abc1234` is in the interval")
+        eq(promise_ladder("I'll merge onto theirs.", "a", "b", "feat: x\n+y", "stub-pin", 1.0,
+                          ["abc1234"])["verdict"], "kept", "its kept still stands")
+    finally:
+        globals()["promise_judge"] = _pj
     eq(integrity(0, 0), None, "no decided commitment is never-ran, not zero")
     eq(integrity(1, 1), 0.0, "one held one broken is level")
     eq(round(integrity(17, 2), 2), 0.68, "the prior k=3 keeps a short session off the rails")
