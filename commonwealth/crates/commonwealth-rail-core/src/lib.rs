@@ -532,6 +532,10 @@ impl RingVerifier for Ed25519Verifier {
 
 #[cfg(test)]
 mod tests;
+// The roster-provenance half, split out when the two together passed the
+// 1200-line ceiling (ARCH §3.2). Named for its subject, not numbered.
+#[cfg(test)]
+mod tests_introduce;
 
 /// The rail's ONE set of op fixtures.
 ///
