@@ -2792,7 +2792,12 @@ def cmd_frame_check(a) -> int:
 # before the judge has a trustworthy number, and can have a baseline over
 # every session on disk in seconds.
 
-RX_ENUM = re.compile(r"^\s*(?:[-*+]\s+|\d+[.)]\s+|\*\*[^*]{3,60}\*\*[.:—-])", re.M)
+# A bold lead counts whether its punctuation sits inside the bold or after
+# it: "**Generate the bank by mutation.** Take claims…" is the shape of every
+# item in the 7-item block d6c0c747 was told "three tops" about, and the old
+# pattern (punctuation after the closing **) counted that session at 0.05
+# items per block.
+RX_ENUM = re.compile(r"^\s*(?:[-*+]\s+|\d+[.)]\s+|\*\*[^*\n]{3,80}\*\*(?:[.:—-]|\s))", re.M)
 RX_BOUND = re.compile(
     r"\b(?:(one|two|three|four|five|1|2|3|4|5)\s+(?:tops|max|maximum|at most)"
     r"|(?:at most|no more than|just|only|max)\s+(one|two|three|four|five|1|2|3|4|5)"
@@ -2844,6 +2849,7 @@ def sprawl_session(path: Path) -> dict:
 
     calls = sum(1 for k, _ in events if k == "call")
     blocks, over = [], []
+    widest = {"offered": 0, "ask": "", "ask_words": 0, "leads": []}
     for n, (kind, payload) in enumerate(events):
         if kind == "user":
             user_last = payload
@@ -2858,7 +2864,18 @@ def sprawl_session(path: Path) -> dict:
         bound = ask_bound(user_last)
         if bound is not None and k > bound:
             over.append({"asked": bound, "offered": k, "excerpt": payload[:110]})
+        # The widest response and the ask it answered, as a juxtaposition. No
+        # threshold: the reader sees "asked in 9 words, offered 7 items" and
+        # judges. On d6c0c747 the 7-item block is the one the operator met
+        # with "Not seven. Three tops." -- the judge above did not flag it.
+        if k > widest["offered"] and not RX_NOT_AN_ASK.match(user_last.strip()):
+            widest.update({"offered": k, "ask": " ".join(user_last.split())[:160],
+                           "ask_words": len(user_last.split()),
+                           "leads": [m.strip()[:70] for m in
+                                     re.findall(r"^\s*(?:[-*+]\s+|\d+[.)]\s+)?(\*\*[^*\n]{3,60}\*\*|[^\n]{3,70})",
+                                                payload, re.M)[:3]]})
     return {"session": path.stem[:8],
+            "widest": widest,
             "operator_blocks": len(blocks),
             "items_offered": sum(blocks),
             "max_offered": max(blocks) if blocks else 0,
@@ -3274,7 +3291,7 @@ def bro_session(path: Path, pin: str, timeout: float) -> dict:
 def render_bro(b: dict, limit: int = 12) -> list[str]:
     lines = []
     if b is None:
-        return ["  bro         not run"]
+        return ["  bro         judge not run (opt-in: --bro); the widest-response juxtaposition above is the deterministic half"]
     if not b["judged"]:
         return [f"  bro         never-ran ({b['pairs']} ask/response pairs, {b['outages']} outages)"]
     lines.append(f"  bro         {b['bro']:.2f} of blocks flagged  ({b['blocks_flagged']}/{b['judged']} · "
@@ -3345,7 +3362,7 @@ def integrity(held: int, broken: int, k: int = INTEGRITY_K) -> float | None:
 
 def session_card(path: Path, pin: str | None, batch: int, timeout: float,
                  corpora: list[str] | None = None, claims: bool = True,
-                 bro_lane: bool = True) -> dict:
+                 bro_lane: bool = False) -> dict:
     """Every number on the card, with the rows behind it."""
     sid = path.stem
     ts = turns(path)
@@ -3423,7 +3440,7 @@ def session_card(path: Path, pin: str | None, batch: int, timeout: float,
         "efficacy": "never-ran",   # bar 5: no order is bound to a transcript yet
         "frame_contradictions": contradictions,
         "sprawl": {k: sprawl[k] for k in ("operator_blocks", "items_offered",
-                                          "max_offered", "items_per_block", "tool_calls")},
+                                          "max_offered", "items_per_block", "tool_calls", "widest")},
         "bound_breaches": sprawl["over_bound"],
         "broken": findings,
         "bro": bro,
@@ -3460,11 +3477,19 @@ def render_card(c: dict) -> str:
               f"{len(c['bound_breaches'])} bound breach(es) · {sp['tool_calls']} tool calls",
               f"  frame       {frame_s}"]
     cv = c.get("claim_verdicts") or {}
-    if c.get("claims_routed"):
+    if c.get("claims_routed") and cv:
         lines.append(f"  claims      {c['claims_routed']} routed to the tree · {cv.get('holds', 0)} held · "
                      f"{cv.get('broken', 0)} broken · {cv.get('not-mine', 0)} declined")
+    elif c.get("claims_routed"):
+        lines.append(f"  claims      {c['claims_routed']} routed to the tree · lane not run (--no-claims)")
     else:
-        lines.append("  claims      not run")
+        lines.append("  claims      none routed to the tree")
+    w = (c["sprawl"].get("widest") or {})
+    if w.get("offered", 0) >= 3:
+        lines += ["", f"  widest response: {w['offered']} items to an ask of {w['ask_words']} words",
+                  f"      ask:  \"{w['ask'][:90]}\""]
+        for ld in w.get("leads") or []:
+            lines.append(f"      item: \"{ld}\"")
     lines += render_bro(c.get("bro"))
     for f in c.get("claims_broken") or []:
         lines += ["", f"  claim did not hold: \"{' '.join(f['text'].split())[:96]}\"",
@@ -3499,7 +3524,7 @@ def write_card(c: dict) -> Path:
 def cmd_card(a) -> int:
     path = resolve(a.project, a.session)
     c = session_card(path, None if a.no_daemon else a.pin, a.batch, a.timeout,
-                     claims=not a.no_claims, bro_lane=not a.no_bro)
+                     claims=not a.no_claims, bro_lane=a.bro)
     out = write_card(c)
     print(render_card(c), end="")
     print(f"written {out}", file=sys.stderr)
@@ -3521,7 +3546,7 @@ def cmd_replay(a) -> int:
     for i, f in enumerate(files, 1):
         try:
             c = session_card(f, None if a.no_daemon else a.pin, a.batch, a.timeout, corpora,
-                             claims=not a.no_claims, bro_lane=not a.no_bro)
+                             claims=not a.no_claims, bro_lane=a.bro)
         except Exception as e:      # one bad transcript must not void the run
             print(f"  {f.stem[:8]}  SKIP {e}", file=sys.stderr)
             continue
@@ -3762,6 +3787,9 @@ def cmd_self_test(_a) -> int:
     eq(RX_NOT_AN_ASK.match("<task-notification>\n<task-id>x</task-id>") is not None, True,
        "a task notification is not an ask")
     eq(RX_NOT_AN_ASK.match("Not seven. Three tops.") is None, True, "the operator's pushback is")
+    eq(offered("**Generate the bank by mutation.** Take claims.\n\n**Use disagreement.** It is.\n"), 2,
+       "a bold lead with its period inside the bold is an item")
+    eq(offered("plain prose with **an emphasis** in the middle"), 0, "emphasis mid-sentence is not")
     eq(integrity(0, 0), None, "no decided commitment is never-ran, not zero")
     eq(integrity(1, 1), 0.0, "one held one broken is level")
     eq(round(integrity(17, 2), 2), 0.68, "the prior k=3 keeps a short session off the rails")
@@ -3866,7 +3894,8 @@ def main() -> int:
     cd.add_argument("--timeout", type=float, default=180.0)
     cd.add_argument("--no-daemon", action="store_true")
     cd.add_argument("--no-claims", action="store_true", help="skip the claims lane (one form call per routed claim)")
-    cd.add_argument("--no-bro", action="store_true", help="skip the bro lane (one judge call per operator-facing block)")
+    cd.add_argument("--bro", action="store_true",
+                    help="run the Bro judge (one call per operator-facing block; ~1 in 6 findings fair on d6c0c747, read by hand)")
     cd.set_defaults(fn=cmd_card)
     rp = sub.add_parser("replay", help="the backtest: a card per session over the last N, then the distribution")
     rp.add_argument("--project", default="-Users-alexsbryan-dev-commonwealth-ai")
@@ -3880,7 +3909,7 @@ def main() -> int:
     rp.add_argument("--no-daemon", action="store_true")
     rp.add_argument("--out", default="")
     rp.add_argument("--no-claims", action="store_true", help="skip the claims lane")
-    rp.add_argument("--no-bro", action="store_true", help="skip the bro lane")
+    rp.add_argument("--bro", action="store_true", help="run the Bro judge per block (opt-in; see card --bro)")
     rp.add_argument("--include-live", action="store_true",
                     help="also card sessions whose transcript changed within the hour (verdicts provisional)")
     rp.set_defaults(fn=cmd_replay)
