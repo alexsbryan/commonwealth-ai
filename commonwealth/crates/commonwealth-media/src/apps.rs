@@ -462,12 +462,12 @@ fn mint_claim_id(name: &str) -> String {
     use std::hash::{BuildHasher, Hasher};
     let mut h = std::collections::hash_map::RandomState::new().build_hasher();
     h.write(name.as_bytes());
-    h.write_u128(
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos(),
-    );
+    // The decider, not a hand-read clock (clock-gate). Milliseconds rather
+    // than the nanoseconds this read before: the collision defence here is
+    // `RandomState::new()`'s per-call seed plus the name — the doc above says
+    // so — and the timestamp is a secondary source, so the six orders of
+    // magnitude buy nothing a random seed is not already buying.
+    h.write_u64(commonwealth_core::clock::unix_now_millis());
     format!("{name}-{:012x}", h.finish() & 0xffff_ffff_ffff)
 }
 

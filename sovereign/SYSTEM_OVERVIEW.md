@@ -9507,6 +9507,42 @@ where all of it already is, so none of the peer-uncommitted rows were
 banked with it. The turn-client split stays OWED; baselining freezes a
 debt, it does not pay one.
 
+### 10.1v Size RE-PINNED at `origin/main` 652209be0 — 2026-09-13 (quality-check fingerprint + sv-surface bars)
+
+arch-gate blocked the push with **14 size findings, 13 of which were already
+public.** `iroh_access.rs` (1349, NEW oversized), `scheduler_core.rs` (+69),
+`turn_http.rs` (+91), `loopback_parity.rs` (+198), `sovereign/crates/sovereign-turn-client/src/lib.rs`
+(+291), `AGENTS.md` (+1254 B), `.claude/CLAUDE.md` (+88 B) — this push touches
+none of those files. `git log origin/main..HEAD` is four commits and `git log
+-- <each flagged file>` is empty for all seven. The baselines were simply
+stale against `origin/main`, so the re-pin is the §10.1u recipe unchanged:
+worktree at `origin/main`, `--update-baseline` there with a PRIVATE
+`CARGO_TARGET_DIR` (a shared target across worktrees reuses mtimes), copy
+`oversized.txt` / `instruction_surface.txt` / `approach_band.txt` back. No
+re-keying was needed this time — `origin/main` and this tree spell the same
+paths.
+
+**What the re-pin left behind is the part worth reading: +5 lines, and they
+are mine.** After the re-pin 13 findings cleared and one did not — approach
+band 197795 → 197800. That is the separation working exactly as intended: it
+isolated what this push ADDS from what was already public, and what this push
+adds is a five-line comment in
+`sovereign-cli/src/quality_check_cmd/mod.rs` explaining why
+`compute_fingerprint` takes the venue's declared lanes and not the run's
+selection. It was fifteen lines first and was trimmed to five (+14 → +5)
+before accepting any of it.
+
+**Why it is accepted rather than trimmed to zero.** The code change is one
+word — `&lanes` → `&in_venue` — and a reader who does not know that the
+fingerprint namespaces every baseline directory will read it as cosmetic and
+revert it. That is principle 3's case for a comment at the site rather than
+only in the commit body. Five lines is the price; `--tighten` was not
+available because this push cuts nothing in the band to bank against it.
+
+Accepted: approach band 197795 → 197800 lines (202 files, unchanged).
+The two clock repoints in the same push went the OTHER way and were NOT
+baselined — `clock-gate` 144 reads / 93 files → 142 / 91, paid not accepted.
+
 ### 10.1u Size RE-PINNED at `origin/main` 94e602d83 — 2026-09-12 (verifier-loop vl-1..vl-6)
 
 §10.1t declined to touch the baseline four hours earlier, for a reason
