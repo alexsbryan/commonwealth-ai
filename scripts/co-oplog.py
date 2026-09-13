@@ -1810,7 +1810,8 @@ def topic_tokens(text: str) -> set:
 def jaccard(a: set, b: set) -> float:
     return len(a & b) / len(a | b) if (a or b) else 0.0
 
-def sprawl_labels(path: Path, short_words: int = 30, overlap: float = 0.12) -> list[dict]:
+def sprawl_labels(path: Path, short_words: int = 30, overlap: float = 0.12,
+                  novel_cap: int = 2, shrink_floor: float = 0.30) -> list[dict]:
     """Turns the operator visibly trimmed. Structural, not lexical."""
     events = []
     with path.open() as fh:
@@ -1845,7 +1846,34 @@ def sprawl_labels(path: Path, short_words: int = 30, overlap: float = 0.12) -> l
         j = jaccard(t0, t1)
         if j < overlap:
             continue                       # moved on; not a re-answer
-        out.append({"trimmed_words": len(a0.split()),
+        # A TRIM INTRODUCES NO CONTENT. This is what separates "Not seven,
+        # three tops" from "Ok with Sun Tzu meets HBS strategy what's the
+        # roadmap" -- both are short replies followed by more on the same
+        # subject, and only the first is pushback about FORM. Measured by
+        # novel content tokens, so it is structural rather than a cue list
+        # (ARCH 9): a trim says nothing the previous turn had not already
+        # said, it says there was too much of it.
+        novel = topic_tokens(u) - t0
+        if len(novel) > novel_cap:
+            continue
+        # THE LABEL IS THE DELTA, NOT THE REPLY.
+        #
+        # Classifying the operator's words does not work: "Go", "Let's fix
+        # it" and "Not seven, three tops" all introduce zero content, and
+        # only the last is pushback. An approval and a trim are
+        # indistinguishable from the operator's side.
+        #
+        # They are not indistinguishable from what happens NEXT. After an
+        # approval the agent goes and works; after a trim it answers the
+        # SAME question again with less. So the label comes from the
+        # re-answer shrinking materially -- structure again, not language,
+        # the same escape ablation gave the BS axis.
+        w0, w1 = len(a0.split()), len(a1.split())
+        shrink = (w0 - w1) / w0 if w0 else 0.0
+        if shrink < shrink_floor:
+            continue
+        out.append({"novel_tokens": len(novel),
+                    "trimmed_words": len(a0.split()),
                     "reply_words": len(u.split()),
                     "reanswer_words": len(a1.split()),
                     "topic_overlap": round(j, 3),
@@ -1866,7 +1894,8 @@ def cmd_sprawl_labels(a) -> int:
     rows = []
     for f in files:
         try:
-            for r in sprawl_labels(f, a.short_words, a.overlap):
+            for r in sprawl_labels(f, a.short_words, a.overlap, a.novel_cap,
+                                   a.shrink_floor):
                 r["session"] = f.stem[:8]
                 rows.append(r)
         except Exception as e:
@@ -1876,11 +1905,15 @@ def cmd_sprawl_labels(a) -> int:
         return 4
     import statistics as st
     shrank = sum(1 for r in rows if r["shrank"])
+    shed = sum(1 for r in rows if r["offered_after"] < r["offered_before"])
     print(f"\n{len(rows)} operator trims across {len(files)} session(s)\n")
     print(f"  trimmed turn, median words     {int(st.median([r['trimmed_words'] for r in rows]))}")
     print(f"  re-answer, median words        {int(st.median([r['reanswer_words'] for r in rows]))}")
     print(f"  the re-answer was SHORTER      {shrank}/{len(rows)}  ({shrank/len(rows):.0%})")
     print(f"  median topic overlap           {st.median([r['topic_overlap'] for r in rows]):.2f}")
+    print(f"  shed enumerated items          {shed}/{len(rows)}")
+    print(f"  median shrink                  "
+          f"{st.median([(r['trimmed_words']-r['reanswer_words'])/r['trimmed_words'] for r in rows]):.0%}")
     print()
     for r in sorted(rows, key=lambda x: -x["trimmed_words"])[:a.show]:
         arrow = "shorter" if r["shrank"] else "LONGER"
@@ -2122,6 +2155,10 @@ def main() -> int:
     sl.add_argument("--sessions", type=int, default=40)
     sl.add_argument("--short-words", type=int, default=30)
     sl.add_argument("--overlap", type=float, default=0.12)
+    sl.add_argument("--novel-cap", type=int, default=2,
+                    help="max content tokens the reply may introduce; a trim introduces none")
+    sl.add_argument("--shrink-floor", type=float, default=0.30,
+                    help="fraction the re-answer must shrink by; the LABEL is this delta")
     sl.add_argument("--show", type=int, default=10)
     sl.add_argument("--json", action="store_true")
     sl.set_defaults(fn=cmd_sprawl_labels)
