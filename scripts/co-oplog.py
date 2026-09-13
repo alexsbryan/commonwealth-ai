@@ -1403,6 +1403,54 @@ def cmd_bs_sample(a) -> int:
     print(f"wrote {a.out} — {len(sample)} unlabelled claims from a pool of {len(pool)}")
     return 0
 
+def cmd_bs_invariance(a) -> int:
+    """Agreement between the two presentations of the SAME question.
+
+    This is the number the fallacy-detection literature says kills
+    deployments and mostly does not report: prompted LLMs measured at 90-94%
+    F1 under an optimised prompt fall to 63-72% with false-positive rates of
+    54-74% under a naive one, while a fine-tuned encoder holds ~86% F1 at
+    ~27% FPR stably across prompting regimes. A score obtained under one
+    phrasing is not a property of the judge, it is a property of the pair.
+
+    So it is reported alongside recall and false alarms, never on request.
+    An invariance below the agreement floor means the headline numbers are
+    an artifact of presentation and no delta on this bank is readable."""
+    forms = bs_forms()
+    bank = [c for c in json.loads(Path(a.bank).read_text())["cases"] if c.get("form")]
+    dev_ids = {f["id"] for f in forms if f["deviation"]}
+
+    agree_bin = agree_form = judged = 0
+    flips = []
+    for c in bank:
+        fwd = bs_check(c["claim"], c["evidence"], a.pin, a.timeout, forms, a.order, "forward")
+        rev = bs_check(c["claim"], c["evidence"], a.pin, a.timeout, forms, a.order, "flipped")
+        if fwd["form"] is None or rev["form"] is None:
+            continue
+        judged += 1
+        fb, rb = fwd["form"] in dev_ids, rev["form"] in dev_ids
+        if fb == rb:
+            agree_bin += 1
+            if fwd["form"] == rev["form"]:
+                agree_form += 1
+        else:
+            flips.append((c, fwd["form"], rev["form"]))
+
+    if not judged:
+        print("VOID: nothing judged (daemon)")
+        return 4
+    print(f"\nBS judge invariance — {judged} cases, bank {Path(a.bank).name}")
+    print(f"  same accuse/clear decision under both presentations  "
+          f"{agree_bin}/{judged}  ({agree_bin/judged:.0%})")
+    print(f"  same FORM named under both                           "
+          f"{agree_form}/{judged}  ({agree_form/judged:.0%})")
+    if flips:
+        print("\n  FLIPPED between presentations:")
+        for c, f1, f2 in flips:
+            print(f"    [truth {c['form']}] forward={f1} flipped={f2}")
+            print(f"      {c['claim'][:96]}")
+    return 0
+
 def cmd_bs_calibrate(a) -> int:
     """Score the BS judge against its bank, in BOTH directions.
 
@@ -1574,6 +1622,12 @@ def main() -> int:
     bsm.add_argument("--exclude", default="")
     bsm.add_argument("--out", default="quality/report-audit/bs-heldout.json")
     bsm.set_defaults(fn=cmd_bs_sample)
+    bi = sub.add_parser("bs-invariance", help="agreement between the two presentations of the same question")
+    bi.add_argument("--pin", default=DEFAULT_PIN)
+    bi.add_argument("--timeout", type=float, default=120.0)
+    bi.add_argument("--order", choices=["file", "reverse"], default="file")
+    bi.add_argument("--bank", default=str(BS_BANK))
+    bi.set_defaults(fn=cmd_bs_invariance)
     bc = sub.add_parser("bs-calibrate", help="score the BS judge against its bank, both directions")
     bc.add_argument("--pin", default=DEFAULT_PIN)
     bc.add_argument("--timeout", type=float, default=120.0)
