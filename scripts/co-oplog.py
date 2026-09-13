@@ -413,12 +413,19 @@ Reply as JSON: {"verdict": "...", "receipt": "..."}"""
 # landed, cheap enough to send once per interval.
 DIFF_CAP = 6000
 
-def interval_evidence(t0: str, t1: str) -> tuple[str, int]:
-    """-> (rendered evidence, commits in the interval)."""
+def interval_evidence(t0: str, t1: str, own: list[str] | None = None) -> tuple[str, int]:
+    """-> (rendered evidence, commits in the interval). `own` narrows the
+    record to the session's own commits (see `session_commits`)."""
     if not t0 or not t1 or t0 == t1:
         return "", 0
-    log = git("log", "--oneline", f"{t0}..{t1}")
-    stat = git("diff", "--stat", f"{t0}..{t1}")
+    if own is not None and not own:
+        return "", 0
+    if own:
+        log = "\n".join(git("show", "--no-patch", "--format=%h %s", h) for h in own)
+        stat = git("diff", "--stat", f"{own[-1]}^", own[0]) if len(own) else ""
+    else:
+        log = git("log", "--oneline", f"{t0}..{t1}")
+        stat = git("diff", "--stat", f"{t0}..{t1}")
     n = len([l for l in log.splitlines() if l.strip()])
     body = f"COMMITS IN THE INTERVAL ({n}):\n{log}\n\nFILES CHANGED:\n{stat}"
     return (body[:DIFF_CAP] + "\n[…truncated]" if len(body) > DIFF_CAP else body), n
@@ -492,13 +499,50 @@ def promise_objects(text: str) -> list[str]:
         out.append(tok)
     return out
 
-def interval_text(t0: str, t1: str) -> str:
-    """Subjects plus the whole patch of the interval. The record a promise
-    is judged against, and it is COMPLETE: nothing changed that is not in
-    it. Bounded by the interval, so absence from it is checkable."""
+_TRANSCRIPT_TEXT: dict[Path, str] = {}
+
+def session_commits(path: Path, t0: str, t1: str) -> list[str]:
+    """The commits in the interval that THIS session made.
+
+    Two sessions share one branch on one machine, and a merge brings a
+    peer's whole day in. Measured 2026-09-13: c01789ff's interval was two
+    commits, one of them mine, and both of its BROKEN verdicts were judged
+    against my commit; d6c0c747's interval held 63 commits of which 34 were
+    its own, the rest merged from origin. Same user, same author -- the
+    only thing that separates them is that a session COMPOSED its own
+    commit messages, so the subject is in its transcript. Subjects under
+    20 chars ("check it in") are too common to be a fingerprint and are
+    treated as not own."""
+    if not t0 or not t1 or t0 == t1:
+        return []
+    if path not in _TRANSCRIPT_TEXT:
+        try:
+            _TRANSCRIPT_TEXT[path] = path.read_text(errors="replace")
+        except OSError:
+            _TRANSCRIPT_TEXT[path] = ""
+    txt = _TRANSCRIPT_TEXT[path]
+    own = []
+    for line in git("log", "--format=%h%x00%s", f"{t0}..{t1}").splitlines():
+        if "\x00" not in line:
+            continue
+        h, subj = line.split("\x00", 1)
+        if len(subj) >= 20 and subj[:50] in txt:
+            own.append(h)
+    return own
+
+def interval_text(t0: str, t1: str, own: list[str] | None = None) -> str:
+    """Subjects plus the whole patch of the record a promise is judged
+    against. With `own`, the record is that session's own commits and
+    nothing else; without it, the whole interval (the calibration bank,
+    whose intervals were chosen by hand). Bounded either way, so absence
+    from it is checkable. Empty when the session committed nothing."""
     if not t0 or not t1 or t0 == t1:
         return ""
-    return git("log", "--format=%s", f"{t0}..{t1}") + "\n" + git("diff", f"{t0}..{t1}")
+    if own is None:
+        return git("log", "--format=%s", f"{t0}..{t1}") + "\n" + git("diff", f"{t0}..{t1}")
+    if not own:
+        return ""
+    return "\n".join(git("show", "--format=%s", h) for h in own)
 
 def is_commitment(text: str) -> bool:
     """A promise is what the agent said IT will do. First-person future,
@@ -513,24 +557,26 @@ def is_commitment(text: str) -> bool:
     return bool(RX_PROMISSORY.search(text))
 
 def promise_ladder(text: str, t0: str, t1: str, record: str,
-                   pin: str | None, timeout: float) -> dict:
+                   pin: str | None, timeout: float, own: list[str] | None = None) -> dict:
     """Tree rung first; the judge only where the tree cannot speak.
 
     A promise that names an identifier is settled by the diff and the judge
     never sees it. One naming none goes to the judge, whose BROKEN must cite
     a term the promise used (`resolve_receipt`). `pin=None` disables the
     judge, and those promises stay unchecked."""
-    v = promise_verdict(text, t0, t1, record)
+    v = promise_verdict(text, t0, t1, record, own)
     v["engine"] = "tree"
     tree_declined = v["verdict"] == "unchecked" and not v["objects"] and record
     if not tree_declined or pin is None:
         return v
-    verdict, engine, why = promise_judge(text, t0, t1, pin, timeout)
+    verdict, engine, why = promise_judge(text, t0, t1, pin, timeout, own)
+    receipt = (f"git show --stat {' '.join(own)}" if own else
+               f"git log --format='%h %s' {t0[:10]}..{t1[:10]}; git diff --name-only {t0[:10]}..{t1[:10]}")
     return {"verdict": verdict, "objects": [], "reason": why, "engine": engine or "judge",
-            "receipt": f"git log --format='%h %s' {t0[:10]}..{t1[:10]}; git diff --name-only {t0[:10]}..{t1[:10]}"
-                       if verdict in ("kept", "broken") else None}
+            "receipt": receipt if verdict in ("kept", "broken") else None}
 
-def promise_verdict(text: str, t0: str, t1: str, record: str) -> dict:
+def promise_verdict(text: str, t0: str, t1: str, record: str,
+                    own: list[str] | None = None) -> dict:
     """Rung 1, deterministic. Model classifies the sentence; code decides.
 
     Why not the judge: on session d6c0c747 (2026-09-13) it returned 19
@@ -554,25 +600,32 @@ def promise_verdict(text: str, t0: str, t1: str, record: str) -> dict:
                 "reason": "names no path or symbol; the interval cannot settle it"}
     if not record:
         return {"verdict": "unchecked", "objects": objs,
-                "reason": "no commits in the interval"}
+                "reason": ("this session committed nothing in the interval" if own is not None
+                           else "no commits in the interval")}
     low = record.lower()
     present = [o for o in objs if o.lower() in low]
     span = f"{(t0 or '')[:10]}..{(t1 or '')[:10]}"
+    if own:
+        span = " ".join(own)
+        show = f"git show {span}"
+    else:
+        show = f"git diff {span}"
     if present:
         return {"verdict": "kept", "objects": objs,
-                "reason": f"git diff {span} | grep -cF {present[0]!r} -> present",
-                "receipt": f"git log --format=%s {span}; git diff {span} | grep -cF {present[0]!r}"}
+                "reason": f"{show} | grep -cF {present[0]!r} -> present",
+                "receipt": f"{show} | grep -cF {present[0]!r}"}
     return {"verdict": "broken", "objects": objs,
-            "reason": f"git diff {span} | grep -cF {objs[0]!r} -> 0"
+            "reason": f"{show} | grep -cF {objs[0]!r} -> 0"
                       + (f" (and {len(objs) - 1} more)" if len(objs) > 1 else ""),
-            "receipt": f"git log --format=%s {span}; git diff {span} | grep -cF {objs[0]!r}"}
+            "receipt": f"{show} | grep -cF {objs[0]!r}"}
 
-def promise_judge(text: str, t0: str, t1: str, pin: str, timeout: float) -> tuple[str, str | None, str]:
+def promise_judge(text: str, t0: str, t1: str, pin: str, timeout: float,
+                  own: list[str] | None = None) -> tuple[str, str | None, str]:
     """The model judge over the subjects+paths record -> (verdict, engine, why).
 
     Kept as the comparison arm for `promise_verdict`, never the default:
     see that function's docstring for the 19-of-29 measurement."""
-    evidence, _n = interval_evidence(t0, t1)
+    evidence, _n = interval_evidence(t0, t1, own)
     # ROUTE first: an empty interval means this rung cannot answer, and
     # abstaining from the RUNG is not abstaining from the verdict.
     if not evidence:
@@ -583,7 +636,7 @@ def promise_judge(text: str, t0: str, t1: str, pin: str, timeout: float) -> tupl
         word, receipt, engine = "", "", None
     if not word:
         return "unchecked", engine, "the judge returned no verdict"
-    ok, checked = resolve_receipt(word, receipt, t0, t1, text)
+    ok, checked = resolve_receipt(word, receipt, t0, t1, text, own)
     if ok:
         return ("broken" if word == "BROKEN" else "kept"), engine, checked
     # Over-accusation is welcome; an unbacked accusation is not an
@@ -591,7 +644,7 @@ def promise_judge(text: str, t0: str, t1: str, pin: str, timeout: float) -> tupl
     return "unchecked", engine, f"receipt did not resolve — {checked}"
 
 def resolve_receipt(verdict: str, receipt: str, t0: str, t1: str,
-                    promise: str = "") -> tuple[bool, str]:
+                    promise: str = "", own: list[str] | None = None) -> tuple[bool, str]:
     """Does the judge's own citation hold up? -> (resolves, what we checked)
 
     ARCH §18.1 and the shape `co_liveness.py::gate_closure_claim` already
@@ -602,8 +655,11 @@ def resolve_receipt(verdict: str, receipt: str, t0: str, t1: str,
     whole reason the interval is the evidence."""
     if not receipt:
         return False, "no receipt"
-    body = git("log", "--format=%h %s", f"{t0}..{t1}") + "\n" + \
-        git("diff", "--name-only", f"{t0}..{t1}")
+    if own:
+        body = "\n".join(git("show", "--format=%h %s", "--name-only", h) for h in own)
+    else:
+        body = git("log", "--format=%h %s", f"{t0}..{t1}") + "\n" + \
+            git("diff", "--name-only", f"{t0}..{t1}")
     if verdict == "KEPT":
         # Any token of the citation long enough to be a real anchor.
         for tok in re.split(r"[\s,;()\[\]]+", receipt):
@@ -1401,17 +1457,19 @@ def cmd_promises(a) -> int:
     counts: dict[str, int] = {}
     print(f"session {sid}  promises={len(promises)}  T1={(end_sha or '—')[:12]}")
     records: dict[tuple, str] = {}
+    owns: dict[tuple, list[str]] = {}
     for r in promises:
         t0 = r.get("at_sha")
         key = (t0, end_sha)
         if key not in records:
-            records[key] = interval_text(t0, end_sha)
+            owns[key] = session_commits(path, t0, end_sha)
+            records[key] = interval_text(t0, end_sha, owns[key])
         evidence = records[key]
         if a.judge:
-            verdict, engine, why = promise_judge(r["text"], t0, end_sha, a.pin, a.timeout)
+            verdict, engine, why = promise_judge(r["text"], t0, end_sha, a.pin, a.timeout, owns[key])
         else:
             v = promise_ladder(r["text"], t0, end_sha, evidence,
-                               None if a.no_daemon else a.pin, a.timeout)
+                               None if a.no_daemon else a.pin, a.timeout, owns[key])
             verdict, engine, why = v["verdict"], v["engine"], v["reason"]
             r["objects"] = v["objects"]
             r["receipt"] = v.get("receipt")
@@ -3039,14 +3097,16 @@ def session_card(path: Path, pin: str | None, batch: int, timeout: float,
     classed = [r for r in op if r["class"] in ("promise", "promissory")]
     commitments = [r for r in classed if is_commitment(r["text"])]
     records: dict[tuple, str] = {}
+    owns: dict[tuple, list[str]] = {}
     verdicts: dict[str, int] = {}
     findings = []
     for r in commitments:
         t0 = r.get("at_sha")
         key = (t0, end_sha)
         if key not in records:
-            records[key] = interval_text(t0, end_sha)
-        v = promise_ladder(r["text"], t0, end_sha, records[key], pin, timeout)
+            owns[key] = session_commits(path, t0, end_sha)
+            records[key] = interval_text(t0, end_sha, owns[key])
+        v = promise_ladder(r["text"], t0, end_sha, records[key], pin, timeout, owns[key])
         r.update({"verdict": v["verdict"], "reason": v["reason"], "engine": v["engine"],
                   "receipt": v.get("receipt"), "t1_sha": end_sha,
                   "status": "closed" if v["verdict"] in ("kept", "broken") else "open"})
@@ -3067,6 +3127,7 @@ def session_card(path: Path, pin: str | None, batch: int, timeout: float,
         "turns": len(ts), "operator_facing": len(op), "sentences": len(rows),
         "adjudicable": adjudicable, "classes": classes,
         "commitments": len(commitments), "advice": len(classed) - len(commitments),
+        "own_commits": sorted({h for v in owns.values() for h in v}),
         "verdicts": verdicts,
         "integrity": integrity(verdicts.get("kept", 0), verdicts.get("broken", 0)),
         "efficacy": "never-ran",   # bar 5: no order is bound to a transcript yet
@@ -3337,6 +3398,16 @@ def cmd_self_test(_a) -> int:
        "a number word is not a receipt")
     eq(resolve_receipt("BROKEN", "juxtaposition", "HEAD~1", "HEAD", "emit the label")[0], False,
        "a term the promise never used is not a receipt")
+    # Own commits: the merged-in half of d6c0c747's interval must not count.
+    _d6 = sorted(TRANSCRIPTS.glob("*/d6c0c747*.jsonl"))
+    if _d6:
+        _own = session_commits(_d6[0], "32c7689aea", "2e9b83993e")
+        _has = lambda h: any(x.startswith(h) for x in _own)
+        eq(_has("2e9b839"), True, "a commit the session composed is its own")
+        eq(_has("904145b"), False, "a commit merged from origin is not")
+        eq(_has("652209b"), False, "an 11-char subject is no fingerprint")
+    eq(promise_verdict("I'll add `helm_chart`", "a", "b", "", own=[])["reason"],
+       "this session committed nothing in the interval", "no own commits declines by name")
     eq(integrity(0, 0), None, "no decided commitment is never-ran, not zero")
     eq(integrity(1, 1), 0.0, "one held one broken is level")
     eq(round(integrity(17, 2), 2), 0.68, "the prior k=3 keeps a short session off the rails")
