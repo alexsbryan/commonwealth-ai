@@ -1451,6 +1451,252 @@ def cmd_bs_invariance(a) -> int:
             print(f"      {c['claim'][:96]}")
     return 0
 
+# ---- ablation pairs: labels without a labeller -------------------------
+#
+# The bank problem is that 32 hand-written cases cannot resolve a change
+# smaller than four cases, and writing more means writing more of my own
+# guesses about what a near-miss looks like.
+#
+# First attempt was to MUTATE the claim -- widen a quantifier, drop a
+# qualifier -- so the pair's answer was known by construction. Generated and
+# discarded 2026-09-13: 5 of 7 mutation types produced ungrammatical text
+# ("the only Four are markdown artifacts", "not one of every exceptions I
+# caught", "So 27% be tolerable"). A judge comparing a clean sentence to a
+# corrupted one is detecting corruption. Regex surgery does not preserve
+# grammar, and a model-written widening would reintroduce the judgement the
+# scheme exists to avoid.
+#
+# ABLATE THE EVIDENCE INSTEAD. The claim text is never touched, so there is
+# no grammaticality risk at all, and monotonicity is the same: with strictly
+# less evidence, the same claim outruns strictly more. Deleting whole
+# sentences is safe by construction.
+#
+# It is also the diagnostic this judge most needs. If verdicts do not move
+# when the evidence is stripped, the judge is not reading the evidence -- it
+# is reacting to the claim's surface form, which is exactly the behaviour
+# that sent `only`/`every`/`nothing` to one label on both list orderings.
+
+def ablate(evidence: str, keep: float) -> str:
+    """Evidence with a trailing fraction of its sentences removed."""
+    sents = re.split(r"(?<=[.!?])\s+", evidence.strip())
+    n = max(0, int(len(sents) * keep))
+    return " ".join(sents[:n]).strip()
+
+def cmd_bs_ablate(a) -> int:
+    """Ordered pairs: the same claim against full and reduced evidence."""
+    import random
+    seen = set(a.exclude.split(",")) if a.exclude else set()
+    src_dir = TRANSCRIPTS / a.project
+    files = sorted(src_dir.glob("*.jsonl"), key=lambda q: q.stat().st_mtime, reverse=True)
+    files = [f for f in files if not any(f.stem.startswith(x) for x in seen)][:a.sessions]
+
+    pairs = []
+    for f in files:
+        try:
+            bundles = turn_bundles(f)
+        except Exception as e:
+            print(f"  skip {f.stem[:8]}: {e}", file=sys.stderr)
+            continue
+        for b in bundles:
+            sents = sentences(b["text"])
+            for sent in sents:
+                if referent(sent) is None:
+                    continue
+                rest = " ".join(s for s in sents if s != sent).strip()
+                if len(re.split(r"(?<=[.!?])\s+", rest)) < 4:
+                    continue          # too short to ablate meaningfully
+                thin = ablate(rest, a.keep)
+                if not thin or thin == rest:
+                    continue
+                pairs.append({"session": f.stem[:8], "turn": b["turn"],
+                              "claim": sent, "evidence_full": rest,
+                              "evidence_thin": thin,
+                              "kept": a.keep})
+    random.seed(a.seed)
+    if len(pairs) > a.n:
+        pairs = random.sample(pairs, a.n)
+    Path(a.out).write_text(json.dumps(
+        {"schema": "bs-ablation/v1",
+         "rule": "The SAME claim against full evidence and against a strict subset of it. "
+                 "With less evidence the claim outruns at least as much, so a judge may "
+                 "never rate the thin side as MORE supported. Known by construction; no "
+                 "annotator, and the claim text is never altered.",
+         "pairs": pairs}, indent=2) + "\n")
+    print(f"wrote {a.out} — {len(pairs)} ablation pairs (keeping {a.keep:.0%} of evidence)")
+    return 0
+
+def cmd_bs_preference(a) -> int:
+    """Score the judge on ablation pairs.
+
+    Three outcomes. `tightened` is the judge behaving: stripping evidence
+    turned a clean verdict into an accusation. `INCOHERENT` is strictly
+    impossible behaviour -- less evidence read as more support. `inert` is
+    the one that matters most: the verdict did not move at all, which over a
+    large share means the judge is not reading the evidence."""
+    forms = bs_forms()
+    dev = {f["id"] for f in forms if f["deviation"]}
+    pairs = json.loads(Path(a.bank).read_text())["pairs"][:a.n]
+    tightened = inert = viol = unjudged = 0
+    bad = []
+    for p in pairs:
+        full = bs_check(p["claim"], p["evidence_full"], a.pin, a.timeout, forms)
+        thin = bs_check(p["claim"], p["evidence_thin"], a.pin, a.timeout, forms)
+        if full["form"] is None or thin["form"] is None:
+            unjudged += 1
+            continue
+        fd, td = full["form"] in dev, thin["form"] in dev
+        if not fd and td:
+            tightened += 1
+        elif fd and not td:
+            viol += 1
+            bad.append((p, full["form"], thin["form"]))
+        else:
+            inert += 1
+    judged = tightened + inert + viol
+    if not judged:
+        print("VOID: nothing judged (daemon)")
+        return 4
+    print(f"\nBS judge evidence-sensitivity — {judged} ablation pairs, {unjudged} not judged")
+    print(f"  tightened when evidence was cut    {tightened}/{judged}  ({tightened/judged:.0%})")
+    print(f"  INERT, verdict never moved         {inert}/{judged}  ({inert/judged:.0%})")
+    print(f"  INCOHERENT, less evidence read as more support  {viol}/{judged}  ({viol/judged:.0%})")
+    print(f"\n  A high INERT share means the judge is scoring the claim's surface,")
+    print(f"  not the step from evidence to conclusion.")
+    for p, ff, tf in bad[:5]:
+        print(f"\n  [incoherent] full={ff} thin={tf}")
+        print(f"    {p['claim'][:96]}")
+    return 0
+
+# ---- the sprawl axis ---------------------------------------------------
+#
+# A SECOND PAIR. Every form in bs-forms.toml measures claim against evidence;
+# this measures RESPONSE against ASK. Same "outruns" shape, different
+# operands, which is why sprawl slips past the BS judge entirely: seven
+# individually sound recommendations to a question that wanted three are
+# seven claims that each follow from their evidence.
+#
+# No model, deliberately. These are counts, and a count that code can take is
+# never a question for a judge (ARCH 10). That also means this axis ships
+# before the judge has a trustworthy number, and can have a baseline over
+# every session on disk in seconds.
+
+RX_ENUM = re.compile(r"^\s*(?:[-*+]\s+|\d+[.)]\s+|\*\*[^*]{3,60}\*\*[.:—-])", re.M)
+RX_BOUND = re.compile(
+    r"\b(?:(one|two|three|four|five|1|2|3|4|5)\s+(?:tops|max|maximum|at most)"
+    r"|(?:at most|no more than|just|only|max)\s+(one|two|three|four|five|1|2|3|4|5)"
+    r"|(?:give me|pick|name)\s+(one|two|three|four|five|1|2|3|4|5)\b)", re.I)
+WORD_N = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+          "1": 1, "2": 2, "3": 3, "4": 4, "5": 5}
+
+def ask_bound(text: str) -> int | None:
+    """The count the operator asked for, when they named one."""
+    m = RX_BOUND.search(text or "")
+    if not m:
+        return None
+    for g in m.groups():
+        if g:
+            return WORD_N.get(g.lower())
+    return None
+
+def offered(text: str) -> int:
+    """Enumerated items in a block: list rows and bold-led paragraphs."""
+    return len(RX_ENUM.findall(text or ""))
+
+def sprawl_session(path: Path) -> dict:
+    """Counts only. Never a verdict -- the ratio is the finding."""
+    user_last, pairs = "", []
+    events = []
+    with path.open() as fh:
+        for line in fh:
+            try:
+                rec = json.loads(line)
+            except Exception:
+                continue
+            content = (rec.get("message") or {}).get("content")
+            if not isinstance(content, list):
+                continue
+            if rec.get("type") == "user":
+                if any(isinstance(b, dict) and b.get("type") == "tool_result" for b in content):
+                    events.append(("result", ""))
+                    continue
+                txt = " ".join(b.get("text", "") for b in content
+                               if isinstance(b, dict) and b.get("type") == "text")
+                events.append(("user", strip_reminders(txt)))
+            elif rec.get("type") == "assistant":
+                for b in content:
+                    if not isinstance(b, dict):
+                        continue
+                    if b.get("type") == "text":
+                        t = strip_reminders(b.get("text", ""))
+                        if len(t) >= 120:
+                            events.append(("text", t))
+                    elif b.get("type") == "tool_use":
+                        events.append(("call", b.get("name", "?")))
+
+    calls = sum(1 for k, _ in events if k == "call")
+    blocks, over = [], []
+    for n, (kind, payload) in enumerate(events):
+        if kind == "user":
+            user_last = payload
+            continue
+        if kind != "text":
+            continue
+        nxt = next((k for k, _ in events[n + 1:] if k in ("call", "user")), "user")
+        if nxt != "user":
+            continue                      # working narration, not a response
+        k = offered(payload)
+        blocks.append(k)
+        bound = ask_bound(user_last)
+        if bound is not None and k > bound:
+            over.append({"asked": bound, "offered": k, "excerpt": payload[:110]})
+    return {"session": path.stem[:8],
+            "operator_blocks": len(blocks),
+            "items_offered": sum(blocks),
+            "max_offered": max(blocks) if blocks else 0,
+            "tool_calls": calls,
+            "items_per_block": round(sum(blocks) / len(blocks), 2) if blocks else 0.0,
+            "claims_per_call": round(sum(blocks) / calls, 3) if calls else None,
+            "over_bound": over}
+
+def cmd_sprawl(a) -> int:
+    src_dir = TRANSCRIPTS / a.project
+    files = sorted(src_dir.glob("*.jsonl"), key=lambda q: q.stat().st_mtime, reverse=True)
+    if a.session:
+        files = [f for f in files if f.stem.startswith(a.session)]
+    else:
+        files = files[:a.sessions]
+    rows = []
+    for f in files:
+        try:
+            rows.append(sprawl_session(f))
+        except Exception as e:
+            print(f"  skip {f.stem[:8]}: {e}", file=sys.stderr)
+    if not rows:
+        print("no sessions matched")
+        return 4
+
+    import statistics as st
+    ipb = [r["items_per_block"] for r in rows if r["operator_blocks"]]
+    print(f"\nsprawl — {len(rows)} session(s), counts only, no judge\n")
+    print(f"{'session':<10}{'blocks':>7}{'items':>7}{'max':>5}{'per-block':>11}{'calls':>7}{'over':>6}")
+    for r in rows:
+        print(f"{r['session']:<10}{r['operator_blocks']:>7}{r['items_offered']:>7}"
+              f"{r['max_offered']:>5}{r['items_per_block']:>11}{r['tool_calls']:>7}"
+              f"{len(r['over_bound']):>6}")
+    if len(ipb) > 1:
+        ipb.sort()
+        print(f"\nitems per operator-facing block: median {st.median(ipb):.2f}  "
+              f"p90 {ipb[int(len(ipb)*0.9)]:.2f}  max {max(ipb):.2f}")
+    breaches = [(r["session"], o) for r in rows for o in r["over_bound"]]
+    if breaches:
+        print(f"\nEXPLICIT BOUND EXCEEDED — {len(breaches)}:")
+        for s, o in breaches:
+            print(f"  {s}: asked {o['asked']}, offered {o['offered']}")
+            print(f"    {' '.join(o['excerpt'].split())[:96]}")
+    if a.json:
+        print(json.dumps(rows, indent=2))
+    return 0
+
 def cmd_bs_calibrate(a) -> int:
     """Score the BS judge against its bank, in BOTH directions.
 
@@ -1622,6 +1868,27 @@ def main() -> int:
     bsm.add_argument("--exclude", default="")
     bsm.add_argument("--out", default="quality/report-audit/bs-heldout.json")
     bsm.set_defaults(fn=cmd_bs_sample)
+    bm = sub.add_parser("bs-ablate", help="generate ordered pairs by cutting EVIDENCE, not the claim")
+    bm.add_argument("--project", default="-Users-alexsbryan-dev-commonwealth-ai")
+    bm.add_argument("--sessions", type=int, default=20)
+    bm.add_argument("--n", type=int, default=400)
+    bm.add_argument("--seed", type=int, default=7)
+    bm.add_argument("--keep", type=float, default=0.34, help="fraction of evidence sentences kept")
+    bm.add_argument("--exclude", default="")
+    bm.add_argument("--out", default="quality/report-audit/bs-pairs.json")
+    bm.set_defaults(fn=cmd_bs_ablate)
+    bp = sub.add_parser("bs-preference", help="score the judge's evidence-sensitivity on ablation pairs")
+    bp.add_argument("--bank", default="quality/report-audit/bs-pairs.json")
+    bp.add_argument("--n", type=int, default=60)
+    bp.add_argument("--pin", default=DEFAULT_PIN)
+    bp.add_argument("--timeout", type=float, default=120.0)
+    bp.set_defaults(fn=cmd_bs_preference)
+    sp = sub.add_parser("sprawl", help="response-vs-ask counts: items offered, bounds exceeded, per unit of work")
+    sp.add_argument("--project", default="-Users-alexsbryan-dev-commonwealth-ai")
+    sp.add_argument("--session", help="one session id prefix; default is the most recent N")
+    sp.add_argument("--sessions", type=int, default=40)
+    sp.add_argument("--json", action="store_true")
+    sp.set_defaults(fn=cmd_sprawl)
     bi = sub.add_parser("bs-invariance", help="agreement between the two presentations of the same question")
     bi.add_argument("--pin", default=DEFAULT_PIN)
     bi.add_argument("--timeout", type=float, default=120.0)
