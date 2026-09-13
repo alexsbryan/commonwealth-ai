@@ -3792,6 +3792,17 @@ def chat_tools(messages: list, tools: list, pin: str, timeout: float, max_tokens
             raise DaemonDown(str(e))
     raise DaemonDown("503 after retries")
 
+def excerpt(line: str, at: int, width: int = 160) -> str:
+    """The line around a match. A hit was the line's first 160 chars, and a
+    match past them returned a line without the thing searched for
+    (00e8b4a8: three search_seen hits FOR '503', none carrying 503)."""
+    l = line.strip()
+    at = max(0, at - (len(line) - len(line.lstrip())))
+    if at <= width - 40:
+        return l[:width]
+    lo = at - 60
+    return "…" + l[lo:lo + width]
+
 class Investigation:
     """One report, one budget, one tool log."""
     def __init__(self, path: Path, turn: int, sha: str | None, t1: str | None,
@@ -3836,8 +3847,9 @@ class Investigation:
                     forms.append(r"(?<![\d.])" + re.escape(n) + r"\d{3}\s*ms\b")
             except ValueError:
                 pass
-            hits = [f"turn {i}: {l.strip()[:160]}" for i, l in self.seen_lines()
-                    if n and any(re.search(f, l.replace(",", ""), re.I) for f in forms)]
+            hits = [f"turn {i}: {excerpt(l, m.start())}" for i, l in self.seen_lines()
+                    for m in [next((mm for f in forms for mm in [re.search(f, l.replace(",", ""), re.I)] if mm), None)]
+                    if n and m]
             return "\n".join(hits[:12]) if hits else f"NOT SEEN: {n} appears in nothing the agent saw before turn {self.turn}"
         if name == "test_summaries":
             def fold(t): return re.sub(r"pass:\s+(\d+)\s*\n\s*fail:\s+(\d+)", r"pass: \1 fail: \2", t)
@@ -3846,7 +3858,7 @@ class Investigation:
             return "\n".join(hits[-20:]) if hits else "NO TEST SUMMARY: the agent saw no test-run summary before this report"
         if name == "search_seen":
             ph = str(args.get("phrase", "")).strip().lower()
-            hits = [f"turn {i}: {l.strip()[:160]}" for i, l in self.seen_lines() if ph and ph in l.lower()]
+            hits = [f"turn {i}: {excerpt(l, l.lower().find(ph))}" for i, l in self.seen_lines() if ph and ph in l.lower()]
             out = "\n".join(hits[:12]) if hits else f"NOT SEEN: {ph!r} appears in nothing the agent saw before turn {self.turn}"
             # A phrase with a number in it is usually a number question in
             # disguise ("1,491 seconds", "197 candidates" -- c01789ff spent
@@ -4805,6 +4817,8 @@ def cmd_self_test(_a) -> int:
     eq(evidence_class("Test sweep 12,413 pass, 2 fail", "turn 30: test result: ok. 4 passed; 0 failed",
                       ["turn 29: pass: 12433 fail: 2", "turn 30: test result: ok. 4 passed; 0 failed"]),
        "number", "and stays a finding when it is nowhere")
+    eq(excerpt("x" * 300 + " 503 more", 301), "…" + "x" * 60 + " 503 more", "excerpt: a late match is centred, not cut")
+    eq(excerpt("  early 503 here", 8), "early 503 here", "excerpt: an early match keeps the line head")
     eq(evidence_class("Context is at 514k and the red threshold is 500k",
                       "NOT SEEN: 'context is at 514k' appears in nothing the agent saw before turn 19"),
        "excluded", "b31822b1: the statusline is not the agent's claim")

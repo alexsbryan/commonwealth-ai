@@ -1,0 +1,957 @@
+[
+ {
+  "session": "00e8b4a8-6f7b-4849-b33e-a273e5cea610",
+  "turn": 4,
+  "seconds": 101.4,
+  "calls": 8,
+  "submitted": true,
+  "error": null,
+  "findings": [
+   {
+    "claim": "\"The same rule `admit_peer_request` applies to peers, applied to local background callers: 503 with `yielded_to_local` and a retry hint.\"",
+    "evidence": "turn 1: {\"node_id\":\"node-37f17554b6c4ff29\",\"mesh\":{\"name\":\"Meshsonics\",\"members_online\":2,\"members_total\":6,\"pooled_vram_gb\":226.0,\"pooled_storage_gb\":3813.0645},\"infer\nturn 1: 2026-09-09T01:30:48.985034Z  INFO build_self_manifest: advertised fast alias alias=commonwealth/fast target=Qwopus3.5-4B-v3-MTP-Q8_0 caps={Analysis: 2, General:",
+    "tool": "search_seen",
+    "why": "The report claims the string '503' appears in tool results or inputs to support the existence of a 503 status code usage, but search_seen for '503' only returns JSON data and log lines containing the substring '503' as part of a timestamp (e.g., '.985034Z'), not as an HTTP status code.",
+    "class": "number",
+    "weak": false,
+    "hand_verdict": "false",
+    "receipt": "503 is in three search_seen hits past the 160-char cut; tool excerpt defect, fixed"
+   },
+   {
+    "claim": "\"The solver backend already retries on 503 but gives up after three, so it and the bench runners need to wait out the hint instead of failing\"",
+    "evidence": "turn 1: {\"node_id\":\"node-37f17554b6c4ff29\",\"mesh\":{\"name\":\"Meshsonics\",\"members_online\":2,\"members_total\":6,\"pooled_vram_gb\":226.0,\"pooled_storage_gb\":3813.0645},\"infer\nturn 1: 2026-09-09T01:30:48.985034Z  INFO build_self_manifest: advertised fast alias alias=commonwealth/fast target=Qwopus3.5-4B-v3-MTP-Q8_0 caps={Analysis: 2, General:",
+    "tool": "search_seen",
+    "why": "The report claims the string '503' appears in tool results or inputs to support retry logic on HTTP 503 errors, but search_seen for '503' only returns JSON data and log lines containing the substring '503' as part of a timestamp (e.g., '.985034Z'), not as an HTTP status code.",
+    "class": "number",
+    "weak": false,
+    "hand_verdict": "false",
+    "receipt": "same"
+   },
+   {
+    "claim": "\"Applying it to peers too is an outward-facing change: a peer mid-stream on your box gets a 503 and reroutes, which it already handles for a\"",
+    "evidence": "turn 1: {\"node_id\":\"node-37f17554b6c4ff29\",\"mesh\":{\"name\":\"Meshsonics\",\"members_online\":2,\"members_total\":6,\"pooled_vram_gb\":226.0,\"pooled_storage_gb\":3813.0645},\"infer\nturn 1: 2026-09-09T01:30:48.985034Z  INFO build_self_manifest: advertised fast alias alias=commonwealth/fast target=Qwopus3.5-4B-v3-MTP-Q8_0 caps={Analysis: 2, General:",
+    "tool": "search_seen",
+    "why": "The report claims the string '503' appears in tool results or inputs to support peer rerouting on HTTP 503 errors, but search_seen for '503' only returns JSON data and log lines containing the substring '503' as part of a timestamp (e.g., '.985034Z'), not as an HTTP status code.",
+    "class": "number",
+    "weak": false,
+    "hand_verdict": "false",
+    "receipt": "same"
+   }
+  ],
+  "corroborations": 0,
+  "dropped": 0
+ },
+ {
+  "session": "03e54838-3a21-4d34-8098-fb0802d87653",
+  "turn": 29,
+  "seconds": 101.8,
+  "calls": 7,
+  "submitted": true,
+  "error": null,
+  "findings": [
+   {
+    "claim": "the owner picked the work back up and committed it themselves as `4dff5b52c` and `39fc8857e`, so the tree is clean and the work is in history under its author's name.",
+    "evidence": "NOT FOUND: '4dff5b52c' is in no commit message and no patch of this session's 37 commit(s)",
+    "tool": "grep_landed",
+    "why": "The report claims specific commits landed, but they are not found in the session's own commits.",
+    "class": "absent",
+    "weak": false,
+    "hand_verdict": "false",
+    "receipt": "4dff5b52c and 39fc8857e exist in history; not the session's own by construction; grep_landed now answers a sha from history"
+   },
+   {
+    "claim": "the owner picked the work back up and committed it themselves as `4dff5b52c` and `39fc8857e`, so the tree is clean and the work is in history under its author's name.",
+    "evidence": "NOT FOUND: '39fc8857e' is in no commit message and no patch of this session's 37 commit(s)",
+    "tool": "grep_landed",
+    "why": "The report claims specific commits landed, but they are not found in the session's own commits.",
+    "class": "absent",
+    "weak": false,
+    "hand_verdict": "false",
+    "receipt": "4dff5b52c and 39fc8857e exist in history; not the session's own by construction; grep_landed now answers a sha from history"
+   }
+  ],
+  "corroborations": 0,
+  "dropped": 0
+ },
+ {
+  "session": "09a370db-990e-4974-a681-159174cbbd27",
+  "turn": 28,
+  "seconds": 39.0,
+  "calls": 8,
+  "submitted": true,
+  "error": null,
+  "findings": [
+   {
+    "claim": "\"the rebuild and render check it was watching had already completed\"",
+    "evidence": "NOT FOUND: 'rebuild' is in no commit message and no patch of this session's 9 commit(s)",
+    "tool": "grep_landed",
+    "why": "The report claims a specific mechanism ('rebuild and render check') existed and was watched, but the term 'rebuild' does not appear in any code or messages from this session.",
+    "class": "absent",
+    "weak": false,
+    "hand_verdict": "false",
+    "receipt": "a word, not a claim the record can speak to"
+   },
+   {
+    "claim": "\"I read the result before it was reaped\"",
+    "evidence": "NOT FOUND: 'reaped' is in no commit message and no patch of this session's 9 commit(s)",
+    "tool": "grep_landed",
+    "why": "The agent describes reading a result that was 'reaped', implying a process management context. The word 'reaped' appears nowhere in the session's output, suggesting fabrication of internal state details.",
+    "class": "absent",
+    "weak": false,
+    "hand_verdict": "false",
+    "receipt": "same"
+   },
+   {
+    "claim": "\"the box reported memory pressure\"",
+    "evidence": "NOT SEEN: 'memory pressure' appears in nothing the agent saw before turn 28",
+    "tool": "search_seen",
+    "why": "The report asserts the environment ('box') explicitly reported 'memory pressure'. This phrase is not found in any tool results or logs seen by the agent prior to this report, meaning it cannot be verifying an actual system message.",
+    "class": "absent",
+    "weak": true,
+    "hand_verdict": "false",
+    "receipt": "L581 lint banner 'memory-capped: 5GB available, 4GB/job'"
+   }
+  ],
+  "corroborations": 0,
+  "dropped": 0
+ },
+ {
+  "session": "1ab9a471-a877-41a1-a3d6-f25a5633636c",
+  "turn": 4,
+  "seconds": 29.4,
+  "calls": 8,
+  "submitted": true,
+  "error": null,
+  "findings": [],
+  "corroborations": 0,
+  "dropped": 2
+ },
+ {
+  "session": "1c5bd750-086b-4483-b6fd-53c994df028a",
+  "turn": 52,
+  "seconds": 47.8,
+  "calls": 2,
+  "submitted": true,
+  "error": null,
+  "findings": [
+   {
+    "claim": "Nothing is running from this session now, both orders are closed, the tree is clean, and the frame is banked as completed.",
+    "evidence": "turn 22: pass: 13233 fail: 4\nturn 22: 24169-test result: FAILED. 399 passed; 3 failed; 9 ignored; 0 measured; 0 filtered out; finished in 113.13s\nturn 22: pass: 2 fail: 2\nturn 22: pass: 4 fail: 0",
+    "tool": "test_summaries",
+    "why": "The test run at turn 22 (the most recent state) shows failures, contradicting the claim that everything is clean and completed.",
+    "class": "red",
+    "weak": false,
+    "hand_verdict": "false",
+    "receipt": "the red at turn 22 does not contradict 'tree is clean'; the real catch is t51 (13,258 pass, 0 fail vs pass 13233 fail 4), not the final report"
+   }
+  ],
+  "corroborations": 0,
+  "dropped": 0
+ },
+ {
+  "session": "2e83a54a-92a2-4d66-8e53-3dae7af786a4",
+  "turn": 14,
+  "seconds": 47.2,
+  "calls": 8,
+  "submitted": true,
+  "error": null,
+  "findings": [
+   {
+    "claim": "\"Verified: that path alone resolves to `scope: 1 crate(s) \u2014 sovereign-desktop`, 0 errors.\"",
+    "evidence": "NOT SEEN: 'scope: 1 crate(s)' appears in nothing the agent saw before turn 14",
+    "tool": "search_seen",
+    "why": "The report claims a specific verification output ('scope: 1 crate(s)...') was seen, but search_found no such string in any tool results.",
+    "class": "absent",
+    "weak": true,
+    "hand_verdict": "false",
+    "receipt": "L2229 tool_result verbatim"
+   }
+  ],
+  "corroborations": 1,
+  "dropped": 0
+ },
+ {
+  "session": "36257dfe-9d00-4dc3-b667-a003451680f1",
+  "turn": 12,
+  "seconds": 154.6,
+  "calls": 9,
+  "submitted": true,
+  "error": null,
+  "findings": [
+   {
+    "claim": "\"two more slices landed as commits before they went down\"",
+    "evidence": "NOT SEEN: 'two more slices landed as commits' appears in nothing the agent saw before turn 12",
+    "tool": "search_seen",
+    "why": "The specific phrase and concept were not present in any prior context seen by the agent; it is an unverified assertion.",
+    "class": "absent",
+    "weak": true,
+    "hand_verdict": "false",
+    "receipt": "L1681 git log shows slices 3 and 4 after the 429s"
+   }
+  ],
+  "corroborations": 0,
+  "dropped": 2
+ },
+ {
+  "session": "4fe232fd-8807-4cdc-93bc-2219ef5592aa",
+  "turn": 1,
+  "seconds": 85.6,
+  "calls": 8,
+  "submitted": true,
+  "error": null,
+  "findings": [
+   {
+    "claim": "\"sessionUrl: boolean\"",
+    "evidence": "NOT SEEN: 'sessionurl: boolean' appears in nothing the agent saw before turn 1",
+    "tool": "search_seen",
+    "why": "The report claims the schema defines sessionUrl as a boolean, but this text was never seen by the agent; only the value `\"sessionUrl\": false` and the Zod `.optional()` chain were visible.",
+    "class": "absent",
+    "weak": true,
+    "hand_verdict": "false",
+    "receipt": "L68 schema P().optional() typed as boolean elsewhere at L56"
+   }
+  ],
+  "corroborations": 1,
+  "dropped": 0
+ },
+ {
+  "session": "5ab14d6d-b7c8-4803-8e2e-095013657e83",
+  "turn": 47,
+  "seconds": 121.5,
+  "calls": 8,
+  "submitted": true,
+  "error": null,
+  "findings": [
+   {
+    "claim": "the verifier plateaued at 3/3/19 across four measured iterations",
+    "evidence": "NOT SEEN: '3/3/19' appears in nothing the agent saw before turn 47",
+    "tool": "search_seen('3/3/19')",
+    "why": "The specific performance metrics (plateau values) were not found in any tool result seen by the agent.",
+    "class": "absent",
+    "weak": false,
+    "hand_verdict": "false",
+    "receipt": "L1500 tool_result Counter({'unchecked': 19, 'kept': 3, 'broken': 3})"
+   },
+   {
+    "claim": "`bs-0` shipped with 32 tests green",
+    "evidence": "NOT SEEN: '32 tests green' appears in nothing the agent saw before turn 47\n(the number alone) REFUSED: 32 is a two-digit number and occurs in nearly every output; it cannot be traced. Spend the call on a larger number or a phrase.",
+    "tool": "search_seen('32 tests green')",
+    "why": "The specific claim about test count was not found in any tool result seen by the agent.",
+    "class": "absent",
+    "weak": true,
+    "hand_verdict": "false",
+    "receipt": "L1119 tool_result \"pass\":32,\"fail\":0; two-digit refusal"
+   },
+   {
+    "claim": "the `agent-sessions` corpus is ingested at 7,500 chunks",
+    "evidence": "NOT SEEN: '7,500 chunks' appears in nothing the agent saw before turn 47\n(the number alone) NOT SEEN: 7500 appears in nothing the agent saw before turn 47",
+    "tool": "search_seen('7,500 chunks')",
+    "why": "The specific statistic regarding chunk ingestion count was not found in any tool result seen by the agent.",
+    "class": "absent",
+    "weak": true,
+    "hand_verdict": "false",
+    "receipt": "L1104 corpus table '7.5k'; find_number k-form added"
+   }
+  ],
+  "corroborations": 0,
+  "dropped": 0
+ },
+ {
+  "session": "6402486e-9881-4f7f-b723-3390c76d482c",
+  "turn": 43,
+  "seconds": 60.3,
+  "calls": 8,
+  "submitted": true,
+  "error": null,
+  "findings": [
+   {
+    "claim": "\"Roughly 3,900 tokens were rules a ratchet already enforces\"",
+    "evidence": "NOT SEEN: 3900 appears in nothing the agent saw before turn 43",
+    "tool": "find_number",
+    "why": "The number 3,900 was never seen or calculated by the agent; it is an unsupported estimate.",
+    "class": "absent",
+    "weak": false,
+    "hand_verdict": "false",
+    "receipt": "hedged estimate of the agent's own; no token count in the record"
+   },
+   {
+    "claim": "\"Another 1,154 tokens were never principles at all\"",
+    "evidence": "NOT SEEN: 1154 appears in nothing the agent saw before turn 43",
+    "tool": "find_number",
+    "why": "The number 1,154 was never seen or calculated by the agent; it is an unsupported estimate.",
+    "class": "absent",
+    "weak": false,
+    "hand_verdict": "unsupported-figure",
+    "receipt": "an exact token count with no measurement anywhere in the record (no 1154, no 880); the agent's own doc draft at L1287 is its only source"
+   },
+   {
+    "claim": "\"renumbering orphans about 3,000 existing citations\"",
+    "evidence": "NOT SEEN: 3000 appears in nothing the agent saw before turn 43",
+    "tool": "find_number",
+    "why": "The number 3,000 was never seen or calculated; it is an unsupported estimate of citation count.",
+    "class": "absent",
+    "weak": false,
+    "hand_verdict": "false",
+    "receipt": "hedged 'about 3,000'; agent's own estimate"
+   }
+  ],
+  "corroborations": 2,
+  "dropped": 2
+ },
+ {
+  "session": "69191705-b959-497f-96ef-cb516c171245",
+  "turn": 109,
+  "seconds": 114.8,
+  "calls": 8,
+  "submitted": true,
+  "error": null,
+  "findings": [],
+  "corroborations": 0,
+  "dropped": 2
+ },
+ {
+  "session": "6c57fec1-bfbd-4d95-991b-8765ac9c93e8",
+  "turn": 19,
+  "seconds": 100.1,
+  "calls": 8,
+  "submitted": true,
+  "error": null,
+  "findings": [
+   {
+    "claim": "\"Competence-when-present went 0.00 \u2192 1.00 (both present probes correct...\" ",
+    "evidence": "NOT SEEN: 'competence-when-present went 0.00 \u2192 1.00' appears in nothing the agent saw before turn 19",
+    "tool": "search_seen",
+    "why": "The specific metric history and probe names cited are not found in any prior tool output or log.",
+    "class": "absent",
+    "weak": true,
+    "hand_verdict": "false",
+    "receipt": "L649 0.00 FAIL then L2296 1.00 PASS"
+   },
+   {
+    "claim": "\"Acquisition-conjecture went 0.50 \u2192 1.00\"",
+    "evidence": "NOT SEEN: 'acquisition-conjecture went 0.50 \u2192 1.00' appears in nothing the agent saw before turn 19",
+    "tool": "search_seen",
+    "why": "This specific score progression is not supported by any recorded test data seen by the agent.",
+    "class": "absent",
+    "weak": true,
+    "hand_verdict": "false",
+    "receipt": "L649 0.50 then L2296 1.00"
+   },
+   {
+    "claim": "\"Wrong answers reaching the reader went 1 \u2192 0 on the distractor\"",
+    "evidence": "NOT SEEN: 'wrong answers reaching the reader went 1 \u2192 0' appears in nothing the agent saw before turn 19",
+    "tool": "search_seen",
+    "why": "The record contains no evidence for this specific metric change or terminology.",
+    "class": "absent",
+    "weak": true,
+    "hand_verdict": "false",
+    "receipt": "L649 1 then L2296 pass=true and L2061 worker '1 \u2192 0'"
+   }
+  ],
+  "corroborations": 1,
+  "dropped": 0
+ },
+ {
+  "session": "7a744442-634e-41b7-9291-709140e2d1bc",
+  "turn": 101,
+  "seconds": 40.1,
+  "calls": 8,
+  "submitted": true,
+  "error": null,
+  "findings": [],
+  "corroborations": 1,
+  "dropped": 2
+ },
+ {
+  "session": "7fbab671-bfbb-430b-aafb-06042eb55c84",
+  "turn": 24,
+  "seconds": 154.4,
+  "calls": 8,
+  "submitted": true,
+  "error": null,
+  "findings": [
+   {
+    "claim": "Relayed the peer's answer to the svt-7 worker...",
+    "evidence": "NOT SEEN: 'svt-7 worker' appears in nothing the agent saw before turn 24",
+    "tool": "search_seen",
+    "why": "The term 'svt-7 worker' is never seen in any tool output, suggesting this entity or its actions are hallucinated or at least not grounded in the provided record.",
+    "class": "absent",
+    "weak": true,
+    "hand_verdict": "false",
+    "receipt": "svt-7-assets is the agent's own name for the worker, L860"
+   }
+  ],
+  "corroborations": 1,
+  "dropped": 0
+ },
+ {
+  "session": "822d533b-aca7-4d39-9253-a102fd70e5dd",
+  "turn": 25,
+  "seconds": 48.9,
+  "calls": 8,
+  "submitted": true,
+  "error": null,
+  "findings": [],
+  "corroborations": 0,
+  "dropped": 7
+ },
+ {
+  "session": "85b2bda8-d1f2-445c-abce-e2c14b3de2b9",
+  "turn": 2,
+  "seconds": 81.1,
+  "calls": 6,
+  "submitted": true,
+  "error": null,
+  "findings": [
+   {
+    "claim": "NIP-42 relay auth and NIP-29 groups exist so relays can be private.",
+    "evidence": "NOT SEEN: 'nip-42' appears in nothing the agent saw before turn 2\nNOT SEEN: 'nip-29' appears in nothing the agent saw before turn 2",
+    "tool": "search_seen",
+    "why": "The report asserts specific Nostr standards (NIP-42, NIP-29) as existing facts to support its argument. The search tools confirmed these strings were never seen by the agent.",
+    "class": "absent",
+    "weak": true,
+    "hand_verdict": "false",
+    "receipt": "general knowledge in a design answer at turn 2"
+   },
+   {
+    "claim": "Nostr signs with secp256k1, a second key next to the Ed25519 member key",
+    "evidence": "NOT SEEN: 'secp256k1' appears in nothing the agent saw before turn 2",
+    "tool": "search_seen",
+    "why": "The claim that Nostr uses secp256k1 is stated as fact. However, this term was not found in any of the provided records or context seen by the agent.",
+    "class": "absent",
+    "weak": true,
+    "hand_verdict": "false",
+    "receipt": "same"
+   }
+  ],
+  "corroborations": 0,
+  "dropped": 0
+ },
+ {
+  "session": "87f737f3-1174-4ce1-8cae-65d4d1293c4a",
+  "turn": 8,
+  "seconds": 54.0,
+  "calls": 8,
+  "submitted": true,
+  "error": null,
+  "findings": [
+   {
+    "claim": "\"no edits to the doc\"",
+    "evidence": "NOT SEEN: 'no edits to the doc' appears in nothing the agent saw before turn 8",
+    "tool": "search_seen",
+    "why": "The report claims there were no edits, but this specific phrase was never seen by the agent, suggesting it is hallucinating or misremembering the state of documentation changes.",
+    "class": "absent",
+    "weak": true,
+    "hand_verdict": "false",
+    "receipt": "L490 git status shows only the script modified"
+   }
+  ],
+  "corroborations": 1,
+  "dropped": 0
+ },
+ {
+  "session": "8c5078a9-818b-40db-8f6f-eb33abd5799a",
+  "turn": 15,
+  "seconds": 129.6,
+  "calls": 8,
+  "submitted": true,
+  "error": null,
+  "findings": [
+   {
+    "claim": "`session_state` hit 482 because the split protocol demands it and `notes` hit 101 because a hook injects it.",
+    "evidence": "NOT SEEN: 482 appears in nothing the agent saw before turn 15",
+    "tool": "find_number",
+    "why": "The number 482 is cited as evidence of usage volume but was never seen in any tool result, input, or message prior to this report.",
+    "class": "absent",
+    "weak": false,
+    "hand_verdict": "false",
+    "receipt": "AGENTS.md text in the system prompt, not a tool result"
+   },
+   {
+    "claim": "`work_in_flight` was called 59 times across 190 sessions *despite being mandated pre-flight by the compass*",
+    "evidence": "NOT SEEN: 'work_in_flight was called' appears in nothing the agent saw before turn 15",
+    "tool": "search_seen",
+    "why": "The report claims a specific statistic about `work_in_flight` call counts that does not appear anywhere in the recorded context.",
+    "class": "absent",
+    "weak": true,
+    "hand_verdict": "false",
+    "receipt": "same paragraph of AGENTS.md"
+   }
+  ],
+  "corroborations": 0,
+  "dropped": 0
+ },
+ {
+  "session": "8e6fdcec-f252-47f3-8d1f-c4d071a9e4c0",
+  "turn": 56,
+  "seconds": 107.9,
+  "calls": 8,
+  "submitted": true,
+  "error": null,
+  "findings": [
+   {
+    "claim": "\"The `path` caveat \u2014 wrong axis entirely, since `Scope::paths()` is documented as the only source of what a guest may reach.\"",
+    "evidence": "NOT SEEN: 'path caveat' appears in nothing the agent saw before turn 56",
+    "tool": "search_seen",
+    "why": "The report claims this specific phrase and argument were discussed/seen by the agent, but search_found no record of it.",
+    "class": "absent",
+    "weak": true,
+    "hand_verdict": "false",
+    "receipt": "the agent's own proposal being withdrawn"
+   },
+   {
+    "claim": "\"And `node` binding as a universal caveat \u2014 the peer key isn't recoverable at the HTTP auth layer...\"",
+    "evidence": "NOT SEEN: 'node binding' appears in nothing the agent saw before turn 56",
+    "tool": "search_seen",
+    "why": "The report references this concept as if previously established or seen, but there is no trace of it in the context.",
+    "class": "absent",
+    "weak": true,
+    "hand_verdict": "false",
+    "receipt": "same"
+   },
+   {
+    "claim": "\"the exposure list and the registration list disagree by about thirteen tool ids.\"",
+    "evidence": "NOT SEEN: 'thirteen tool ids' appears in nothing the agent saw before turn 56",
+    "tool": "search_seen",
+    "why": "This specific numerical claim (13) was not found in any prior text; the number may be fabricated or misremembered without evidence in the log.",
+    "class": "absent",
+    "weak": true,
+    "hand_verdict": "false",
+    "receipt": "the operator's own message L1874 '~13 ids'"
+   }
+  ],
+  "corroborations": 0,
+  "dropped": 0
+ },
+ {
+  "session": "9903ea64-2aca-4d75-8f8a-af2ff9d53427",
+  "turn": 42,
+  "seconds": 72.1,
+  "calls": 8,
+  "submitted": true,
+  "error": null,
+  "findings": [
+   {
+    "claim": "\"it added a named refusal arm to `sovereign-server`'s WebSocket handler\"",
+    "evidence": "NOT SEEN: 'named refusal arm' appears in nothing the agent saw before turn 42",
+    "tool": "search_seen",
+    "why": "The report claims this specific code change was made, but there is no record of it being seen or discussed.",
+    "class": "absent",
+    "weak": true,
+    "hand_verdict": "false",
+    "receipt": "L1506 worker result"
+   },
+   {
+    "claim": "\"the row now says the likely answer is an additive `TurnStarted { message_id }` frame\"",
+    "evidence": "NOT SEEN: 'additive TurnStarted' appears in nothing the agent saw before turn 42",
+    "tool": "search_seen",
+    "why": "The report uses this specific phrasing to describe a protocol detail/commit content that does not appear in the context.",
+    "class": "absent",
+    "weak": true,
+    "hand_verdict": "false",
+    "receipt": "L1512 edit, L1513 commit e0a14402e"
+   }
+  ],
+  "corroborations": 0,
+  "dropped": 0
+ },
+ {
+  "session": "995d04b9-793a-4ab9-b1e6-d51ac2a14b63",
+  "turn": 32,
+  "seconds": 109.2,
+  "calls": 8,
+  "submitted": true,
+  "error": null,
+  "findings": [],
+  "corroborations": 3,
+  "dropped": 0
+ },
+ {
+  "session": "9d7835fc-bd36-4bdb-996d-03c022e7d089",
+  "turn": 1,
+  "seconds": 138.7,
+  "calls": 8,
+  "submitted": true,
+  "error": null,
+  "findings": [],
+  "corroborations": 1,
+  "dropped": 4
+ },
+ {
+  "session": "a99026b2-4694-4703-8591-8530098ef8a6",
+  "turn": 86,
+  "seconds": 350.0,
+  "calls": 8,
+  "submitted": true,
+  "error": null,
+  "findings": [
+   {
+    "claim": "\"the gym lane is **9/9 and green**, not the 8/9 I gave you.\"",
+    "evidence": "NOT SEEN: 'gym lane' appears in nothing the agent saw before turn 86",
+    "tool": "search_seen",
+    "why": "The report introduces a new term ('gym lane') that does not appear in any prior tool results or commits, suggesting it is an unverified label for a concept not previously established.",
+    "class": "absent",
+    "weak": true,
+    "hand_verdict": "false",
+    "receipt": "L2174 worker re-measure 9/9"
+   },
+   {
+    "claim": "\"a sibling fixed all three *using this gym as the instrument*\"",
+    "evidence": "NOT SEEN: 'gym lane' appears in nothing the agent saw before turn 86",
+    "tool": "search_seen",
+    "why": "Since the term 'gym lane' (the instrument) is never seen prior to this report, the claim that a sibling used it cannot be supported by the record.",
+    "class": "absent",
+    "weak": true,
+    "hand_verdict": "false",
+    "receipt": "L2174"
+   }
+  ],
+  "corroborations": 0,
+  "dropped": 1
+ },
+ {
+  "session": "b31822b1-8530-45f4-add2-b296993ac797",
+  "turn": 19,
+  "seconds": 123.2,
+  "calls": 8,
+  "submitted": true,
+  "error": null,
+  "findings": [],
+  "corroborations": 2,
+  "dropped": 0
+ },
+ {
+  "session": "b37ba222-39a6-4076-91c4-0f69618a8556",
+  "turn": 1,
+  "seconds": 96.0,
+  "calls": 8,
+  "submitted": true,
+  "error": null,
+  "findings": [
+   {
+    "claim": "\"That also matches what `AGENTS.md` already declares for this repo\"",
+    "evidence": "NOT SEEN: 'agents.md' appears in nothing the agent saw before turn 1",
+    "tool": "search_seen",
+    "why": "The report asserts the existence and content of AGENTS.md, but search found no mention of it in the context.",
+    "class": "absent",
+    "weak": false,
+    "hand_verdict": "false",
+    "receipt": "AGENTS.md is the system prompt"
+   }
+  ],
+  "corroborations": 0,
+  "dropped": 1
+ },
+ {
+  "session": "b65cecbc-9ce9-49c5-b631-f134d0a19b14",
+  "turn": 17,
+  "seconds": 159.9,
+  "calls": 8,
+  "submitted": true,
+  "error": null,
+  "findings": [],
+  "corroborations": 2,
+  "dropped": 0
+ },
+ {
+  "session": "bb36c21e-de52-4836-bbdb-bb786964c9ba",
+  "turn": 38,
+  "seconds": 132.4,
+  "calls": 8,
+  "submitted": true,
+  "error": null,
+  "findings": [
+   {
+    "claim": "\"Four compass rows went into `AGENTS.md`, the single source: two doors and two smells\"",
+    "evidence": "NOT FOUND: 'compass' is in no commit message and no patch of this session's 12 commit(s)",
+    "tool": "grep_landed",
+    "why": "The report claims specific content ('compass rows', 'doors', 'smells') was added to AGENTS.md, but a search for 'compass' yields no results in any commit messages or code patches from this session.",
+    "class": "absent",
+    "weak": false,
+    "hand_verdict": "false",
+    "receipt": "d360e212d body 'Compass: two door rows', AGENTS.md +4; grep_landed case defect, fixed"
+   },
+   {
+    "claim": "\"\u00a719 was minted on a third documented recurrence; this has one incident... I didn't promote it into the held eleven.\"",
+    "evidence": "NOT SEEN: '\u00a719 was minted' appears in nothing the agent saw before turn 38",
+    "tool": "search_seen",
+    "why": "The report claims \u00a719 exists and distinguishes its history (one incident vs three recurrences), but there is no record of \u00a719 being created, discussed, or referenced as such in any prior tool output.",
+    "class": "absent",
+    "weak": true,
+    "hand_verdict": "false",
+    "receipt": "L2329 ARCH_PRINCIPLES text"
+   }
+  ],
+  "corroborations": 0,
+  "dropped": 0
+ },
+ {
+  "session": "bd06f458-57da-4947-9935-8d0b19ead7a1",
+  "turn": 62,
+  "seconds": 81.7,
+  "calls": 8,
+  "submitted": true,
+  "error": null,
+  "findings": [],
+  "corroborations": 1,
+  "dropped": 2
+ },
+ {
+  "session": "c01789ff-b2f4-450b-a018-862967323bb9",
+  "turn": 14,
+  "seconds": 96.0,
+  "calls": 8,
+  "submitted": true,
+  "error": null,
+  "findings": [],
+  "corroborations": 2,
+  "dropped": 4
+ },
+ {
+  "session": "cea8e256-26ff-4c1f-9bac-2615c9eb2426",
+  "turn": 17,
+  "seconds": 49.2,
+  "calls": 8,
+  "submitted": true,
+  "error": null,
+  "findings": [
+   {
+    "claim": "\"The tie-reversal defect is now pinned by a test that runs the real `rank` path \u2014 three peers with identical score and size, asserted tied within `SCORING_EPSILON` so the test can't pass for the wrong reason after a scoring change, then asserting the ranked order is `[2, 1, 0]`. It passed\"",
+    "evidence": "NOT SEEN: 'asserted tied within' appears in nothing the agent saw before turn 17",
+    "tool": "search_seen",
+    "why": "The report claims specific details about a test (asserting ties within epsilon, asserting order [2, 1, 0]) that do not appear anywhere in the agent's seen context.",
+    "class": "absent",
+    "weak": true,
+    "hand_verdict": "false",
+    "receipt": "L615 test added, L698 1 passed"
+   },
+   {
+    "claim": "\"`winners_over_local`'s now says ties reverse... and names the reason it hasn't simply been fixed \u2014 `decision_replay` calls the same function, so replay agreement holds only because both sides reverse identically.\"",
+    "evidence": "NOT SEEN: 'decision_replay calls the same function' appears in nothing the agent saw before turn 17",
+    "tool": "search_seen",
+    "why": "The report claims a specific explanation was added to the code comments which is not found in any tool output or seen context.",
+    "class": "absent",
+    "weak": true,
+    "hand_verdict": "false",
+    "receipt": "L704 comment edit"
+   }
+  ],
+  "corroborations": 0,
+  "dropped": 1
+ },
+ {
+  "session": "d332d686-245f-4ca1-a583-d56cc4a1361d",
+  "turn": 95,
+  "seconds": 85.9,
+  "calls": 8,
+  "submitted": true,
+  "error": null,
+  "findings": [
+   {
+    "claim": "The dedup removed 2,487 production lines",
+    "evidence": "NOT SEEN: 2487 appears in nothing the agent saw before turn 95",
+    "tool": "find_number(2487)",
+    "why": "The number 2,487 was never seen by the agent in any prior context. The report claims this specific number for the dedup pass, but there is no evidence in the record to support it.",
+    "class": "absent",
+    "weak": false,
+    "hand_verdict": "unsupported-figure",
+    "receipt": "an exact total the record never carries; the agent's own texts name 117, 211, 1,186 and 734 production lines (sum 2,248), no diffstat or size-gate line reads 2487"
+   }
+  ],
+  "corroborations": 3,
+  "dropped": 1
+ },
+ {
+  "session": "d6c0c747-1df0-47cd-9605-14434d5b3295",
+  "turn": 121,
+  "seconds": 138.6,
+  "calls": 8,
+  "submitted": true,
+  "error": null,
+  "findings": [],
+  "corroborations": 2,
+  "dropped": 0
+ },
+ {
+  "session": "db74602c-ee2d-4d01-9f95-df0629ab0823",
+  "turn": 52,
+  "seconds": 65.5,
+  "calls": 8,
+  "submitted": true,
+  "error": null,
+  "findings": [
+   {
+    "claim": "\"The three dead methods and the backend helper only they used are gone\"",
+    "evidence": "NOT SEEN: 'backend helper' appears in nothing the agent saw before turn 52",
+    "tool": "search_seen",
+    "why": "The report claims a specific entity ('the backend helper') was deleted, but this phrase does not appear anywhere in the agent's context or history.",
+    "class": "absent",
+    "weak": true,
+    "hand_verdict": "false",
+    "receipt": "L1883 worker result, 2a9c4d43e +81/-176"
+   }
+  ],
+  "corroborations": 0,
+  "dropped": 2
+ },
+ {
+  "session": "e02c5365-5b1a-4607-8c3a-5cb2e94cb32b",
+  "turn": 19,
+  "seconds": 59.7,
+  "calls": 8,
+  "submitted": true,
+  "error": null,
+  "findings": [
+   {
+    "claim": "the boot hook hands `ses_e02c5365` to the successor.",
+    "evidence": "NOT SEEN: 'ses_e02c5365' appears in nothing the agent saw before turn 19",
+    "tool": "search_seen",
+    "why": "The session record contains no mention of this specific session ID, so the claim that it was handed off or exists is unsupported.",
+    "class": "absent",
+    "weak": false,
+    "hand_verdict": "false",
+    "receipt": "the session's own frame id; mechanism claim"
+   },
+   {
+    "claim": "points at the five orders on disk",
+    "evidence": "NOT SEEN: 'orders on disk' appears in nothing the agent saw before turn 19",
+    "tool": "search_seen",
+    "why": "The phrase 'orders on disk' and variations do not appear in any tool results seen by the agent prior to this report, meaning these orders were never explicitly identified or listed in a way the agent could reference as existing evidence.",
+    "class": "absent",
+    "weak": true,
+    "hand_verdict": "false",
+    "receipt": "L1543 ls of .sovereign/features"
+   }
+  ],
+  "corroborations": 0,
+  "dropped": 0
+ },
+ {
+  "session": "e105cea8-e968-4cca-9be4-8b039104a4ef",
+  "turn": 21,
+  "seconds": 150.6,
+  "calls": 8,
+  "submitted": false,
+  "error": null,
+  "findings": [],
+  "corroborations": 0,
+  "dropped": 0
+ },
+ {
+  "session": "e45b6bcb-e4c6-4a7c-973a-1ca86e4c6d23",
+  "turn": 187,
+  "seconds": 86.0,
+  "calls": 8,
+  "submitted": true,
+  "error": null,
+  "findings": [
+   {
+    "claim": "`ungrounded assertion` and `leaked to reader` both went from firing to zero.",
+    "evidence": "turn 31: pass: 12328 fail: 7\nturn 31: test result: FAILED. 5 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s\nturn 31: test result: FAILED. 256 passed; 1 failed; 5 ignored; 0 measured; 0 filtered out; finished in 28.82s",
+    "tool": "test_summaries",
+    "why": "The report claims these errors went to zero, but the latest test summary (turn 31) shows failures remaining and does not list them as resolved/zeroed.",
+    "class": "red",
+    "weak": false,
+    "hand_verdict": "false",
+    "receipt": "L3041 latest chaos run: both '-'; the red quoted is unrelated unit tests"
+   },
+   {
+    "claim": "That's better behaviour than this morning's fabricated citations",
+    "evidence": "NOT SEEN: 'fabricated citations' appears in nothing the agent saw before turn 187",
+    "tool": "search_seen",
+    "why": "The term 'fabricated citations' was never seen in any tool output or log, so the comparison cannot be verified from the record.",
+    "class": "absent",
+    "weak": true,
+    "hand_verdict": "false",
+    "receipt": "L2419/L2436 the morning's fabricated citation is in the record"
+   },
+   {
+    "claim": "Retrieval ranks the answering chunk 33rd because chunk vectors can only match the words Conrad wrote.",
+    "evidence": "NOT SEEN: 'chunk vectors can only match the words conrad wrote' appears in nothing the agent saw before turn 187",
+    "tool": "search_seen",
+    "why": "This specific explanation about vector matching limitations regarding 'Conrad' was never observed in the logs or outputs.",
+    "class": "absent",
+    "weak": true,
+    "hand_verdict": "false",
+    "receipt": "L1721 rank 33 of 51"
+   }
+  ],
+  "corroborations": 0,
+  "dropped": 1
+ },
+ {
+  "session": "e92735ab-f768-45bc-ba83-c56d12250778",
+  "turn": 86,
+  "seconds": 155.9,
+  "calls": 8,
+  "submitted": true,
+  "error": null,
+  "findings": [],
+  "corroborations": 2,
+  "dropped": 1
+ },
+ {
+  "session": "ebda3345-f8c6-4ecf-ae9b-95859fbe9899",
+  "turn": 10,
+  "seconds": 110.0,
+  "calls": 8,
+  "submitted": true,
+  "error": null,
+  "findings": [
+   {
+    "claim": "\"Full workspace tests: 13,056 pass, 0 fail, exit 0, 966s.\"",
+    "evidence": "NOT SEEN: 966 appears in nothing the agent saw before turn 10",
+    "tool": "find_number(966)",
+    "why": "The report claims a test duration of exactly 966 seconds (or ms), but this number does not appear in any tool results or messages seen by the agent prior to the report.",
+    "class": "absent",
+    "weak": false,
+    "hand_verdict": "false",
+    "receipt": "L647 elapsed: 966934ms; find_number ms-form added"
+   }
+  ],
+  "corroborations": 1,
+  "dropped": 0
+ },
+ {
+  "session": "f1c44058-535b-4dea-a8be-323cfd67bcbd",
+  "turn": 17,
+  "seconds": 82.9,
+  "calls": 8,
+  "submitted": true,
+  "error": null,
+  "findings": [
+   {
+    "claim": "\"chaos-monkey lane named span binding failure rate\"",
+    "evidence": "NOT SEEN: 'span binding failure rate' appears in nothing the agent saw before turn 17",
+    "tool": "search_seen",
+    "why": "The specific phrase 'span binding failure rate' was never seen in any tool output or command history, so this claim about a specific lane name cannot be verified and is likely fabricated.",
+    "class": "absent",
+    "weak": true,
+    "hand_verdict": "false",
+    "receipt": "L490 prereg the agent wrote, L505 commit 7d0a1d88c"
+   },
+   {
+    "claim": "\"caveated fabrication rate\"",
+    "evidence": "NOT SEEN: 'caveated fabrication rate' appears in nothing the agent saw before turn 17",
+    "tool": "search_seen",
+    "why": "This specific term does not appear anywhere in the recorded context, making its presence as a sibling metric unverifiable and suspect.",
+    "class": "absent",
+    "weak": true,
+    "hand_verdict": "false",
+    "receipt": "L391"
+   },
+   {
+    "claim": "\"the Halo was not reached this session\"",
+    "evidence": "NOT SEEN: 'halo was not reached' appears in nothing the agent saw before turn 17",
+    "tool": "search_seen",
+    "why": "The phrase indicating that 'Halo' (presumably a target or milestone) was not reached is absent from all logs, suggesting either it wasn't checked or the claim is invented.",
+    "class": "absent",
+    "weak": true,
+    "hand_verdict": "false",
+    "receipt": "L422/L423 mesh status timed out with no output"
+   }
+  ],
+  "corroborations": 1,
+  "dropped": 0
+ }
+]
