@@ -1851,6 +1851,63 @@ def harvest_corrections(since: str = "2026-06-01") -> list[dict]:
                          "subject": subj[:110], "why": ctx[:420]})
     return rows
 
+def cmd_counts(a) -> int:
+    """The claim checker as a `counts:` instrument.
+
+    Reuse, not a new harness (ARCH 11). `sovereign-tdd` already defines the
+    one-`f` contract — a command prefixed `counts:` whose stdout is
+    `PASS <name>` / `FAIL <name>`, parsed at
+    `sovereign/crates/sovereign-tdd/src/shared/parser.rs:56`, with zero lines
+    plus an `error` folding to one failing `<suite error>` and zero lines
+    without one staying 0/0/0 so `NoBaseline` keeps meaning "nothing to steer
+    by". Emitting it makes this pipeline steerable by the existing solve loop
+    instead of by a scorer I would otherwise have written for the fifth time.
+
+    One checkable outcome per known-false claim: did the pipeline catch a
+    claim the repo itself already declared false, at the tree where it was
+    false? The labels are the correcting authors'; the sha is that commit's
+    parent. Nothing here is authored by this tool, which is the property
+    every earlier bank lacked.
+
+    The driver's discipline is honoured rather than reimplemented: an
+    instrument that DECLINES is not a pass. `not-mine` means the pipeline
+    never looked, and a claim nobody looked at is not a claim anybody caught.
+    """
+    import subprocess
+    bank = Path(a.bank)
+    if not bank.exists():
+        print(f"error: no bank at {bank} — run `harvest` first")
+        return 4
+    cases = json.loads(bank.read_text())["cases"]
+    corpora = installed_corpora()
+    caught = missed = 0
+    for i, s in enumerate(cases, 1):
+        sha = subprocess.run(["git", "rev-parse", s["labelled_by"] + "^"],
+                             capture_output=True, text=True).stdout.strip()
+        name = f"correction.{s['labelled_by']}.{i}"
+        if not sha:
+            print(f"error: {name} has no parent commit")
+            continue
+        r, tok = route(s.get("why") or s["false_claim"], corpora)
+        if r == "record":
+            v = instrument_record(s["false_claim"], tok)
+        elif r == "code":
+            v = instrument_code(s["false_claim"], tok, sha)
+        elif r == "ran":
+            v = {"verdict": "not-mine", "why": "ran is corroboration-only"}
+        else:
+            v = {"verdict": "not-mine", "why": f"routed {r}, no instrument"}
+        if v["verdict"] == "broken":
+            caught += 1
+            print(f"PASS {name}")
+        else:
+            missed += 1
+            print(f"FAIL {name} [{r}/{v['verdict']}] {s['false_claim'][:64]}")
+    tot = caught + missed
+    print(f"# caught {caught}/{tot} known-false claims "
+          f"({caught/tot:.0%})" if tot else "# no cases", file=sys.stderr)
+    return 0
+
 def cmd_harvest(a) -> int:
     rows = harvest_corrections(a.since)
     seen, uniq = set(), []
@@ -2036,6 +2093,28 @@ def instrument_code(claim: str, anchor: str, sha: str) -> dict:
     a = anchor.strip().strip("`'\"")
     if not a or len(a) < 4:
         return {"verdict": "not-mine", "why": "no resolvable anchor"}
+    # THE QUANTIFIER MUST GOVERN THE ANCHOR.
+    #
+    # The one defect behind every false instrument tonight: marker and anchor
+    # matched independently, anywhere in the sentence, about neither. "This
+    # act was wrong and it never comes back" scored a catch on `never` with
+    # the anchor ` becomes ` at 2,858 occurrences; "I need nothing at or
+    # below this" scored one on `Digest` at 409.
+    #
+    # Proximity is a PROXY for the grammatical relation, not the relation.
+    # It is honest about being crude and it is monotone in the right
+    # direction: a quantifier 30 characters from its anchor may still not
+    # govern it, but one 200 characters away in a different clause certainly
+    # does not. The real fix is parsing the claim into (anchor, quantifier,
+    # predicate) and is the reason this instrument stays narrow until then.
+    def governs(rx) -> bool:
+        ai = claim.lower().find(a.lower())
+        if ai < 0:
+            return False
+        for mm in rx.finditer(claim):
+            if abs(mm.start() - ai) <= 60:
+                return True
+        return False
     hits = git("grep", "-cF", a, sha)
     files = [l for l in hits.splitlines() if l.strip()]
     total = 0
@@ -2045,12 +2124,12 @@ def instrument_code(claim: str, anchor: str, sha: str) -> dict:
         except (ValueError, IndexError):
             pass
     cmd = f"git grep -cF {a!r} {sha[:9]}"
-    if RX_ABSENCE.search(claim):
+    if governs(RX_ABSENCE):
         if total == 0:
             return {"verdict": "holds", "why": f"{cmd} — nothing, which is the claim"}
         return {"verdict": "broken", "why": f"{cmd} — {total} occurrence(s) across "
                                             f"{len(files)} file(s)", "receipt": cmd}
-    if RX_UNIQUE.search(claim):
+    if governs(RX_UNIQUE):
         if total == 0:
             return {"verdict": "not-mine", "why": f"{cmd} — anchor does not resolve at this sha"}
         if len(files) > 1:
@@ -2756,6 +2835,9 @@ def main() -> int:
     bp.add_argument("--pin", default=DEFAULT_PIN)
     bp.add_argument("--timeout", type=float, default=120.0)
     bp.set_defaults(fn=cmd_bs_preference)
+    ct = sub.add_parser("counts", help="the checker as a `counts:` instrument over externally-labelled claims")
+    ct.add_argument("--bank", default="quality/report-audit/bs-corrections-verified.json")
+    ct.set_defaults(fn=cmd_counts)
     hv = sub.add_parser("harvest", help="known-false claims the repo already labelled in commit bodies")
     hv.add_argument("--since", default="2026-06-01")
     hv.add_argument("--show", type=int, default=8)
