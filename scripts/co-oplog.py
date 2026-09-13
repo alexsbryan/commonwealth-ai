@@ -86,6 +86,37 @@ def mechanical(sent: str) -> str | None:
         return "promissory"
     return None
 
+# ---- the intake gate ---------------------------------------------------
+#
+# A claim is ADJUDICABLE only if it names something a rung of the golden
+# ladder could resolve. This is the order's receipt rule ("every accusation
+# carries a receipt a reader can check in ONE step") moved upstream to
+# intake: a sentence naming nothing resolvable cannot produce a receipt, so
+# a check planned over it is guaranteed to be theatre. Blind batch v4
+# planned `git grep -cF '<the whole claim sentence>'` for seven such rows.
+#
+# The gate is on SHAPE, never on resolution. Requiring the referent to
+# resolve at T0 would systematically drop absence claims -- "there is no
+# `/v1/sessions` route today" is row 3 of v4, correctly KEPT precisely
+# because its referent does not resolve.
+RX_REFERENT = re.compile(r"""
+      `[^`]{2,}`                                    # a backticked span
+    | \b\w+\.(?:rs|py|sh|toml|md|json|js|ts|mjs|sql|html|ya?ml|lock)\b
+    | \b[\w.-]+/[\w./-]*\w                          # a path
+    | \b[a-z0-9]+_[a-z0-9_]+\b                      # snake_case
+    | \b[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+\b         # CamelCase, 2+ humps
+    | \b\w+::\w+                                    # a Rust path
+    | \b[0-9]+(?:[.,][0-9]+)*\s*k?\s*
+      (?:%|(?:[KMGT]B|ms|lines|tokens|commits|files|rows|tests|crates|sessions)\b)
+    | \b[0-9a-f]{7,40}\b                            # a sha
+""", re.X)
+
+def referent(sent: str) -> str | None:
+    """The first repo-resolvable referent in the sentence, or None."""
+    m = RX_REFERENT.search(sent)
+    return m.group(0) if m else None
+
+
 # ---- transcript reading ------------------------------------------------
 
 def strip_reminders(text: str) -> str:
@@ -101,13 +132,28 @@ def strip_fences(text: str) -> str:
             out.append(line)
     return "\n".join(out)
 
+# Markdown that is presentation, not content. Emphasis has to come off
+# BEFORE the leader strip and before the sentence split: `lstrip("-*> ")`
+# ate one asterisk of a `**bold**` run and left the closing pair inline, so
+# `**What landed today.** The ingest escape...` split into the fragment
+# `What landed today.**` plus a remainder. Four of the 25 rows in blind
+# batch v4 (1, 10, 20, 24) were that artifact and nothing else -- 16% of a
+# sample the operator was asked to referee. Only `**` is stripped: `__` is
+# bold in markdown and is also `__init__`, and eating it damages a referent.
+RX_LEADER = re.compile(r"^\s*(?:[-*+>]\s+|#{1,6}\s+|\d+\.\s+)+")
+RX_EMPHASIS = re.compile(r"\*\*")
+
+def demark(line: str) -> str:
+    """A markdown line reduced to the prose a claim would be written in."""
+    return RX_EMPHASIS.sub("", RX_LEADER.sub("", line)).strip()
+
 def sentences(text: str) -> list[str]:
     """Line first, then sentence. A markdown table row or bullet is a claim
     on its own; run whole-text sentence splitting and a nine-row table
     becomes one 'sentence'."""
     out = []
     for line in strip_fences(text).split("\n"):
-        line = line.strip().lstrip("-*> ").strip()
+        line = demark(line)
         if len(line) < 25:
             continue
         for s in re.split(r"(?<=[.!?])\s+", line):
@@ -585,7 +631,12 @@ def plan_problem(kind: str, arg: str) -> str:
         return "a path is not a symbol definition"
     if kind in ("defined", "impls") and " " in a:
         return "a symbol name has no spaces"
-    if kind == "mentions" and len(a.split()) > 4:
+    # `count` searches the tree exactly as `mentions` does, and v4 planned
+    # it with the entire claim as the pattern seven times (rows 1, 8, 10,
+    # 11, 13, 19, 22) -- a query whose emptiness is guaranteed by its own
+    # shape. `in_diff` is deliberately NOT gated: a diff really does contain
+    # prose, so a sentence is a legitimate pattern there.
+    if kind in ("mentions", "count") and len(a.split()) > 4:
         return "a whole sentence never appears verbatim in source"
     return ""
 
@@ -942,20 +993,32 @@ def cmd_batch(a) -> int:
     files = sorted(src.glob("*.jsonl"), key=lambda q: q.stat().st_mtime, reverse=True)
     files = [f for f in files if not any(f.stem.startswith(x) for x in seen)][:a.sessions]
 
-    pool = []
+    pool, dropped, outages = [], [], []
     for f in files:
         try:
             rows = rows_for(f.stem, f, a.pin, a.batch, a.timeout, True)
         except Exception as e:
             print(f"  skip {f.stem[:8]}: {e}", file=sys.stderr)
+            outages.append(f"classification of {f.stem[:8]}: {e}")
             continue
         ts = turns(f)
         end = sha_at(ts[-1][2]) if ts else None
         for r in rows:
-            if r["audience"] == "operator" and r["class"] in ("retrospective", "universal") \
-               and r.get("at_sha") and end:
-                r["t1_sha"] = end
-                pool.append(r)
+            if not (r["audience"] == "operator"
+                    and r["class"] in ("retrospective", "universal")
+                    and r.get("at_sha") and end):
+                continue
+            r["t1_sha"] = end
+            # The intake gate. A sentence naming nothing a rung can resolve
+            # is recorded in the ledger like any other claim -- it is only
+            # barred from the ADJUDICABLE pool, because no check over it
+            # could produce a receipt.
+            ref = referent(r["text"])
+            if ref is None:
+                dropped.append(r)
+                continue
+            r["referent"] = ref
+            pool.append(r)
         print(f"  {f.stem[:8]}  pool={len(pool)}", file=sys.stderr)
 
     random.seed(a.seed)
@@ -973,6 +1036,8 @@ output. Score the VERDICT — right or wrong — in the blank. `?` is legitimate
 """]
     for i, r in enumerate(sample, 1):
         v = verify_claim(r["text"], r["at_sha"], r["t1_sha"], a.pin, a.timeout)
+        if v["check"] is None and "could be planned" in (v.get("reason") or ""):
+            outages.append(f"claim {i}: {v['reason']}")
         receipt = (v["receipt"] or "—").splitlines()
         out.append(f"""
 ## {i}. [ ]   verdict: **{v['verdict']}**
@@ -984,8 +1049,43 @@ output. Score the VERDICT — right or wrong — in the blank. `?` is legitimate
     receipt: {chr(10).join('             ' + l[:110] for l in receipt[:6]).strip()}
 """)
         print(f"  {i}/{len(sample)} {v['verdict']}", file=sys.stderr)
+    if outages:
+        out.insert(0, f"""# VOID — could-not-judge, not a result
+
+The daemon did not survive this run, so these numbers measure its
+availability and not claim quality. A run that lost the daemon and a run
+whose judge found nothing both print `unchecked`; only this banner
+separates them.
+
+{len(outages)} daemon failure(s), first {min(3, len(outages))}:
+""" + "\n".join(f"  - {o}" for o in outages[:3]) + """
+
+Re-run against a live daemon before reading anything below.
+
+---
+""")
+        print(f"VOID: {len(outages)} daemon failure(s) during the run", file=sys.stderr)
+
     Path(a.out).write_text("\n".join(out))
+
+    # The gate reports what it removed, by name, in the same run that
+    # reports what survived. A filter whose drops are invisible is a filter
+    # nobody can referee (ARCH 5, 7).
+    admitted = len(pool)
+    drops = a.drops or (a.out.rsplit(".", 1)[0] + "-drops.md")
+    dl = [f"""# Intake drops — order bs-1-oplog
+
+Candidates that cleared audience and class but named no referent any rung
+could resolve, so no check over them could return a receipt.
+
+Admitted {admitted} · dropped {len(dropped)} · {len(dropped)/max(1, admitted+len(dropped)):.0%} of candidates.
+"""]
+    for r in dropped:
+        dl.append(f"- [{r['class'][:5]}] {r['session'][:8]} t{r['turn']}: {r['text'][:200]}")
+    Path(drops).write_text("\n".join(dl) + "\n")
+
     print(f"wrote {a.out} — {len(sample)} claims from {len(files)} sessions")
+    print(f"wrote {drops} — {len(dropped)} dropped at intake, {admitted} admitted")
     return 0
 
 def cmd_self_test(_a) -> int:
@@ -1005,6 +1105,45 @@ def cmd_self_test(_a) -> int:
     eq("none" in CLASSES, True, "none is a real class, not a gap-filler")
     eq(interval_evidence("abc", "abc"), ("", 0), "an empty interval yields no evidence")
     eq(interval_evidence("", "def"), ("", 0), "a missing T0 yields no evidence")
+
+    # Segmentation. The failing input is blind batch v4 row 1 verbatim: the
+    # old splitter returned 2 sentences of which the first was the fragment
+    # "What landed today, in 48 commits.**" -- watched red before the fix.
+    v4r1 = ("**What landed today, in 48 commits.** The ingest escape and the "
+            "first-launch hang were one defect class, fixed with a bind-outcome gate.")
+    got = sentences(v4r1)
+    eq(len(got), 2, "bold header splits off its own sentence")
+    eq(any("**" in s for s in got), False, "no emphasis marker survives into a claim")
+    eq(got[0], "What landed today, in 48 commits.", "the header keeps its terminal period")
+    eq(demark("### A heading long enough to be counted"),
+       "A heading long enough to be counted", "heading marker comes off")
+    eq(demark("- **bold** and the rest of a bullet"),
+       "bold and the rest of a bullet", "bullet leader then emphasis")
+    eq(demark("__init__ is not bold"), "__init__ is not bold", "underscores are left alone")
+
+    # The intake gate, both directions. Positives are drawn from v4 rows the
+    # batch handled correctly (3, 4, 9, 15, 16); negatives from rows whose
+    # planned check was guaranteed-empty prose (5, 19, 22, 23).
+    for s, what in [("There is no `/v1/sessions` route today.", "backtick"),
+                    ("priced doors at 60-150 lines each", "number with a unit"),
+                    ("`is_attach_mode()` has exactly one branch", "snake_case"),
+                    ("the daemon absorbed 78% of the growth", "percentage"),
+                    ("state.rs (2,195 lines) plus state/ (2,303)", "filename"),
+                    ("every impl of ClaimSearcher is gone", "CamelCase"),
+                    ("RailGap::NewerVersionLine is refused", "a Rust path")]:
+        if referent(s) is None:
+            fails.append(f"intake gate drops an adjudicable claim ({what}): {s!r}")
+    for s in ["The constraint was never the substrate.",
+              "The split is dead on measurement, and two correctness waves are landed.",
+              "On the specific blockers I raised, each has a mitigation.",
+              "The company is the registry operator grown up: it holds the keys."]:
+        if referent(s) is not None:
+            fails.append(f"intake gate admits prose naming nothing: {s!r} -> {referent(s)!r}")
+
+    eq(plan_problem("count", "the whole claim sentence as a grep pattern"),
+       "a whole sentence never appears verbatim in source", "count is gated like mentions")
+    eq(plan_problem("in_diff", "the whole claim sentence as a grep pattern"),
+       "", "in_diff is not gated -- a diff contains prose")
     for f in fails:
         print("FAIL", f)
     print(f"co-oplog self-test: {len(fails)} failure(s)")
@@ -1048,6 +1187,7 @@ def main() -> int:
     cal.add_argument("--verbose", action="store_true")
     cal.set_defaults(fn=cmd_calibrate)
     b = sub.add_parser("batch", help="blind batch for the operator to score")
+    b.add_argument("--drops", help="where to write the intake drop log")
     b.add_argument("--project", default="-Users-alexsbryan-dev-commonwealth-ai")
     b.add_argument("--sessions", type=int, default=20)
     b.add_argument("--n", type=int, default=25)
