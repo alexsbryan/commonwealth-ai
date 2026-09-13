@@ -3072,6 +3072,7 @@ def cmd_bs_calibrate(a) -> int:
 # the abstentions are the number most likely to drift (bar 3, bar 4).
 
 SESSIONS_DIR = Path.home() / ".svrnmesh" / "sessions"
+LIVE_WINDOW_S = 3600   # a transcript touched within the hour is a session still running
 INTEGRITY_K = 3   # the prior: one broken promise in a three-promise session is not -1.0
 
 def integrity(held: int, broken: int, k: int = INTEGRITY_K) -> float | None:
@@ -3115,6 +3116,11 @@ def session_card(path: Path, pin: str | None, batch: int, timeout: float,
             findings.append({"turn": r["turn"], "text": r["text"], "reason": v["reason"],
                              "receipt": v.get("receipt"), "engine": v["engine"]})
 
+    # A session whose transcript is still growing has not come due: its
+    # promises are OPEN, not broken. First replay card (c01789ff) called two
+    # promises broken in a session that was mid-sentence in another window.
+    import time as _t
+    live = (_t.time() - path.stat().st_mtime) < LIVE_WINDOW_S
     frame = SESSIONS_DIR / sid / "frame.md"
     contradictions = (frame_contradictions(frame.read_text(), corpora or installed_corpora())
                       if frame.exists() else None)
@@ -3122,7 +3128,7 @@ def session_card(path: Path, pin: str | None, batch: int, timeout: float,
     t_first = ts[0][2] if ts else ""
     t_last = ts[-1][2] if ts else ""
     return {
-        "schema": "session-card/v1", "session": sid,
+        "schema": "session-card/v1", "session": sid, "in_flight": live,
         "started": t_first, "ended": t_last, "t1_sha": end_sha,
         "turns": len(ts), "operator_facing": len(op), "sentences": len(rows),
         "adjudicable": adjudicable, "classes": classes,
@@ -3158,7 +3164,8 @@ def render_card(c: dict) -> str:
     frame_s = ("no frame" if fc is None else
                "ok" if not fc else f"{len(fc)} contradiction(s) with the record")
     sp = c["sprawl"]
-    lines = [f"session {c['session'][:8]} · {dur} · {c['turns']} turns · T1 {(c['t1_sha'] or '—')[:10]}", ""]
+    lines = [f"session {c['session'][:8]} · {dur} · {c['turns']} turns · T1 {(c['t1_sha'] or '—')[:10]}"
+             + ("  · IN FLIGHT — verdicts provisional, promises not yet due" if c.get("in_flight") else ""), ""]
     lines += [f"  integrity   {integ_s}",
               f"  efficacy    {c['efficacy']}  (no order bound to this session)",
               f"  coverage    {cov:.2f} adjudicable  ({c['adjudicable']} of {c['operator_facing']} operator-facing)",
@@ -3207,8 +3214,10 @@ def cmd_replay(a) -> int:
     src = TRANSCRIPTS / a.project
     seen = set(a.exclude.split(",")) if a.exclude else set()
     files = sorted(src.glob("*.jsonl"), key=lambda q: q.stat().st_mtime, reverse=True)
+    import time as _t
     files = [f for f in files if not any(f.stem.startswith(x) for x in seen)
-             and f.stat().st_size >= a.min_bytes][:a.last]
+             and f.stat().st_size >= a.min_bytes
+             and (a.include_live or _t.time() - f.stat().st_mtime >= LIVE_WINDOW_S)][:a.last]
     corpora = installed_corpora()
     cards = []
     for i, f in enumerate(files, 1):
@@ -3523,6 +3532,8 @@ def main() -> int:
     rp.add_argument("--timeout", type=float, default=180.0)
     rp.add_argument("--no-daemon", action="store_true")
     rp.add_argument("--out", default="")
+    rp.add_argument("--include-live", action="store_true",
+                    help="also card sessions whose transcript changed within the hour (verdicts provisional)")
     rp.set_defaults(fn=cmd_replay)
     rf = sub.add_parser("referee", help="Act 2: the N most-adjudicable cards from a replay summary, whole")
     rf.add_argument("--summary", default="quality/report-audit/replay-2026-09-13.json")
