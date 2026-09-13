@@ -452,7 +452,7 @@ mod tests {
             Selected::Refused {
                 name: "Quiet".into(),
                 node_id: Some(NodeId::from_u128(0xC0DE)),
-                refusal: MediaReachRefusal::NoOrigin("Quiet".into())
+                refusal: MediaReachRefusal::NoOrigin("Quiet".into(), OriginKind::Media)
             }
         );
         assert_eq!(

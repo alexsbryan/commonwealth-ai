@@ -43,6 +43,44 @@ pub enum OriginKind {
     App,
 }
 
+impl OriginKind {
+    /// What to call this kind in a sentence a person reads.
+    ///
+    /// The viewer refusals name the kind they were ASKED about, and until
+    /// 2026-09-12 every one of them said "media origin" because the refusal
+    /// enum predated apps and hardcoded the word. So `svrn mesh app <peer>
+    /// chores` answered "advertises no media origin" about a node that
+    /// advertised one — wrong domain and factually false in the same
+    /// sentence, sending the reader to fix a config line already correct.
+    ///
+    /// One noun per kind, decided here, so the set cannot gain a variant
+    /// without answering for how it reads (ARCH §8: one decider, one name).
+    pub fn noun(self) -> &'static str {
+        match self {
+            OriginKind::Media => "media origin",
+            OriginKind::App => "published app",
+        }
+    }
+
+    /// The viewer verb that lists who offers this kind — what to tell someone
+    /// whose peer came back empty.
+    pub fn viewer_verb(self) -> &'static str {
+        match self {
+            OriginKind::Media => "svrn mesh media",
+            OriginKind::App => "svrn mesh app",
+        }
+    }
+
+    /// How a HOLDER starts offering this kind, for the other half of that
+    /// same refusal: the reader is often the person who has to go fix it.
+    pub fn how_to_offer(self) -> &'static str {
+        match self {
+            OriginKind::Media => "set `[iroh] media_origin`",
+            OriginKind::App => "run `svrn publish <name> <port>`",
+        }
+    }
+}
+
 /// Deserialize a gossiped `origins` array, DROPPING kinds this build does not
 /// know instead of failing the whole field.
 ///

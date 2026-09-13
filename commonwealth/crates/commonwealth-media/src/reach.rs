@@ -80,17 +80,21 @@ pub enum MediaReachRefusal {
     UnknownMember(String),
     #[error("'{0}' matches more than one member ({1}) — give a longer id prefix or the name")]
     Ambiguous(String, String),
-    #[error("'{0}' is this node — its media origin is already local")]
-    IsSelf(String),
+    #[error("'{}' is this node — its {} is already local", .0, .1.noun())]
+    IsSelf(String, OriginKind),
     #[error("'{0}' is {1} — a bridge to it would accept and then never answer")]
     Offline(String, &'static str),
     #[error("'{0}' has no iroh identity (pre-identity daemon) — nothing to dial by key")]
     NoIdentity(String),
+    // The kind is carried, not spelled, so this cannot go on describing media
+    // to someone who asked about an app (ARCH §8 — the noun has one home,
+    // `OriginKind::noun`).
     #[error(
-        "'{0}' advertises no media origin — it declares no media_origin, or its daemon \
-         predates the advertisement and needs a restart; `svrn mesh media` lists who offers one"
+        "'{}' advertises no {} — it offers none ({}), or its daemon predates the \
+         advertisement and needs a restart; `{}` lists who offers one",
+        .0, .1.noun(), .1.how_to_offer(), .1.viewer_verb()
     )]
-    NoOrigin(String),
+    NoOrigin(String, OriginKind),
     #[error("no iroh path to '{0}': {1}")]
     NoPath(String, String),
     #[error("transport handed back a non-loopback endpoint for '{0}' ({1}) — refusing")]
@@ -227,7 +231,7 @@ pub fn pick_member(
         }
     };
     if picked.node_id == self_id {
-        return Err(MediaReachRefusal::IsSelf(picked.name));
+        return Err(MediaReachRefusal::IsSelf(picked.name, kind));
     }
     match picked.status {
         NodeStatus::Online | NodeStatus::Busy => {}
@@ -238,7 +242,7 @@ pub fn pick_member(
         return Err(MediaReachRefusal::NoIdentity(picked.name));
     }
     if !picked.offers(kind) {
-        return Err(MediaReachRefusal::NoOrigin(picked.name));
+        return Err(MediaReachRefusal::NoOrigin(picked.name, kind));
     }
     Ok(picked)
 }
@@ -377,7 +381,10 @@ mod tests {
             OriginKind::Media,
         )
         .unwrap_err();
-        assert_eq!(err, MediaReachRefusal::NoOrigin("LittleMac".into()));
+        assert_eq!(
+            err,
+            MediaReachRefusal::NoOrigin("LittleMac".into(), OriginKind::Media)
+        );
         assert!(
             err.to_string().contains("advertises no media origin"),
             "{err}"
@@ -490,7 +497,54 @@ mod tests {
             OriginKind::Media,
         )
         .unwrap_err();
-        assert_eq!(err, MediaReachRefusal::IsSelf("RuggedFox".into()));
+        assert_eq!(
+            err,
+            MediaReachRefusal::IsSelf("RuggedFox".into(), OriginKind::Media)
+        );
+    }
+
+    /// The failing input, and it was live: `svrn mesh app RuggedFox chores`
+    /// answered "advertises no media origin — it declares no media_origin …
+    /// `svrn mesh media` lists who offers one" about a node that DID advertise
+    /// a media origin and simply published no app. Wrong domain and false in
+    /// one sentence, pointing the reader at a config line already correct.
+    ///
+    /// Both kinds are asserted, because a refusal that named apps everywhere
+    /// would be the same defect mirrored.
+    #[test]
+    fn a_refusal_names_the_kind_it_was_asked_about() {
+        let mut roster = roster();
+        // Offers media, publishes no app — exactly the live case.
+        roster[1].origins = vec![OriginKind::Media];
+
+        let err = pick_member(&roster, NodeId::from_u128(ME), "LittleMac", OriginKind::App)
+            .unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("published app"), "{msg}");
+        assert!(msg.contains("svrn publish"), "{msg}");
+        assert!(
+            !msg.contains("media"),
+            "an app refusal must not mention media at all: {msg}"
+        );
+
+        let mut no_media = roster.clone();
+        no_media[1].origins = vec![OriginKind::App];
+        let err = pick_member(
+            &no_media,
+            NodeId::from_u128(ME),
+            "LittleMac",
+            OriginKind::Media,
+        )
+        .unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("media origin"), "{msg}");
+        assert!(msg.contains("[iroh] media_origin"), "{msg}");
+
+        // And the self-dial, which said "its media origin is already local"
+        // no matter which verb asked.
+        let err = pick_member(&roster, NodeId::from_u128(ME), "RuggedFox", OriginKind::App)
+            .unwrap_err();
+        assert!(err.to_string().contains("published app"), "{err}");
     }
 
     /// A pre-identity peer has nothing to dial by key. Refused here rather
