@@ -3825,8 +3825,16 @@ class Investigation:
                             f"it cannot be traced. Spend the call on a larger number or a phrase.")
             except ValueError:
                 pass
+            # A status table prints 7,500 as "7.5k" (5ab14d6d turn 47:
+            # '7,500 chunks' NOT SEEN, the corpus table read '7.5k').
+            forms = [r"(?<!\d)" + re.escape(n) + r"(?!\d)"]
+            try:
+                if float(n) >= 1000 and float(n) == int(float(n)):
+                    forms.append(r"(?<![\d.])" + re.escape(f"{int(n) / 1000:g}") + r"k\b")
+            except ValueError:
+                pass
             hits = [f"turn {i}: {l.strip()[:160]}" for i, l in self.seen_lines()
-                    if n and re.search(r"(?<!\d)" + re.escape(n) + r"(?!\d)", l.replace(",", ""))]
+                    if n and any(re.search(f, l.replace(",", ""), re.I) for f in forms)]
             return "\n".join(hits[:12]) if hits else f"NOT SEEN: {n} appears in nothing the agent saw before turn {self.turn}"
         if name == "test_summaries":
             def fold(t): return re.sub(r"pass:\s+(\d+)\s*\n\s*fail:\s+(\d+)", r"pass: \1 fail: \2", t)

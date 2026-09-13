@@ -1,0 +1,1973 @@
+[
+ {
+  "schema": "session-card/v1",
+  "session": "c01789ff-b2f4-450b-a018-862967323bb9",
+  "started": "2026-09-13T03:24:03.809Z",
+  "ended": "2026-09-13T16:43:22.795Z",
+  "t1_sha": "ba125f21a1691d500df2f6d2c3fbf4a46d3a52ff",
+  "turns": 8,
+  "operator_facing": 342,
+  "sentences": 347,
+  "adjudicable": 207,
+  "classes": {
+   "evaluative": 32,
+   "retrospective": 129,
+   "none": 72,
+   "universal": 60,
+   "predictive": 31,
+   "promissory": 18
+  },
+  "commitments": 3,
+  "advice": 15,
+  "verdicts": {
+   "broken": 2,
+   "unchecked": 1
+  },
+  "integrity": -0.4,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 7,
+   "items_offered": 99,
+   "max_offered": 26,
+   "items_per_block": 14.14,
+   "tool_calls": 174
+  },
+  "bound_breaches": [],
+  "broken": [
+   {
+    "turn": 6,
+    "text": "When it lands I'll compare the two runs, update those entries, and come back with the import plan.",
+    "reason": "no `import` in 8 record lines",
+    "receipt": "git log --format='%h %s' 2e9b83993e..ba125f21a1; git diff --name-only 2e9b83993e..ba125f21a1",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 7,
+    "text": "I'll add that as entry 16.",
+    "reason": "no `entry` in 6 record lines",
+    "receipt": "git log --format='%h %s' 6c6f110af7..ba125f21a1; git diff --name-only 6c6f110af7..ba125f21a1",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   }
+  ]
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "536c8494-a13d-4d62-9588-7e3194f85762",
+  "started": "2026-09-13T16:33:53.328Z",
+  "ended": "2026-09-13T16:37:42.150Z",
+  "t1_sha": "6c6f110af7a855138ab8b6bd2aa9a628e847b6c8",
+  "turns": 2,
+  "operator_facing": 27,
+  "sentences": 27,
+  "adjudicable": 19,
+  "classes": {
+   "retrospective": 11,
+   "none": 4,
+   "universal": 8,
+   "predictive": 2,
+   "evaluative": 2
+  },
+  "commitments": 0,
+  "advice": 0,
+  "verdicts": {},
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": null,
+  "sprawl": {
+   "operator_blocks": 2,
+   "items_offered": 0,
+   "max_offered": 0,
+   "items_per_block": 0.0,
+   "tool_calls": 68
+  },
+  "bound_breaches": [],
+  "broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "d6c0c747-1df0-47cd-9605-14434d5b3295",
+  "started": "2026-09-12T23:52:59.121Z",
+  "ended": "2026-09-13T16:13:03.273Z",
+  "t1_sha": "2e9b83993e4e123751cad7d7f201fb8dc7e7da6a",
+  "turns": 121,
+  "operator_facing": 515,
+  "sentences": 927,
+  "adjudicable": 326,
+  "classes": {
+   "retrospective": 204,
+   "none": 83,
+   "universal": 93,
+   "predictive": 43,
+   "evaluative": 63,
+   "promissory": 29
+  },
+  "commitments": 3,
+  "advice": 26,
+  "verdicts": {
+   "unchecked": 1,
+   "broken": 1,
+   "kept": 1
+  },
+  "integrity": 0.0,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 44,
+   "items_offered": 2,
+   "max_offered": 2,
+   "items_per_block": 0.05,
+   "tool_calls": 223
+  },
+  "bound_breaches": [],
+  "broken": [
+   {
+    "turn": 5,
+    "text": "That's my judgment and not a label, and I'll put it in front of you in the referee pass rather than score it myself.",
+    "reason": "no `referee` in 420 record lines",
+    "receipt": "git log --format='%h %s' 746feb1732..2e9b83993e; git diff --name-only 746feb1732..2e9b83993e",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   }
+  ]
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "8e6fdcec-f252-47f3-8d1f-c4d071a9e4c0",
+  "started": "2026-09-12T23:56:30.676Z",
+  "ended": "2026-09-13T03:38:09.639Z",
+  "t1_sha": "8fd1963a33a9c64ec534bcc9dd0b5b0e86ad5056",
+  "turns": 56,
+  "operator_facing": 703,
+  "sentences": 751,
+  "adjudicable": 417,
+  "classes": {
+   "retrospective": 249,
+   "none": 127,
+   "universal": 142,
+   "predictive": 73,
+   "evaluative": 86,
+   "promissory": 26
+  },
+  "commitments": 3,
+  "advice": 23,
+  "verdicts": {
+   "broken": 2,
+   "unchecked": 1
+  },
+  "integrity": -0.4,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 28,
+   "items_offered": 0,
+   "max_offered": 0,
+   "items_per_block": 0.0,
+   "tool_calls": 267
+  },
+  "bound_breaches": [],
+  "broken": [
+   {
+    "turn": 14,
+    "text": "Say the word and I'll land all three the moment they clear \u2014 or if you'd rather see the demo work tonight, the two commands that do it by hand on RuggedFox right now are the declare plus `svrn daemon stop && svrn daemon start`, not the reload the verb suggests.",
+    "reason": "no `RuggedFox` in 361 record lines",
+    "receipt": "git log --format='%h %s' d515b6f0d4..8fd1963a33; git diff --name-only d515b6f0d4..8fd1963a33",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 40,
+    "text": "If you want, the most useful next step is probably the reverse of what I've been doing all day: describe one concrete encounter \u2014 who's holding what device, what they need to know, what they're recording \u2014 and I'll tell you honestly which parts of this are built, which are adjacent, and which are neither.",
+    "reason": "no `describe` in 2 record lines",
+    "receipt": "git log --format='%h %s' 4fb7af4ffb..8fd1963a33; git diff --name-only 4fb7af4ffb..8fd1963a33",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   }
+  ]
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "85b2bda8-d1f2-445c-abce-e2c14b3de2b9",
+  "started": "2026-09-13T03:39:43.615Z",
+  "ended": "2026-09-13T03:47:08.259Z",
+  "t1_sha": "b8292092fa3390e5814874d719253d40a1302831",
+  "turns": 2,
+  "operator_facing": 83,
+  "sentences": 83,
+  "adjudicable": 52,
+  "classes": {
+   "none": 13,
+   "retrospective": 31,
+   "predictive": 9,
+   "universal": 20,
+   "evaluative": 9,
+   "promissory": 1
+  },
+  "commitments": 0,
+  "advice": 1,
+  "verdicts": {},
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 2,
+   "items_offered": 4,
+   "max_offered": 4,
+   "items_per_block": 2.0,
+   "tool_calls": 20
+  },
+  "bound_breaches": [],
+  "broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "1c5bd750-086b-4483-b6fd-53c994df028a",
+  "started": "2026-09-12T23:51:44.035Z",
+  "ended": "2026-09-13T05:38:50.987Z",
+  "t1_sha": "24770ebdb3c318f92b206f52a79115d13a4dbcac",
+  "turns": 52,
+  "operator_facing": 170,
+  "sentences": 192,
+  "adjudicable": 122,
+  "classes": {
+   "retrospective": 85,
+   "none": 32,
+   "universal": 23,
+   "predictive": 12,
+   "promissory": 14,
+   "evaluative": 4
+  },
+  "commitments": 2,
+  "advice": 12,
+  "verdicts": {
+   "broken": 2
+  },
+  "integrity": -0.4,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 42,
+   "items_offered": 20,
+   "max_offered": 7,
+   "items_per_block": 0.48,
+   "tool_calls": 226
+  },
+  "bound_breaches": [],
+  "broken": [
+   {
+    "turn": 2,
+    "text": "Stop conditions I will bring to you rather than resolve: the soak going red on the step-3 commit, or any capability that turns out to need a local path (that is a DEFAULTS_LEDGER row and your call, never a silent fallback).",
+    "reason": "no `going` in 420 record lines",
+    "receipt": "git log --format='%h %s' 32c7689aea..24770ebdb3; git diff --name-only 32c7689aea..24770ebdb3",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 3,
+    "text": "I will verify the cut myself when the step-3 commit lands.",
+    "reason": "no `step-3` in 420 record lines",
+    "receipt": "git log --format='%h %s' 32c7689aea..24770ebdb3; git diff --name-only 32c7689aea..24770ebdb3",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   }
+  ]
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "9d7835fc-bd36-4bdb-996d-03c022e7d089",
+  "started": "2026-09-13T01:02:29.150Z",
+  "ended": "2026-09-13T01:02:29.150Z",
+  "t1_sha": "609464bee1416ae0dd2cc884b7b78e943d238e1c",
+  "turns": 1,
+  "operator_facing": 19,
+  "sentences": 19,
+  "adjudicable": 11,
+  "classes": {
+   "retrospective": 7,
+   "universal": 2,
+   "none": 5,
+   "predictive": 2,
+   "promissory": 2,
+   "evaluative": 1
+  },
+  "commitments": 1,
+  "advice": 1,
+  "verdicts": {
+   "unchecked": 1
+  },
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 1,
+   "items_offered": 2,
+   "max_offered": 2,
+   "items_per_block": 2.0,
+   "tool_calls": 10
+  },
+  "bound_breaches": [],
+  "broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "b31822b1-8530-45f4-add2-b296993ac797",
+  "started": "2026-09-12T19:59:25.770Z",
+  "ended": "2026-09-12T22:56:51.593Z",
+  "t1_sha": "650d08a4d1d70bdcb2451d183b817202bde73262",
+  "turns": 19,
+  "operator_facing": 167,
+  "sentences": 175,
+  "adjudicable": 117,
+  "classes": {
+   "retrospective": 82,
+   "none": 26,
+   "promissory": 17,
+   "evaluative": 11,
+   "universal": 18,
+   "predictive": 13
+  },
+  "commitments": 7,
+  "advice": 10,
+  "verdicts": {
+   "unchecked": 2,
+   "kept": 1,
+   "broken": 4
+  },
+  "integrity": -0.375,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 17,
+   "items_offered": 0,
+   "max_offered": 0,
+   "items_per_block": 0.0,
+   "tool_calls": 309
+  },
+  "bound_breaches": [],
+  "broken": [
+   {
+    "turn": 6,
+    "text": "I'll bring the daemon back up the moment the gate finishes and tell both of them.",
+    "reason": "no `finishes` in 85 record lines",
+    "receipt": "git log --format='%h %s' e8ee7c288f..650d08a4d1; git diff --name-only e8ee7c288f..650d08a4d1",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 12,
+    "text": "Once it's green I'll commit with explicit pathspecs, bring the daemon back up, and tell `commonwealth-ai-68`.",
+    "reason": "no `commonwealth-ai-68` in 489 record lines",
+    "receipt": "git log --format='%h %s' 9e8fe21891..650d08a4d1; git diff --name-only 9e8fe21891..650d08a4d1",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 13,
+    "text": "I'll tell `commonwealth-ai-68` with the numbers.",
+    "reason": "no `commonwealth-ai-68` in 61 record lines",
+    "receipt": "git log --format='%h %s' 4bb2f9d40f..650d08a4d1; git diff --name-only 4bb2f9d40f..650d08a4d1",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 14,
+    "text": "Whoever lands first tells the other, and I'll re-read and merge onto theirs rather than overwrite.",
+    "reason": "no `merge` in 61 record lines",
+    "receipt": "git log --format='%h %s' 4bb2f9d40f..650d08a4d1; git diff --name-only 4bb2f9d40f..650d08a4d1",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   }
+  ]
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "7fbab671-bfbb-430b-aafb-06042eb55c84",
+  "started": "2026-09-12T18:53:14.852Z",
+  "ended": "2026-09-12T22:55:46.402Z",
+  "t1_sha": "650d08a4d1d70bdcb2451d183b817202bde73262",
+  "turns": 24,
+  "operator_facing": 124,
+  "sentences": 155,
+  "adjudicable": 86,
+  "classes": {
+   "retrospective": 58,
+   "predictive": 11,
+   "none": 22,
+   "evaluative": 5,
+   "promissory": 17,
+   "universal": 11
+  },
+  "commitments": 9,
+  "advice": 8,
+  "verdicts": {
+   "broken": 8,
+   "kept": 1
+  },
+  "integrity": -0.5833333333333334,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 18,
+   "items_offered": 12,
+   "max_offered": 4,
+   "items_per_block": 0.67,
+   "tool_calls": 153
+  },
+  "bound_breaches": [],
+  "broken": [
+   {
+    "turn": 2,
+    "text": "If you approve it, the next actions are the desktop soak on ed959fe29 (it restarts the daemon, so I will coordinate with the peer session first) and then one worker on svt-6-engine.",
+    "reason": "no `ed959fe29` in 121 record lines",
+    "receipt": "git log --format='%h %s' ffff8041e0..650d08a4d1; git diff --name-only ffff8041e0..650d08a4d1",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 4,
+    "text": "When it reports I will verify its commits and row count, close it, flip svt-7 to open, and launch the svt-7 worker in the same turn.",
+    "reason": "no `svt-7` in 113 record lines",
+    "receipt": "git log --format='%h %s' a4bf4d074a..650d08a4d1; git diff --name-only a4bf4d074a..650d08a4d1",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 4,
+    "text": "I will pick up the moment the worker's completion notice arrives.",
+    "reason": "no `completion` in 113 record lines",
+    "receipt": "git log --format='%h %s' a4bf4d074a..650d08a4d1; git diff --name-only a4bf4d074a..650d08a4d1",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 6,
+    "text": "I have written both into svt-7 step 6 with the allowlist entry as the default, and I will not do both.",
+    "reason": "no `svt-7` in 104 record lines",
+    "receipt": "git log --format='%h %s' 25052d03b6..650d08a4d1; git diff --name-only 25052d03b6..650d08a4d1",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 6,
+    "text": "If you want the split instead, say so and I will price it.",
+    "reason": "no `split` in 104 record lines",
+    "receipt": "git log --format='%h %s' 25052d03b6..650d08a4d1; git diff --name-only 25052d03b6..650d08a4d1",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 8,
+    "text": "The shared notes store timed out twice on the same write (the daemon was restarted by the peer session minutes ago and is likely still loading), so it is not in the notes store yet; I will retry when the svt-6 worker reports.",
+    "reason": "no `svt-6` in 100 record lines",
+    "receipt": "git log --format='%h %s' 3afb166f12..650d08a4d1; git diff --name-only 3afb166f12..650d08a4d1",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 8,
+    "text": "I will pick up when the worker's completion notice arrives.",
+    "reason": "no `completion` in 100 record lines",
+    "receipt": "git log --format='%h %s' 3afb166f12..650d08a4d1; git diff --name-only 3afb166f12..650d08a4d1",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 12,
+    "text": "I will pick up when the svt-6 worker reports.",
+    "reason": "no `svt-6` in 480 record lines",
+    "receipt": "git log --format='%h %s' 70eddf9bcc..650d08a4d1; git diff --name-only 70eddf9bcc..650d08a4d1",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   }
+  ]
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "5ab14d6d-b7c8-4803-8e2e-095013657e83",
+  "started": "2026-09-12T16:19:46.029Z",
+  "ended": "2026-09-12T21:04:24.782Z",
+  "t1_sha": "9e8fe21891aa8ffd9b0ee020ae11bb7f1a49cb76",
+  "turns": 47,
+  "operator_facing": 529,
+  "sentences": 586,
+  "adjudicable": 324,
+  "classes": {
+   "retrospective": 203,
+   "universal": 86,
+   "none": 96,
+   "evaluative": 66,
+   "predictive": 43,
+   "promissory": 35
+  },
+  "commitments": 4,
+  "advice": 31,
+  "verdicts": {
+   "unchecked": 4
+  },
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 23,
+   "items_offered": 0,
+   "max_offered": 0,
+   "items_per_block": 0.0,
+   "tool_calls": 210
+  },
+  "bound_breaches": [],
+  "broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "b65cecbc-9ce9-49c5-b631-f134d0a19b14",
+  "started": "2026-09-12T15:45:30.711Z",
+  "ended": "2026-09-12T19:51:09.294Z",
+  "t1_sha": "3afb166f1213b4a43ae39b11046c05bc229f37b8",
+  "turns": 17,
+  "operator_facing": 95,
+  "sentences": 121,
+  "adjudicable": 66,
+  "classes": {
+   "retrospective": 51,
+   "promissory": 3,
+   "universal": 12,
+   "predictive": 7,
+   "none": 15,
+   "evaluative": 7
+  },
+  "commitments": 0,
+  "advice": 3,
+  "verdicts": {},
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 4,
+   "items_offered": 0,
+   "max_offered": 0,
+   "items_per_block": 0.0,
+   "tool_calls": 344
+  },
+  "bound_breaches": [],
+  "broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "69191705-b959-497f-96ef-cb516c171245",
+  "started": "2026-09-12T05:18:22.214Z",
+  "ended": "2026-09-12T17:10:37.355Z",
+  "t1_sha": "568697dc1d373a1b028197be7ffa3db73cc4e9ae",
+  "turns": 109,
+  "operator_facing": 146,
+  "sentences": 352,
+  "adjudicable": 99,
+  "classes": {
+   "retrospective": 81,
+   "none": 24,
+   "universal": 15,
+   "evaluative": 15,
+   "predictive": 8,
+   "promissory": 3
+  },
+  "commitments": 0,
+  "advice": 3,
+  "verdicts": {},
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 6,
+   "items_offered": 7,
+   "max_offered": 4,
+   "items_per_block": 1.17,
+   "tool_calls": 445
+  },
+  "bound_breaches": [],
+  "broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "ebda3345-f8c6-4ecf-ae9b-95859fbe9899",
+  "started": "2026-09-11T20:57:41.953Z",
+  "ended": "2026-09-11T22:13:54.693Z",
+  "t1_sha": "b5610c26b4ccd24ba58f04d50a799f4348b9425c",
+  "turns": 10,
+  "operator_facing": 177,
+  "sentences": 181,
+  "adjudicable": 114,
+  "classes": {
+   "retrospective": 81,
+   "universal": 28,
+   "predictive": 22,
+   "evaluative": 15,
+   "none": 26,
+   "promissory": 5
+  },
+  "commitments": 1,
+  "advice": 4,
+  "verdicts": {
+   "broken": 1
+  },
+  "integrity": -0.25,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 8,
+   "items_offered": 0,
+   "max_offered": 0,
+   "items_per_block": 0.0,
+   "tool_calls": 88
+  },
+  "bound_breaches": [],
+  "broken": [
+   {
+    "turn": 8,
+    "text": "I'll report the verdict when it lands.",
+    "reason": "no `report` in 43 record lines",
+    "receipt": "git log --format='%h %s' fc20866373..b5610c26b4; git diff --name-only fc20866373..b5610c26b4",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   }
+  ]
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "e92735ab-f768-45bc-ba83-c56d12250778",
+  "started": "2026-09-11T20:20:56.672Z",
+  "ended": "2026-09-12T07:01:00.082Z",
+  "t1_sha": "c4b9700167cdbd061e79a14dc0f0523b5b0f59ae",
+  "turns": 86,
+  "operator_facing": 853,
+  "sentences": 969,
+  "adjudicable": 496,
+  "classes": {
+   "retrospective": 300,
+   "universal": 145,
+   "none": 138,
+   "predictive": 95,
+   "evaluative": 124,
+   "promissory": 51
+  },
+  "commitments": 17,
+  "advice": 34,
+  "verdicts": {
+   "broken": 15,
+   "kept": 1,
+   "unchecked": 1
+  },
+  "integrity": -0.7368421052631579,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 38,
+   "items_offered": 0,
+   "max_offered": 0,
+   "items_per_block": 0.0,
+   "tool_calls": 291
+  },
+  "bound_breaches": [],
+  "broken": [
+   {
+    "turn": 5,
+    "text": "Build is running; I'll report the probe lines when it lands.",
+    "reason": "no `probe` in 252 record lines",
+    "receipt": "git log --format='%h %s' 3e05a0e50f..c4b9700167; git diff --name-only 3e05a0e50f..c4b9700167",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 5,
+    "text": "I'll check the daemon binary is actually on the merged build before I treat that capture as meaningful rather than decorative.",
+    "reason": "no `binary` in 252 record lines",
+    "receipt": "git log --format='%h %s' 3e05a0e50f..c4b9700167; git diff --name-only 3e05a0e50f..c4b9700167",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 7,
+    "text": "Once it's in place, tell me and I'll verify the block is actually in force *before* re-probing \u2014 inferring it from the probe result would make the probe its own instrument check.",
+    "reason": "no `block` in 252 record lines",
+    "receipt": "git log --format='%h %s' 3e05a0e50f..c4b9700167; git diff --name-only 3e05a0e50f..c4b9700167",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 8,
+    "text": "When it's in, tell me and I'll confirm it's actually in force before re-probing \u2014 read-only, `pfctl -s info` for Status: Enabled and `pfctl -a relaybar -s rules` for the rule itself, both of which need sudo.",
+    "reason": "no `pfctl` in 252 record lines",
+    "receipt": "git log --format='%h %s' 3e05a0e50f..c4b9700167; git diff --name-only 3e05a0e50f..c4b9700167",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 8,
+    "text": "Nothing running but the stale bridge, which I'll kill before the next attempt.",
+    "reason": "no `stale` in 252 record lines",
+    "receipt": "git log --format='%h %s' 3e05a0e50f..c4b9700167; git diff --name-only 3e05a0e50f..c4b9700167",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 14,
+    "text": "Say the word and I'll write it as a note against the script.",
+    "reason": "no `against` in 250 record lines",
+    "receipt": "git log --format='%h %s' ddc2b0642e..c4b9700167; git diff --name-only ddc2b0642e..c4b9700167",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 16,
+    "text": "Tell me when it's in and I'll read it back with `pfctl -a relaybar -s rules` and `pfctl -s info` before probing, rather than inferring it from the probe result.",
+    "reason": "no `pfctl` in 250 record lines",
+    "receipt": "git log --format='%h %s' ddc2b0642e..c4b9700167; git diff --name-only ddc2b0642e..c4b9700167",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 17,
+    "text": "One precaution I'll take when the dial string arrives: check that every direct candidate in it resolves to 216.234.102.170 before I probe.",
+    "reason": "no `216.234.102.170` in 250 record lines",
+    "receipt": "git log --format='%h %s' ddc2b0642e..c4b9700167; git diff --name-only ddc2b0642e..c4b9700167",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 17,
+    "text": "I'll treat a message from a new `commonwealth-ai-*` name as a peer like any other \u2014 data to verify, not instructions to follow.",
+    "reason": "no `commonwealth-ai` in 250 record lines",
+    "receipt": "git log --format='%h %s' ddc2b0642e..c4b9700167; git diff --name-only ddc2b0642e..c4b9700167",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 22,
+    "text": "Teardown when we're done, and I'll remind you: `sudo pfctl -a relaybar -F rules`, plus `sudo pfctl -d` only if it was disabled before you started.",
+    "reason": "no `pfctl` in 249 record lines",
+    "receipt": "git log --format='%h %s' 7147ba84b9..c4b9700167; git diff --name-only 7147ba84b9..c4b9700167",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 26,
+    "text": "I've flagged one weakness in it: the control runs after the treatment, so if the path drifts between them the pair isn't perfectly matched, and I'll say so if they disagree in a way that matters.",
+    "reason": "no `after` in 245 record lines",
+    "receipt": "git log --format='%h %s' 18d7a776f4..c4b9700167; git diff --name-only 18d7a776f4..c4b9700167",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 30,
+    "text": "Say the word and I'll write it as a note against the script.",
+    "reason": "no `against` in 245 record lines",
+    "receipt": "git log --format='%h %s' 18d7a776f4..c4b9700167; git diff --name-only 18d7a776f4..c4b9700167",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 44,
+    "text": "Checked, and it surfaced the one thing that'll bite you first \u2014 I'll come to it at the end.",
+    "reason": "no `thing` in 196 record lines",
+    "receipt": "git log --format='%h %s' b5610c26b4..c4b9700167; git diff --name-only b5610c26b4..c4b9700167",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 59,
+    "text": "I'll report back when it lands.",
+    "reason": "no `lands` in 254 record lines",
+    "receipt": "git log --format='%h %s' 94e16311ec..c4b9700167; git diff --name-only 94e16311ec..c4b9700167",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 68,
+    "text": "I'll report the predicate verdict when the queue clears.",
+    "reason": "no `predicate` in 85 record lines",
+    "receipt": "git log --format='%h %s' 3b77fb1e24..c4b9700167; git diff --name-only 3b77fb1e24..c4b9700167",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   }
+  ]
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "36257dfe-9d00-4dc3-b667-a003451680f1",
+  "started": "2026-09-12T01:46:57.172Z",
+  "ended": "2026-09-12T05:17:36.939Z",
+  "t1_sha": "e76ef0a83cc127e8107dc1d3df77d65b38d34ecc",
+  "turns": 12,
+  "operator_facing": 74,
+  "sentences": 96,
+  "adjudicable": 50,
+  "classes": {
+   "none": 14,
+   "retrospective": 34,
+   "universal": 8,
+   "promissory": 8,
+   "predictive": 5,
+   "evaluative": 5
+  },
+  "commitments": 1,
+  "advice": 7,
+  "verdicts": {
+   "broken": 1
+  },
+  "integrity": -0.25,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 9,
+   "items_offered": 0,
+   "max_offered": 0,
+   "items_per_block": 0.0,
+   "tool_calls": 190
+  },
+  "bound_breaches": [],
+  "broken": [
+   {
+    "turn": 5,
+    "text": "I will pick up as each of those returns.",
+    "reason": "no `those` in 72 record lines",
+    "receipt": "git log --format='%h %s' 91290ca938..e76ef0a83c; git diff --name-only 91290ca938..e76ef0a83c",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   }
+  ]
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "2e83a54a-92a2-4d66-8e53-3dae7af786a4",
+  "started": "2026-09-11T19:57:27.249Z",
+  "ended": "2026-09-12T00:46:26.487Z",
+  "t1_sha": "5af31d8836d916e7b0a94c24d24ee3e8cc73f457",
+  "turns": 14,
+  "operator_facing": 128,
+  "sentences": 174,
+  "adjudicable": 96,
+  "classes": {
+   "retrospective": 77,
+   "universal": 12,
+   "none": 19,
+   "promissory": 7,
+   "evaluative": 10,
+   "predictive": 3
+  },
+  "commitments": 1,
+  "advice": 6,
+  "verdicts": {
+   "broken": 1
+  },
+  "integrity": -0.25,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 8,
+   "items_offered": 0,
+   "max_offered": 0,
+   "items_per_block": 0.0,
+   "tool_calls": 294
+  },
+  "bound_breaches": [],
+  "broken": [
+   {
+    "turn": 1,
+    "text": "I'll re-run it against the corrected paths.",
+    "reason": "no `corrected` in 132 record lines",
+    "receipt": "git log --format='%h %s' 55cd9ce0c6..5af31d8836; git diff --name-only 55cd9ce0c6..5af31d8836",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   }
+  ]
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "cea8e256-26ff-4c1f-9bac-2615c9eb2426",
+  "started": "2026-09-11T19:38:22.415Z",
+  "ended": "2026-09-11T20:45:37.536Z",
+  "t1_sha": "ddc2b0642e2588e5a8941b2a773ca74d4042b1ff",
+  "turns": 17,
+  "operator_facing": 193,
+  "sentences": 219,
+  "adjudicable": 116,
+  "classes": {
+   "retrospective": 77,
+   "none": 31,
+   "evaluative": 28,
+   "universal": 32,
+   "predictive": 18,
+   "promissory": 7
+  },
+  "commitments": 1,
+  "advice": 6,
+  "verdicts": {
+   "broken": 1
+  },
+  "integrity": -0.25,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 10,
+   "items_offered": 0,
+   "max_offered": 0,
+   "items_per_block": 0.0,
+   "tool_calls": 97
+  },
+  "bound_breaches": [],
+  "broken": [
+   {
+    "turn": 3,
+    "text": "I'll give you the shortlist with line counts and the specific files when they land.",
+    "reason": "no `shortlist` in 165 record lines",
+    "receipt": "git log --format='%h %s' 4b29cd3fe8..ddc2b0642e; git diff --name-only 4b29cd3fe8..ddc2b0642e",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   }
+  ]
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "87f737f3-1174-4ce1-8cae-65d4d1293c4a",
+  "started": "2026-09-11T19:43:09.296Z",
+  "ended": "2026-09-11T20:15:02.856Z",
+  "t1_sha": "3e05a0e50f6bfeffea3056e87d23601fbbb395db",
+  "turns": 8,
+  "operator_facing": 119,
+  "sentences": 122,
+  "adjudicable": 68,
+  "classes": {
+   "retrospective": 40,
+   "none": 33,
+   "evaluative": 13,
+   "universal": 25,
+   "predictive": 5,
+   "promissory": 3
+  },
+  "commitments": 1,
+  "advice": 2,
+  "verdicts": {
+   "broken": 1
+  },
+  "integrity": -0.25,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 6,
+   "items_offered": 3,
+   "max_offered": 3,
+   "items_per_block": 0.5,
+   "tool_calls": 45
+  },
+  "bound_breaches": [],
+  "broken": [
+   {
+    "turn": 7,
+    "text": "Here is where I think the alignment actually sits, and I'll stop the worker if you say so.",
+    "reason": "no `alignment` in 2 record lines",
+    "receipt": "git log --format='%h %s' 84da5bbbe0..3e05a0e50f; git diff --name-only 84da5bbbe0..3e05a0e50f",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   }
+  ]
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "f1c44058-535b-4dea-a8be-323cfd67bcbd",
+  "started": "2026-09-11T17:46:56.626Z",
+  "ended": "2026-09-11T18:27:36.149Z",
+  "t1_sha": "7d0a1d88c0b12ffe856d5aabb91858015296024a",
+  "turns": 17,
+  "operator_facing": 368,
+  "sentences": 437,
+  "adjudicable": 228,
+  "classes": {
+   "retrospective": 130,
+   "none": 71,
+   "universal": 84,
+   "predictive": 33,
+   "evaluative": 36,
+   "promissory": 14
+  },
+  "commitments": 0,
+  "advice": 14,
+  "verdicts": {},
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 13,
+   "items_offered": 32,
+   "max_offered": 10,
+   "items_per_block": 2.46,
+   "tool_calls": 39
+  },
+  "bound_breaches": [],
+  "broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "6402486e-9881-4f7f-b723-3390c76d482c",
+  "started": "2026-09-11T00:38:30.471Z",
+  "ended": "2026-09-11T15:40:30.453Z",
+  "t1_sha": "af47c998d4029111231f75a314bbf99d9dd21b1f",
+  "turns": 43,
+  "operator_facing": 374,
+  "sentences": 430,
+  "adjudicable": 235,
+  "classes": {
+   "evaluative": 50,
+   "retrospective": 151,
+   "none": 57,
+   "universal": 64,
+   "predictive": 32,
+   "promissory": 20
+  },
+  "commitments": 1,
+  "advice": 19,
+  "verdicts": {
+   "kept": 1
+  },
+  "integrity": 0.25,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 16,
+   "items_offered": 0,
+   "max_offered": 0,
+   "items_per_block": 0.0,
+   "tool_calls": 173
+  },
+  "bound_breaches": [],
+  "broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "e02c5365-5b1a-4607-8c3a-5cb2e94cb32b",
+  "started": "2026-09-11T15:27:51.119Z",
+  "ended": "2026-09-11T19:33:31.646Z",
+  "t1_sha": "b25c04b3ec08bfe73ed9bbc2aee9f215565689eb",
+  "turns": 19,
+  "operator_facing": 296,
+  "sentences": 302,
+  "adjudicable": 194,
+  "classes": {
+   "retrospective": 122,
+   "universal": 50,
+   "none": 42,
+   "predictive": 29,
+   "promissory": 22,
+   "evaluative": 31
+  },
+  "commitments": 3,
+  "advice": 19,
+  "verdicts": {
+   "unchecked": 2,
+   "broken": 1
+  },
+  "integrity": -0.25,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 16,
+   "items_offered": 0,
+   "max_offered": 0,
+   "items_per_block": 0.0,
+   "tool_calls": 247
+  },
+  "bound_breaches": [],
+  "broken": [
+   {
+    "turn": 13,
+    "text": "I'll keep the pipeline moving as each returns \u2014 svt-2's deletion can't start until svt-1 gives the desktop a daemon it doesn't own, and svt-3's ordering depends on what the audit finds.",
+    "reason": "no `svt-2` in 338 record lines",
+    "receipt": "git log --format='%h %s' 6b3e6831c9..b25c04b3ec; git diff --name-only 6b3e6831c9..b25c04b3ec",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   }
+  ]
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "03e54838-3a21-4d34-8098-fb0802d87653",
+  "started": "2026-09-10T19:58:07.311Z",
+  "ended": "2026-09-11T15:11:12.152Z",
+  "t1_sha": "39fc8857e67def6674f20ca546d0ff0685890917",
+  "turns": 29,
+  "operator_facing": 165,
+  "sentences": 192,
+  "adjudicable": 101,
+  "classes": {
+   "retrospective": 76,
+   "evaluative": 21,
+   "promissory": 5,
+   "universal": 20,
+   "none": 29,
+   "predictive": 14
+  },
+  "commitments": 3,
+  "advice": 2,
+  "verdicts": {
+   "broken": 2,
+   "unchecked": 1
+  },
+  "integrity": -0.4,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 16,
+   "items_offered": 0,
+   "max_offered": 0,
+   "items_per_block": 0.0,
+   "tool_calls": 73
+  },
+  "bound_breaches": [],
+  "broken": [
+   {
+    "turn": 1,
+    "text": "A message from a peer session lands in this conversation on its own, so I don't need to poll for it \u2014 when something arrives I'll show you the verbatim request and what it would touch before anything runs.",
+    "reason": "no `message` in 230 record lines",
+    "receipt": "git log --format='%h %s' 966b0cdb65..39fc8857e6; git diff --name-only 966b0cdb65..39fc8857e6",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 2,
+    "text": "Say the word and I'll apply the config, add both roster entries, and coordinate the restart with `commonwealth-ai-68` first.",
+    "reason": "no `commonwealth-ai-68` in 230 record lines",
+    "receipt": "git log --format='%h %s' 966b0cdb65..39fc8857e6; git diff --name-only 966b0cdb65..39fc8857e6",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   }
+  ]
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "bb36c21e-de52-4836-bbdb-bb786964c9ba",
+  "started": "2026-09-11T05:09:50.500Z",
+  "ended": "2026-09-11T15:19:06.994Z",
+  "t1_sha": "ba92616dde5dfb2e06e4a1ce94e8810bc74ae677",
+  "turns": 38,
+  "operator_facing": 424,
+  "sentences": 474,
+  "adjudicable": 245,
+  "classes": {
+   "universal": 80,
+   "evaluative": 64,
+   "retrospective": 147,
+   "none": 90,
+   "predictive": 25,
+   "promissory": 18
+  },
+  "commitments": 4,
+  "advice": 14,
+  "verdicts": {
+   "broken": 3,
+   "kept": 1
+  },
+  "integrity": -0.2857142857142857,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 18,
+   "items_offered": 0,
+   "max_offered": 0,
+   "items_per_block": 0.0,
+   "tool_calls": 342
+  },
+  "bound_breaches": [],
+  "broken": [
+   {
+    "turn": 14,
+    "text": "I'll have that shortly and will put a real cost and risk table against it rather than another assertion.",
+    "reason": "no `table` in 295 record lines",
+    "receipt": "git log --format='%h %s' 002e6d976e..ba92616dde; git diff --name-only 002e6d976e..ba92616dde",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 17,
+    "text": "Say the word and I'll start on the setup-installs-the-service rung, or keep clearing the correctness queue first.",
+    "reason": "no `setup-installs-the-service` in 45 record lines",
+    "receipt": "git log --format='%h %s' 70868ed7a8..ba92616dde; git diff --name-only 70868ed7a8..ba92616dde",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 26,
+    "text": "Say which, and I'll put it in the frame before we split so the next session starts from the decision rather than re-deriving it.",
+    "reason": "no `frame` in 22 record lines",
+    "receipt": "git log --format='%h %s' fe5a85cc3f..ba92616dde; git diff --name-only fe5a85cc3f..ba92616dde",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   }
+  ]
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "d332d686-245f-4ca1-a583-d56cc4a1361d",
+  "started": "2026-09-10T13:45:33.487Z",
+  "ended": "2026-09-11T03:35:02.361Z",
+  "t1_sha": "cbf198eca79d3e8ec10c78304f356a26bab3641a",
+  "turns": 95,
+  "operator_facing": 164,
+  "sentences": 254,
+  "adjudicable": 130,
+  "classes": {
+   "retrospective": 81,
+   "none": 24,
+   "promissory": 12,
+   "universal": 37,
+   "predictive": 7,
+   "evaluative": 3
+  },
+  "commitments": 5,
+  "advice": 7,
+  "verdicts": {
+   "broken": 3,
+   "unchecked": 2
+  },
+  "integrity": -0.5,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 54,
+   "items_offered": 6,
+   "max_offered": 6,
+   "items_per_block": 0.11,
+   "tool_calls": 312
+  },
+  "bound_breaches": [],
+  "broken": [
+   {
+    "turn": 4,
+    "text": "I'll re-bank the frame after the operator daemon is back, and avoid MCP writes until then.",
+    "reason": "no `writes` in 278 record lines",
+    "receipt": "git log --format='%h %s' 0708bd3a7e..cbf198eca7; git diff --name-only 0708bd3a7e..cbf198eca7",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 74,
+    "text": "I'll re-bank it after the daemon returns.",
+    "reason": "no `returns` in 222 record lines",
+    "receipt": "git log --format='%h %s' 5f71c6bce1..cbf198eca7; git diff --name-only 5f71c6bce1..cbf198eca7",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 80,
+    "text": "The duplication reviewer is running over the initiative's diff with a measured deletion plan as its deliverable; I'll act on it with workers as soon as it lands.",
+    "reason": "no `duplication` in 227 record lines",
+    "receipt": "git log --format='%h %s' db71205b95..cbf198eca7; git diff --name-only db71205b95..cbf198eca7",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   }
+  ]
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "8c5078a9-818b-40db-8f6f-eb33abd5799a",
+  "started": "2026-09-10T21:06:26.727Z",
+  "ended": "2026-09-10T23:00:26.519Z",
+  "t1_sha": "4888f733eb9ebe5292faae5759e43a46df64c79e",
+  "turns": 15,
+  "operator_facing": 626,
+  "sentences": 633,
+  "adjudicable": 371,
+  "classes": {
+   "retrospective": 249,
+   "none": 122,
+   "universal": 97,
+   "promissory": 25,
+   "evaluative": 89,
+   "predictive": 44
+  },
+  "commitments": 1,
+  "advice": 24,
+  "verdicts": {
+   "broken": 1
+  },
+  "integrity": -0.25,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 12,
+   "items_offered": 5,
+   "max_offered": 5,
+   "items_per_block": 0.42,
+   "tool_calls": 91
+  },
+  "bound_breaches": [],
+  "broken": [
+   {
+    "turn": 1,
+    "text": "I'll have the full teardown when the readers return.",
+    "reason": "no `teardown` in 198 record lines",
+    "receipt": "git log --format='%h %s' 21f5727342..4888f733eb; git diff --name-only 21f5727342..4888f733eb",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   }
+  ]
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "e105cea8-e968-4cca-9be4-8b039104a4ef",
+  "started": "2026-09-10T14:05:23.227Z",
+  "ended": "2026-09-10T18:47:08.433Z",
+  "t1_sha": "f6a6335191a5e77bf1725bd79c9fc737c7fbb1a7",
+  "turns": 21,
+  "operator_facing": 99,
+  "sentences": 128,
+  "adjudicable": 78,
+  "classes": {
+   "none": 14,
+   "retrospective": 63,
+   "evaluative": 5,
+   "promissory": 4,
+   "universal": 11,
+   "predictive": 2
+  },
+  "commitments": 1,
+  "advice": 3,
+  "verdicts": {
+   "unchecked": 1
+  },
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 5,
+   "items_offered": 0,
+   "max_offered": 0,
+   "items_per_block": 0.0,
+   "tool_calls": 219
+  },
+  "bound_breaches": [],
+  "broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "6cb727b9-d79f-4667-9b5e-a2fbd235d5e5",
+  "started": "",
+  "ended": "",
+  "t1_sha": null,
+  "turns": 0,
+  "operator_facing": 0,
+  "sentences": 0,
+  "adjudicable": 0,
+  "classes": {},
+  "commitments": 0,
+  "advice": 0,
+  "verdicts": {},
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 0,
+   "items_offered": 0,
+   "max_offered": 0,
+   "items_per_block": 0.0,
+   "tool_calls": 2
+  },
+  "bound_breaches": [],
+  "broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "b37ba222-39a6-4076-91c4-0f69618a8556",
+  "started": "2026-09-10T13:41:10.012Z",
+  "ended": "2026-09-10T13:41:10.012Z",
+  "t1_sha": "aaf09ddbef96079668977f97ef3cc9d72e34a9c4",
+  "turns": 1,
+  "operator_facing": 17,
+  "sentences": 17,
+  "adjudicable": 8,
+  "classes": {
+   "retrospective": 4,
+   "none": 5,
+   "universal": 3,
+   "predictive": 2,
+   "evaluative": 2,
+   "promissory": 1
+  },
+  "commitments": 0,
+  "advice": 1,
+  "verdicts": {},
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 1,
+   "items_offered": 3,
+   "max_offered": 3,
+   "items_per_block": 3.0,
+   "tool_calls": 6
+  },
+  "bound_breaches": [],
+  "broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "9903ea64-2aca-4d75-8f8a-af2ff9d53427",
+  "started": "2026-09-09T18:47:39.388Z",
+  "ended": "2026-09-09T21:01:58.237Z",
+  "t1_sha": "e0a14402e58e17086f0f39fdbb0520fb90fcfe7e",
+  "turns": 42,
+  "operator_facing": 142,
+  "sentences": 239,
+  "adjudicable": 87,
+  "classes": {
+   "retrospective": 57,
+   "none": 24,
+   "universal": 24,
+   "predictive": 15,
+   "evaluative": 16,
+   "promissory": 6
+  },
+  "commitments": 1,
+  "advice": 5,
+  "verdicts": {
+   "unchecked": 1
+  },
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 8,
+   "items_offered": 0,
+   "max_offered": 0,
+   "items_per_block": 0.0,
+   "tool_calls": 220
+  },
+  "bound_breaches": [],
+  "broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "995d04b9-793a-4ab9-b1e6-d51ac2a14b63",
+  "started": "2026-09-09T13:48:31.817Z",
+  "ended": "2026-09-09T16:36:50.526Z",
+  "t1_sha": "56694a6f4d8d18d64f9cfbee15fe28ce96a418cf",
+  "turns": 32,
+  "operator_facing": 73,
+  "sentences": 121,
+  "adjudicable": 58,
+  "classes": {
+   "retrospective": 43,
+   "none": 9,
+   "universal": 14,
+   "evaluative": 5,
+   "predictive": 1,
+   "promissory": 1
+  },
+  "commitments": 0,
+  "advice": 1,
+  "verdicts": {},
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 4,
+   "items_offered": 0,
+   "max_offered": 0,
+   "items_per_block": 0.0,
+   "tool_calls": 257
+  },
+  "bound_breaches": [],
+  "broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "4fe232fd-8807-4cdc-93bc-2219ef5592aa",
+  "started": "2026-09-09T13:50:22.093Z",
+  "ended": "2026-09-09T13:50:22.093Z",
+  "t1_sha": "972fecb9ee02253740bb202e7953e90dfb7f0de0",
+  "turns": 1,
+  "operator_facing": 12,
+  "sentences": 12,
+  "adjudicable": 8,
+  "classes": {
+   "retrospective": 4,
+   "none": 2,
+   "promissory": 3,
+   "evaluative": 1,
+   "universal": 1,
+   "predictive": 1
+  },
+  "commitments": 2,
+  "advice": 1,
+  "verdicts": {
+   "unchecked": 2
+  },
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 1,
+   "items_offered": 0,
+   "max_offered": 0,
+   "items_per_block": 0.0,
+   "tool_calls": 5
+  },
+  "bound_breaches": [],
+  "broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "6c57fec1-bfbd-4d95-991b-8765ac9c93e8",
+  "started": "2026-09-09T06:24:55.406Z",
+  "ended": "2026-09-09T08:09:20.240Z",
+  "t1_sha": "8e4d3fb11cef1ff7a7d1b368254d0d6c9a26bd1e",
+  "turns": 19,
+  "operator_facing": 82,
+  "sentences": 107,
+  "adjudicable": 55,
+  "classes": {
+   "retrospective": 37,
+   "evaluative": 6,
+   "none": 14,
+   "universal": 8,
+   "predictive": 7,
+   "promissory": 10
+  },
+  "commitments": 7,
+  "advice": 3,
+  "verdicts": {
+   "broken": 5,
+   "kept": 2
+  },
+  "integrity": -0.3,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 6,
+   "items_offered": 0,
+   "max_offered": 0,
+   "items_per_block": 0.0,
+   "tool_calls": 397
+  },
+  "bound_breaches": [],
+  "broken": [
+   {
+    "turn": 1,
+    "text": "Test run in flight; I will commit once it returns and report the counts.",
+    "reason": "no `counts` in 54 record lines",
+    "receipt": "git log --format='%h %s' 38ebf81572..8e4d3fb11c; git diff --name-only 38ebf81572..8e4d3fb11c",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 5,
+    "text": "I was burning turns polling; both send a completion notification, so I'll pick this up when they land rather than watching the clock.",
+    "reason": "no `completion` in 56 record lines",
+    "receipt": "git log --format='%h %s' b3dfea5bb2..8e4d3fb11c; git diff --name-only b3dfea5bb2..8e4d3fb11c",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 5,
+    "text": "State at the seat right now: seven of the eight workspace test failures fixed, W2's unknowable-contract fix verified here (17/17, both directions), and one deferred item \u2014 the conformance-tag regeneration, which I'll run last because both workers are still shifting line numbers in tagged files.",
+    "reason": "git diff b3dfea5bb2..8e4d3fb11c | grep -cF '17/17' -> 0",
+    "receipt": "git log --format=%s b3dfea5bb2..8e4d3fb11c; git diff b3dfea5bb2..8e4d3fb11c | grep -cF '17/17'",
+    "engine": "tree"
+   },
+   {
+    "turn": 6,
+    "text": "I'll stop polling and wait for their completion notifications.",
+    "reason": "no `polling` in 56 record lines",
+    "receipt": "git log --format='%h %s' b3dfea5bb2..8e4d3fb11c; git diff --name-only b3dfea5bb2..8e4d3fb11c",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 8,
+    "text": "I'll thread it through as soon as W1 releases `atlas_grounding.rs` and `ground/select.rs`; shipping W3's floor without it would make production abstain on every question, so it is not optional.",
+    "reason": "git diff b3dfea5bb2..8e4d3fb11c | grep -cF 'atlas_grounding.rs' -> 0 (and 1 more)",
+    "receipt": "git log --format=%s b3dfea5bb2..8e4d3fb11c; git diff b3dfea5bb2..8e4d3fb11c | grep -cF 'atlas_grounding.rs'",
+    "engine": "tree"
+   }
+  ]
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "00e8b4a8-6f7b-4849-b33e-a273e5cea610",
+  "started": "2026-09-09T01:32:18.850Z",
+  "ended": "2026-09-09T01:51:13.065Z",
+  "t1_sha": "af5abfcb29144eb7a71e172a1d1a88964257c4df",
+  "turns": 4,
+  "operator_facing": 41,
+  "sentences": 43,
+  "adjudicable": 29,
+  "classes": {
+   "retrospective": 15,
+   "predictive": 3,
+   "none": 5,
+   "universal": 10,
+   "promissory": 4,
+   "evaluative": 4
+  },
+  "commitments": 1,
+  "advice": 3,
+  "verdicts": {
+   "unchecked": 1
+  },
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 2,
+   "items_offered": 3,
+   "max_offered": 3,
+   "items_per_block": 1.5,
+   "tool_calls": 16
+  },
+  "bound_breaches": [],
+  "broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "e45b6bcb-e4c6-4a7c-973a-1ca86e4c6d23",
+  "started": "2026-09-08T19:18:18.692Z",
+  "ended": "2026-09-09T00:40:53.426Z",
+  "t1_sha": "ad64282100e34041e3a95c0be41245e72516380d",
+  "turns": 187,
+  "operator_facing": 644,
+  "sentences": 1232,
+  "adjudicable": 402,
+  "classes": {
+   "retrospective": 272,
+   "none": 95,
+   "universal": 93,
+   "evaluative": 84,
+   "promissory": 37,
+   "predictive": 53,
+   "could-not-judge": 10
+  },
+  "commitments": 9,
+  "advice": 28,
+  "verdicts": {
+   "broken": 4,
+   "unchecked": 2,
+   "kept": 3
+  },
+  "integrity": -0.1,
+  "efficacy": "never-ran",
+  "frame_contradictions": null,
+  "sprawl": {
+   "operator_blocks": 53,
+   "items_offered": 1,
+   "max_offered": 1,
+   "items_per_block": 0.02,
+   "tool_calls": 396
+  },
+  "bound_breaches": [],
+  "broken": [
+   {
+    "turn": 2,
+    "text": "I'll report the eight verdicts when it lands, roughly 25 minutes.",
+    "reason": "no `eight` in 139 record lines",
+    "receipt": "git log --format='%h %s' 78237126c1..ad64282100; git diff --name-only 78237126c1..ad64282100",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 22,
+    "text": "Say the word and I'll add it with the same both-directions controls, then re-run.",
+    "reason": "no `both-directions` in 127 record lines",
+    "receipt": "git log --format='%h %s' 6887296a14..ad64282100; git diff --name-only 6887296a14..ad64282100",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 107,
+    "text": "Once this compiles I'll re-run the build, then `summary-atoms`, then the pre-registered probe measurement.",
+    "reason": "no `summary-atoms` in 114 record lines",
+    "receipt": "git log --format='%h %s' f4b13a68cf..ad64282100; git diff --name-only f4b13a68cf..ad64282100",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 111,
+    "text": "The thing I'll be watching for is whether step 1 clears at all \u2014 that alone settles the root cause.",
+    "reason": "no `clears` in 114 record lines",
+    "receipt": "git log --format='%h %s' f4b13a68cf..ad64282100; git diff --name-only f4b13a68cf..ad64282100",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   }
+  ]
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "db74602c-ee2d-4d01-9f95-df0629ab0823",
+  "started": "2026-09-08T14:03:32.305Z",
+  "ended": "2026-09-08T21:10:14.700Z",
+  "t1_sha": "2a9c4d43e96e1face38f61e81be748927c560230",
+  "turns": 52,
+  "operator_facing": 183,
+  "sentences": 227,
+  "adjudicable": 123,
+  "classes": {
+   "promissory": 16,
+   "retrospective": 82,
+   "universal": 25,
+   "predictive": 13,
+   "none": 26,
+   "evaluative": 11,
+   "could-not-judge": 10
+  },
+  "commitments": 4,
+  "advice": 12,
+  "verdicts": {
+   "broken": 3,
+   "unchecked": 1
+  },
+  "integrity": -0.5,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 28,
+   "items_offered": 8,
+   "max_offered": 4,
+   "items_per_block": 0.29,
+   "tool_calls": 187
+  },
+  "bound_breaches": [],
+  "broken": [
+   {
+    "turn": 6,
+    "text": "Build and CLI test are running in the background; I'll pick up when they finish, then restart the daemon and run `svrn ring seal mesh-measurements` live.",
+    "reason": "no `mesh-measurements` in 308 record lines",
+    "receipt": "git log --format='%h %s' 724b97925b..2a9c4d43e9; git diff --name-only 724b97925b..2a9c4d43e9",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 35,
+    "text": "The bar measurement run is the last mechanical step and is running in the background; when it reports I'll record its verdicts in the frame and mark it.",
+    "reason": "no `measurement` in 30 record lines",
+    "receipt": "git log --format='%h %s' 02ac6de772..2a9c4d43e9; git diff --name-only 02ac6de772..2a9c4d43e9",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 39,
+    "text": "I'll report both when they land.",
+    "reason": "no `report` in 22 record lines",
+    "receipt": "git log --format='%h %s' 78237126c1..2a9c4d43e9; git diff --name-only 78237126c1..2a9c4d43e9",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   }
+  ]
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "a99026b2-4694-4703-8591-8530098ef8a6",
+  "started": "2026-09-08T04:03:50.675Z",
+  "ended": "2026-09-08T17:20:47.704Z",
+  "t1_sha": "f65f679ebb4e86e34eab604c64e39a2297430a3a",
+  "turns": 86,
+  "operator_facing": 555,
+  "sentences": 651,
+  "adjudicable": 365,
+  "classes": {
+   "retrospective": 256,
+   "predictive": 35,
+   "evaluative": 61,
+   "none": 94,
+   "promissory": 32,
+   "universal": 77
+  },
+  "commitments": 5,
+  "advice": 27,
+  "verdicts": {
+   "kept": 2,
+   "broken": 3
+  },
+  "integrity": -0.125,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 42,
+   "items_offered": 0,
+   "max_offered": 0,
+   "items_per_block": 0.0,
+   "tool_calls": 253
+  },
+  "bound_breaches": [],
+  "broken": [
+   {
+    "turn": 58,
+    "text": "The soak worker has been holding a window that no longer has a purpose, since its bar needs two concurrent chat turns and there is no inference to drive them \u2014 I'll release it to keep pricing the eight scripts, which is read-only work it can finish regardless.",
+    "reason": "no `worker` in 74 record lines",
+    "receipt": "git log --format='%h %s' a742eef729..f65f679ebb; git diff --name-only a742eef729..f65f679ebb",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 61,
+    "text": "I'll restart and warm the moment the mtime moves.",
+    "reason": "no `mtime` in 74 record lines",
+    "receipt": "git log --format='%h %s' a742eef729..f65f679ebb; git diff --name-only a742eef729..f65f679ebb",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 62,
+    "text": "I'm polling for the binary to move off 07:34:49, and I'll do the restart and warm myself since the soak worker owns daemon churn and is holding.",
+    "reason": "no `restart` in 74 record lines",
+    "receipt": "git log --format='%h %s' a742eef729..f65f679ebb; git diff --name-only a742eef729..f65f679ebb",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   }
+  ]
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "09a370db-990e-4974-a681-159174cbbd27",
+  "started": "2026-09-08T04:00:07.365Z",
+  "ended": "2026-09-08T06:05:55.635Z",
+  "t1_sha": "b8541d34c76524e8a38d17b8125366c70461e345",
+  "turns": 28,
+  "operator_facing": 113,
+  "sentences": 154,
+  "adjudicable": 77,
+  "classes": {
+   "none": 19,
+   "retrospective": 53,
+   "universal": 17,
+   "predictive": 7,
+   "evaluative": 10,
+   "promissory": 7
+  },
+  "commitments": 2,
+  "advice": 5,
+  "verdicts": {
+   "kept": 2
+  },
+  "integrity": 0.4,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 6,
+   "items_offered": 6,
+   "max_offered": 6,
+   "items_per_block": 1.0,
+   "tool_calls": 187
+  },
+  "bound_breaches": [],
+  "broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "1ab9a471-a877-41a1-a3d6-f25a5633636c",
+  "started": "2026-09-05T00:49:30.864Z",
+  "ended": "2026-09-05T01:01:33.303Z",
+  "t1_sha": "c486892587165c3f154ed5a9ff85f8f5d216dc3a",
+  "turns": 4,
+  "operator_facing": 98,
+  "sentences": 99,
+  "adjudicable": 65,
+  "classes": {
+   "retrospective": 35,
+   "none": 14,
+   "universal": 26,
+   "promissory": 4,
+   "predictive": 8,
+   "evaluative": 11
+  },
+  "commitments": 0,
+  "advice": 4,
+  "verdicts": {},
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": null,
+  "sprawl": {
+   "operator_blocks": 3,
+   "items_offered": 0,
+   "max_offered": 0,
+   "items_per_block": 0.0,
+   "tool_calls": 41
+  },
+  "bound_breaches": [],
+  "broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "7a744442-634e-41b7-9291-709140e2d1bc",
+  "started": "2026-09-04T23:46:54.393Z",
+  "ended": "2026-09-05T13:31:02.342Z",
+  "t1_sha": "95583b7378906d0ab53e0cc44c10721f9da6e768",
+  "turns": 101,
+  "operator_facing": 491,
+  "sentences": 650,
+  "adjudicable": 315,
+  "classes": {
+   "retrospective": 219,
+   "none": 89,
+   "universal": 72,
+   "promissory": 24,
+   "evaluative": 57,
+   "predictive": 30
+  },
+  "commitments": 6,
+  "advice": 18,
+  "verdicts": {
+   "broken": 4,
+   "unchecked": 2
+  },
+  "integrity": -0.5714285714285714,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 25,
+   "items_offered": 53,
+   "max_offered": 8,
+   "items_per_block": 2.12,
+   "tool_calls": 231
+  },
+  "bound_breaches": [],
+  "broken": [
+   {
+    "turn": 11,
+    "text": "I'll re-run `--accept` once the bench is in so the ceiling is derived, not guessed.",
+    "reason": "no `--accept` in 352 record lines",
+    "receipt": "git log --format='%h %s' a4f8f2a956..95583b7378; git diff --name-only a4f8f2a956..95583b7378",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 34,
+    "text": "When it returns I'll run the seat's single sweep over the whole wave.",
+    "reason": "no `seat's` in 306 record lines",
+    "receipt": "git log --format='%h %s' fa69be3829..95583b7378; git diff --name-only fa69be3829..95583b7378",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 36,
+    "text": "I'll report the sweep when it lands.",
+    "reason": "no `sweep` in 287 record lines",
+    "receipt": "git log --format='%h %s' 2e334c1837..95583b7378; git diff --name-only 2e334c1837..95583b7378",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 79,
+    "text": "I'll report the sweep verdict when it lands.",
+    "reason": "no `sweep` in 418 record lines",
+    "receipt": "git log --format='%h %s' 1027ab126c..95583b7378; git diff --name-only 1027ab126c..95583b7378",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   }
+  ]
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "bd06f458-57da-4947-9935-8d0b19ead7a1",
+  "started": "2026-09-04T21:33:02.508Z",
+  "ended": "2026-09-05T09:03:00.158Z",
+  "t1_sha": "26e4194d0221ec61ca6eae6fc87a503bd1709d18",
+  "turns": 62,
+  "operator_facing": 677,
+  "sentences": 729,
+  "adjudicable": 431,
+  "classes": {
+   "retrospective": 295,
+   "universal": 100,
+   "none": 157,
+   "evaluative": 42,
+   "predictive": 47,
+   "promissory": 36
+  },
+  "commitments": 9,
+  "advice": 27,
+  "verdicts": {
+   "kept": 2,
+   "unchecked": 2,
+   "broken": 5
+  },
+  "integrity": -0.3,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 32,
+   "items_offered": 55,
+   "max_offered": 7,
+   "items_per_block": 1.72,
+   "tool_calls": 179
+  },
+  "bound_breaches": [],
+  "broken": [
+   {
+    "turn": 26,
+    "text": "I will ask Worker A to include one fall-through turn's ledger in its lane run so the cost number exists before anyone calls this closed.",
+    "reason": "no `fall-through` in 301 record lines",
+    "receipt": "git log --format='%h %s' a4f8f2a956..26e4194d02; git diff --name-only a4f8f2a956..26e4194d02",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 37,
+    "text": "I'll relay the last worker's table when it lands.",
+    "reason": "no `relay` in 273 record lines",
+    "receipt": "git log --format='%h %s' b6eba84c4d..26e4194d02; git diff --name-only b6eba84c4d..26e4194d02",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 51,
+    "text": "I will pick up each notification as it lands and keep going.",
+    "reason": "no `notification` in 87 record lines",
+    "receipt": "git log --format='%h %s' f15d28a4c6..26e4194d02; git diff --name-only f15d28a4c6..26e4194d02",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 53,
+    "text": "When both report I run the sweep, then spawn those two plus registry phase 1, which I will draft against the registry's real schema once its report is in.",
+    "reason": "no `registry` in 10 record lines",
+    "receipt": "git log --format='%h %s' ef84419d58..26e4194d02; git diff --name-only ef84419d58..26e4194d02",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   },
+   {
+    "turn": 57,
+    "text": "Your call; if you leave this one running I will take the cost report, run the sweep, and spawn rung 2 as planned.",
+    "reason": "no `sweep` in 329 record lines",
+    "receipt": "git log --format='%h %s' 57e5ee76d9..26e4194d02; git diff --name-only 57e5ee76d9..26e4194d02",
+    "engine": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+   }
+  ]
+ }
+]
