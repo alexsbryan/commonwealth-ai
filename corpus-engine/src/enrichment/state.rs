@@ -222,7 +222,7 @@ impl EnrichmentState {
     /// explicit operator action clears it:
     /// `LocalCorpusManager::reset_enrichment_state`
     /// (`sovereign/crates/sovereign-tools/src/local_corpus/manager.rs`),
-    /// reachable over the wire at `POST /v1/corpus/enrichment/reset`
+    /// reachable over the wire at `POST /internal/corpus/enrich-reset`
     /// (`sovereign/crates/sovereign-mesh/src/corpus_watch_http.rs`), after
     /// which the corpus enriches again on the normal path.
     ///

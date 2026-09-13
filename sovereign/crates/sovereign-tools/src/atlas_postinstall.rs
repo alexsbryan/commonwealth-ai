@@ -1116,7 +1116,7 @@ pub async fn resume_inflight_tier2(
                 "tier2 resume: skipping workspace whose source corpus's enrichment \
                  state records a stall or an error. Resume is an explicit operator \
                  action: clear the state via LocalCorpusManager::reset_enrichment_state \
-                 (POST /v1/corpus/enrichment/reset), then re-request extraction."
+                 (POST /internal/corpus/enrich-reset), then re-request extraction."
             );
             continue;
         }

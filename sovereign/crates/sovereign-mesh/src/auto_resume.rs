@@ -338,7 +338,7 @@ async fn resume_in_progress_ingests(state: AppState) {
                  or an error — the pass that died would re-enter on every boot. \
                  Resume is an explicit operator action: clear the state via \
                  LocalCorpusManager::reset_enrichment_state (POST \
-                 /v1/corpus/enrichment/reset, or Settings → Local Knowledge \
+                 /internal/corpus/enrich-reset, or Settings → Local Knowledge \
                  remove + re-add), then re-request the install."
             );
             continue;

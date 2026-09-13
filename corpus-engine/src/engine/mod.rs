@@ -747,7 +747,7 @@ impl CorpusEngine {
                         "conversation enrichment resume: refusing a build the stall-sweep \
                          already declared dead — it would re-enter the pass that died on \
                          every boot. Resume is an explicit operator action: clear the \
-                         state (POST /v1/corpus/enrichment/reset), then re-enrich."
+                         state (POST /internal/corpus/enrich-reset), then re-enrich."
                     );
                 }
                 continue;

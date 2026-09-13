@@ -975,7 +975,7 @@ impl LocalCorpusManager {
                     "enrichment resume: refusing a build the stall-sweep already \
                      declared dead — it would re-enter the pass that died on every \
                      boot. Resume is an explicit operator action: reset_enrichment_state \
-                     (POST /v1/corpus/enrichment/reset), then Make explorable."
+                     (POST /internal/corpus/enrich-reset), then Make explorable."
                 );
                 continue;
             }

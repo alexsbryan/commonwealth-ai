@@ -1441,7 +1441,7 @@ two consult `EnrichmentPhase::is_resumable_interruption()`, which says
 `Stalled` IS resumable — true of a process killed mid-run, and exactly what
 re-armed a doomed pass on every boot. **Resume is now an explicit operator
 action**: `LocalCorpusManager::reset_enrichment_state`, reachable at `POST
-/v1/corpus/enrichment/reset`
+/internal/corpus/enrich-reset`
 (`sovereign/crates/sovereign-mesh/src/corpus_watch_http.rs`), clears the
 sidecar; the corpus then enriches again on the normal path. Every skip says
 so at `info` and names that path.
