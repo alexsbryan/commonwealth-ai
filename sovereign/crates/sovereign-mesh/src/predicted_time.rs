@@ -423,11 +423,20 @@ impl From<Result<Prediction, Unpredictable>> for LocalOption {
 ///    comparison, so there is nothing left for a fudge factor to
 ///    protect against.
 ///
-/// Order-sensitive on exact ties, deliberately and for the same
-/// reason `winners_over_local` is: the sort is stable, so equal
-/// predictions rank in the order the caller supplied, which is
-/// scoring order, which is the order the candidate records were
-/// pushed. Reordering the caller's pushes reorders these winners.
+/// Order-sensitive on exact ties: the sort below is stable *and*
+/// `total_cmp` is a genuine total order, so equal predictions rank in
+/// the order the caller supplied — which is scoring order, which is
+/// the order the candidate records were pushed. Reordering the
+/// caller's pushes reorders these winners.
+///
+/// **This is NOT the same behaviour as `winners_over_local`**, which
+/// this comment claimed until 2026-09-11. That function's comparator
+/// is built from `pick_better` and is not a valid `Ord`, so it
+/// *reverses* ties rather than preserving them — measured, see
+/// `scheduler_core::tests::tied_candidates_rank_in_reverse_input_order_and_replay_depends_on_it`.
+/// The two objectives therefore disagree on tie order today, and
+/// anyone unifying them has to pick which one is right and re-baseline
+/// the arms for the other.
 pub fn faster_than_local<T>(
     local: LocalOption,
     scored: Vec<(T, Result<Prediction, Unpredictable>)>,

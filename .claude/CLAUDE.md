@@ -14,8 +14,9 @@
 Everything above came from `AGENTS.md` and applies in every harness. These are
 this harness's own affordances.
 
-- **Prefer the MCP tools over the CLI form.** Both reach the same
-  `ToolRegistry::execute()`, but the MCP path is faster and costs fewer tokens.
+- **Prefer the MCP tools over the CLI form.** Both run the same `Tool::execute`
+  body from the same registry (there is no `ToolRegistry::execute` — see the
+  note in `AGENTS.md`), and the MCP path is faster and costs fewer tokens.
   `symbols({"name": "ToolRegistry"})` here; `sovereign tools call symbols
   --name=ToolRegistry` is the portable equivalent named in `AGENTS.md`.
 - **Subagents are the `Agent` tool.** `Explore` for read-only fan-out searches,

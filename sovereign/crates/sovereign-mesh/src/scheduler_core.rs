@@ -130,11 +130,27 @@ pub(crate) fn beats_local(local: &ModelCandidate, cand: &ModelCandidate) -> bool
 /// other's peer representation: production carries an index into its
 /// view slice, replay carries the peer's recorded name.
 ///
-/// **Order-sensitive.** `pick_better` keeps the incumbent on a full
-/// tie, so two indistinguishable candidates rank in the order they
-/// were passed. Production passes them in scoring order and the
-/// decision record stores them in that same order — which is what
-/// makes replay reproduce a tie the same way round.
+/// **Order-sensitive, and ties come out REVERSED.** This comment said
+/// "two indistinguishable candidates rank in the order they were
+/// passed" until 2026-09-11, when a test was written to check it
+/// (`tied_candidates_rank_in_reverse_input_order_and_replay_depends_on_it`)
+/// and three tied peers passed as `[0, 1, 2]` ranked `[2, 1, 0]`.
+///
+/// The cause is that the comparator below is not a valid `Ord`.
+/// `pick_better` returns a *winner*, not an ordering, and keeps `cur`
+/// on a full tie — so the closure reports `Less` with the arguments in
+/// either order, and antisymmetry fails. Rust's sort is only defined
+/// for a total order; on 1.95 driftsort a run of ≤20 takes
+/// `insertion_sort_shift_left`, which shifts each new element past
+/// every element it claims to be less than, and a tied element claims
+/// that about all of them. (Epsilon comparison breaks transitivity
+/// independently: sizes 1/2/3 with scores 0.0 / 0.0009 / 0.0018 give
+/// a < b < c < a.)
+///
+/// Replay does still reproduce a tie the same way round, but not for
+/// the reason stated here before: `crate::decision_replay` calls this
+/// same function, so both sides reverse identically. That coupling is
+/// why the comparator has not simply been fixed — see the test.
 pub(crate) fn winners_over_local<T>(
     local: &ModelCandidate,
     scored: Vec<(T, ModelCandidate)>,
@@ -924,6 +940,59 @@ mod tests {
             .expect("hub recorded");
         assert_eq!(hub.rank, Some(0));
         assert!(hub.selected);
+    }
+
+    /// **Characterization, not endorsement — read before you change it.**
+    ///
+    /// [`winners_over_local`]'s sort comparator is built from
+    /// [`pick_better`], which returns a *winner* rather than an
+    /// ordering, and on a full tie returns `cur`. The closure therefore
+    /// reports `Less` with the arguments in either order, so
+    /// antisymmetry fails and the comparator is not a valid `Ord` —
+    /// `slice::sort_by` is only defined for a total order. (Epsilon
+    /// comparison breaks transitivity independently: sizes 1/2/3 with
+    /// scores 0.0 / 0.0009 / 0.0018 give a < b < c < a.)
+    ///
+    /// The observable consequence is this: tied candidates come out
+    /// **reversed**, not in input order. That matters because
+    /// [`crate::decision_replay`] reaches this same function
+    /// (`decision_replay.rs:329`) and reproduces production's verdict
+    /// *because both reverse identically*. Fixing one side alone breaks
+    /// policy agreement against every capture already on disk.
+    ///
+    /// So if you make this test fail, you are changing behaviour, not
+    /// fixing a bug in isolation: the dispatch target moves, every
+    /// `Verdict::Peers` list reorders, and every Tier-1 arm whose band 0
+    /// is homogeneous (`twin-hubs` is three identical hubs) needs
+    /// re-baselining in the same change.
+    #[test]
+    fn tied_candidates_rank_in_reverse_input_order_and_replay_depends_on_it() {
+        let peers = vec![
+            peer("alpha", 0.95, Some(0)),
+            peer("bravo", 0.95, Some(0)),
+            peer("charlie", 0.95, Some(0)),
+        ];
+        let out = run(&peers);
+
+        // The setup is only meaningful if these really are a full tie:
+        // same score within SCORING_EPSILON and the same size. Assert it
+        // rather than assume it, or this test could pass for the wrong
+        // reason after a scoring change.
+        let scores: Vec<f32> = out.ranked.iter().map(|r| r.candidate.score).collect();
+        assert_eq!(scores.len(), 3, "all three peers should beat weak local");
+        for s in &scores {
+            assert!(
+                (s - scores[0]).abs() <= crate::oicp_select::SCORE_TIE_EPSILON,
+                "peers are not tied, so this test proves nothing: {scores:?}"
+            );
+        }
+
+        let order: Vec<usize> = out.ranked.iter().map(|r| r.view_idx).collect();
+        assert_eq!(
+            order,
+            vec![2, 1, 0],
+            "input order is [0, 1, 2]; the comparator reverses ties"
+        );
     }
 
     #[test]

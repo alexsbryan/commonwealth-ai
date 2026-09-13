@@ -25,7 +25,7 @@ HOSTS = [
     "commonwealth/crates/commonwealth-api/src",
     "sovereign/crates/sovereign-cli-daemon/src",
     "sovereign/crates/sovereign-server/src",
-    "sovereign/crates/sovereign-workflow-host/src",
+    "studio/crates/sovereign-workflow-host/src",
 ]
 ROUTE = re.compile(r'\.route\(\s*"([^"]+)"\s*,\s*((?:[a-z]+\([^()]*(?:\([^()]*\))?[^()]*\)\s*\.?\s*)+)', re.S)
 

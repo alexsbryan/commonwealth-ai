@@ -140,7 +140,9 @@ So `lint_status`/`test_status`/`build` (under `tools`) live in **`sovereign-cli-
 
 **`sovereign-cli` MUST be built with `--features dev-tools`.** Without it the build succeeds and silently replaces your `target/debug/sovereign-cli` with an end-user binary that has NO `notes`, `code`, `project`, `atos`, or `tools` verbs — and the loss surfaces minutes later on an unrelated command as "not in the default build", which reads like a missing feature rather than "your last build downgraded your install". Since 2026-07-26 the dispatcher warns on every invocation when it detects this (a `sovereign-cli-dev` sibling next to a dispatcher lacking the feature); the repair is the command above. Debug — see the build-profile note above. The daemon must be restarted (`sovereign daemon stop && sovereign daemon start`, in the `sovereign-vulkan` toolbox — there is no `dev-toolbox` on this host) to load a new `sovereign-cli-daemon` binary; CLI verbs pick up the new sibling on next invocation.
 
-**The CLI form is the portable one and it works in every harness — including harnesses with no MCP at all, and with the daemon down.** Where your harness does expose these as MCP tools (Claude Code does; pi deliberately does not), prefer that path: it is faster and costs fewer tokens. Both reach the same `ToolRegistry::execute()`.
+**The CLI form is the portable one and it works in every harness — including harnesses with no MCP at all, and with the daemon down.** Where your harness does expose these as MCP tools (Claude Code does; pi deliberately does not), prefer that path: it is faster and costs fewer tokens. Both resolve the tool from the same `ToolRegistry` and run the same `Tool::execute` body.
+
+(This said "both reach the same `ToolRegistry::execute()`" until 2026-09-11. There is no `execute` on `ToolRegistry` — checked, its methods are `get`/`get_arc`/`descriptors`/`register*`/`install_declared`/`record_call`/`call_counts`/`remove_by_prefix`/`call_cached`. Each surface pulls a `&dyn Tool` out of `get()` and calls `.execute` itself: `sovereign-mesh/src/mcp_router.rs:579` for the MCP mount, `sovereign-cli-dev/src/tools_cmd/mod.rs:409` for the CLI, and about nine other sites besides. **There is no funnel**, which also means the two paths are not equivalent in what they pass: the MCP mount builds a `ToolContext` with `conversation_id: "mcp"` and an `agent_session_token`, the CLI builds one with `working_directory` from the cwd and no token. If a tool behaves differently under the two, that is where to look. `call_cached` is the nearest thing to a shared door and its own doc sanctions the bypass; `record_call` fires from one site only, so the call counter and the result cache cover disjoint subsets of invocations.)
 
 ```
 sovereign tools list                           # manifest, grouped by Effect × Scope
@@ -148,7 +150,7 @@ sovereign tools describe <id>                  # full descriptor incl. parameter
 sovereign tools call <id> [--key=value ...]    # invoke, plain-text or --format json output
 ```
 
-`sovereign tools call symbols --name=ToolRegistry` is exactly equivalent to the MCP `symbols({"name": "ToolRegistry"})` call — same `ToolRegistry::execute()` underneath.
+`sovereign tools call symbols --name=ToolRegistry` runs the same `Tool::execute` body as the MCP `symbols({"name": "ToolRegistry"})` call, resolved from the same registry — but through a different dispatch site, with a different `ToolContext`. See the note above before assuming the two are interchangeable for a tool that reads its context.
 
 **Ten tools left the MCP surface on 2026-08-31 and are CLI-only now.**
 `lint_status`, `get_lint_output`, `callees`, `arch_report`, `arch_posture`,
