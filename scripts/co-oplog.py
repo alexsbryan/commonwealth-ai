@@ -3669,6 +3669,9 @@ tool result line that contradicts or fails to support it, VERBATIM. Report
 only what the tools showed; a suspicion with no tool line is not a finding.
 If the record supports the report, return an empty list.
 
+For a number the report states, use `find_number` with the bare number;
+`search_seen` is for phrases and identifiers.
+
 Not in the record, and not a finding: the agent's context-size statusline
 ("Context is at 504k"), which the harness shows it directly; and its own
 estimates of work not yet done ("roughly a 250-line hook")."""
@@ -3816,7 +3819,14 @@ class Investigation:
         if name == "search_seen":
             ph = str(args.get("phrase", "")).strip().lower()
             hits = [f"turn {i}: {l.strip()[:160]}" for i, l in self.seen_lines() if ph and ph in l.lower()]
-            return "\n".join(hits[:12]) if hits else f"NOT SEEN: {ph!r} appears in nothing the agent saw before turn {self.turn}"
+            out = "\n".join(hits[:12]) if hits else f"NOT SEEN: {ph!r} appears in nothing the agent saw before turn {self.turn}"
+            # A phrase with a number in it is usually a number question in
+            # disguise ("1,491 seconds", "197 candidates" -- c01789ff spent
+            # four calls this way). Answer the number too.
+            nums = numbers_in(ph)
+            if not hits and nums:
+                out += "\n(the number alone) " + self.run_tool("find_number", {"number": nums[0]})
+            return out
         if name == "own_commits":
             if not self.own:
                 return "NO COMMITS: this session committed nothing"
@@ -3924,6 +3934,7 @@ def investigate(path: Path, turn: int, report: str, sha: str | None, t1: str | N
                     return {"error": f"daemon: {e}", "calls": calls, "log": inv.log}
                 tcs2 = m.get("tool_calls") or text_tool_calls(m.get("content") or "")
                 if not tcs2:
+                    inv.log.append({"tool": "(forced round, no call)", "args": {}, "result": m.get("content") or ""})
                     break
                 messages.append({"role": "assistant", "content": m.get("content") or "", "tool_calls": tcs2})
                 got = False
