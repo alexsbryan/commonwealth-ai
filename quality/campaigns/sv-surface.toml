@@ -2035,9 +2035,20 @@ direction    = "higher_is_better"
 # tree by its own rule, and the plants are MUTATIONS OF PRODUCTION SOURCE, so
 # measuring in this checkout would corrupt any soak or build sharing it.
 instrument   = '''
-scripts/twin-census.py --worktree HEAD >/dev/null 2>&1
+scripts/twin-census.py --worktree HEAD >/dev/null 2>&1; rc=$?
 d=$(ls -1d target/twin-census/*/ 2>/dev/null | tail -1)
 [ -n "$d" ] || exit 3
+# THE RUNNER'S OWN VERDICT DECIDES, not this line's arithmetic. twin-census.py
+# exits 4 when any family is could-not-judge or never-ran, and 1 when one is
+# NOT-A-GATE. Reading `proved-red` past a non-zero exit is how this bar first
+# reported met=7 on 2026-09-13 with 13 of 20 controls broken (10 plants that
+# no longer COMPILE, 3 whose `find` anchor occurs 0x) — sv-surface's own
+# svt-3/6/7 moved the desktop modules the plants target, so the campaign
+# invalidated its own construction 3 and the numerator hid it. A count of
+# what still works is not a measurement of whether the mechanism works
+# (ARCH principle 5: could-not-judge is owed, not free; principle 6: never
+# substitute a success-shaped value for an Err).
+[ $rc -eq 0 ] || exit $rc
 python3 -c "import json,sys;print(json.load(open(sys.argv[1]+'summary.json'))['counts']['proved-red'])" "$d"
 '''
 timeout_s    = 14400
