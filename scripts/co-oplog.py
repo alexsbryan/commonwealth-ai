@@ -3907,6 +3907,11 @@ def _claim_numbers(text: str) -> set[str]:
             out.add(n)
     return out
 
+def claim_load(text: str) -> int:
+    """How much an operator-facing block gives the record to contradict:
+    its 3+-digit numbers plus its green claims."""
+    return len(_claim_numbers(text)) + len(RX_GREEN.findall(text))
+
 def evidence_class(claim: str, evidence: str, results: list[str] = ()) -> str:
     """absent | red | number | corroboration | superseded | excluded -- the
     shape in which the tool line contradicts the claim, or why it does not.
@@ -4136,7 +4141,11 @@ def cmd_investigate_all(a) -> int:
         if not ops:
             print(f"  {i:>2}/{len(files)} {f.stem[:8]}  no operator-facing block", flush=True)
             continue
-        turn, text, when = ops[-1]
+        # The final report carries the session's heaviest claim load in 5
+        # of 39 sessions (median 2 claims against a median heaviest of 10,
+        # ten finals at zero); both real catches so far sat on a heavy
+        # turn. --pick heaviest aims at that turn instead.
+        turn, text, when = max(ops, key=lambda o: claim_load(o[1])) if a.pick == "heaviest" else ops[-1]
         sha = sha_at(when)
         t1 = sha_at(ts[-1][2])
         start = sha_at(ts[0][2])
@@ -4148,7 +4157,7 @@ def cmd_investigate_all(a) -> int:
         r["report"] = text
         d = SESSIONS_DIR / f.stem
         d.mkdir(parents=True, exist_ok=True)
-        (d / "investigation.json").write_text(json.dumps(r, indent=1))
+        (d / ("investigation.json" if a.pick == "final" else f"investigation-{a.pick}.json")).write_text(json.dumps(r, indent=1))
         if "error" in r:
             print(f"  {i:>2}/{len(files)} {f.stem[:8]}  could-not-judge: {r['error']}", flush=True)
             summary.append({"session": f.stem, "error": r["error"]})
@@ -4759,6 +4768,8 @@ def cmd_self_test(_a) -> int:
        "absent", "9d7835fc: grep_landed absence")
     eq(evidence_class("four uncommitted lib.rs lines of mine", "turn 18: +pub mod assets_http;"),
        "corroboration", "b31822b1: no number, no red, no absence")
+    eq(claim_load("Full workspace tests: 13,056 pass, 0 fail, exit 0, 966s."), 3, "claim_load: two numbers and a green")
+    eq(claim_load("Nothing is running from this session now, the tree is clean."), 0, "claim_load: nothing to contradict")
     eq(evidence_class("Context is at 514k and the red threshold is 500k",
                       "NOT SEEN: 'context is at 514k' appears in nothing the agent saw before turn 19"),
        "excluded", "b31822b1: the statusline is not the agent's claim")
@@ -4907,8 +4918,9 @@ def main() -> int:
     iv.add_argument("--budget", type=int, default=8)
     iv.add_argument("--verbose", action="store_true")
     iv.set_defaults(fn=cmd_investigate)
-    ia = sub.add_parser("investigate-all", help="one investigation per session's final report over the last N")
+    ia = sub.add_parser("investigate-all", help="one investigation per session over the last N: its final report, or its heaviest-claim turn")
     ia.add_argument("--project", default="-Users-alexsbryan-dev-commonwealth-ai")
+    ia.add_argument("--pick", choices=["final", "heaviest"], default="final")
     ia.add_argument("--last", type=int, default=40)
     ia.add_argument("--exclude", default="")
     ia.add_argument("--min-bytes", type=int, default=200_000)
