@@ -1,0 +1,116 @@
+# Flight rules — read raw. Verdicts come from measurement rows, never prose here.
+#
+# ORDERS ARE GITIGNORED (`.sovereign/features/` is per-host). This file is the
+# committed artifact: the `[[rung]]` table owns rung STATUS and the `[[bar]]`
+# rows own the numbers. The rationale lives in campaign.md.
+id        = "ring-apps"
+objective = "Commonwealth is a pure substrate for ring-scale applications - commerce and social realized over the ring rail, where the ledger, the namespace and the ordering are handed out separately instead of fused in a platform. The first rung makes the NAMESPACE half honest: a person in a ring can be traced to the member who vouched for them and the act they vouched on, without asking anyone what they remember"
+spec      = "docs/internal/RING_APPLICATIONS.md (GITIGNORED, per-host) - the vision, the borrow-and-refuse table, and the substrate assessment S1-S8. Its first draft claimed rings were mesh-wide and singular; that was the exception generalised into the rule and is corrected in the doc under 'What a ring is today'. Read the CORRECTED section, not a memory of the claim."
+declared  = "2026-09-13"
+status    = "active"
+
+# ── THE PREDICATE ────────────────────────────────────────────────────────────
+# TWO-SIDED. The affirmative half alone passes vacuously: a roster with one row
+# that carries a warrant proves nothing about a roster that can also REFUSE.
+# The negative half is the refusal this repo already holds and must keep
+# holding - an op arriving over the wire moves no roster, ever.
+[predicate]
+statement = "A key in a ring's roster resolves to the signed op that introduced it and to the member who signed that op, and an `Introduce` op arriving from a peer over ring-sync changes no roster row on the receiving node"
+check     = "./scripts/sovereign-test.sh --human --package commonwealth-rail --package commonwealth-rail-core"
+
+# ── BARS ─────────────────────────────────────────────────────────────────────
+
+[[bar]]
+id           = "ra-introduction-is-traceable"
+demo         = "Ask why Alex is in this ring and get a name, an op id and a date"
+rung         = "ra-1"
+one_line     = "CLAIM: every roster row added through the introduction path resolves to a signed op by a member the ring already claimed"
+derives_from = "`Roster` is `BTreeMap<Person, Vec<String>>` (commonwealth-rail-core/src/lib.rs:160) - a name and some keys, with no record of who vouched, on what, or when. A key is in the ring because somebody typed `svrn ring roster add`, and the reason lives in that person's memory. SPKI/SDSI (Rivest and Lampson, 1996) is the formalism this restores: linked local names, resolved by following local bindings, with no global registry."
+floor        = 1.0
+floor_basis  = "structural: FRACTION of roster rows written through the new path whose warrant names an op id that (a) exists in that ring's journal, (b) verifies under a key the roster already claimed at the time, and (c) is an `Introduce`. All three, or the row is untraceable and counts against."
+target       = 1.0
+direction    = "higher_is_better"
+instrument   = "a test that writes an introduction, admits a key on it, and resolves the row back to the op and the signer. Plus the back-compat leg: a `roster.json` written before this rung has rows with NO warrant, and those must read as warrant-unknown rather than failing to parse - a migration that turns every existing ring into a parse error is not back-compatible, it is an outage."
+goodhart     = "1.0 over one row proves nothing, and 1.0 is also what you measure when the warrant field is present but the op id resolves to nothing - the check must RESOLVE the op, not merely find a string. A verdict citing only the affirmative leg is reporting half the predicate; ra-roster-stays-independent must be at target in the same run."
+status       = "open"
+
+[[bar]]
+id           = "ra-roster-stays-independent"
+demo         = "A peer sends an introduction and nothing in my ring changes until I say so"
+rung         = "ra-1"
+one_line     = "CLAIM: roster mutations caused by an arriving op = 0, and the pinned no-re-division property still holds"
+derives_from = "two refusals already in the code. `sovereign-mesh/src/ring_roster.rs` module docs: 'The roster is written from here and is not reachable from the rail at all. There is no roster route, so a deployed app cannot add a key to the ring - including its own.' And `rail-core/src/lib.rs:152-159`: the roster is deliberately NOT a function of the op set, pinned by a test in the reference app, because a roster that moved with the log would re-divide every past expense the day a housemate moves in."
+floor        = 0.0
+floor_basis  = "structural: COUNT of roster rows added, removed or changed as a consequence of an op being admitted, gossiped or synced. Zero, and it is a property of the route set rather than of a check somebody remembered - there is no roster route, and this rung must not create one."
+target       = 0.0
+direction    = "near_zero"
+instrument   = "the negative leg is the load-bearing one and it must be watched failing: a peer appends an `Introduce` naming a key nobody claims, ring-sync carries it, and the receiving node's `roster.json` is byte-identical afterwards. Plus the reference app's existing no-re-division test, re-run unchanged."
+goodhart     = "zero is the expected good result and proves nothing alone (ARCH 5, 72b3ab47 - a zero count is not a positive control). The same run must show the introduction ARRIVING and being READABLE, or the bar has only demonstrated that nothing happened. An `Introduce` that no peer ever sent scores zero perfectly."
+status       = "open"
+
+[[bar]]
+id           = "ra-offers-catalogue-computed"
+demo         = "One command, and the neighbours who did not answer are named rather than missing"
+rung         = "ra-4"
+one_line     = "CLAIM: on a two-node mesh a caller holding no credential gets a SERVED row from the peer's offer origin and a NEVER_ASKED row naming a node that publishes none, in the same response"
+derives_from = "`origin_fanout` is already generic over the kind - `POST /v1/mesh/fanout` takes it and the media route is the same handler with the field defaulted (sovereign-mesh/src/origin_fanout.rs:33-39). `OriginKind` (oicp-types/src/origin.rs:26) is the closed set that must gain a third variant, and it carries noun/viewer_verb/how_to_offer per variant so the refusals read correctly - the 2026-09-12 defect where every app refusal said `media origin` is what that shape exists to prevent."
+floor        = 1.0
+floor_basis  = "structural: BOTH rows present in one response, or the bar is not met. A served row proves the origin is reachable; a never_asked row carrying the refusal proves the catalogue reports its own incompleteness, which is the property no marketplace has and the whole reason for the rung."
+target       = 1.0
+direction    = "higher_is_better"
+instrument   = "scripts/ring-offers-demo.sh verdict ra-offers-catalogue-computed"
+timeout_s    = 420
+instrument_note = "FOUR throwaway daemons on one host, one mesh, real iroh, no credential on the caller - the house-mesh predicate's shape. It reads the FANOUT ROWS out of `svrn mesh offers --json`, never a reachability probe: `hm-no-shared-credentials` records that `library.py check` passed against an UNAUTHENTICATED path while every catalogue fetch 401'd. Value is 1.0 only when the SAME response carries a served 2xx row AND a never_asked row whose reason names an OFFER origin and whose node id is a real member - a row about nobody, which is what naming a peer that does not exist produces, does not count."
+goodhart     = "a never_asked row is trivially produced by naming a peer that does not exist, and a served row by an origin that answers 200 to anything. The pair must be the SAME response over REAL nodes: one that published an offer origin and one that did not. A caller that is also the seller proves nothing - `origin_fanout` never asks this node (origin_fanout.rs:22-25), so a catalogue can only come from a peer."
+status       = "open"
+
+[[bar]]
+id           = "ra-seller-carries-their-vouch"
+demo         = "Ask who these sellers are and get the person who vouched for each"
+rung         = "ra-4"
+one_line     = "CLAIM: every seller row resolves to its roster vouch or renders warrant-unknown - never blank, never substituted"
+derives_from = "the ra-1 join. `Roster.vouches` and `trace` landed 2026-09-13 (commonwealth-rail-core/src/introduce.rs:274); this is the first surface that READS them for somebody other than the operator, and it is the sentence no marketplace can say."
+floor        = 1.0
+floor_basis  = "structural: FRACTION of seller rows in a catalogue rendering either a resolved vouch (person, op id, date) or an explicit warrant-unknown. Blank is a failure and a substituted local answer is a worse one."
+target       = 1.0
+direction    = "higher_is_better"
+instrument   = "scripts/ring-offers-demo.sh verdict ra-seller-carries-their-vouch"
+timeout_s    = 420
+instrument_note = "The same four daemons, `svrn mesh offers --why`. ONE run containing BOTH a seller whose vouch resolves to a named person and an op, and a seller whose row predates the vouch field and renders unknown - the harness seeds exactly that mixture, because a uniform run cannot distinguish a working join from a stuck one. Value is the fraction of seller rows carrying a vouch line that is either resolved or an explicit warrant-unknown; a BLANK line counts against. The goodhart guard is in the instrument: a run with ZERO resolved rows scores 0.0 however tidy it looks."
+goodhart     = "1.0 with every row reading `unknown` is a perfect score for a join that never ran. At least one row must name a person and an op id. And per the ra-1 worker's finding, a caller must never fall back to its OWN roster file for a remote seller's warrant - that is the substitution ARCH 6 refuses, and `ring roster show` already guards the local version of it by warning and exiting 1."
+status       = "open"
+
+# ── THE LADDER ───────────────────────────────────────────────────────────────
+
+[[rung]]
+id     = "ra-1"
+title  = "ring-1-introduce: a roster row carries its warrant, and an act is the evidence"
+status = "open"
+demo   = "D1"
+moves  = ["ra-introduction-is-traceable", "ra-roster-stays-independent"]
+note   = "S1 + S2 from RING_APPLICATIONS.md, landed together: provenance with nothing to populate it is a field nobody fills, and an act with nowhere to land is a payload nobody reads. SAME-RING ONLY — cross-ring introduction needs S3 and the Carry vocabulary."
+
+[[rung]]
+id     = "ra-4"
+title  = "an Offer origin kind, the computed catalogue, and the vouch join"
+status = "open"
+demo   = "D4"
+moves  = ["ra-offers-catalogue-computed", "ra-seller-carries-their-vouch"]
+note   = "S6, FUNDED 2026-09-13 and lands NEXT despite the id — ids are identity, not position. Promoted ahead of ra-2 because ra-1's worker found the campaign's byproduct stop condition unmet: an Introduce cannot ride a transaction when no transaction act exists, so `svrn ring introduce` is the separate civic act the spec named as the PGP failure mode. This rung builds the first transaction vocabulary, which is what an introduction can later be a byproduct OF. Building Carry (ra-2) on an attestation nobody writes would be building on the rot."
+
+[[rung]]
+id     = "ra-2"
+title  = "standalone op verification, and Carry across rings"
+status = "open"
+demo   = "D2"
+moves  = []
+note   = "S3. DEFERRED behind ra-4, see that rung's note. Verify a foreign op's signature and derived id without holding the foreign roster, then Carry it into this ring under the carrier's own key. Names no bar yet — declare one before drafting the order."
+
+[[rung]]
+id     = "ra-3"
+title  = "blob distribution — iroh-blobs for the bytes an act references"
+status = "open"
+demo   = "D3"
+moves  = []
+note   = "S5. Independent of ra-1 and ra-2 and can run in parallel with a different pair of hands. Nothing visual works in either domain while a photo radiates from one node's first hop. Names no bar yet."
+
