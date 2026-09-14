@@ -3910,3 +3910,518 @@ note = "The ONLY true leaf in the crate: sovereign_config.rs imports exactly one
 # and has no corpus-engine residue. No corpus-engine module answers "what is known about
 # this question, and what evidence is still missing?" — Charter/Round/EvidenceWindow/
 # AcquisitionPlan/SourceLedger appear nowhere in corpus-engine/src.
+
+# ═══ Cluster graph — sovereign-api 2026-09-14 (9 clusters): AppState hub (state.rs:582, 63 pub fields, 98 in-crate sites), mesh->api 159 sites / api->mesh 0 — the crate is BELOW the mesh; a ~2,200-line slice (responses_types, openai_types, state.rs's inference contract) precedes dm-mesh-serving ═══
+# sovereign-api cluster graph — measured 2026-09-14, read-only worker.
+#
+# Scripts that produced every number here (same scratchpad):
+#   api_edges.py     in-crate `use crate::` / `crate::` / `super::` per file -> cluster matrix
+#   api_external.py  git grep -nE 'sovereign_api::' over *.rs outside the crate
+#   api_deps.py      per-file in-repo crate imports, tiered against quality/ARCH_LAYERS.toml
+#
+# Tiers are ARCH_LAYERS.toml layer indices: 0 contract · 1 knowledge ·
+# 2 mesh-foundation · 3 runtime · 4 capabilities · 5 mesh-api · 6 hosts.
+# `window` = [own_dep_max_tier, consumer_min_tier]; a dest must sit inside it.
+# consumer_min_tier = 99 means "no external consumer, unconstrained above".
+#
+# Counts are REFERENCE SITES (an import line or a path in code), not symbols.
+
+# crate = "sovereign-api"
+# total_lines = 43163        # 43,189 incl. the `prompts` data row (26); code = 43,163
+# total_files = 57           # 58 registry [[module]] rows; one is the prompts/ data dir
+# own_context = "none"       # the crate DISSOLVES — no cluster stays
+# measured = "2026-09-14"
+
+# ── The hub ─────────────────────────────────────────────────────────────────
+# [hub]
+# symbol = "AppState / AppStateInner"
+# file = "sovereign/crates/sovereign-api/src/state.rs:582"
+# cluster = "host"
+# lines = 2736
+# fields = 63                # pub fields on AppStateInner (state.rs:626-1240)
+# in_crate_files_naming_it = 37      # of 57 (65%) — `grep -rl AppState src/`
+# in_crate_import_sites = 98         # serving 40 · host 36 · workbench 11 · fabric 8 · ingest 2 · retrieval 1
+# clusters_naming_it = ["serving", "host", "workbench", "fabric", "ingest", "retrieval"]
+# clusters_clean_of_it = ["answering", "kernel", "workspace"]
+# external_sites = 39                # `sovereign_api::state::AppState` outside the crate
+# note = """
+# The three clusters that never name AppState — answering, kernel, workspace — are
+# exactly the three whose destinations sit BELOW the mesh-api tier and whose moves
+# need no port. That is the dissolution's rule in one line: a cluster can leave
+# when it has stopped taking AppState.
+# middleware/mod.rs (host) does NOT name the type — only its comments do (:483, :493);
+# `PipelineContext` (:79) is already the clean seam the five middleware impls use.
+# """
+
+# ── The cross-crate measurement (task item 2) ───────────────────────────────
+# [cross_import]
+# mesh_to_api = 159          # sovereign-mesh src+tests -> sovereign_api::  (host 125 · kernel 17 · ingest 15 · serving 2)
+# mesh_to_api_src = 83       # src/ only, 22 files
+# mesh_to_api_tests = 76     # tests/main/, 29 files
+# api_to_mesh = 0            # ZERO code references. 5 `sovereign_mesh::` hits, all doc comments:
+#                            #   openai_types.rs:77 · routes_inference.rs:103 · state.rs:159 ·
+#                            #   tests/rail_e2e/ceiling.rs:172 · tests/rail_e2e/main.rs:488
+# cycle = false
+# manifest_edge = "sovereign/crates/sovereign-mesh/Cargo.toml:54  sovereign-api = { path = ... }"
+# crates_declaring_sovereign_api = ["sovereign-mesh", "sovereign-mesh-test-harness"]
+# verdict = """
+# NO CYCLE, and the direction is unambiguous: sovereign-api is strictly BELOW
+# sovereign-mesh. Every wave-1 rung therefore carries a sovereign-api symbol into
+# its new home unless a sovereign-api slice moves first — see [order].
+# """
+
+# [cross_import.mesh_consumers_by_mesh_cluster]
+# WHICH sovereign-mesh cluster does the consuming. The row that decides the order
+# is `fabric` — the one cluster that STAYS in sovereign-mesh.
+# fabric = 15        # 9 files, ALL host-cluster symbols: 11 AppState/AppStateInner,
+#                    # 3 routes_internal helpers, 1 state::ConvergenceRecord
+#                    #   ring_sync.rs:80,:83,:610,:932 · ring_roster.rs:79 (x2),:180 ·
+#                    #   gossip.rs:45,:1064 · capabilities.rs:46 · iroh_access.rs:233 ·
+#                    #   join.rs:47 · peer_adapter.rs:29 · rail_kv_pump.rs:108 · state.rs:6
+# serving = 23       # inference_adapter.rs 14 · prompt_compactor.rs 5 · oicp_synthesis.rs 2 · rpc_warm_http.rs 2
+# host = 21          # daemon.rs 17 · tool_profile.rs 4
+# ingest = 14        # auto_ingest.rs 12 · auto_resume.rs 2
+# understanding = 4  # source_content_validator.rs 3 · newsworthy_host.rs 1
+# workbench = 4      # fim_adapter.rs 4
+# compute = 1        # work_donor.rs 1
+# workspace = 1      # work_atlas_broadcaster.rs 1
+# tests = 76
+
+# ── The nine clusters ───────────────────────────────────────────────────────
+
+# ([hub] and crate metadata kept as comments; the move order and exception ledger live under plan."sovereign-api")
+[[cluster]]
+crate = "sovereign-api"
+context = "kernel"
+lines = 1370
+files = 2                  # openai_types.rs 949 · responses_types.rs 421
+leaf = true                # THE ONLY LEAF: zero outbound in-crate edges
+imports_clusters = []
+imported_by_clusters = { host = 110, serving = 49, answering = 12, workbench = 11, fabric = 4, workspace = 2 }
+external_consumers = { sovereign-mesh = 17 }   # openai_types only; 6 files
+own_dep_max_tier = 3
+consumer_min_tier = 5
+window = [3, 5]
+dest = "oicp-types"
+dest_exists = true
+dest_tier = 0
+shim_sites = 205           # 188 in-crate + 17 mesh import lines repointed to `oicp_types::`
+renames_riding = []
+order = 1
+exceptions_retired = ["sovereign-core (1 of 22 sites)"]
+note = """
+The window says [3,5] and oicp-types is tier 0 — but BOTH upward imports are
+RE-EXPORT PATHS, not real edges, and repointing two lines makes the cluster
+tier-0 clean today:
+  openai_types.rs:4   sovereign_serving::oicp::InferenceRequirements
+                      -> defined at oicp-types/src/requirements.rs:16
+  openai_types.rs:86  sovereign_core::types::SamplingMode
+                      -> defined at oicp-types/src/completion.rs:378
+                         (sovereign-core/src/lib.rs:64 re-exports sovereign-contracts,
+                          which re-exports oicp-types)
+responses_types.rs imports ONLY serde (grep '^use' -> 1 line) and is tier-0 clean
+with no edit at all.
+This is the cheapest and highest-leverage rung in the whole campaign: two import
+lines, 1,370 lines land in the published language, and 205 references stop
+crossing a crate boundary UPWARD. It is also the precondition for
+SERVING_BOUNDARY rule 4 ("Not sovereign-api") and for dm-mesh-workbench.
+CORRECTION owed to SERVING_BOUNDARY.md: rule 4 says `prompt_compactor.rs:48`
+"has the one such import today". It is four files and 23 refs — see
+[cross_import.mesh_consumers_by_mesh_cluster].serving.
+"""
+
+[[cluster]]
+crate = "sovereign-api"
+context = "workspace"
+lines = 443
+files = 1                  # middleware/decision_extractor.rs
+leaf = false
+imports_clusters = { host = 8, kernel = 2 }
+imported_by_clusters = {}
+external_consumers = {}
+own_dep_max_tier = 4       # sovereign_tools::notes::response_mine — ONE site
+consumer_min_tier = 99
+window = [4, 99]
+dest = "corpus-engine-notes"
+dest_exists = true
+dest_tier = 1
+shim_sites = 10            # 8 middleware seam + 2 kernel imports
+renames_riding = []
+order = 2
+exceptions_retired = ["sovereign-tools (1 of 7 sites)"]
+note = """
+Already imports corpus_engine_notes::{NoteScope, NoteSource, NoteStore} DIRECTLY
+(decision_extractor.rs:47). The single tier-4 reach is
+`sovereign_tools::notes::response_mine` (:48). Move that one function down into
+corpus-engine-notes — the registry's own note says this file answers "the note
+store's question, not routing's" — and the window becomes [1,99] and the dest
+fits. The other 8 sites are the middleware seam (Middleware, MiddlewareError,
+MiddlewareSession, PipelineContext, ResponseView at middleware/mod.rs:79-186,
+plus shared::{fixtures, notes_db_path}); that seam must be lifted to
+sovereign-contracts with the `answering` move — same rung family, see below.
+"""
+
+[[cluster]]
+crate = "sovereign-api"
+context = "answering"
+lines = 2016
+files = 5                  # context_injector 845 · approval_gate 442 · session_briefing 354 · tool_injector 239 · turn_fidelity 136
+leaf = false
+imports_clusters = { host = 29, kernel = 12 }
+imported_by_clusters = { serving = 3 }
+external_consumers = {}
+own_dep_max_tier = 4       # sovereign_atos::{session, approval} — 9 sites
+consumer_min_tier = 99
+window = [4, 99]
+dest = "sovereign-core"
+dest_exists = true
+dest_tier = 3
+shim_sites = 44            # 29 middleware seam + 12 kernel + 3 from serving (turn_fidelity)
+renames_riding = []
+order = 3
+exceptions_retired = ["sovereign-atos (9 of 14 sites)"]
+note = """
+dest_tier 3 is BELOW the window floor of 4, and the offender is the `atos`
+[[exception]] itself: approval_gate.rs:29,:115 · context_injector.rs:33,:496,:694 ·
+session_briefing.rs:111,:184,:325,:328. The exception does not retire by moving —
+it would become a NEW runtime->capabilities violation. It retires by INVERSION:
+sovereign-atos registers its middlewares into the pipeline registry
+(middleware/mod.rs:323 MiddlewareRegistry) instead of the pipeline naming ATOS.
+The feature is already optional and off by default, so the seam is the natural
+shape. After inversion the window is [1,99] and sovereign-core fits.
+Precondition shared with `workspace`: the Middleware trait + PipelineContext +
+MiddlewareSession + MiddlewareError + ResponseView move DOWN to
+sovereign-contracts; MiddlewareRegistry + Pipeline (the composition) stay host.
+turn_fidelity.rs is the one file `serving` imports from here (routes_responses/
+routes_inference read reshape_enabled / auto_allowlist_enabled, 3 sites).
+"""
+
+[[cluster]]
+crate = "sovereign-api"
+context = "workbench"
+lines = 6302
+files = 6                  # next_edit_model 2462 · routes_edit_predictions 1412 · next_edit 983 · next_edit_symbols 714 · next_edit_journal 389 · next_edit_syntax 342
+leaf = false
+imports_clusters = { host = 15, kernel = 11 }
+imported_by_clusters = { host = 2 }
+external_consumers = {}
+own_dep_max_tier = 3       # sovereign_core::types — 3 sites, all re-exports
+consumer_min_tier = 99
+window = [3, 99]
+dest = "code-next-edit"    # a TENTH code-intel package crate; docs/CODE_TOOLING_BOUNDARY.md §2 names none
+dest_exists = false
+dest_tier = 1
+shim_sites = 28            # 15 host (state.rs FIM contract + server::mock_router) + 11 kernel + 2 host-side callers
+renames_riding = []
+order = 4
+exceptions_retired = ["sovereign-core (3 of 22 sites)"]
+note = """
+docs/CODE_TOOLING_BOUNDARY.md §2's package table has NINE crates (yield-hook,
+scip-graph, code-facts, code-notes, code-watchers, code-archaeology, code-enrich,
+code-tools, code-intel-cli) and NOT ONE of them is next-edit. quality/DOMAINS.md
+§4 calls next-edit "Workbench's clearest lost child", spec sovereign/docs/NEXT_EDIT.md.
+So the destination must be MINTED, under code-intel/crates/ and on the doc's own
+`code-*` naming convention. §9's open item "crate names are unverified against
+crates.io" applies to this one too.
+The three sovereign_core::types sites are re-exports of sovereign-contracts:
+  next_edit_journal.rs:36 / routes_edit_predictions.rs:230,:649
+  -> sovereign-contracts/src/types/next_edit_journal.rs:111 JournalLine, :126 NextEditEpisode
+Repointing them is exactly CODE_TOOLING_BOUNDARY Phase 1 and drops the window to
+[2,99]; the remaining tier-2 reach is sovereign_serving::oicp (2 sites), which must
+also go because the package's allowed leaves are oicp-types / sovereign-contracts /
+oicp-client ONLY and the campaign forbids a new [[exception]].
+THE KNOT: 15 host sites on the FIM half of state.rs — LocalInferenceService (:265),
+LocalInferenceError (:208), FimCompletionRequest (:109), FimStreamStart (:141),
+EditSlotStatus (:167) — plus server::mock_router. That contract must become a PORT
+(CODE_TOOLING_BOUNDARY §5's host-contract shape) before this cluster can leave.
+It is the SAME precondition as dm-mesh-workbench (fim_adapter.rs, 4 sites).
+"""
+
+[[cluster]]
+crate = "sovereign-api"
+context = "serving"
+lines = 9942
+files = 10
+leaf = false
+imports_clusters = { host = 79, kernel = 49, answering = 3 }
+imported_by_clusters = { host = 21 }
+external_consumers = { sovereign-mesh = 2 }   # routes_oicp::EMBEDDED_FEATURES @ oicp_synthesis.rs:476,:801
+own_dep_max_tier = 4       # sovereign_atos::session @ routes_inference.rs:1627 — ONE site
+consumer_min_tier = 5
+window = [4, 5]
+dest = "SPLIT"
+dest_exists = false
+dest_tier = 0              # see split rows
+shim_sites = 131
+renames_riding = ["Candidate -> Venue (DOMAINS.toml §10.1)", "PeerPreference -> VenuePreferenceStore (§10.2)"]
+order = 5
+exceptions_retired = ["sovereign-core (5 of 22 sites)", "sovereign-atos (1 of 14 sites)"]
+note = """
+THE CLUSTER SPLITS 18/82, and the registry tag is the DOMAIN question, not the
+destination.
+  (a) PACKAGE HALF — 1,822 lines to sovereign-serving-host, TRAVELLING WITH
+      wave 1's dm-mesh-serving because SERVING_BOUNDARY.md's own crate table
+      lists "plus sovereign-api's admission" inside that crate:
+        admission.rs   1447   peer_admission_layer :551 · client_fairness_layer :457 ·
+                              local_queue_shed_response :199 · shed_response :211 ·
+                              PeerInflightGuard :228 · AdmissionRejection :158
+        principal.rs    375   "the ONE resolver from a request to a fairness principal";
+                              `Principal` is Admission's decided word (DOMAINS §10.1)
+                              and the key of DAEMON_CORE §1's table
+      SERVING_BOUNDARY §(c) keeps peer_admission_layer and client_fairness_layer in
+      the HOST as ~20-line axum adapters, so this half lands minus its axum shell.
+      The decider is NOT re-minted: serving_policy::fair_sched::SchedCore (tier 0).
+  (b) HOST HALF — 8,120 lines of axum route handlers to the daemon host, with
+      dm-mesh-host. These answer the serving QUESTION but they are the daemon's
+      HTTP surface, which DAEMON_CORE §3.1 puts in one host:
+        routes_responses 2746 · routes_inference 2342 · routes_ollama 716 ·
+        routes_oicp 653 · routes_internal/model_files 611 · routes_completions 555 ·
+        routes_internal/peer_preference 403 · routes_internal/rpc_warm 94
+      routes_responses + routes_inference are frontdoor.rs's only two production
+      callers (23 sites) and frontdoor is adjudicated HOST (DOMAINS.toml
+      [[collision]] family="frontdoor", rung domains-4) — so the file does NOT
+      split: it moves WHOLE with routes_responses' and routes_inference's host half.
+The tier-4 site is one line (routes_inference.rs:1627 sovereign_atos::session) and
+goes with the answering inversion. The 5 sovereign-core sites are
+  time::unix_now @ admission.rs:637, routes_responses.rs:1546  -> sovereign-time (tier 0 twin)
+  rebrand::svrnmesh_root @ routes_responses.rs:1623,:1708,:1764 -> the workspace-path
+    SSOT (220 sites / 15 crates, ARCH_LAYERS.toml); relocating it is its own rung,
+    and the serving package's leaf budget forces it before (a) can land clean.
+"""
+
+[[cluster]]
+crate = "sovereign-api"
+context = "ingest"
+lines = 1152
+files = 2
+leaf = false
+imports_clusters = { host = 6 }
+imported_by_clusters = { host = 12 }
+external_consumers = { sovereign-mesh = 15 }   # ALL on auto_recover; auto_ingest.rs 12 + auto_resume.rs 2 + tests
+own_dep_max_tier = 2       # sovereign_grants::shard_manager
+consumer_min_tier = 5
+window = [2, 5]
+dest = "SPLIT"
+dest_exists = true
+dest_tier = 2
+shim_sites = 33
+renames_riding = []
+order = 6
+exceptions_retired = []
+note = """
+SPLITS by what each file imports — the task's own test:
+  auto_recover.rs (860) -> sovereign-grants (tier 2, EXISTS, 2,610 lines).
+     Its whole import list is `corpus_engine::Corpus` (:57) and
+     `sovereign_grants::shard_manager::{MergePlan, ShardManager}` (:58). It drives
+     the shard manager, and sovereign-grants already depends on corpus-engine
+     (sovereign-grants/Cargo.toml:10), so the edge is downward and legal.
+     corpus-engine is tier 1 and CANNOT take it: the shard manager is tier 2.
+     One AppState site (:236, a `&AppState` parameter) becomes the two things it
+     reads — active_ingests + corpus_engine. This is the rung that unblocks
+     dm-mesh-ingest: all 15 mesh references land on this file.
+  routes_oicp_ingest.rs (292) -> the daemon host, with dm-mesh-host.
+     axum + sovereign_serving::oicp + crate::routes_internal helpers + AppState.
+     A pure route shell; zero external consumers; window [2,99].
+"""
+
+[[cluster]]
+crate = "sovereign-api"
+context = "fabric"
+lines = 2444
+files = 4                  # routes_internal/mesh_admin 1598 · routes_rail 443 · routes_internal/ring_sync 207 · routes_internal/gossip 196
+leaf = false
+imports_clusters = { host = 13, kernel = 4 }
+imported_by_clusters = { host = 1 }
+external_consumers = {}
+own_dep_max_tier = 2
+consumer_min_tier = 99
+window = [2, 99]
+dest = "the daemon host (route shell); the logic stays commonwealth-rail / -core / -state"
+dest_exists = false
+dest_tier = 6
+shim_sites = 18
+renames_riding = ["Member stays Fabric's word (DOMAINS §10.1); MemberRecord unchanged"]
+order = 7
+exceptions_retired = []
+note = """
+NOT sovereign-mesh. Decided by what they import, per the task's rule: these four
+files name ZERO sovereign_mesh symbols. Their whole in-repo reach is tier 2 —
+commonwealth-core::{mesh, contributions, activity, ids, capabilities} 20,
+commonwealth-state 5, commonwealth-rail::{Ed25519Verifier, RingSigner, admit} 4,
+commonwealth-discovery 2, sovereign-grants 2, commonwealth-transport 1 —
+plus sovereign_serving::oicp 4. They are axum handlers over the mesh foundation,
+which is exactly what DAEMON_CORE §4 says belongs in the host crate once nothing
+below links it ("the 18,319 lines of *_http.rs ... belong in the host crate, and
+sovereign-mesh becomes what its name says: the mesh").
+Their 13 host sites are AppState (4), LocalInferenceError/Service (3),
+server::MAX_REQUEST_BODY_BYTES (2), routes_internal::{MeshWire, ErrorBody} (2),
+client_auth::Guest (1), test_app_state (1) — all internal to the daemon host
+after the move, so no port is owed.
+"""
+
+[[cluster]]
+crate = "sovereign-api"
+context = "retrieval"
+lines = 590
+files = 1                  # routes_knowledge.rs
+leaf = false
+imports_clusters = { host = 1 }
+imported_by_clusters = { host = 1 }
+external_consumers = {}
+own_dep_max_tier = 2
+consumer_min_tier = 99
+window = [2, 99]
+dest = "the daemon host"   # NOT corpus-engine
+dest_exists = false
+dest_tier = 6
+shim_sites = 2
+renames_riding = []
+order = 7
+exceptions_retired = []
+note = """
+The registry tags it retrieval and the DESTINATION is not corpus-engine. Its
+import list (routes_knowledge.rs:22-32) is axum, commonwealth_core::ids::NodeId,
+commonwealth_core::mesh::{MemberRecord, NodeStatus}, sovereign_serving::oicp::
+{KnowledgeResult, KnowledgeSearchRequest, KnowledgeSearchResponse},
+crate::state::AppState, and `crate::fanout` — which lib.rs:26 re-exports from
+commonwealth_transport::fanout (14 sites, the most of any single dep here).
+ZERO corpus-engine. It is a peer FAN-OUT route: the chunks come from other nodes'
+indexes, not this one. corpus-engine (tier 1) cannot take it — commonwealth-core
+and commonwealth-transport are tier 2, an upward edge, and the roster is Fabric's.
+The registry [[edge]] row E3 (PeerContact -> routes_knowledge.rs) already records
+the crossing as "passed whole, never destructured" at :277/:466.
+"""
+
+[[cluster]]
+crate = "sovereign-api"
+context = "host"
+lines = 18930
+files = 27
+leaf = false
+imports_clusters = { kernel = 110, serving = 21, ingest = 12, workbench = 2, fabric = 1, retrieval = 1 }
+imported_by_clusters = { serving = 79, answering = 29, workbench = 15, fabric = 13, workspace = 8, ingest = 6, retrieval = 1 }
+external_consumers = { sovereign-mesh = 125, sovereign-mesh-test-harness = 3 }
+own_dep_max_tier = 4       # sovereign-tools 6 sites · sovereign-atos 4 sites
+consumer_min_tier = 5
+window = [4, 5]
+dest = "sovereign-daemon (NEW), not sovereign-cli-daemon"
+dest_exists = false
+dest_tier = 6
+shim_sites = 279           # 151 in-crate + 128 external
+renames_riding = ["PeerPreferenceDto (E13, 4th copy of the row) collapses with the serving move"]
+order = 8
+exceptions_retired = [
+  "sovereign-core (13 of 22 sites) — the last 13",
+  "sovereign-tools (6 of 7 sites) — the last 6",
+  "sovereign-atos (4 of 14 sites) — the last 4",
+]
+note = """
+THE WINDOW IS EMPTY AS MEASURED: [4,5] and every host destination is tier 6, above
+the consumer floor. Nothing may depend on a host (ARCH_LAYERS "Binaries and
+end-user surfaces. Nothing may depend on a host."). So this cluster CANNOT move
+until every tier-5 consumer stops naming it. After wave 1 the residue is exactly
+two things:
+  - sovereign-mesh's FABRIC cluster, 15 sites over 9 files — the cluster that STAYS.
+    11 of the 15 are AppState/AppStateInner passed as a parameter. THIS IS THE
+    ONE HARD PRECONDITION for the whole dissolution, and it is sovereign-mesh's
+    work, not sovereign-api's.
+  - sovereign-mesh-test-harness, 3 sites — back-of-house, which "may observe every
+    layer" (ARCH_LAYERS backstage rule), so a host edge is legal there and its own
+    [[exception]] row is a different burn-down (R6, the harness standing up a node
+    against oicp-types alone).
+
+sovereign-cli-daemon vs a NEW sovereign-daemon, priced for THIS crate's host
+modules (routes_internal/ 5,346 · middleware/ 1,252 · state.rs 2,736 · server.rs
+1,259 · frontdoor.rs 5,820 · routes_status.rs 746 · the rest 1,771):
+  sovereign-cli-daemon  23,716 lines today, has both lib.rs and main.rs, tier 6.
+    Taking sovereign-api's ~30,400 host-bound lines (host 18,930 + serving's route
+    half 8,120 + fabric 2,444 + retrieval 590 + routes_oicp_ingest 292) PLUS
+    sovereign-mesh's host cluster (25,432) lands it at ~79,500 -> a ~103,000-line
+    crate. The campaign's own loop watches for exactly this ("each destination
+    whose share drops below 100% is ENQUEUED — a move can make a new god crate"),
+    so this choice guarantees a wave-4 node.
+  sovereign-daemon (NEW)  RECOMMENDED. Same tier, same closure, but it leaves
+    sovereign-cli-daemon as the CLI wrapper DAEMON_CORE §4 needs it to be — the
+    section's bar is `cargo tree -p sovereign-cli --features dev-tools -i
+    llama-cpp-4` returning nothing, and parking 80k lines of inference-linked
+    handlers in a crate named sovereign-cli-* argues against that bar with its
+    name. It also gives DAEMON_CORE §3.1's duplicate-route work a single owner:
+    /internal/corpus/status is registered by BOTH sovereign-api and sovereign-mesh
+    in the SAME daemon today (§3.1), and that collision only becomes visible —
+    and fixable — once both registrations are in one crate.
+  This is the same destination the sovereign-mesh worker should be recommending
+  for its own host cluster; the two must agree, because the two host clusters
+  have to land in ONE crate or the AppState edge simply changes address.
+"""
+
+# ── Order (task item 6) ─────────────────────────────────────────────────────
+[plan."sovereign-api".order]
+first_crate = "sovereign-api"
+first_crate_qualified = "a 2,200-line SLICE of it, ahead of wave 1; the bulk stays wave 2"
+rationale = """
+Measured direction decides it: sovereign-mesh -> sovereign-api is 159 references
+and sovereign-api -> sovereign-mesh is ZERO. sovereign-api is strictly the lower
+crate, and a bottom-up demolition takes the lower one first.
+The campaign's ladder puts sovereign-mesh in WAVE 1 and sovereign-api in WAVE 2,
+and its own rung text already hedges: "its serving cluster may need to travel WITH
+wave 1's — the cluster graph decides". The graph says MORE than the serving
+cluster does. FOUR of wave 1's seven rungs are blocked on a sovereign-api symbol:
+  dm-mesh-serving    23 refs from 4 files. SERVING_BOUNDARY rule 4 forbids the
+                     package naming sovereign-api and says prompt_compactor.rs:48
+                     is "the one such import today" — it is four files: 8 on
+                     kernel (openai_types), 13 on host (state.rs's inference
+                     contract), 2 on serving (routes_oicp::EMBEDDED_FEATURES).
+  dm-mesh-workbench  4 refs (fim_adapter.rs): openai_types + state::{EditSlotStatus,
+                     FimCompletionRequest, FimStreamStart}. The code-intel package's
+                     leaf budget is oicp-types/sovereign-contracts/oicp-client only,
+                     and the campaign forbids a new [[exception]].
+  dm-mesh-ingest     14 refs (auto_ingest.rs 12, auto_resume.rs 2) on
+                     sovereign-api's auto_recover + AppState + routes_internal.
+  dm-mesh-host       21 refs (daemon.rs 17, tool_profile.rs 4) — resolves by
+                     co-location, not by a move.
+Run wave 1 first and each of those carries sovereign-api into its new home, which
+is precisely the "never a new [[exception]] row" the algorithm forbids.
+"""
+
+moves = [
+  # ── BEFORE wave 1's first rung — ~2,200 lines, unblocks four mesh rungs ──
+  "api-0  kernel/responses_types.rs (421) -> oicp-types. Zero in-repo imports today; moves as-is.",
+  "api-1  kernel/openai_types.rs (949) -> oicp-types, after two import lines repoint to the types' real homes (oicp-types/src/{requirements.rs:16, completion.rs:378}). Clears 8 of dm-mesh-serving's 23 and 1 of dm-mesh-workbench's 4.",
+  "api-2  state.rs's inference contract -> sovereign-contracts (LocalInferenceService :265, RpcShardWarmer :454) + oicp-types (LocalInferenceError :208, FimCompletionRequest :109, FimStreamStart :141, EditSlotStatus :167, ResidentSlot :59, SlotPlacement :39, WorkerPlacement :52, ComputeChildStatus :83). A file SPLIT, not a cluster move. Clears 13 more of dm-mesh-serving's 23 and 3 of dm-mesh-workbench's 4, and is the port dm-api-workbench needs anyway.",
+  "MESH-PRECONDITION  AppState out of sovereign-mesh's 9 fabric files (15 sites). Owned by the mesh worker; nothing past api-5 can land without it.",
+
+  # ── wave 1 (dm-mesh-serving .. dm-mesh-small) runs here ──
+  "api-3  workspace (443) -> corpus-engine-notes, after sovereign_tools::notes::response_mine moves down and the Middleware seam lifts to sovereign-contracts.",
+  "api-4  answering (2,016) -> sovereign-core, after the ATOS coupling inverts to registration.",
+  "api-5  workbench (6,302) -> code-next-edit (new code-intel package crate), on api-2's port.",
+  "api-6  serving's package half — admission.rs + principal.rs (1,822) -> sovereign-serving-host. INTERLEAVE: this IS dm-mesh-serving, one rung, one crate. SERVING_BOUNDARY.md's crate table lists sovereign-api's admission inside sovereign-serving-host, and the admission middleware and the scheduler cross both crates.",
+  "api-7  ingest/auto_recover.rs (860) -> sovereign-grants (tier 2). Unblocks dm-mesh-ingest's 15 refs.",
+  "api-8  the host-bound route shell — serving's 8 route files (8,120) + fabric (2,444) + retrieval (590) + ingest/routes_oicp_ingest (292) -> sovereign-daemon. INTERLEAVE: with dm-mesh-host.",
+  "api-9  host (18,930), frontdoor.rs included, whole -> sovereign-daemon. LAST. INTERLEAVE: with dm-mesh-host; the two host clusters land in ONE crate or the AppState edge just changes address. All three [[exception]] rows retire here.",
+]
+
+interleave = """
+api-0/1/2 run BEFORE dm-mesh-serving.
+api-6 IS dm-mesh-serving (fused).
+api-8 and api-9 run WITH dm-mesh-host (fused, sovereign-api's side first — the
+mesh's daemon.rs names sovereign-api and not the reverse).
+api-3/4/5/7 are independent of the mesh waves and can run in any order among
+themselves, one cargo-touching worker at a time.
+"""
+
+# ── Exception burn-down (task item 7) ───────────────────────────────────────
+[plan."sovereign-api".exceptions]
+# quality/ARCH_LAYERS.toml:1147, :1153, :1159 — all three tracking = "R6"
+"sovereign-api -> sovereign-core" = { sites = 22, by_cluster = { host = 13, serving = 5, workbench = 3, kernel = 1 }, retires_at = "api-9", detail = "13 of 22 are cheap repoints that need no move: 1 kernel re-export (SamplingMode) at api-1, 3 workbench re-exports (JournalLine/NextEditEpisode -> sovereign-contracts/src/types/next_edit_journal.rs) at api-5, and 9 `sovereign_core::time::unix_now*` sites -> the tier-0 twin sovereign-time (admission.rs:637, routes_responses.rs:1546, routes_status.rs:202/:646/:652, server.rs:707/:737, state.rs:1238/:1283). The residual 9 are 3 rebrand::svrnmesh_root (serving; the workspace-path SSOT, its own rung) and 6 run_identity/launch (host; legal downward at tier 6)." }
+"sovereign-api -> sovereign-tools" = { sites = 7, by_cluster = { host = 6, workspace = 1 }, retires_at = "api-9", detail = "workspace's one site (decision_extractor.rs:48 notes::response_mine) at api-3. The 6 host sites are routes_internal/atlas_status.rs:21 and routes_internal/corpus_ingest.rs:78,:79,:886,:905,:1053 (atlas_peer_advice, sec_edgar, atlas_postinstall) — legal downward once the host is tier 6." }
+"sovereign-api -> sovereign-atos" = { sites = 14, by_cluster = { answering = 9, host = 4, serving = 1 }, retires_at = "api-9", detail = "feature-gated (atos), off in default builds. answering's 9 at api-4 via inversion; serving's 1 (routes_inference.rs:1627) at api-6; host's 4 (artifact_surface.rs:31, middleware/mod.rs:117, state.rs:817,:1747) legal downward at tier 6." }
+end_state = "zero rows. All three retire only when the host cluster lands, which is why api-9 is the wave's verdict rung."
+honesty = """
+Two of the three retire by DIRECTION (a tier-6 host may name tier 3 and tier 4),
+not by the edge disappearing. quality/ARCH_LAYERS.toml:1108 already records why
+that matters — the harness row's removal condition was rewritten precisely
+because "the debt disappearing from the burn-down without anyone paying it" is
+not payment. State it in the ledger: sovereign-core and sovereign-atos are
+LEGALISED by the host's tier, sovereign-tools likewise; only the 13 repointed
+sovereign-core sites and workspace's one sovereign-tools site are actually PAID.
+"""
