@@ -4414,8 +4414,12 @@ Promise {action}: something the agent says it will do.
 Status {goal, state}: a verdict on the work ("done", "green", "clean", "blocked", "met").
 Opinion: a judgement or explanation with nothing to check.
 Rules: one statement per fact; `span` is VERBATIM from the report; every number the
-report states becomes a Tested or Measured statement; fill the fields you can read
-off the span, leave the rest out. Call `statements` once."""
+report states becomes a Tested or Measured statement (a hedged one too: "~300 lines"
+is Measured value 300); every commit sha is a Landed statement; a note or ticket id
+("Note 426e8eed") is Exists{name}; "watched red", "sabotage went red", "N impls
+removed", "X deleted" are Landed or Tested statements, not Opinion; an open item
+("one verification stays open") is Status{state: open}. Fill the fields you can
+read off the span, leave the rest out. Call `statements` once."""
 
 SERVES_TOOL = [{"type": "function", "function": {
     "name": "serves",
@@ -4490,23 +4494,55 @@ class Kernel:
     def run(self, st: dict) -> tuple[str, str]:
         k, turn = st["kind"], st["turn"]
         if k == "Tested":
+            scope = (st.get("scope") or "").strip("`")
+            named = [x for x in IDENT_SHAPE.findall(scope) if "_" in x or "::" in x]   # 'gate every_test_module_is_wired' names a test
+            if named:
+                scope = named[0]
+            if named or IDENT_SHAPE.fullmatch(scope):
+                # A named test or gate: judged by the lines that name it
+                # (69191705 t70: 'watched fail on three distinct inputs' was
+                # refuted against the sweep's counts).
+                want_red = (st.get("fail") or 0) > 0 or bool(re.search(r"\b(?:red|fail)", st.get("span", ""), re.I)) and not (st.get("pass") or 0)
+                lines = [(i, l.strip()) for i, t in sorted(self.obs["results"] + self.obs["asks"], key=lambda x: x[0]) if i <= turn
+                         for l in t.splitlines() if scope in l and re.search(r"\b(?:ok|FAILED|passed|failed|PASS|FAIL)\b", l)]
+                if not lines:
+                    return "sorry", f"no line names {scope} with an outcome before turn {turn}"
+                reds = [x for x in lines if RX_RED.search(x[1])]
+                hit = reds[-1] if want_red and reds else (lines[-1] if not want_red and not RX_RED.search(lines[-1][1]) else None)
+                if hit:
+                    return "proved", f"turn {hit[0]}: {hit[1][:140]}"
+                i, l = lines[-1]
+                return "refuted", f"turn {i}: {l[:140]}"
             summ = self.summaries(turn + 1)
             whole = bool(re.search(r"\b(?:full|whole|workspace|sweep|suite|all)\b", st.get("scope", ""), re.I)) or (st.get("pass") or 0) >= 500
             cands = [(i, l) for i, l in summ if not whole or is_full_run(l, parse_summary(l)[0])]
             if not cands:
                 return "sorry", "no test summary in the record before this turn" + (" for a whole-scope run" if whole else "")
-            i, last = cands[-1]
-            p_, f_ = parse_summary(last)
             want_p, want_f = st.get("pass"), st.get("fail")
             if want_p is None and want_f is None:
+                i, last = cands[-1]
                 return "sorry", f"statement carries no counts; last run turn {i}: {last[:120]}"
-            if (want_p is None or want_p == p_) and (want_f is None or want_f == f_):
-                return "proved", f"turn {i}: {last[:140]}"
-            return "refuted", f"turn {i}: {last[:140]}"
+            # The run the statement reports has to exist: any summary at or
+            # before the turn with those counts proves it (7fbab671 t1: '4973
+            # tests green' was refuted by a worker's later 2860/6 line of a
+            # different scope). None does, and the last run is the receipt
+            # (1c5bd750 t51, 9903ea64 t19).
+            def fits(l):
+                p_, f_ = parse_summary(l)
+                return (want_p is None or want_p == p_) and (want_f is None or want_f == f_)
+            match = [(i, l) for i, l in cands if fits(l)]
+            if match:
+                i, l = match[-1]
+                return "proved", f"turn {i}: {l[:140]}"
+            i, last = cands[-1]
+            return "refuted", f"no run with these counts; last run turn {i}: {last[:140]}"
         if k == "Landed":
             is_sha = lambda x: bool(re.fullmatch(r"[0-9a-f]{7,40}", x.strip("`")))
             shas = [x.strip("`") for x in [st.get("sha") or ""] + (st.get("paths") or []) + (st.get("symbols") or []) if x and is_sha(x)]
-            names = [x.strip("`") for x in (st.get("paths") or []) + (st.get("symbols") or []) if x and not is_sha(x)]
+            # 'conv_tiered rows', 'the lesson object' are prose the model put
+            # in symbols (7fbab671 t1); only identifier-shaped anchors count.
+            names = [x.strip("`") for x in (st.get("paths") or []) + (st.get("symbols") or [])
+                     if x and not is_sha(x) and IDENT_SHAPE.fullmatch(x.strip("`"))]
             if shas:
                 subjs, missing = [], []
                 for sha in shas:
@@ -4527,21 +4563,41 @@ class Kernel:
             nm, sha_t = (st.get("name") or "").strip("`"), self.sha_at_turn(turn)
             if not nm or not sha_t:
                 return "sorry", "no name or sha"
-            out = git("grep", "-lF", nm.split("::")[-1].split("/")[-1], sha_t).strip()
+            if nm.startswith("/"):
+                # A route, not a path: it exists as a string in the tree
+                # (69191705 t70: '/internal/corpus/catalog').
+                out = git("grep", "-lF", nm, sha_t).strip()
+                return ("proved" if out else "refuted"), (f"route in {len(out.splitlines())} file(s) at {sha_t[:9]}" if out else f"nothing at {sha_t[:9]} names {nm!r}")
+            if "/" in nm:
+                # A path exists or not (69191705 t70: recipe_install.rs was
+                # refuted by grepping for its name as content).
+                body = git("show", f"{sha_t}:{nm.lstrip('./')}")
+                return ("proved" if body else "refuted"), (f"{nm} is in the tree at {sha_t[:9]}" if body else f"{nm} is not in the tree at {sha_t[:9]}")
+            if "." in nm:
+                # A bare file name: any file so named, anywhere in the tree
+                # (9903ea64 t19 'sv-surface.toml', e02c5365 t14 'attach_watch.rs').
+                files = [l for l in git("ls-tree", "-r", "--name-only", sha_t).splitlines() if l.split("/")[-1] == nm]
+                return ("proved" if files else "refuted"), (f"{files[0]}" + (f" (+{len(files) - 1})" if len(files) > 1 else "") + f" at {sha_t[:9]}" if files else f"no file named {nm} at {sha_t[:9]}")
+            out = git("grep", "-lF", nm.split("::")[-1], sha_t).strip()
             return ("proved" if out else "refuted"), (f"{len(out.splitlines())} file(s) at {sha_t[:9]}" if out else f"nothing at {sha_t[:9]} contains {nm!r}")
         if k == "Measured":
             v = str(st.get("value") or "").replace(",", "")
-            nums = re.findall(r"\d[\d,]*\.?\d*", st["span"]) if not v else [v]
-            for n in nums:
-                hit = self.seen(n.replace(",", ""), turn)
-                if hit:
-                    return "proved", hit[:140]
-            return "sorry", f"nothing printed {nums[:3]} before turn {turn}"
+            nums = re.findall(r"\d[\d,]*\.?\d*", v) or re.findall(r"\d[\d,]*\.?\d*", st.get("span", ""))
+            # A bare number printed somewhere is weak proof: 2048 proved
+            # '2,048 chars per chunk' off 'n_ubatch=2048' (1c5bd750 t51).
+            # The line has to carry a word of the quantity too, else the row
+            # is proved but flagged weak for the hand reader.
+            words = [w for w in re.findall(r"[a-z]{4,}", (st.get("quantity") or "").lower()) if w not in ("total", "count", "number", "lines")]
+            hits = [(n, self.seen(n.replace(",", ""), turn)) for n in nums[:4]]
+            if nums and all(h for _, h in hits):
+                st["weak"] = not any(any(w in h.lower() for w in words) for _, h in hits) if words else True
+                return "proved", " | ".join(h[:100] for _, h in hits)[:200]
+            return "sorry", f"nothing printed {[n for n, h in hits if not h][:3]} before turn {turn}"
         if k == "Promise":
             return "open", "discharged by a later Landed or Tested on the same anchor"
         if k == "Status":
             return "open", "by its dependencies"
-        return "proved", "opinion: nothing to check"
+        return "open", "opinion: no obligation"
 
 def translate_block(text: str, turn: int, pin: str, timeout: float) -> list[dict]:
     msgs = [{"role": "system", "content": TRANSLATE_SYSTEM},
@@ -4567,13 +4623,17 @@ def translate_block(text: str, turn: int, pin: str, timeout: float) -> list[dict
     return out
 
 def serves_edges(goals: list[dict], stmts: list[dict], pin: str, timeout: float) -> tuple[dict, list[dict]]:
-    gtext = "\n".join(f"{g['id']}: {' '.join(g['text'].split())[:500]}" for g in goals)
-    stext = "\n".join(f"{s['id']}: {s['span'][:200]}" for s in stmts)
+    # Short ids, short texts, a bigger envelope: the model echoed every
+    # goal's full text as its id and the reply was cut at 2,500 tokens
+    # (1c5bd750, twice: zero edges parsed).
+    gtext = "\n".join(f"{g['id']}: {' '.join(g['text'].split())[:300]}" for g in goals)
+    stext = "\n".join(f"{s['id']}: {s['span'][:160]}" for s in stmts)
     msgs = [{"role": "system", "content": SERVES_SYSTEM},
-            {"role": "user", "content": f"GOALS:\n{gtext}\n\nSTATEMENTS:\n{stext}"}]
-    m = chat_tools(msgs, SERVES_TOOL, pin, timeout, max_tokens=2500, force="serves")
+            {"role": "user", "content": f"GOALS:\n{gtext}\n\nSTATEMENTS:\n{stext}\n\nIn `goal_types` and `edges`, `goal` is the id alone (root, g1, g2 ...)."}]
+    m = chat_tools(msgs, SERVES_TOOL, pin, timeout, max_tokens=4000, force="serves")
     tcs = m.get("tool_calls") or text_tool_calls(m.get("content") or "")
     types, edges = {}, []
+    serves_edges.raw = json.dumps(m)[:4000]   # kept for the ledger when nothing parses
     by_id = {g["id"]: g for g in goals}
     for tc in tcs:
         try:
@@ -4584,13 +4644,14 @@ def serves_edges(goals: list[dict], stmts: list[dict], pin: str, timeout: float)
             continue
         if not isinstance(args, dict):
             continue
+        gid = lambda x: str(x or "none").split(":")[0].strip()
         for gt in args.get("goal_types") or []:
-            if isinstance(gt, dict) and gt.get("goal") in by_id:
-                types[gt["goal"]] = gt.get("type")
+            if isinstance(gt, dict) and gid(gt.get("goal")) in by_id:
+                types[gid(gt["goal"])] = gt.get("type")
         for e in args.get("edges") or []:
             if not isinstance(e, dict):
                 continue
-            g = str(e.get("goal") or "none").strip()
+            g = gid(e.get("goal"))
             q = str(e.get("quote") or "").strip().strip('"“”')
             if g not in by_id and q:
                 # The model quoted the goal and wrote 'none' or the goal's
@@ -4644,7 +4705,14 @@ def cmd_claims(a) -> int:
     for n, (i, t) in enumerate(x for x in obs["asks"] if x[0] <= last_turn and is_steer(x[1])):
         goals.append({"id": f"g{n + 1}", "turn": i, "text": strip_reminders(t).strip()})
     stmts, t0 = [], time.time()
-    for i, text, _ in picked:
+    d = SESSIONS_DIR / path.stem
+    if a.serves_only:
+        # The serves step alone, over the stored statements (it is the
+        # flaky call; a translation is not re-bought to retry it).
+        stmts = [r for r in (json.loads(l) for l in (d / "claims.jsonl").open()) if r["node"] == "statement"]
+        for st in stmts:
+            st.pop("serves", None); st.pop("node", None)
+    for i, text, _ in ([] if a.serves_only else picked):
         try:
             got = translate_block(text, i, a.pin, a.timeout)
         except DaemonDown as e:
@@ -4656,6 +4724,9 @@ def cmd_claims(a) -> int:
     # Status: by the block's Tested/Landed/Exists statements
     for st in stmts:
         if st["kind"] == "Status":
+            if re.search(r"\b(?:open|blocked|owed|pending|waiting|not (?:yet|done|met))\b", (st.get("state") or "") + " " + (st.get("goal") or ""), re.I):
+                st["state"], st["receipt"] = "open", "an open item carries no obligation"   # 9903ea64 t19.15
+                continue
             deps = [d for d in stmts if d["turn"] == st["turn"] and d["kind"] in ("Tested", "Landed", "Exists")]
             st["deps"] = [d["id"] for d in deps]
             if any(d["state"] == "refuted" for d in deps):
@@ -4681,8 +4752,18 @@ def cmd_claims(a) -> int:
             print(f"serves: daemon {e}")
     for g in goals:
         g["type"] = types.get(g["id"], "root" if g["id"] == "root" else "?")
-    served = {e["statement"]: e for e in edges if e["goal"] != "none" and e["verbatim"]}
-    d = SESSIONS_DIR / path.stem
+    # The model names a statement by id, by 'id: text', or by its text
+    # alone (69191705: eight edges, all by text, arc printed 0/8).
+    def sid_of(x: str) -> str:
+        head = str(x).split(":")[0].strip()
+        if any(st["id"] == head for st in stmts):
+            return head
+        t = " ".join(str(x).split())[:60]
+        return next((st["id"] for st in stmts if " ".join(st["span"].split()).startswith(t) or t.startswith(" ".join(st["span"].split())[:40])), head)
+    served = {sid_of(e["statement"]): e for e in edges if e["goal"] != "none" and e["verbatim"]}
+    if stmts and not a.no_serves and not edges:
+        (d / "serves-raw.json").write_text(getattr(serves_edges, "raw", ""))
+        print(f"  serves: nothing parsed from the model's reply; raw kept at {d / 'serves-raw.json'}")
     d.mkdir(parents=True, exist_ok=True)
     with (d / "claims.jsonl").open("w") as fh:
         for g in goals:
@@ -4699,7 +4780,7 @@ def cmd_claims(a) -> int:
         print(f"  goal {g['id']:<5} t{g['turn']:<4} {g['type']:<12} {' '.join(g['text'].split())[:110]}")
     for st in stmts:
         anchor = {k: v for k, v in st.items() if k in ("scope", "pass", "fail", "sha", "paths", "symbols", "name", "quantity", "value", "unit", "action", "goal", "state") and k != "state"}
-        print(f"  {st['id']:<8} {st['kind']:<9} {st['state']:<8} serves={served.get(st['id'], {}).get('goal', 'none'):<5} {json.dumps(anchor)[:70]:<72} | {st['span'][:80]}")
+        print(f"  {st['id']:<8} {st['kind']:<9} {st['state'] + ('~' if st.get('weak') else ''):<8} serves={served.get(st['id'], {}).get('goal', 'none'):<5} {json.dumps(anchor)[:70]:<72} | {st['span'][:80]}")
         print(f"           receipt: {st['receipt'][:150]}")
     for e in sup:
         print(f"  supersedes {e['earlier']} -> {e['later']}: {e['why']}")
@@ -5482,6 +5563,30 @@ def cmd_self_test(_a) -> int:
     eq(parse_summary("Summary [ 502.448s] 13105 tests run: 13103 passed (1 leaky), 2 failed, 61 skipped"), (13103, 2), "parse_summary: nextest")
     eq(is_full_run("test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out", 4), False, "a filtered rerun is not a whole-scope run")
     eq(is_full_run("pass: 12448 fail: 1", 12448), True, "a sweep is")
+    with _tf.TemporaryDirectory() as _d:
+        _t4 = Path(_d) / "t.jsonl"
+        _t4.write_text("\n".join(json.dumps(r) for r in [
+            {"type": "user", "message": {"content": [{"type": "tool_result", "content": "Summary [ 59.4s] 4973 tests run: 4973 passed, 31 skipped"}]}},
+            {"type": "user", "message": {"content": "<task-notification>worker: 2860 pass / 6 fail</task-notification>"}},
+            {"type": "assistant", "message": {"content": [{"type": "text", "text": "v" * 130}]}},
+        ]) + "\n")
+        _k2 = Kernel(_t4, session_observations(_t4), lambda i: None)
+        eq(_k2.run({"kind": "Tested", "turn": 1, "scope": "five crates", "pass": 4973, "fail": 0})[0], "proved",
+           "a run with the stated counts before the turn proves it, whatever ran after")
+        eq(_k2.run({"kind": "Tested", "turn": 1, "scope": "full sweep", "pass": 4980, "fail": 0})[0], "refuted",
+           "no run with the counts, and the last run is the receipt")
+        _k2.obs["results"].append((0, "test every_test_module_is_wired ... FAILED\ntest result: FAILED. 0 passed; 1 failed"))
+        eq(_k2.run({"kind": "Tested", "turn": 1, "scope": "every_test_module_is_wired", "pass": 0, "fail": 1})[0], "proved",
+           "a named test 'watched fail' is proved by a line naming it red")
+        eq(_k2.run({"kind": "Tested", "turn": 1, "scope": "every_test_module_is_wired", "pass": 1, "fail": 0})[0], "refuted",
+           "and claimed green is refuted by it")
+        eq(_k2.run({"kind": "Tested", "turn": 1, "scope": "gate every_test_module_is_wired", "pass": 0, "fail": 1})[0], "proved",
+           "a test name inside a longer scope is the name")
+    _kh = Kernel(Path("."), {"results": [], "asks": [], "nums": {}}, lambda i: git("rev-parse", "HEAD").strip())
+    eq(_kh.run({"kind": "Exists", "turn": 1, "name": "co-oplog.py"})[0], "proved", "Exists: a bare file name is found anywhere in the tree")
+    eq(_kh.run({"kind": "Exists", "turn": 1, "name": "scripts/co-oplog.py"})[0], "proved", "Exists: a path is looked up as a path")
+    eq(_kh.run({"kind": "Exists", "turn": 1, "name": "/internal/never-such-route-zz9"})[0], "refuted", "Exists: a route is a string in the tree")
+    eq(_kh.run({"kind": "Exists", "turn": 1, "name": "no_such_file_zz9.rs"})[0], "refuted", "Exists: and a missing file is refuted")
     eq(parse_summary("13257 pass / 1 fail exit 101"), (13257, 1), "parse_summary: a worker's line")
     eq(parse_summary("total_pass=13257  total_fail=1  cargo.exit=101"), (13257, 1), "parse_summary: the scoped banner")
     eq(is_steer("<task-notification>x</task-notification>"), False, "a notification is not a steer")
@@ -5656,6 +5761,7 @@ def main() -> int:
     cl.add_argument("--pin", default=DEFAULT_PIN)
     cl.add_argument("--timeout", type=float, default=240.0)
     cl.add_argument("--no-serves", action="store_true")
+    cl.add_argument("--serves-only", action="store_true", help="redo only the serves step over the stored claims.jsonl")
     cl.set_defaults(fn=cmd_claims)
     ia = sub.add_parser("investigate-all", help="one investigation per session over the last N: its final report, or its heaviest-claim turn")
     ia.add_argument("--project", default="-Users-alexsbryan-dev-commonwealth-ai")
