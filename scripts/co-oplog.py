@@ -5299,7 +5299,7 @@ def cmd_plan_claims(a) -> int:
     here = {c for c in cited if git("show", f"{sha_p}:{c}")}
     foreign = len(cited) >= 3 and len(here) * 2 < len(cited)
     for st in stmts:
-        if foreign and st["state"] == "refuted" and st["kind"] in ("Exists", "Proposes"):
+        if foreign and st["state"] in ("refuted", "proved") and st["kind"] in ("Exists", "Proposes"):   # 80406ac5: 17 canon nouns 'proved new' here
             st["state"], st["receipt"] = "sorry", f"the plan's paths are in another repository ({len(cited) - len(here)} of {len(cited)} top directories are not here)"
         sec = (st.get("section") or "").lower().rstrip("?").strip()
         if st["kind"] == "Exists" and st["state"] == "refuted" and not any(sec.startswith(x) for x in Kernel.PLAN_ASSERTS_EXISTS):
