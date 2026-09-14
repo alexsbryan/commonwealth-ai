@@ -4493,7 +4493,11 @@ class Kernel:
         self.text = ""          # the plan, for Proposes: a name the plan cites with an anchor is not proposed new
 
     PLAN_NOT_NEW = ("what this removes", "could this be done with less", "what already exists", "what this extends",
-                    "deliberately not doing", "non-goals", "restraint patterns")
+                    "deliberately not doing", "non-goals", "restraint patterns", "context")
+    # the sections in which a plan ASSERTS a thing exists; an absent name
+    # anywhere else is the plan naming what it will write (90267a54 p9.11:
+    # 'MeshDirectory came back clean from code converge noun' tagged Exists)
+    PLAN_ASSERTS_EXISTS = ("context", "what already exists", "what this extends", "what this removes", "inherited state", "prior art")
 
     def plan_cites(self, name: str) -> str | None:
         """The plan line that cites `name` beside a file:line anchor or a
@@ -4554,7 +4558,7 @@ class Kernel:
         out = {n: None for n in names}
         if plain:
             alt = "(?:" + "|".join(sorted({re.escape(n.replace("-", "_")) for n in plain}, key=len, reverse=True)) + ")"
-            hits = git("grep", "-n", "-P", "-e", self.RX_DEF.format(n=alt), sha).splitlines()
+            hits = git("grep", "-n", "-P", "-e", self.RX_DEF.format(n=alt), sha, "--", ":!*.md", ":!*.txt", ":!*.jsonl").splitlines()
             rx = {n: re.compile(self.RX_DEF.format(n=re.escape(n.replace("-", "_")))) for n in plain}
             for l in hits:
                 parts = l.split(":", 3)                  # sha:file:lineno:content -- the regex is ^-anchored on CONTENT
@@ -4605,7 +4609,7 @@ class Kernel:
             if not re.fullmatch(r"\w+", mem) or not re.fullmatch(r"\w+", typ):
                 return None
             # a definition of the member in a file that also names the type
-            for l in git("grep", "-n", "-P", "-e", self.RX_DEF.format(n=re.escape(mem)), sha).splitlines():
+            for l in git("grep", "-n", "-P", "-e", self.RX_DEF.format(n=re.escape(mem)), sha, "--", ":!*.md", ":!*.txt", ":!*.jsonl").splitlines():
                 parts = l.split(":", 2)
                 if len(parts) == 3 and git("grep", "-l", "-F", typ, sha, "--", parts[1]).strip():
                     return f"{parts[1]}:{parts[2][:120]}"
@@ -4617,7 +4621,7 @@ class Kernel:
         rx = self.RX_DEF.format(n=re.escape(n.replace("-", "_")) if "-" in n else re.escape(n))
         # -P: git's -E has no \s or \b on this host (2.50, Apple); the
         # first smoke returned 'nothing defines Kernel' at a sha carrying it.
-        out = git("grep", "-n", "-P", "-e", rx, sha).strip()
+        out = git("grep", "-n", "-P", "-e", rx, sha, "--", ":!*.md", ":!*.txt", ":!*.jsonl").strip()
         if not out and "-" in n:
             out = git("grep", "-n", "-P", "-e", f'^\\s*name\\s*=\\s*"{re.escape(n)}"', sha, "--", "*Cargo.toml").strip()
         if not out:
@@ -5280,6 +5284,18 @@ def cmd_plan_claims(a) -> int:
                 st["state"], st["receipt"] = kernel.run(st) if st["verbatim"] else ("sorry", "span is not verbatim in the plan")
                 stmts.append(st)
             print(f"  section {n:>2}/{len(secs)} {title[:50]:<50} {len(got):>3} statement(s) {round(time.time() - t1)}s", flush=True)
+    # A plan for another repository (22da1ede: canon; crates/canon-core/..):
+    # judged against this tree every refuted row would be false. Foreign
+    # when most of the plan's cited paths do not start in this repo.
+    cited = {m.group(1).split("/")[0] for m in re.finditer(r"`\.?/?([\w-]+/[\w./-]+\.\w+)", ev["plan"])}
+    here = {c for c in cited if git("show", f"{sha_p}:{c}")}
+    foreign = len(cited) >= 3 and len(here) * 2 < len(cited)
+    for st in stmts:
+        if foreign and st["state"] == "refuted" and st["kind"] in ("Exists", "Proposes"):
+            st["state"], st["receipt"] = "sorry", f"the plan's paths are in another repository ({len(cited) - len(here)} of {len(cited)} top directories are not here)"
+        sec = (st.get("section") or "").lower().rstrip("?").strip()
+        if st["kind"] == "Exists" and st["state"] == "refuted" and not any(sec.startswith(x) for x in Kernel.PLAN_ASSERTS_EXISTS):
+            st["state"], st["receipt"] = "sorry", f"absent at {sha_p[:9]}, named in a '{st.get('section')}' section: the plan may be naming what it will write"
     proposed = {re.sub(r":\d+(?:-\d+)?$", "", (st.get("name") or "").strip("`")) for st in stmts if st["kind"] == "Proposes"}
     for st in stmts:
         if st["kind"] == "Exists" and st["state"] == "refuted" and re.sub(r":\d+(?:-\d+)?$", "", (st.get("name") or "").strip("`")) in proposed:
@@ -6162,6 +6178,8 @@ def cmd_self_test(_a) -> int:
     eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "co-oplog.py:868", "shape": "other", "span": "x"})[0], "sorry", "Proposes: a line anchor is a citation")
     eq(_kh.run({"kind": "Exists", "turn": 1, "name": "Kernel::summaries()", "span": "x"})[0], "proved", "Exists: call parens are not part of the name")
     eq(_kh.run({"kind": "Exists", "turn": 1, "name": "GR-19", "span": "x"})[0], "sorry", "Exists: a requirement id is judged by its document")
+    eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "Kernel", "span": "x", "section": "Context"})[0], "sorry", "Proposes: a Context section describes what exists")
+    eq(_kh.defined_at("ARCH_PRINCIPLES", git("rev-parse", "HEAD").strip()) is None, True, "defined_at: a name in a markdown code block is no definition")
     _kh.text = "| `co-oplog.rs` | 228 | move |"
     eq(_kh.plan_cites("co-oplog") is not None, True, "plan_cites: name.rs in a table cites the module")
     _kh.text = ""
