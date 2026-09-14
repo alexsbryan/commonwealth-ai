@@ -24,7 +24,7 @@ description = "The neutral kernel — identity and provenance types owned by no 
 # family needs; anything heavier belongs in a domain crate, not here.
 serde = { workspace = true }
 # Random bytes for `*Id::generate()`. Already a commonwealth-core dep.
-getrandom = "0.3"
+getrandom = "0.4"
 # Hex for the wire forms of ContentHash and the id family. Deliberately a dep
 # rather than a sixth hand-rolled encoder — the census found five already.
 hex = "0.4"
