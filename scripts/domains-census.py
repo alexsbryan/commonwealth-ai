@@ -225,7 +225,7 @@ def peer_defs(root: Path) -> list[dict]:
     C9 egress custody), not an exception in this script.
     """
     root = Path(root)
-    kept = {n["name"] for n in registry().get("noun", [])
+    kept = {n["name"] for n in registry_for(root).get("noun", [])
             if n.get("disposition") == "decided:keep"}
     found: list[dict] = []
     for path in _rs_files(root):
@@ -327,7 +327,7 @@ _MEMBER_EDGE = "MemberRecord"
 
 def _is_member_edge(name: str) -> bool:
     """The bar's own scope: a name carrying `Peer`, or `MemberRecord`."""
-    return "Peer" in name or name == _MEMBER_EDGE
+    return _PEER_WORD in name or name == _MEMBER_EDGE
 
 
 def _field_leaf(field: str) -> str:
