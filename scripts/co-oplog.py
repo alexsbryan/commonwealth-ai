@@ -4529,7 +4529,46 @@ class Kernel:
               r"|^\s*(?:async\s+)?(?:def|class)\s+{n}\b"
               r"|^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?(?:function|class|interface)\s+{n}\b"
               r"|^\s*(?:name\s*=\s*\"{n}\")"
-              r"|^\s*\w+!\s*[\(\{{\[]\s*(?:pub\s+)?(?:struct\s+|enum\s+)?{n}\b")
+              r"|^\w+!\s*[\(\{{\[]\s*(?:pub\s+)?(?:struct\s+|enum\s+)?{n}\b")
+
+    _trees: dict = {}
+
+    def tree(self, sha: str) -> list[str]:
+        """`git ls-tree -r --name-only` once per sha (a 121-name sweep ran it
+        per bare file name, 536c8494)."""
+        if sha not in self._trees:
+            self._trees[sha] = git("ls-tree", "-r", "--name-only", sha).splitlines()
+        return self._trees[sha]
+
+    def defined_many(self, names: list[str], sha: str, shapes: dict | None = None) -> dict:
+        """defined_at over many names with ONE definition grep: the plain
+        identifiers go into one alternation, and each hit line is bucketed
+        by the name at its definition position."""
+        shapes = shapes or {}
+        plain = [n for n in names if re.fullmatch(r"[A-Za-z_][\w-]*", n) and len(n) >= 3
+                 and not (re.fullmatch(r"[a-z]+", n) and shapes.get(n, "") not in ("fn", "module", "crate"))]
+        out = {n: None for n in names}
+        if plain:
+            alt = "(?:" + "|".join(sorted({re.escape(n.replace("-", "_")) for n in plain}, key=len, reverse=True)) + ")"
+            hits = git("grep", "-n", "-P", "-e", self.RX_DEF.format(n=alt), sha).splitlines()
+            rx = {n: re.compile(self.RX_DEF.format(n=re.escape(n.replace("-", "_")))) for n in plain}
+            for l in hits:
+                parts = l.split(":", 3)                  # sha:file:lineno:content -- the regex is ^-anchored on CONTENT
+                if len(parts) < 4:
+                    continue
+                for n in plain:
+                    if rx[n].search(parts[3]):
+                        if out[n] is None:
+                            out[n] = f"{parts[1]}:{parts[2]}:{parts[3][:140]}"
+                        elif "(+" not in out[n]:
+                            out[n] += " (+more)"
+            for n in plain:
+                if out[n] is None and "-" in n:
+                    out[n] = self.defined_at(n, sha, shapes.get(n, ""))       # the Cargo.toml fallback
+        for n in names:
+            if n not in plain:
+                out[n] = self.defined_at(n, sha, shapes.get(n, ""))
+        return out
 
     def defined_at(self, name: str, sha: str, shape: str = "") -> str | None:
         """Where `name` is DEFINED in the tree at `sha` (a definition line,
@@ -4548,10 +4587,10 @@ class Kernel:
             if body:
                 return f"{n} is in the tree at {sha[:9]}"
             # a path relative to a crate ('runtime/streaming.rs:1055', c3b57dbd p3.2): by suffix
-            files = [l for l in git("ls-tree", "-r", "--name-only", sha).splitlines() if l.endswith("/" + n.lstrip("./"))]
+            files = [l for l in self.tree(sha) if l.endswith("/" + n.lstrip("./"))]
             return f"{files[0]} at {sha[:9]}" + (f" (+{len(files) - 1})" if len(files) > 1 else "") if files else None
         if re.search(r"\.(?:rs|py|sh|toml|md|json|ts|mjs|ya?ml)$", n):
-            files = [l for l in git("ls-tree", "-r", "--name-only", sha).splitlines() if l.split("/")[-1] == n]
+            files = [l for l in self.tree(sha) if l.split("/")[-1] == n]
             return f"{files[0]} at {sha[:9]}" + (f" (+{len(files) - 1})" if len(files) > 1 else "") if files else None
         if "::" in n:
             typ, mem = n.rsplit("::", 1)
@@ -5232,10 +5271,9 @@ def cmd_plan_claims(a) -> int:
     for st in stmts:
         if st["kind"] in ("Proposes", "Exists") and st.get("name"):
             tagged.setdefault(re.sub(r":\d+(?:-\d+)?$", "", st["name"].strip("`")), st["kind"])
-    sweep = []
-    for nm in sweep_idents(ev["plan"]):
-        hit = kernel.defined_at(nm, sha_p)
-        sweep.append({"name": nm, "defined": bool(hit), "where": (hit or "")[:120], "tagged": tagged.get(nm, "none")})
+    names = sweep_idents(ev["plan"])
+    found = kernel.defined_many(names, sha_p)
+    sweep = [{"name": nm, "defined": bool(found[nm]), "where": (found[nm] or "")[:120], "tagged": tagged.get(nm, "none")} for nm in names]
     with (d / "plan-claims.jsonl").open("w") as fh:
         fh.write(json.dumps({"node": "plan", "session": path.stem, "when": ev["when"], "sha": sha_p, "verdict": ev["verdict"],
                              "turn": ev["turn"], "sections": len(secs), "chars": len(ev["plan"]), "title": ev["plan"].splitlines()[0][:120]}) + "\n")
@@ -6100,6 +6138,9 @@ def cmd_self_test(_a) -> int:
     eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "sovereign/DEFAULTS_LEDGER.md", "shape": "file", "span": "a `sovereign/DEFAULTS_LEDGER.md` row per rung"})[0], "sorry", "Proposes: a row in an existing file is an addition")
     eq(anchored("Outcome", "pub(crate) struct Outcome {\n local: Option<Scored>"), True, "anchored: the name is a token in the text")
     eq(anchored("come", "pub(crate) struct Outcome {"), False, "anchored: not a substring of a longer token")
+    _many = _kh.defined_many(["Kernel", "FooBarBazNounX", "NodeId", "co-oplog.py", "sovereign-mesh", "Kernel::summaries"], git("rev-parse", "HEAD").strip())
+    eq({k: bool(v) for k, v in _many.items()}, {"Kernel": True, "FooBarBazNounX": False, "NodeId": True, "co-oplog.py": True, "sovereign-mesh": True, "Kernel::summaries": True},
+       "defined_many agrees with defined_at on six shapes of name")
     _kh.text = "the split lands in `some_other_file.rs`"
     eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "cmd_claims", "shape": "fn", "span": "x"})[0], "sorry", "Proposes: a fn defined in a file the plan does not name is no collision")
     _kh.text = "the split lands in `scripts/co-oplog.py`"
