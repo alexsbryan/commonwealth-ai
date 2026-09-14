@@ -11,6 +11,7 @@
 # --model provider/model selects workers; --review-model selects review rows.
 # --variant high sets reasoning effort for both. --install-launchd writes the
 # macOS job; bootstrap it with launchctl after inspecting the generated plist.
+# --supervise escalates fixable stops to the review model, with bounded retries.
 set -u
 ORIG_ARGS=("$@")
 SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
@@ -38,6 +39,7 @@ NOTIFY=0
 PLAN=0
 SELF_TEST=0
 INSTALL=0
+SUPERVISE=0
 OPENCODE_BIN="${RALPH_OPENCODE_BIN:-opencode}"
 MODEL_ARGS=""
 
@@ -63,6 +65,7 @@ while [ $# -gt 0 ]; do
     --plan) PLAN=1; shift ;;
     --self-test) SELF_TEST=1; shift ;;
     --install-launchd) INSTALL=1; shift ;;
+    --supervise) SUPERVISE=1; shift ;;
     -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
     *) echo "ralph-loop: unknown flag $1" >&2; exit 2 ;;
   esac
@@ -113,15 +116,16 @@ if [ "$INSTALL" -eq 1 ]; then
   exit 0
 fi
 
-current_unit() {
-  [ -f "$STATE" ] || return 0
-  local u
-  u=$(grep -oE '^- \[~\] [A-Za-z0-9-]+' "$STATE" | head -1 | awk '{print $NF}')
-  if [ -n "$u" ]; then printf '%s' "$u"; return; fi
-  for u in $(grep -oE '^- \[ \] [A-Za-z0-9-]+' "$STATE" | awk '{print $NF}'); do
-    if deps_met "$u"; then printf '%s' "$u"; return; fi
+if [ "$SUPERVISE" -eq 1 ] && [ "$PLAN" -eq 0 ] && [ "$SELF_TEST" -eq 0 ]; then
+  INNER_ARGS=()
+  SUPERVISOR_ARGS=(--workdir "$PWD")
+  [ "$NOTIFY" -eq 1 ] || SUPERVISOR_ARGS+=(--no-notify)
+  for a in "${ORIG_ARGS[@]}"; do
+    [ "$a" = "--supervise" ] || INNER_ARGS+=("$a")
   done
-}
+  exec /bin/bash "$(dirname "$SELF")/ralph-supervise.sh" "${SUPERVISOR_ARGS[@]}" \
+    -- /bin/bash "$SELF" "${INNER_ARGS[@]}"
+fi
 
 select_model() { # unit id (or review for a periodic audit)
   local model="$MODEL"
@@ -164,6 +168,7 @@ fi
 [ -f "$STOP_FILE" ] && { say "halted; remove $STOP_FILE to resume"; exit 0; }
 
 say "start $LABEL at $(git rev-parse --short HEAD 2>/dev/null) review_every=$REVIEW_EVERY max_stall=$MAX_STALL"
+RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
 stall=0; iter=0
 while [ "$iter" -lt "$MAX_ITER" ]; do
   iter=$((iter + 1))
@@ -179,7 +184,7 @@ while [ "$iter" -lt "$MAX_ITER" ]; do
   if [ "$REVIEW_EVERY" -gt 0 ] && [ -n "$REVIEW_PROMPT" ] && [ "$(commits_since_review)" -ge "$REVIEW_EVERY" ]; then
     say "review iteration $iter ($(commits_since_review) commits since last review)"
     select_model review
-    run_session "$REVIEW_PROMPT" "$PWD" "$STATE_DIR/logs/review-$iter.out"
+    run_session "$REVIEW_PROMPT" "$PWD" "$STATE_DIR/logs/review-$RUN_ID-$iter.out"
     iter=$((iter - 1)); continue
   fi
 
@@ -191,7 +196,7 @@ while [ "$iter" -lt "$MAX_ITER" ]; do
     HUMAN-*) halt "operator approval required: $(grep -E "^- \[[~ ]\] $unit([[:space:]]|$)" "$STATE" | head -1)" ;;
   esac
   select_model "$unit"
-  run_session "$PROMPT" "$PWD" "$STATE_DIR/logs/iter-$iter.out"
+  run_session "$PROMPT" "$PWD" "$STATE_DIR/logs/iter-$RUN_ID-$iter.out"
   after=$(git rev-parse HEAD 2>/dev/null || echo none)
   if [ "$before" = "$after" ]; then
     stall=$((stall + 1)); say "no commit this iteration (stall $stall/$MAX_STALL)"

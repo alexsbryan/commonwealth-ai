@@ -12,7 +12,7 @@ LOOP = Path(__file__).resolve().parents[1] / "ralph-loop.sh"
 
 
 class Routing(unittest.TestCase):
-    def run_queue(self, rows, *, models=False):
+    def run_queue(self, rows, *, models=False, supervised=False):
         with tempfile.TemporaryDirectory(prefix="ralph-routing-") as tmp:
             root = Path(tmp)
             (root / "ralph").mkdir()
@@ -37,6 +37,8 @@ class Routing(unittest.TestCase):
                    "--review-model", "strong/reviewer"]
             if models:
                 cmd += ["--model", "worker/terra", "--variant", "high"]
+            if supervised:
+                cmd += ["--supervise"]
             result = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=10)
             args = root / "argv.json"
             return result, json.loads(args.read_text()) if args.exists() else None
@@ -85,6 +87,13 @@ class Routing(unittest.TestCase):
         result, args = self.run_queue("- [ ] REVIEW-blocked — depends [missing]\n")
         self.assertIsNone(args)
         self.assertNotEqual(result.returncode, 0)
+
+    def test_supervise_flag_forwards_models_and_preserves_human_stop(self):
+        result, args = self.run_queue("- [ ] HUMAN-design — depends []\n",
+                                      models=True, supervised=True)
+        self.assertIsNone(args)
+        self.assertIn("supervisor resolution: model strong/reviewer, variant high", result.stdout)
+        self.assertIn("operator approval required", result.stdout)
 
 
 if __name__ == "__main__":

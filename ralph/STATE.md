@@ -15,7 +15,7 @@ nohup bash scripts/ralph-loop.sh --workdir . --label domains \
   --prompt ralph/PROMPT.md --state ralph/STATE.md \
   --model <WORKER_MODEL> --variant <EFFORT> \
   --review-model <REVIEW_MODEL> --review-every 0 --max-stall 3 \
-  --session-timeout 3600 --notify >> ralph/log.txt 2>&1 &
+  --session-timeout 3600 --supervise --notify >> ralph/log.txt 2>&1 &
 ```
 
 `--review-every 0` because reviews are rows here; any unit id containing
@@ -24,6 +24,8 @@ nohup bash scripts/ralph-loop.sh --workdir . --label domains \
 For a detached Mac job, replace `nohup` and the output redirection with
 `--install-launchd`, then run the printed `launchctl bootstrap` command.
 The job is one-shot: an operator stop requires an explicit restart.
+The supervisor inherits the review model and effort; fixable blockers receive
+bounded resolution attempts, while ready `HUMAN-` rows remain operator-only.
 
 On the Fedora peer: `toolbox enter sovereign-vulkan` first and launch from
 inside it (opencode must be on its PATH); drop `--notify`, which is macOS-only.
@@ -44,8 +46,8 @@ O10 = `.sovereign/features/domains-10-serving-extract/order.md`
 
 ## Rung 3 — the instrument (python only, no cargo)
 
-- [x] 869469ff5 dm3-route-census-hosts — depends [] — EDIT scripts/daemon-route-census.py: its HOSTS entry for the old commonwealth-api path becomes sovereign/crates/sovereign-api/src, and a HOSTS directory that does not exist is an error, never a zero — read: O3 step 1 — check: run `python3 scripts/daemon-route-census.py` before and after the edit; paste both unique-path counts
-- [ ] dm3-census-skeleton — depends [] — CREATE scripts/domains-census.py with only: the registry load (tomllib over DT), a `--json` last line `{"value": N, "commit": "<sha>"}` through scripts/lib/judgement.py's emitter, exit codes 0/3/4, a `--self-test` runner that plants fixtures in a temp dir and reports caught/refused per axis (no axes yet), and the comment stripping copied from scripts/nc-extends.py — read: O3 step 2 and "Seams" — check: CENSUS
+- [x] dm3-route-census-hosts 869469ff5 — depends [] — EDIT scripts/daemon-route-census.py: its HOSTS entry for the old commonwealth-api path becomes sovereign/crates/sovereign-api/src, and a HOSTS directory that does not exist is an error, never a zero — read: O3 step 1 — check: run `python3 scripts/daemon-route-census.py` before and after the edit; paste both unique-path counts
+- [~] dm3-census-skeleton — depends [] — CREATE scripts/domains-census.py with only: the registry load (tomllib over DT), a measurement `--json` last line `{"value": N, "commit": "<sha>"}` via json.dumps for co-lineage.py's _parse_value (no trailing verdict in measurement mode), scripts/lib/judgement.py's emitter for judging runs (`--self-test` and later `predicate`), exit codes 0/3/4, a `--self-test` runner that plants fixtures in a temp dir and reports caught/refused per axis (no axes yet), and the comment stripping copied from scripts/nc-extends.py — read: O3 step 2 and "Seams"; scripts/co-lineage.py _parse_value; scripts/nc-thesis.py main's --json branch — check: CENSUS
 - [ ] dm3-peer-outside — depends [dm3-census-skeleton] — ADD the `peer-outside` subcommand with its planted positive and negative controls in --self-test — read: O3 step 3; O3 "Adjudicated 2026-09-14"; DT [[noun]] rows — check: CENSUS; paste `python3 scripts/domains-census.py peer-outside`
 - [ ] dm3-shared-edges — depends [dm3-peer-outside] — ADD `shared-edges` with controls — read: O3 step 4; DM §10.3; DT [[edge]] rows — check: CENSUS; paste its output
 - [ ] dm3-word-owners — depends [dm3-shared-edges] — ADD `word-owners` with controls; `owns` matches anywhere in a type name, `owns_exact` the bare name; crates tagged kernel or back-of-house print as exempt — read: O3 step 5; O3 "Adjudicated 2026-09-14"; DM §10.1 — check: CENSUS; paste its output

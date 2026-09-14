@@ -28,6 +28,16 @@ deps_of() {
 }
 deps_met() { local d; for d in $(deps_of "$1"); do [ "$(status_of "$d")" = x ] || return 1; done; return 0; }
 
+current_unit() {
+  [ -f "$STATE" ] || return 0
+  local u
+  u=$(grep -oE '^- \[~\] [A-Za-z0-9-]+' "$STATE" | head -1 | awk '{print $NF}')
+  if [ -n "$u" ]; then printf '%s' "$u"; return; fi
+  for u in $(grep -oE '^- \[ \] [A-Za-z0-9-]+' "$STATE" | awk '{print $NF}'); do
+    if deps_met "$u"; then printf '%s' "$u"; return; fi
+  done
+}
+
 notify() { # title body
   [ "${NOTIFY:-0}" -eq 1 ] || return 0
   /usr/bin/osascript -e "display notification \"${2}\" with title \"ralph: ${1}\"" >/dev/null 2>&1 || true

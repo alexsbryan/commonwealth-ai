@@ -8134,6 +8134,12 @@ It resumes `[~]` before selecting the first dependency-ready `[ ]` row, using
 the pool's shared readiness helpers in `scripts/ralph-lib.sh`. Ready `HUMAN-`
 rows stop before launching a worker. `--install-launchd` writes a one-shot Mac
 job; `python3 scripts/tests/ralph-routing.py` exercises routing with a stub worker.
+`--supervise` wraps the driver in `scripts/ralph-supervise.sh`, inheriting the
+review model and effort once. Blockers get bounded, logged resolution sessions
+and notifications; ready `HUMAN-` rows and operator STOP requests never enter
+resolution. The old blocker STOP is cleared before resolution so it cannot kill
+its own resolver; a new STOP is preserved. Session logs retain distinct run ids.
+`python3 scripts/tests/ralph-supervise.py` exercises resolution and terminal stops.
 
 ### 8.1 Where configuration and state live
 

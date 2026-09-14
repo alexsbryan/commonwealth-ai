@@ -55,7 +55,9 @@ What the id prefix tells you:
 5. Commit: `git add` the paths you changed, by name — never `git add -A`, never
    `target/` or `ralph/log*`. Message `<unit-id>: <one line>`; body = the
    `exit=` lines and anything the row says to paste.
-6. Mark the row `[x] <short-hash>` and commit `ralph/STATE.md` alone as
+6. Mark the row `- [x] <unit-id> <short-hash> — depends [...] — ...`, keeping
+   the unit id immediately after the checkbox; the dependency parser reads that
+   position. Commit `ralph/STATE.md` alone as
    `ralph: <unit-id> done`. In a POOL LANE, write `ralph/done/<unit-id>` and
    commit that instead.
 
