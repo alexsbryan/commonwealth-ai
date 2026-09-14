@@ -1144,6 +1144,263 @@ def cmd_misnamed(args: list[str]) -> int:
     return EXIT_OK
 
 
+# ── liftable — dm-contexts-liftable ─────────────────────────────────────────
+#
+# A context is liftable when someone outside this repository can take it alone
+# and get value (DOMAINS.md §2). The mechanism already exists: a `[[package]]`
+# row in `quality/ARCH_LAYERS.toml` that `cargo xtask boundary-gate` passes, and
+# a `lift` script that copies the closure out of the monorepo and runs it. The
+# instrument reports the two as two numbers — `gated` (a package row exists) and
+# `lifted` (a declared lift passed) — because the goodhart's failure mode is a
+# context packaged as one crate that still reaches everything through the shared
+# `[[package_leaf]]` budget: a passing gate with no lift.
+#
+# THE KEPT-CONTEXT SET IS DERIVED, NOT LISTED. The registry's `[[context]]`
+# table is the closed set, but its "Not contexts" section (kernel, host,
+# back-of-house) marks three rows that are not domains — and none of the three
+# owns a word, which is DOMAINS.md §4's own definition ("named by the word it
+# owns exclusively"). So the set is the kept rows that own at least one word:
+# 11 today, and a merge under the §8 kill bar is a registry row edit, not a
+# constant here.
+#
+# THE VALUE. Floor 3 is the gate reading of 2026-09-13 (Fabric and Compute via
+# `commonwealth`, Workbench via `code-intel`). The goodhart refines it: a
+# context that DECLARES a lift counts only when that lift has passed. So a
+# context contributes 1 when it is gated, EXCEPT that a context with a declared
+# `lift` contributes only when its lift passed — read from the lift's own
+# artifact when it is not run, from a live run when it is. Run-tier and
+# read-tier therefore agree on today's tree (3), and a declared lift that fails
+# drops the value, which is the goodhart made arithmetic.
+#
+# THE LIFT SCRIPTS ARE INVENTORY THAT CAN ONLY ABSTAIN WITHOUT AN INVITE
+# (commonwealth/BOUNDARY.md "Tier 2"), so the read tier is the default: a live
+# run happens only when the campaign row sets a `timeout_s` (the bar's own
+# `timeout_s` decides, and `--no-lift` forces the read tier regardless).
+_DEFAULT_LIFT_TIMEOUT_S = 120
+
+
+def arch_packages_for(root: Path) -> set[str]:
+    """The `[[package]]` names in ARCH_LAYERS.toml, fixture-aware.
+
+    A fixture with no `quality/ARCH_LAYERS.toml` falls back to the repo's, so an
+    axis can be driven against a bare source fixture; the controls write their
+    own, so the fallback never blurs a planted case.
+    """
+    root = Path(root)
+    p = root / "quality" / "ARCH_LAYERS.toml"
+    if not p.exists():
+        p = REPO / "quality" / "ARCH_LAYERS.toml"
+    try:
+        with open(p, "rb") as f:
+            data = tomllib.load(f)
+    except (OSError, tomllib.TOMLDecodeError):
+        return set()
+    return {pkg.get("name") for pkg in data.get("package", []) if pkg.get("name")}
+
+
+def kept_contexts(reg: dict) -> list[dict]:
+    """The kept contexts that are domains: `status = "kept"` and owns a word."""
+    return [c for c in reg.get("context", [])
+            if c.get("status") == "kept"
+            and (c.get("owns") or c.get("owns_exact"))]
+
+
+def _lift_artifact(cmd: str) -> Path | None:
+    """The `last.json` a `*-lift.sh` script writes, derived from its name.
+
+    Both lift scripts emit their verdict to `target/<script-stem>/last.json`
+    (`verdict()` in scripts/cw-rails-lift.sh:83, scripts/cw-work-lift.sh:79), so
+    the read tier can report a recorded lift without re-running it — a
+    measurement, not a substitution. The command's first token is the script;
+    anything else (a future non-script lift) has no artifact to read.
+    """
+    tokens = cmd.split()
+    if not tokens or not tokens[0].endswith(".sh"):
+        return None
+    return REPO / "target" / Path(tokens[0]).stem / "last.json"
+
+
+def _read_lift_artifact(cmd: str) -> bool | None:
+    """The recorded lift verdict, or None when there is none to read."""
+    art = _lift_artifact(cmd)
+    if art is None or not art.exists():
+        return None
+    try:
+        return json.loads(art.read_text(encoding="utf-8")).get("value") == 1
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _run_lift(cmd: str, timeout_s: int) -> tuple[bool | None, str]:
+    """Run one declared lift; (lifted, note). None means no claim was made.
+
+    `rc 0` alone is NOT success: cw-work-lift.sh exits 0 with `{"value": 0}` on
+    a measured failure (its own header is the contract), so a JSON value is read
+    when the script prints one and `rc` is the fallback for a script that does
+    not. A timeout makes no claim (ARCH principle 6).
+    """
+    try:
+        r = subprocess.run(["bash", "-c", cmd], cwd=REPO, capture_output=True,
+                           text=True, timeout=timeout_s)
+    except subprocess.TimeoutExpired:
+        return None, f"timeout {timeout_s}s"
+    lines = [ln.strip() for ln in r.stdout.splitlines() if ln.strip()]
+    if lines and lines[-1].startswith("{"):
+        try:
+            value = json.loads(lines[-1]).get("value")
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                return value == 1, f"exit {r.returncode}, value {value}"
+        except json.JSONDecodeError:
+            pass
+    return r.returncode == 0, f"exit {r.returncode}"
+
+
+def liftable(root: Path, run_lifts: bool = False,
+             timeout_s: int = _DEFAULT_LIFT_TIMEOUT_S) -> dict:
+    """Classify every kept context as gated / lifted; return the rows and value.
+
+    `run_lifts=False` is the read tier: a declared lift is reported from its
+    last artifact when one exists and is otherwise NOT RUN (never a fabricated
+    pass). `run_lifts=True` executes it. The value counts a context when it is
+    gated, except that a declared-lift context counts only when the lift passed
+    — or, in the read tier with no artifact, by its gate, since that is the only
+    reading available without running it.
+    """
+    root = Path(root)
+    reg = registry_for(root)
+    packages = arch_packages_for(root)
+    rows: list[dict] = []
+    for c in kept_contexts(reg):
+        pkg = c.get("package", "") or ""
+        gated = bool(pkg) and pkg in packages
+        cmd = c.get("lift", "") or ""
+        declared = bool(cmd)
+        lifted: bool | None = None
+        note = "—"
+        if declared:
+            if run_lifts:
+                lifted, note = _run_lift(cmd, timeout_s)
+            else:
+                lifted = _read_lift_artifact(cmd)
+                note = "artifact" if lifted is not None else "not-run"
+        if not declared:
+            counted = gated
+        elif lifted is not None:
+            counted = lifted
+        else:
+            counted = gated          # read tier, no artifact: the gate reading
+        rows.append({
+            "context": c["id"], "package": pkg, "gate": "gated" if gated else "—",
+            "lift": ("lifted" if lifted is True else "failed" if lifted is False
+                     else note if declared else "—"),
+            "applicable_as": c.get("applicable_as", ""), "counted": counted,
+            "declared": declared, "lifted": lifted, "gated": gated,
+        })
+    value = sum(1 for r in rows if r["counted"])
+    return {"rows": rows, "value": value,
+            "gated": sum(1 for r in rows if r["gated"]),
+            "lifted": sum(1 for r in rows if r["lifted"] is True)}
+
+
+def _liftable_gaps(root: Path) -> list[dict]:
+    """The axis's own function: truthy iff a kept context is not liftable."""
+    return [r for r in liftable(root, run_lifts=False)["rows"] if not r["counted"]]
+
+
+def _liftable_fixture(root: Path, package: str) -> None:
+    """A kept domain context owning a word, and a package row to match it."""
+    (root / "quality").mkdir(parents=True, exist_ok=True)
+    (root / "quality" / "DOMAINS.toml").write_text(
+        '[[context]]\n'
+        'id = "widget"\n'
+        'kind = "supporting"\n'
+        'owns = ["Sprocket"]\n'
+        f'package = "{package}"\n'
+        'lift = ""\n'
+        'status = "kept"\n'
+        'applicable_as = "a widget you can hand a stranger"\n'
+        '\n'
+        '[[context]]\n'
+        'id = "kernel"\n'
+        'kind = "published-language"\n'
+        'owns = []\n'
+        'package = ""\n'
+        'status = "kept"\n'
+        'applicable_as = "not applicable by design"\n', encoding="utf-8")
+    (root / "quality" / "ARCH_LAYERS.toml").write_text(
+        '[[package]]\n'
+        'name = "fixture-package"\n'
+        'crates = ["fixture-crate"]\n', encoding="utf-8")
+
+
+def _liftable_positive(root: Path) -> None:
+    """A kept context with no package: caught as a gap.
+
+    The kernel row is the negative control INSIDE the positive fixture: it owns
+    no word, so it is not a kept domain and must never be reported as a gap —
+    without it the owns-filter is untested.
+    """
+    _liftable_fixture(root, "")
+
+
+def _liftable_negative(root: Path) -> None:
+    """A kept context whose package is in ARCH_LAYERS: refused (no gap)."""
+    _liftable_fixture(root, "fixture-package")
+
+
+AXES.append({
+    "id": "liftable",
+    "detect": _liftable_gaps,
+    "positive": _liftable_positive,
+    "negative": _liftable_negative,
+})
+
+
+def _bar_timeout_s(instrument_token: str) -> int | None:
+    """The campaign row's `timeout_s` for the bar that names this subcommand.
+
+    Read from `quality/campaigns/domains.toml` rather than typed here, because
+    whether a lift may be RUN is the campaign's call: a row with a `timeout_s`
+    is run-tier, a row without one is read-tier (`co-lineage.py:616` caps the
+    read tier at 10 s), and the instrument follows the row.
+    """
+    p = REPO / "quality" / "campaigns" / "domains.toml"
+    try:
+        with open(p, "rb") as f:
+            data = tomllib.load(f)
+    except (OSError, tomllib.TOMLDecodeError):
+        return None
+    for b in data.get("bar", []):
+        if instrument_token in (b.get("instrument") or ""):
+            return b.get("timeout_s")
+    return None
+
+
+@subcommand("liftable")
+def cmd_liftable(args: list[str]) -> int:
+    """Print the per-context gated/lifted table, or the measurement line."""
+    token = "domains-census.py liftable"
+    timeout_s = _bar_timeout_s(token)
+    run_lifts = timeout_s is not None and "--no-lift" not in args
+    r = liftable(REPO, run_lifts=run_lifts,
+                 timeout_s=timeout_s or _DEFAULT_LIFT_TIMEOUT_S)
+    if "--json" in args:
+        emit_measurement(r["value"])
+        return EXIT_OK
+    mode = "run tier (lifts executed)" if run_lifts else "read tier (lifts not run)"
+    print("liftable — every kept context as a package the gate passes, and a "
+          "lift that runs\n  (gated = a [[package]] row exists; lifted = a "
+          "declared lift passed)\n")
+    for row in r["rows"]:
+        pkg = row["package"] or "—"
+        print(f"  {row['context']:<15} {pkg:<13} gate={row['gate']:<6} "
+              f"lift={row['lift']:<10} {row['applicable_as']}")
+    print(f"\n  {r['gated']} gated / {r['lifted']} lifted of "
+          f"{len(r['rows'])} kept contexts  [{mode}]")
+    print(f"\n  value: {r['value']} contexts a stranger could take alone")
+    return EXIT_OK
+
+
 def self_test() -> int:
     """Plant a positive and a negative control per axis; report caught/refused.
 
