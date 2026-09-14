@@ -92,6 +92,20 @@ pub(super) async fn stop_daemon() -> i32 {
                 // reports success while the actual daemon keeps serving"), and
                 // the service-manager leg added 2026-07-29 returns above it,
                 // so that guard could not run here.
+                //
+                // Windows has no port probe (`find_daemon_pid_by_port` is
+                // lsof/ss), so there the stop is reported as the manager's
+                // word and SAYS so, rather than as a verified release.
+                #[cfg(not(unix))]
+                {
+                    eprintln!(
+                        "✓ {} reports stopped (port :{} release not verified on this platform)",
+                        svc.name,
+                        client_port()
+                    );
+                    return 0;
+                }
+                #[cfg(unix)]
                 match await_port_release(client_port()).await {
                     None => {
                         eprintln!("✓ daemon stopped");
