@@ -4496,7 +4496,7 @@ class Kernel:
                     "deliberately not doing", "non-goals", "restraint patterns", "context")
 
 
-    def plan_cites(self, name: str) -> str | None:
+    def plan_cites(self, name: str, sha: str = "") -> str | None:
         """The plan line that cites `name` beside a file:line anchor or a
         path -- the plan knows the thing exists (536c8494: GuestGrant
         proposed 'total in place' two sections after `guest_grant.rs:120`)."""
@@ -4505,6 +4505,9 @@ class Kernel:
             if re.search(r"(?<![\w])" + re.escape(n) + r"\.(?:rs|py|sh|ts)\b", l):
                 return f"L{i}: {l.strip()[:100]}"
             if re.search(r"`" + re.escape(n) + r"(?:::\w+)?(?:\(\))?`", l) and re.search(r"\w\.(?:rs|py|toml|md|sh|ts)(?::\d+)?\b|`:\d{2,}", l.replace(n, "")):
+                files = re.findall(r"([\w./-]+\.(?:rs|py|toml|md|sh|ts))\b", l.replace(n, ""))
+                if sha and files and not any(self.defined_at(f, sha) for f in files):
+                    continue                             # every anchor on the line is a file the plan itself will write
                 return f"L{i}: {l.strip()[:100]}"
         return None
 
@@ -4643,6 +4646,8 @@ class Kernel:
                 return "sorry", f"{nm!r} carries a line anchor: a citation, not a proposal"              # 5c16d4f6 p21.3: sabotage.py:868
             if re.search(r"\b(?:modified|modify|changed|extended|edited|updated|touched|rewrite|rework|refactor|survives|stays|remains|unchanged)\b", st.get("span", ""), re.I):
                 return "sorry", f"the span says {nm} is modified or kept, not new"                       # 24f0cac7 p10.6, fd20b61e p10.1, p10.12
+            if nm.startswith("/") and (st.get("section") or "").lower().startswith("verification"):
+                return "sorry", f"{nm} in a Verification section is exercised, not proposed"           # 62d5846b p13.16
             if re.search(r"\(&(?:mut )?self\b", st.get("span", "")):
                 return "sorry", f"{nm} is a method; it belongs to its type, which is the proposal"       # 62d5846b p9.4: GuestGrant::is_live vs ingest_grant's
             if nm.lstrip().startswith(("--", "svrn ", "sovereign ", "cargo ")):
@@ -4668,7 +4673,7 @@ class Kernel:
                 if files and where not in files:
                     return "sorry", f"a fn named {nm} is defined in {where}, not in a file this plan names; no collision the plan can see"
             if hit:
-                cite = self.plan_cites(nm)
+                cite = self.plan_cites(nm, sha_t)
                 if cite:
                     return "sorry", f"already defined at {sha_t[:9]} and the plan cites it ({cite[:60]}): an extension, not a new noun"
                 return "refuted", f"already defined at {sha_t[:9]}: {hit}"
@@ -4870,7 +4875,8 @@ class Kernel:
                 return "proved", f"{len(out.splitlines())} file(s) at {sha_t[:9]}"
             for label, later in (("session end", end), ("HEAD", git("rev-parse", "HEAD").strip())):
                 if later and later != sha_t and git("grep", "-lF", nm.split("::")[-1], later).strip():
-                    return "sorry", f"nothing at {sha_t[:9]} contains {nm!r}, but {label} {later[:9]} does: uncommitted when cited, or written after"
+                    first = git("log", "--format=%h %ci", "--reverse", "-S", nm.split("::")[-1], f"{sha_t}..{later}").strip().splitlines()
+                    return "sorry", f"nothing at {sha_t[:9]} contains {nm!r}; first in git at {first[0][:26] if first else later[:9]}: uncommitted when cited, or written after"
             return "refuted", f"nothing at {sha_t[:9]} contains {nm!r}"
         if k == "Measured":
             v = str(st.get("value") or "").replace(",", "")
@@ -6206,7 +6212,10 @@ def cmd_self_test(_a) -> int:
     _kh.text = 'Scope::Models(_) => &["/v1/models", "/v1/chat/completions"],'
     eq(_kh.plan_cites("Scope"), None, "plan_cites: a route in the plan's own code is no citation (62d5846b)")
     _kh.text = "- **`SplitInferenceProvider`** (`oicp-client/src/lib.rs:1258`) is the provider."
-    eq(_kh.plan_cites("SplitInferenceProvider") is not None, True, "plan_cites: a backticked name beside file:line is a citation")
+    eq(_kh.plan_cites("SplitInferenceProvider", git("rev-parse", "HEAD").strip()) is not None, True, "plan_cites: a backticked name beside file:line is a citation")
+    _kh.text = "1. `no_such_new_file_xyz.rs` — one `Scope` variant, one `paths()` arm"
+    eq(_kh.plan_cites("Scope", git("rev-parse", "HEAD").strip()), None, "plan_cites: an anchor the plan itself will write is no citation (62d5846b)")
+    eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "/v1/models", "span": "curl /v1/models", "section": "Verification"})[0], "sorry", "Proposes: a route in Verification is exercised")
     eq(_kh.defined_at("constant_time_eq", git("rev-parse", "HEAD").strip()) is None or "Cargo.lock" not in _kh.defined_at("constant_time_eq", git("rev-parse", "HEAD").strip()), True, "defined_at: Cargo.lock is not a definition site")
     _kh.text = ""
     _many = _kh.defined_many(["Kernel", "FooBarBazNounX", "NodeId", "co-oplog.py", "sovereign-mesh", "Kernel::summaries"], git("rev-parse", "HEAD").strip())
