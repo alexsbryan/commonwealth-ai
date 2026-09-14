@@ -54,6 +54,10 @@
 # check (watch `logs` for the slot load) before trusting a long run to it.
 set -euo pipefail
 
+# The Vast CLI reads VAST_API_KEY. Accept VAST_API_TOKEN as well; an explicit
+# VAST_API_KEY wins.
+export VAST_API_KEY="${VAST_API_KEY:-${VAST_API_TOKEN:-}}"
+
 # Where this script lives, so the onstart render can read its siblings
 # (pod-supervise.sh). Resolved before any cd.
 SCRIPT_DIR_LOCAL="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -444,8 +448,31 @@ json.dump(out, sys.stdout)
 # alone does not say which mode the pod was rented in — and a `down` that
 # guessed "solo" on a mesh pod would destroy it without leaving, stranding a
 # live member row on every peer.
+# Every read of Vast's instance list goes through here, because a list that
+# could not be read is not an empty one. Prints the rows as JSON, or says why
+# it could not and fails.
+vast_rows() {
+  local out
+  out=$(vastai show instances --raw 2>&1) || true
+  printf '%s' "$out" | python3 -c '
+import sys, json
+raw = sys.stdin.read()
+try:
+    rows = json.loads(raw)
+except Exception:
+    rows = None
+if not isinstance(rows, list):
+    why = rows.get("msg") if isinstance(rows, dict) else raw.strip()[:200]
+    print(f"[dev-pod] could not read Vast instances: {why} -- cannot say what is billing",
+          file=sys.stderr)
+    raise SystemExit(2)
+print(json.dumps(rows))'
+}
+
 resolve_row() {
-  vastai show instances --raw 2>/dev/null \
+  local rows_json
+  rows_json=$(vast_rows) || return 1
+  printf '%s' "$rows_json" \
     | LABEL_PREFIX="$LABEL_PREFIX" WANT_ID="${1:-}" python3 -c '
 import sys, json, os
 prefix = os.environ["LABEL_PREFIX"]
@@ -876,7 +903,8 @@ down)
   ;;
 status)
   # "Is anything costing me money right now, and how much so far?"
-  vastai show instances --raw 2>/dev/null | LABEL_PREFIX="$LABEL_PREFIX" python3 -c '
+  rows_json=$(vast_rows) || exit 2
+  printf '%s' "$rows_json" | LABEL_PREFIX="$LABEL_PREFIX" python3 -c '
 import sys, json, os, time
 prefix = os.environ["LABEL_PREFIX"]
 try: rows = json.load(sys.stdin)
