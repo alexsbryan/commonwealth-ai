@@ -38,6 +38,8 @@ Exit codes: 0 value valid (or self-test green), 3 artifact absent,
 from __future__ import annotations
 
 import json
+import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -125,6 +127,157 @@ def subcommand(name: str):
         SUBCOMMANDS[name] = fn
         return fn
     return deco
+
+
+# ── peer-outside — dm-peer-outside-fabric ───────────────────────────────────
+#
+# No crate outside the commonwealth package may define a type whose name
+# carries the word `Peer`. The sweep is ANYWHERE in the name, never a prefix:
+# a prefix bar is passed by renaming `PeerFoo` to `MeshPeerFoo`, which moves no
+# coupling (campaigns/domains.toml:135-139). `--anywhere` is therefore the only
+# mode; a `--prefix` mode is not implemented.
+#
+# TWO LITERALS THE REGISTRY CANNOT SUPPLY, and why they are not the constant
+# the Seams forbid. The word `Peer` is the axis's own subject — Fabric owns
+# `Member`, so no `[[context]].owns` row carries `Peer`, and deriving it from
+# the `[[noun]]` rows would break the moment the bar hits target and the rows
+# are renamed away. The package prefix is the bar's own scope ("outside the
+# commonwealth package", campaigns/domains.toml:132). Every word the
+# `word-owners` axis sweeps comes from the registry; this axis is the Peer bar,
+# so its word is its definition.
+_PEER_WORD = "Peer"
+_PEER_DEF = re.compile(
+    r"^\s*pub(?:\(crate\))?\s+(?:struct|enum|type|trait)\s+(\w+)")
+_COMMONWEALTH_PREFIX = "commonwealth/crates/"
+_WALK_SKIP = frozenset({"target", ".git", "node_modules"})
+
+
+def _rs_files(root: Path) -> list[Path]:
+    """Every tracked `*.rs` under `root`; a filesystem walk for a fixture.
+
+    `git ls-files` is the tree path: the universe is what is committed, and it
+    cannot wander into `target/`. A temp-dir fixture is not a work tree, so it
+    is walked with the heavy directories pruned. One enumerator, so the axis
+    the self-test drives is the axis that runs on the tree.
+    """
+    root = Path(root)
+    if (root / ".git").exists():
+        r = subprocess.run(["git", "ls-files", "--", "*.rs"],
+                           cwd=root, capture_output=True, text=True)
+        if r.returncode == 0:
+            return [root / p for p in r.stdout.splitlines() if p]
+    out: list[Path] = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in _WALK_SKIP]
+        out.extend(Path(dirpath) / fn for fn in filenames if fn.endswith(".rs"))
+    return out
+
+
+def _crate_dir(path: Path, root: Path) -> str:
+    """The crate a file belongs to: its nearest ancestor with a Cargo.toml.
+
+    Only ancestors AT or BELOW `root` are considered, so a stray manifest above
+    a temp-dir fixture can never claim it.
+    """
+    root = Path(root)
+    for d in (path.parent, *path.parents):
+        if d != root and root not in d.parents:
+            continue
+        if (d / "Cargo.toml").exists():
+            return d.relative_to(root).as_posix() if d != root else "."
+    try:
+        rel = path.relative_to(root).as_posix()
+    except ValueError:
+        return path.as_posix()
+    return rel.split("/", 1)[0]
+
+
+def peer_defs(root: Path) -> list[dict]:
+    """`Peer`-named definitions outside the commonwealth package, keeps removed.
+
+    One dict per definition (`file`, `line`, `name`, `crate`), so the self-test
+    can ask it for truthiness and the subcommand can print the crate set. The
+    registry's `[[noun]]` rows with `disposition = "decided:keep"` are
+    subtracted BY NAME — the registry's own carve-out list (e.g. `PeerAnswer`,
+    C9 egress custody), not an exception in this script.
+    """
+    root = Path(root)
+    kept = {n["name"] for n in registry().get("noun", [])
+            if n.get("disposition") == "decided:keep"}
+    found: list[dict] = []
+    for path in _rs_files(root):
+        try:
+            rel = path.relative_to(root).as_posix()
+        except ValueError:
+            rel = path.as_posix()
+        if rel.startswith(_COMMONWEALTH_PREFIX):
+            continue
+        try:
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        for i, line in enumerate(lines):
+            m = _PEER_DEF.match(code_part(line))
+            if not m or _PEER_WORD not in m.group(1):
+                continue
+            if m.group(1) in kept:
+                continue
+            found.append({"file": rel, "line": i + 1, "name": m.group(1),
+                          "crate": _crate_dir(path, root)})
+    return found
+
+
+def _peer_positive(root: Path) -> None:
+    """A planted real definition: caught."""
+    (root / "fixture").mkdir(parents=True, exist_ok=True)
+    (root / "fixture" / "lib.rs").write_text(
+        "pub struct FooPeerBar {\n    n: u32,\n}\n", encoding="utf-8")
+
+
+def _peer_negative(root: Path) -> None:
+    """The word present but not a definition: refused.
+
+    The five shapes the row names (`use`, a commented-out definition, a doc
+    comment, a string literal, a lower-case variable, an `impl`) plus a
+    definition that does NOT carry the word — without that last line the
+    negative cannot catch a broken word filter.
+    """
+    (root / "fixture").mkdir(parents=True, exist_ok=True)
+    (root / "fixture" / "lib.rs").write_text(
+        "use x::PeerFoo;\n"
+        "// pub struct PeerFoo\n"
+        "/// A doc comment naming `pub struct PeerFoo`.\n"
+        "const NAME: &str = \"PeerFoo\";\n"
+        "fn f() { let peer_foo = 1; }\n"
+        "impl PeerFoo {}\n"
+        "pub struct PlainThing;\n",
+        encoding="utf-8")
+
+
+AXES.append({
+    "id": "peer-outside",
+    "detect": peer_defs,
+    "positive": _peer_positive,
+    "negative": _peer_negative,
+})
+
+
+@subcommand("peer-outside")
+def cmd_peer_outside(args: list[str]) -> int:
+    """Print the count and the crate set, or the measurement line with --json."""
+    found = peer_defs(REPO)
+    if "--json" in args:
+        emit_measurement(len(found))
+        return EXIT_OK
+    by_crate: dict[str, int] = {}
+    for h in found:
+        by_crate[h["crate"]] = by_crate.get(h["crate"], 0) + 1
+    print("peer-outside — Peer* definitions outside commonwealth/crates/ "
+          "(the word anywhere in the name; prefix mode refused)\n")
+    for crate in sorted(by_crate):
+        print(f"  {crate:<46} {by_crate[crate]:>3}")
+    print(f"\n  value: {len(found)} in {len(by_crate)} crates")
+    return EXIT_OK
 
 
 def self_test() -> int:
