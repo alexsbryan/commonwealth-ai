@@ -4494,10 +4494,7 @@ class Kernel:
 
     PLAN_NOT_NEW = ("what this removes", "could this be done with less", "what already exists", "what this extends",
                     "deliberately not doing", "non-goals", "restraint patterns", "context")
-    # the sections in which a plan ASSERTS a thing exists; an absent name
-    # anywhere else is the plan naming what it will write (90267a54 p9.11:
-    # 'MeshDirectory came back clean from code converge noun' tagged Exists)
-    PLAN_ASSERTS_EXISTS = ("context", "what already exists", "what this extends", "what this removes", "inherited state", "prior art")
+
 
     def plan_cites(self, name: str) -> str | None:
         """The plan line that cites `name` beside a file:line anchor or a
@@ -4507,7 +4504,7 @@ class Kernel:
         for i, l in enumerate(self.text.splitlines(), 1):
             if re.search(r"(?<![\w])" + re.escape(n) + r"\.(?:rs|py|sh|ts)\b", l):
                 return f"L{i}: {l.strip()[:100]}"
-            if n in l and re.search(r"\w\.(?:rs|py|toml|md)\b|:\d{2,}\b|[\w-]+/[\w./-]+", l.replace(n, "")):
+            if re.search(r"`" + re.escape(n) + r"(?:::\w+)?(?:\(\))?`", l) and re.search(r"\w\.(?:rs|py|toml|md|sh|ts)(?::\d+)?\b|`:\d{2,}", l.replace(n, "")):
                 return f"L{i}: {l.strip()[:100]}"
         return None
 
@@ -4558,7 +4555,7 @@ class Kernel:
         out = {n: None for n in names}
         if plain:
             alt = "(?:" + "|".join(sorted({re.escape(n.replace("-", "_")) for n in plain}, key=len, reverse=True)) + ")"
-            hits = git("grep", "-n", "-P", "-e", self.RX_DEF.format(n=alt), sha, "--", ":!*.md", ":!*.txt", ":!*.jsonl").splitlines()
+            hits = git("grep", "-n", "-P", "-e", self.RX_DEF.format(n=alt), sha, "--", ":!*.md", ":!*.txt", ":!*.jsonl", ":!Cargo.lock").splitlines()
             rx = {n: re.compile(self.RX_DEF.format(n=re.escape(n.replace("-", "_")))) for n in plain}
             for l in hits:
                 parts = l.split(":", 3)                  # sha:file:lineno:content -- the regex is ^-anchored on CONTENT
@@ -4609,7 +4606,7 @@ class Kernel:
             if not re.fullmatch(r"\w+", mem) or not re.fullmatch(r"\w+", typ):
                 return None
             # a definition of the member in a file that also names the type
-            for l in git("grep", "-n", "-P", "-e", self.RX_DEF.format(n=re.escape(mem)), sha, "--", ":!*.md", ":!*.txt", ":!*.jsonl").splitlines():
+            for l in git("grep", "-n", "-P", "-e", self.RX_DEF.format(n=re.escape(mem)), sha, "--", ":!*.md", ":!*.txt", ":!*.jsonl", ":!Cargo.lock").splitlines():
                 parts = l.split(":", 2)
                 if len(parts) == 3 and git("grep", "-l", "-F", typ, sha, "--", parts[1]).strip():
                     return f"{parts[1]}:{parts[2][:120]}"
@@ -4621,7 +4618,7 @@ class Kernel:
         rx = self.RX_DEF.format(n=re.escape(n.replace("-", "_")) if "-" in n else re.escape(n))
         # -P: git's -E has no \s or \b on this host (2.50, Apple); the
         # first smoke returned 'nothing defines Kernel' at a sha carrying it.
-        out = git("grep", "-n", "-P", "-e", rx, sha, "--", ":!*.md", ":!*.txt", ":!*.jsonl").strip()
+        out = git("grep", "-n", "-P", "-e", rx, sha, "--", ":!*.md", ":!*.txt", ":!*.jsonl", ":!Cargo.lock").strip()
         if not out and "-" in n:
             out = git("grep", "-n", "-P", "-e", f'^\\s*name\\s*=\\s*"{re.escape(n)}"', sha, "--", "*Cargo.toml").strip()
         if not out:
@@ -5311,9 +5308,10 @@ def cmd_plan_claims(a) -> int:
     for st in stmts:
         if foreign and st["state"] in ("refuted", "proved") and st["kind"] in ("Exists", "Proposes"):   # 80406ac5: 17 canon nouns 'proved new' here
             st["state"], st["receipt"] = "sorry", f"the plan's paths are in another repository ({len(cited) - len(here)} of {len(cited)} top directories are not here)"
-        sec = (st.get("section") or "").lower().rstrip("?").strip()
-        if st["kind"] == "Exists" and st["state"] == "refuted" and not any(sec.startswith(x) for x in Kernel.PLAN_ASSERTS_EXISTS):
-            st["state"], st["receipt"] = "sorry", f"absent at {sha_p[:9]}, named in a '{st.get('section')}' section: the plan may be naming what it will write"
+        # (An 'asserting section' rule lived here for one kernel revision and
+        # demoted RailScope -- in no file anywhere -- along with MeshDirectory,
+        # invite_expires_at, NEVER_GUESTABLE .. which HEAD carries: the
+        # later-in-tree rule in the Exists tactic covers those, this did not.)
     proposed = {re.sub(r":\d+(?:-\d+)?$", "", (st.get("name") or "").strip("`")) for st in stmts if st["kind"] == "Proposes"}
     for st in stmts:
         if st["kind"] == "Exists" and st["state"] == "refuted" and re.sub(r":\d+(?:-\d+)?$", "", (st.get("name") or "").strip("`")) in proposed:
@@ -6205,6 +6203,11 @@ def cmd_self_test(_a) -> int:
     eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "scripts/co-oplog.py", "shape": "file", "span": "`scripts/co-oplog.py` modified (one index)"})[0], "sorry", "Proposes: 'modified' is a change, not a new file")
     _kh.text = "| `co-oplog.rs` | 228 | move |"
     eq(_kh.plan_cites("co-oplog") is not None, True, "plan_cites: name.rs in a table cites the module")
+    _kh.text = 'Scope::Models(_) => &["/v1/models", "/v1/chat/completions"],'
+    eq(_kh.plan_cites("Scope"), None, "plan_cites: a route in the plan's own code is no citation (62d5846b)")
+    _kh.text = "- **`SplitInferenceProvider`** (`oicp-client/src/lib.rs:1258`) is the provider."
+    eq(_kh.plan_cites("SplitInferenceProvider") is not None, True, "plan_cites: a backticked name beside file:line is a citation")
+    eq(_kh.defined_at("constant_time_eq", git("rev-parse", "HEAD").strip()) is None or "Cargo.lock" not in _kh.defined_at("constant_time_eq", git("rev-parse", "HEAD").strip()), True, "defined_at: Cargo.lock is not a definition site")
     _kh.text = ""
     _many = _kh.defined_many(["Kernel", "FooBarBazNounX", "NodeId", "co-oplog.py", "sovereign-mesh", "Kernel::summaries"], git("rev-parse", "HEAD").strip())
     eq({k: bool(v) for k, v in _many.items()}, {"Kernel": True, "FooBarBazNounX": False, "NodeId": True, "co-oplog.py": True, "sovereign-mesh": True, "Kernel::summaries": True},
