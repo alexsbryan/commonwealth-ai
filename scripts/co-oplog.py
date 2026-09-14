@@ -28,6 +28,7 @@ from __future__ import annotations
 import argparse
 import datetime as _dt
 import json
+import types
 import os
 import re
 import sys
@@ -4386,7 +4387,7 @@ def investigate(path: Path, turn: int, report: str, sha: str | None, t1: str | N
 # serves edges, with verbatim spans the kernel validates; it never assigns a
 # proof state.
 
-KINDS = ("Tested", "Landed", "Exists", "Measured", "Promise", "Status", "Opinion")
+KINDS = ("Tested", "Landed", "Exists", "Measured", "Count", "Promise", "Status", "Opinion")
 STATES = ("proved", "refuted", "sorry", "open")
 
 STATEMENTS_TOOL = [{"type": "function", "function": {
@@ -4401,6 +4402,7 @@ STATEMENTS_TOOL = [{"type": "function", "function": {
             "symbols": {"type": "array", "items": {"type": "string"}},
             "name": {"type": "string"},
             "quantity": {"type": "string"}, "value": {"type": "string"}, "unit": {"type": "string"},
+            "of": {"type": "integer"}, "pattern": {"type": "string"}, "in": {"type": "string"},
             "action": {"type": "string"}, "goal": {"type": "string"}, "state": {"type": "string"}},
         "required": ["kind", "span"]}}}, "required": ["statements"]}}}]
 
@@ -4409,7 +4411,10 @@ Kinds:
 Tested {scope, pass, fail}: a test run's outcome. scope is what ran ("full workspace", a crate, a test name).
 Landed {sha, paths, symbols}: something committed or in the tree now.
 Exists {name}: a file, symbol, route or test exists.
-Measured {quantity, value, unit}: a number the report states as measured (lines, bytes, seconds, counts).
+Measured {quantity, value, unit}: a number the report states as measured (lines, bytes, seconds).
+Count {quantity, value, of, pattern, in}: a count of things ("eight launch roles", "15 of 16 gates",
+  "13 impls", "39 sites"); `of` for "N of M"; `pattern` and `in` when the span names what is counted
+  and where (an enum, a match, a file).
 Promise {action}: something the agent says it will do.
 Status {goal, state}: a verdict on the work ("done", "green", "clean", "blocked", "met").
 Opinion: a judgement or explanation with nothing to check.
@@ -4593,6 +4598,41 @@ class Kernel:
                 st["weak"] = not any(any(w in h.lower() for w in words) for _, h in hits) if words else True
                 return "proved", " | ".join(h[:100] for _, h in hits)[:200]
             return "sorry", f"nothing printed {[n for n, h in hits if not h][:3]} before turn {turn}"
+        if k == "Count":
+            # 'N of M' against a record line carrying 'X of M' (69191705 t109:
+            # '15 of 16 gates' vs '2 of 16 want attention' = 14 of 16); a
+            # counted pattern in a file at the sha (e02c5365 t14: 'eight
+            # launch roles' vs nine `Launch::` arms in main.rs).
+            words = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8,
+                     "nine": 9, "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15}
+            v = str(st.get("value") or "").strip().lower()
+            n = int(v) if v.isdigit() else words.get(v)
+            if n is None:
+                return "sorry", f"no count in {v!r}"
+            of = st.get("of")
+            if of:
+                rx = re.compile(r"\b(\d+) of " + str(int(of)) + r"\b")
+                seen = [(i, l.strip()) for i, t in sorted(self.obs["results"] + self.obs["asks"], key=lambda x: x[0]) if i <= turn
+                        for l in t.splitlines() if rx.search(l)]
+                if not seen:
+                    return "sorry", f"nothing printed 'N of {of}' before turn {turn}"
+                i, l = seen[-1]
+                m = int(rx.search(l).group(1))
+                fits = m == n or (re.search(r"want attention|fail|red|not passed", l, re.I) and int(of) - m == n)
+                return ("proved" if fits else "refuted"), f"turn {i}: {l[:140]}"
+            pat, where, sha_t = (st.get("pattern") or "").strip("`"), (st.get("in") or "").strip("`"), self.sha_at_turn(turn)
+            if pat and where and sha_t:
+                body = git("show", f"{sha_t}:{where.lstrip('./')}")
+                if not body:
+                    files = [l for l in git("ls-tree", "-r", "--name-only", sha_t).splitlines() if l.split("/")[-1] == where.split("/")[-1]]
+                    body = git("show", f"{sha_t}:{files[0]}") if files else ""
+                    where = files[0] if files else where
+                if not body:
+                    return "sorry", f"{where} is not in the tree at {sha_t[:9]}"
+                got = len(re.findall(re.escape(pat), body))
+                return ("proved" if got == n else "refuted"), f"{got} x {pat!r} in {where} at {sha_t[:9]}"
+            hit = self.seen(str(n), turn)
+            return ("proved", hit[:140]) if hit else ("sorry", f"nothing printed {n} before turn {turn}; no pattern or file to count")
         if k == "Promise":
             return "open", "discharged by a later Landed or Tested on the same anchor"
         if k == "Status":
@@ -4683,6 +4723,43 @@ def supersedes(stmts: list[dict], kernel: Kernel) -> list[dict]:
                 edges.append({"earlier": a["id"], "later": b["id"], "why": f"{qa}: {a['value']} then {b['value']}"})
     return edges
 
+def cmd_claims_all(a) -> int:
+    """The definitive run: every operator-facing block with claim_load >=
+    min_load over the last N sessions, translated and run through the
+    kernel, no serves step; refuted rows collected for the hand read."""
+    src = TRANSCRIPTS / a.project
+    seen = set(a.exclude.split(",")) if a.exclude else set()
+    files = sorted(src.glob("*.jsonl"), key=lambda q: q.stat().st_mtime, reverse=True)
+    files = [f for f in files if not any(f.stem.startswith(x) for x in seen) and f.stat().st_size >= a.min_bytes and not transcript_live(f)][:a.last]
+    summary, t0 = [], time.time()
+    for n, f in enumerate(files, 1):
+        ts = turns(f)
+        ops = [(i, t) for i, t, w, aud in ts if aud == "operator" and claim_load(t) >= a.min_load]
+        if not ops:
+            print(f"  {n:>2}/{len(files)} {f.stem[:8]}  no block at load >= {a.min_load}", flush=True); continue
+        ns = types.SimpleNamespace(project=a.project, session=f.stem, turns=",".join(str(i) for i, _ in ops), min_load=a.min_load,
+                                   pin=a.pin, timeout=a.timeout, no_serves=True, serves_only=False)
+        t1 = time.time()
+        try:
+            rc = cmd_claims(ns)
+        except DaemonDown as e:
+            print(f"  {n:>2}/{len(files)} {f.stem[:8]}  could-not-judge: daemon {e}", flush=True)
+            summary.append({"session": f.stem, "error": str(e)}); continue
+        rows = [json.loads(l) for l in (SESSIONS_DIR / f.stem / "claims.jsonl").open()] if rc == 0 else []
+        stmts = [r for r in rows if r["node"] == "statement"]
+        from collections import Counter as _C
+        c = _C(r["state"] for r in stmts)
+        refuted = [r for r in stmts if r["state"] == "refuted"]
+        print(f"  {n:>2}/{len(files)} {f.stem[:8]}  blocks={len(ops)}  statements={len(stmts)}  {dict(c)}  {round(time.time() - t1)}s", flush=True)
+        summary.append({"session": f.stem, "blocks": [i for i, _ in ops], "statements": len(stmts), "states": dict(c),
+                        "refuted": refuted, "supersedes": [r for r in rows if r["node"] == "supersedes"], "seconds": round(time.time() - t1)})
+    if a.out:
+        Path(a.out).write_text(json.dumps(summary, indent=1))
+        print(f"written {a.out}")
+    print(f"\nclaims-all — {len(summary)} session(s) · {sum(len(x.get('refuted', [])) for x in summary)} refuted row(s) · "
+          f"{sum(len(x.get('supersedes', [])) for x in summary)} supersedes edge(s) · {sum(1 for x in summary if 'error' in x)} could-not-judge · {round(time.time() - t0)}s")
+    return 0
+
 def cmd_claims(a) -> int:
     path = resolve(a.project, a.session)
     ts = turns(path)
@@ -4727,7 +4804,7 @@ def cmd_claims(a) -> int:
             if re.search(r"\b(?:open|blocked|owed|pending|waiting|not (?:yet|done|met))\b", (st.get("state") or "") + " " + (st.get("goal") or ""), re.I):
                 st["state"], st["receipt"] = "open", "an open item carries no obligation"   # 9903ea64 t19.15
                 continue
-            deps = [d for d in stmts if d["turn"] == st["turn"] and d["kind"] in ("Tested", "Landed", "Exists")]
+            deps = [d for d in stmts if d["turn"] == st["turn"] and d["kind"] in ("Tested", "Landed", "Exists", "Count")]
             st["deps"] = [d["id"] for d in deps]
             if any(d["state"] == "refuted" for d in deps):
                 st["state"], st["receipt"] = "refuted", "by " + ", ".join(d["id"] for d in deps if d["state"] == "refuted")
@@ -5585,8 +5662,13 @@ def cmd_self_test(_a) -> int:
     _kh = Kernel(Path("."), {"results": [], "asks": [], "nums": {}}, lambda i: git("rev-parse", "HEAD").strip())
     eq(_kh.run({"kind": "Exists", "turn": 1, "name": "co-oplog.py"})[0], "proved", "Exists: a bare file name is found anywhere in the tree")
     eq(_kh.run({"kind": "Exists", "turn": 1, "name": "scripts/co-oplog.py"})[0], "proved", "Exists: a path is looked up as a path")
-    eq(_kh.run({"kind": "Exists", "turn": 1, "name": "/internal/never-such-route-zz9"})[0], "refuted", "Exists: a route is a string in the tree")
+    eq(_kh.run({"kind": "Exists", "turn": 1, "name": "/internal/nope-" + hex(int(time.time()))[2:]})[0], "refuted", "Exists: a route is a string in the tree, and this one is in no tree")
     eq(_kh.run({"kind": "Exists", "turn": 1, "name": "no_such_file_zz9.rs"})[0], "refuted", "Exists: and a missing file is refuted")
+    eq(_kh.run({"kind": "Count", "turn": 1, "quantity": "roles", "value": "eight", "pattern": "Launch::", "in": "co-oplog.py"})[0], "refuted",
+       "Count: a pattern counted in a file at the sha")
+    _kc = Kernel(Path("."), {"results": [(0, "[—] 2 of 16 want attention (not passed, or passed on stale evidence)")], "asks": [], "nums": {}}, lambda i: None)
+    eq(_kc.run({"kind": "Count", "turn": 1, "quantity": "gates passing", "value": "15", "of": 16})[0], "refuted", "Count: '15 of 16' vs '2 of 16 want attention'")
+    eq(_kc.run({"kind": "Count", "turn": 1, "quantity": "gates passing", "value": "14", "of": 16})[0], "proved", "Count: and 14 of 16 is what it says")
     eq(parse_summary("13257 pass / 1 fail exit 101"), (13257, 1), "parse_summary: a worker's line")
     eq(parse_summary("total_pass=13257  total_fail=1  cargo.exit=101"), (13257, 1), "parse_summary: the scoped banner")
     eq(is_steer("<task-notification>x</task-notification>"), False, "a notification is not a steer")
@@ -5763,6 +5845,16 @@ def main() -> int:
     cl.add_argument("--no-serves", action="store_true")
     cl.add_argument("--serves-only", action="store_true", help="redo only the serves step over the stored claims.jsonl")
     cl.set_defaults(fn=cmd_claims)
+    ca = sub.add_parser("claims-all", help="the claim graph over the last N sessions, kernel only; refuted rows collected for the hand read")
+    ca.add_argument("--project", default="-Users-alexsbryan-dev-commonwealth-ai")
+    ca.add_argument("--last", type=int, default=40)
+    ca.add_argument("--exclude", default="")
+    ca.add_argument("--min-bytes", type=int, default=200_000)
+    ca.add_argument("--min-load", type=int, default=5)
+    ca.add_argument("--pin", default=DEFAULT_PIN)
+    ca.add_argument("--timeout", type=float, default=240.0)
+    ca.add_argument("--out", default="")
+    ca.set_defaults(fn=cmd_claims_all)
     ia = sub.add_parser("investigate-all", help="one investigation per session over the last N: its final report, or its heaviest-claim turn")
     ia.add_argument("--project", default="-Users-alexsbryan-dev-commonwealth-ai")
     ia.add_argument("--pick", choices=["final", "heaviest"], default="final")
