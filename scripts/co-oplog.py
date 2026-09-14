@@ -4486,6 +4486,20 @@ class Kernel:
     def __init__(self, path: Path, obs: dict, sha_at_turn):
         self.path, self.obs, self.sha_at_turn = path, obs, sha_at_turn
         self.own_all = None
+        self.text = ""          # the plan, for Proposes: a name the plan cites with an anchor is not proposed new
+
+    PLAN_NOT_NEW = ("what this removes", "could this be done with less", "what already exists", "what this extends",
+                    "deliberately not doing", "non-goals", "restraint patterns")
+
+    def plan_cites(self, name: str) -> str | None:
+        """The plan line that cites `name` beside a file:line anchor or a
+        path -- the plan knows the thing exists (536c8494: GuestGrant
+        proposed 'total in place' two sections after `guest_grant.rs:120`)."""
+        n = name.strip("`").split("::")[0]
+        for i, l in enumerate(self.text.splitlines(), 1):
+            if n in l and re.search(r"\w\.(?:rs|py|toml|md)\b|:\d{2,}\b|[\w-]+/[\w./-]+", l.replace(n, "")):
+                return f"L{i}: {l.strip()[:100]}"
+        return None
 
     def sha_end(self) -> str | None:
         try:
@@ -4512,7 +4526,8 @@ class Kernel:
     RX_DEF = (r"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+|unsafe\s+|const\s+)*(?:struct|enum|trait|type|fn|mod|const|static|union|macro_rules!)\s+{n}\b"
               r"|^\s*(?:async\s+)?(?:def|class)\s+{n}\b"
               r"|^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?(?:function|class|interface)\s+{n}\b"
-              r"|^\s*(?:name\s*=\s*\"{n}\")")
+              r"|^\s*(?:name\s*=\s*\"{n}\")"
+              r"|^\s*\w+!\s*[\(\{{\[]\s*(?:pub\s+)?(?:struct\s+|enum\s+)?{n}\b")
 
     def defined_at(self, name: str, sha: str, shape: str = "") -> str | None:
         """Where `name` is DEFINED in the tree at `sha` (a definition line,
@@ -4581,8 +4596,18 @@ class Kernel:
                 return "sorry", f"{nm!r} is prose or a glob, not a name git can look for"
             if re.fullmatch(r"[a-z]+", nm) and (st.get("shape") or "") not in ("fn", "module", "crate"):
                 return "sorry", f"{nm!r} is a field or key, not a noun git defines"
+            sec = (st.get("section") or "").lower().rstrip("?").strip()
+            if any(sec.startswith(x) for x in self.PLAN_NOT_NEW):
+                return "sorry", f"a '{st.get('section')}' section proposes nothing new"          # 536c8494 p5.1, p6.2
             hit = self.defined_at(nm, sha_t, st.get("shape") or "")
+            if hit and re.search(r"\b(?:rows?|entry|entries|lines?|section|field|arm|variant|key|column)\b", st.get("span", ""), re.I) \
+                    and re.search(r"\.(?:md|toml|json|ya?ml|tsv|txt)$", nm):
+                # 'a DEFAULTS_LEDGER.md row per rung' proposes a row, not the file (536c8494 p11.9-10)
+                return "sorry", f"an addition to {nm}, which is in the tree at {sha_t[:9]}; the new thing has no name"
             if hit:
+                cite = self.plan_cites(nm)
+                if cite:
+                    return "sorry", f"already defined at {sha_t[:9]} and the plan cites it ({cite[:60]}): an extension, not a new noun"
                 return "refuted", f"already defined at {sha_t[:9]}: {hit}"
             if not re.search(r"[/:.]|_|[A-Z][a-z]+[A-Z]|^[A-Z][a-z]{3,}$|^[a-z][a-z0-9-]{3,}$", nm):
                 return "sorry", f"{nm!r} is not a name git can look for"
@@ -4749,6 +4774,8 @@ class Kernel:
                     return "proved", f"{nm} is in the tree at {sha_t[:9]}"
                 top = nm.lstrip("./").split("/")[0]
                 if git("show", f"{sha_t}:{top}"):
+                    if Path(nm.lstrip("./")).exists():
+                        return "sorry", f"{nm} is on disk but not in git at {sha_t[:9]} (ignored or untracked); git cannot date it"
                     return "refuted", f"{nm} is not in the tree at {sha_t[:9]}"
                 # relative to a crate ('runtime/streaming.rs', c3b57dbd p3.2): by suffix
                 files = [l for l in git("ls-tree", "-r", "--name-only", sha_t).splitlines() if l.endswith("/" + nm.lstrip("./"))]
@@ -5159,6 +5186,7 @@ def cmd_plan_claims(a) -> int:
     secs = plan_sections(ev["plan"])
     obs = session_observations(path)
     kernel = Kernel(path, obs, lambda i: sha_p)
+    kernel.text = ev["plan"]
     d = SESSIONS_DIR / path.stem
     d.mkdir(parents=True, exist_ok=True)
     stmts, t0 = [], time.time()
@@ -5221,6 +5249,8 @@ def cmd_plan_claims(a) -> int:
 def cmd_plan_claims_all(a) -> int:
     src = TRANSCRIPTS / a.project
     files = [f for f in sorted(src.glob("*.jsonl"), key=lambda q: q.stat().st_mtime, reverse=True) if plan_events(f)]
+    if getattr(a, "resume", False):
+        files = [f for f in files if not (SESSIONS_DIR / f.stem / "plan-claims.jsonl").exists()]
     summary, t0 = [], time.time()
     for n, f in enumerate(files, 1):
         ns = types.SimpleNamespace(project=a.project, session=f.stem, pin=a.pin, timeout=a.timeout, rekernel=a.rekernel, verbose=False)
@@ -6047,6 +6077,12 @@ def cmd_self_test(_a) -> int:
                       ("FooBarBazNounX", "proved"), ("Kernel::nope_nope", "proved"), ("no-such-crate-xyz", "proved"),
                       ("a ledger of plans", "sorry"), ("svrn setup --terminal", "sorry")):
         eq(_kh.run({"kind": "Proposes", "turn": 1, "name": _n, "span": "x"})[0], _want, f"Proposes {_n}")
+    eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "NodeId", "span": "x"})[0], "refuted", "Proposes: a macro-defined type is defined (define_id!(NodeId, ..))")
+    eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "sovereign/DEFAULTS_LEDGER.md", "shape": "file", "span": "a `sovereign/DEFAULTS_LEDGER.md` row per rung"})[0], "sorry", "Proposes: a row in an existing file is an addition")
+    eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "Kernel", "span": "x", "section": "What this removes"})[0], "sorry", "Proposes: a removes section proposes nothing")
+    _kh.text = "- `Kernel` (`scripts/co-oplog.py:4477`) is the judge.\n\n## Plan\n\nbuild a `Kernel`"
+    eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "Kernel", "span": "x"})[0], "sorry", "Proposes: the plan cites the definition, so it is an extension")
+    _kh.text = ""
     eq(_kh.run({"kind": "Exists", "turn": 1, "name": "co-oplog.py"})[0], "proved", "Exists: a bare file name is found anywhere in the tree")
     eq(_kh.run({"kind": "Exists", "turn": 1, "name": "scripts/co-oplog.py"})[0], "proved", "Exists: a path is looked up as a path")
     eq(_kh.run({"kind": "Exists", "turn": 1, "name": "/internal/nope-" + hex(int(time.time()))[2:]})[0], "refuted", "Exists: a route is a string in the tree, and this one is in no tree")
@@ -6244,6 +6280,7 @@ def main() -> int:
     pc.add_argument("--out", default="")
     pc.add_argument("--verbose", action="store_true", help="print Opinion rows too")
     pc.add_argument("--rekernel", action="store_true", help="re-judge the stored ledger; no model call")
+    pc.add_argument("--resume", action="store_true", help="with --all: skip sessions that already have a ledger")
     pc.set_defaults(fn=lambda a: cmd_plan_claims_all(a) if a.all else cmd_plan_claims(a))
     ca = sub.add_parser("claims-all", help="the claim graph over the last N sessions, kernel only; refuted rows collected for the hand read")
     ca.add_argument("--project", default="-Users-alexsbryan-dev-commonwealth-ai")
