@@ -70,6 +70,25 @@ def registry(path: Path = DT) -> dict:
     return _REGISTRY
 
 
+def registry_for(root: Path) -> dict:
+    """The registry for a scan root: the fixture's own, else the repo's.
+
+    The self-test drives an axis against a temp dir, and an axis that reads
+    `[[edge]]` rows must be judged by the registry the fixture planted, not by
+    the repo's — otherwise the planted control and the file that judges it are
+    different documents. A root with no `quality/DOMAINS.toml` falls back to
+    the repo registry, so an axis can be driven against a bare source fixture.
+    """
+    root = Path(root)
+    if root.resolve() == REPO.resolve():
+        return registry()
+    p = root / "quality" / "DOMAINS.toml"
+    if p.exists():
+        with open(p, "rb") as f:
+            return tomllib.load(f)
+    return registry()
+
+
 def code_part(content: str) -> str:
     """The executable part of a source line — comments removed.
 
@@ -277,6 +296,171 @@ def cmd_peer_outside(args: list[str]) -> int:
     for crate in sorted(by_crate):
         print(f"  {crate:<46} {by_crate[crate]:>3}")
     print(f"\n  value: {len(found)} in {len(by_crate)} crates")
+    return EXIT_OK
+
+
+# ── shared-edges — dm-shared-edges ──────────────────────────────────────────
+#
+# A cross-context edge is a `[[edge]]` row: a type defined in one context that
+# a module of another reads. The registry is the denominator (13 rows, E1-E13,
+# hand-enumerated 2026-09-13, each carrying the fields the consumer actually
+# reads); the tree decides which are still live. The value is the live edges
+# with no named translation — the bar is "Fabric's member type reaches Serving
+# and Compute only through a named translation", so a row carrying
+# `translation = "<path:line>"` is off the count (E10, the working pattern, is
+# the one already translated).
+#
+# LIVENESS IS NOT A `use`-LINE SCAN. A use-only sweep of the six consuming
+# contexts finds 7 of the 13 (measured 2026-09-14): E1 crosses as a field
+# reference (`Arc<commonwealth_core::peer_health::PeerHealthTracker>`), E7 as a
+# `Debug`-flattened `trust_level`, E3/E4 as a whole-record pass with no import
+# at all. The row's own `fields_read` names what the consumer touches, so an
+# edge is live iff its `to_module` file names the `from_type` or any field it
+# reads. A row whose file names neither is STALE and is printed, never counted
+# (ARCH principle 6 — absence is reported, not defaulted).
+_MEMBER_EDGE = "MemberRecord"
+
+
+def _is_member_edge(name: str) -> bool:
+    """The bar's own scope: a name carrying `Peer`, or `MemberRecord`."""
+    return "Peer" in name or name == _MEMBER_EDGE
+
+
+def _field_leaf(field: str) -> str:
+    """`capabilities.embed_model` -> `embed_model`; a bare name unchanged."""
+    return field.strip().split(".")[-1].strip()
+
+
+def shared_edges(root: Path) -> dict:
+    """Classify every registry `[[edge]]` row against the tree at `root`.
+
+    Returns four lists — `counted` (live, untranslated, member-named: the
+    value), plus `translated`, `stale` and `offname`, which the subcommand
+    prints so an excluded edge is visible rather than silently dropped.
+    """
+    reg = registry_for(root)
+    counted: list[dict] = []
+    translated: list[dict] = []
+    stale: list[dict] = []
+    offname: list[dict] = []
+    for edge in reg.get("edge", []):
+        row = dict(edge)
+        to = Path(root) / edge["to_module"]
+        try:
+            text = to.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            text = ""
+        names = [edge["from_type"]] + [_field_leaf(f)
+                                       for f in edge.get("fields_read", [])]
+        row["live"] = bool(text) and any(n and n in text for n in names)
+        if not _is_member_edge(edge["from_type"]):
+            offname.append(row)
+        elif edge.get("translation", "none") != "none":
+            translated.append(row)
+        elif not row["live"]:
+            stale.append(row)
+        else:
+            counted.append(row)
+    return {"counted": counted, "translated": translated,
+            "stale": stale, "offname": offname}
+
+
+def _shared_edges_detect(root: Path) -> list[dict]:
+    """The axis's own function: truthy iff a live untranslated edge exists."""
+    return shared_edges(root)["counted"]
+
+
+def _shared_positive(root: Path) -> None:
+    """A live, untranslated member edge: caught."""
+    (root / "quality").mkdir(parents=True, exist_ok=True)
+    (root / "quality" / "DOMAINS.toml").write_text(
+        '[[edge]]\n'
+        'from_type = "MemberRecord"\n'
+        'from_context = "fabric"\n'
+        'to_module = "fixture/consumer.rs"\n'
+        'to_context = "serving"\n'
+        'fields_read = ["node_id"]\n'
+        'translation = "none"\n', encoding="utf-8")
+    (root / "fixture").mkdir(parents=True, exist_ok=True)
+    (root / "fixture" / "consumer.rs").write_text(
+        "use commonwealth_core::mesh::MemberRecord;\n"
+        "fn f(m: &MemberRecord) { let _ = m.node_id; }\n", encoding="utf-8")
+
+
+def _shared_negative(root: Path) -> None:
+    """Three refusals, each a plausible registry row.
+
+    A translated edge (its `translation` names a function), a stale row (its
+    `to_module` no longer names the type or any field), and an off-name type
+    (`PlainThing` is live and untranslated but is not what the bar sweeps).
+    """
+    (root / "quality").mkdir(parents=True, exist_ok=True)
+    (root / "quality" / "DOMAINS.toml").write_text(
+        '[[edge]]\n'
+        'from_type = "PeerFoo"\n'
+        'from_context = "fabric"\n'
+        'to_module = "fixture/translated.rs"\n'
+        'to_context = "serving"\n'
+        'fields_read = []\n'
+        'translation = "sovereign/x.rs:1"\n'
+        '\n'
+        '[[edge]]\n'
+        'from_type = "PeerBar"\n'
+        'from_context = "fabric"\n'
+        'to_module = "fixture/stale.rs"\n'
+        'to_context = "serving"\n'
+        'fields_read = []\n'
+        'translation = "none"\n'
+        '\n'
+        '[[edge]]\n'
+        'from_type = "PlainThing"\n'
+        'from_context = "kernel"\n'
+        'to_module = "fixture/plain.rs"\n'
+        'to_context = "serving"\n'
+        'fields_read = []\n'
+        'translation = "none"\n', encoding="utf-8")
+    (root / "fixture").mkdir(parents=True, exist_ok=True)
+    (root / "fixture" / "translated.rs").write_text(
+        "use commonwealth_core::mesh::PeerFoo;\n", encoding="utf-8")
+    (root / "fixture" / "plain.rs").write_text(
+        "use some::PlainThing;\n", encoding="utf-8")
+    # fixture/stale.rs is deliberately absent: PeerBar's row names a file that
+    # no longer exists, so the row is stale and must not count.
+
+
+AXES.append({
+    "id": "shared-edges",
+    "detect": _shared_edges_detect,
+    "positive": _shared_positive,
+    "negative": _shared_negative,
+})
+
+
+@subcommand("shared-edges")
+def cmd_shared_edges(args: list[str]) -> int:
+    """Print the live untranslated edge count and, per edge, the fields read."""
+    r = shared_edges(REPO)
+    counted = r["counted"]
+    if "--json" in args:
+        emit_measurement(len(counted))
+        return EXIT_OK
+    print("shared-edges — live cross-context [[edge]] rows with no named "
+          "translation\n  (registry denominator; a stale or translated row is "
+          "printed, never counted)\n")
+    for row in counted:
+        edge = f"{row['from_context']} -> {row['to_context']}"
+        fields = ", ".join(row.get("fields_read", [])) or "—"
+        print(f"  {row['from_type']:<22} {edge:<26} "
+              f"fields={len(row.get('fields_read', []))}")
+        print(f"  {'':<22} reads: {fields}")
+    for label, rows in (("translated", r["translated"]),
+                        ("stale", r["stale"]), ("off-name", r["offname"])):
+        for row in rows:
+            print(f"  [excluded/{label}] {row['from_type']} "
+                  f"({row['from_context']} -> {row['to_context']})")
+    print(f"\n  value: {len(counted)} live untranslated edges "
+          f"({len(r['translated'])} translated, {len(r['stale'])} stale, "
+          f"{len(r['offname'])} off-name)")
     return EXIT_OK
 
 
