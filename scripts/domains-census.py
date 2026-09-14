@@ -1716,6 +1716,80 @@ def cmd_liftable(args: list[str]) -> int:
     return EXIT_OK
 
 
+# ── predicate — the campaign's objective ────────────────────────────────────
+#
+# The sentence `quality/campaigns/domains.toml` `[predicate]` declares, as a
+# program a runner can call. TWO CONJUNCTS, both REUSED, neither re-derived
+# (ARCH principle 8): every kept context names an ARCH_LAYERS `[[package]]`
+# (the same `gated` reading dm-contexts-liftable counts) and no crate outside
+# the commonwealth package defines a `Peer*` type (the same `peer_defs` reading
+# dm-peer-outside-fabric counts). The statement's third clause — that
+# `cargo xtask boundary-gate` PASSES those packages — is the campaign check's
+# own `&&` (quality/campaigns/domains.toml:41), because this script shells
+# cargo for nothing but the declared lifts ("Seams": grep-shaped, no cargo).
+#
+# EXIT 1, NOT "NON-ZERO". `co-lineage.py::evaluate_predicate` reads 0 as TRUE,
+# 1 as FALSE, and any other code as COULD-NOT-RUN; a predicate that is false is
+# not one that could not run, and rendering it as the fourth verdict would be
+# the "abstention with no run that demanded it" the smell table forbids. The
+# reasons print BEFORE the judgement line, so the `detail` co-lineage captures
+# from the first output line is the WHY, not a header.
+#
+# THE PREDICATE IS FALSE ON TODAY'S TREE, AND THAT IS THE POINT. A predicate
+# that cannot be watched failing is not a predicate (domains-3-instrument,
+# Objective). Its two halves are each already watched failing by their own
+# axis's planted controls in `--self-test`, so the composition is not shipped
+# blind either (ARCH principles 5 and 7).
+
+
+def predicate_problems(root: Path) -> dict:
+    """The two conjuncts, each as the list it fails on (empty list = holds)."""
+    root = Path(root)
+    reg = registry_for(root)
+    packages = arch_packages_for(root)
+    ungated = [c["id"] for c in kept_contexts(reg)
+               if not ((c.get("package") or "") and c["package"] in packages)]
+    return {"ungated": ungated, "peers": peer_defs(root)}
+
+
+@subcommand("predicate")
+def cmd_predicate(args: list[str]) -> int:
+    """The campaign predicate: every kept context packaged, no outside Peer*."""
+    p = predicate_problems(REPO)
+    ungated, peers = p["ungated"], p["peers"]
+    by_crate: dict[str, int] = {}
+    for d in peers:
+        by_crate[d["crate"]] = by_crate.get(d["crate"], 0) + 1
+    ok = not ungated and not peers
+    if ok:
+        print("predicate — every kept context names an ARCH_LAYERS package and "
+              "no crate outside commonwealth/ defines a Peer* type")
+    else:
+        print(f"predicate FALSE — {len(ungated)} kept contexts name no package; "
+              f"{len(peers)} Peer* definitions outside commonwealth/")
+        if ungated:
+            print(f"\n  kept contexts with no ARCH_LAYERS [[package]] "
+                  f"({len(ungated)}):")
+            for c in ungated:
+                print(f"    {c}")
+        if peers:
+            print(f"\n  Peer* definitions outside commonwealth/ "
+                  f"({len(peers)} in {len(by_crate)} crates):")
+            for crate in sorted(by_crate):
+                print(f"    {crate}: {by_crate[crate]}")
+    if ok:
+        emit_judgement(
+            "domains-census", "passed",
+            "every kept context names an ARCH_LAYERS package and no crate "
+            "outside commonwealth/ defines a Peer* type")
+        return EXIT_OK
+    emit_judgement(
+        "domains-census", "failed",
+        f"{len(ungated)} kept contexts name no package; {len(peers)} Peer* "
+        f"definitions outside commonwealth/ in {len(by_crate)} crates")
+    return 1
+
+
 # ── plan — the move plan ────────────────────────────────────────────────────
 #
 # The demolition loop's per-crate plan (campaigns/domains.toml, THE STRATEGY;

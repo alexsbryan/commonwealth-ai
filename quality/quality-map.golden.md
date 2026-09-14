@@ -26,6 +26,7 @@
 | `deletion-manifest` | `python3 scripts/deletion-manifest.py --verify` | advisory | F0 | 4s | yes |
 | `desktop-check` | `npm run check` | hard | F0 | 10s | yes |
 | `desktop-invoke-coverage-gate` | `npm run report:coverage:gate` | tracked | F0 | unmeasured | yes |
+| `dm-census-predicate` | `python3 scripts/domains-census.py predicate` | advisory | F0 | 0.59s | **no** |
 | `docs-gate` | `cargo xtask docs-gate` | hard | F0 | 2s | yes |
 | `env-gate` | `cargo xtask env-gate` | hard | F0 | 3s | yes |
 | `feature-matrix` | `cargo hack check --each-feature --no-dev-deps` | advisory | F0 | unmeasured | **no** |
@@ -113,6 +114,16 @@
 | `desktop-report-ttfi` | `npm run report:ttfi` | tracked | F0 | unmeasured | **no** |
 | `desktop-soak` | `npm run soak` | tracked | F3 | unmeasured | **no** |
 | `desktop-soak-py` | `scripts/desktop-soak.py --mode dual` | tracked | F3 | unmeasured | **no** |
+| `dm-census-atom-outside` | `python3 scripts/domains-census.py atom-outside --json` | advisory | F0 | 0.59s | **no** |
+| `dm-census-congestion` | `python3 scripts/domains-census.py congestion --json` | advisory | F0 | 2s | **no** |
+| `dm-census-crate-lines` | `python3 scripts/domains-census.py crate-lines --crate sovereign-mesh --json` | advisory | F0 | 2s | **no** |
+| `dm-census-liftable` | `python3 scripts/domains-census.py liftable --json` | advisory | F0 | 0.11s | **no** |
+| `dm-census-misnamed` | `python3 scripts/domains-census.py misnamed --json` | advisory | F0 | 2s | **no** |
+| `dm-census-peer-outside` | `python3 scripts/domains-census.py peer-outside --json` | advisory | F0 | 0.64s | **no** |
+| `dm-census-plan` | `python3 scripts/domains-census.py plan --crate sovereign-mesh` | advisory | F0 | 1s | **no** |
+| `dm-census-queue` | `python3 scripts/domains-census.py queue --json` | advisory | F0 | 2s | **no** |
+| `dm-census-shared-edges` | `python3 scripts/domains-census.py shared-edges --json` | advisory | F0 | 0.12s | **no** |
+| `dm-census-word-owners` | `python3 scripts/domains-census.py word-owners --json` | advisory | F0 | 2s | **no** |
 | `doc-coverage` | `cargo doc --no-deps (RUSTDOCFLAGS=--show-coverage, pinned nightly)` | tracked | F0 | unmeasured | **no** |
 | `drift-detect` | `sovereign drift detect` | tracked | F3 | unmeasured | **no** |
 | `inner-chaos-soak` | `sovereign-cli-llm eval inner-chaos --minutes <n> --journal <path>` | tracked | F3 | unmeasured | **no** |
@@ -133,6 +144,7 @@
 | `daemon-soak-report-selftest` | `scripts/daemon-soak-report.sh --self-test` | tracked | F0 | 0.20s | **no** |
 | `desktop-judge-calibration` | `node tests/e2e/scripts/calibrate-judge.mjs` | hard | F3 | unmeasured | **no** |
 | `desktop-sabotage` | `npm run sabotage` | hard | F1 | unmeasured | yes |
+| `domains-census-self-test` | `python3 scripts/domains-census.py --self-test` | advisory | F0 | 0.27s | **no** |
 | `inner-chaos-calibrate` | `sovereign-cli-llm eval inner-chaos --calibrate` | hard | F3 | 5m | **no** |
 | `judge-replay-control` | `python3 sovereign/bench/chaos_monkey/judge_replay_report.py --self-test` | hard | F0 | 0.03s | yes |
 | `pre-push-fail-closed` | `bash scripts/tests/pre-push-fail-closed.sh` | hard | F2 | unmeasured | yes |
@@ -160,7 +172,7 @@
 
 | | meaning | instruments |
 |---|---|---|
-| F0 | unit — no process boundary, no backend | `api-gate`, `arch-gate`, `bench-compile`, `boundary-gate`, `build-timings`, `check-desktop-version`, `clippy-json`, `clock-gate`, `co-lineage`, `co-sweep`, `concept-gate`, `daemon-concurrency-soak-selftest`, `daemon-soak-report`, `daemon-soak-report-selftest`, `deletion-manifest`, `desktop-check`, `desktop-invoke-coverage`, `desktop-invoke-coverage-gate`, `desktop-invoke-coverage-real`, `desktop-report-breaker`, `desktop-report-journeys`, `desktop-report-soak`, `desktop-report-ttfi`, `desktop-vitest`, `doc-coverage`, `docs-gate`, `env-gate`, `evidence-verdict`, `feature-matrix`, `feature-powerset`, `hook-selftests`, `hook-wiring`, `instrument-gate`, `judge-funnel-gate`, `judge-replay-bank`, `judge-replay-control`, `judge-replay-report`, `layer-gate`, `layout-gate`, `lifecycle-gate`, `lint-gate`, `lock-gate`, `mesh-soak-gate`, `module-cycles`, `nc-thesis`, `pre-commit`, `pre-push`, `run-if-stale`, `rustfmt`, `rustsec-advisories`, `sabotage`, `settings-wiring-self-test`, `shell-selftests`, `size-gate`, `sovereign-lint`, `sovereign-lint-scoped`, `sovereign-test`, `twin-census`, `windows-crosscheck`, `xtask-quality` |
+| F0 | unit — no process boundary, no backend | `api-gate`, `arch-gate`, `bench-compile`, `boundary-gate`, `build-timings`, `check-desktop-version`, `clippy-json`, `clock-gate`, `co-lineage`, `co-sweep`, `concept-gate`, `daemon-concurrency-soak-selftest`, `daemon-soak-report`, `daemon-soak-report-selftest`, `deletion-manifest`, `desktop-check`, `desktop-invoke-coverage`, `desktop-invoke-coverage-gate`, `desktop-invoke-coverage-real`, `desktop-report-breaker`, `desktop-report-journeys`, `desktop-report-soak`, `desktop-report-ttfi`, `desktop-vitest`, `dm-census-atom-outside`, `dm-census-congestion`, `dm-census-crate-lines`, `dm-census-liftable`, `dm-census-misnamed`, `dm-census-peer-outside`, `dm-census-plan`, `dm-census-predicate`, `dm-census-queue`, `dm-census-shared-edges`, `dm-census-word-owners`, `doc-coverage`, `docs-gate`, `domains-census-self-test`, `env-gate`, `evidence-verdict`, `feature-matrix`, `feature-powerset`, `hook-selftests`, `hook-wiring`, `instrument-gate`, `judge-funnel-gate`, `judge-replay-bank`, `judge-replay-control`, `judge-replay-report`, `layer-gate`, `layout-gate`, `lifecycle-gate`, `lint-gate`, `lock-gate`, `mesh-soak-gate`, `module-cycles`, `nc-thesis`, `pre-commit`, `pre-push`, `run-if-stale`, `rustfmt`, `rustsec-advisories`, `sabotage`, `settings-wiring-self-test`, `shell-selftests`, `size-gate`, `sovereign-lint`, `sovereign-lint-scoped`, `sovereign-test`, `twin-census`, `windows-crosscheck`, `xtask-quality` |
 | F1 | mocked backend — real caller, fabricated answers | `cli-journey-selftest`, `desktop-a11y`, `desktop-e2e-synthetic`, `desktop-sabotage`, `desktop-ttfi`, `dst-scenarios` |
 | F2 | real binary against a fixture daemon | `arch-report`, `capability-map`, `desktop-e2e-real`, `desktop-journeys`, `enrichment-f1`, `pre-push-fail-closed`, `routing-replay` |
 | F3 | real daemon, real models | `chaos-monkey`, `chat-ask`, `ci-bench`, `cli-contract-live-verify`, `cli-journey-sandbox`, `cli-journey-verify`, `co-drift`, `co-liveness`, `contract-nightly`, `cw-work-lift`, `daemon-concurrency-soak`, `daemon-concurrency-soak-control`, `daemon-soak`, `desktop-breaker`, `desktop-chaos`, `desktop-demo`, `desktop-demo-export`, `desktop-judge-calibration`, `desktop-soak`, `desktop-soak-py`, `drift-detect`, `inner-chaos-calibrate`, `inner-chaos-soak`, `judge-replay`, `judge-replay-bank-feed`, `knowledge-gym`, `mesh-live-probe`, `mesh-soak`, `mtp-probe`, `oicp-conformance`, `quality-check`, `retrieval-prod`, `routing`, `smoke-attach-mode`, `synth`, `throughput`, `throughput-probe` |
@@ -265,7 +277,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 
 | venue | instruments |
 |---|---|
-| `by-hand` | `arch-report`, `capability-map`, `ci-bench`, `cli-contract-live-verify`, `cli-journey-sandbox`, `cli-journey-verify`, `clippy-json`, `co-drift`, `co-lineage`, `co-liveness`, `cw-rails-lift`, `cw-work-lift`, `daemon-soak`, `desktop-a11y`, `desktop-breaker`, `desktop-chaos`, `desktop-demo`, `desktop-demo-export`, `desktop-e2e-faults`, `desktop-e2e-real`, `desktop-invoke-coverage`, `desktop-invoke-coverage-real`, `desktop-journeys`, `desktop-judge-calibration`, `desktop-report-breaker`, `desktop-report-journeys`, `desktop-report-soak`, `desktop-report-ttfi`, `desktop-smoke`, `desktop-soak`, `desktop-soak-py`, `desktop-ttfi`, `drift-detect`, `dst-scenarios`, `evidence-verdict`, `judge-replay`, `judge-replay-bank`, `judge-replay-report`, `lint-gate`, `mesh-live-probe`, `mesh-soak`, `mesh-soak-gate`, `nc-thesis`, `pre-commit`, `pre-push`, `pre-push-fail-closed`, `quality-check`, `run-if-stale`, `sabotage`, `settings-wiring-self-test`, `sovereign-lint`, `sovereign-test`, `twin-census`, `windows-crosscheck`, `wizard-verify`, `xtask-quality` |
+| `by-hand` | `arch-report`, `capability-map`, `ci-bench`, `cli-contract-live-verify`, `cli-journey-sandbox`, `cli-journey-verify`, `clippy-json`, `co-drift`, `co-lineage`, `co-liveness`, `cw-rails-lift`, `cw-work-lift`, `daemon-soak`, `desktop-a11y`, `desktop-breaker`, `desktop-chaos`, `desktop-demo`, `desktop-demo-export`, `desktop-e2e-faults`, `desktop-e2e-real`, `desktop-invoke-coverage`, `desktop-invoke-coverage-real`, `desktop-journeys`, `desktop-judge-calibration`, `desktop-report-breaker`, `desktop-report-journeys`, `desktop-report-soak`, `desktop-report-ttfi`, `desktop-smoke`, `desktop-soak`, `desktop-soak-py`, `desktop-ttfi`, `dm-census-atom-outside`, `dm-census-congestion`, `dm-census-crate-lines`, `dm-census-liftable`, `dm-census-misnamed`, `dm-census-peer-outside`, `dm-census-plan`, `dm-census-predicate`, `dm-census-queue`, `dm-census-shared-edges`, `dm-census-word-owners`, `domains-census-self-test`, `drift-detect`, `dst-scenarios`, `evidence-verdict`, `judge-replay`, `judge-replay-bank`, `judge-replay-report`, `lint-gate`, `mesh-live-probe`, `mesh-soak`, `mesh-soak-gate`, `nc-thesis`, `pre-commit`, `pre-push`, `pre-push-fail-closed`, `quality-check`, `run-if-stale`, `sabotage`, `settings-wiring-self-test`, `sovereign-lint`, `sovereign-test`, `twin-census`, `windows-crosscheck`, `wizard-verify`, `xtask-quality` |
 | `check` | `chaos-monkey`, `chat-ask`, `enrichment-f1`, `knowledge-gym`, `retrieval-prod`, `routing`, `synth`, `throughput` |
 | `ci:cli-release` | `check-desktop-version` |
 | `ci:desktop` | `desktop-check`, `desktop-e2e-synthetic`, `desktop-invoke-coverage-gate`, `desktop-sabotage`, `desktop-vitest` |
@@ -292,7 +304,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 | `weekly:soak` | `mesh-soak`, `mesh-soak-gate` |
 | `weekly:timings` | `build-timings` |
 
-### What CI does not run (85 of 114)
+### What CI does not run (97 of 126)
 
 - `api-gate` — .github/workflows/weekly.yml (header) · runs in: weekly:api-surface
 - `arch-report` — sovereign/crates/sovereign-cli/src/posture_cmd.rs (arch_row) · runs in: by-hand
@@ -338,7 +350,19 @@ A flag here is one whose absence does not fail anything; it just makes the green
 - `desktop-soak` — sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-layers · runs in: by-hand
 - `desktop-soak-py` — sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses · runs in: by-hand
 - `desktop-ttfi` — sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses · runs in: smoke:1, by-hand
+- `dm-census-atom-outside` — quality/campaigns/domains.toml (bar dm-atom-outside — the count this measures) · runs in: by-hand
+- `dm-census-congestion` — quality/campaigns/domains.toml (bar dm-context-congestion — the count this measures) · runs in: by-hand
+- `dm-census-crate-lines` — quality/campaigns/domains.toml (bar dm-mesh-lines — the count this measures) · runs in: by-hand
+- `dm-census-liftable` — quality/campaigns/domains.toml (bar dm-contexts-liftable — the count this measures) · runs in: by-hand
+- `dm-census-misnamed` — quality/campaigns/domains.toml (bar dm-misnamed-crates — the count this measures) · runs in: by-hand
+- `dm-census-peer-outside` — quality/campaigns/domains.toml (bar dm-peer-outside-fabric — the count this measures) · runs in: by-hand
+- `dm-census-plan` — quality/campaigns/domains.toml (THE STRATEGY — the loop this check drives) · runs in: by-hand
+- `dm-census-predicate` — quality/campaigns/domains.toml ([predicate] — the sentence this decides) · runs in: by-hand
+- `dm-census-queue` — quality/campaigns/domains.toml (bar dm-queue — the count this measures) · runs in: by-hand
+- `dm-census-shared-edges` — quality/campaigns/domains.toml (bar dm-shared-edges — the count this measures) · runs in: by-hand
+- `dm-census-word-owners` — quality/campaigns/domains.toml (bar dm-word-owners — the count this measures) · runs in: by-hand
 - `doc-coverage` — .github/workflows/weekly.yml (header) · runs in: weekly:doc-coverage
+- `domains-census-self-test` — scripts/domains-census.py (module header — the planted controls) · runs in: by-hand
 - `drift-detect` — sovereign/crates/sovereign-cli/src/posture_cmd.rs (drift_row) · runs in: by-hand
 - `enrichment-f1` — sovereign/bench/literary/README.md · runs in: check
 - `evidence-verdict` — AGENTS.md §Code Intelligence (the tool table row: "Does the test my commit body cites actually SEE the change?") · runs in: by-hand
@@ -388,5 +412,5 @@ Nothing is on no map. Check that before believing it.
 
 ---
 
-**114 instruments, 13 with a negative control, 55 unmeasured cost, 43 by-hand only.** (0 run nowhere at all.)
+**126 instruments, 24 with a negative control, 55 unmeasured cost, 55 by-hand only.** (0 run nowhere at all.)
 

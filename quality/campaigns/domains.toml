@@ -34,8 +34,10 @@ status    = "active"
 # crate — which is why Phase C exists and why the predicate cannot be green by
 # accident before it.
 #
-# UNTIL domains-3 lands, the check below reads could-not-judge (instrument
-# missing). That is the honest reading — never-ran is not passed (§18.2).
+# AS OF 2026-09-14 (rung 3 landed) the check below RUNS and reads FALSE:
+# `domains-census.py predicate` names which kept contexts lack a package and
+# which crates define Peer, and exits 1. It reads TRUE only when both lists are
+# empty — never-ran is not passed (§18.2).
 [predicate]
 statement = "Every context kept in quality/DOMAINS.toml names a [[package]] in quality/ARCH_LAYERS.toml that cargo xtask boundary-gate passes, and no crate outside the commonwealth package defines a pub type named Peer*"
 check     = "python3 scripts/domains-census.py predicate && (cd corpus-engine && cargo xtask boundary-gate)"
