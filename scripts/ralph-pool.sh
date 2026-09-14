@@ -1,38 +1,26 @@
 #!/bin/bash
-# ralph-pool.sh — run a campaign's ready units in parallel lanes, each in its
-# own git worktree, merging each finished lane back into the main tree.
+# ralph-pool.sh — the PARALLEL campaign loop. Runs a ring's ready units in up
+# to --lanes concurrent sessions, each in its own git worktree, merging each
+# finished lane serially into the main tree. The session/contract layer lives in
+# ralph-lib.sh, shared with ralph-loop.sh — the pool no longer re-implements a
+# subset (it kept missing the process-group kill and the wait-for marker).
 #
-# ralph-loop.sh is serial (one unit at a time). This keeps up to --lanes
-# sessions in flight over the units whose dependencies are already done, so a
-# ring's wide frontier is worked in parallel: ring 1 opened with five
-# independent units; ring 2 has transform-rung beside the registry chain.
+# Wave-based: each wave takes up to --lanes ready units, runs them, waits for
+# all, then merges the finished ones serially.
 #
-# It is WAVE-based, not a dynamic pool: each wave takes up to --lanes ready
-# units, runs them concurrently, waits for all of them, then merges the ones
-# that finished (serially, in the main tree). Simple and predictable.
-#
-# Safety, because parallel agents on one repo can corrupt each other:
-#   * every lane is its own `git worktree` on its own branch — no two sessions
-#     share a working tree;
-#   * merges are serial and happen only in the main tree;
-#   * a merge conflict ABORTS and HALTS (NEEDS_HUMAN) — never auto-resolved;
-#   * a lane session runs in its own process group and is killed (group) past
-#     --session-timeout, so a cut leaves no orphans;
-#   * REVIEW units run serially in the main tree, never in a lane — a review
-#     must see its units merged;
-#   * lanes do not edit ralph/STATE.md; the pool marks a unit [x] after merging,
-#     so the merge never fights over the queue file.
-#
-# A lane session works the unit and commits; when the unit passes its own tests
-# it writes `ralph/done/<unit>` and commits it. The pool merges a lane whose
-# done marker is present, marks the unit [x] in the main tree, and removes the
-# worktree.
+# Safety: lanes never share a working tree; merges are serial; a conflict aborts
+# and HALTS (never auto-resolved); REVIEW units run serially in the main tree;
+# lanes do not edit STATE.md (the pool marks a unit [x] after merging).
 #
 # Usage:
 #   nohup ralph-pool.sh --workdir . --prompt ralph/PROMPT.md --lanes 2 \
-#     [--state ralph/STATE.md] [--session-timeout 3600] [--review-model MODEL] \
+#     --review-model MODEL [--state ralph/STATE.md] [--session-timeout 3600] \
 #     [--notify] >> ralph/log.txt 2>&1 &
 set -u
+SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+LIB="$(cd "$(dirname "$0")" && pwd)/ralph-lib.sh"
+# shellcheck source=ralph-lib.sh
+. "$LIB"
 
 WORKDIR=""
 PROMPT="ralph/PROMPT.md"
@@ -42,7 +30,10 @@ SESSION_TIMEOUT=3600
 REVIEW_MODEL=""
 NOTIFY=0
 STOP_FILE="ralph/STOP"
+DONE_FILE="ralph/DONE"
 NEEDS_HUMAN="ralph/NEEDS_HUMAN.md"
+OPENCODE_BIN="${RALPH_OPENCODE_BIN:-opencode}"
+MODEL_ARGS=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -53,19 +44,13 @@ while [ $# -gt 0 ]; do
     --session-timeout) SESSION_TIMEOUT="$2"; shift 2 ;;
     --review-model) REVIEW_MODEL="$2"; shift 2 ;;
     --notify) NOTIFY=1; shift ;;
-    -h|--help) sed -n '2,32p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
     *) echo "ralph-pool: unknown flag $1" >&2; exit 2 ;;
   esac
 done
 [ -n "$WORKDIR" ] || { echo "ralph-pool: --workdir is required" >&2; exit 2; }
 cd "$WORKDIR" || exit 2
 BASE_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-OPENCODE_BIN="${RALPH_OPENCODE_BIN:-opencode}"
-
-notify() { [ "$NOTIFY" -eq 1 ] || return 0
-  /usr/bin/osascript -e "display notification \"${2}\" with title \"ralph-pool: ${1}\"" >/dev/null 2>&1 || true; }
-say() { echo "$(date -u +%FT%TZ) $*"; }
-halt() { say "HALT: $1"; printf '%s\n\nresolve by hand, then remove %s\n' "$1" "$STOP_FILE" > "$NEEDS_HUMAN"; : > "$STOP_FILE"; notify "HALT" "$1"; exit 3; }
 
 status_of() {
   local line
@@ -86,29 +71,17 @@ is_review() { case "$1" in REVIEW-*) return 0 ;; *) return 1 ;; esac; }
 deps_met() { local d; for d in $(deps_of "$1"); do [ "$(status_of "$d")" = x ] || return 1; done; return 0; }
 all_done() { local u; for u in $(unit_ids); do [ "$(status_of "$u")" = x ] || return 1; done; return 0; }
 
-# One lane session, in its worktree, own process group, wall-clock timeout.
-run_lane_session() { # unit dir logfile
-  local unit="$1" dir="$2" log="$3" input
-  input="${TMPDIR:-/tmp}/ralph-pool-$unit.md"
+# A lane session: a POOL LANE note + the prompt, run by the shared layer.
+run_lane_session() { # unit dir log
+  local note="${TMPDIR:-/tmp}/ralph-pool-$1.md"
   {
-    printf 'POOL LANE: you are working unit %s in an isolated git worktree.\n' "$unit"
-    printf 'Commit your work here. When the unit passes its OWN tests, write ralph/done/%s and commit it — the pool merges your branch then.\n' "$unit"
+    printf 'POOL LANE: you are working unit %s in an isolated git worktree.\n' "$1"
+    printf 'Commit your work here. When the unit passes its OWN tests, write ralph/done/%s and commit it — the pool merges your branch then.\n' "$1"
     printf 'Do NOT edit ralph/STATE.md; the pool marks the unit done after the merge.\n\n'
     cat "$PROMPT"
-  } > "$input"
-  ( cd "$dir" && exec "$OPENCODE_BIN" run "$(cat "$input")" ) > "$log" 2>&1 &
-  local pid=$! waited=0
-  while kill -0 "$pid" 2>/dev/null && [ "$waited" -lt "$SESSION_TIMEOUT" ]; do
-    sleep 30; waited=$((waited + 30))
-    [ $((waited % 60)) -eq 0 ] && say "  lane $unit running ${waited}s"
-    [ -f "$STOP_FILE" ] && { kill -TERM -- -"$pid" 2>/dev/null; sleep 3; kill -KILL -- -"$pid" 2>/dev/null; break; }
-  done
-  if kill -0 "$pid" 2>/dev/null; then
-    say "lane $unit exceeded ${SESSION_TIMEOUT}s — killing its group"
-    kill -TERM -- -"$pid" 2>/dev/null; sleep 5; kill -KILL -- -"$pid" 2>/dev/null
-  fi
-  wait "$pid" 2>/dev/null || true
-  rm -f "$input"
+  } > "$note"
+  run_session "$note" "$2" "$3"
+  rm -f "$note"
 }
 
 mkdir -p ralph/done .ralph/wt
@@ -117,26 +90,45 @@ while true; do
   [ -f "$STOP_FILE" ] && { say "STOP"; exit 0; }
   if all_done; then say "DONE: all units [x]"; notify "DONE" "pool complete"; exit 0; fi
 
-  # A ready REVIEW runs serially in the main tree (it must see merged units).
+  # A detached milestone run in flight: wait on its marker, no session, no failure.
+  if ! wait_for_marker; then sleep 120; continue; fi
+
+  # A ready REVIEW runs serially in the main tree, retrying if a session times out.
   review=""
   for u in $(unit_ids); do
     if [ "$(status_of "$u")" = " " ] && is_review "$u" && deps_met "$u"; then review="$u"; break; fi
   done
   if [ -n "$review" ]; then
-    say "serial review $review (main tree)"
-    MODEL_ARGS=""; [ -n "$REVIEW_MODEL" ] && MODEL_ARGS="--model $REVIEW_MODEL"
-    run_lane_session "$review" "$PWD" "ralph/log-$review.txt"
-    [ "$(status_of "$review")" = x ] || halt "review $review did not mark [x]"
+    review_attempt=1; review_waiting=0
+    while [ "$review_attempt" -le 3 ]; do
+      say "serial review $review (main tree) attempt $review_attempt"
+      MODEL_ARGS=""; [ -n "$REVIEW_MODEL" ] && MODEL_ARGS="--model $REVIEW_MODEL"
+      run_session "$PROMPT" "$PWD" "ralph/log-$review.txt"
+      [ "$(status_of "$review")" = x ] && break
+      # A review that handed off to a detached run returns quickly and writes
+      # ralph/waiting; wait on its marker instead of counting a failed attempt.
+      if ! wait_for_marker; then review_waiting=1; break; fi
+      say "review $review did not mark [x] (attempt $review_attempt) — resuming"
+      review_attempt=$((review_attempt + 1))
+    done
+    [ "$review_waiting" -eq 1 ] && continue
+    [ "$(status_of "$review")" = x ] || halt "review $review did not finish after 3 attempts"
     continue
   fi
 
-  # Wave: up to LANES ready, non-review units, concurrently.
+  # Wave: up to LANES ready, non-review, non-conflicting units, concurrently.
   wave=""
   for u in $(unit_ids); do
     [ "$(echo "$wave" | wc -w)" -ge "$LANES" ] && break
     [ "$(status_of "$u")" = " " ] || continue
     is_review "$u" && continue
     deps_met "$u" || continue
+    conflict=0
+    for v in $wave; do
+      [ -f ralph/conflicts.txt ] || break
+      grep -qE "^($u $v|$v $u)$" ralph/conflicts.txt && conflict=1
+    done
+    [ "$conflict" -eq 1 ] && continue
     wave="$wave $u"
   done
   wave=$(echo "$wave")
@@ -148,14 +140,17 @@ while true; do
   pids=""
   for u in $wave; do
     wt=".ralph/wt/$u"; branch="ralph/$u"
-    git worktree add -q -b "$branch" "$wt" "$BASE_BRANCH" 2>/dev/null || { say "worktree add failed for $u"; continue; }
-    say "lane start $u (worktree $wt)"
+    if [ -d "$wt" ]; then
+      say "lane $u resuming in its existing worktree"
+    else
+      git worktree add -q -b "$branch" "$wt" "$BASE_BRANCH" 2>/dev/null || { say "worktree add failed for $u"; continue; }
+      say "lane start $u (worktree $wt)"
+    fi
     run_lane_session "$u" "$wt" "ralph/log-$u.txt" &
     pids="$pids $!"
   done
   for p in $pids; do wait "$p" 2>/dev/null || true; done
 
-  # Merge the finished lanes serially; mark and clean up.
   for u in $wave; do
     wt=".ralph/wt/$u"; branch="ralph/$u"
     [ -d "$wt" ] || continue

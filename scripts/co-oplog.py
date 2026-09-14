@@ -4387,7 +4387,7 @@ def investigate(path: Path, turn: int, report: str, sha: str | None, t1: str | N
 # serves edges, with verbatim spans the kernel validates; it never assigns a
 # proof state.
 
-KINDS = ("Tested", "Landed", "Exists", "Measured", "Count", "Promise", "Status", "Opinion")
+KINDS = ("Tested", "Landed", "Exists", "Proposes", "Measured", "Count", "Promise", "Status", "Opinion")
 STATES = ("proved", "refuted", "sorry", "open")
 
 STATEMENTS_TOOL = [{"type": "function", "function": {
@@ -4401,6 +4401,7 @@ STATEMENTS_TOOL = [{"type": "function", "function": {
             "sha": {"type": "string"}, "paths": {"type": "array", "items": {"type": "string"}},
             "symbols": {"type": "array", "items": {"type": "string"}},
             "name": {"type": "string"},
+            "shape": {"type": "string", "enum": ["type", "fn", "module", "crate", "file", "command", "table", "other"]},
             "quantity": {"type": "string"}, "value": {"type": "string"}, "unit": {"type": "string"},
             "of": {"type": "integer"}, "pattern": {"type": "string"}, "in": {"type": "string"},
             "action": {"type": "string"}, "goal": {"type": "string"}, "state": {"type": "string"}},
@@ -4410,7 +4411,16 @@ TRANSLATE_SYSTEM = """Translate an AI coding agent's report to its operator into
 Kinds:
 Tested {scope, pass, fail}: a test run's outcome. scope is what ran ("full workspace", a crate, a test name).
 Landed {sha, paths, symbols}: something committed or in the tree now.
-Exists {name}: a file, symbol, route or test exists.
+Exists {name}: a file, symbol, route or test exists NOW (a cited surface: "`SplitInferenceProvider` is the provider").
+Proposes {name, shape}: a NEW thing the report says it will build, add, introduce, create or needs
+  ("a `NodeClass` enum", "new crate `commonwealth-rail`", "add `svrn setup --terminal`", "we need a ledger").
+  name is the identifier or path as written; shape is what kind of thing. ONLY when the report says the
+  thing does not exist yet. A name the report uses, returns, points at, changes or extends is Exists{name};
+  a change with no new name ("`SetupConfig.models` becomes `Option`") is Promise. In a code block every
+  struct, enum, trait, type or fn the report DEFINES is its own Proposes{name}, one per definition; a type
+  named as what something "becomes" or "splits into" is Proposes{name} too. In a phase or build section a
+  backticked fn, method, const, file, command or flag the report will write ("`cmd_grant` POSTs to the
+  daemon", "`DEFAULT_GUEST_TTL_SECS = 2h`", "add `with_bearer(…)` constructors") is Proposes{name}.
 Measured {quantity, value, unit}: a number the report states as measured (lines, bytes, seconds).
 Count {quantity, value, of, pattern, in}: a count of things ("eight launch roles", "15 of 16 gates",
   "13 impls", "39 sites"); `of` for "N of M"; `pattern` and `in` when the span names what is counted
@@ -4421,7 +4431,8 @@ Opinion: a judgement or explanation with nothing to check.
 Rules: one statement per fact; `span` is VERBATIM from the report; every number the
 report states becomes a Tested or Measured statement (a hedged one too: "~300 lines"
 is Measured value 300); every commit sha is a Landed statement; a note or ticket id
-("Note 426e8eed") is Exists{name}; "watched red", "sabotage went red", "N impls
+("Note 426e8eed") is Exists{name}; every backticked name the report cites as already
+there is Exists{name}, and every backticked name it says it will create is Proposes{name}; "watched red", "sabotage went red", "N impls
 removed", "X deleted" are Landed or Tested statements, not Opinion; an open item
 ("one verification stays open") is Status{state: open}. Fill the fields you can
 read off the span, leave the rest out. Call `statements` once."""
@@ -4479,6 +4490,26 @@ class Kernel:
     def __init__(self, path: Path, obs: dict, sha_at_turn):
         self.path, self.obs, self.sha_at_turn = path, obs, sha_at_turn
         self.own_all = None
+        self.text = ""          # the plan, for Proposes: a name the plan cites with an anchor is not proposed new
+
+    PLAN_NOT_NEW = ("what this removes", "could this be done with less", "what already exists", "what this extends",
+                    "deliberately not doing", "non-goals", "restraint patterns", "context")
+
+
+    def plan_cites(self, name: str, sha: str = "") -> str | None:
+        """The plan line that cites `name` beside a file:line anchor or a
+        path -- the plan knows the thing exists (536c8494: GuestGrant
+        proposed 'total in place' two sections after `guest_grant.rs:120`)."""
+        n = name.strip("`").split("::")[0]
+        for i, l in enumerate(self.text.splitlines(), 1):
+            if re.search(r"(?<![\w])" + re.escape(n) + r"\.(?:rs|py|sh|ts)\b", l):
+                return f"L{i}: {l.strip()[:100]}"
+            if re.search(r"`" + re.escape(n) + r"(?:::\w+)?(?:\(\))?`", l) and re.search(r"\w\.(?:rs|py|toml|md|sh|ts)(?::\d+)?\b|`:\d{2,}", l.replace(n, "")):
+                files = re.findall(r"([\w./-]+\.(?:rs|py|toml|md|sh|ts))\b", l.replace(n, ""))
+                if sha and files and not any(self.defined_at(f, sha) for f in files):
+                    continue                             # every anchor on the line is a file the plan itself will write
+                return f"L{i}: {l.strip()[:100]}"
+        return None
 
     def sha_end(self) -> str | None:
         try:
@@ -4502,8 +4533,163 @@ class Kernel:
         r = inv.run_tool("find_number", {"number": n})
         return None if r.startswith(("NOT SEEN", "REFUSED")) else r.splitlines()[0]
 
+    RX_DEF = (r"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+|unsafe\s+|const\s+)*(?:struct|enum|trait|type|fn|mod|const|static|union|macro_rules!)\s+{n}\b"
+              r"|^\s*(?:async\s+)?(?:def|class)\s+{n}\b"
+              r"|^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?(?:function|class|interface)\s+{n}\b"
+              r"|^\s*(?:name\s*=\s*\"{n}\")"
+              r"|^\w+!\s*[\(\{{\[]\s*(?:pub\s+)?(?:struct\s+|enum\s+)?{n}\b")
+
+    _trees: dict = {}
+
+    def tree(self, sha: str) -> list[str]:
+        """`git ls-tree -r --name-only` once per sha (a 121-name sweep ran it
+        per bare file name, 536c8494)."""
+        if sha not in self._trees:
+            self._trees[sha] = git("ls-tree", "-r", "--name-only", sha).splitlines()
+        return self._trees[sha]
+
+    def defined_many(self, names: list[str], sha: str, shapes: dict | None = None) -> dict:
+        """defined_at over many names with ONE definition grep: the plain
+        identifiers go into one alternation, and each hit line is bucketed
+        by the name at its definition position."""
+        shapes = shapes or {}
+        plain = [n for n in names if re.fullmatch(r"[A-Za-z_][\w-]*", n) and len(n) >= 3
+                 and not (re.fullmatch(r"[a-z]+", n) and shapes.get(n, "") not in ("fn", "module", "crate"))]
+        out = {n: None for n in names}
+        if plain:
+            alt = "(?:" + "|".join(sorted({re.escape(n.replace("-", "_")) for n in plain}, key=len, reverse=True)) + ")"
+            hits = git("grep", "-n", "-P", "-e", self.RX_DEF.format(n=alt), sha, "--", ":!*.md", ":!*.txt", ":!*.jsonl", ":!Cargo.lock").splitlines()
+            rx = {n: re.compile(self.RX_DEF.format(n=re.escape(n.replace("-", "_")))) for n in plain}
+            for l in hits:
+                parts = l.split(":", 3)                  # sha:file:lineno:content -- the regex is ^-anchored on CONTENT
+                if len(parts) < 4:
+                    continue
+                for n in plain:
+                    if rx[n].search(parts[3]):
+                        if out[n] is None:
+                            out[n] = f"{parts[1]}:{parts[2]}:{parts[3][:140]}"
+                        elif "(+" not in out[n]:
+                            out[n] += " (+more)"
+            for n in plain:
+                if out[n] is None and "-" in n:
+                    out[n] = self.defined_at(n, sha, shapes.get(n, ""))       # the Cargo.toml fallback
+        for n in names:
+            if n not in plain:
+                out[n] = self.defined_at(n, sha, shapes.get(n, ""))
+        return out
+
+    def defined_at(self, name: str, sha: str, shape: str = "") -> str | None:
+        """Where `name` is DEFINED in the tree at `sha` (a definition line,
+        a file, a crate's Cargo.toml name), or None. The inventory tactic:
+        a proposed noun that already has a definition is the parallel
+        system before it is written (ARCH 11, the review rule)."""
+        n = name.strip("`").strip()
+        n = re.sub(r":\d+(?:-\d+)?$", "", n)
+        n = re.sub(r"\(\)$", "", n)
+        if not n or not sha or " " in n or re.search(r"[{}<>=→*]", n) or re.match(r"(?:~|/Users|/private|/tmp|target/|\.sovereign/|\S*/target/)", n):
+            return None                                  # prose or a glob ('setup_cmd/{args,mod}.rs', c3b57dbd p5.5)
+        if re.fullmatch(r"[A-Za-z_]\w*\.[a-z_]\w*", n) and not re.search(r"\.(?:rs|py|sh|toml|md|json|ts|mjs|ya?ml)$", n):
+            n = n.replace(".", "::")                     # NodeCapabilities.inference_capable is a member (c3b57dbd p9.9)
+        if n.startswith("/"):
+            out = git("grep", "-lF", n, sha).strip()                  # a route: a string in the tree (62d5846b p13.15: /v1/models 'proved' new)
+            return f"route in {len(out.splitlines())} file(s) at {sha[:9]}" if out else None
+        if "/" in n:
+            body = git("show", f"{sha}:{n.lstrip('./')}")
+            if body:
+                return f"{n} is in the tree at {sha[:9]}"
+            # a path relative to a crate ('runtime/streaming.rs:1055', c3b57dbd p3.2): by suffix
+            files = [l for l in self.tree(sha) if l.endswith("/" + n.lstrip("./"))]
+            return f"{files[0]} at {sha[:9]}" + (f" (+{len(files) - 1})" if len(files) > 1 else "") if files else None
+        if re.search(r"\.(?:rs|py|sh|toml|md|json|ts|mjs|ya?ml)$", n):
+            files = [l for l in self.tree(sha) if l.split("/")[-1] == n]
+            return f"{files[0]} at {sha[:9]}" + (f" (+{len(files) - 1})" if len(files) > 1 else "") if files else None
+        if "::" in n:
+            typ, mem = n.rsplit("::", 1)
+            typ = typ.split("::")[-1]
+            if not re.fullmatch(r"\w+", mem) or not re.fullmatch(r"\w+", typ):
+                return None
+            # a definition of the member in a file that also names the type
+            for l in git("grep", "-n", "-P", "-e", self.RX_DEF.format(n=re.escape(mem)), sha, "--", ":!*.md", ":!*.txt", ":!*.jsonl", ":!Cargo.lock").splitlines():
+                parts = l.split(":", 2)
+                if len(parts) == 3 and git("grep", "-l", "-F", typ, sha, "--", parts[1]).strip():
+                    return f"{parts[1]}:{parts[2][:120]}"
+            return None
+        if not re.fullmatch(r"[A-Za-z_][\w-]*", n) or len(n) < 3:
+            return None
+        if re.fullmatch(r"[a-z]+", n) and shape not in ("fn", "module", "crate"):
+            return None                                  # 'models', 'entry': a field or key, not a noun git defines (c3b57dbd p5.1-2)
+        rx = self.RX_DEF.format(n=re.escape(n.replace("-", "_")) if "-" in n else re.escape(n))
+        # -P: git's -E has no \s or \b on this host (2.50, Apple); the
+        # first smoke returned 'nothing defines Kernel' at a sha carrying it.
+        out = git("grep", "-n", "-P", "-e", rx, sha, "--", ":!*.md", ":!*.txt", ":!*.jsonl", ":!Cargo.lock").strip()
+        if not out and "-" in n:
+            out = git("grep", "-n", "-P", "-e", f'^\\s*name\\s*=\\s*"{re.escape(n)}"', sha, "--", "*Cargo.toml").strip()
+        if not out:
+            return None
+        lines = out.splitlines()
+        first = lines[0].split(":", 1)[1] if lines[0].count(":") >= 2 else lines[0]
+        return f"{first[:140]}" + (f" (+{len(lines) - 1} more)" if len(lines) > 1 else "")
+
     def run(self, st: dict) -> tuple[str, str]:
         k, turn = st["kind"], st["turn"]
+        if k == "Proposes":
+            # The inventory tactic. A proposed noun already defined at the
+            # sha is refuted with the definition as receipt; absent, the
+            # proposal is proved new; a name git cannot look for (prose, a
+            # flag, a machine-local path) is sorry.
+            nm, sha_t = (st.get("name") or "").strip("`"), self.sha_at_turn(turn)
+            if not nm or not sha_t:
+                return "sorry", "no name or sha"
+            if " " in nm.strip():
+                return "sorry", f"{nm!r} is prose or a command line, not a name git can look for"       # 62d5846b p13.2-7: test commands 'proved'
+            if re.search(r":\d+(?:-\d+)?$", nm):
+                return "sorry", f"{nm!r} carries a line anchor: a citation, not a proposal"              # 5c16d4f6 p21.3: sabotage.py:868
+            if re.search(r"\w\.(?:rs|py|sh|ts|toml)`?:\d+", st.get("span", "")):
+                return "sorry", f"the span cites a file:line beside {nm}: a citation, not a proposal"   # e541f77a p11.25: UnverifiedReason (span_resolver.rs:58)
+            if re.search(r"\b(?:modified|modify|changed|extended|edited|updated|touched|rewrite|rework|refactor|survives|stays|remains|unchanged)\b", st.get("span", ""), re.I):
+                return "sorry", f"the span says {nm} is modified or kept, not new"                       # 24f0cac7 p10.6, fd20b61e p10.1, p10.12
+            if nm.startswith("/") and (st.get("section") or "").lower().startswith("verification"):
+                return "sorry", f"{nm} in a Verification section is exercised, not proposed"           # 62d5846b p13.16
+            if (st.get("shape") == "file" or re.search(r"\.(?:rs|py|sh|toml|md|json|ts|mjs|ya?ml)$", nm)) \
+                    and not re.search(r"\bnew\b|\bcreate", st.get("span", ""), re.I) \
+                    and not any(nm.split("/")[-1] in l and re.search(r"\bnew\b|\bcreate", l, re.I) for l in self.text.splitlines()):
+                # A file the plan names without calling it new is a file it
+                # edits or runs (run B: routes_rail.rs, pre-push.sh, glob.rs,
+                # Cargo.toml (+68) all 'already defined'); plans mark new
+                # files '(new, ~130 lines)' (62d5846b) or 'Create `x`'.
+                return "sorry", f"{nm} is named without 'new' or 'create': edited or run, not proposed"
+            if re.search(r"\(&(?:mut )?self\b", st.get("span", "")):
+                return "sorry", f"{nm} is a method; it belongs to its type, which is the proposal"       # 62d5846b p9.4: GuestGrant::is_live vs ingest_grant's
+            if nm.lstrip().startswith(("--", "svrn ", "sovereign ", "cargo ")):
+                return "sorry", f"{nm!r} is a command or flag; no definition to look for"
+            if re.search(r"[{}<>=→*]", nm):
+                return "sorry", f"{nm!r} is prose or a glob, not a name git can look for"
+            if re.fullmatch(r"[a-z]+", nm) and (st.get("shape") or "") not in ("fn", "module", "crate"):
+                return "sorry", f"{nm!r} is a field or key, not a noun git defines"
+            sec = (st.get("section") or "").lower().rstrip("?").strip()
+            if any(sec.startswith(x) for x in self.PLAN_NOT_NEW):
+                return "sorry", f"a '{st.get('section')}' section proposes nothing new"          # 536c8494 p5.1, p6.2
+            hit = self.defined_at(nm, sha_t, st.get("shape") or "")
+            if hit and re.search(r"\b(?:rows?|entry|entries|lines?|section|field|arm|variant|key|column)\b", st.get("span", ""), re.I) \
+                    and re.search(r"\.(?:md|toml|json|ya?ml|tsv|txt)$", nm):
+                # 'a DEFAULTS_LEDGER.md row per rung' proposes a row, not the file (536c8494 p11.9-10)
+                return "sorry", f"an addition to {nm}, which is in the tree at {sha_t[:9]}; the new thing has no name"
+            if hit and (st.get("shape") == "fn" or re.fullmatch(r"[a-z][a-z0-9_]*", nm)) and "::" not in nm and "/" not in nm:
+                # A fn collides only inside a file the plan names: `fn value`
+                # in scheduler_core.rs is not the `fn value` of some other
+                # module (cea8e256 p3.3, p3.5). A type collides workspace-wide.
+                files = {m.group(1).split("/")[-1] for m in re.finditer(r"([\w./-]+\.(?:rs|py|sh|ts|mjs))\b", self.text)}
+                where = hit.split(":")[0].split("/")[-1]
+                if files and where not in files:
+                    return "sorry", f"a fn named {nm} is defined in {where}, not in a file this plan names; no collision the plan can see"
+            if hit:
+                cite = self.plan_cites(nm, sha_t)
+                if cite:
+                    return "sorry", f"already defined at {sha_t[:9]} and the plan cites it ({cite[:60]}): an extension, not a new noun"
+                return "refuted", f"already defined at {sha_t[:9]}: {hit}"
+            if not re.search(r"[/:.]|_|[A-Z][a-z]+[A-Z]|^[A-Z][a-z]{3,}$|^[a-z][a-z0-9-]{3,}$", nm):
+                return "sorry", f"{nm!r} is not a name git can look for"
+            return "proved", f"nothing defines {nm} at {sha_t[:9]}"
         if k == "Tested":
             scope = (st.get("scope") or "").strip("`")
             named = [x for x in IDENT_SHAPE.findall(scope) if "_" in x or "::" in x]   # 'gate every_test_module_is_wired' names a test
@@ -4638,10 +4824,23 @@ class Kernel:
         if k == "Exists":
             nm, sha_t = (st.get("name") or "").strip("`"), self.sha_at_turn(turn)
             nm = re.sub(r":\d+(?:-\d+)?$", "", nm)          # model_slot.rs:3539 is the file (66a5247a t12)
+            nm = re.sub(r"\(\)$", "", nm)                    # Journey::exercises() is Journey::exercises (e541f77a p6.22)
+            m = re.fullmatch(r"([\w./-]+\.\w+)::?(\w+)", nm)
+            if m and "/" in m.group(1):                       # gym/comaintainer/score.py::call_daemon (fd20b61e p3.4)
+                body = git("show", f"{sha_t}:{m.group(1).lstrip('./')}")
+                if not body:
+                    return "sorry", f"{m.group(1)} is not in the tree at {sha_t[:9]}; cannot look for {m.group(2)} in it"
+                return ("proved" if re.search(r"(?<![\w])" + re.escape(m.group(2)) + r"(?![\w])", body) else "refuted"), f"{m.group(2)} {'is' if m.group(2) in body else 'is not'} in {m.group(1)} at {sha_t[:9]}"
+            if nm.startswith("--") or (" " in nm.strip() and "/" not in nm):
+                return "sorry", f"{nm!r} is a flag or prose, not a name git can look for"       # fd20b61e p10.3 '--self-test', p13.5 'F-bars'
+            if not ("/" in nm or "." in nm or "::" in nm or IDENT_SHAPE.fullmatch(nm) or re.fullmatch(r"[A-Z][a-z]{3,}|[a-z][a-z0-9]{3,}|[A-Z][A-Z0-9_-]{2,}", nm)):
+                return "sorry", f"{nm!r} is not a name git can look for"
             if not nm or not sha_t:
                 return "sorry", "no name or sha"
             if re.fullmatch(r"[0-9a-f]{8,64}", nm):
                 return "sorry", f"{nm} is a hash, not a thing in the tree (995d04b9 t4: a baseline id)"
+            if re.fullmatch(r"[A-Z]{1,4}-\d{1,4}", nm):
+                return "sorry", f"{nm} is a requirement or ticket id, judged by its document, not the tree (e541f77a p22.17: GR-19)"
             # A thing created later in the session is in the tree at its end
             # (f1c44058 t10: the prereg file, committed two turns on).
             end = self.sha_end() or sha_t
@@ -4666,7 +4865,13 @@ class Kernel:
                     return "proved", f"{nm} is in the tree at {sha_t[:9]}"
                 top = nm.lstrip("./").split("/")[0]
                 if git("show", f"{sha_t}:{top}"):
+                    if Path(nm.lstrip("./")).exists():
+                        return "sorry", f"{nm} is on disk but not in git at {sha_t[:9]} (ignored or untracked); git cannot date it"
                     return "refuted", f"{nm} is not in the tree at {sha_t[:9]}"
+                # relative to a crate ('runtime/streaming.rs', c3b57dbd p3.2): by suffix
+                files = [l for l in git("ls-tree", "-r", "--name-only", sha_t).splitlines() if l.endswith("/" + nm.lstrip("./"))]
+                if files:
+                    return "proved", f"{files[0]}" + (f" (+{len(files) - 1})" if len(files) > 1 else "") + f" at {sha_t[:9]}"
                 return "sorry", f"{nm} is under no directory of this repository; another repo, or not a path"
             if "." in nm:
                 # A bare file name: any file so named, anywhere in the tree
@@ -4676,7 +4881,13 @@ class Kernel:
                 files = [l for l in git("ls-tree", "-r", "--name-only", sha_t).splitlines() if l.split("/")[-1] == nm]
                 return ("proved" if files else "sorry"), (f"{files[0]}" + (f" (+{len(files) - 1})" if len(files) > 1 else "") + f" at {sha_t[:9]}" if files else f"no file named {nm} in this repository at {sha_t[:9]}; may be another repo")
             out = git("grep", "-lF", nm.split("::")[-1], sha_t).strip()
-            return ("proved" if out else "refuted"), (f"{len(out.splitlines())} file(s) at {sha_t[:9]}" if out else f"nothing at {sha_t[:9]} contains {nm!r}")
+            if out:
+                return "proved", f"{len(out.splitlines())} file(s) at {sha_t[:9]}"
+            for label, later in (("session end", end), ("HEAD", git("rev-parse", "HEAD").strip())):
+                if later and later != sha_t and git("grep", "-lF", nm.split("::")[-1], later).strip():
+                    first = git("log", "--format=%h %ci", "--reverse", "-S", nm.split("::")[-1], f"{sha_t}..{later}").strip().splitlines()
+                    return "sorry", f"nothing at {sha_t[:9]} contains {nm!r}; first in git at {first[0][:26] if first else later[:9]}: uncommitted when cited, or written after"
+            return "refuted", f"nothing at {sha_t[:9]} contains {nm!r}"
         if k == "Measured":
             v = str(st.get("value") or "").replace(",", "")
             nums = re.findall(r"\d[\d,]*\.?\d*", v) or re.findall(r"\d[\d,]*\.?\d*", st.get("span", ""))
@@ -4980,6 +5191,210 @@ def cmd_claims(a) -> int:
     n_chk = sum(1 for s in stmts if s["kind"] != "Opinion")
     from collections import Counter as _C
     print(f"  states: {dict(_C(s['state'] for s in stmts))} · arc: {n_serve}/{n_chk} checkable statements serve a goal")
+    return 0
+
+PLAN_SKIP = ("principles at stake", "restraint patterns")   # the template's boilerplate, not the plan
+
+def plan_events(path: Path) -> list[dict]:
+    """Every ExitPlanMode submission in a transcript: the plan text, its
+    timestamp, the operator's verdict on it, and the turn index (in
+    `turns()` numbering) it sits after."""
+    out, turn, pending = [], 0, {}
+    with path.open() as fh:
+        for line in fh:
+            try:
+                rec = json.loads(line)
+            except Exception:
+                continue
+            content = (rec.get("message") or {}).get("content")
+            if not isinstance(content, list):
+                continue
+            for b in content:
+                if not isinstance(b, dict):
+                    continue
+                if rec.get("type") == "assistant" and b.get("type") == "text" and len(strip_reminders(b.get("text", ""))) >= 120:
+                    turn += 1
+                elif rec.get("type") == "assistant" and b.get("type") == "tool_use" and b.get("name") == "ExitPlanMode":
+                    ev = {"turn": turn, "when": rec.get("timestamp") or "", "plan": (b.get("input") or {}).get("plan") or "", "verdict": "unknown"}
+                    pending[b.get("id")] = ev; out.append(ev)
+                elif b.get("type") == "tool_result" and b.get("tool_use_id") in pending:
+                    r = b.get("content"); r = r if isinstance(r, str) else json.dumps(r)
+                    pending[b["tool_use_id"]]["verdict"] = "approved" if "approved" in r else ("rejected" if "doesn't want" in r else ("blocked" if "hook error" in r else "unknown"))
+    return out
+
+def plan_sections(plan: str, limit: int = 6500) -> list[tuple[str, str]]:
+    """(title, text) per `## ` section, boilerplate sections dropped, long
+    ones split at `### ` then at paragraphs so each fits the translator."""
+    parts = re.split(r"(?m)^(?=## )", plan)
+    out = []
+    for part in parts:
+        if not part.strip():
+            continue
+        title = part.splitlines()[0].lstrip("# ").strip() or "(untitled)"
+        if title.lower().rstrip("?").strip() in PLAN_SKIP:
+            continue
+        if len(part) <= limit:
+            out.append((title, part)); continue
+        for sub in re.split(r"(?m)^(?=### )", part):
+            if len(sub) <= limit:
+                if sub.strip():
+                    out.append((title, sub))
+                continue
+            buf = ""
+            for para in re.split(r"\n\n+", sub):
+                if len(buf) + len(para) > limit and buf:
+                    out.append((title, buf)); buf = ""
+                buf += para + "\n\n"
+            if buf.strip():
+                out.append((title, buf))
+    return out
+
+RX_TICK = re.compile(r"`([^`\n]{2,80})`")
+
+def anchored(name: str, text: str) -> bool:
+    """A Proposes/Exists is anchored by its NAME, which must occur in the
+    text as a token; the span may paraphrase a code block (cea8e256 p3.1:
+    '`pub(crate) struct Outcome` with fields ...' for a 9-line struct)."""
+    n = re.sub(r":\d+(?:-\d+)?$", "", name.strip("`").strip())
+    return len(n) >= 3 and bool(re.search(r"(?<![\w])" + re.escape(n) + r"(?![\w])", text))
+
+def sweep_idents(text: str) -> list[str]:
+    """Every backticked name a plan mentions that git could look for --
+    the recall instrument for the translation: a name defined at the sha
+    the model tagged Proposes, or absent and tagged Exists, or tagged
+    neither, each is a row the hand read can price."""
+    seen, out = set(), []
+    for m in RX_TICK.finditer(text):
+        n = re.sub(r":\d+(?:-\d+)?$", "", m.group(1).strip()).rstrip("()")
+        if " " in n or n.startswith(("-", "$", "[", "{", "<", "svrn", "sovereign", "cargo", "git", "http")):
+            continue
+        if not (IDENT_SHAPE.fullmatch(n) or re.fullmatch(r"[A-Z][a-z]{3,}|[a-z][a-z0-9-]{3,}", n)):
+            continue
+        if n not in seen:
+            seen.add(n); out.append(n)
+    return out
+
+def cmd_plan_claims(a) -> int:
+    """The Proposes lane: a session's LAST submitted plan, translated by
+    section into statements, judged by the kernel at the sha that was
+    HEAD when the plan was submitted. Beside the model's rows, a
+    deterministic sweep of every backticked name in the plan."""
+    path = resolve(a.project, a.session)
+    evs = plan_events(path)
+    if not evs:
+        print("no ExitPlanMode plan in this session"); return 4
+    ev = evs[-1]
+    sha_p = sha_at(ev["when"])
+    if not sha_p:
+        print(f"could-not-judge: no commit at {ev['when']}"); return 3
+    secs = plan_sections(ev["plan"])
+    obs = session_observations(path)
+    kernel = Kernel(path, obs, lambda i: sha_p)
+    kernel.text = ev["plan"]
+    d = SESSIONS_DIR / path.stem
+    d.mkdir(parents=True, exist_ok=True)
+    ledger = "plan-claims" + (f"-{a.ledger}" if getattr(a, "ledger", "") else "") + ".jsonl"   # --ledger A: a preserved run's ledger
+    stmts, t0 = [], time.time()
+    if getattr(a, "rekernel", False):
+        stmts = [r for r in (json.loads(l) for l in (d / ledger).open()) if r["node"] == "statement"]
+        for st in stmts:
+            st.pop("node", None); st.pop("deps", None)
+            st["verbatim"] = st["verbatim"] or (st["kind"] in ("Proposes", "Exists") and anchored(st.get("name") or "", ev["plan"]))
+            st["state"], st["receipt"] = kernel.run(st) if st["verbatim"] else ("sorry", "span is not verbatim in the plan")
+    else:
+        for n, (title, text) in enumerate(secs, 1):
+            t1 = time.time()
+            try:
+                got = translate_block(f"PLAN section '{title}':\n\n{text}", ev["turn"], a.pin, a.timeout)
+            except DaemonDown as e:
+                print(f"could-not-judge: daemon {e}"); return 3
+            for k, st in enumerate(got):
+                st["id"] = f"p{n}.{k + 1}"; st["section"] = title
+                st["verbatim"] = st["verbatim"] or span_is_real(re.sub(r"[`*_]", "", st["span"]), re.sub(r"[`*_]", "", text)) \
+                    or (st["kind"] in ("Proposes", "Exists") and anchored(st.get("name") or "", text))
+                st["state"], st["receipt"] = kernel.run(st) if st["verbatim"] else ("sorry", "span is not verbatim in the plan")
+                stmts.append(st)
+            print(f"  section {n:>2}/{len(secs)} {title[:50]:<50} {len(got):>3} statement(s) {round(time.time() - t1)}s", flush=True)
+    # A plan for another repository (22da1ede: canon; crates/canon-core/..):
+    # judged against this tree every refuted row would be false. Foreign
+    # when most of the plan's cited paths do not start in this repo.
+    cited = {m.group(1).split("/")[0] for m in re.finditer(r"`\.?/?([\w-]+/[\w./-]+\.\w+)", ev["plan"])}
+    here = {c for c in cited if git("show", f"{sha_p}:{c}")}
+    foreign = len(cited) >= 3 and len(here) <= 1      # 5c16d4f6 cites 19 top dirs, 12 it will CREATE; 22da1ede (canon) resolves none
+    for st in stmts:
+        if foreign and st["state"] in ("refuted", "proved") and st["kind"] in ("Exists", "Proposes"):   # 80406ac5: 17 canon nouns 'proved new' here
+            st["state"], st["receipt"] = "sorry", f"the plan's paths are in another repository ({len(cited) - len(here)} of {len(cited)} top directories are not here)"
+        # (An 'asserting section' rule lived here for one kernel revision and
+        # demoted RailScope -- in no file anywhere -- along with MeshDirectory,
+        # invite_expires_at, NEVER_GUESTABLE .. which HEAD carries: the
+        # later-in-tree rule in the Exists tactic covers those, this did not.)
+    proposed = {re.sub(r":\d+(?:-\d+)?$", "", (st.get("name") or "").strip("`")) for st in stmts if st["kind"] == "Proposes"}
+    for st in stmts:
+        if st["kind"] == "Exists" and st["state"] == "refuted" and re.sub(r":\d+(?:-\d+)?$", "", (st.get("name") or "").strip("`")) in proposed:
+            st["state"], st["receipt"] = "sorry", "absent at the sha, and this plan proposes it: new by the plan's own account"
+    # the sweep: every backticked name, defined at the sha or not
+    tagged = {}
+    for st in stmts:
+        if st["kind"] in ("Proposes", "Exists") and st.get("name"):
+            tagged.setdefault(re.sub(r":\d+(?:-\d+)?$", "", st["name"].strip("`")), st["kind"])
+    names = sweep_idents(ev["plan"])
+    found = kernel.defined_many(names, sha_p)
+    sweep = [{"name": nm, "defined": bool(found[nm]), "where": (found[nm] or "")[:120], "tagged": tagged.get(nm, "none")} for nm in names]
+    with (d / ledger).open("w") as fh:
+        fh.write(json.dumps({"node": "plan", "session": path.stem, "when": ev["when"], "sha": sha_p, "verdict": ev["verdict"],
+                             "turn": ev["turn"], "sections": len(secs), "chars": len(ev["plan"]), "title": ev["plan"].splitlines()[0][:120]}) + "\n")
+        for st in stmts:
+            fh.write(json.dumps({"node": "statement", **st}) + "\n")
+        for r in sweep:
+            fh.write(json.dumps({"node": "sweep", **r}) + "\n")
+    from collections import Counter as _C
+    print(f"plan {path.stem[:8]} · {ev['verdict']} · sha {sha_p[:9]} · {len(secs)} section(s) · {len(stmts)} statement(s) · {round(time.time() - t0)}s · {d / ledger}")
+    print(f"  {ev['plan'].splitlines()[0][:110]}")
+    for st in stmts:
+        if st["kind"] == "Opinion" and not a.verbose:
+            continue
+        anchor = {k: v for k, v in st.items() if k in ("scope", "pass", "fail", "sha", "paths", "symbols", "name", "shape", "quantity", "value", "action", "goal")}
+        print(f"  {st['id']:<7} {st['kind']:<9} {st['state']:<8} {json.dumps(anchor)[:60]:<62} | {st['span'][:70]}")
+        print(f"          receipt: {st['receipt'][:150]}")
+    c = _C(s["state"] for s in stmts); ck = _C((s["kind"], s["state"]) for s in stmts)
+    print(f"  states: {dict(c)} · Proposes: {dict((k[1], v) for k, v in ck.items() if k[0] == 'Proposes')} · Exists: {dict((k[1], v) for k, v in ck.items() if k[0] == 'Exists')}")
+    parallel = [r for r in sweep if r["defined"] and r["tagged"] == "Proposes"]
+    ghost = [r for r in sweep if not r["defined"] and r["tagged"] == "Exists"]
+    untagged = [r for r in sweep if r["tagged"] == "none"]
+    print(f"  sweep: {len(sweep)} name(s) · {sum(r['defined'] for r in sweep)} defined at sha · "
+          f"{len(parallel)} defined-but-Proposes · {len(ghost)} absent-but-Exists · {len(untagged)} untagged ({sum(r['defined'] for r in untagged)} defined)")
+    for r in parallel:
+        print(f"    defined-but-Proposes {r['name']}: {r['where'][:100]}")
+    for r in ghost:
+        print(f"    absent-but-Exists    {r['name']}")
+    return 0
+
+def cmd_plan_claims_all(a) -> int:
+    src = TRANSCRIPTS / a.project
+    files = [f for f in sorted(src.glob("*.jsonl"), key=lambda q: q.stat().st_mtime, reverse=True) if plan_events(f)]
+    if getattr(a, "resume", False):
+        files = [f for f in files if not (SESSIONS_DIR / f.stem / "plan-claims.jsonl").exists()]
+    summary, t0 = [], time.time()
+    for n, f in enumerate(files, 1):
+        ns = types.SimpleNamespace(project=a.project, session=f.stem, pin=a.pin, timeout=a.timeout, rekernel=a.rekernel, verbose=False, ledger=a.ledger)
+        t1 = time.time()
+        try:
+            rc = cmd_plan_claims(ns)
+        except DaemonDown as e:
+            print(f"  {n:>2}/{len(files)} {f.stem[:8]}  could-not-judge: daemon {e}", flush=True)
+            summary.append({"session": f.stem, "error": str(e)}); continue
+        if rc != 0:
+            summary.append({"session": f.stem, "error": f"rc {rc}"}); continue
+        rows = [json.loads(l) for l in (SESSIONS_DIR / f.stem / "plan-claims.jsonl").open()]
+        stmts = [r for r in rows if r["node"] == "statement"]
+        from collections import Counter as _C
+        summary.append({"session": f.stem, "plan": rows[0], "statements": len(stmts), "states": dict(_C(r["state"] for r in stmts)),
+                        "refuted": [r for r in stmts if r["state"] == "refuted"],
+                        "sweep": [r for r in rows if r["node"] == "sweep" and (r["tagged"] != "none" or r["defined"])], "seconds": round(time.time() - t1)})
+    if a.out:
+        Path(a.out).write_text(json.dumps(summary, indent=1)); print(f"written {a.out}")
+    print(f"\nplan-claims-all — {len(summary)} plan(s) · {sum(len(x.get('refuted', [])) for x in summary)} refuted row(s) · "
+          f"{sum(1 for x in summary if 'error' in x)} could-not-judge · {round(time.time() - t0)}s")
     return 0
 
 def cmd_investigate(a) -> int:
@@ -5778,6 +6193,56 @@ def cmd_self_test(_a) -> int:
            "a test name inside a longer scope is the name")
     _kh = Kernel(Path("."), {"results": [], "asks": [], "nums": {}}, lambda i: git("rev-parse", "HEAD").strip())
     eq(_kh.run({"kind": "Landed", "turn": 1, "symbols": ["Kernel::summaries"], "span": "Kernel::summaries lands"})[0], "proved", "Landed: Type::member is both names in one file at the sha")
+    # Proposes: the inventory tactic. Watched wrong first: git grep -E has
+    # no \s, so every name came back 'nothing defines' (2026-09-13).
+    for _n, _want in (("Kernel", "refuted"), ("SplitInferenceProvider", "refuted"), ("Kernel::summaries", "refuted"),
+                      ("scripts/co-oplog.py", "refuted"), ("co-oplog.py", "refuted"), ("sovereign-mesh", "refuted"),
+                      ("FooBarBazNounX", "proved"), ("Kernel::nope_nope", "proved"), ("no-such-crate-xyz", "proved"),
+                      ("a ledger of plans", "sorry"), ("svrn setup --terminal", "sorry")):
+        eq(_kh.run({"kind": "Proposes", "turn": 1, "name": _n, "span": f"a new {_n}"})[0], _want, f"Proposes {_n}")
+    eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "NodeId", "span": "x"})[0], "refuted", "Proposes: a macro-defined type is defined (define_id!(NodeId, ..))")
+    eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "sovereign/DEFAULTS_LEDGER.md", "shape": "file", "span": "a `sovereign/DEFAULTS_LEDGER.md` row per rung"})[0], "sorry", "Proposes: a row in an existing file is an addition")
+    eq(anchored("Outcome", "pub(crate) struct Outcome {\n local: Option<Scored>"), True, "anchored: the name is a token in the text")
+    eq(anchored("come", "pub(crate) struct Outcome {"), False, "anchored: not a substring of a longer token")
+    eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "summaries", "shape": "fn", "span": "`pub fn summaries(&self, before: int)`"})[0], "sorry", "Proposes: a &self method belongs to its type")
+    eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "./scripts/sovereign-test.sh --human", "shape": "other", "span": "x"})[0], "sorry", "Proposes: a command line is prose")
+    eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "/v1/models", "shape": "other", "span": "x"})[0], "refuted", "Proposes: an existing route is a string in the tree")
+    eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "co-oplog.py:868", "shape": "other", "span": "x"})[0], "sorry", "Proposes: a line anchor is a citation")
+    eq(_kh.run({"kind": "Exists", "turn": 1, "name": "Kernel::summaries()", "span": "x"})[0], "proved", "Exists: call parens are not part of the name")
+    eq(_kh.run({"kind": "Exists", "turn": 1, "name": "GR-19", "span": "x"})[0], "sorry", "Exists: a requirement id is judged by its document")
+    eq(_kh.run({"kind": "Exists", "turn": 1, "name": "scripts/co-oplog.py::cmd_claims", "span": "x"})[0], "proved", "Exists: path::fn is the fn in that file")
+    eq(_kh.run({"kind": "Exists", "turn": 1, "name": "docs/ARCHITECTURE_TOUR.md::no_such_fn_xyz", "span": "x"})[0], "refuted", "Exists: path::fn absent from that file (not co-oplog.py: this line would be the hit)")
+    eq(_kh.run({"kind": "Exists", "turn": 1, "name": "--self-test", "span": "x"})[0], "sorry", "Exists: a flag is no name")
+    eq(_kh.run({"kind": "Exists", "turn": 1, "name": "F-bars", "span": "x"})[0], "sorry", "Exists: prose is no name")
+    eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "Kernel", "span": "x", "section": "Context"})[0], "sorry", "Proposes: a Context section describes what exists")
+    eq(_kh.defined_at("ARCH_PRINCIPLES", git("rev-parse", "HEAD").strip()) is None, True, "defined_at: a name in a markdown code block is no definition")
+    eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "scripts/co-oplog.py", "shape": "file", "span": "`scripts/co-oplog.py` modified (one index)"})[0], "sorry", "Proposes: 'modified' is a change, not a new file")
+    _kh.text = "| `co-oplog.rs` | 228 | move |"
+    eq(_kh.plan_cites("co-oplog") is not None, True, "plan_cites: name.rs in a table cites the module")
+    _kh.text = 'Scope::Models(_) => &["/v1/models", "/v1/chat/completions"],'
+    eq(_kh.plan_cites("Scope"), None, "plan_cites: a route in the plan's own code is no citation (62d5846b)")
+    _kh.text = "- **`SplitInferenceProvider`** (`oicp-client/src/lib.rs:1258`) is the provider."
+    eq(_kh.plan_cites("SplitInferenceProvider", git("rev-parse", "HEAD").strip()) is not None, True, "plan_cites: a backticked name beside file:line is a citation")
+    _kh.text = "1. `no_such_new_file_xyz.rs` — one `Scope` variant, one `paths()` arm"
+    eq(_kh.plan_cites("Scope", git("rev-parse", "HEAD").strip()), None, "plan_cites: an anchor the plan itself will write is no citation (62d5846b)")
+    eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "/v1/models", "span": "curl /v1/models", "section": "Verification"})[0], "sorry", "Proposes: a route in Verification is exercised")
+    eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "scripts/co-oplog.py", "shape": "file", "span": "`scripts/co-oplog.py` gains a verb"})[0], "sorry", "Proposes: a file named without 'new' is edited")
+    eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "scripts/co-oplog.py", "shape": "file", "span": "`scripts/co-oplog.py` (new, ~80 lines)"})[0], "refuted", "Proposes: a file called new that is in the tree")
+    eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "Kernel", "shape": "type", "span": "`Kernel` (`scripts/co-oplog.py:4486`)"})[0], "sorry", "Proposes: a span with file:line cites")
+    eq(_kh.defined_at("constant_time_eq", git("rev-parse", "HEAD").strip()) is None or "Cargo.lock" not in _kh.defined_at("constant_time_eq", git("rev-parse", "HEAD").strip()), True, "defined_at: Cargo.lock is not a definition site")
+    _kh.text = ""
+    _many = _kh.defined_many(["Kernel", "FooBarBazNounX", "NodeId", "co-oplog.py", "sovereign-mesh", "Kernel::summaries"], git("rev-parse", "HEAD").strip())
+    eq({k: bool(v) for k, v in _many.items()}, {"Kernel": True, "FooBarBazNounX": False, "NodeId": True, "co-oplog.py": True, "sovereign-mesh": True, "Kernel::summaries": True},
+       "defined_many agrees with defined_at on six shapes of name")
+    _kh.text = "the split lands in `some_other_file.rs`"
+    eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "cmd_claims", "shape": "fn", "span": "x"})[0], "sorry", "Proposes: a fn defined in a file the plan does not name is no collision")
+    _kh.text = "the split lands in `scripts/co-oplog.py`"
+    eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "Kernel", "shape": "type", "span": "x"})[0], "refuted", "Proposes: a type collides workspace-wide")
+    _kh.text = ""
+    eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "Kernel", "span": "x", "section": "What this removes"})[0], "sorry", "Proposes: a removes section proposes nothing")
+    _kh.text = "- `Kernel` (`scripts/co-oplog.py:4477`) is the judge.\n\n## Plan\n\nbuild a `Kernel`"
+    eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "Kernel", "span": "x"})[0], "sorry", "Proposes: the plan cites the definition, so it is an extension")
+    _kh.text = ""
     eq(_kh.run({"kind": "Exists", "turn": 1, "name": "co-oplog.py"})[0], "proved", "Exists: a bare file name is found anywhere in the tree")
     eq(_kh.run({"kind": "Exists", "turn": 1, "name": "scripts/co-oplog.py"})[0], "proved", "Exists: a path is looked up as a path")
     eq(_kh.run({"kind": "Exists", "turn": 1, "name": "/internal/nope-" + hex(int(time.time()))[2:]})[0], "refuted", "Exists: a route is a string in the tree, and this one is in no tree")
@@ -5966,6 +6431,18 @@ def main() -> int:
     cl.add_argument("--serves-only", action="store_true", help="redo only the serves step over the stored claims.jsonl")
     cl.add_argument("--rekernel", action="store_true", help="re-judge the stored statements with the current kernel; no model call")
     cl.set_defaults(fn=cmd_claims)
+    pc = sub.add_parser("plan-claims", help="the Proposes lane: a session's last submitted plan as statements, judged against the tree at the plan's sha")
+    pc.add_argument("session", nargs="?", default="")
+    pc.add_argument("--all", action="store_true", help="every session that submitted a plan")
+    pc.add_argument("--project", default="-Users-alexsbryan-dev-commonwealth-ai")
+    pc.add_argument("--pin", default=DEFAULT_PIN)
+    pc.add_argument("--timeout", type=float, default=240.0)
+    pc.add_argument("--out", default="")
+    pc.add_argument("--verbose", action="store_true", help="print Opinion rows too")
+    pc.add_argument("--rekernel", action="store_true", help="re-judge the stored ledger; no model call")
+    pc.add_argument("--resume", action="store_true", help="with --all: skip sessions that already have a ledger")
+    pc.add_argument("--ledger", default="", help="ledger suffix: 'A' reads/writes plan-claims-A.jsonl (a preserved run)")
+    pc.set_defaults(fn=lambda a: cmd_plan_claims_all(a) if a.all else cmd_plan_claims(a))
     ca = sub.add_parser("claims-all", help="the claim graph over the last N sessions, kernel only; refuted rows collected for the hand read")
     ca.add_argument("--project", default="-Users-alexsbryan-dev-commonwealth-ai")
     ca.add_argument("--last", type=int, default=40)

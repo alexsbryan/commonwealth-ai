@@ -4,7 +4,7 @@
 # Bank improvements only (never adds, never raises — safe to run anytime):
 #   cargo run -p xtask -- arch-gate --tighten
 1499	commonwealth/crates/commonwealth-state/src/store.rs
-1701	commonwealth/crates/commonwealth-transport/src/iroh.rs
+1668	commonwealth/crates/commonwealth-transport/src/iroh.rs
 1304	commonwealth/crates/commonwealth-work/src/refusal.rs
 1484	corpus-engine-atos/src/features.rs
 7807	corpus-engine-notes/src/notes.rs
@@ -12,8 +12,8 @@
 1300	corpus-engine-scip/src/scip_export.rs
 3691	corpus-engine-scip/src/scip_graph.rs
 1588	corpus-engine-vocab/src/atoms.rs
-2145	corpus-engine/src/engine/ingest.rs
-4214	corpus-engine/src/engine/mod.rs
+2148	corpus-engine/src/engine/ingest.rs
+4222	corpus-engine/src/engine/mod.rs
 1420	corpus-engine/src/enrichment/atlas/analysis/sec_facts/mod.rs
 1461	corpus-engine/src/enrichment/atlas/analysis/tensions.rs
 2516	corpus-engine/src/enrichment/atlas/context.rs
@@ -66,7 +66,7 @@
 2543	sovereign/crates/sovereign-cli-llm/src/bench_cmd/book_report.rs
 2278	sovereign/crates/sovereign-cli-llm/src/bench_cmd/chaos_monkey.rs
 1357	sovereign/crates/sovereign-cli-llm/src/bench_cmd/mechanism_fidelity.rs
-1908	sovereign/crates/sovereign-cli-llm/src/bench_cmd/vault_report.rs
+1917	sovereign/crates/sovereign-cli-llm/src/bench_cmd/vault_report.rs
 1471	sovereign/crates/sovereign-cli-llm/src/corpus_snapshot_cmd.rs
 1765	sovereign/crates/sovereign-cli-llm/src/enrich_cmd/atlas_drift_report.rs
 1247	sovereign/crates/sovereign-cli-llm/src/enrich_cmd/delta_cmd.rs
@@ -76,7 +76,7 @@
 1655	sovereign/crates/sovereign-cli-llm/src/knowledge_gym_cmd/runner.rs
 2289	sovereign/crates/sovereign-cli-llm/src/mesh_bench.rs
 1611	sovereign/crates/sovereign-cli-llm/src/mesh_bench/tests.rs
-5340	sovereign/crates/sovereign-cli-llm/src/mesh_cmd.rs
+5345	sovereign/crates/sovereign-cli-llm/src/mesh_cmd.rs
 1745	sovereign/crates/sovereign-cli-llm/src/pipeline_cmd.rs
 1225	sovereign/crates/sovereign-cli-llm/src/quality_lane_cmd/bench_lane.rs
 1796	sovereign/crates/sovereign-cli-llm/src/quality_lane_cmd/chat_ask.rs
@@ -95,7 +95,7 @@
 1217	sovereign/crates/sovereign-cli/tests/main/cli_contract_journeys.rs
 1667	sovereign/crates/sovereign-compute/src/manager.rs
 2028	sovereign/crates/sovereign-compute/src/supervisor.rs
-3631	sovereign/crates/sovereign-contracts/src/setup_config.rs
+3445	sovereign/crates/sovereign-contracts/src/setup_config.rs
 1525	sovereign/crates/sovereign-contracts/src/skills.rs
 2036	sovereign/crates/sovereign-contracts/src/traits.rs
 1796	sovereign/crates/sovereign-contracts/src/types/mod.rs
@@ -140,15 +140,15 @@
 1400	sovereign/crates/sovereign-inference/src/embedded/prefix_state.rs
 3511	sovereign/crates/sovereign-inference/src/embedded/rpc_distribution.rs
 1952	sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs
-1284	sovereign/crates/sovereign-mesh/src/admin_http.rs
+1308	sovereign/crates/sovereign-mesh/src/admin_http.rs
 1459	sovereign/crates/sovereign-mesh/src/auto_ingest.rs
 1650	sovereign/crates/sovereign-mesh/src/corpus_watch_http.rs
-5655	sovereign/crates/sovereign-mesh/src/daemon.rs
+5683	sovereign/crates/sovereign-mesh/src/daemon.rs
 1527	sovereign/crates/sovereign-mesh/src/decision_log.rs
 1493	sovereign/crates/sovereign-mesh/src/gossip.rs
 2086	sovereign/crates/sovereign-mesh/src/inference_adapter.rs
-1349	sovereign/crates/sovereign-mesh/src/iroh_access.rs
-1824	sovereign/crates/sovereign-mesh/src/mesh_http.rs
+1614	sovereign/crates/sovereign-mesh/src/iroh_access.rs
+1825	sovereign/crates/sovereign-mesh/src/mesh_http.rs
 2394	sovereign/crates/sovereign-mesh/src/mesh_sim/mod.rs
 1264	sovereign/crates/sovereign-mesh/src/oicp_synthesis.rs
 5399	sovereign/crates/sovereign-mesh/src/peer_inference.rs
@@ -171,13 +171,13 @@
 1362	sovereign/crates/sovereign-store/src/sqlite/conv_tiered.rs
 1835	sovereign/crates/sovereign-store/tests/main/store_tests.rs
 1594	sovereign/crates/sovereign-tdd/src/trial.rs
-1618	sovereign/crates/sovereign-tools/src/atlas_postinstall.rs
+1639	sovereign/crates/sovereign-tools/src/atlas_postinstall.rs
 1267	sovereign/crates/sovereign-tools/src/atlas_view/reader.rs
 1605	sovereign/crates/sovereign-tools/src/code/session_state.rs
 1421	sovereign/crates/sovereign-tools/src/conv_tiered_provider.rs
 1549	sovereign/crates/sovereign-tools/src/knowledge_view/manager.rs
 1311	sovereign/crates/sovereign-tools/src/local_corpus/extract_stage.rs
-2640	sovereign/crates/sovereign-tools/src/local_corpus/manager.rs
+2657	sovereign/crates/sovereign-tools/src/local_corpus/manager.rs
 2145	sovereign/crates/sovereign-tools/src/raptor_atlas.rs
 1374	sovereign/crates/sovereign-tools/src/sec_edgar.rs
 1539	sovereign/crates/sovereign-tools/tests/main/e2e_code_intel.rs

@@ -917,7 +917,7 @@ status     = "holds"
 home       = "minted"
 in_program = false
 measure    = "D1 count for name Peer + private peer records outside commonwealth-core::mesh"
-today      = "2026-08-24: the concept holds; the row named a type that does not exist. There is no `pub struct Peer` anywhere in the workspace — the mesh member type is `MemberRecord` (commonwealth-core/mesh.rs:35) and it carries the whole totality: node_id, name, invited_by, joined_at, last_seen, status, capabilities, addresses, node_pubkey (the Ed25519 identity), iroh relay. No split was needed: the IDENTITY half is already the kernel's NodeId, which MemberRecord holds by value rather than re-deriving. Renaming the type to Peer is a separate decision with its own blast radius; this row records where the noun lives, not what it should be called."
+today      = "2026-08-24: the concept holds; the row named a type that does not exist. There is no `pub struct Peer` anywhere in the workspace — the mesh member type is `MemberRecord` (commonwealth-core/mesh.rs:35) and it carries the whole totality: node_id, name, invited_by, joined_at, last_seen, status, capabilities, addresses, node_pubkey (the Ed25519 identity), iroh relay. No split was needed: the IDENTITY half is already the kernel's NodeId, which MemberRecord holds by value rather than re-deriving. Renaming the type to Peer is a separate decision with its own blast radius; this row records where the noun lives, not what it should be called. 2026-09-14: the `domains` campaign takes the opposite move — the WORD `Peer` retires outside the commonwealth package (72 dispositions in quality/DOMAINS.toml [[noun]], rung domains-4) and Fabric's word is `Member`; this canonical is unchanged."
 
 [[concept]]
 name       = "NodeCapability"
@@ -929,3 +929,40 @@ status     = "holds"
 home       = "minted"
 in_program = false
 measure    = "D1 count for name Capability across the OICP surface"
+
+# ── Words minted by the domains campaign (quality/DOMAINS.md §10.1, 2026-09-14) ──
+# Each is a context's exclusive NOUN, chosen against `converge noun` output
+# pasted in quality/DOMAINS.toml. `home = "planned"` until the rename lands.
+
+[[concept]]
+name       = "Venue"
+canonical  = "sovereign_serving_host::Venue"
+disposition = "converge"
+totality   = "The thing the scheduler ranks — a place a request can be served: the local slot or a remote member's advertised model. MemberReach (four Fabric fields) + published Capability claims + Serving's own latency history, availability and quarantine. One score type, oicp_types::ScoredClaim, under its published name."
+gloss      = '''where a request can be served, ranked.'''
+status     = "target"
+home       = "planned"
+in_program = true
+measure    = "definitions carrying `Venue` outside the serving package (dm-word-owners); today one kin, kernel_types::quality::VenueAction, renames to TriggerAction in rung domains-5"
+
+[[concept]]
+name       = "Donor"
+canonical  = "commonwealth_work::Donor"
+disposition = "converge"
+totality   = "A machine that runs a unit under a declared isolation boundary. Selected by what it checks — accept_from, isolation, offer kind — and by nothing it does not; roster trust never crosses. DonorReach { node_id, name, endpoints } is the one Fabric translation."
+gloss      = '''whose machine runs this.'''
+status     = "target"
+home       = "planned"
+in_program = true
+measure    = "definitions carrying `Donor` outside the commonwealth package's compute half (dm-word-owners); zero first-party definitions on 2026-09-14"
+
+[[concept]]
+name       = "Principal"
+canonical  = "sovereign_api::principal::Principal"
+disposition = "converge"
+totality   = "Who is asking — the identity a request resolves to before admission, and the key of DAEMON_CORE.md §1's one table `principal -> Scope`. Admission's inflight guard and tally are keyed on it; a peer's row and a local caller's row have the same shape."
+gloss      = '''who is asking, resolved to a Scope.'''
+status     = "target"
+home       = "planned"
+in_program = true
+measure    = "definitions carrying `Principal` outside its owner (dm-word-owners); three of four kin are already sovereign-api/src/principal.rs — a convergence, zero renames. Owner may move beside `Scope` when daemon-core Phase 5 lands one resolver"

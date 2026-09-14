@@ -238,6 +238,33 @@ what `atlas/` alone has grown to.
 
 ## 7. Sequencing
 
+Executed by the `domains` campaign — flight rules in
+`quality/campaigns/domains.toml`, the registry the instruments read in
+`quality/DOMAINS.toml` (contexts, owned words, module tags, the Peer
+dispositions, the cross-context edges, the collision verdicts), and per-rung
+orders under `.sovereign/features/`. Drafted 2026-09-13; the campaign's
+Decisions section records where its inventory overrode this file (§8,
+"Re-measured"; §10).
+
+**Re-sequenced 2026-09-14, operator direction: god crates first.** The phase
+order below was wrong in one way that matters: it sequenced by CONCERN (names,
+then the read model, then a crate, then the rest), so the largest misnamed
+crate would have been demolished last and by four different rungs. The
+campaign now sequences by CRATE, biggest first, and the phases fold in. The
+loop: take the largest crate whose modules are not all its own context; the
+cluster that IS its context stays; every other cluster moves to its context's
+home crate (the registry's `crates` list, creating the home when it does not
+exist); leaf clusters first, then by size; an edge that crosses crates after
+the move goes through a port already designed (§10.3,
+`sovereign/SERVING_BOUNDARY.md`) or the cluster splits, never a new exception
+row; a rename rides the move; each destination whose own-context share drops
+is enqueued, which is the breadth-first half; stop when the queue is empty and
+the predicate holds. Phase A's renames ride the moves; Phase C is wave 1's
+serving cluster leaving `sovereign-mesh`; Phase B is wave 3's first move out
+of `corpus-engine`; Phase D is the loop. Wave 1 is `sovereign-mesh`: Fabric
+(16,028 lines) stays, ten clusters leave. The algorithm runs as
+`scripts/domains-census.py plan` (rung 3), not as a list a person keeps.
+
 No phase here moves a line until the one before it has named something, because
 the reason this repository grew three misnamed crates is that code with no home
 goes wherever it links.
@@ -294,6 +321,58 @@ it for, it is not a context and this file is wrong about it — merge it into it
 neighbour and say which. Build feedback is the first candidate and is written
 down as such rather than defended.
 
+**Re-measured 2026-09-13, before the campaign's first row.** Leading with what
+was wrong, so the table above is read as the 09-11 reading and the toml's
+floors as the baseline:
+
+- Row 1's denominator was unstated. Prefix-`pub` reads **39 across 13 crates**
+  (26 outside the commonwealth package), not 34 across 11. Sweeping for `Peer`
+  anywhere in a type name finds 21 more definitions and a fourteenth crate
+  (`commonwealth-discovery`): **50 pub-ish, 35 outside the package in 9
+  crates**. A prefix bar is passable by renaming `PeerFoo` to `MeshPeerFoo`,
+  so the campaign counts the word. Two carve-outs are registry rows:
+  `PeerStore` (a replicated KV, renamed apart) and `PeerAnswer` in
+  kernel-types (egress custody, kept). The seven concepts in §3 hold and are
+  nine: replicated KV and egress custody were missing.
+- Row 2 would read green today while the defect stands. All 20 `atoms.json`
+  readers already use `corpus-engine-vocab`'s `AtomsFile`; none declares its
+  own struct. The leak is the DOOR: `read_atlas_atoms` is at
+  `corpus-engine/src/enrichment/atlas/writer.rs:595`, not in vocab, so
+  `corpus-mcp/src/tools.rs:873` hand-rolls one and nine sites bypass it. The
+  bar becomes "pub `Atom*` outside vocab and `enrichment/`, minus three named
+  axum binders": **12 → 0**, and the door invariant is made structural rather
+  than counted. `Cluster*` is never persisted under `atlas/` and leaves §5's
+  leak sentence; `Seed*`'s outside count is 2 atlas nouns, not 6.
+- Row 3 counted studio, which §4 calls not a context, and `corpus-mcp`, which
+  is a host. By the strict rule (a `[[package]]` the gate passes) it is **3 of
+  10**: Fabric and Compute via `commonwealth`, Workbench via `code-intel`.
+- Row 4's floor is **88,255**, not 82,241 — `sv-surface` moved desktop
+  surfaces onto daemon routes hosted in `sovereign-mesh` in the two days
+  between. `*_http.rs` is 26 files / 22,017 lines against `DAEMON_CORE.md`'s
+  22 / 18,319. By module tags the crate is host 25,432 / serving 20,488 /
+  fabric 16,028 / compute 9,740 / back-of-house 4,841 / workbench 4,811 /
+  ingest 3,410 / understanding 2,316 / answering 747 / workspace 233 /
+  retrieval 209 — the bar is reachable at 16,775 only if every non-Fabric
+  tag leaves, and the host's 25,432 is a daemon-core campaign's to move.
+- §4 Serving measures **44,485 lines** module by module (38,665 if
+  `frontdoor.rs`, which reshapes prompts for third-party harnesses, is Host).
+  The scheduler half (6,356) already imports nothing foreign; the knot is
+  `peer_inference.rs` (5,399). The anticorruption layer §5 asks for exists at
+  `sovereign-mesh/src/daemon.rs:2286-2345` reading nine fields; it is misnamed
+  and lives in the host's god object. `sovereign-serving`, the peg, carries
+  eleven exported types with zero external references and 771 lines of
+  knowledge-shard assignment that drag `corpus-engine`.
+- §5's words collide. `Candidate` has five first-party definitions in five
+  crates; `Member` two; `Caller` one; `Source` is already Ingest's by §4 and
+  is in the duplicate-name baseline. `Donor` is clean. The words are decided
+  in rung `domains-4` against `converge noun` evidence, not here.
+- §9's `corpus-engine-vocab` figure of 5,161 is right; a non-recursive
+  `wc -l src/*.rs` gives 2,769 and is the trap §2's preamble warns about.
+- `scripts/daemon-route-census.py:25` still names
+  `commonwealth/crates/commonwealth-api/src`, gone since `domains-1`; every
+  route `sovereign-api` registers is uncounted and today's 213 unique paths
+  is an under-count. Repaired by rung `domains-3`.
+
 ## 9. What was not verified
 
 Named so the next reader does not take them as measured.
@@ -310,3 +389,162 @@ Named so the next reader does not take them as measured.
   store, or whether the sharding and snapshot behaviour makes it custom.
 - Every "applicable as" in §4 except the four in §2's table. Those four were
   run; the other six are claims about what a lift WOULD show.
+
+## 10. Adjudications — rung `domains-4`, 2026-09-14
+
+Every collision the three inventories surfaced is now one interface or a named
+split. The rows are data — `quality/DOMAINS.toml` `[[noun]]` (72, all
+`decided:`), `[[edge]]` (13), `[[collision]]` (20) — and this section is the
+argument beside them. Nothing here moved code; rungs 5-10 do.
+
+### 10.1 The words
+
+A context owns a NOUN, matched anywhere in a type name. Role suffixes
+(`Candidate`, `Record`, `View`, `Kind`, `Result`) are not words: `Candidate`
+has five definitions and 23 kin across four contexts, and owning it would
+rename `TensionCandidate` and `RelayCandidate` to move no coupling. §5's list
+is therefore revised, each against `converge noun` output pasted in the
+registry rows:
+
+| context | §5 said | decided | evidence |
+|---|---|---|---|
+| Fabric | Member | **`Member`** (type stays `MemberRecord`) | exclusive after `suggest_seams.rs:64,87` rename to `SeamSymbol`/`SharedSeamSymbol` (13 + 6 sites); `code_capability_graph.rs:91` is back-of-house and exempt |
+| Serving | Candidate | **`Venue`** | 0 definitions; one kin `kernel_types::quality::VenueAction` (18 sites / 3 files) renames to `TriggerAction`. `Seat` refused as a synonym of `Slot`; `Lender` refused — `guest_lender.rs:17-27` already means the pinned grant and says "a lender is not a peer" |
+| Compute | Donor | **`Donor`** | 0 definitions; sole kin `WorkDonorHandle` is Compute's |
+| Admission | Caller | **`Principal`** | 0 definitions; three of four kin are the owner (`sovereign-api/src/principal.rs:93,125,147`); converges with `DAEMON_CORE.md` §1's `principal → Scope` — zero renames |
+| Knowledge | Source | **no word — not a context** | every candidate failed the exclusivity test, which is the kill bar firing: the atlas half is Understanding's (`RemoteAtlasView`, `AtlasPullLead`), the ask-a-peer half is Retrieval's (`RemoteIndexTarget`, `RemoteIndexReply`). `Source` is Ingest's word and the kernel's type (`kernel_types::origin::Source`); `Library` is Fabric's media noun |
+
+Two match modes follow. `owns` matches anywhere; `owns_exact` matches the bare
+name — Ingest's `Source`, whose 72 kin mean "which producer". Definitions in
+`kernel` and `back-of-house` tagged crates count against no owner and are
+printed as exempt, never hidden.
+
+### 10.2 The Peer rows — 72 decided: keep 11, rename 56, merge 5, delete 0
+
+Named adjudications: `PeerRow` was two concepts (`MemberFanoutRow` in
+commonwealth-transport, `TravelMeasurementRow` in cli-llm). The three
+spellings of one live-path fact collapse: `PeerPathSnapshot` survives,
+`PeerTransportPath` merges into it, `IrohPeerPath` becomes **`MemberReach`**
+and moves down to `sovereign-contracts` — the Fabric-published view every
+other context reads. `PeerPreference`, defined four times down the stack,
+becomes one owner (`VenuePreferenceStore`) and one DTO. The `PeerStore` family
+is a replicated KV and says so (`ReplicatedKv*`). `PeerAnswer` in kernel-types
+is kept: egress custody, the one place the word is load-bearing.
+`oicp_types::PeerDescriptor` renames (`FederatedMeshDescriptor`) with its
+serde names unchanged — oicp-types is in the bar's population, and the wire is
+not.
+
+### 10.3 The edges — one translation each, and one that is already a defect
+
+`MemberRecord` crosses into Serving today through
+`EmbeddedDaemon::peer_inference_endpoints` (`sovereign-mesh/src/daemon.rs:2286-2345`),
+which reads eight fields plus three filters — over the `dm-shared-edges`
+ceiling of about four. The split that keeps the ceiling honest: four fields
+are Fabric REACH (`MemberReach`: node id, name, endpoints, alive), two are
+CAPABILITY and arrive through the published `oicp_types::Capability` claims,
+not off the roster row, and three are Serving's own (latency history,
+availability, quarantine). A `Venue` is `MemberReach` + claims + Serving's
+three; the Fabric translation carries four. E1 crosses as two methods and zero
+fields; E2 as one `f32`. E10 (`PeerAtlasView::from_member`,
+`sovereign-tools/src/atlas_peer_advice.rs:67`) is the working pattern and is
+renamed, not redesigned.
+
+E7 is a live defect, not a smell. `PeerTrustLevel` carries
+`#[serde(rename_all = "snake_case")]` (`commonwealth-core/src/mesh/mod.rs:399-405`),
+so its published spelling is `model_and_knowledge_sharing`, while
+`routes_oicp.rs:346`'s `format!("{:?}").to_lowercase()` emits
+`modelandknowledgesharing`. Two spellings of one closed set, one produced by a
+`Debug` derive. The fix is a closed wire enum in oicp-types, and the failing
+input exists today.
+
+### 10.4 Serving's collisions — eight families
+
+| family | verdict | survivor / renames | rung |
+|---|---|---|---|
+| `Tier` ×3 + `TierFloor` | split, four concepts | `TierFloor` (scheduler); `role::Tier` → `PreferredSlot` (31 sites); `apps::Tier` → `Origin` (16, wire-visible, serde rename); peg's `Tier` deleted. Not `LatencyClass`: `tier.rs:105-111` pre-registers that seam | 9, 5 |
+| routing model (13 dead types) | delete | zero external references each, by `callers`. Salvage: `UnavailableReason`'s shape → a closed `GateReason` replacing `Verdict::Gated{gate: String}`. Cascade: `MeshPlan` loses four of seven fields and dies with four `store_adapter` methods and three harness helpers, all zero-caller | 9 |
+| eight "candidate" nouns | converge the noun, split the role | one `Venue`; `VenueView`/`SelfView`/`ManifestView`/`Ranked`; score type is `oicp_types::ScoredClaim`, kept under its published name; the three `as` aliases at `oicp_select.rs:32-34` deleted; `LocalCandidateView` stays — its asymmetry is finding F1 in the type system | 5, 10 |
+| four "admission" deciders | split | Serving keeps `Admission`; rail → `Inclusion`; runtime → `TurnLease`; native grounding → `Answerability` (128 sites). The decider already exists in a tier-0 leaf, `serving_policy::fair_sched::SchedCore`; admission needs its axum/`AppState` coupling cut, not a new decider | 10 |
+| two `decision_log`s | split | mesh module → `routing_decisions`, types `RoutingDecision*`; studio's keeps the tool id in four registries. `SOVEREIGN_DECISION_LOG`, `oicp-decision/v1`, `DECISION_TRACE_TARGET` do not move | 10 |
+| `GuestLender*` | split by side of the link | four types move to the serving host unrenamed; `StoredGuestLink` is host wiring; `sovereign-grants` keeps `GuestGrant`/`Scope`. `GuestLenderSource` is NOT `PeerEndpointSource`: enumerate vs lookup-by-model-id, `Vec` vs `Option`, a 60 s TTL with `invalidate()` on 401, and a guest is a PIN that beats selection (`peer_inference.rs:3104`). Two ports | 10 |
+| `frontdoor.rs` | Host, confirmed | two production callers, 23 sites (`routes_responses.rs` 14, `routes_inference.rs` 9), both above the routing decision; imports no scheduler, candidate, score or admission type | — |
+| the public interface | five sketches | the two ports, the scheduler entry with its real signature, admission on `SchedCore`, the decision record + replay, and what `sovereign-cli-daemon`'s eight sites call — the basis of `sovereign/SERVING_BOUNDARY.md`'s rules | 9 |
+
+### 10.5 Understanding's collisions — and one correction to Phase B
+
+| family | verdict | survivor / renames |
+|---|---|---|
+| `Gap` ×3 | split two, converge two | `quality/CONCEPTS.toml:831-843` already decided it; the atlas detector's `Gap` becomes **`Lacuna`** (49 sites / 11 files; `atlas/gaps.json` and its key stay via serde rename), deep-research's becomes `GapRow` (19 / 8). kernel-types refused: either survivor drags `AtomId`/`ChunkRef` or `AcquisitionRoute` to layer 0 |
+| `Domain` | split; Understanding does not take the word | the atlas noun has no type (`git grep domains.json -- '*.rs'` = 0); the plugin `Domain` → **`FieldModel`** (45 refs), `DomainRegistry` → `FieldModelRegistry`. `Pass` refused: `EnrichmentPassRegistry` is a step, a domain is a genre |
+| `Seed` | split | six homonyms rename (37 refs / 11 files); `SeedError`/`SeedReport` are Understanding's; the outside count is 1 → 0, not 2 |
+| `AtomSpan` ×2 | converge into vocab | owned, `atom_type: AtomType` (closed set at `corpus-engine-vocab/src/atoms.rs:1104`); `AtomType::from_label` must be minted |
+| `Cluster` (39 defs, six families) | not a noun | `writer.rs` has zero matches; struck from owned words |
+| read model (21 defs, 5 crates) | converge to 16 in 2 | one `AtlasPage<T>`; `SectionRef` + `EvidenceExcerpt` one type; `RelatedAtom`/`CrossCorpusLink` each defined twice; `AtomHead` collapses a four-producer field set; **`AtomCard` deletes** (a lossy mirror of `AtomEnvelope`); `read_atlas_ontology` is minted, not moved (its only inline site is `context_loader.rs:711`) |
+| archaeology `Atom*` | split, not allow-list | `AtomProvenance` → `AnchorHistory` (27 / 4), `AtomWitness` → `WitnessTally` (13 / 1). The allow-list is the three axum binders and nothing else; I1 is 12 → 0 |
+| `Source` ×4 | converge on `kernel_types::origin::Source` | none of the four is Ingest's recipe source; `KeySet` (6), `ItemSet` (12, studio), `BundleLocation` (10) rename apart |
+
+**The correction.** `pub(crate)` on `AtomsFile.atoms` does not close the door:
+the derived `Deserialize` stays public and `serde_json::from_str::<AtomsFile>`
+still works outside vocab. The structural form is the `Evidence` pattern — a
+private wire twin that deserialises, `AtomsFile` itself not `Deserialize`, so
+`vocab::read` is the only constructor. `thiserror` would breach the leaf's
+dependency budget; `Display`/`Error` are hand-written.
+
+### 10.6 §9's open items, closed
+
+- **`deep_research/` is an eleventh context, `research`** (25,597 lines, 17
+  module rows). Its reach into the rest of `sovereign-core` is 28 `use crate::`
+  lines and two touch `runtime/`; its provider boundary is already a trait
+  (`ResearchPort`, `deep_research/estate.rs`); `Charter` is an exclusive word.
+  Answering answers one turn from an index it is handed; research acquires
+  across rounds. `dm-contexts-liftable`'s target moves 10 → 11 with the row.
+- **Retrieval store is not generic.** `index/search.rs` (1,245 lines) is; the
+  rest is not — the two-key `merge_shards` dedupe and its newest-mtime
+  propagation (`sharding.rs:760-780`), `Evidence`'s sealed door,
+  `ChunkProvenance`'s egress floor, RAPTOR's separate table, the snapshot's
+  embedding-model refusal. §4's "invest less" is true of `search.rs`, not of
+  the context.
+- The seven `Peer*` meanings are nine plus scaffolding (§8, re-measured).
+- `frontdoor.rs` is Host (§10.4).
+
+## 11. Destinations decided — the design rungs, 2026-09-14
+
+Design only, reviewed by the operator before any move. The arguments live in the boundary
+documents; each paragraph here is what a registry row records.
+
+### 11.1 Where the rest is argued
+
+The host crate, the dissolution of `AppState` and the adapter rule are `quality/DAEMON_CORE.md`
+§4. The caller's identity — which corrects §10.1's gift of `Principal` to Serving — is its §3.3.
+Serving's corrections head `sovereign/SERVING_BOUNDARY.md`. The `[[forbid]] corpus-engine* ->
+sovereign-*` row stands, and none of the clusters it appeared to block goes to `corpus-engine` or
+`sovereign-enrichment-build`.
+
+### 11.2 Compute
+
+Leading with what the registry had wrong: Compute's `crates` list named `sovereign-compute`, and
+the cluster graph chose it by name and tier. Every module of `sovereign-compute` keeps a loaded
+model in a supervised child process and routes inference to it — Serving's local engine and a
+single-owner resource — with no `commonwealth-work` edge and no unit, lease or donor.
+
+| piece | what it is | home |
+|---|---|---|
+| `commonwealth-work` | vocabulary, fold, lease predicate, executor trait and registry, process executor, sandbox | stays — it is the context |
+| `work_donor`, `ingest_executor` | the node running units off the work fold | `sovereign-daemon`'s `jobs` |
+| rented pods: `worker_pod`, `worker_http`, `worker_controller`, `worker_daemon`, `worker_subprocess_runner`, `multi_pod_coordinator` (5,831 lines) | leasing a rented machine and running work on it — Compute's remote isolation | a new Compute crate, `sovereign-pods` |
+| `worker_eligibility`, `pinned_pod_snapshot`, `pinned_transport` (1,863) | which RPC inference workers may hold a shard; a pinned pod presented as a venue | `sovereign-serving-host` |
+| `guest_tunnel` (134) | an iroh dial to a lender, exposed as a local address | Fabric, `sovereign-mesh` — it is reach |
+| `sovereign-compute` | Serving's local engine | re-tagged `serving`; rename proposed, `sovereign-slots` |
+
+Three findings ride with the table. **Pods speak a third unit vocabulary**, beside
+`commonwealth-work`'s units and `sovereign-grants`' legacy ingest lease. A rented pod is a donor
+whose isolation is a VM — the `oicp_types::Isolation` variant exists — and converging pods onto
+`commonwealth-work` units is a behaviour rung; after it, if `sovereign-pods` names only the
+commonwealth package and leaves, it joins that package. **One config table holds two contexts**:
+`ComputeSection` carries both the slot children and the donor's `work_offer`, and splits in a
+config rung with a compatibility reader. **One supervisor**: `sovereign-compute`'s supervisor is
+context-neutral and the only one in the tree with restart, backoff and a persisted crash log;
+`worker_subprocess_runner` repeats half of it, and `commonwealth-work`'s process executor calls
+itself the seventh spawn-with-timeout, kept because of `commonwealth-work -> sovereign-*`. That
+forbid names the sovereign family, not a leaf, so process supervision becomes a leaf outside it
+that all three reach down to.

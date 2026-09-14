@@ -3,6 +3,10 @@
 # evidence from its model runs. Neither is an act.
 seen
 draft-runs/
+# `adjudication/` holds an agent's proposed verdicts on a draft run and the group
+# files the operator reads before ratifying with scripts/canon-ratify.py. Also
+# evidence: what the operator ratifies becomes acts, and the acts are the record.
+adjudication/
 # `config` names ONE machine's endpoint and model. `canon init` does not list
 # it; canon's own repository does, so `canon draft` on a fresh clone says "no
 # endpoint configured" instead of calling a port on this laptop (canon

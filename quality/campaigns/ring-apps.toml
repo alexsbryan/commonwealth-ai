@@ -30,7 +30,11 @@ floor        = 1.0
 floor_basis  = "structural: FRACTION of roster rows written through the new path whose warrant names an op id that (a) exists in that ring's journal, (b) verifies under a key the roster already claimed at the time, and (c) is an `Introduce`. All three, or the row is untraceable and counts against."
 target       = 1.0
 direction    = "higher_is_better"
-instrument   = "a test that writes an introduction, admits a key on it, and resolves the row back to the op and the signer. Plus the back-compat leg: a `roster.json` written before this rung has rows with NO warrant, and those must read as warrant-unknown rather than failing to parse - a migration that turns every existing ring into a parse error is not back-compatible, it is an outage."
+# instrument   = (none yet) — co-lineage EXECS this field, so prose here would be
+#   run as bash. Absent is the honest state: `could-not-judge reason=instrument-missing`,
+#   not a fabricated verdict. Owed: a verdict-emitting command in the shape of
+#   ra-4's `scripts/ring-offers-demo.sh verdict <bar-id>`.
+instrument_note = "a test that writes an introduction, admits a key on it, and resolves the row back to the op and the signer. Plus the back-compat leg: a `roster.json` written before this rung has rows with NO warrant, and those must read as warrant-unknown rather than failing to parse - a migration that turns every existing ring into a parse error is not back-compatible, it is an outage."
 goodhart     = "1.0 over one row proves nothing, and 1.0 is also what you measure when the warrant field is present but the op id resolves to nothing - the check must RESOLVE the op, not merely find a string. A verdict citing only the affirmative leg is reporting half the predicate; ra-roster-stays-independent must be at target in the same run."
 status       = "open"
 
@@ -44,7 +48,11 @@ floor        = 0.0
 floor_basis  = "structural: COUNT of roster rows added, removed or changed as a consequence of an op being admitted, gossiped or synced. Zero, and it is a property of the route set rather than of a check somebody remembered - there is no roster route, and this rung must not create one."
 target       = 0.0
 direction    = "near_zero"
-instrument   = "the negative leg is the load-bearing one and it must be watched failing: a peer appends an `Introduce` naming a key nobody claims, ring-sync carries it, and the receiving node's `roster.json` is byte-identical afterwards. Plus the reference app's existing no-re-division test, re-run unchanged."
+# instrument   = (none yet) — co-lineage EXECS this field, so prose here would be
+#   run as bash. Absent is the honest state: `could-not-judge reason=instrument-missing`,
+#   not a fabricated verdict. Owed: a verdict-emitting command in the shape of
+#   ra-4's `scripts/ring-offers-demo.sh verdict <bar-id>`.
+instrument_note = "the negative leg is the load-bearing one and it must be watched failing: a peer appends an `Introduce` naming a key nobody claims, ring-sync carries it, and the receiving node's `roster.json` is byte-identical afterwards. Plus the reference app's existing no-re-division test, re-run unchanged."
 goodhart     = "zero is the expected good result and proves nothing alone (ARCH 5, 72b3ab47 - a zero count is not a positive control). The same run must show the introduction ARRIVING and being READABLE, or the bar has only demonstrated that nothing happened. An `Introduce` that no peer ever sent scores zero perfectly."
 status       = "open"
 

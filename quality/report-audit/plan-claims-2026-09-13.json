@@ -1,0 +1,1128 @@
+{
+ "date": "2026-09-13",
+ "kernel": "da2acf319",
+ "order": ".sovereign/features/bs-1-oplog/order.md \u00a7Proposes (machine-local)",
+ "input": "the last ExitPlanMode submission of each of 13 sessions, by section, template boilerplate dropped",
+ "model": {
+  "runA": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL (local, 3 plans) then Qwen3.6-35B-A3B-MTP-UD-Q6_K (Vast A6000, 10 plans) \u2014 a quant substitution, named",
+  "runB": "Qwen3.6-35B-A3B-MTP-UD-Q6_K (Vast A6000, 13 plans), after the one pre-registered translator tuning pass"
+ },
+ "handlist_blind": {
+  "written": "2026-09-13 before plan-claims ran on either session",
+  "cea8e256": [
+   "Outcome",
+   "Scored",
+   "Admitted",
+   "World",
+   "Policy",
+   "ManifestState",
+   "screen",
+   "value",
+   "prefer",
+   "decide",
+   "record"
+  ],
+  "62d5846b": [
+   "Scope",
+   "GuestGrant",
+   "GuestGrantStore",
+   "guest_grant.rs",
+   "routes_internal/guest_grant.rs",
+   "guest_link.rs",
+   "DeepLink::Guest",
+   "build_guest_link",
+   "cmd_grant",
+   "cmd_use",
+   "guest_refusal",
+   "with_bearer",
+   "DEFAULT_GUEST_TTL_SECS",
+   "MAX_GUEST_TTL_SECS",
+   "guest.json",
+   "permits_path"
+  ]
+ },
+ "verdicts": {
+  "read": "2026-09-13, every refuted Proposes/Exists row of both runs at kernel da2acf319, by hand against the plan text and the tree",
+  "classes": "collision = the plan proposes a TYPE under a name already defined in another crate (ARCH 11: a convergence decision, not a free choice); parallel = the plan builds a capability that exists under another name (the operator's class; NONE found in 13 plans); mistag = the translator tagged an existing thing as proposed, or a proposed thing as cited",
+  "runA": {
+   "62d5846b p9.8 Scope": "REAL collision \u2014 pub enum Scope proposed in commonwealth-knowledge; oicp-types/src/tool.rs:97 pub enum Scope (+1)",
+   "cea8e256 p3.1 Outcome": "REAL collision \u2014 6 definitions already",
+   "cea8e256 p3.10 Policy": "REAL collision \u2014 5 definitions already",
+   "62d5846b p9.15 constant_time_eq": "mistag \u2014 an existing fn used in the plan's pseudo-code, cited as 'Constant-time compare' at client_auth.rs:96",
+   "e541f77a p14.4 spec_sha256": "mistag \u2014 the plan's own runner design ('Complies: spec_sha256 is checked')",
+   "e541f77a p20.4 quality/baselines/conformance/latest.json": "mistag \u2014 a path in a proposed CLI usage line",
+   "precision": "3/6"
+  },
+  "runB": {
+   "24f0cac7 p6.20 Disposition": "REAL collision \u2014 `disp: Disposition` in the ledger's Label; cli_contract.rs:73 already defines Disposition",
+   "cea8e256 p3.1 Outcome": "REAL collision",
+   "cea8e256 p3.10 Policy": "REAL collision",
+   "536c8494 p9.2 ScopeRequest::into_limits": "mistag \u2014 the Warrant plan's own type design (section 'The type') tagged as cited",
+   "5c16d4f6 p12.4 ring_cmd/mod.rs": "mistag \u2014 an existing file the plan edits",
+   "5c16d4f6 p22.6 pre-push.sh": "mistag \u2014 'new' on the span refers to a gate, not the file",
+   "5c16d4f6 p22.8 pre-push.sh": "same",
+   "precision": "3/7"
+  },
+  "known_catch_lost": "RailScope (536c8494): cited enum that existed nowhere at the plan's sha or on disk; HEAD now carries it because the Warrant work landed the same day, so the kernel says sorry with the introducing commit \u2014 the tactic cannot separate 'uncommitted when cited' from 'written after'",
+  "bar2": {
+   "pre_tune": "17/27 (cea8e256 8/11, 62d5846b 9/16)",
+   "post_tune": "21/27 (9/11, 12/16)"
+  },
+  "bar3": {
+   "runA_pod": "10 plans in 2001s",
+   "runB_pod": "13 plans in 1744s"
+  }
+ },
+ "runA": {
+  "run": "A",
+  "plans": 13,
+  "states": {
+   "sorry": 991,
+   "refuted": 9,
+   "open": 106,
+   "proved": 454
+  },
+  "proposes": {
+   "sorry": 458,
+   "proved": 61,
+   "refuted": 4
+  },
+  "exists": {
+   "sorry": 256,
+   "proved": 339,
+   "refuted": 2
+  },
+  "refuted": [
+   {
+    "session": "62d5846b",
+    "id": "p9.8",
+    "kind": "Proposes",
+    "name": "Scope",
+    "receipt": "already defined at 2dd18bd0b: oicp-types/src/tool.rs:97:pub enum Scope { (+1 more)"
+   },
+   {
+    "session": "62d5846b",
+    "id": "p9.15",
+    "kind": "Proposes",
+    "name": "constant_time_eq",
+    "receipt": "already defined at 2dd18bd0b: commonwealth/crates/commonwealth-api/src/client_auth.rs:71:f"
+   },
+   {
+    "session": "cea8e256",
+    "id": "p3.1",
+    "kind": "Proposes",
+    "name": "Outcome",
+    "receipt": "already defined at 84da5bbbe: corpus-mcp/src/host.rs:204:pub enum Outcome { (+5 more)"
+   },
+   {
+    "session": "cea8e256",
+    "id": "p3.10",
+    "kind": "Proposes",
+    "name": "Policy",
+    "receipt": "already defined at 84da5bbbe: sovereign/crates/sovereign-cli-llm/src/bench_cmd/enron.rs:60"
+   },
+   {
+    "session": "e541f77a",
+    "id": "p14.4",
+    "kind": "Exists",
+    "name": "spec_sha256",
+    "receipt": "nothing at 68cca3de4 contains 'spec_sha256'"
+   },
+   {
+    "session": "e541f77a",
+    "id": "p20.4",
+    "kind": "Exists",
+    "name": "quality/baselines/conformance/latest.json",
+    "receipt": "quality/baselines/conformance/latest.json is not in the tree at 68cca3de4"
+   }
+  ],
+  "demoted": [
+   {
+    "session": "22da1ede",
+    "id": "p4.1",
+    "name": "Bearing",
+    "receipt": "a 'What this removes' section proposes nothing new"
+   },
+   {
+    "session": "22da1ede",
+    "id": "p10.4",
+    "name": "Policy",
+    "receipt": "Policy is a method; it belongs to its type, which is the proposal"
+   },
+   {
+    "session": "536c8494",
+    "id": "p5.4",
+    "name": "client_auth.rs:442-444",
+    "receipt": "'client_auth.rs:442-444' carries a line anchor: a citation, not a proposal"
+   },
+   {
+    "session": "536c8494",
+    "id": "p6.2",
+    "name": "GuestGrant",
+    "receipt": "a 'Could this be done with less?' section proposes nothing new"
+   },
+   {
+    "session": "536c8494",
+    "id": "p11.10",
+    "name": "quality/CONCEPTS.toml",
+    "receipt": "an addition to quality/CONCEPTS.toml, which is in the tree at 6c6f110af; the new"
+   },
+   {
+    "session": "5c16d4f6",
+    "id": "p6.3",
+    "name": "fair_sched",
+    "receipt": "a 'Could this be done with less?' section proposes nothing new"
+   },
+   {
+    "session": "5c16d4f6",
+    "id": "p10.1",
+    "name": "oplog",
+    "receipt": "already defined at 9722bf821 and the plan cites it (L66: - **\u00a710.6 \u2014 duplicating"
+   },
+   {
+    "session": "5c16d4f6",
+    "id": "p16.3",
+    "name": "`oicp-types`",
+    "receipt": "already defined at 9722bf821 and the plan cites it (L298: | `model_aliases.rs` |"
+   },
+   {
+    "session": "5c16d4f6",
+    "id": "p19.10",
+    "name": "`all.toml:987`",
+    "receipt": "'all.toml:987' carries a line anchor: a citation, not a proposal"
+   },
+   {
+    "session": "5c16d4f6",
+    "id": "p19.20",
+    "name": "`ring_dir`",
+    "receipt": "already defined at 9722bf821 and the plan cites it (L66: - **\u00a710.6 \u2014 duplicating"
+   },
+   {
+    "session": "5c16d4f6",
+    "id": "p19.26",
+    "name": "`fair_sched`",
+    "receipt": "already defined at 9722bf821 and the plan cites it (L181: | `all.toml:79`, `gr.t"
+   },
+   {
+    "session": "5c16d4f6",
+    "id": "p19.27",
+    "name": "`pipeline_aliases`",
+    "receipt": "already defined at 9722bf821 and the plan cites it (L297: | `pipeline_aliases.rs"
+   },
+   {
+    "session": "5c16d4f6",
+    "id": "p19.28",
+    "name": "`model_aliases`",
+    "receipt": "already defined at 9722bf821 and the plan cites it (L157: `commonwealth-core/src"
+   },
+   {
+    "session": "5c16d4f6",
+    "id": "p21.3",
+    "name": "sabotage.py:868",
+    "receipt": "'sabotage.py:868' carries a line anchor: a citation, not a proposal"
+   },
+   {
+    "session": "62d5846b",
+    "id": "p4.1",
+    "name": "`Scope`",
+    "receipt": "a 'What this removes' section proposes nothing new"
+   },
+   {
+    "session": "62d5846b",
+    "id": "p4.2",
+    "name": "`GuestGrant`",
+    "receipt": "a 'What this removes' section proposes nothing new"
+   },
+   {
+    "session": "62d5846b",
+    "id": "p9.4",
+    "name": "is_live",
+    "receipt": "is_live is a method; it belongs to its type, which is the proposal"
+   },
+   {
+    "session": "62d5846b",
+    "id": "p9.5",
+    "name": "permits_path",
+    "receipt": "permits_path is a method; it belongs to its type, which is the proposal"
+   },
+   {
+    "session": "62d5846b",
+    "id": "p9.6",
+    "name": "models",
+    "receipt": "models is a method; it belongs to its type, which is the proposal"
+   },
+   {
+    "session": "62d5846b",
+    "id": "p12.3",
+    "name": "/v1/models",
+    "receipt": "a 'Deliberately not doing' section proposes nothing new"
+   },
+   {
+    "session": "80406ac5",
+    "id": "p5.1",
+    "name": "Conflict",
+    "receipt": "a 'What this removes' section proposes nothing new"
+   },
+   {
+    "session": "80406ac5",
+    "id": "p5.2",
+    "name": "Disposition",
+    "receipt": "a 'What this removes' section proposes nothing new"
+   },
+   {
+    "session": "90267a54",
+    "id": "p3.2",
+    "name": "resume_active()",
+    "receipt": "a 'What this extends' section proposes nothing new"
+   },
+   {
+    "session": "90267a54",
+    "id": "p15.4",
+    "name": "isSolo",
+    "receipt": "a fn named isSolo is defined in MeshSettings.svelte, not in a file this plan nam"
+   },
+   {
+    "session": "90267a54",
+    "id": "p16.3",
+    "name": "CLI_REFERENCE.md",
+    "receipt": "an addition to CLI_REFERENCE.md, which is in the tree at 27c0fe031; the new thin"
+   },
+   {
+    "session": "c3b57dbd",
+    "id": "p5.4",
+    "name": "SplitInferenceProvider",
+    "receipt": "already defined at 6d388a3c8 and the plan cites it (L60: - **`SplitInferenceProv"
+   },
+   {
+    "session": "cea8e256",
+    "id": "p3.3",
+    "name": "value",
+    "receipt": "a fn named value is defined in co-backlog.py, not in a file this plan names; no "
+   },
+   {
+    "session": "cea8e256",
+    "id": "p3.5",
+    "name": "decide",
+    "receipt": "a fn named decide is defined in refusal.rs, not in a file this plan names; no co"
+   },
+   {
+    "session": "cea8e256",
+    "id": "p3.6",
+    "name": "record",
+    "receipt": "a fn named record is defined in next_edit_journal.rs, not in a file this plan na"
+   },
+   {
+    "session": "cea8e256",
+    "id": "p3.7",
+    "name": "rank",
+    "receipt": "a fn named rank is defined in peer_addr.rs, not in a file this plan names; no co"
+   },
+   {
+    "session": "cea8e256",
+    "id": "p3.8",
+    "name": "RankInputs",
+    "receipt": "already defined at 84da5bbbe and the plan cites it (L244: `RankInputs` and `Rank"
+   },
+   {
+    "session": "cea8e256",
+    "id": "p7.1",
+    "name": "local_rec_idx",
+    "receipt": "a 'What this removes' section proposes nothing new"
+   },
+   {
+    "session": "cea8e256",
+    "id": "p7.2",
+    "name": "peer_rec_idx",
+    "receipt": "a 'What this removes' section proposes nothing new"
+   },
+   {
+    "session": "cea8e256",
+    "id": "p7.5",
+    "name": "assign_tier_bands",
+    "receipt": "a 'What this removes' section proposes nothing new"
+   },
+   {
+    "session": "cea8e256",
+    "id": "p7.7",
+    "name": "worker_eligibility",
+    "receipt": "a 'What this removes' section proposes nothing new"
+   },
+   {
+    "session": "cea8e256",
+    "id": "p7.13",
+    "name": "RankObjective::Product",
+    "receipt": "a 'What this removes' section proposes nothing new"
+   },
+   {
+    "session": "cea8e256",
+    "id": "p7.14",
+    "name": "beats_local",
+    "receipt": "a 'What this removes' section proposes nothing new"
+   },
+   {
+    "session": "cea8e256",
+    "id": "p7.15",
+    "name": "winners_over_local",
+    "receipt": "a 'What this removes' section proposes nothing new"
+   },
+   {
+    "session": "cea8e256",
+    "id": "p7.16",
+    "name": "local_sentinel",
+    "receipt": "a 'What this removes' section proposes nothing new"
+   },
+   {
+    "session": "e541f77a",
+    "id": "p3.4",
+    "name": "Verdict",
+    "receipt": "a 'What this extends' section proposes nothing new"
+   },
+   {
+    "session": "fccdfa6e",
+    "id": "p5.5",
+    "name": "ENRICHMENT_SEAM_COUNT",
+    "receipt": "a 'Context' section proposes nothing new"
+   }
+  ],
+  "sweep_defined_but_proposes": [
+   {
+    "session": "22da1ede",
+    "name": "Position",
+    "where": "corpus-engine/src/enrichment/atlas/atoms.rs:792:pub struct Position { "
+   },
+   {
+    "session": "22da1ede",
+    "name": "scope.rs",
+    "where": "sovereign/crates/sovereign-eval/src/scope.rs at 77dc3e6eb"
+   },
+   {
+    "session": "24f0cac7",
+    "name": "corpus-engine-scip/src/scip_graph.rs",
+    "where": "corpus-engine-scip/src/scip_graph.rs is in the tree at 8bdefaa67"
+   },
+   {
+    "session": "536c8494",
+    "name": "Scope",
+    "where": "oicp-types/src/tool.rs:97:pub enum Scope { (+more)"
+   },
+   {
+    "session": "536c8494",
+    "name": "client_auth.rs",
+    "where": "sovereign/crates/sovereign-api/src/client_auth.rs at 6c6f110af (+1)"
+   },
+   {
+    "session": "536c8494",
+    "name": "quality/CONCEPTS.toml",
+    "where": "quality/CONCEPTS.toml is in the tree at 6c6f110af"
+   },
+   {
+    "session": "5c16d4f6",
+    "name": "fair_sched",
+    "where": "commonwealth/crates/commonwealth-core/src/lib.rs:10:pub mod fair_sched"
+   },
+   {
+    "session": "5c16d4f6",
+    "name": "ring_dir",
+    "where": "sovereign/crates/sovereign-cli-llm/src/ring_cmd/mod.rs:99:fn ring_dir("
+   },
+   {
+    "session": "5c16d4f6",
+    "name": "oicp-types",
+    "where": "oicp-types/Cargo.toml:2:name = \"oicp-types\""
+   },
+   {
+    "session": "5c16d4f6",
+    "name": "model_aliases",
+    "where": "commonwealth/crates/commonwealth-core/src/lib.rs:19:pub mod model_alia"
+   },
+   {
+    "session": "5c16d4f6",
+    "name": "all.toml",
+    "where": "quality/sabotage/all.toml at 9722bf821"
+   },
+   {
+    "session": "5c16d4f6",
+    "name": "corpus-engine-yield",
+    "where": "corpus-engine-yield/Cargo.toml:2:name = \"corpus-engine-yield\""
+   },
+   {
+    "session": "5c16d4f6",
+    "name": "EtaEwma",
+    "where": "commonwealth/crates/commonwealth-core/src/fair_sched.rs:74:pub struct "
+   },
+   {
+    "session": "5c16d4f6",
+    "name": "pipeline_aliases",
+    "where": "commonwealth/crates/commonwealth-core/src/lib.rs:22:pub mod pipeline_a"
+   },
+   {
+    "session": "62d5846b",
+    "name": "Scope",
+    "where": "oicp-types/src/tool.rs:97:pub enum Scope { (+more)"
+   },
+   {
+    "session": "80406ac5",
+    "name": "Verdict",
+    "where": "corpus-engine-archaeology/src/archaeology_eval.rs:109:pub enum Verdict"
+   },
+   {
+    "session": "80406ac5",
+    "name": "Status",
+    "where": "sovereign/crates/sovereign-authoring-harness/src/lib.rs:65:pub enum St"
+   },
+   {
+    "session": "80406ac5",
+    "name": "Conflict",
+    "where": "sovereign/crates/sovereign-desktop/src-tauri/src/governance_commands.r"
+   },
+   {
+    "session": "80406ac5",
+    "name": "Disposition",
+    "where": "sovereign/crates/sovereign-cli-shared/src/cli_contract.rs:732:pub enum"
+   },
+   {
+    "session": "80406ac5",
+    "name": "Profile",
+    "where": "sovereign/crates/sovereign-mesh/src/tool_profile.rs:85:pub struct Prof"
+   },
+   {
+    "session": "80406ac5",
+    "name": "Candidate",
+    "where": "corpus-engine/examples/bridge_rank_probe.rs:78:struct Candidate { (+mo"
+   },
+   {
+    "session": "80406ac5",
+    "name": "Snapshot",
+    "where": "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/diagnose.rs:203:stru"
+   },
+   {
+    "session": "80406ac5",
+    "name": "OpenQuestion",
+    "where": "corpus-engine/src/enrichment/open_questions.rs:16:pub struct OpenQuest"
+   },
+   {
+    "session": "90267a54",
+    "name": "SYSTEM_OVERVIEW.md",
+    "where": "sovereign/SYSTEM_OVERVIEW.md at 27c0fe031"
+   },
+   {
+    "session": "cea8e256",
+    "name": "assign_tier_bands",
+    "where": "sovereign/crates/sovereign-mesh/src/decision_log.rs:1006:    pub fn as"
+   },
+   {
+    "session": "cea8e256",
+    "name": "Outcome",
+    "where": "corpus-mcp/src/host.rs:204:pub enum Outcome { (+more)"
+   },
+   {
+    "session": "cea8e256",
+    "name": "beats_local",
+    "where": "sovereign/crates/sovereign-mesh/src/scheduler_core.rs:117:pub(crate) f"
+   },
+   {
+    "session": "cea8e256",
+    "name": "local_sentinel",
+    "where": "sovereign/crates/sovereign-mesh/src/scheduler_core.rs:99:pub(crate) fn"
+   },
+   {
+    "session": "cea8e256",
+    "name": "RankInputs",
+    "where": "sovereign/crates/sovereign-mesh/src/scheduler_core.rs:248:pub(crate) s"
+   },
+   {
+    "session": "cea8e256",
+    "name": "Policy",
+    "where": "sovereign/crates/sovereign-cli-llm/src/bench_cmd/enron.rs:60:enum Poli"
+   },
+   {
+    "session": "cea8e256",
+    "name": "worker_eligibility",
+    "where": "sovereign/crates/sovereign-mesh/src/lib.rs:136:pub mod worker_eligibil"
+   },
+   {
+    "session": "e541f77a",
+    "name": "Verdict",
+    "where": "corpus-engine-archaeology/src/archaeology_eval.rs:109:pub enum Verdict"
+   },
+   {
+    "session": "eabf06db",
+    "name": "docs/COMAINTAINER_OPERATOR_MANUAL.md",
+    "where": "docs/COMAINTAINER_OPERATOR_MANUAL.md is in the tree at b033aae23"
+   },
+   {
+    "session": "fccdfa6e",
+    "name": "Runtime::new",
+    "where": "commonwealth/crates/commonwealth-api/src/routes_internal/mesh_admin.rs"
+   },
+   {
+    "session": "fccdfa6e",
+    "name": "commonwealth-daemon",
+    "where": "commonwealth/crates/commonwealth-daemon/Cargo.toml:2:name = \"commonwea"
+   },
+   {
+    "session": "fd20b61e",
+    "name": "scripts/co-lineage.py",
+    "where": "scripts/co-lineage.py is in the tree at 69804d6a9"
+   },
+   {
+    "session": "fd20b61e",
+    "name": "scripts/co-backlog-producer.sh",
+    "where": "scripts/co-backlog-producer.sh is in the tree at 69804d6a9"
+   },
+   {
+    "session": "fd20b61e",
+    "name": "landed_but_unmoved",
+    "where": "scripts/co-lineage.py:465:def landed_but_unmoved(bar: Bar, init: Initi"
+   }
+  ]
+ },
+ "runB": {
+  "run": "B",
+  "plans": 13,
+  "states": {
+   "sorry": 1074,
+   "refuted": 11,
+   "open": 117,
+   "proved": 403
+  },
+  "proposes": {
+   "sorry": 528,
+   "proved": 87,
+   "refuted": 6
+  },
+  "exists": {
+   "sorry": 260,
+   "proved": 280,
+   "refuted": 1
+  },
+  "refuted": [
+   {
+    "session": "24f0cac7",
+    "id": "p6.20",
+    "kind": "Proposes",
+    "name": "Disposition",
+    "receipt": "already defined at 8bdefaa67: sovereign/crates/sovereign-cli-shared/src/cli_contract.rs:73"
+   },
+   {
+    "session": "536c8494",
+    "id": "p9.2",
+    "kind": "Exists",
+    "name": "ScopeRequest::into_limits",
+    "receipt": "nothing at 6c6f110af contains 'ScopeRequest::into_limits'"
+   },
+   {
+    "session": "5c16d4f6",
+    "id": "p12.4",
+    "kind": "Proposes",
+    "name": "ring_cmd/mod.rs",
+    "receipt": "already defined at 9722bf821: sovereign/crates/sovereign-cli-llm/src/ring_cmd/mod.rs at 97"
+   },
+   {
+    "session": "5c16d4f6",
+    "id": "p22.6",
+    "kind": "Proposes",
+    "name": "./scripts/pre-push.sh",
+    "receipt": "already defined at 9722bf821: ./scripts/pre-push.sh is in the tree at 9722bf821"
+   },
+   {
+    "session": "5c16d4f6",
+    "id": "p22.8",
+    "kind": "Proposes",
+    "name": "./scripts/pre-push.sh",
+    "receipt": "already defined at 9722bf821: ./scripts/pre-push.sh is in the tree at 9722bf821"
+   },
+   {
+    "session": "cea8e256",
+    "id": "p3.1",
+    "kind": "Proposes",
+    "name": "Outcome",
+    "receipt": "already defined at 84da5bbbe: corpus-mcp/src/host.rs:204:pub enum Outcome { (+5 more)"
+   },
+   {
+    "session": "cea8e256",
+    "id": "p3.10",
+    "kind": "Proposes",
+    "name": "Policy",
+    "receipt": "already defined at 84da5bbbe: sovereign/crates/sovereign-cli-llm/src/bench_cmd/enron.rs:60"
+   }
+  ],
+  "demoted": [
+   {
+    "session": "22da1ede",
+    "id": "p4.1",
+    "name": "Bearing",
+    "receipt": "a 'What this removes' section proposes nothing new"
+   },
+   {
+    "session": "22da1ede",
+    "id": "p4.4",
+    "name": "render_code",
+    "receipt": "a 'What this removes' section proposes nothing new"
+   },
+   {
+    "session": "22da1ede",
+    "id": "p4.5",
+    "name": "render_house",
+    "receipt": "a 'What this removes' section proposes nothing new"
+   },
+   {
+    "session": "22da1ede",
+    "id": "p4.6",
+    "name": "render_personal",
+    "receipt": "a 'What this removes' section proposes nothing new"
+   },
+   {
+    "session": "22da1ede",
+    "id": "p10.4",
+    "name": "Policy",
+    "receipt": "Policy is a method; it belongs to its type, which is the proposal"
+   },
+   {
+    "session": "24f0cac7",
+    "id": "p6.10",
+    "name": "settings_digest",
+    "receipt": "settings_digest is a method; it belongs to its type, which is the proposal"
+   },
+   {
+    "session": "24f0cac7",
+    "id": "p6.11",
+    "name": "control",
+    "receipt": "control is a method; it belongs to its type, which is the proposal"
+   },
+   {
+    "session": "24f0cac7",
+    "id": "p6.12",
+    "name": "fire",
+    "receipt": "fire is a method; it belongs to its type, which is the proposal"
+   },
+   {
+    "session": "24f0cac7",
+    "id": "p7.8",
+    "name": "label",
+    "receipt": "a fn named label is defined in principal.rs, not in a file this plan names; no c"
+   },
+   {
+    "session": "536c8494",
+    "id": "p10.8",
+    "name": "summary",
+    "receipt": "a fn named summary is defined in atoms.rs, not in a file this plan names; no col"
+   },
+   {
+    "session": "5c16d4f6",
+    "id": "p4.3",
+    "name": "oplog",
+    "receipt": "a 'What this extends' section proposes nothing new"
+   },
+   {
+    "session": "5c16d4f6",
+    "id": "p4.6",
+    "name": "commonwealth-rail-core",
+    "receipt": "a 'What this extends' section proposes nothing new"
+   },
+   {
+    "session": "5c16d4f6",
+    "id": "p10.1",
+    "name": "oplog",
+    "receipt": "already defined at 9722bf821 and the plan cites it (L66: - **\u00a710.6 \u2014 duplicating"
+   },
+   {
+    "session": "5c16d4f6",
+    "id": "p11.4",
+    "name": "admit.rs",
+    "receipt": "already defined at 9722bf821 and the plan cites it (L232: `git mv` the 7 files i"
+   },
+   {
+    "session": "5c16d4f6",
+    "id": "p11.5",
+    "name": "sync.rs",
+    "receipt": "already defined at 9722bf821 and the plan cites it (L111: - **No `Payload<T>`.**"
+   },
+   {
+    "session": "5c16d4f6",
+    "id": "p11.6",
+    "name": "payload.rs",
+    "receipt": "already defined at 9722bf821 and the plan cites it (L232: `git mv` the 7 files i"
+   },
+   {
+    "session": "5c16d4f6",
+    "id": "p11.7",
+    "name": "sig.rs",
+    "receipt": "already defined at 9722bf821 and the plan cites it (L232: `git mv` the 7 files i"
+   },
+   {
+    "session": "5c16d4f6",
+    "id": "p12.3",
+    "name": "daemon.rs:2637",
+    "receipt": "'daemon.rs:2637' carries a line anchor: a citation, not a proposal"
+   },
+   {
+    "session": "5c16d4f6",
+    "id": "p16.3",
+    "name": "oicp-types",
+    "receipt": "already defined at 9722bf821 and the plan cites it (L298: | `model_aliases.rs` |"
+   },
+   {
+    "session": "5c16d4f6",
+    "id": "p16.28",
+    "name": "Clock",
+    "receipt": "already defined at 9722bf821 and the plan cites it (L309: **`clock.rs` stays, re"
+   },
+   {
+    "session": "5c16d4f6",
+    "id": "p16.29",
+    "name": "TestClock",
+    "receipt": "already defined at 9722bf821 and the plan cites it (L309: **`clock.rs` stays, re"
+   },
+   {
+    "session": "62d5846b",
+    "id": "p3.1",
+    "name": "with_bearer",
+    "receipt": "a 'What this extends' section proposes nothing new"
+   },
+   {
+    "session": "62d5846b",
+    "id": "p3.4",
+    "name": "HELP_MESH",
+    "receipt": "a 'What this extends' section proposes nothing new"
+   },
+   {
+    "session": "62d5846b",
+    "id": "p4.1",
+    "name": "`Scope`",
+    "receipt": "a 'What this removes' section proposes nothing new"
+   },
+   {
+    "session": "62d5846b",
+    "id": "p4.2",
+    "name": "`GuestGrant`",
+    "receipt": "a 'What this removes' section proposes nothing new"
+   },
+   {
+    "session": "62d5846b",
+    "id": "p9.4",
+    "name": "is_live",
+    "receipt": "is_live is a method; it belongs to its type, which is the proposal"
+   },
+   {
+    "session": "62d5846b",
+    "id": "p9.5",
+    "name": "permits_path",
+    "receipt": "permits_path is a method; it belongs to its type, which is the proposal"
+   },
+   {
+    "session": "62d5846b",
+    "id": "p9.6",
+    "name": "models",
+    "receipt": "models is a method; it belongs to its type, which is the proposal"
+   },
+   {
+    "session": "62d5846b",
+    "id": "p12.3",
+    "name": "/v1/models",
+    "receipt": "a 'Deliberately not doing' section proposes nothing new"
+   },
+   {
+    "session": "80406ac5",
+    "id": "p5.1",
+    "name": "Conflict",
+    "receipt": "a 'What this removes' section proposes nothing new"
+   },
+   {
+    "session": "80406ac5",
+    "id": "p5.2",
+    "name": "Disposition",
+    "receipt": "a 'What this removes' section proposes nothing new"
+   },
+   {
+    "session": "90267a54",
+    "id": "p5.3",
+    "name": "derive_legacy_mesh_secret",
+    "receipt": "a 'Could this be done with less?' section proposes nothing new"
+   },
+   {
+    "session": "90267a54",
+    "id": "p8.5",
+    "name": "gossip_authorized",
+    "receipt": "gossip_authorized is a method; it belongs to its type, which is the proposal"
+   },
+   {
+    "session": "90267a54",
+    "id": "p9.8",
+    "name": "forget",
+    "receipt": "a fn named forget is defined in enrich.rs, not in a file this plan names; no col"
+   },
+   {
+    "session": "cea8e256",
+    "id": "p3.3",
+    "name": "value",
+    "receipt": "a fn named value is defined in co-backlog.py, not in a file this plan names; no "
+   },
+   {
+    "session": "cea8e256",
+    "id": "p3.5",
+    "name": "decide",
+    "receipt": "a fn named decide is defined in refusal.rs, not in a file this plan names; no co"
+   },
+   {
+    "session": "cea8e256",
+    "id": "p3.6",
+    "name": "record",
+    "receipt": "a fn named record is defined in next_edit_journal.rs, not in a file this plan na"
+   },
+   {
+    "session": "cea8e256",
+    "id": "p3.7",
+    "name": "rank",
+    "receipt": "a fn named rank is defined in peer_addr.rs, not in a file this plan names; no co"
+   },
+   {
+    "session": "cea8e256",
+    "id": "p3.8",
+    "name": "RankInputs",
+    "receipt": "already defined at 84da5bbbe and the plan cites it (L244: `RankInputs` and `Rank"
+   },
+   {
+    "session": "cea8e256",
+    "id": "p6.5",
+    "name": "ManifestState",
+    "receipt": "a 'What this extends' section proposes nothing new"
+   },
+   {
+    "session": "fccdfa6e",
+    "id": "p14.1",
+    "name": "ShellTool",
+    "receipt": "already defined at 77dc3e6eb and the plan cites it (L361: the knowledge and retr"
+   },
+   {
+    "session": "fd20b61e",
+    "id": "p10.12",
+    "name": "list",
+    "receipt": "a fn named list is defined in registry.rs, not in a file this plan names; no col"
+   },
+   {
+    "session": "fd20b61e",
+    "id": "p11.7",
+    "name": "call_daemon",
+    "receipt": "already defined at 69804d6a9 and the plan cites it (L270: - Imports `call_daemon"
+   }
+  ],
+  "sweep_defined_but_proposes": [
+   {
+    "session": "22da1ede",
+    "name": "Position",
+    "where": "corpus-engine/src/enrichment/atlas/atoms.rs:792:pub struct Position { "
+   },
+   {
+    "session": "24f0cac7",
+    "name": "ledger.rs",
+    "where": "corpus-engine/src/asset_store/ledger.rs at 8bdefaa67 (+1)"
+   },
+   {
+    "session": "5c16d4f6",
+    "name": "ARCH_LAYERS.toml",
+    "where": "quality/ARCH_LAYERS.toml at 9722bf821"
+   },
+   {
+    "session": "5c16d4f6",
+    "name": "admit.rs",
+    "where": "commonwealth/crates/commonwealth-knowledge/src/rail/admit.rs at 9722bf"
+   },
+   {
+    "session": "5c16d4f6",
+    "name": "sync.rs",
+    "where": "commonwealth/crates/commonwealth-knowledge/src/rail/sync.rs at 9722bf8"
+   },
+   {
+    "session": "5c16d4f6",
+    "name": "payload.rs",
+    "where": "commonwealth/crates/commonwealth-knowledge/src/rail/payload.rs at 9722"
+   },
+   {
+    "session": "5c16d4f6",
+    "name": "oicp-types",
+    "where": "oicp-types/Cargo.toml:2:name = \"oicp-types\""
+   },
+   {
+    "session": "5c16d4f6",
+    "name": "boundary-gate",
+    "where": "corpus-engine/xtask/src/main.rs:23:mod boundary_gate;"
+   },
+   {
+    "session": "5c16d4f6",
+    "name": "clock-gate",
+    "where": "corpus-engine/xtask/src/main.rs:24:mod clock_gate;"
+   },
+   {
+    "session": "5c16d4f6",
+    "name": "sig.rs",
+    "where": "commonwealth/crates/commonwealth-knowledge/src/rail/sig.rs at 9722bf82"
+   },
+   {
+    "session": "5c16d4f6",
+    "name": "SYSTEM_OVERVIEW.md",
+    "where": "sovereign/SYSTEM_OVERVIEW.md at 9722bf821"
+   },
+   {
+    "session": "5c16d4f6",
+    "name": "glob.rs",
+    "where": "commonwealth/crates/commonwealth-core/src/glob.rs at 9722bf821"
+   },
+   {
+    "session": "5c16d4f6",
+    "name": "EtaEwma",
+    "where": "commonwealth/crates/commonwealth-core/src/fair_sched.rs:74:pub struct "
+   },
+   {
+    "session": "5c16d4f6",
+    "name": "Clock",
+    "where": "commonwealth/crates/commonwealth-core/src/clock.rs:28:pub trait Clock:"
+   },
+   {
+    "session": "5c16d4f6",
+    "name": "TestClock",
+    "where": "commonwealth/crates/commonwealth-core/src/clock.rs:80:pub struct TestC"
+   },
+   {
+    "session": "62d5846b",
+    "name": "Scope",
+    "where": "oicp-types/src/tool.rs:97:pub enum Scope { (+more)"
+   },
+   {
+    "session": "62d5846b",
+    "name": "HELP_MESH",
+    "where": "sovereign/crates/sovereign-cli-llm/src/mesh_cmd.rs:433:const HELP_MESH"
+   },
+   {
+    "session": "62d5846b",
+    "name": "ingest_grant.rs",
+    "where": "commonwealth/crates/commonwealth-knowledge/src/ingest_grant.rs at 2dd1"
+   },
+   {
+    "session": "80406ac5",
+    "name": "Verdict",
+    "where": "corpus-engine-archaeology/src/archaeology_eval.rs:109:pub enum Verdict"
+   },
+   {
+    "session": "80406ac5",
+    "name": "Conflict",
+    "where": "sovereign/crates/sovereign-desktop/src-tauri/src/governance_commands.r"
+   },
+   {
+    "session": "80406ac5",
+    "name": "Disposition",
+    "where": "sovereign/crates/sovereign-cli-shared/src/cli_contract.rs:732:pub enum"
+   },
+   {
+    "session": "80406ac5",
+    "name": "Profile",
+    "where": "sovereign/crates/sovereign-mesh/src/tool_profile.rs:85:pub struct Prof"
+   },
+   {
+    "session": "c3b57dbd",
+    "name": "setup_cmd/mod.rs",
+    "where": "sovereign/crates/sovereign-cli-daemon/src/setup_cmd/mod.rs at 6d388a3c"
+   },
+   {
+    "session": "cea8e256",
+    "name": "Outcome",
+    "where": "corpus-mcp/src/host.rs:204:pub enum Outcome { (+more)"
+   },
+   {
+    "session": "cea8e256",
+    "name": "RankInputs",
+    "where": "sovereign/crates/sovereign-mesh/src/scheduler_core.rs:248:pub(crate) s"
+   },
+   {
+    "session": "cea8e256",
+    "name": "Policy",
+    "where": "sovereign/crates/sovereign-cli-llm/src/bench_cmd/enron.rs:60:enum Poli"
+   },
+   {
+    "session": "cea8e256",
+    "name": "decision_replay",
+    "where": "sovereign/crates/sovereign-mesh/src/lib.rs:35:pub mod decision_replay;"
+   },
+   {
+    "session": "e541f77a",
+    "name": "kernel_types::Verdict",
+    "where": "quality/CONCEPTS.toml:217:name        = \"Verdict\""
+   },
+   {
+    "session": "e541f77a",
+    "name": "MockLlamaServer",
+    "where": "commonwealth/crates/commonwealth-test-harness/src/mock_llama.rs:31:pub"
+   },
+   {
+    "session": "e541f77a",
+    "name": "GateAction",
+    "where": "sovereign/crates/sovereign-core/src/deep_research/icd.rs:41:pub enum G"
+   },
+   {
+    "session": "e541f77a",
+    "name": "UnverifiedReason",
+    "where": "sovereign/crates/sovereign-core/src/runtime/grounding/native_grounding"
+   },
+   {
+    "session": "e541f77a",
+    "name": "GkReason",
+    "where": "sovereign/crates/sovereign-core/src/runtime/types.rs:260:pub(crate) en"
+   },
+   {
+    "session": "e541f77a",
+    "name": "EmptyRoundReason",
+    "where": "sovereign/crates/sovereign-core/src/deep_research/icd.rs:434:pub enum "
+   },
+   {
+    "session": "eabf06db",
+    "name": "role_check.py",
+    "where": "gym/comaintainer/role_check.py at b033aae23"
+   },
+   {
+    "session": "eabf06db",
+    "name": "score_paired.py",
+    "where": "gym/comaintainer/score_paired.py at b033aae23"
+   },
+   {
+    "session": "eabf06db",
+    "name": "analyze_ceiling.py",
+    "where": "gym/comaintainer/analyze_ceiling.py at b033aae23"
+   },
+   {
+    "session": "eabf06db",
+    "name": "build_ceiling_study.py",
+    "where": "gym/comaintainer/build_ceiling_study.py at b033aae23"
+   },
+   {
+    "session": "eabf06db",
+    "name": "CEILING_STUDY_PREREG.md",
+    "where": "gym/comaintainer/CEILING_STUDY_PREREG.md at b033aae23"
+   },
+   {
+    "session": "fd20b61e",
+    "name": "scripts/co-lineage.py",
+    "where": "scripts/co-lineage.py is in the tree at 69804d6a9"
+   },
+   {
+    "session": "fd20b61e",
+    "name": "scripts/co-sweep.sh",
+    "where": "scripts/co-sweep.sh is in the tree at 69804d6a9"
+   },
+   {
+    "session": "fd20b61e",
+    "name": "scripts/co-backlog-producer.sh",
+    "where": "scripts/co-backlog-producer.sh is in the tree at 69804d6a9"
+   },
+   {
+    "session": "fd20b61e",
+    "name": "call_daemon",
+    "where": "gym/comaintainer/score.py:84:def call_daemon(prompt: str, timeout: flo"
+   },
+   {
+    "session": "fd20b61e",
+    "name": "docs/COMAINTAINER_OPERATOR_MANUAL.md",
+    "where": "docs/COMAINTAINER_OPERATOR_MANUAL.md is in the tree at 69804d6a9"
+   }
+  ]
+ }
+}
