@@ -4644,8 +4644,8 @@ class Kernel:
                 return "sorry", f"{nm!r} is prose or a command line, not a name git can look for"       # 62d5846b p13.2-7: test commands 'proved'
             if re.search(r":\d+(?:-\d+)?$", nm):
                 return "sorry", f"{nm!r} carries a line anchor: a citation, not a proposal"              # 5c16d4f6 p21.3: sabotage.py:868
-            if re.search(r"\b(?:modified|modify|changed|extended|edited|updated|touched)\b", st.get("span", ""), re.I):
-                return "sorry", f"the span says {nm} is modified, not new"                               # 24f0cac7 p10.6
+            if re.search(r"\b(?:modified|modify|changed|extended|edited|updated|touched|rewrite|rework|refactor|survives|stays|remains|unchanged)\b", st.get("span", ""), re.I):
+                return "sorry", f"the span says {nm} is modified or kept, not new"                       # 24f0cac7 p10.6, fd20b61e p10.1, p10.12
             if re.search(r"\(&(?:mut )?self\b", st.get("span", "")):
                 return "sorry", f"{nm} is a method; it belongs to its type, which is the proposal"       # 62d5846b p9.4: GuestGrant::is_live vs ingest_grant's
             if nm.lstrip().startswith(("--", "svrn ", "sovereign ", "cargo ")):
@@ -4813,6 +4813,16 @@ class Kernel:
             nm, sha_t = (st.get("name") or "").strip("`"), self.sha_at_turn(turn)
             nm = re.sub(r":\d+(?:-\d+)?$", "", nm)          # model_slot.rs:3539 is the file (66a5247a t12)
             nm = re.sub(r"\(\)$", "", nm)                    # Journey::exercises() is Journey::exercises (e541f77a p6.22)
+            m = re.fullmatch(r"([\w./-]+\.\w+)::?(\w+)", nm)
+            if m and "/" in m.group(1):                       # gym/comaintainer/score.py::call_daemon (fd20b61e p3.4)
+                body = git("show", f"{sha_t}:{m.group(1).lstrip('./')}")
+                if not body:
+                    return "sorry", f"{m.group(1)} is not in the tree at {sha_t[:9]}; cannot look for {m.group(2)} in it"
+                return ("proved" if re.search(r"(?<![\w])" + re.escape(m.group(2)) + r"(?![\w])", body) else "refuted"), f"{m.group(2)} {'is' if m.group(2) in body else 'is not'} in {m.group(1)} at {sha_t[:9]}"
+            if nm.startswith("--") or (" " in nm.strip() and "/" not in nm):
+                return "sorry", f"{nm!r} is a flag or prose, not a name git can look for"       # fd20b61e p10.3 '--self-test', p13.5 'F-bars'
+            if not ("/" in nm or "." in nm or "::" in nm or IDENT_SHAPE.fullmatch(nm) or re.fullmatch(r"[A-Z][a-z]{3,}|[a-z][a-z0-9]{3,}|[A-Z][A-Z0-9_-]{2,}", nm)):
+                return "sorry", f"{nm!r} is not a name git can look for"
             if not nm or not sha_t:
                 return "sorry", "no name or sha"
             if re.fullmatch(r"[0-9a-f]{8,64}", nm):
@@ -6186,6 +6196,10 @@ def cmd_self_test(_a) -> int:
     eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "co-oplog.py:868", "shape": "other", "span": "x"})[0], "sorry", "Proposes: a line anchor is a citation")
     eq(_kh.run({"kind": "Exists", "turn": 1, "name": "Kernel::summaries()", "span": "x"})[0], "proved", "Exists: call parens are not part of the name")
     eq(_kh.run({"kind": "Exists", "turn": 1, "name": "GR-19", "span": "x"})[0], "sorry", "Exists: a requirement id is judged by its document")
+    eq(_kh.run({"kind": "Exists", "turn": 1, "name": "scripts/co-oplog.py::cmd_claims", "span": "x"})[0], "proved", "Exists: path::fn is the fn in that file")
+    eq(_kh.run({"kind": "Exists", "turn": 1, "name": "scripts/co-oplog.py::no_such_fn_xyz", "span": "x"})[0], "refuted", "Exists: path::fn absent from that file")
+    eq(_kh.run({"kind": "Exists", "turn": 1, "name": "--self-test", "span": "x"})[0], "sorry", "Exists: a flag is no name")
+    eq(_kh.run({"kind": "Exists", "turn": 1, "name": "F-bars", "span": "x"})[0], "sorry", "Exists: prose is no name")
     eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "Kernel", "span": "x", "section": "Context"})[0], "sorry", "Proposes: a Context section describes what exists")
     eq(_kh.defined_at("ARCH_PRINCIPLES", git("rev-parse", "HEAD").strip()) is None, True, "defined_at: a name in a markdown code block is no definition")
     eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "scripts/co-oplog.py", "shape": "file", "span": "`scripts/co-oplog.py` modified (one index)"})[0], "sorry", "Proposes: 'modified' is a change, not a new file")
