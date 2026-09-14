@@ -10047,8 +10047,8 @@ bank.
 `REVIEW-audit-1` stopped because `PREPUSH` was red on `origin/main` itself.
 `arch-gate` measured `AGENTS.md` at 48,379 bytes against a 47,980 pin and the
 approach band at 200,927 lines against 200,868. Neither is this branch's:
-`git diff --stat origin/main..HEAD -- '*.rs'` is empty, and `HEAD:AGENTS.md` is
-byte-identical to `origin/main:AGENTS.md` (48,379). The baselines were stale
+`git diff --stat origin/main..HEAD -- '*.rs'` is empty, and `AGENTS.md` at
+`HEAD` is byte-identical to `AGENTS.md` at `origin/main` (48,379). The baselines were stale
 against public state — `AGENTS.md` grew past §10.1v's 47,980 pin on
 `origin/main` after that pin was written — so this is §10.1u's recipe: re-pin at
 `origin/main`, never `--update-baseline` on a tree shared with other sessions.
