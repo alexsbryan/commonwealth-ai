@@ -828,6 +828,322 @@ def cmd_atom_outside(args: list[str]) -> int:
     return EXIT_OK
 
 
+# ── crate-lines, misnamed — dm-mesh-lines, dm-misnamed-crates ───────────────
+#
+# Two bars read the same table: the `[[module]]` rows' `lines`, and the
+# `[[context]].crates` home lists. `crate-lines --crate X` sums the rows that
+# belong to crate X (the dm-mesh-lines floor is 88,255 for sovereign-mesh);
+# `misnamed` asks, per crate, what share of its lines carry a context the crate
+# is the HOME of, and counts the crates whose name therefore describes less than
+# half of what they hold (DOMAINS.md §3, §8 row 5; campaigns/domains.toml
+# dm-misnamed-crates).
+#
+# A CRATE'S OWN CONTEXT IS ITS HOME LIST, never a name match: a crate is the
+# home of every context whose `crates` list names it (registry head, "`crates`
+# is a context's HOME"). A module tagged with a context that does not name the
+# crate is MISFILED; a crate no context names has no own context and its share
+# is zero. `unknown` is a legal tag and counts against the crate (registry,
+# "Module tags" head) — absence is REPORTED (the module is listed in the
+# per-crate table) and never silently dropped.
+#
+# THE COVERAGE ASSERTION PRECEDES EVERY COUNT. Every `.rs` under a workspace
+# member's `src/` must have a `[[module]]` row — an exact file row, or a
+# directory row whose path prefixes it. A file with neither is UNTAGGED: the
+# count would silently understate, so the subcommand exits 4 naming the file
+# (ARCH principle 6). The tag generator asserted exactly this when the census
+# landed (dm3-tag-workspace: 0 untagged of 2073); the assertion keeps it true.
+#
+# THE DIGEST IS THE GOODHART. dm-misnamed-crates can hit target by editing the
+# tag table instead of the code, so the value is printed beside a digest of the
+# table — a retag changes the digest and is visible in the row.
+
+def _workspace_crates(root: Path) -> list[tuple[str, Path]]:
+    """(name, dir) for every workspace member crate under `root`.
+
+    The repo path reads `[workspace].members`; a fixture with no root manifest
+    is walked for `Cargo.toml` files. One enumerator, so the coverage the
+    self-test drives is the coverage that runs on the tree.
+    """
+    root = Path(root)
+    members: list[str] = []
+    manifest = root / "Cargo.toml"
+    if manifest.exists():
+        try:
+            with open(manifest, "rb") as f:
+                members = list(tomllib.load(f).get("workspace", {}).get("members", []))
+        except (OSError, tomllib.TOMLDecodeError):
+            members = []
+    if members:
+        return [(Path(m).name, root / m) for m in members]
+    out: list[tuple[str, Path]] = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in _WALK_SKIP]
+        if "Cargo.toml" in filenames:
+            out.append((Path(dirpath).name, Path(dirpath)))
+    return out
+
+
+def _module_paths(reg: dict) -> tuple[set[str], list[str]]:
+    """The registry's module coverage: exact file rows and directory rows."""
+    exact: set[str] = set()
+    dirs: list[str] = []
+    for r in reg.get("module", []):
+        p = r.get("path")
+        if not p:
+            continue
+        if p.endswith("/"):
+            dirs.append(p)
+        else:
+            exact.add(p)
+    return exact, dirs
+
+
+def _covered(rel: str, exact: set[str], dirs: list[str]) -> bool:
+    return rel in exact or any(rel.startswith(d) for d in dirs)
+
+
+def coverage_holes(root: Path) -> list[str]:
+    """Every `.rs` under a member's `src/` with no `[[module]]` row."""
+    root = Path(root)
+    exact, dirs = _module_paths(registry_for(root))
+    files = _rs_files(root)
+    holes: list[str] = []
+    for _name, d in _workspace_crates(root):
+        try:
+            rel_dir = d.relative_to(root).as_posix()
+        except ValueError:
+            continue
+        prefix = (rel_dir + "/") if rel_dir not in (".", "") else ""
+        src = prefix + "src/"
+        for path in files:
+            try:
+                rel = path.relative_to(root).as_posix()
+            except ValueError:
+                rel = path.as_posix()
+            if rel.startswith(src) and not _covered(rel, exact, dirs):
+                holes.append(rel)
+    return sorted(set(holes))
+
+
+def _row_crate(root: Path, rel: str) -> str:
+    """The crate a `[[module]]` path belongs to: nearest Cargo.toml, by name."""
+    d = _crate_dir(Path(root) / rel, Path(root))
+    return Path(d).name if d not in (".", "") else "."
+
+
+def crate_lines(root: Path, crate: str) -> list[dict]:
+    """The `[[module]]` rows belonging to `crate`, in registry order."""
+    reg = registry_for(root)
+    return [dict(r) for r in reg.get("module", [])
+            if r.get("path") and _row_crate(root, r["path"]) == crate]
+
+
+def _crate_homes(reg: dict) -> dict[str, set[str]]:
+    """crate -> the contexts whose `crates` list names it (its homes)."""
+    homes: dict[str, set[str]] = {}
+    for c in reg.get("context", []):
+        for cr in c.get("crates", []):
+            homes.setdefault(cr, set()).add(c["id"])
+    return homes
+
+
+def misnamed(root: Path) -> dict:
+    """Per-crate own-context share; the crates whose name describes < half.
+
+    Returns every crate that has `[[module]]` rows (`rows`, for the printed
+    table) and the subset `misnamed` — `own * 2 < total`, i.e. the crate's name
+    describes strictly less than half of what it holds.
+    """
+    root = Path(root)
+    reg = registry_for(root)
+    homes = _crate_homes(reg)
+    total: Counter = Counter()
+    own: Counter = Counter()
+    for r in reg.get("module", []):
+        rel = r.get("path")
+        if not rel:
+            continue
+        crate = _row_crate(root, rel)
+        n = r.get("lines", 0) or 0
+        total[crate] += n
+        if r.get("context") in homes.get(crate, set()):
+            own[crate] += n
+    rows = [{"crate": c, "own": own[c], "total": total[c],
+             "homes": sorted(homes.get(c, set()))}
+            for c in total if total[c] > 0]
+    rows.sort(key=lambda r: (-r["total"], r["crate"]))
+    mis = [r for r in rows if r["own"] * 2 < r["total"]]
+    return {"rows": rows, "misnamed": mis}
+
+
+def _tag_digest(reg: dict) -> str:
+    """A digest of the tag table: module (path, context) + context homes."""
+    parts = [f"{r.get('path')}\t{r.get('context')}" for r in reg.get("module", [])]
+    for c in reg.get("context", []):
+        for cr in c.get("crates", []):
+            parts.append(f"home\t{c['id']}\t{cr}")
+    return hashlib.sha256("\n".join(sorted(parts)).encode("utf-8")).hexdigest()[:12]
+
+
+def _flag_value(args: list[str], flag: str) -> str | None:
+    """The value of `--flag X` or `--flag=X`, else None."""
+    for i, a in enumerate(args):
+        if a == flag and i + 1 < len(args):
+            return args[i + 1]
+        if a.startswith(flag + "="):
+            return a.split("=", 1)[1]
+    return None
+
+
+def _coverage_fixture(root: Path, tag_orphan: bool) -> None:
+    """A member crate with two src files; the orphan's row is optional."""
+    (root / "quality").mkdir(parents=True, exist_ok=True)
+    reg = ('[[context]]\n'
+           'id = "widget"\n'
+           'kind = "core"\n'
+           'crates = ["fixture-crate"]\n\n'
+           '[[module]]\n'
+           'path = "fixture-crate/src/lib.rs"\n'
+           'context = "widget"\n'
+           'lines = 1\n')
+    if tag_orphan:
+        reg += ('\n[[module]]\n'
+                'path = "fixture-crate/src/orphan.rs"\n'
+                'context = "widget"\n'
+                'lines = 1\n')
+    (root / "quality" / "DOMAINS.toml").write_text(reg, encoding="utf-8")
+    crate = root / "fixture-crate"
+    (crate / "src").mkdir(parents=True, exist_ok=True)
+    (crate / "Cargo.toml").write_text(
+        '[package]\nname = "fixture-crate"\nversion = "0.0.0"\n',
+        encoding="utf-8")
+    (crate / "src" / "lib.rs").write_text("pub struct A;\n", encoding="utf-8")
+    (crate / "src" / "orphan.rs").write_text("pub struct B;\n", encoding="utf-8")
+
+
+def _coverage_positive(root: Path) -> None:
+    """A src file with no `[[module]]` row: caught as a coverage hole."""
+    _coverage_fixture(root, tag_orphan=False)
+
+
+def _coverage_negative(root: Path) -> None:
+    """Every src file has a row: refused (no hole)."""
+    _coverage_fixture(root, tag_orphan=True)
+
+
+AXES.append({
+    "id": "crate-lines",
+    "detect": coverage_holes,
+    "positive": _coverage_positive,
+    "negative": _coverage_negative,
+})
+
+
+def _misnamed_fixture(root: Path, tag: str) -> None:
+    """A member crate with one module, tagged `tag`, owned by `widget`."""
+    (root / "quality").mkdir(parents=True, exist_ok=True)
+    (root / "quality" / "DOMAINS.toml").write_text(
+        '[[context]]\n'
+        'id = "widget"\n'
+        'kind = "core"\n'
+        'crates = ["fixture-crate"]\n\n'
+        '[[module]]\n'
+        'path = "fixture-crate/src/lib.rs"\n'
+        f'context = "{tag}"\n'
+        'lines = 10\n',
+        encoding="utf-8")
+    crate = root / "fixture-crate"
+    (crate / "src").mkdir(parents=True, exist_ok=True)
+    (crate / "Cargo.toml").write_text(
+        '[package]\nname = "fixture-crate"\nversion = "0.0.0"\n',
+        encoding="utf-8")
+    (crate / "src" / "lib.rs").write_text("pub struct A;\n", encoding="utf-8")
+
+
+def _misnamed_positive(root: Path) -> None:
+    """A crate whose only module is tagged another context: caught."""
+    _misnamed_fixture(root, "other")
+
+
+def _misnamed_negative(root: Path) -> None:
+    """A crate whose module is its own context: refused."""
+    _misnamed_fixture(root, "widget")
+
+
+def _misnamed_detect(root: Path) -> list[dict]:
+    """The axis's own function: truthy iff a crate describes < half itself."""
+    return misnamed(root)["misnamed"]
+
+
+AXES.append({
+    "id": "misnamed",
+    "detect": _misnamed_detect,
+    "positive": _misnamed_positive,
+    "negative": _misnamed_negative,
+})
+
+
+@subcommand("crate-lines")
+def cmd_crate_lines(args: list[str]) -> int:
+    """Print crate X's module rows and total lines, or the measurement line."""
+    holes = coverage_holes(REPO)
+    if holes:
+        print("crate-lines: coverage hole — no [[module]] row for:",
+              file=sys.stderr)
+        for h in holes:
+            print(f"  untagged: {h}", file=sys.stderr)
+        return EXIT_COULD_NOT_JUDGE
+    crate = _flag_value(args, "--crate")
+    if not crate:
+        print("usage: domains-census.py crate-lines --crate <name> [--json]",
+              file=sys.stderr)
+        return 2
+    rows = crate_lines(REPO, crate)
+    if not rows:
+        print(f"crate-lines: no [[module]] rows for crate {crate!r}",
+              file=sys.stderr)
+        return EXIT_ARTIFACT_ABSENT
+    total = sum(r.get("lines", 0) or 0 for r in rows)
+    if "--json" in args:
+        emit_measurement(total)
+        return EXIT_OK
+    print(f"crate-lines — {crate}: {len(rows)} module rows, {total} lines\n")
+    for r in sorted(rows, key=lambda r: r.get("path", "")):
+        print(f"  {r.get('context', '?'):<14} {r.get('lines', 0):>7}  "
+              f"{r.get('path', '')}")
+    print(f"\n  value: {total} lines")
+    return EXIT_OK
+
+
+@subcommand("misnamed")
+def cmd_misnamed(args: list[str]) -> int:
+    """Print per-crate own-context share, or the measurement line."""
+    holes = coverage_holes(REPO)
+    if holes:
+        print("misnamed: coverage hole — no [[module]] row for:",
+              file=sys.stderr)
+        for h in holes:
+            print(f"  untagged: {h}", file=sys.stderr)
+        return EXIT_COULD_NOT_JUDGE
+    r = misnamed(REPO)
+    if "--json" in args:
+        emit_measurement(len(r["misnamed"]))
+        return EXIT_OK
+    print("misnamed — share of each crate's lines carrying a context the crate "
+          "is the home of\n  (a crate's name describes less than half of what "
+          "it holds → counted)\n")
+    for row in r["rows"]:
+        share = row["own"] / row["total"] * 100
+        flag = "  MISNAMED" if row["own"] * 2 < row["total"] else ""
+        homes = ", ".join(row["homes"]) or "(no home)"
+        print(f"  {row['crate']:<30} {homes:<22} {row['own']:>7} / "
+              f"{row['total']:>7}  {share:5.1f}%{flag}")
+    print(f"\n  tag-table digest: {_tag_digest(registry())}")
+    print(f"  value: {len(r['misnamed'])} crates whose name describes less "
+          f"than half of what they hold")
+    return EXIT_OK
+
+
 def self_test() -> int:
     """Plant a positive and a negative control per axis; report caught/refused.
 
