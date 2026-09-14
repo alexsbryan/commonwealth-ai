@@ -4416,7 +4416,9 @@ Proposes {name, shape}: a NEW thing the report says it will build, add, introduc
   ("a `NodeClass` enum", "new crate `commonwealth-rail`", "add `svrn setup --terminal`", "we need a ledger").
   name is the identifier or path as written; shape is what kind of thing. ONLY when the report says the
   thing does not exist yet. A name the report uses, returns, points at, changes or extends is Exists{name};
-  a change with no new name ("`SetupConfig.models` becomes `Option`") is Promise.
+  a change with no new name ("`SetupConfig.models` becomes `Option`") is Promise. In a code block every
+  struct, enum, trait, type or fn the report DEFINES is its own Proposes{name}, one per definition; a type
+  named as what something "becomes" or "splits into" is Proposes{name} too.
 Measured {quantity, value, unit}: a number the report states as measured (lines, bytes, seconds).
 Count {quantity, value, of, pattern, in}: a count of things ("eight launch roles", "15 of 16 gates",
   "13 impls", "39 sites"); `of` for "N of M"; `pattern` and `in` when the span names what is counted
@@ -4604,6 +4606,14 @@ class Kernel:
                     and re.search(r"\.(?:md|toml|json|ya?ml|tsv|txt)$", nm):
                 # 'a DEFAULTS_LEDGER.md row per rung' proposes a row, not the file (536c8494 p11.9-10)
                 return "sorry", f"an addition to {nm}, which is in the tree at {sha_t[:9]}; the new thing has no name"
+            if hit and (st.get("shape") == "fn" or re.fullmatch(r"[a-z][a-z0-9_]*", nm)) and "::" not in nm and "/" not in nm:
+                # A fn collides only inside a file the plan names: `fn value`
+                # in scheduler_core.rs is not the `fn value` of some other
+                # module (cea8e256 p3.3, p3.5). A type collides workspace-wide.
+                files = {m.group(1).split("/")[-1] for m in re.finditer(r"([\w./-]+\.(?:rs|py|sh|ts|mjs))\b", self.text)}
+                where = hit.split(":")[0].split("/")[-1]
+                if files and where not in files:
+                    return "sorry", f"a fn named {nm} is defined in {where}, not in a file this plan names; no collision the plan can see"
             if hit:
                 cite = self.plan_cites(nm)
                 if cite:
@@ -5154,6 +5164,13 @@ def plan_sections(plan: str, limit: int = 6500) -> list[tuple[str, str]]:
 
 RX_TICK = re.compile(r"`([^`\n]{2,80})`")
 
+def anchored(name: str, text: str) -> bool:
+    """A Proposes/Exists is anchored by its NAME, which must occur in the
+    text as a token; the span may paraphrase a code block (cea8e256 p3.1:
+    '`pub(crate) struct Outcome` with fields ...' for a 9-line struct)."""
+    n = re.sub(r":\d+(?:-\d+)?$", "", name.strip("`").strip())
+    return len(n) >= 3 and bool(re.search(r"(?<![\w])" + re.escape(n) + r"(?![\w])", text))
+
 def sweep_idents(text: str) -> list[str]:
     """Every backticked name a plan mentions that git could look for --
     the recall instrument for the translation: a name defined at the sha
@@ -5194,6 +5211,7 @@ def cmd_plan_claims(a) -> int:
         stmts = [r for r in (json.loads(l) for l in (d / "plan-claims.jsonl").open()) if r["node"] == "statement"]
         for st in stmts:
             st.pop("node", None); st.pop("deps", None)
+            st["verbatim"] = st["verbatim"] or (st["kind"] in ("Proposes", "Exists") and anchored(st.get("name") or "", ev["plan"]))
             st["state"], st["receipt"] = kernel.run(st) if st["verbatim"] else ("sorry", "span is not verbatim in the plan")
     else:
         for n, (title, text) in enumerate(secs, 1):
@@ -5204,7 +5222,8 @@ def cmd_plan_claims(a) -> int:
                 print(f"could-not-judge: daemon {e}"); return 3
             for k, st in enumerate(got):
                 st["id"] = f"p{n}.{k + 1}"; st["section"] = title
-                st["verbatim"] = st["verbatim"] or span_is_real(re.sub(r"[`*_]", "", st["span"]), re.sub(r"[`*_]", "", text))
+                st["verbatim"] = st["verbatim"] or span_is_real(re.sub(r"[`*_]", "", st["span"]), re.sub(r"[`*_]", "", text)) \
+                    or (st["kind"] in ("Proposes", "Exists") and anchored(st.get("name") or "", text))
                 st["state"], st["receipt"] = kernel.run(st) if st["verbatim"] else ("sorry", "span is not verbatim in the plan")
                 stmts.append(st)
             print(f"  section {n:>2}/{len(secs)} {title[:50]:<50} {len(got):>3} statement(s) {round(time.time() - t1)}s", flush=True)
@@ -6079,6 +6098,13 @@ def cmd_self_test(_a) -> int:
         eq(_kh.run({"kind": "Proposes", "turn": 1, "name": _n, "span": "x"})[0], _want, f"Proposes {_n}")
     eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "NodeId", "span": "x"})[0], "refuted", "Proposes: a macro-defined type is defined (define_id!(NodeId, ..))")
     eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "sovereign/DEFAULTS_LEDGER.md", "shape": "file", "span": "a `sovereign/DEFAULTS_LEDGER.md` row per rung"})[0], "sorry", "Proposes: a row in an existing file is an addition")
+    eq(anchored("Outcome", "pub(crate) struct Outcome {\n local: Option<Scored>"), True, "anchored: the name is a token in the text")
+    eq(anchored("come", "pub(crate) struct Outcome {"), False, "anchored: not a substring of a longer token")
+    _kh.text = "the split lands in `some_other_file.rs`"
+    eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "cmd_claims", "shape": "fn", "span": "x"})[0], "sorry", "Proposes: a fn defined in a file the plan does not name is no collision")
+    _kh.text = "the split lands in `scripts/co-oplog.py`"
+    eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "Kernel", "shape": "type", "span": "x"})[0], "refuted", "Proposes: a type collides workspace-wide")
+    _kh.text = ""
     eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "Kernel", "span": "x", "section": "What this removes"})[0], "sorry", "Proposes: a removes section proposes nothing")
     _kh.text = "- `Kernel` (`scripts/co-oplog.py:4477`) is the judge.\n\n## Plan\n\nbuild a `Kernel`"
     eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "Kernel", "span": "x"})[0], "sorry", "Proposes: the plan cites the definition, so it is an extension")
