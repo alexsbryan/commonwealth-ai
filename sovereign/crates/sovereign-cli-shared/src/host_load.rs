@@ -46,7 +46,16 @@
 ///
 /// `None` where the platform reports none — and callers record that absence
 /// rather than substituting a zero, which would read as an idle host
-/// (ARCH §18.3).
+/// (ARCH §18.3). Windows is such a platform: `getloadavg` is a Unix call and
+/// the msvc `libc` has no binding, so an ungated call broke the 0.7.0 Windows
+/// daemon build.
+#[cfg(not(unix))]
+pub fn load_average_1m() -> Option<f64> {
+    None
+}
+
+/// See the non-Unix twin above for the absence contract.
+#[cfg(unix)]
 pub fn load_average_1m() -> Option<f64> {
     let mut avg = [0f64; 3];
     // SAFETY: `getloadavg` writes at most `nelem` doubles into the buffer and
