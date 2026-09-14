@@ -6460,3 +6460,9501 @@ note = "Stays. 16,028 ln is the whole stop condition; 76 sites reach out (34 int
   from = "MeshPeerStore"
   to = "MeshReplicatedKv"
   file = "sovereign/crates/sovereign-mesh/src/peer_adapter.rs:39"
+
+# ═══ Module tags — workspace census 2026-09-14 (dm3-tag-workspace): every workspace member crate not already covered by a [[module]] row; one row per .rs under src/ ═══
+# 1582 rows appended, 741 unknown (a crate named by no context's `crates` list, or by several).
+# Coverage: after this append, every .rs under a workspace member's src/ has exactly one [[module]] row.
+# Crates already fully covered and not re-emitted: sovereign-mesh, sovereign-api, sovereign-serving, corpus-engine (2026-09-13/14 censuses).
+# Crates added: 64. Unknown-context rows are legal and count against their crate (O3 queue).
+
+[[module]]
+path = "commonwealth/crates/commonwealth-core/src/activity.rs"
+context = "fabric"
+lines = 470
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-core/src/capabilities.rs"
+context = "fabric"
+lines = 536
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-core/src/clock.rs"
+context = "fabric"
+lines = 167
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-core/src/config.rs"
+context = "fabric"
+lines = 287
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-core/src/contributions.rs"
+context = "fabric"
+lines = 797
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-core/src/ct.rs"
+context = "fabric"
+lines = 56
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-core/src/dial_sig.rs"
+context = "fabric"
+lines = 201
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-core/src/error.rs"
+context = "fabric"
+lines = 34
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-core/src/ids.rs"
+context = "fabric"
+lines = 118
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-core/src/knowledge.rs"
+context = "fabric"
+lines = 519
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-core/src/latency.rs"
+context = "fabric"
+lines = 156
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-core/src/lib.rs"
+context = "fabric"
+lines = 134
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-core/src/mesh/mod.rs"
+context = "fabric"
+lines = 977
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-core/src/mesh/tests.rs"
+context = "fabric"
+lines = 863
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-core/src/mesh/tests/gossip_auth.rs"
+context = "fabric"
+lines = 590
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-core/src/mesh/wire.rs"
+context = "fabric"
+lines = 160
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-core/src/mesh_identity.rs"
+context = "fabric"
+lines = 447
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-core/src/mesh_merge.rs"
+context = "fabric"
+lines = 269
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-core/src/model.rs"
+context = "fabric"
+lines = 277
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-core/src/partition.rs"
+context = "fabric"
+lines = 278
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-core/src/peer_addr.rs"
+context = "fabric"
+lines = 129
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-core/src/peer_health.rs"
+context = "fabric"
+lines = 510
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-discovery/src/deep_link.rs"
+context = "fabric"
+lines = 852
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-discovery/src/hardware.rs"
+context = "fabric"
+lines = 594
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-discovery/src/lib.rs"
+context = "fabric"
+lines = 81
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-discovery/src/mdns.rs"
+context = "fabric"
+lines = 376
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-discovery/src/membership.rs"
+context = "fabric"
+lines = 537
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-media/src/apps.rs"
+context = "fabric"
+lines = 657
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-media/src/declared.rs"
+context = "fabric"
+lines = 276
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-media/src/fanout.rs"
+context = "fabric"
+lines = 872
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-media/src/identity.rs"
+context = "fabric"
+lines = 411
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-media/src/lib.rs"
+context = "fabric"
+lines = 39
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-media/src/reach.rs"
+context = "fabric"
+lines = 586
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-rail-core/src/admit.rs"
+context = "fabric"
+lines = 547
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-rail-core/src/introduce.rs"
+context = "fabric"
+lines = 360
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-rail-core/src/lib.rs"
+context = "fabric"
+lines = 552
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-rail-core/src/payload.rs"
+context = "fabric"
+lines = 272
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-rail-core/src/sig.rs"
+context = "fabric"
+lines = 232
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-rail-core/src/sync.rs"
+context = "fabric"
+lines = 496
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-rail-core/src/tests.rs"
+context = "fabric"
+lines = 765
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-rail-core/src/tests_introduce.rs"
+context = "fabric"
+lines = 551
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-rail-core/src/tests_support.rs"
+context = "fabric"
+lines = 83
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-rail/src/lib.rs"
+context = "fabric"
+lines = 798
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-rail/src/tests.rs"
+context = "fabric"
+lines = 826
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-rails/src/acceptor.rs"
+context = "fabric"
+lines = 239
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-rails/src/api.rs"
+context = "fabric"
+lines = 333
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-rails/src/cli.rs"
+context = "fabric"
+lines = 536
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-rails/src/config.rs"
+context = "fabric"
+lines = 288
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-rails/src/gossip.rs"
+context = "fabric"
+lines = 612
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-rails/src/identity.rs"
+context = "fabric"
+lines = 222
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-rails/src/internal.rs"
+context = "fabric"
+lines = 292
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-rails/src/join.rs"
+context = "fabric"
+lines = 260
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-rails/src/lib.rs"
+context = "fabric"
+lines = 310
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-rails/src/main.rs"
+context = "fabric"
+lines = 40
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-state/src/activity.rs"
+context = "fabric"
+lines = 289
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-state/src/backend.rs"
+context = "fabric"
+lines = 468
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-state/src/contributions.rs"
+context = "fabric"
+lines = 449
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-state/src/error.rs"
+context = "fabric"
+lines = 14
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-state/src/gc.rs"
+context = "fabric"
+lines = 218
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-state/src/lib.rs"
+context = "fabric"
+lines = 129
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-state/src/peer_preferences.rs"
+context = "fabric"
+lines = 545
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-state/src/processed_shards.rs"
+context = "fabric"
+lines = 176
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-state/src/rail_kv.rs"
+context = "fabric"
+lines = 933
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-state/src/retention.rs"
+context = "fabric"
+lines = 144
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-state/src/store.rs"
+context = "fabric"
+lines = 1499
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-transport/src/fanout.rs"
+context = "fabric"
+lines = 367
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-transport/src/identity.rs"
+context = "fabric"
+lines = 381
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-transport/src/ip.rs"
+context = "fabric"
+lines = 379
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-transport/src/iroh.rs"
+context = "fabric"
+lines = 1668
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-transport/src/iroh_identity_forward.rs"
+context = "fabric"
+lines = 860
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-transport/src/iroh_path.rs"
+context = "fabric"
+lines = 176
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-transport/src/lib.rs"
+context = "fabric"
+lines = 273
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-transport/src/origin_alpn.rs"
+context = "fabric"
+lines = 92
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-transport/src/routed.rs"
+context = "fabric"
+lines = 348
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-work/src/act.rs"
+context = "unknown"
+lines = 709
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-work/src/actor.rs"
+context = "unknown"
+lines = 150
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-work/src/attribution.rs"
+context = "unknown"
+lines = 267
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-work/src/executor.rs"
+context = "unknown"
+lines = 794
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-work/src/lib.rs"
+context = "unknown"
+lines = 111
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-work/src/process.rs"
+context = "unknown"
+lines = 1060
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-work/src/process/tests.rs"
+context = "unknown"
+lines = 616
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-work/src/projection.rs"
+context = "unknown"
+lines = 1083
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-work/src/projection/tests.rs"
+context = "unknown"
+lines = 610
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-work/src/refusal.rs"
+context = "unknown"
+lines = 1304
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-work/src/sandbox.rs"
+context = "unknown"
+lines = 621
+note = ""
+
+[[module]]
+path = "commonwealth/crates/commonwealth-work/src/seal.rs"
+context = "unknown"
+lines = 290
+note = ""
+
+[[module]]
+path = "corpus-engine-archaeology/src/archaeology_eval.rs"
+context = "unknown"
+lines = 1196
+note = ""
+
+[[module]]
+path = "corpus-engine-archaeology/src/git_archaeology.rs"
+context = "unknown"
+lines = 732
+note = ""
+
+[[module]]
+path = "corpus-engine-archaeology/src/lib.rs"
+context = "unknown"
+lines = 27
+note = ""
+
+[[module]]
+path = "corpus-engine-archaeology/src/rough_edges.rs"
+context = "unknown"
+lines = 559
+note = ""
+
+[[module]]
+path = "corpus-engine-atos/src/design_signals.rs"
+context = "unknown"
+lines = 885
+note = ""
+
+[[module]]
+path = "corpus-engine-atos/src/error.rs"
+context = "unknown"
+lines = 26
+note = ""
+
+[[module]]
+path = "corpus-engine-atos/src/features.rs"
+context = "unknown"
+lines = 1484
+note = ""
+
+[[module]]
+path = "corpus-engine-atos/src/lib.rs"
+context = "unknown"
+lines = 41
+note = ""
+
+[[module]]
+path = "corpus-engine-atos/src/plan_items.rs"
+context = "unknown"
+lines = 414
+note = ""
+
+[[module]]
+path = "corpus-engine-notes/src/error.rs"
+context = "workspace"
+lines = 20
+note = ""
+
+[[module]]
+path = "corpus-engine-notes/src/lib.rs"
+context = "workspace"
+lines = 58
+note = ""
+
+[[module]]
+path = "corpus-engine-notes/src/note.rs"
+context = "workspace"
+lines = 374
+note = ""
+
+[[module]]
+path = "corpus-engine-notes/src/notes.rs"
+context = "workspace"
+lines = 7807
+note = ""
+
+[[module]]
+path = "corpus-engine-notes/src/notes_schema.rs"
+context = "workspace"
+lines = 1044
+note = ""
+
+[[module]]
+path = "corpus-engine-notes/src/project_docs.rs"
+context = "workspace"
+lines = 419
+note = ""
+
+[[module]]
+path = "corpus-engine-scip/src/arch_metrics.rs"
+context = "workbench"
+lines = 1068
+note = ""
+
+[[module]]
+path = "corpus-engine-scip/src/capability_map.rs"
+context = "workbench"
+lines = 1136
+note = ""
+
+[[module]]
+path = "corpus-engine-scip/src/converge.rs"
+context = "workbench"
+lines = 1361
+note = ""
+
+[[module]]
+path = "corpus-engine-scip/src/descriptor.rs"
+context = "workbench"
+lines = 400
+note = ""
+
+[[module]]
+path = "corpus-engine-scip/src/error.rs"
+context = "workbench"
+lines = 38
+note = ""
+
+[[module]]
+path = "corpus-engine-scip/src/lib.rs"
+context = "workbench"
+lines = 95
+note = ""
+
+[[module]]
+path = "corpus-engine-scip/src/roles.rs"
+context = "workbench"
+lines = 737
+note = ""
+
+[[module]]
+path = "corpus-engine-scip/src/scip_export.rs"
+context = "workbench"
+lines = 1300
+note = ""
+
+[[module]]
+path = "corpus-engine-scip/src/scip_graph.rs"
+context = "workbench"
+lines = 3691
+note = ""
+
+[[module]]
+path = "corpus-engine-scip/src/scip_graph_edges.rs"
+context = "workbench"
+lines = 236
+note = ""
+
+[[module]]
+path = "corpus-engine-scip/src/scip_proto.rs"
+context = "workbench"
+lines = 542
+note = ""
+
+[[module]]
+path = "corpus-engine-scip/src/shape.rs"
+context = "workbench"
+lines = 914
+note = ""
+
+[[module]]
+path = "corpus-engine-scip/src/tool_path.rs"
+context = "workbench"
+lines = 296
+note = ""
+
+[[module]]
+path = "corpus-engine-scip/src/trace.rs"
+context = "workbench"
+lines = 261
+note = ""
+
+[[module]]
+path = "corpus-engine-sections/src/lib.rs"
+context = "workbench"
+lines = 568
+note = ""
+
+[[module]]
+path = "corpus-engine-vocab/src/atoms.rs"
+context = "unknown"
+lines = 1588
+note = ""
+
+[[module]]
+path = "corpus-engine-vocab/src/atoms/tests.rs"
+context = "unknown"
+lines = 673
+note = ""
+
+[[module]]
+path = "corpus-engine-vocab/src/canonical.rs"
+context = "unknown"
+lines = 61
+note = ""
+
+[[module]]
+path = "corpus-engine-vocab/src/edges.rs"
+context = "unknown"
+lines = 328
+note = ""
+
+[[module]]
+path = "corpus-engine-vocab/src/lib.rs"
+context = "unknown"
+lines = 36
+note = ""
+
+[[module]]
+path = "corpus-engine-vocab/src/ontology/decl.rs"
+context = "unknown"
+lines = 651
+note = ""
+
+[[module]]
+path = "corpus-engine-vocab/src/ontology/mod.rs"
+context = "unknown"
+lines = 269
+note = ""
+
+[[module]]
+path = "corpus-engine-vocab/src/ontology/navigation.rs"
+context = "unknown"
+lines = 799
+note = ""
+
+[[module]]
+path = "corpus-engine-vocab/src/stable_key.rs"
+context = "unknown"
+lines = 474
+note = ""
+
+[[module]]
+path = "corpus-engine-vocab/src/taxonomy.rs"
+context = "unknown"
+lines = 282
+note = ""
+
+[[module]]
+path = "corpus-engine-watchers/src/error.rs"
+context = "build-feedback"
+lines = 23
+note = ""
+
+[[module]]
+path = "corpus-engine-watchers/src/lib.rs"
+context = "build-feedback"
+lines = 51
+note = ""
+
+[[module]]
+path = "corpus-engine-watchers/src/lint_results.rs"
+context = "build-feedback"
+lines = 603
+note = ""
+
+[[module]]
+path = "corpus-engine-watchers/src/lint_watcher.rs"
+context = "build-feedback"
+lines = 580
+note = ""
+
+[[module]]
+path = "corpus-engine-watchers/src/project_index_watcher.rs"
+context = "build-feedback"
+lines = 81
+note = ""
+
+[[module]]
+path = "corpus-engine-watchers/src/test_results.rs"
+context = "build-feedback"
+lines = 542
+note = ""
+
+[[module]]
+path = "corpus-engine-watchers/src/test_watcher.rs"
+context = "build-feedback"
+lines = 537
+note = ""
+
+[[module]]
+path = "corpus-engine-watchers/src/watcher_coordinator.rs"
+context = "build-feedback"
+lines = 877
+note = ""
+
+[[module]]
+path = "corpus-engine-yield/src/lib.rs"
+context = "unknown"
+lines = 335
+note = ""
+
+[[module]]
+path = "corpus-engine-yield/src/time.rs"
+context = "unknown"
+lines = 48
+note = ""
+
+[[module]]
+path = "corpus-engine/xtask/src/api_gate.rs"
+context = "back-of-house"
+lines = 195
+note = ""
+
+[[module]]
+path = "corpus-engine/xtask/src/arch_gate.rs"
+context = "back-of-house"
+lines = 470
+note = ""
+
+[[module]]
+path = "corpus-engine/xtask/src/boundary_gate.rs"
+context = "back-of-house"
+lines = 862
+note = ""
+
+[[module]]
+path = "corpus-engine/xtask/src/clock_gate.rs"
+context = "back-of-house"
+lines = 277
+note = ""
+
+[[module]]
+path = "corpus-engine/xtask/src/common.rs"
+context = "back-of-house"
+lines = 327
+note = ""
+
+[[module]]
+path = "corpus-engine/xtask/src/concept_gate.rs"
+context = "back-of-house"
+lines = 344
+note = ""
+
+[[module]]
+path = "corpus-engine/xtask/src/docs_gate.rs"
+context = "back-of-house"
+lines = 463
+note = ""
+
+[[module]]
+path = "corpus-engine/xtask/src/env_gate.rs"
+context = "back-of-house"
+lines = 431
+note = ""
+
+[[module]]
+path = "corpus-engine/xtask/src/instrument_gate.rs"
+context = "back-of-house"
+lines = 816
+note = ""
+
+[[module]]
+path = "corpus-engine/xtask/src/judge_funnel_gate.rs"
+context = "back-of-house"
+lines = 432
+note = ""
+
+[[module]]
+path = "corpus-engine/xtask/src/layer_gate.rs"
+context = "back-of-house"
+lines = 276
+note = ""
+
+[[module]]
+path = "corpus-engine/xtask/src/layout_gate.rs"
+context = "back-of-house"
+lines = 266
+note = ""
+
+[[module]]
+path = "corpus-engine/xtask/src/lifecycle_gate.rs"
+context = "back-of-house"
+lines = 559
+note = ""
+
+[[module]]
+path = "corpus-engine/xtask/src/lint_gate.rs"
+context = "back-of-house"
+lines = 286
+note = ""
+
+[[module]]
+path = "corpus-engine/xtask/src/lock_gate.rs"
+context = "back-of-house"
+lines = 180
+note = ""
+
+[[module]]
+path = "corpus-engine/xtask/src/main.rs"
+context = "back-of-house"
+lines = 140
+note = ""
+
+[[module]]
+path = "corpus-engine/xtask/src/manifests.rs"
+context = "back-of-house"
+lines = 541
+note = ""
+
+[[module]]
+path = "corpus-engine/xtask/src/quality_cmd.rs"
+context = "back-of-house"
+lines = 161
+note = ""
+
+[[module]]
+path = "corpus-engine/xtask/src/refactor_apply.rs"
+context = "back-of-house"
+lines = 356
+note = ""
+
+[[module]]
+path = "corpus-engine/xtask/src/refactor_land.rs"
+context = "back-of-house"
+lines = 84
+note = ""
+
+[[module]]
+path = "corpus-engine/xtask/src/size_gate.rs"
+context = "back-of-house"
+lines = 498
+note = ""
+
+[[module]]
+path = "corpus-engine/xtask/src/target_arch.rs"
+context = "back-of-house"
+lines = 1087
+note = ""
+
+[[module]]
+path = "corpus-mcp/src/ask.rs"
+context = "unknown"
+lines = 591
+note = ""
+
+[[module]]
+path = "corpus-mcp/src/host.rs"
+context = "unknown"
+lines = 669
+note = ""
+
+[[module]]
+path = "corpus-mcp/src/ingest.rs"
+context = "unknown"
+lines = 751
+note = ""
+
+[[module]]
+path = "corpus-mcp/src/main.rs"
+context = "unknown"
+lines = 98
+note = ""
+
+[[module]]
+path = "corpus-mcp/src/mcp.rs"
+context = "unknown"
+lines = 80
+note = ""
+
+[[module]]
+path = "corpus-mcp/src/recipe.rs"
+context = "unknown"
+lines = 105
+note = ""
+
+[[module]]
+path = "corpus-mcp/src/serve.rs"
+context = "unknown"
+lines = 448
+note = ""
+
+[[module]]
+path = "corpus-mcp/src/tools.rs"
+context = "unknown"
+lines = 1121
+note = ""
+
+[[module]]
+path = "kernel-types/src/answer.rs"
+context = "kernel"
+lines = 744
+note = ""
+
+[[module]]
+path = "kernel-types/src/attribution.rs"
+context = "kernel"
+lines = 320
+note = ""
+
+[[module]]
+path = "kernel-types/src/conformance.rs"
+context = "kernel"
+lines = 335
+note = ""
+
+[[module]]
+path = "kernel-types/src/custody.rs"
+context = "kernel"
+lines = 265
+note = ""
+
+[[module]]
+path = "kernel-types/src/hash.rs"
+context = "kernel"
+lines = 198
+note = ""
+
+[[module]]
+path = "kernel-types/src/ids.rs"
+context = "kernel"
+lines = 306
+note = ""
+
+[[module]]
+path = "kernel-types/src/judgement.rs"
+context = "kernel"
+lines = 836
+note = ""
+
+[[module]]
+path = "kernel-types/src/lib.rs"
+context = "kernel"
+lines = 126
+note = ""
+
+[[module]]
+path = "kernel-types/src/origin.rs"
+context = "kernel"
+lines = 455
+note = ""
+
+[[module]]
+path = "kernel-types/src/quality/instruments.rs"
+context = "kernel"
+lines = 1568
+note = ""
+
+[[module]]
+path = "kernel-types/src/quality/mod.rs"
+context = "kernel"
+lines = 34
+note = ""
+
+[[module]]
+path = "kernel-types/src/quality/render.rs"
+context = "kernel"
+lines = 410
+note = ""
+
+[[module]]
+path = "kernel-types/src/quality/triggers.rs"
+context = "kernel"
+lines = 538
+note = ""
+
+[[module]]
+path = "kernel-types/src/wire.rs"
+context = "kernel"
+lines = 184
+note = ""
+
+[[module]]
+path = "oicp-client/src/lib.rs"
+context = "kernel"
+lines = 3053
+note = ""
+
+[[module]]
+path = "oicp-conformance/src/args.rs"
+context = "unknown"
+lines = 146
+note = ""
+
+[[module]]
+path = "oicp-conformance/src/checks.rs"
+context = "unknown"
+lines = 806
+note = ""
+
+[[module]]
+path = "oicp-conformance/src/main.rs"
+context = "unknown"
+lines = 240
+note = ""
+
+[[module]]
+path = "oicp-conformance/src/report.rs"
+context = "unknown"
+lines = 207
+note = ""
+
+[[module]]
+path = "oicp-types/src/capability.rs"
+context = "kernel"
+lines = 535
+note = ""
+
+[[module]]
+path = "oicp-types/src/completion.rs"
+context = "kernel"
+lines = 749
+note = ""
+
+[[module]]
+path = "oicp-types/src/error.rs"
+context = "kernel"
+lines = 330
+note = ""
+
+[[module]]
+path = "oicp-types/src/glob.rs"
+context = "kernel"
+lines = 115
+note = ""
+
+[[module]]
+path = "oicp-types/src/ingest.rs"
+context = "kernel"
+lines = 203
+note = ""
+
+[[module]]
+path = "oicp-types/src/job.rs"
+context = "kernel"
+lines = 970
+note = ""
+
+[[module]]
+path = "oicp-types/src/jsonrpc.rs"
+context = "kernel"
+lines = 239
+note = ""
+
+[[module]]
+path = "oicp-types/src/knowledge.rs"
+context = "kernel"
+lines = 293
+note = ""
+
+[[module]]
+path = "oicp-types/src/lib.rs"
+context = "kernel"
+lines = 101
+note = ""
+
+[[module]]
+path = "oicp-types/src/manifest.rs"
+context = "kernel"
+lines = 428
+note = ""
+
+[[module]]
+path = "oicp-types/src/model_aliases.rs"
+context = "kernel"
+lines = 345
+note = ""
+
+[[module]]
+path = "oicp-types/src/origin.rs"
+context = "kernel"
+lines = 328
+note = ""
+
+[[module]]
+path = "oicp-types/src/registry.rs"
+context = "kernel"
+lines = 210
+note = ""
+
+[[module]]
+path = "oicp-types/src/requirements.rs"
+context = "kernel"
+lines = 341
+note = ""
+
+[[module]]
+path = "oicp-types/src/response.rs"
+context = "kernel"
+lines = 37
+note = ""
+
+[[module]]
+path = "oicp-types/src/scoring.rs"
+context = "kernel"
+lines = 1269
+note = ""
+
+[[module]]
+path = "oicp-types/src/slot.rs"
+context = "kernel"
+lines = 200
+note = ""
+
+[[module]]
+path = "oicp-types/src/tenant.rs"
+context = "kernel"
+lines = 228
+note = ""
+
+[[module]]
+path = "oicp-types/src/tool.rs"
+context = "kernel"
+lines = 169
+note = ""
+
+[[module]]
+path = "oicp-types/src/version.rs"
+context = "kernel"
+lines = 19
+note = ""
+
+[[module]]
+path = "oplog/src/lib.rs"
+context = "unknown"
+lines = 729
+note = ""
+
+[[module]]
+path = "quality/arch-layers/src/lib.rs"
+context = "back-of-house"
+lines = 765
+note = ""
+
+[[module]]
+path = "quality/arch-layers/src/packages.rs"
+context = "back-of-house"
+lines = 578
+note = ""
+
+[[module]]
+path = "quality/arch-layers/src/surfaces.rs"
+context = "back-of-house"
+lines = 555
+note = ""
+
+[[module]]
+path = "quality/arch-layers/src/violations.rs"
+context = "back-of-house"
+lines = 230
+note = ""
+
+[[module]]
+path = "serving-policy/src/fair_sched.rs"
+context = "serving"
+lines = 562
+note = ""
+
+[[module]]
+path = "serving-policy/src/fair_sched/tests.rs"
+context = "serving"
+lines = 424
+note = ""
+
+[[module]]
+path = "serving-policy/src/lib.rs"
+context = "serving"
+lines = 27
+note = ""
+
+[[module]]
+path = "serving-policy/src/pipeline_aliases.rs"
+context = "serving"
+lines = 228
+note = ""
+
+[[module]]
+path = "sovereign-mobile/src-tauri/src/cache/mod.rs"
+context = "host"
+lines = 5
+note = ""
+
+[[module]]
+path = "sovereign-mobile/src-tauri/src/cache/schema.rs"
+context = "host"
+lines = 152
+note = ""
+
+[[module]]
+path = "sovereign-mobile/src-tauri/src/cache/store.rs"
+context = "host"
+lines = 306
+note = ""
+
+[[module]]
+path = "sovereign-mobile/src-tauri/src/commands/chat.rs"
+context = "host"
+lines = 100
+note = ""
+
+[[module]]
+path = "sovereign-mobile/src-tauri/src/commands/conversation.rs"
+context = "host"
+lines = 108
+note = ""
+
+[[module]]
+path = "sovereign-mobile/src-tauri/src/commands/corpus.rs"
+context = "host"
+lines = 103
+note = ""
+
+[[module]]
+path = "sovereign-mobile/src-tauri/src/commands/host.rs"
+context = "host"
+lines = 150
+note = ""
+
+[[module]]
+path = "sovereign-mobile/src-tauri/src/commands/mod.rs"
+context = "host"
+lines = 8
+note = ""
+
+[[module]]
+path = "sovereign-mobile/src-tauri/src/connection/keychain.rs"
+context = "host"
+lines = 69
+note = ""
+
+[[module]]
+path = "sovereign-mobile/src-tauri/src/connection/mod.rs"
+context = "host"
+lines = 46
+note = ""
+
+[[module]]
+path = "sovereign-mobile/src-tauri/src/connection/store.rs"
+context = "host"
+lines = 245
+note = ""
+
+[[module]]
+path = "sovereign-mobile/src-tauri/src/connectivity/mod.rs"
+context = "host"
+lines = 12
+note = ""
+
+[[module]]
+path = "sovereign-mobile/src-tauri/src/connectivity/monitor.rs"
+context = "host"
+lines = 117
+note = ""
+
+[[module]]
+path = "sovereign-mobile/src-tauri/src/connectivity/reachability.rs"
+context = "host"
+lines = 24
+note = ""
+
+[[module]]
+path = "sovereign-mobile/src-tauri/src/error.rs"
+context = "host"
+lines = 58
+note = ""
+
+[[module]]
+path = "sovereign-mobile/src-tauri/src/iroh_bridge.rs"
+context = "host"
+lines = 96
+note = ""
+
+[[module]]
+path = "sovereign-mobile/src-tauri/src/lib.rs"
+context = "host"
+lines = 123
+note = ""
+
+[[module]]
+path = "sovereign-mobile/src-tauri/src/main.rs"
+context = "host"
+lines = 8
+note = ""
+
+[[module]]
+path = "sovereign-mobile/src-tauri/src/remote/client.rs"
+context = "host"
+lines = 208
+note = ""
+
+[[module]]
+path = "sovereign-mobile/src-tauri/src/remote/dto.rs"
+context = "host"
+lines = 148
+note = ""
+
+[[module]]
+path = "sovereign-mobile/src-tauri/src/remote/map.rs"
+context = "host"
+lines = 67
+note = ""
+
+[[module]]
+path = "sovereign-mobile/src-tauri/src/remote/mod.rs"
+context = "host"
+lines = 9
+note = ""
+
+[[module]]
+path = "sovereign-mobile/src-tauri/src/remote/stream.rs"
+context = "host"
+lines = 458
+note = ""
+
+[[module]]
+path = "sovereign-mobile/src-tauri/src/state.rs"
+context = "host"
+lines = 91
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-bench/src/artifacts.rs"
+context = "back-of-house"
+lines = 360
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-bench/src/baseline.rs"
+context = "back-of-house"
+lines = 168
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-bench/src/cli/aggregate.rs"
+context = "back-of-house"
+lines = 481
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-bench/src/cli/args.rs"
+context = "back-of-house"
+lines = 361
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-bench/src/cli/mod.rs"
+context = "back-of-house"
+lines = 114
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-bench/src/cli/replay.rs"
+context = "back-of-house"
+lines = 497
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-bench/src/cli/run.rs"
+context = "back-of-house"
+lines = 750
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-bench/src/cli/swebench.rs"
+context = "back-of-house"
+lines = 504
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-bench/src/failure_class.rs"
+context = "back-of-house"
+lines = 544
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-bench/src/judge.rs"
+context = "back-of-house"
+lines = 561
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-bench/src/judge_multi.rs"
+context = "back-of-house"
+lines = 176
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-bench/src/lib.rs"
+context = "back-of-house"
+lines = 34
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-bench/src/main.rs"
+context = "back-of-house"
+lines = 13
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-bench/src/problem.rs"
+context = "back-of-house"
+lines = 516
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-bench/src/report.rs"
+context = "back-of-house"
+lines = 234
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-bench/src/runner.rs"
+context = "back-of-house"
+lines = 545
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-bench/src/runners/bare_metal.rs"
+context = "back-of-house"
+lines = 332
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-bench/src/runners/mock.rs"
+context = "back-of-house"
+lines = 150
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-bench/src/runners/mod.rs"
+context = "back-of-house"
+lines = 18
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-bench/src/runners/native.rs"
+context = "back-of-house"
+lines = 2884
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-bench/src/runners/pi.rs"
+context = "back-of-house"
+lines = 1026
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-bench/src/runners/registry.rs"
+context = "back-of-house"
+lines = 138
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-bench/src/runners/search.rs"
+context = "back-of-house"
+lines = 291
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-bench/src/runners/shared.rs"
+context = "back-of-house"
+lines = 523
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-bench/src/runners/shared_detectors.rs"
+context = "back-of-house"
+lines = 377
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-bench/src/sandbox.rs"
+context = "back-of-house"
+lines = 203
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-bench/src/scoring.rs"
+context = "back-of-house"
+lines = 468
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-bench/src/witness/auto_test.rs"
+context = "back-of-house"
+lines = 407
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-bench/src/witness/mod.rs"
+context = "back-of-house"
+lines = 11
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-bench/src/witness/test_result_parser.rs"
+context = "back-of-house"
+lines = 174
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-tools/src/adapter/mod.rs"
+context = "unknown"
+lines = 108
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-tools/src/adapter/native.rs"
+context = "unknown"
+lines = 207
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-tools/src/adapter/pi.rs"
+context = "unknown"
+lines = 547
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-tools/src/descriptor.rs"
+context = "unknown"
+lines = 181
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-tools/src/executor.rs"
+context = "unknown"
+lines = 2053
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-tools/src/lib.rs"
+context = "unknown"
+lines = 50
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-tools/src/primitive.rs"
+context = "unknown"
+lines = 346
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-tools/src/registry.rs"
+context = "unknown"
+lines = 108
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-tools/src/result.rs"
+context = "unknown"
+lines = 464
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-tools/src/role/dossier.rs"
+context = "unknown"
+lines = 776
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-tools/src/role/mod.rs"
+context = "unknown"
+lines = 99
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-tools/src/role/model_map.rs"
+context = "unknown"
+lines = 158
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-tools/src/role/profile.rs"
+context = "unknown"
+lines = 434
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-tools/src/role/transition.rs"
+context = "unknown"
+lines = 184
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-agent-tools/src/syntax.rs"
+context = "unknown"
+lines = 656
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-atos/src/approval.rs"
+context = "unknown"
+lines = 590
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-atos/src/charter.rs"
+context = "unknown"
+lines = 502
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-atos/src/lib.rs"
+context = "unknown"
+lines = 391
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-atos/src/local/helpers.rs"
+context = "unknown"
+lines = 314
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-atos/src/local/mod.rs"
+context = "unknown"
+lines = 24
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-atos/src/local/orchestrator.rs"
+context = "unknown"
+lines = 986
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-atos/src/report.rs"
+context = "unknown"
+lines = 480
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-atos/src/session.rs"
+context = "unknown"
+lines = 418
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-authoring-harness/src/checks.rs"
+context = "unknown"
+lines = 452
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-authoring-harness/src/declaration.rs"
+context = "unknown"
+lines = 20
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-authoring-harness/src/drive.rs"
+context = "unknown"
+lines = 129
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-authoring-harness/src/lib.rs"
+context = "unknown"
+lines = 107
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-authoring-harness/src/render.rs"
+context = "unknown"
+lines = 150
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/corpus_maintenance.rs"
+context = "host"
+lines = 339
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/atlas_builder.rs"
+context = "host"
+lines = 74
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs"
+context = "host"
+lines = 2857
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/build/containment.rs"
+context = "host"
+lines = 348
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/build/inference.rs"
+context = "host"
+lines = 657
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/build/mod.rs"
+context = "host"
+lines = 20
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/build/preflight.rs"
+context = "host"
+lines = 293
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/discovery_policy.rs"
+context = "host"
+lines = 693
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/lifecycle.rs"
+context = "host"
+lines = 1325
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/mod.rs"
+context = "host"
+lines = 1589
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/ocr_install.rs"
+context = "host"
+lines = 296
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/provider.rs"
+context = "host"
+lines = 174
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/rlimit.rs"
+context = "host"
+lines = 48
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/solve_http.rs"
+context = "host"
+lines = 1150
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/solve_tools.rs"
+context = "host"
+lines = 171
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/tool_registry.rs"
+context = "host"
+lines = 433
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/vram_plan.rs"
+context = "host"
+lines = 310
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/worker.rs"
+context = "host"
+lines = 148
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/workflow_trigger.rs"
+context = "host"
+lines = 179
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/workspace.rs"
+context = "host"
+lines = 223
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/doctor_cmd/checks_commonwealth.rs"
+context = "host"
+lines = 225
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/doctor_cmd/checks_freshness.rs"
+context = "host"
+lines = 1048
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/doctor_cmd/checks_omo.rs"
+context = "host"
+lines = 229
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/doctor_cmd/checks_sovereign.rs"
+context = "host"
+lines = 1073
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/doctor_cmd/mod.rs"
+context = "host"
+lines = 487
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/doctor_cmd/probe.rs"
+context = "host"
+lines = 45
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/doctor_cmd/repair.rs"
+context = "host"
+lines = 223
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/install_service_cmd.rs"
+context = "host"
+lines = 91
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/lib.rs"
+context = "host"
+lines = 675
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/listener_watch.rs"
+context = "host"
+lines = 144
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/log_rotation.rs"
+context = "host"
+lines = 336
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/main.rs"
+context = "host"
+lines = 11
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/memory_watch.rs"
+context = "host"
+lines = 943
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/model_cmd.rs"
+context = "host"
+lines = 529
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/panic_hook.rs"
+context = "host"
+lines = 303
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/setup_cmd/args.rs"
+context = "host"
+lines = 264
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/setup_cmd/byom.rs"
+context = "host"
+lines = 62
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/setup_cmd/catalog.rs"
+context = "host"
+lines = 85
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/setup_cmd/download.rs"
+context = "host"
+lines = 145
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/setup_cmd/emit.rs"
+context = "host"
+lines = 187
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/setup_cmd/fim.rs"
+context = "host"
+lines = 1345
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/setup_cmd/finish.rs"
+context = "host"
+lines = 543
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/setup_cmd/json_surface_tests.rs"
+context = "host"
+lines = 318
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/setup_cmd/mod.rs"
+context = "host"
+lines = 1669
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/setup_cmd/opencode.rs"
+context = "host"
+lines = 169
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/setup_cmd/terminal.rs"
+context = "host"
+lines = 779
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/setup_cmd/terminal/tests.rs"
+context = "host"
+lines = 63
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/setup_config.rs"
+context = "host"
+lines = 8
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/supervise.rs"
+context = "host"
+lines = 145
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/watcher_supervisor.rs"
+context = "host"
+lines = 259
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/amend.rs"
+context = "unknown"
+lines = 1240
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/arch_report_cmd.rs"
+context = "unknown"
+lines = 109
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/atlas_identity.rs"
+context = "unknown"
+lines = 34
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/atos_cmd/ab.rs"
+context = "unknown"
+lines = 461
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/atos_cmd/args.rs"
+context = "unknown"
+lines = 163
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/atos_cmd/doctor.rs"
+context = "unknown"
+lines = 340
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/atos_cmd/feature.rs"
+context = "unknown"
+lines = 133
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/atos_cmd/milestone.rs"
+context = "unknown"
+lines = 723
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/atos_cmd/mod.rs"
+context = "unknown"
+lines = 201
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/atos_cmd/plugin.rs"
+context = "unknown"
+lines = 62
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/atos_cmd/provision.rs"
+context = "unknown"
+lines = 83
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/atos_cmd/replay.rs"
+context = "unknown"
+lines = 457
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/atos_cmd/run.rs"
+context = "unknown"
+lines = 4750
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/atos_cmd/spec.rs"
+context = "unknown"
+lines = 346
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/atos_cmd/status.rs"
+context = "unknown"
+lines = 309
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/atos_cmd/stores.rs"
+context = "unknown"
+lines = 64
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/atos_cmd/teardown.rs"
+context = "unknown"
+lines = 187
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/atos_plugin.rs"
+context = "unknown"
+lines = 246
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/audit_extract.rs"
+context = "unknown"
+lines = 698
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/audit_recover.rs"
+context = "unknown"
+lines = 824
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/code_capability_graph.rs"
+context = "unknown"
+lines = 1537
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/code_cmd.rs"
+context = "unknown"
+lines = 1847
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/code_fieldglass/assemble.rs"
+context = "unknown"
+lines = 527
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/code_fieldglass/derive.rs"
+context = "unknown"
+lines = 939
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/code_fieldglass/layout.rs"
+context = "unknown"
+lines = 325
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/code_fieldglass/mod.rs"
+context = "unknown"
+lines = 1030
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/code_fieldglass/model.rs"
+context = "unknown"
+lines = 242
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/code_map.rs"
+context = "unknown"
+lines = 622
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/converge_baseline.rs"
+context = "unknown"
+lines = 198
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/converge_cmd.rs"
+context = "unknown"
+lines = 1189
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/design_onboarding.rs"
+context = "unknown"
+lines = 325
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/design_session.rs"
+context = "unknown"
+lines = 979
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/drift_cmd_orchestrator.rs"
+context = "unknown"
+lines = 1285
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/dry_report_cmd.rs"
+context = "unknown"
+lines = 119
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/intent.rs"
+context = "unknown"
+lines = 677
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/lib.rs"
+context = "unknown"
+lines = 322
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/main.rs"
+context = "unknown"
+lines = 12
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/phases.rs"
+context = "unknown"
+lines = 528
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/plan_composer.rs"
+context = "unknown"
+lines = 716
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/plan_enricher.rs"
+context = "unknown"
+lines = 272
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/project_cmd/audit/mod.rs"
+context = "unknown"
+lines = 851
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/project_cmd/audit/tests.rs"
+context = "unknown"
+lines = 371
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/project_cmd/charter_amend.rs"
+context = "unknown"
+lines = 505
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/project_cmd/design_plan.rs"
+context = "unknown"
+lines = 396
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/project_cmd/hooks.rs"
+context = "unknown"
+lines = 305
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/project_cmd/mod.rs"
+context = "unknown"
+lines = 692
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/project_cmd/phase.rs"
+context = "unknown"
+lines = 352
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/project_cmd/refresh.rs"
+context = "unknown"
+lines = 1030
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/project_cmd/serve.rs"
+context = "unknown"
+lines = 820
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/redirect_cmd.rs"
+context = "unknown"
+lines = 577
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/refactor_cmd/affinity.rs"
+context = "unknown"
+lines = 598
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/refactor_cmd/census.rs"
+context = "unknown"
+lines = 603
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/refactor_cmd/classify.rs"
+context = "unknown"
+lines = 443
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/refactor_cmd/destination.rs"
+context = "unknown"
+lines = 696
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/refactor_cmd/detector.rs"
+context = "unknown"
+lines = 1682
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/refactor_cmd/discover.rs"
+context = "unknown"
+lines = 737
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/refactor_cmd/gate.rs"
+context = "unknown"
+lines = 513
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/refactor_cmd/label_model.rs"
+context = "unknown"
+lines = 897
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/refactor_cmd/labels.rs"
+context = "unknown"
+lines = 704
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/refactor_cmd/ledger.rs"
+context = "unknown"
+lines = 547
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/refactor_cmd/mod.rs"
+context = "unknown"
+lines = 1186
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/refactor_cmd/order.rs"
+context = "unknown"
+lines = 561
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/refactor_cmd/reduction.rs"
+context = "unknown"
+lines = 618
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/refactor_cmd/schedule.rs"
+context = "unknown"
+lines = 802
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/refactor_cmd/spec.rs"
+context = "unknown"
+lines = 177
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/refactor_wire.rs"
+context = "unknown"
+lines = 738
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/suggest_seams_cmd.rs"
+context = "unknown"
+lines = 148
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/tools_cmd/args.rs"
+context = "unknown"
+lines = 61
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/tools_cmd/format.rs"
+context = "unknown"
+lines = 69
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/tools_cmd/mod.rs"
+context = "unknown"
+lines = 466
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-dev/src/tools_cmd/registry.rs"
+context = "unknown"
+lines = 608
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/alignment_cmd.rs"
+context = "host"
+lines = 779
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/atlas_cmd/backfill_ann.rs"
+context = "host"
+lines = 349
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/atlas_cmd/budget.rs"
+context = "host"
+lines = 384
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/atlas_cmd/build_doc_index.rs"
+context = "host"
+lines = 109
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/atlas_cmd/enable_incremental.rs"
+context = "host"
+lines = 169
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/atlas_cmd/inspect.rs"
+context = "host"
+lines = 429
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/atlas_cmd/kind.rs"
+context = "host"
+lines = 738
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/atlas_cmd/map_check.rs"
+context = "host"
+lines = 150
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/atlas_cmd/migrate_all.rs"
+context = "host"
+lines = 534
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/atlas_cmd/migrate_ids.rs"
+context = "host"
+lines = 167
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/atlas_cmd/mod.rs"
+context = "host"
+lines = 144
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/atlas_cmd/stats.rs"
+context = "host"
+lines = 163
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/atlas_cmd/status.rs"
+context = "host"
+lines = 211
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/atlas_cmd/typed_extension.rs"
+context = "host"
+lines = 294
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/atlas_cmd/wikipedia.rs"
+context = "host"
+lines = 623
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/awareness_cmd/args.rs"
+context = "host"
+lines = 173
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/awareness_cmd/decay.rs"
+context = "host"
+lines = 426
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/awareness_cmd/digest.rs"
+context = "host"
+lines = 301
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/awareness_cmd/entities.rs"
+context = "host"
+lines = 671
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/awareness_cmd/eval.rs"
+context = "host"
+lines = 344
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/awareness_cmd/extract.rs"
+context = "host"
+lines = 549
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/awareness_cmd/filter.rs"
+context = "host"
+lines = 646
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/awareness_cmd/golden.rs"
+context = "host"
+lines = 486
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/awareness_cmd/inference.rs"
+context = "host"
+lines = 523
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/awareness_cmd/mod.rs"
+context = "host"
+lines = 165
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/awareness_cmd/render.rs"
+context = "host"
+lines = 71
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/awareness_cmd/reset.rs"
+context = "host"
+lines = 292
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/awareness_cmd/scenario.rs"
+context = "host"
+lines = 897
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/awareness_cmd/seed.rs"
+context = "host"
+lines = 428
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/awareness_cmd/store_open.rs"
+context = "host"
+lines = 144
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/awareness_cmd/suggest.rs"
+context = "host"
+lines = 460
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/awareness_cmd/templates/mod.rs"
+context = "host"
+lines = 229
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/awareness_cmd/timeline.rs"
+context = "host"
+lines = 511
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/awareness_cmd/trace.rs"
+context = "host"
+lines = 461
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/backlog_cmd/add.rs"
+context = "host"
+lines = 367
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/backlog_cmd/item.rs"
+context = "host"
+lines = 543
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/backlog_cmd/mod.rs"
+context = "host"
+lines = 92
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/backlog_cmd/ruler.rs"
+context = "host"
+lines = 277
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/backlog_cmd/score.rs"
+context = "host"
+lines = 403
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/ablate.rs"
+context = "host"
+lines = 1187
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/adjudicate.rs"
+context = "host"
+lines = 448
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/all.rs"
+context = "host"
+lines = 1781
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/atlas.rs"
+context = "host"
+lines = 824
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/baselines.rs"
+context = "host"
+lines = 304
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/book_report.rs"
+context = "host"
+lines = 2543
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/chaos_monkey.rs"
+context = "host"
+lines = 2278
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/desktop_bridge.rs"
+context = "host"
+lines = 249
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/discover.rs"
+context = "host"
+lines = 467
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/enron.rs"
+context = "host"
+lines = 854
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/faithfulness.rs"
+context = "host"
+lines = 574
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/flywheel.rs"
+context = "host"
+lines = 399
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/gate.rs"
+context = "host"
+lines = 801
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/governance.rs"
+context = "host"
+lines = 400
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/judge_replay.rs"
+context = "host"
+lines = 499
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/lane_baseline.rs"
+context = "host"
+lines = 759
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/live_runner.rs"
+context = "host"
+lines = 876
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/mechanism_fidelity.rs"
+context = "host"
+lines = 1357
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/mod.rs"
+context = "host"
+lines = 224
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/model_resolve.rs"
+context = "host"
+lines = 239
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/moral/mod.rs"
+context = "host"
+lines = 277
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/moral/report.rs"
+context = "host"
+lines = 288
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/moral/runner.rs"
+context = "host"
+lines = 157
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/moral/scenarios.rs"
+context = "host"
+lines = 305
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/obsidian.rs"
+context = "host"
+lines = 376
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/parity_compare.rs"
+context = "host"
+lines = 528
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/promote.rs"
+context = "host"
+lines = 597
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/proxy_bench.rs"
+context = "host"
+lines = 119
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/redteam.rs"
+context = "host"
+lines = 748
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/render.rs"
+context = "host"
+lines = 637
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/report.rs"
+context = "host"
+lines = 874
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/resolver_precision/mod.rs"
+context = "host"
+lines = 650
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/resolver_precision/transcript.rs"
+context = "host"
+lines = 279
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/resource_meter.rs"
+context = "host"
+lines = 791
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/routing_replay.rs"
+context = "host"
+lines = 283
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/rubric/judge.rs"
+context = "host"
+lines = 723
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/rubric/mod.rs"
+context = "host"
+lines = 44
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/rubric/paired.rs"
+context = "host"
+lines = 621
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/rubric/report.rs"
+context = "host"
+lines = 207
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/rubric/score.rs"
+context = "host"
+lines = 444
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/rubric/test_support.rs"
+context = "host"
+lines = 58
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/scaffold.rs"
+context = "host"
+lines = 658
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/scaffolding_param.rs"
+context = "host"
+lines = 282
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/situated/criteria.rs"
+context = "host"
+lines = 431
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/situated/mod.rs"
+context = "host"
+lines = 333
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/situated/report.rs"
+context = "host"
+lines = 447
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/situated/runner.rs"
+context = "host"
+lines = 192
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/situated/transcripts.rs"
+context = "host"
+lines = 272
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/smoke_subset.rs"
+context = "host"
+lines = 368
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/uap.rs"
+context = "host"
+lines = 781
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/vault_report.rs"
+context = "host"
+lines = 1917
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/verifier.rs"
+context = "host"
+lines = 700
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/chat_cmd/ask.rs"
+context = "host"
+lines = 512
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/chat_cmd/bootstrap.rs"
+context = "host"
+lines = 629
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/chat_cmd/config.rs"
+context = "host"
+lines = 660
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/chat_cmd/inspect.rs"
+context = "host"
+lines = 350
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/chat_cmd/list.rs"
+context = "host"
+lines = 90
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/chat_cmd/mod.rs"
+context = "host"
+lines = 118
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/chat_cmd/render.rs"
+context = "host"
+lines = 418
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/chat_cmd/session.rs"
+context = "host"
+lines = 295
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/chat_cmd/show.rs"
+context = "host"
+lines = 125
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/claim_cmd.rs"
+context = "host"
+lines = 900
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/corpus_catalog_cmd.rs"
+context = "host"
+lines = 446
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/corpus_cmd/diagnostics.rs"
+context = "host"
+lines = 1140
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/corpus_cmd/fmt.rs"
+context = "host"
+lines = 53
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/corpus_cmd/ingest.rs"
+context = "host"
+lines = 139
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/corpus_cmd/inventory.rs"
+context = "host"
+lines = 704
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/corpus_cmd/mod.rs"
+context = "host"
+lines = 132
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/corpus_cmd/optimize.rs"
+context = "host"
+lines = 425
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/corpus_cmd/partitions.rs"
+context = "host"
+lines = 1057
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/corpus_cmd/recipe_source.rs"
+context = "host"
+lines = 23
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/corpus_cmd/search.rs"
+context = "host"
+lines = 125
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/corpus_cmd/status.rs"
+context = "host"
+lines = 110
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/corpus_extract_entities_cmd.rs"
+context = "host"
+lines = 485
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/corpus_resolve.rs"
+context = "host"
+lines = 181
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/corpus_scrub_cmd.rs"
+context = "host"
+lines = 460
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/corpus_snapshot_cmd.rs"
+context = "host"
+lines = 1471
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/corpus_watch_cmd.rs"
+context = "host"
+lines = 974
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/atlas_configuration.rs"
+context = "host"
+lines = 56
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/atlas_cross_corpus.rs"
+context = "host"
+lines = 372
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/atlas_drift_report.rs"
+context = "host"
+lines = 1765
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/atlas_eval.rs"
+context = "host"
+lines = 562
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/atlas_gaps.rs"
+context = "host"
+lines = 58
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/atlas_patch_code.rs"
+context = "host"
+lines = 529
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/atlas_phase_cmd.rs"
+context = "host"
+lines = 87
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/atlas_query.rs"
+context = "host"
+lines = 558
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/atlas_reconcile.rs"
+context = "host"
+lines = 263
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/atlas_resolve.rs"
+context = "host"
+lines = 78
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/atlas_tensions.rs"
+context = "host"
+lines = 58
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/atlas_tensions_classify.rs"
+context = "host"
+lines = 76
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/backfill_sections.rs"
+context = "host"
+lines = 683
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/build.rs"
+context = "host"
+lines = 284
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/capability_doc.rs"
+context = "host"
+lines = 560
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/capability_reconcile.rs"
+context = "host"
+lines = 790
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/cascade.rs"
+context = "host"
+lines = 239
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/classify.rs"
+context = "host"
+lines = 388
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/code_intel.rs"
+context = "host"
+lines = 146
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/delta_cmd.rs"
+context = "host"
+lines = 1247
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/diagnose.rs"
+context = "host"
+lines = 656
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/diff.rs"
+context = "host"
+lines = 266
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/egress_reds.rs"
+context = "host"
+lines = 142
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/errors.rs"
+context = "host"
+lines = 714
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/eval/adjudicate.rs"
+context = "host"
+lines = 389
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/eval/args.rs"
+context = "host"
+lines = 96
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/eval/axis_driver.rs"
+context = "host"
+lines = 575
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/eval/golden.rs"
+context = "host"
+lines = 430
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/eval/matching.rs"
+context = "host"
+lines = 256
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/eval/mod.rs"
+context = "host"
+lines = 806
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/eval/scorers.rs"
+context = "host"
+lines = 1155
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/eval/snapshot.rs"
+context = "host"
+lines = 233
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/eval_median.rs"
+context = "host"
+lines = 652
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/exemplars.rs"
+context = "host"
+lines = 106
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/extract.rs"
+context = "host"
+lines = 108
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/extract_typed.rs"
+context = "host"
+lines = 636
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/field_atoms.rs"
+context = "host"
+lines = 183
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/ingest.rs"
+context = "host"
+lines = 383
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/init.rs"
+context = "host"
+lines = 1310
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/investigation.rs"
+context = "host"
+lines = 600
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/mod.rs"
+context = "host"
+lines = 305
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/phase_cmd.rs"
+context = "host"
+lines = 211
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/promote.rs"
+context = "host"
+lines = 527
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/query.rs"
+context = "host"
+lines = 255
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/raptor.rs"
+context = "host"
+lines = 1085
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/raptor_index.rs"
+context = "host"
+lines = 76
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/reset.rs"
+context = "host"
+lines = 579
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/schema_review.rs"
+context = "host"
+lines = 104
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/seed_cmd.rs"
+context = "host"
+lines = 68
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/sep_ingest.rs"
+context = "host"
+lines = 431
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/sheets_ingest.rs"
+context = "host"
+lines = 237
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/show.rs"
+context = "host"
+lines = 420
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/spec_intel.rs"
+context = "host"
+lines = 502
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/spec_reconcile.rs"
+context = "host"
+lines = 1171
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/status.rs"
+context = "host"
+lines = 61
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/summary_atoms.rs"
+context = "host"
+lines = 83
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/templates/mod.rs"
+context = "host"
+lines = 221
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/triage.rs"
+context = "host"
+lines = 367
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/validate.rs"
+context = "host"
+lines = 241
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/workflow_primitives.rs"
+context = "host"
+lines = 792
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/eval_cmd/atlas_ann.rs"
+context = "host"
+lines = 27
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/eval_cmd/attribution.rs"
+context = "host"
+lines = 159
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/eval_cmd/bank.rs"
+context = "host"
+lines = 581
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/eval_cmd/lost_corpora.rs"
+context = "host"
+lines = 119
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/eval_cmd/mod.rs"
+context = "host"
+lines = 1109
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/eval_cmd/report.rs"
+context = "host"
+lines = 670
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/eval_cmd/routing_metrics.rs"
+context = "host"
+lines = 502
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/eval_cmd/runner.rs"
+context = "host"
+lines = 2074
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/eval_cmd/runner_threads.rs"
+context = "host"
+lines = 809
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/eval_cmd/score.rs"
+context = "host"
+lines = 1152
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/govern_cmd/accept.rs"
+context = "host"
+lines = 90
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/govern_cmd/ask.rs"
+context = "host"
+lines = 306
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/govern_cmd/mod.rs"
+context = "host"
+lines = 111
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/govern_cmd/resolve.rs"
+context = "host"
+lines = 195
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/govern_cmd/seed.rs"
+context = "host"
+lines = 79
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/govern_cmd/tensions.rs"
+context = "host"
+lines = 135
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/guest_link.rs"
+context = "host"
+lines = 229
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/gym_judge/mod.rs"
+context = "host"
+lines = 496
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/inner_chaos/brain.rs"
+context = "host"
+lines = 182
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/inner_chaos/calibrate.rs"
+context = "host"
+lines = 447
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/inner_chaos/journal.rs"
+context = "host"
+lines = 153
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/inner_chaos/judge.rs"
+context = "host"
+lines = 331
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/inner_chaos/mod.rs"
+context = "host"
+lines = 887
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/inner_chaos/personas.rs"
+context = "host"
+lines = 161
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/inner_chaos/recall.rs"
+context = "host"
+lines = 2385
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/inner_chaos/recall_stream.rs"
+context = "host"
+lines = 328
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/inner_chaos/rejudge.rs"
+context = "host"
+lines = 205
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/inner_chaos/replay.rs"
+context = "host"
+lines = 287
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/inner_chaos/report.rs"
+context = "host"
+lines = 331
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/inner_chaos/runner.rs"
+context = "host"
+lines = 560
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/inner_chaos/synth.rs"
+context = "host"
+lines = 363
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/inner_chaos/transcript.rs"
+context = "host"
+lines = 79
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/job_cmd.rs"
+context = "host"
+lines = 831
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/knowledge_gym_cmd/ledger.rs"
+context = "host"
+lines = 184
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/knowledge_gym_cmd/mod.rs"
+context = "host"
+lines = 474
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/knowledge_gym_cmd/production.rs"
+context = "host"
+lines = 465
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/knowledge_gym_cmd/runner.rs"
+context = "host"
+lines = 1655
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/lib.rs"
+context = "host"
+lines = 331
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/main.rs"
+context = "host"
+lines = 15
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/mcp_cmd.rs"
+context = "host"
+lines = 346
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/mcp_demo_server.rs"
+context = "host"
+lines = 342
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/mesh_app.rs"
+context = "host"
+lines = 269
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/mesh_bench.rs"
+context = "host"
+lines = 2289
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/mesh_bench/tests.rs"
+context = "host"
+lines = 1611
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/mesh_cmd.rs"
+context = "host"
+lines = 5345
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/mesh_guest.rs"
+context = "host"
+lines = 1048
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/mesh_media.rs"
+context = "host"
+lines = 595
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/mesh_member_cmd.rs"
+context = "host"
+lines = 153
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/mesh_offers.rs"
+context = "host"
+lines = 697
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/mesh_skew.rs"
+context = "host"
+lines = 336
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/mesh_soak.rs"
+context = "host"
+lines = 866
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/mesh_travel.rs"
+context = "host"
+lines = 400
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/meshapp_cmd.rs"
+context = "host"
+lines = 628
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/meshapp_registry.rs"
+context = "host"
+lines = 468
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/meta_atlas_cmd.rs"
+context = "host"
+lines = 630
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/mobile_cmd.rs"
+context = "host"
+lines = 360
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/newsworthy_cmd.rs"
+context = "host"
+lines = 165
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/pipeline_cmd.rs"
+context = "host"
+lines = 1745
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/portfolio_cmd/ask.rs"
+context = "host"
+lines = 181
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/portfolio_cmd/mod.rs"
+context = "host"
+lines = 254
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/proxy_cmd/ask.rs"
+context = "host"
+lines = 179
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/proxy_cmd/mod.rs"
+context = "host"
+lines = 48
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/publish_cmd.rs"
+context = "host"
+lines = 589
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/quality_lane_cmd/bench_lane.rs"
+context = "host"
+lines = 1225
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/quality_lane_cmd/chat_ask.rs"
+context = "host"
+lines = 1796
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/quality_lane_cmd/mod.rs"
+context = "host"
+lines = 196
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/quality_lane_cmd/throughput.rs"
+context = "host"
+lines = 1059
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/reading_diag_cmd.rs"
+context = "host"
+lines = 1327
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/recipe_agent_cmd.rs"
+context = "host"
+lines = 307
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/recipe_agent_live_trial.rs"
+context = "host"
+lines = 1845
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/recipe_cmd.rs"
+context = "host"
+lines = 680
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/recipe_cmd/authoring.rs"
+context = "host"
+lines = 195
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/recipe_cmd/publish.rs"
+context = "host"
+lines = 222
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/remote_gguf.rs"
+context = "host"
+lines = 444
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/ring_cmd/dev.rs"
+context = "host"
+lines = 294
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/ring_cmd/mod.rs"
+context = "host"
+lines = 955
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/ring_cmd/scaffold.rs"
+context = "host"
+lines = 206
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/router_cache_cmd.rs"
+context = "host"
+lines = 330
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/router_fit_cmd.rs"
+context = "host"
+lines = 1356
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/run_cmd.rs"
+context = "host"
+lines = 661
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/search_gym_cmd/judge_calibration.rs"
+context = "host"
+lines = 576
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/search_gym_cmd/mod.rs"
+context = "host"
+lines = 598
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/search_gym_cmd/predicate.rs"
+context = "host"
+lines = 210
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/search_gym_cmd/runner.rs"
+context = "host"
+lines = 868
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/search_gym_cmd/score.rs"
+context = "host"
+lines = 1264
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/solve_cmd.rs"
+context = "host"
+lines = 478
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/turn_sink.rs"
+context = "host"
+lines = 84
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/voice_eval/checks.rs"
+context = "host"
+lines = 641
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/voice_eval/judge.rs"
+context = "host"
+lines = 14
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/voice_eval/mod.rs"
+context = "host"
+lines = 551
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/voice_eval/report.rs"
+context = "host"
+lines = 707
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/voice_eval/runner.rs"
+context = "host"
+lines = 408
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/voice_eval/scenarios.rs"
+context = "host"
+lines = 428
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/worker_pod_provider.rs"
+context = "host"
+lines = 391
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-llm/src/workflow_cmd.rs"
+context = "host"
+lines = 1510
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-shared/src/args.rs"
+context = "unknown"
+lines = 379
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-shared/src/cli_contract.rs"
+context = "unknown"
+lines = 1617
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-shared/src/cli_contract_report.rs"
+context = "unknown"
+lines = 732
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-shared/src/code_index.rs"
+context = "unknown"
+lines = 886
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-shared/src/code_index_incremental.rs"
+context = "unknown"
+lines = 605
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-shared/src/deprecation.rs"
+context = "unknown"
+lines = 125
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-shared/src/dirs.rs"
+context = "unknown"
+lines = 89
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-shared/src/flag_surface.rs"
+context = "unknown"
+lines = 86
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-shared/src/help.rs"
+context = "unknown"
+lines = 182
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-shared/src/host_load.rs"
+context = "unknown"
+lines = 84
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-shared/src/lane_verdict.rs"
+context = "unknown"
+lines = 309
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-shared/src/lib.rs"
+context = "unknown"
+lines = 68
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-shared/src/mcp_client.rs"
+context = "unknown"
+lines = 124
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-shared/src/models.rs"
+context = "unknown"
+lines = 37
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-shared/src/observation.rs"
+context = "unknown"
+lines = 684
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-shared/src/project_toml.rs"
+context = "unknown"
+lines = 402
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-shared/src/prompts.rs"
+context = "unknown"
+lines = 205
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-shared/src/rail.rs"
+context = "unknown"
+lines = 222
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-shared/src/repo.rs"
+context = "unknown"
+lines = 130
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-shared/src/scip.rs"
+context = "unknown"
+lines = 109
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-shared/src/tracing_init.rs"
+context = "unknown"
+lines = 48
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-shared/src/urls.rs"
+context = "unknown"
+lines = 122
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/amend_cmd.rs"
+context = "host"
+lines = 9
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/archaeology_eval_cmd.rs"
+context = "host"
+lines = 589
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/audit_cmd.rs"
+context = "host"
+lines = 122
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/cache_audit_cmd.rs"
+context = "host"
+lines = 2727
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/charter_cmd.rs"
+context = "host"
+lines = 10
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/code_index_cmd.rs"
+context = "host"
+lines = 41
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/code_refresh.rs"
+context = "host"
+lines = 561
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/conformance_cmd.rs"
+context = "host"
+lines = 1210
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/contract_cmd.rs"
+context = "host"
+lines = 102
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/daemon_bin.rs"
+context = "host"
+lines = 71
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/deep_research_cmd.rs"
+context = "host"
+lines = 751
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/design_cmd.rs"
+context = "host"
+lines = 8
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/dev_bin.rs"
+context = "host"
+lines = 83
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/drift_cmd.rs"
+context = "host"
+lines = 69
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/git_archaeology_cmd.rs"
+context = "host"
+lines = 668
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/init.rs"
+context = "host"
+lines = 157
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/journal_cmd/grounding.rs"
+context = "host"
+lines = 172
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/journal_cmd/mod.rs"
+context = "host"
+lines = 592
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/journal_cmd/next_edit.rs"
+context = "host"
+lines = 276
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/llm_bin.rs"
+context = "host"
+lines = 71
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/main.rs"
+context = "host"
+lines = 1458
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/memory_cmd.rs"
+context = "host"
+lines = 256
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/milestone_cmd.rs"
+context = "host"
+lines = 93
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/notes_cmd.rs"
+context = "host"
+lines = 2205
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/notes_retrieval_cmd.rs"
+context = "host"
+lines = 1007
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/path_cmd.rs"
+context = "host"
+lines = 108
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/plan_cmd.rs"
+context = "host"
+lines = 171
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/posture_cmd.rs"
+context = "host"
+lines = 669
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/project_init/mod.rs"
+context = "host"
+lines = 1089
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/project_init/scaffold.rs"
+context = "host"
+lines = 753
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/project_init/setup.rs"
+context = "host"
+lines = 268
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/project_registry.rs"
+context = "host"
+lines = 684
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/quality_check_cmd/distribute.rs"
+context = "host"
+lines = 1502
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/quality_check_cmd/exec.rs"
+context = "host"
+lines = 513
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/quality_check_cmd/fingerprint.rs"
+context = "host"
+lines = 353
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/quality_check_cmd/mod.rs"
+context = "host"
+lines = 933
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/quality_check_cmd/report.rs"
+context = "host"
+lines = 356
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/quality_check_cmd/select.rs"
+context = "host"
+lines = 227
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/quality_map_cmd.rs"
+context = "host"
+lines = 224
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/reflect_cmd.rs"
+context = "host"
+lines = 811
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/refresh_cmd.rs"
+context = "host"
+lines = 22
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/report_audit/checks.rs"
+context = "host"
+lines = 785
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/report_audit/evidence.rs"
+context = "host"
+lines = 473
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/report_audit/mod.rs"
+context = "host"
+lines = 357
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/rough_edges_cmd.rs"
+context = "host"
+lines = 384
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/seat_cmd.rs"
+context = "host"
+lines = 419
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/serve_cmd.rs"
+context = "host"
+lines = 446
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/session_cmd.rs"
+context = "host"
+lines = 3569
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/session_lineage.rs"
+context = "host"
+lines = 348
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/sibling.rs"
+context = "host"
+lines = 207
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/status_cmd.rs"
+context = "host"
+lines = 15
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/stop_cmd.rs"
+context = "host"
+lines = 148
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/update_cmd.rs"
+context = "host"
+lines = 246
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/util/deprecation.rs"
+context = "host"
+lines = 7
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/util/dirs.rs"
+context = "host"
+lines = 10
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/util/help.rs"
+context = "host"
+lines = 13
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/util/mod.rs"
+context = "host"
+lines = 21
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/util/prompts.rs"
+context = "host"
+lines = 4
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/util/tracing_init.rs"
+context = "host"
+lines = 6
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli/src/util/urls.rs"
+context = "host"
+lines = 54
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-compute/src/child.rs"
+context = "serving"
+lines = 222
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-compute/src/child_main.rs"
+context = "serving"
+lines = 534
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-compute/src/client.rs"
+context = "serving"
+lines = 237
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-compute/src/distribution.rs"
+context = "serving"
+lines = 297
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-compute/src/lib.rs"
+context = "serving"
+lines = 36
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-compute/src/manager.rs"
+context = "serving"
+lines = 1667
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-compute/src/server.rs"
+context = "serving"
+lines = 154
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-compute/src/supervisor.rs"
+context = "serving"
+lines = 2028
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-compute/src/wire.rs"
+context = "serving"
+lines = 300
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/daemon_wire.rs"
+context = "kernel"
+lines = 431
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/daemon_wire/assets.rs"
+context = "kernel"
+lines = 184
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/daemon_wire/build_stamp.rs"
+context = "kernel"
+lines = 306
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/daemon_wire/chat_activity.rs"
+context = "kernel"
+lines = 56
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/daemon_wire/conv_tiered.rs"
+context = "kernel"
+lines = 98
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/daemon_wire/documents.rs"
+context = "kernel"
+lines = 91
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/daemon_wire/enrich.rs"
+context = "kernel"
+lines = 39
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/daemon_wire/ingest.rs"
+context = "kernel"
+lines = 195
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/daemon_wire/local_corpus.rs"
+context = "kernel"
+lines = 81
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/daemon_wire/local_corpus/clusterer.rs"
+context = "kernel"
+lines = 81
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/daemon_wire/local_corpus/config.rs"
+context = "kernel"
+lines = 734
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/daemon_wire/local_corpus/git.rs"
+context = "kernel"
+lines = 16
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/daemon_wire/local_corpus/manager.rs"
+context = "kernel"
+lines = 42
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/daemon_wire/local_corpus/pre_scanner.rs"
+context = "kernel"
+lines = 85
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/daemon_wire/local_corpus/preview.rs"
+context = "kernel"
+lines = 90
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/daemon_wire/local_corpus/progress.rs"
+context = "kernel"
+lines = 129
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/daemon_wire/local_corpus/writeback.rs"
+context = "kernel"
+lines = 83
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/daemon_wire/mesh.rs"
+context = "kernel"
+lines = 484
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/daemon_wire/meshapp.rs"
+context = "kernel"
+lines = 236
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/daemon_wire/provenance.rs"
+context = "kernel"
+lines = 151
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/daemon_wire/recipe_projects.rs"
+context = "kernel"
+lines = 247
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/daemon_wire/recipes.rs"
+context = "kernel"
+lines = 221
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/daemon_wire/research.rs"
+context = "kernel"
+lines = 294
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/daemon_wire/sec_coverage.rs"
+context = "kernel"
+lines = 88
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/daemon_wire/setup_plan.rs"
+context = "kernel"
+lines = 345
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/daemon_wire/workflows.rs"
+context = "kernel"
+lines = 215
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/data_roots.rs"
+context = "kernel"
+lines = 389
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/egress.rs"
+context = "kernel"
+lines = 399
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/embed_quirks.rs"
+context = "kernel"
+lines = 264
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/engine_config.rs"
+context = "kernel"
+lines = 164
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/error.rs"
+context = "kernel"
+lines = 237
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/frame.rs"
+context = "kernel"
+lines = 618
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/gguf_validator.rs"
+context = "kernel"
+lines = 277
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/health.rs"
+context = "kernel"
+lines = 691
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/intent_policy.rs"
+context = "kernel"
+lines = 693
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/launch.rs"
+context = "kernel"
+lines = 825
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/lessons.rs"
+context = "kernel"
+lines = 139
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/lib.rs"
+context = "kernel"
+lines = 121
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/mcp_config.rs"
+context = "kernel"
+lines = 204
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/memory_config.rs"
+context = "kernel"
+lines = 91
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/mobile_host.rs"
+context = "kernel"
+lines = 486
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/model_family.rs"
+context = "kernel"
+lines = 590
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/observer.rs"
+context = "kernel"
+lines = 130
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/peer.rs"
+context = "kernel"
+lines = 272
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/peer/tests.rs"
+context = "kernel"
+lines = 205
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/rebrand.rs"
+context = "kernel"
+lines = 781
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/recipe/json_to_toml.rs"
+context = "kernel"
+lines = 342
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/recipe/mod.rs"
+context = "kernel"
+lines = 27
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/recipe/notes.rs"
+context = "kernel"
+lines = 192
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/recipe/paths.rs"
+context = "kernel"
+lines = 47
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/recipe/registry.rs"
+context = "kernel"
+lines = 125
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/recipe/schema.rs"
+context = "kernel"
+lines = 27
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/recipe/testing.rs"
+context = "kernel"
+lines = 129
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/recipe/url_template.rs"
+context = "kernel"
+lines = 102
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/registry.rs"
+context = "kernel"
+lines = 437
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/run_lock.rs"
+context = "kernel"
+lines = 275
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/setup_config.rs"
+context = "kernel"
+lines = 3445
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/setup_config_iroh.rs"
+context = "kernel"
+lines = 253
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/skills.rs"
+context = "kernel"
+lines = 1525
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/slot_policy.rs"
+context = "kernel"
+lines = 444
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/tool_bundle.rs"
+context = "kernel"
+lines = 399
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/tool_manifest/mod.rs"
+context = "kernel"
+lines = 742
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/tool_result_cache.rs"
+context = "kernel"
+lines = 317
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/traits.rs"
+context = "kernel"
+lines = 2062
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/types/answer_doc.rs"
+context = "kernel"
+lines = 422
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/types/approval.rs"
+context = "kernel"
+lines = 108
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/types/conversation.rs"
+context = "kernel"
+lines = 498
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/types/custody.rs"
+context = "kernel"
+lines = 104
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/types/document.rs"
+context = "kernel"
+lines = 680
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/types/edit_slot.rs"
+context = "kernel"
+lines = 201
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/types/epistemic.rs"
+context = "kernel"
+lines = 374
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/types/grounding_journal.rs"
+context = "kernel"
+lines = 782
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/types/grounding_verdict.rs"
+context = "kernel"
+lines = 342
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/types/journal.rs"
+context = "kernel"
+lines = 436
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/types/mod.rs"
+context = "kernel"
+lines = 1796
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/types/narration.rs"
+context = "kernel"
+lines = 784
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/types/next_edit_journal.rs"
+context = "kernel"
+lines = 637
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/types/projection.rs"
+context = "kernel"
+lines = 629
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/types/routing.rs"
+context = "kernel"
+lines = 1199
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/types/search_privacy.rs"
+context = "kernel"
+lines = 47
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/types/stage_attribution.rs"
+context = "kernel"
+lines = 591
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/types/turn.rs"
+context = "kernel"
+lines = 610
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/types/ui.rs"
+context = "kernel"
+lines = 370
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/workspace.rs"
+context = "kernel"
+lines = 125
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/approval_desk.rs"
+context = "unknown"
+lines = 432
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/archive_classifier.rs"
+context = "unknown"
+lines = 484
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/claim_class_classifier.rs"
+context = "unknown"
+lines = 280
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/context.rs"
+context = "unknown"
+lines = 357
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/conv_briefing.rs"
+context = "unknown"
+lines = 924
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/conv_entity_graph.rs"
+context = "unknown"
+lines = 1095
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/conv_frame.rs"
+context = "unknown"
+lines = 386
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/conv_tiered.rs"
+context = "unknown"
+lines = 399
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/current_info_classifier.rs"
+context = "unknown"
+lines = 332
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/dossier.rs"
+context = "unknown"
+lines = 531
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/effort_classifier.rs"
+context = "unknown"
+lines = 346
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/embed_fn.rs"
+context = "unknown"
+lines = 75
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/executor.rs"
+context = "unknown"
+lines = 1677
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/guest_link.rs"
+context = "unknown"
+lines = 219
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/health_monitor.rs"
+context = "unknown"
+lines = 335
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/insight.rs"
+context = "unknown"
+lines = 160
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/lessons.rs"
+context = "unknown"
+lines = 1193
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/lib.rs"
+context = "unknown"
+lines = 97
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/memory.rs"
+context = "unknown"
+lines = 2492
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/memory_compaction.rs"
+context = "unknown"
+lines = 307
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/mesh_measurements.rs"
+context = "unknown"
+lines = 3054
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/models_manifest.rs"
+context = "unknown"
+lines = 1056
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/pipeline/curator.rs"
+context = "unknown"
+lines = 572
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/pipeline/judge.rs"
+context = "unknown"
+lines = 360
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/pipeline/mod.rs"
+context = "unknown"
+lines = 61
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/pipeline/presenter.rs"
+context = "unknown"
+lines = 1053
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/pipeline/prompts.rs"
+context = "unknown"
+lines = 110
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/pipeline/runner.rs"
+context = "unknown"
+lines = 653
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/pipeline/stages.rs"
+context = "unknown"
+lines = 387
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/plan_grammar.rs"
+context = "unknown"
+lines = 243
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/planner/mod.rs"
+context = "unknown"
+lines = 1156
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/planner/schema.rs"
+context = "unknown"
+lines = 589
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/query_session.rs"
+context = "unknown"
+lines = 487
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/quote_verification.rs"
+context = "unknown"
+lines = 692
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/role.rs"
+context = "unknown"
+lines = 321
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/router.rs"
+context = "unknown"
+lines = 3412
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/router_axis.rs"
+context = "unknown"
+lines = 270
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/router_bootstrap.rs"
+context = "unknown"
+lines = 448
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/router_calibration.rs"
+context = "unknown"
+lines = 1316
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/router_drift.rs"
+context = "unknown"
+lines = 601
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/router_embed.rs"
+context = "unknown"
+lines = 1247
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/router_embed_cache.rs"
+context = "unknown"
+lines = 747
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/router_instruction.rs"
+context = "unknown"
+lines = 297
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/run_identity.rs"
+context = "unknown"
+lines = 143
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime.rs"
+context = "unknown"
+lines = 1104
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/acquisition.rs"
+context = "unknown"
+lines = 739
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/admission.rs"
+context = "unknown"
+lines = 225
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/attached_doc_render.rs"
+context = "unknown"
+lines = 134
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/authority_guard.rs"
+context = "unknown"
+lines = 618
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/capabilities.rs"
+context = "unknown"
+lines = 362
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/code_trace.rs"
+context = "unknown"
+lines = 619
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/collaboration.rs"
+context = "unknown"
+lines = 885
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/epistemic.rs"
+context = "unknown"
+lines = 1444
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/evidence.rs"
+context = "unknown"
+lines = 1653
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/evidence_loop/anchoring.rs"
+context = "unknown"
+lines = 481
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/evidence_loop/mod.rs"
+context = "unknown"
+lines = 847
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/formatters.rs"
+context = "unknown"
+lines = 1119
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/gk_rescue.rs"
+context = "unknown"
+lines = 214
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/grounding/audit_pass.rs"
+context = "unknown"
+lines = 1179
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/grounding/call_census.rs"
+context = "unknown"
+lines = 664
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/grounding/citation.rs"
+context = "unknown"
+lines = 882
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/grounding/citation/quote_match.rs"
+context = "unknown"
+lines = 250
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/grounding/citation/tests.rs"
+context = "unknown"
+lines = 1037
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/grounding/citation_attribution.rs"
+context = "unknown"
+lines = 704
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/grounding/citation_attribution/tests.rs"
+context = "unknown"
+lines = 554
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/grounding/citation_attribution/text.rs"
+context = "unknown"
+lines = 162
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/grounding/config.rs"
+context = "unknown"
+lines = 815
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/grounding/gate.rs"
+context = "unknown"
+lines = 688
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/grounding/inner.rs"
+context = "unknown"
+lines = 1123
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/grounding/judge.rs"
+context = "unknown"
+lines = 805
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/grounding/judge/batched.rs"
+context = "unknown"
+lines = 621
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/grounding/judge/prompts.rs"
+context = "unknown"
+lines = 94
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/grounding/judge/scan.rs"
+context = "unknown"
+lines = 529
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/grounding/judge/tests/claim_scan.rs"
+context = "unknown"
+lines = 521
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/grounding/judge/tests/mod.rs"
+context = "unknown"
+lines = 5
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/grounding/judge/tests/prefix_family.rs"
+context = "unknown"
+lines = 670
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/grounding/longform.rs"
+context = "unknown"
+lines = 604
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/grounding/mod.rs"
+context = "unknown"
+lines = 1186
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/grounding/native_grounding/admission.rs"
+context = "unknown"
+lines = 841
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/grounding/native_grounding/mod.rs"
+context = "unknown"
+lines = 25
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/grounding/native_grounding/segments.rs"
+context = "unknown"
+lines = 462
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/grounding/native_grounding/span_resolver.rs"
+context = "unknown"
+lines = 451
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/grounding/pipeline.rs"
+context = "unknown"
+lines = 265
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/grounding/repair.rs"
+context = "unknown"
+lines = 226
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/grounding/replay.rs"
+context = "unknown"
+lines = 133
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/grounding/sealed.rs"
+context = "unknown"
+lines = 443
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/grounding/search.rs"
+context = "unknown"
+lines = 725
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/grounding/surgical.rs"
+context = "unknown"
+lines = 1165
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/grounding/tests.rs"
+context = "unknown"
+lines = 2944
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/grounding/value_presence.rs"
+context = "unknown"
+lines = 761
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/handlers/ask_move.rs"
+context = "unknown"
+lines = 242
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/handlers/attached_doc.rs"
+context = "unknown"
+lines = 1477
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/handlers/code_query.rs"
+context = "unknown"
+lines = 136
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/handlers/commissive.rs"
+context = "unknown"
+lines = 149
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/handlers/complex_task.rs"
+context = "unknown"
+lines = 576
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/handlers/conation.rs"
+context = "unknown"
+lines = 217
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/handlers/document_op.rs"
+context = "unknown"
+lines = 346
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/handlers/expressive.rs"
+context = "unknown"
+lines = 985
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/handlers/generative.rs"
+context = "unknown"
+lines = 253
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/handlers/knowledge_query.rs"
+context = "unknown"
+lines = 2127
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/handlers/metalingual.rs"
+context = "unknown"
+lines = 1171
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/handlers/mod.rs"
+context = "unknown"
+lines = 27
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/handlers/recipe_author.rs"
+context = "unknown"
+lines = 854
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/handlers/simple.rs"
+context = "unknown"
+lines = 380
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/handlers/synthesis_common.rs"
+context = "unknown"
+lines = 227
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/intent_helpers.rs"
+context = "unknown"
+lines = 233
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/lane.rs"
+context = "unknown"
+lines = 204
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/memory_grounding.rs"
+context = "unknown"
+lines = 345
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/merge_select.rs"
+context = "unknown"
+lines = 319
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/numeric_audit.rs"
+context = "unknown"
+lines = 744
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/prompt_budget.rs"
+context = "unknown"
+lines = 468
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/prompts.rs"
+context = "unknown"
+lines = 1057
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/question_analysis.rs"
+context = "unknown"
+lines = 855
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/retrieval/atlas_grounding.rs"
+context = "unknown"
+lines = 686
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/retrieval/atom_enum.rs"
+context = "unknown"
+lines = 1790
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/retrieval/boosts.rs"
+context = "unknown"
+lines = 287
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/retrieval/conv_tiered.rs"
+context = "unknown"
+lines = 306
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/retrieval/corpus_search.rs"
+context = "unknown"
+lines = 1232
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/retrieval/history.rs"
+context = "unknown"
+lines = 1369
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/retrieval/mod.rs"
+context = "unknown"
+lines = 613
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/retrieval/query_expansion.rs"
+context = "unknown"
+lines = 1585
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/retrieval/source_expansion.rs"
+context = "unknown"
+lines = 484
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/retrieval/turn_prepass.rs"
+context = "unknown"
+lines = 243
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/retrieval_helpers.rs"
+context = "unknown"
+lines = 813
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/retrieval_ledger.rs"
+context = "unknown"
+lines = 343
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/retrieval_pipeline.rs"
+context = "unknown"
+lines = 3180
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/retrieval_pipeline/atlas_step_reachability_tests.rs"
+context = "unknown"
+lines = 379
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/serve.rs"
+context = "unknown"
+lines = 645
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/stage_ledger.rs"
+context = "unknown"
+lines = 379
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/streaming.rs"
+context = "unknown"
+lines = 4689
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/system_message.rs"
+context = "unknown"
+lines = 888
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/text_utils.rs"
+context = "unknown"
+lines = 490
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/turn.rs"
+context = "unknown"
+lines = 1039
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/turn_lease.rs"
+context = "unknown"
+lines = 143
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/types.rs"
+context = "unknown"
+lines = 370
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/unavailability.rs"
+context = "unknown"
+lines = 307
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/voice_prompts.rs"
+context = "unknown"
+lines = 492
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/runtime/wellbeing.rs"
+context = "unknown"
+lines = 707
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/scope_classifier.rs"
+context = "unknown"
+lines = 330
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/searched_sources.rs"
+context = "unknown"
+lines = 92
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/stubs.rs"
+context = "unknown"
+lines = 65
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/time.rs"
+context = "unknown"
+lines = 75
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/title.rs"
+context = "unknown"
+lines = 1263
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/tool_loop.rs"
+context = "unknown"
+lines = 689
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/approval.rs"
+context = "host"
+lines = 68
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/atlas_commands.rs"
+context = "host"
+lines = 415
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/attach_watch.rs"
+context = "host"
+lines = 134
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/bootstrap.rs"
+context = "host"
+lines = 395
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/collaborate_commands.rs"
+context = "host"
+lines = 204
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/command_bridge.rs"
+context = "host"
+lines = 500
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/asset_download.rs"
+context = "host"
+lines = 77
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/budget.rs"
+context = "host"
+lines = 397
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/chat.rs"
+context = "host"
+lines = 1479
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/config_setup.rs"
+context = "host"
+lines = 1108
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/contribution.rs"
+context = "host"
+lines = 435
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/conversation.rs"
+context = "host"
+lines = 1287
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/corpus.rs"
+context = "host"
+lines = 292
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/corpus_install.rs"
+context = "host"
+lines = 889
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/diagnostics.rs"
+context = "host"
+lines = 320
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/document_asset.rs"
+context = "host"
+lines = 511
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/hardware.rs"
+context = "host"
+lines = 353
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/lessons.rs"
+context = "host"
+lines = 205
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/mcp_servers.rs"
+context = "host"
+lines = 262
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/meshapp.rs"
+context = "host"
+lines = 722
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/mod.rs"
+context = "host"
+lines = 389
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/models.rs"
+context = "host"
+lines = 614
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/reading.rs"
+context = "host"
+lines = 125
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/recipe_testing.rs"
+context = "host"
+lines = 379
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/supervisor_ctl.rs"
+context = "host"
+lines = 30
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/crash_bundle.rs"
+context = "host"
+lines = 812
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/crash_report.rs"
+context = "host"
+lines = 403
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/daemon_binary.rs"
+context = "host"
+lines = 483
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/deep_research_commands/mod.rs"
+context = "host"
+lines = 417
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/deep_research_commands/tests.rs"
+context = "host"
+lines = 98
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/dev_flags.rs"
+context = "host"
+lines = 97
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/enrich_commands.rs"
+context = "host"
+lines = 233
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/error.rs"
+context = "host"
+lines = 154
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/friendly_names.rs"
+context = "host"
+lines = 92
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/governance_commands.rs"
+context = "host"
+lines = 243
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/health.rs"
+context = "host"
+lines = 724
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/import_commands.rs"
+context = "host"
+lines = 1151
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/insight_commands.rs"
+context = "host"
+lines = 251
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/invoke_coverage.rs"
+context = "host"
+lines = 175
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/launch_mode.rs"
+context = "host"
+lines = 44
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/local_corpus_commands.rs"
+context = "host"
+lines = 1316
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/main.rs"
+context = "host"
+lines = 904
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/mesh_commands.rs"
+context = "host"
+lines = 1016
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/meshapp.rs"
+context = "host"
+lines = 218
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/mobile_host_setup.rs"
+context = "host"
+lines = 339
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/recipe_author_commands.rs"
+context = "host"
+lines = 329
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/recipe_commands.rs"
+context = "host"
+lines = 138
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/routing_events.rs"
+context = "host"
+lines = 78
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/serving_host.rs"
+context = "host"
+lines = 230
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/setup_flow.rs"
+context = "host"
+lines = 610
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/setup_plan.rs"
+context = "host"
+lines = 280
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/state.rs"
+context = "host"
+lines = 669
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/state/builders/mod.rs"
+context = "host"
+lines = 31
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/state/builders/test_support.rs"
+context = "host"
+lines = 52
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/state/config.rs"
+context = "host"
+lines = 791
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/state/wire_turns.rs"
+context = "host"
+lines = 238
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/tray.rs"
+context = "host"
+lines = 262
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/turn_report.rs"
+context = "host"
+lines = 557
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/update_commands.rs"
+context = "host"
+lines = 134
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/watched_folder_commands.rs"
+context = "host"
+lines = 476
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-desktop/src-tauri/src/workflow_commands.rs"
+context = "host"
+lines = 363
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-enrichment-build/src/atlas_configuration.rs"
+context = "unknown"
+lines = 433
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-enrichment-build/src/atlas_gaps.rs"
+context = "unknown"
+lines = 352
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-enrichment-build/src/atlas_phase_cmd.rs"
+context = "unknown"
+lines = 706
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-enrichment-build/src/atlas_resolve.rs"
+context = "unknown"
+lines = 688
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-enrichment-build/src/atlas_tensions.rs"
+context = "unknown"
+lines = 375
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-enrichment-build/src/atlas_tensions_classify.rs"
+context = "unknown"
+lines = 539
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-enrichment-build/src/atlas_tensions_holistic.rs"
+context = "unknown"
+lines = 339
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-enrichment-build/src/build/extract_step.rs"
+context = "unknown"
+lines = 367
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-enrichment-build/src/build/mod.rs"
+context = "unknown"
+lines = 186
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-enrichment-build/src/build/plan.rs"
+context = "unknown"
+lines = 608
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-enrichment-build/src/build/steps.rs"
+context = "unknown"
+lines = 753
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-enrichment-build/src/corpus_io.rs"
+context = "unknown"
+lines = 578
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-enrichment-build/src/extract/args.rs"
+context = "unknown"
+lines = 481
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-enrichment-build/src/extract/mod.rs"
+context = "unknown"
+lines = 653
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-enrichment-build/src/extract/tokens.rs"
+context = "unknown"
+lines = 45
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-enrichment-build/src/inference_client/discovery.rs"
+context = "unknown"
+lines = 207
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-enrichment-build/src/inference_client/mod.rs"
+context = "unknown"
+lines = 627
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-enrichment-build/src/inference_client/wire.rs"
+context = "unknown"
+lines = 731
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-enrichment-build/src/integration_tests.rs"
+context = "unknown"
+lines = 233
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-enrichment-build/src/lib.rs"
+context = "unknown"
+lines = 81
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-enrichment-build/src/pipeline_map.rs"
+context = "unknown"
+lines = 235
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-enrichment-build/src/pipeline_resolve.rs"
+context = "unknown"
+lines = 37
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-enrichment-build/src/providers.rs"
+context = "unknown"
+lines = 530
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-enrichment-build/src/schema_review.rs"
+context = "unknown"
+lines = 635
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-enrichment-build/src/seed_cmd.rs"
+context = "unknown"
+lines = 257
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-enrichment-build/src/source_loader.rs"
+context = "unknown"
+lines = 495
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-enrichment-build/src/test_env.rs"
+context = "unknown"
+lines = 37
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-enrichment-catalog/src/catalog.rs"
+context = "unknown"
+lines = 257
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-enrichment-catalog/src/config.rs"
+context = "unknown"
+lines = 453
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-enrichment-catalog/src/corpus_state.rs"
+context = "unknown"
+lines = 92
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-enrichment-catalog/src/lib.rs"
+context = "unknown"
+lines = 33
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-enrichment-catalog/src/paths.rs"
+context = "unknown"
+lines = 172
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/audit_trail.rs"
+context = "back-of-house"
+lines = 305
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/bin/main.rs"
+context = "back-of-house"
+lines = 679
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/chaos_monkey/mod.rs"
+context = "back-of-house"
+lines = 38
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/chaos_monkey/question.rs"
+context = "back-of-house"
+lines = 709
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/chaos_monkey/score.rs"
+context = "back-of-house"
+lines = 1914
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/cognitive/item.rs"
+context = "back-of-house"
+lines = 352
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/cognitive/mod.rs"
+context = "back-of-house"
+lines = 146
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/cognitive/report.rs"
+context = "back-of-house"
+lines = 377
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/cognitive/runner.rs"
+context = "back-of-house"
+lines = 300
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/cognitive/scorer.rs"
+context = "back-of-house"
+lines = 694
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/diff.rs"
+context = "back-of-house"
+lines = 255
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/disposition_bench.rs"
+context = "back-of-house"
+lines = 254
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/disposition_score.rs"
+context = "back-of-house"
+lines = 283
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/disposition_taxonomy.rs"
+context = "back-of-house"
+lines = 182
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/entity_resolution_bench.rs"
+context = "back-of-house"
+lines = 318
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/entity_resolution_score.rs"
+context = "back-of-house"
+lines = 323
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/faithfulness.rs"
+context = "back-of-house"
+lines = 392
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/finalize.rs"
+context = "back-of-house"
+lines = 61
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/flywheel/case.rs"
+context = "back-of-house"
+lines = 234
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/flywheel/det_checks.rs"
+context = "back-of-house"
+lines = 204
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/flywheel/generators/adversarial.rs"
+context = "back-of-house"
+lines = 1364
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/flywheel/generators/corpus.rs"
+context = "back-of-house"
+lines = 300
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/flywheel/generators/mod.rs"
+context = "back-of-house"
+lines = 8
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/flywheel/mining.rs"
+context = "back-of-house"
+lines = 201
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/flywheel/mod.rs"
+context = "back-of-house"
+lines = 92
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/flywheel/probe.rs"
+context = "back-of-house"
+lines = 178
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/flywheel/redteam.rs"
+context = "back-of-house"
+lines = 707
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/flywheel/verify.rs"
+context = "back-of-house"
+lines = 414
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/governance_bench.rs"
+context = "back-of-house"
+lines = 458
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/judge.rs"
+context = "back-of-house"
+lines = 516
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/lib.rs"
+context = "back-of-house"
+lines = 39
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/manifest.rs"
+context = "back-of-house"
+lines = 425
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/mechanical.rs"
+context = "back-of-house"
+lines = 215
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/mechanism_fidelity/card.rs"
+context = "back-of-house"
+lines = 601
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/mechanism_fidelity/case.rs"
+context = "back-of-house"
+lines = 277
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/mechanism_fidelity/class.rs"
+context = "back-of-house"
+lines = 94
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/mechanism_fidelity/classes/aggregation.rs"
+context = "back-of-house"
+lines = 276
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/mechanism_fidelity/classes/attribution.rs"
+context = "back-of-house"
+lines = 302
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/mechanism_fidelity/classes/mod.rs"
+context = "back-of-house"
+lines = 8
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/mechanism_fidelity/classes/wealth_tax.rs"
+context = "back-of-house"
+lines = 150
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/mechanism_fidelity/mod.rs"
+context = "back-of-house"
+lines = 116
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/mechanism_fidelity/perturb.rs"
+context = "back-of-house"
+lines = 338
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/mechanism_fidelity/registry.rs"
+context = "back-of-house"
+lines = 53
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/mechanism_fidelity/score.rs"
+context = "back-of-house"
+lines = 242
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/mechanism_fidelity/stopping.rs"
+context = "back-of-house"
+lines = 295
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/mechanism_fidelity/structural.rs"
+context = "back-of-house"
+lines = 150
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/regression.rs"
+context = "back-of-house"
+lines = 179
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/scope.rs"
+context = "back-of-house"
+lines = 288
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/tool_grader.rs"
+context = "back-of-house"
+lines = 403
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-eval/src/workflow.rs"
+context = "back-of-house"
+lines = 337
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-gliner/src/bootstrap.rs"
+context = "unknown"
+lines = 78
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-gliner/src/bounded_input.rs"
+context = "unknown"
+lines = 368
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-gliner/src/chunk_extractor.rs"
+context = "unknown"
+lines = 336
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-gliner/src/gliner2.rs"
+context = "unknown"
+lines = 567
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-gliner/src/gliner_ner.rs"
+context = "unknown"
+lines = 888
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-gliner/src/labeled.rs"
+context = "unknown"
+lines = 262
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-gliner/src/lib.rs"
+context = "unknown"
+lines = 47
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-gliner/src/session_bound.rs"
+context = "unknown"
+lines = 163
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-grants/src/guest_grant.rs"
+context = "unknown"
+lines = 474
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-grants/src/ingest_grant.rs"
+context = "unknown"
+lines = 258
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-grants/src/lib.rs"
+context = "unknown"
+lines = 12
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-grants/src/shard_manager.rs"
+context = "unknown"
+lines = 1112
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-grants/src/work_queue.rs"
+context = "unknown"
+lines = 754
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/capacity.rs"
+context = "unknown"
+lines = 747
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/cpu_compat.rs"
+context = "unknown"
+lines = 302
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/embedded/capabilities.rs"
+context = "unknown"
+lines = 617
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/embedded/control_vector.rs"
+context = "unknown"
+lines = 123
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/embedded/embed_only.rs"
+context = "unknown"
+lines = 117
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/embedded/embed_slot.rs"
+context = "unknown"
+lines = 571
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/embedded/engine.rs"
+context = "unknown"
+lines = 4436
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/embedded/ffi_trace.rs"
+context = "unknown"
+lines = 436
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/embedded/gates.rs"
+context = "unknown"
+lines = 1271
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/embedded/grammar.rs"
+context = "unknown"
+lines = 1288
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/embedded/idle_slot.rs"
+context = "unknown"
+lines = 573
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/embedded/kv_budget.rs"
+context = "unknown"
+lines = 224
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/embedded/kv_ops.rs"
+context = "unknown"
+lines = 267
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/embedded/mod.rs"
+context = "unknown"
+lines = 39
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/embedded/model_slot.rs"
+context = "unknown"
+lines = 6167
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/embedded/prefix_state.rs"
+context = "unknown"
+lines = 1400
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/embedded/prompt_helpers.rs"
+context = "unknown"
+lines = 1074
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/embedded/rerank_slot.rs"
+context = "unknown"
+lines = 796
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/embedded/rpc_distribution.rs"
+context = "unknown"
+lines = 3511
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs"
+context = "unknown"
+lines = 1952
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/embedded/sampler.rs"
+context = "unknown"
+lines = 601
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/engine_conformance.rs"
+context = "unknown"
+lines = 422
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/engine_factory.rs"
+context = "unknown"
+lines = 557
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/evidence_id_constraint.rs"
+context = "unknown"
+lines = 473
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/fim.rs"
+context = "unknown"
+lines = 883
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/gguf_meta.rs"
+context = "unknown"
+lines = 272
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/hardware.rs"
+context = "unknown"
+lines = 130
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/health.rs"
+context = "unknown"
+lines = 95
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/hybrid.rs"
+context = "unknown"
+lines = 574
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/json_grammar.rs"
+context = "unknown"
+lines = 741
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/lib.rs"
+context = "unknown"
+lines = 69
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/llama.rs"
+context = "unknown"
+lines = 504
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/llama_logs.rs"
+context = "unknown"
+lines = 170
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/llguidance_constraint.rs"
+context = "unknown"
+lines = 926
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/reranker_standalone.rs"
+context = "unknown"
+lines = 297
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/router_circuit.rs"
+context = "unknown"
+lines = 111
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/rpc_worker_main.rs"
+context = "unknown"
+lines = 363
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/selector.rs"
+context = "unknown"
+lines = 529
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/setup_planner.rs"
+context = "unknown"
+lines = 717
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/smoketest.rs"
+context = "unknown"
+lines = 212
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/url_constraint.rs"
+context = "unknown"
+lines = 498
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-inference/src/vocab_cache.rs"
+context = "unknown"
+lines = 159
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh-test-harness/src/fault/mod.rs"
+context = "back-of-house"
+lines = 29
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh-test-harness/src/fault/policy.rs"
+context = "back-of-house"
+lines = 123
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh-test-harness/src/fault/proxy.rs"
+context = "back-of-house"
+lines = 123
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh-test-harness/src/fault/schedule.rs"
+context = "back-of-house"
+lines = 210
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh-test-harness/src/fault/transport.rs"
+context = "back-of-house"
+lines = 99
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh-test-harness/src/fixtures.rs"
+context = "back-of-house"
+lines = 191
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh-test-harness/src/lib.rs"
+context = "back-of-house"
+lines = 6
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh-test-harness/src/mock_llama.rs"
+context = "back-of-house"
+lines = 161
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh-test-harness/src/simulated_mesh.rs"
+context = "back-of-house"
+lines = 297
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh-test-harness/src/simulated_node.rs"
+context = "back-of-house"
+lines = 254
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-meshapp-registry/src/lib.rs"
+context = "unknown"
+lines = 15
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-meshapp-registry/src/manifest.rs"
+context = "unknown"
+lines = 75
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-meshapp-registry/src/proxy.rs"
+context = "unknown"
+lines = 66
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-meshapp-registry/src/registry.rs"
+context = "unknown"
+lines = 94
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-meshapp/src/lib.rs"
+context = "unknown"
+lines = 941
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-meshapp/src/parcels.rs"
+context = "unknown"
+lines = 235
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-meshapp/src/tests.rs"
+context = "unknown"
+lines = 337
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-meshapp/src/wrapped.rs"
+context = "unknown"
+lines = 1230
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-meshapp/src/wrapped/semantic.rs"
+context = "unknown"
+lines = 1403
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-meshapp/src/wrapped/semantic/tests.rs"
+context = "unknown"
+lines = 878
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-meshapp/src/wrapped/tests.rs"
+context = "unknown"
+lines = 702
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-pipeline/src/adaptive.rs"
+context = "unknown"
+lines = 287
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-pipeline/src/classifier.rs"
+context = "unknown"
+lines = 456
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-pipeline/src/driver.rs"
+context = "unknown"
+lines = 612
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-pipeline/src/ledger.rs"
+context = "unknown"
+lines = 282
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-pipeline/src/lib.rs"
+context = "unknown"
+lines = 21
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-pipeline/src/pod.rs"
+context = "unknown"
+lines = 340
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-pipeline/src/recipe.rs"
+context = "unknown"
+lines = 461
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-pipeline/src/status.rs"
+context = "unknown"
+lines = 114
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-pipeline/src/worklist.rs"
+context = "unknown"
+lines = 492
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-runtime-recipe/src/lib.rs"
+context = "unknown"
+lines = 1177
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-server/src/activity.rs"
+context = "host"
+lines = 292
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-server/src/approval.rs"
+context = "host"
+lines = 154
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-server/src/auth.rs"
+context = "host"
+lines = 119
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-server/src/busy.rs"
+context = "host"
+lines = 42
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-server/src/config.rs"
+context = "host"
+lines = 407
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-server/src/corpus_upload.rs"
+context = "host"
+lines = 383
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-server/src/http_tests.rs"
+context = "host"
+lines = 720
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-server/src/iroh_access.rs"
+context = "host"
+lines = 132
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-server/src/main.rs"
+context = "host"
+lines = 882
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-server/src/narration.rs"
+context = "host"
+lines = 65
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-server/src/reciprocity.rs"
+context = "host"
+lines = 225
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-server/src/routes.rs"
+context = "host"
+lines = 673
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-server/src/routes_documents.rs"
+context = "host"
+lines = 304
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-server/src/routes_mcp.rs"
+context = "host"
+lines = 1176
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-server/src/routes_tdd.rs"
+context = "host"
+lines = 416
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-server/src/scheduler.rs"
+context = "host"
+lines = 410
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-server/src/shutdown.rs"
+context = "host"
+lines = 220
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-server/src/startup.rs"
+context = "host"
+lines = 142
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-server/src/tenant.rs"
+context = "host"
+lines = 108
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-server/src/ws.rs"
+context = "host"
+lines = 314
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-service/src/lib.rs"
+context = "unknown"
+lines = 1740
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-store/src/insight_store.rs"
+context = "unknown"
+lines = 429
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-store/src/lib.rs"
+context = "unknown"
+lines = 15
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-store/src/memory.rs"
+context = "unknown"
+lines = 827
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-store/src/migrations.rs"
+context = "unknown"
+lines = 1048
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-store/src/postgres.rs"
+context = "unknown"
+lines = 1594
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-store/src/sqlite.rs"
+context = "unknown"
+lines = 429
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-store/src/sqlite/budget.rs"
+context = "unknown"
+lines = 47
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-store/src/sqlite/chat_activity.rs"
+context = "unknown"
+lines = 120
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-store/src/sqlite/conv_tiered.rs"
+context = "unknown"
+lines = 1362
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-store/src/sqlite/conversation.rs"
+context = "unknown"
+lines = 508
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-store/src/sqlite/corpus_state.rs"
+context = "unknown"
+lines = 154
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-store/src/sqlite/document.rs"
+context = "unknown"
+lines = 393
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-store/src/sqlite/document_asset.rs"
+context = "unknown"
+lines = 393
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-store/src/sqlite/document_session.rs"
+context = "unknown"
+lines = 124
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-store/src/sqlite/health.rs"
+context = "unknown"
+lines = 128
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-store/src/sqlite/memory.rs"
+context = "unknown"
+lines = 545
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-store/src/sqlite/permission.rs"
+context = "unknown"
+lines = 33
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-store/src/sqlite/routing.rs"
+context = "unknown"
+lines = 89
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-store/src/sqlite/step_execution.rs"
+context = "unknown"
+lines = 91
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-store/src/sqlite/task.rs"
+context = "unknown"
+lines = 80
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-store/src/state_store_checker.rs"
+context = "unknown"
+lines = 119
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tdd/src/backend.rs"
+context = "unknown"
+lines = 329
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tdd/src/lib.rs"
+context = "unknown"
+lines = 54
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tdd/src/prompts.rs"
+context = "unknown"
+lines = 19
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tdd/src/recur/catalog.rs"
+context = "unknown"
+lines = 162
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tdd/src/recur/driver.rs"
+context = "unknown"
+lines = 750
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tdd/src/recur/evaluator.rs"
+context = "unknown"
+lines = 153
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tdd/src/recur/frame.rs"
+context = "unknown"
+lines = 270
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tdd/src/recur/git.rs"
+context = "unknown"
+lines = 137
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tdd/src/recur/mod.rs"
+context = "unknown"
+lines = 49
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tdd/src/recur/model.rs"
+context = "unknown"
+lines = 672
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tdd/src/shared/apply.rs"
+context = "unknown"
+lines = 240
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tdd/src/shared/edit.rs"
+context = "unknown"
+lines = 654
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tdd/src/shared/lang.rs"
+context = "unknown"
+lines = 142
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tdd/src/shared/mod.rs"
+context = "unknown"
+lines = 39
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tdd/src/shared/parser.rs"
+context = "unknown"
+lines = 713
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tdd/src/shared/snapshot.rs"
+context = "unknown"
+lines = 210
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tdd/src/shared/source.rs"
+context = "unknown"
+lines = 218
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tdd/src/shared/test_runner.rs"
+context = "unknown"
+lines = 251
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tdd/src/tasks/bdd.rs"
+context = "unknown"
+lines = 335
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tdd/src/tasks/framework.rs"
+context = "unknown"
+lines = 204
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tdd/src/tasks/make_passing.rs"
+context = "unknown"
+lines = 48
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tdd/src/tasks/mod.rs"
+context = "unknown"
+lines = 36
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tdd/src/tasks/solve.rs"
+context = "unknown"
+lines = 612
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tdd/src/tasks/split_file.rs"
+context = "unknown"
+lines = 227
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tdd/src/tasks/structural/max_file_size.rs"
+context = "unknown"
+lines = 329
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tdd/src/tasks/structural/mod.rs"
+context = "unknown"
+lines = 18
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tdd/src/tasks/write_failing_test.rs"
+context = "unknown"
+lines = 84
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tdd/src/trial.rs"
+context = "unknown"
+lines = 1594
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tdd/src/types.rs"
+context = "unknown"
+lines = 218
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tdd/src/workdir.rs"
+context = "unknown"
+lines = 339
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-time/src/lib.rs"
+context = "unknown"
+lines = 59
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/atlas_context_manager.rs"
+context = "unknown"
+lines = 1111
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/atlas_peer_advice.rs"
+context = "unknown"
+lines = 289
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/atlas_phase/gaps.rs"
+context = "unknown"
+lines = 143
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/atlas_phase/mod.rs"
+context = "unknown"
+lines = 41
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/atlas_phase/tensions.rs"
+context = "unknown"
+lines = 148
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/atlas_postinstall.rs"
+context = "unknown"
+lines = 1639
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/atlas_status.rs"
+context = "unknown"
+lines = 247
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/atlas_view/atom_browse.rs"
+context = "unknown"
+lines = 906
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/atlas_view/atom_detail.rs"
+context = "unknown"
+lines = 1074
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/atlas_view/conv.rs"
+context = "unknown"
+lines = 135
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/atlas_view/mod.rs"
+context = "unknown"
+lines = 52
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/atlas_view/reader.rs"
+context = "unknown"
+lines = 1267
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/atlas_view/subgraph.rs"
+context = "unknown"
+lines = 694
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/attached_document_search.rs"
+context = "unknown"
+lines = 630
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/bundles.rs"
+context = "unknown"
+lines = 701
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/calendar.rs"
+context = "unknown"
+lines = 125
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/catalog.rs"
+context = "unknown"
+lines = 354
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/catalog_ingest.rs"
+context = "unknown"
+lines = 952
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/arch_posture.rs"
+context = "unknown"
+lines = 284
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/arch_report.rs"
+context = "unknown"
+lines = 754
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/archive_feature.rs"
+context = "unknown"
+lines = 86
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/atos_plan_emit.rs"
+context = "unknown"
+lines = 379
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/atos_utils.rs"
+context = "unknown"
+lines = 434
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/atos_verify.rs"
+context = "unknown"
+lines = 306
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/blast_radius.rs"
+context = "unknown"
+lines = 473
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/brief.rs"
+context = "unknown"
+lines = 1070
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/briefing_tool.rs"
+context = "unknown"
+lines = 356
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/build.rs"
+context = "unknown"
+lines = 343
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/callees.rs"
+context = "unknown"
+lines = 149
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/callers.rs"
+context = "unknown"
+lines = 142
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/capability_findings.rs"
+context = "unknown"
+lines = 278
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/capability_map_tool.rs"
+context = "unknown"
+lines = 193
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/capability_posture.rs"
+context = "unknown"
+lines = 244
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/code_search.rs"
+context = "unknown"
+lines = 314
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/delete_note.rs"
+context = "unknown"
+lines = 76
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/design_signals_extract.rs"
+context = "unknown"
+lines = 356
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/drift.rs"
+context = "unknown"
+lines = 216
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/drift_findings.rs"
+context = "unknown"
+lines = 535
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/drift_posture.rs"
+context = "unknown"
+lines = 501
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/dry_report.rs"
+context = "unknown"
+lines = 893
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/facts_tool.rs"
+context = "unknown"
+lines = 418
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/get_lint_output.rs"
+context = "unknown"
+lines = 78
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/get_run_output.rs"
+context = "unknown"
+lines = 79
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/index_health.rs"
+context = "unknown"
+lines = 232
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/lint_status.rs"
+context = "unknown"
+lines = 794
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/mod.rs"
+context = "unknown"
+lines = 609
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/project_context.rs"
+context = "unknown"
+lines = 176
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/promote_note.rs"
+context = "unknown"
+lines = 113
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/provision_feature.rs"
+context = "unknown"
+lines = 95
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/read_note_by_id.rs"
+context = "unknown"
+lines = 90
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/read_note_digest.rs"
+context = "unknown"
+lines = 350
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/read_notes.rs"
+context = "unknown"
+lines = 722
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/recent_changes.rs"
+context = "unknown"
+lines = 124
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/record_atos_event.rs"
+context = "unknown"
+lines = 113
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/retire_note.rs"
+context = "unknown"
+lines = 222
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/run_tests.rs"
+context = "unknown"
+lines = 57
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/session_reflection.rs"
+context = "unknown"
+lines = 111
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/session_state.rs"
+context = "unknown"
+lines = 1605
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/spec.rs"
+context = "unknown"
+lines = 298
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/suggest_note.rs"
+context = "unknown"
+lines = 505
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/suggest_seams.rs"
+context = "unknown"
+lines = 1035
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/symbol_lookup.rs"
+context = "unknown"
+lines = 403
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/test_status.rs"
+context = "unknown"
+lines = 540
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/watcher_health.rs"
+context = "unknown"
+lines = 402
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/working_set.rs"
+context = "unknown"
+lines = 428
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/write_note.rs"
+context = "unknown"
+lines = 296
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/code/write_redteam_finding.rs"
+context = "unknown"
+lines = 154
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/compute.rs"
+context = "unknown"
+lines = 87
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/conv_tiered_provider.rs"
+context = "unknown"
+lines = 1421
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/corpus/gutenberg.rs"
+context = "unknown"
+lines = 210
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/corpus/html_crawl.rs"
+context = "unknown"
+lines = 190
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/corpus/manager.rs"
+context = "unknown"
+lines = 630
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/corpus/mod.rs"
+context = "unknown"
+lines = 360
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/corpus/openalex.rs"
+context = "unknown"
+lines = 230
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/corpus/parquet_reader.rs"
+context = "unknown"
+lines = 247
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/corpus/registry.rs"
+context = "unknown"
+lines = 219
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/corpus/stackexchange.rs"
+context = "unknown"
+lines = 290
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/corpus/wikipedia.rs"
+context = "unknown"
+lines = 347
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/corpus_search.rs"
+context = "unknown"
+lines = 411
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/corpus_store.rs"
+context = "unknown"
+lines = 373
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/document.rs"
+context = "unknown"
+lines = 292
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/document_asset/artifacts.rs"
+context = "unknown"
+lines = 326
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/document_asset/atoms.rs"
+context = "unknown"
+lines = 223
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/document_asset/execution.rs"
+context = "unknown"
+lines = 548
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/document_asset/manager.rs"
+context = "unknown"
+lines = 670
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/document_asset/mod.rs"
+context = "unknown"
+lines = 829
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/document_asset/motifs.rs"
+context = "unknown"
+lines = 532
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/document_asset/routing.rs"
+context = "unknown"
+lines = 134
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/document_asset/self_reference.rs"
+context = "unknown"
+lines = 230
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/document_asset/skeleton.rs"
+context = "unknown"
+lines = 688
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/document_operation.rs"
+context = "unknown"
+lines = 563
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/email.rs"
+context = "unknown"
+lines = 135
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/enrich.rs"
+context = "unknown"
+lines = 908
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/enrichment_bootstrap.rs"
+context = "unknown"
+lines = 105
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/enrichment_checker.rs"
+context = "unknown"
+lines = 275
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/entity_graph.rs"
+context = "unknown"
+lines = 526
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/epistemic.rs"
+context = "unknown"
+lines = 523
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/extract.rs"
+context = "unknown"
+lines = 102
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/file.rs"
+context = "unknown"
+lines = 168
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/index_validator.rs"
+context = "unknown"
+lines = 345
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/knowledge.rs"
+context = "unknown"
+lines = 224
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/knowledge_lookup/mod.rs"
+context = "unknown"
+lines = 758
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/knowledge_view/acquirers/mod.rs"
+context = "unknown"
+lines = 14
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/knowledge_view/acquirers/sqlite.rs"
+context = "unknown"
+lines = 694
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/knowledge_view/atlas_digest.rs"
+context = "unknown"
+lines = 318
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/knowledge_view/cross_view.rs"
+context = "unknown"
+lines = 575
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/knowledge_view/debouncer.rs"
+context = "unknown"
+lines = 295
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/knowledge_view/digest.rs"
+context = "unknown"
+lines = 126
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/knowledge_view/manager.rs"
+context = "unknown"
+lines = 1549
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/knowledge_view/mod.rs"
+context = "unknown"
+lines = 47
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/knowledge_view/recipes.rs"
+context = "unknown"
+lines = 570
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/knowledge_view/relational.rs"
+context = "unknown"
+lines = 363
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/knowledge_view/splice_extension.rs"
+context = "unknown"
+lines = 733
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/knowledge_view/strategic.rs"
+context = "unknown"
+lines = 306
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/knowledge_view/timeline.rs"
+context = "unknown"
+lines = 574
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/knowledge_view/tokens.rs"
+context = "unknown"
+lines = 93
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/knowledge_view/view_kind.rs"
+context = "unknown"
+lines = 183
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/lib.rs"
+context = "unknown"
+lines = 188
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/atlas_dispatch.rs"
+context = "unknown"
+lines = 255
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/clusterer.rs"
+context = "unknown"
+lines = 496
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/config.rs"
+context = "unknown"
+lines = 685
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/excerpt.rs"
+context = "unknown"
+lines = 367
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/extract_stage.rs"
+context = "unknown"
+lines = 1311
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/frontmatter.rs"
+context = "unknown"
+lines = 580
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/git.rs"
+context = "unknown"
+lines = 176
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/humanise.rs"
+context = "unknown"
+lines = 326
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/manager.rs"
+context = "unknown"
+lines = 2657
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/mod.rs"
+context = "unknown"
+lines = 56
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/ocr/cleanup.rs"
+context = "unknown"
+lines = 324
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/ocr/engine.rs"
+context = "unknown"
+lines = 133
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/ocr/mod.rs"
+context = "unknown"
+lines = 150
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/ocr/paddle/detect.rs"
+context = "unknown"
+lines = 239
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/ocr/paddle/dict.rs"
+context = "unknown"
+lines = 64
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/ocr/paddle/geometry.rs"
+context = "unknown"
+lines = 166
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/ocr/paddle/mod.rs"
+context = "unknown"
+lines = 323
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/ocr/paddle/recognize.rs"
+context = "unknown"
+lines = 199
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/ocr/pipeline.rs"
+context = "unknown"
+lines = 310
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/ocr/rasterize.rs"
+context = "unknown"
+lines = 159
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/ocr/tesseract.rs"
+context = "unknown"
+lines = 317
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/pre_scanner.rs"
+context = "unknown"
+lines = 541
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/preview.rs"
+context = "unknown"
+lines = 659
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/progress.rs"
+context = "unknown"
+lines = 27
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/recipe_extractor.rs"
+context = "unknown"
+lines = 43
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/watched/apply.rs"
+context = "unknown"
+lines = 217
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/watched/diff.rs"
+context = "unknown"
+lines = 154
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/watched/enrich.rs"
+context = "unknown"
+lines = 1092
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/watched/events.rs"
+context = "unknown"
+lines = 125
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/watched/mod.rs"
+context = "unknown"
+lines = 50
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/watched/registry.rs"
+context = "unknown"
+lines = 392
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/watched/scheduler.rs"
+context = "unknown"
+lines = 189
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/watched/soft_delete_gc.rs"
+context = "unknown"
+lines = 291
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/watched/state.rs"
+context = "unknown"
+lines = 373
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/watched/status.rs"
+context = "unknown"
+lines = 164
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/watched/threshold.rs"
+context = "unknown"
+lines = 152
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/watched/walker.rs"
+context = "unknown"
+lines = 934
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/watched/worker.rs"
+context = "unknown"
+lines = 1003
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/watched/workflow_trigger.rs"
+context = "unknown"
+lines = 39
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/local_corpus/writeback.rs"
+context = "unknown"
+lines = 854
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/mcp_surface.rs"
+context = "unknown"
+lines = 861
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/mem_atlas.rs"
+context = "unknown"
+lines = 294
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/mem_tree.rs"
+context = "unknown"
+lines = 1080
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/notes/diff_extract.rs"
+context = "unknown"
+lines = 442
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/notes/diff_extract_backend.rs"
+context = "unknown"
+lines = 515
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/notes/mod.rs"
+context = "unknown"
+lines = 30
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/notes/nudge.rs"
+context = "unknown"
+lines = 568
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/notes/patterns.rs"
+context = "unknown"
+lines = 673
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/notes/response_mine.rs"
+context = "unknown"
+lines = 454
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/parcel_analytics.rs"
+context = "unknown"
+lines = 293
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/rag/ingest.rs"
+context = "unknown"
+lines = 99
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/rag/mod.rs"
+context = "unknown"
+lines = 30
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/rag/parse.rs"
+context = "unknown"
+lines = 199
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/rag/section.rs"
+context = "unknown"
+lines = 308
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/raptor_atlas.rs"
+context = "unknown"
+lines = 2145
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/raptor_checkpoint.rs"
+context = "unknown"
+lines = 558
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/raptor_index.rs"
+context = "unknown"
+lines = 101
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/recipe_notes_adapter.rs"
+context = "unknown"
+lines = 275
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/recipe_tester_adapter.rs"
+context = "unknown"
+lines = 91
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/sec_edgar.rs"
+context = "unknown"
+lines = 1374
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/sec_facts.rs"
+context = "unknown"
+lines = 842
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/sec_facts_render.rs"
+context = "unknown"
+lines = 1110
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/sec_facts_render/tests.rs"
+context = "unknown"
+lines = 650
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/spec_watcher.rs"
+context = "unknown"
+lines = 380
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/summary_atoms.rs"
+context = "unknown"
+lines = 577
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/summary_verify.rs"
+context = "unknown"
+lines = 286
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/typed_call.rs"
+context = "unknown"
+lines = 427
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/typed_extension/harvest.rs"
+context = "unknown"
+lines = 288
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/typed_extension/manifest.rs"
+context = "unknown"
+lines = 234
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/typed_extension/mod.rs"
+context = "unknown"
+lines = 607
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/typed_extension/pass.rs"
+context = "unknown"
+lines = 565
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/typed_extension/tests.rs"
+context = "unknown"
+lines = 599
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-tools/src/wikipedia_fetch.rs"
+context = "unknown"
+lines = 128
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-turn-client/src/lib.rs"
+context = "kernel"
+lines = 4800
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-turn-client/src/mesh.rs"
+context = "kernel"
+lines = 314
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-turn-client/src/reach.rs"
+context = "kernel"
+lines = 780
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-work-atlas/src/confidence.rs"
+context = "unknown"
+lines = 89
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-work-atlas/src/config.rs"
+context = "unknown"
+lines = 108
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-work-atlas/src/gc.rs"
+context = "unknown"
+lines = 387
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-work-atlas/src/lib.rs"
+context = "unknown"
+lines = 33
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-work-atlas/src/model.rs"
+context = "unknown"
+lines = 263
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-work-atlas/src/observer.rs"
+context = "unknown"
+lines = 494
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-work-atlas/src/repo_id.rs"
+context = "unknown"
+lines = 312
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-work-atlas/src/store.rs"
+context = "unknown"
+lines = 665
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-work-atlas/src/tools/broadcast.rs"
+context = "unknown"
+lines = 98
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-work-atlas/src/tools/declare_scope.rs"
+context = "unknown"
+lines = 202
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-work-atlas/src/tools/mod.rs"
+context = "unknown"
+lines = 25
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-work-atlas/src/tools/release_scope.rs"
+context = "unknown"
+lines = 84
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-work-atlas/src/tools/resource_may_i.rs"
+context = "unknown"
+lines = 557
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-work-atlas/src/tools/work_in_flight.rs"
+context = "unknown"
+lines = 318
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-recipe-author/src/capability_request.rs"
+context = "unknown"
+lines = 547
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-recipe-author/src/checkpoint.rs"
+context = "unknown"
+lines = 723
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-recipe-author/src/decision_log.rs"
+context = "unknown"
+lines = 418
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-recipe-author/src/http_tester.rs"
+context = "unknown"
+lines = 268
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-recipe-author/src/lib.rs"
+context = "unknown"
+lines = 223
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-recipe-author/src/probe_url.rs"
+context = "unknown"
+lines = 600
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-recipe-author/src/project.rs"
+context = "unknown"
+lines = 506
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-recipe-author/src/read.rs"
+context = "unknown"
+lines = 182
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-recipe-author/src/recipe_project_store.rs"
+context = "unknown"
+lines = 248
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-recipe-author/src/recipe_schema.rs"
+context = "unknown"
+lines = 892
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-recipe-author/src/registry_browse.rs"
+context = "unknown"
+lines = 176
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-recipe-author/src/research_finding.rs"
+context = "unknown"
+lines = 369
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-recipe-author/src/situated_context.rs"
+context = "unknown"
+lines = 384
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-recipe-author/src/test_support.rs"
+context = "unknown"
+lines = 111
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-recipe-author/src/test_tool.rs"
+context = "unknown"
+lines = 333
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-recipe-author/src/validate.rs"
+context = "unknown"
+lines = 125
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-recipe-author/src/write.rs"
+context = "unknown"
+lines = 175
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-recipe-author/src/write_structured.rs"
+context = "unknown"
+lines = 313
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-studio/src/main.rs"
+context = "unknown"
+lines = 517
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-tools-base/src/lib.rs"
+context = "unknown"
+lines = 37
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-tools-base/src/mcp/auth.rs"
+context = "unknown"
+lines = 131
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-tools-base/src/mcp/client.rs"
+context = "unknown"
+lines = 150
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-tools-base/src/mcp/config.rs"
+context = "unknown"
+lines = 11
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-tools-base/src/mcp/discovery.rs"
+context = "unknown"
+lines = 136
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-tools-base/src/mcp/http.rs"
+context = "unknown"
+lines = 253
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-tools-base/src/mcp/loader.rs"
+context = "unknown"
+lines = 39
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-tools-base/src/mcp/mod.rs"
+context = "unknown"
+lines = 576
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-tools-base/src/mcp/reconnect.rs"
+context = "unknown"
+lines = 126
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-tools-base/src/mcp/secret_store.rs"
+context = "unknown"
+lines = 143
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-tools-base/src/mcp/stdio.rs"
+context = "unknown"
+lines = 138
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-tools-base/src/mcp/transport.rs"
+context = "unknown"
+lines = 44
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-tools-base/src/mcp/types.rs"
+context = "unknown"
+lines = 12
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-tools-base/src/rag/chunk.rs"
+context = "unknown"
+lines = 595
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-tools-base/src/rag/mod.rs"
+context = "unknown"
+lines = 22
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-tools-base/src/read_csv.rs"
+context = "unknown"
+lines = 122
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-tools-base/src/read_file.rs"
+context = "unknown"
+lines = 111
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-tools-base/src/read_json.rs"
+context = "unknown"
+lines = 139
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-tools-base/src/search.rs"
+context = "unknown"
+lines = 676
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-tools-base/src/shell.rs"
+context = "unknown"
+lines = 98
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-tools-base/src/vector_mean.rs"
+context = "unknown"
+lines = 183
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-tools-base/src/web/extract.rs"
+context = "unknown"
+lines = 474
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-tools-base/src/web/mod.rs"
+context = "unknown"
+lines = 505
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-tools-base/src/web/search/assets.rs"
+context = "unknown"
+lines = 194
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-tools-base/src/web/search/backend_trait.rs"
+context = "unknown"
+lines = 451
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-tools-base/src/web/search/configured.rs"
+context = "unknown"
+lines = 175
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-tools-base/src/web/search/mod.rs"
+context = "unknown"
+lines = 1201
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-tools-base/src/web/search/orchestrator.rs"
+context = "unknown"
+lines = 480
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-tools-base/src/write_file.rs"
+context = "unknown"
+lines = 142
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-tools-base/src/write_json.rs"
+context = "unknown"
+lines = 222
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-tools-base/src/zip.rs"
+context = "unknown"
+lines = 141
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-workflow-host/src/author.rs"
+context = "unknown"
+lines = 799
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-workflow-host/src/author_schema.rs"
+context = "unknown"
+lines = 400
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-workflow-host/src/daemon_models.rs"
+context = "unknown"
+lines = 425
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-workflow-host/src/installer.rs"
+context = "unknown"
+lines = 306
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-workflow-host/src/lib.rs"
+context = "unknown"
+lines = 646
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-workflow-host/src/workflow_http.rs"
+context = "unknown"
+lines = 797
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-workflow/src/cache.rs"
+context = "unknown"
+lines = 83
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-workflow/src/kind.rs"
+context = "unknown"
+lines = 275
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-workflow/src/lib.rs"
+context = "unknown"
+lines = 37
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-workflow/src/model.rs"
+context = "unknown"
+lines = 540
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-workflow/src/progress.rs"
+context = "unknown"
+lines = 68
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-workflow/src/runner.rs"
+context = "unknown"
+lines = 467
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-workflow/src/steps.rs"
+context = "unknown"
+lines = 507
+note = ""
+
+[[module]]
+path = "studio/crates/sovereign-workflow/src/template.rs"
+context = "unknown"
+lines = 423
+note = ""
