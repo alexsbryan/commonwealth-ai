@@ -37,6 +37,7 @@ Exit codes: 0 value valid (or self-test green), 3 artifact absent,
 """
 from __future__ import annotations
 
+import fnmatch
 import hashlib
 import json
 import os
@@ -1512,6 +1513,800 @@ def cmd_liftable(args: list[str]) -> int:
           f"{len(r['rows'])} kept contexts  [{mode}]")
     print(f"\n  value: {r['value']} contexts a stranger could take alone")
     return EXIT_OK
+
+
+# ── plan — the move plan ────────────────────────────────────────────────────
+#
+# The demolition loop's per-crate plan (campaigns/domains.toml, THE STRATEGY;
+# domains-3-instrument "Re-sequenced 2026-09-14" bullet `plan`). For the queue
+# head — or `--crate X` — it reads that crate's `[[cluster]]` rows, re-derives
+# what the tree can answer, diffs the two, orders the clusters (leaves first,
+# then size) and asserts each move.
+#
+# THE REGISTRY IS THE DECIDER, THE TREE IS THE CROSS-CHECK. Every number the
+# loop acts on (lines, the tier window, shim sites, the destination) is a
+# `[[cluster]]` row — DATA, so a move is a diff a reviewer reads. The tree
+# re-derivation is the instrument's own audit of those rows: lines and files
+# from `wc -l` over the crate's `src/` under the `[[module]]` tags, in-crate
+# edges from `crate::` references resolved to the module they name, and
+# external consumers from `<crate_ident>::` outside the crate. A disagreement
+# between the two is a FINDING printed beside the move (the row's banner says
+# the rows predate the 2026-09-14 retags), never a silent overwrite — that is
+# ARCH principle 4 and the reason the plan is worth running at all.
+#
+# THE WINDOW IS [own_dep_max_tier, consumer_min_tier] inclusive (the
+# corpus-engine banner's own definition). A destination is legal when its tier
+# sits inside it; `window_after_port` is the band once the port the design
+# names lands, so a cluster legal only after its port is printed as such. A
+# window whose floor is ABOVE its ceiling is EMPTY: the cluster is two
+# clusters or owes a port, and the plan prints KNOT with the crossing symbols
+# and the fix class, never a destination (campaign.md "Ambiguity policy";
+# dm-queue kill).
+#
+# THE ASSERTS PER MOVE, all four named by the order: dest tier in the window;
+# dest named by the context's `crates` list; no new `[[exception]]` (checked
+# against ARCH_LAYERS' own forbid/exception ledger); the crate's own-context
+# share monotone. The first three are hard; `share_monotone` is structural (a
+# move carries only non-own lines out) but is computed, not asserted.
+_PLAN_REF = re.compile(
+    r"crate::([A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)*)")
+_WS_CRATE_REF = re.compile(r"\b([a-z][a-z0-9_]*)::")
+_NAMED_CRATE = re.compile(r"\b[a-z][a-z0-9]*(?:-[a-z0-9]+)+\b")
+
+
+def _arch(root: Path) -> dict:
+    """The layer/package/forbid/exception tables of ARCH_LAYERS.toml.
+
+    A fixture with no ARCH_LAYERS falls back to the repo's, exactly as
+    `arch_packages_for` does, so a planted case that does not care about tiers
+    still runs against a real ledger.
+    """
+    p = Path(root) / "quality" / "ARCH_LAYERS.toml"
+    if not p.exists():
+        p = REPO / "quality" / "ARCH_LAYERS.toml"
+    try:
+        with open(p, "rb") as f:
+            data = tomllib.load(f)
+    except (OSError, tomllib.TOMLDecodeError):
+        return {"layers": [], "packages": set(), "forbids": [], "exceptions": []}
+    return {
+        "layers": [(i, layer.get("crates", []))
+                   for i, layer in enumerate(data.get("layer", []))],
+        "packages": {pkg.get("name") for pkg in data.get("package", [])
+                     if pkg.get("name")},
+        "forbids": list(data.get("forbid", [])),
+        "exceptions": list(data.get("exception", [])),
+    }
+
+
+def _crate_tier(arch: dict, crate: str) -> int | None:
+    """The layer index naming `crate`, or None (a glob may name it, too)."""
+    for i, crates in arch["layers"]:
+        for pat in crates:
+            if fnmatch.fnmatch(crate, pat):
+                return i
+    return None
+
+
+def _crate_exists(root: Path, arch: dict, crate: str) -> bool:
+    """True when a workspace member or an ARCH_LAYERS package carries the name.
+
+    A layer glob naming a crate the tree has not created (sovereign-scheduler
+    today) is NOT existence — `cargo xtask boundary-gate` cannot see it.
+    """
+    if crate in arch["packages"]:
+        return True
+    return any(name == crate for name, _d in _workspace_crates(root))
+
+
+def _as_int(v) -> int | None:
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, int):
+        return v
+    if isinstance(v, str):
+        m = re.search(r"-?\d+", v)
+        return int(m.group()) if m else None
+    return None
+
+
+def _window_pair(row: dict, key: str = "window") -> tuple[int, int] | None:
+    """A `window`/`window_after_port` as an inclusive (lo, hi), else None."""
+    w = row.get(key)
+    if isinstance(w, list) and len(w) >= 2:
+        lo, hi = _as_int(w[0]), _as_int(w[1])
+        return (lo, hi) if lo is not None and hi is not None else None
+    if isinstance(w, str):
+        nums = [int(n) for n in re.findall(r"\d+", w)]
+        if len(nums) >= 2:
+            return nums[0], nums[1]
+    lo, hi = _as_int(row.get("own_dep_max_tier")), _as_int(
+        row.get("consumer_min_tier"))
+    if lo is not None and hi is not None:
+        return lo, hi
+    return None
+
+
+def _dest_tiers(row: dict) -> list[int]:
+    """The `dest_tier` as a list of ints: `5`, `"3"`, `"0 / 3"` all read."""
+    dt = row.get("dest_tier")
+    if isinstance(dt, bool):
+        return []
+    if isinstance(dt, int):
+        return [dt]
+    if isinstance(dt, str):
+        return [int(n) for n in re.findall(r"\d+", dt)]
+    return []
+
+
+def _cluster_imports(row: dict, key: str) -> dict[str, int]:
+    """`imports_clusters` / `imported_by_clusters` in either registry shape.
+
+    corpus-engine writes a list of `"context:n"` strings; sovereign-mesh and
+    sovereign-api write a list of `{context, sites}` tables (or, for
+    `imported_by_clusters`, a `{context = n}` dict). One reader for all three.
+    """
+    raw = row.get(key, [])
+    out: dict[str, int] = {}
+    if isinstance(raw, dict):
+        for k, v in raw.items():
+            out[k] = out.get(k, 0) + (_as_int(v) or 0)
+    elif isinstance(raw, list):
+        for e in raw:
+            if isinstance(e, str):
+                ctx, _, n = e.partition(":")
+                out[ctx] = out.get(ctx, 0) + (int(n) if n.isdigit() else 0)
+            elif isinstance(e, dict) and e.get("context"):
+                out[e["context"]] = out.get(e["context"], 0) + (
+                    _as_int(e.get("sites")) or 0)
+    return out
+
+
+def _cluster_external(row: dict) -> list[dict]:
+    """`external_consumers` normalized to `{crate, tier, sites}` rows."""
+    raw = row.get("external_consumers")
+    out: list[dict] = []
+    if isinstance(raw, list):
+        for e in raw:
+            if isinstance(e, dict) and e.get("crate"):
+                out.append({"crate": e["crate"], "tier": _as_int(e.get("tier")),
+                            "sites": _as_int(e.get("sites")) or 0})
+    elif isinstance(raw, dict):
+        for k, v in raw.items():
+            if isinstance(v, dict):
+                out.append({"crate": k, "tier": _as_int(v.get("tier")),
+                            "sites": _as_int(v.get("sites")) or 0})
+            else:
+                out.append({"crate": k, "tier": None,
+                            "sites": _as_int(v) or 0})
+    elif isinstance(raw, str):
+        m = re.search(r"(\d+)\s*sites?\s*/\s*\d+\s*crates?:\s*(.*)", raw)
+        if m:
+            for part in m.group(2).split(","):
+                mm = re.match(r"\s*([\w-]+)\(t(\d+)\):(\d+)", part)
+                if mm:
+                    out.append({"crate": mm.group(1), "tier": int(mm.group(2)),
+                                "sites": int(mm.group(3))})
+    return out
+
+
+def _context_crates(reg: dict) -> dict[str, list[str]]:
+    return {c["id"]: list(c.get("crates", [])) for c in reg.get("context", [])}
+
+
+def _crate_dir_of(root: Path, crate: str) -> Path | None:
+    for name, d in _workspace_crates(root):
+        if name == crate:
+            return d
+    return None
+
+
+def _ctx_lines_from_tree(root: Path, crate: str, reg: dict) -> dict[str, list]:
+    """`{context: [lines, files]}` for the crate's `src/`, read from the tree.
+
+    This is the re-derivation of the cluster rows' `lines`/`files`: the
+    `[[module]]` tag decides a file's context, `wc -l` (via splitlines) the
+    size. A file the crate's tags do not describe lands under `unknown`, which
+    the coverage assertion elsewhere already refuses.
+    """
+    root = Path(root)
+    cdir = _crate_dir_of(root, crate)
+    out: dict[str, list] = {}
+    if cdir is None:
+        return out
+    try:
+        src = cdir.relative_to(root).as_posix() + "/src/"
+    except ValueError:
+        return out
+    for path in _rs_files(root):
+        try:
+            rel = path.relative_to(root).as_posix()
+        except ValueError:
+            continue
+        if not rel.startswith(src):
+            continue
+        try:
+            n = len(path.read_text(encoding="utf-8",
+                                   errors="replace").splitlines())
+        except OSError:
+            continue
+        key = _module_context(reg, rel) or "unknown"
+        row = out.setdefault(key, [0, 0])
+        row[0] += n
+        row[1] += 1
+    return out
+
+
+def _resolve_crate_ref(crate_dir: Path, segs: list[str]) -> Path | None:
+    """The module file `crate::a::b::…` names: the longest existing prefix.
+
+    `crate::decision_log::DecisionEvent` resolves to `src/decision_log.rs`
+    (the module) with `DecisionEvent` the item; `crate::routes_internal::x`
+    resolves to `src/routes_internal/mod.rs`. A path whose every prefix is a
+    file (a nested item) stops at the deepest existing module.
+    """
+    src = crate_dir / "src"
+    for i in range(len(segs), 0, -1):
+        base = src.joinpath(*segs[:i])
+        if base.with_suffix(".rs").exists():
+            return base.with_suffix(".rs")
+        if (base / "mod.rs").exists():
+            return base / "mod.rs"
+    return None
+
+
+def _tree_in_crate_edges(root: Path, crate: str, reg: dict) -> dict:
+    """Re-derive `(src_context -> dst_context) -> [symbols]` from `crate::`.
+
+    Grep-shaped (the instrument's whole posture): every `crate::…` reference
+    in the crate's `src/` is resolved to the module it names, that module's
+    `[[module]]` tag is the destination context, and the pair is counted.
+    `mod x;` lines carry no `crate::` and dissolve with a move, so they are
+    excluded by construction (the corpus-engine banner's method).
+    """
+    root = Path(root)
+    cdir = _crate_dir_of(root, crate)
+    edges: dict = {}
+    if cdir is None:
+        return edges
+    try:
+        src = cdir.relative_to(root).as_posix() + "/src/"
+    except ValueError:
+        return edges
+    for path in _rs_files(root):
+        try:
+            rel = path.relative_to(root).as_posix()
+        except ValueError:
+            continue
+        if not rel.startswith(src):
+            continue
+        src_ctx = _module_context(reg, rel) or "unknown"
+        try:
+            lines = path.read_text(encoding="utf-8",
+                                   errors="replace").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            code = code_part(line)
+            if "crate::" not in code:
+                continue
+            for m in _PLAN_REF.finditer(code):
+                segs = m.group(1).split("::")
+                resolved = _resolve_crate_ref(cdir, segs)
+                if resolved is None:
+                    continue
+                try:
+                    drel = resolved.relative_to(root).as_posix()
+                except ValueError:
+                    continue
+                dst_ctx = _module_context(reg, drel) or "unknown"
+                if dst_ctx == src_ctx:
+                    continue
+                edges.setdefault((src_ctx, dst_ctx), []).append(m.group(1))
+    return edges
+
+
+def _tree_external_consumers(root: Path, crate: str, arch: dict) -> dict:
+    """`{consumer_crate: {sites, tier}}` from `<ident>::` outside the crate.
+
+    `git grep` over tracked `*.rs` (the tree path), comments stripped so a doc
+    mention is not a consumer. A fixture that is not a work tree has no git
+    grep and yields `{}` — absence reported, never a fabricated consumer.
+    """
+    root = Path(root)
+    ident = crate.replace("-", "_")
+    try:
+        r = subprocess.run(
+            ["git", "grep", "-nE", rf"{re.escape(ident)}::", "--", "*.rs"],
+            cwd=root, capture_output=True, text=True)
+    except OSError:
+        return {}
+    out: dict = {}
+    for line in r.stdout.splitlines():
+        parts = line.split(":", 2)
+        if len(parts) < 3:
+            continue
+        path, _ln, content = parts
+        if not code_part(content):
+            continue
+        cd = Path(_crate_dir(root / path, root)).name
+        if cd == crate:
+            continue
+        entry = out.setdefault(cd, {"sites": 0, "tier": _crate_tier(arch, cd)})
+        entry["sites"] += 1
+    return out
+
+
+def _tree_own_deps(root: Path, crate: str, ctx: str, reg: dict,
+                   arch: dict) -> dict:
+    """`{crate: tier}` this cluster's files name, from in-repo `ident::` uses."""
+    root = Path(root)
+    cdir = _crate_dir_of(root, crate)
+    if cdir is None:
+        return {}
+    known = {}
+    for name, _d in _workspace_crates(root):
+        t = _crate_tier(arch, name)
+        if t is not None and name != crate:
+            known[name.replace("-", "_")] = (name, t)
+    try:
+        src = cdir.relative_to(root).as_posix() + "/src/"
+    except ValueError:
+        return {}
+    found: dict = {}
+    for path in _rs_files(root):
+        try:
+            rel = path.relative_to(root).as_posix()
+        except ValueError:
+            continue
+        if not rel.startswith(src) or _module_context(reg, rel) != ctx:
+            continue
+        try:
+            lines = path.read_text(encoding="utf-8",
+                                   errors="replace").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            code = code_part(line)
+            if "::" not in code:
+                continue
+            for m in _WS_CRATE_REF.finditer(code):
+                hit = known.get(m.group(1))
+                if hit:
+                    found[hit[0]] = hit[1]
+    return found
+
+
+def _renames_riding(root: Path, crate: str, ctx: str, reg: dict) -> list[dict]:
+    """Registry `[[noun]]` rows whose rename rides this cluster's move.
+
+    A noun row is riding when its `disposition` is a rename and its `file` is
+    a module the crate's tags put in this cluster. The registry is the list
+    (a rename is a row, not a constant), so this reads rather than re-derives.
+    """
+    out: list[dict] = []
+    for n in reg.get("noun", []):
+        if not str(n.get("disposition", "")).startswith("decided:rename"):
+            continue
+        f = n.get("file", "")
+        if not f:
+            continue
+        rel = f.split(":")[0]
+        if _row_crate(root, rel) != crate:
+            continue
+        if (_module_context(reg, rel) or "unknown") == ctx:
+            out.append(n)
+    return out
+
+
+def _move_order(clusters: list[dict]) -> tuple[list[str], list[list[str]]]:
+    """Topological move order over the cluster graph: leaves first, then size.
+
+    The registry's in-crate edges are NOT a DAG (host <-> serving, compute <->
+    serving), so the order is computed on the CONDENSATION: Tarjan-free mutual
+    reachability groups the cycles, the components are topologically sorted
+    (a component that imports no other moves first), and each component's
+    members are ordered by lines desc. A multi-member component is returned as
+    a CYCLE — the knot a port or a split has to cut — and never silently
+    flattened into a size order that pretends it was acyclic.
+    """
+    ctxs = [c["context"] for c in clusters]
+    lines = {c["context"]: c["lines"] for c in clusters}
+    imports = {c["context"]: {k for k in c["imports"] if k in ctxs}
+               for c in clusters}
+
+    reach: dict[str, set[str]] = {}
+    for s in ctxs:
+        seen: set[str] = set()
+        stack = [s]
+        while stack:
+            n = stack.pop()
+            for m in imports.get(n, ()):
+                if m in ctxs and m not in seen:
+                    seen.add(m)
+                    stack.append(m)
+        reach[s] = seen
+    scc_of: dict[str, int] = {}
+    comps: list[list[str]] = []
+    for s in ctxs:
+        if s in scc_of:
+            continue
+        comp = [t for t in ctxs
+                if (t == s or t in reach[s]) and (t == s or s in reach[t])]
+        for t in comp:
+            scc_of[t] = len(comps)
+        comps.append(comp)
+
+    comp_imports: dict[int, set[int]] = {i: set() for i in range(len(comps))}
+    for s in ctxs:
+        for m in imports.get(s, ()):
+            if scc_of[s] != scc_of[m]:
+                comp_imports[scc_of[s]].add(scc_of[m])
+
+    order: list[str] = []
+    cycles: list[list[str]] = []
+    remaining = set(range(len(comps)))
+    while remaining:
+        ready = [i for i in remaining if not (comp_imports[i] & remaining)]
+        if not ready:
+            ready = [max(remaining, key=lambda i: max(lines.get(c, 0)
+                                                      for c in comps[i]))]
+        ready.sort(key=lambda i: (-max(lines.get(c, 0) for c in comps[i]),
+                                  min(comps[i])))
+        for i in ready:
+            members = sorted(comps[i], key=lambda c: (-lines.get(c, 0), c))
+            order.extend(members)
+            if len(members) > 1:
+                cycles.append(members)
+            remaining.discard(i)
+    return order, cycles
+
+
+def _no_new_exception(arch: dict, dest_crates: set[str],
+                      deps: set[str]) -> tuple[bool, str]:
+    """Would the move owe an `[[exception]]` ARCH_LAYERS does not already hold?
+
+    For every forbid whose `from` matches a destination crate and whose `to`
+    matches a crate the moved cluster would depend on: legal if the forbid's
+    `except` names the dep, or an existing exception covers the pair; else a
+    NEW row would be needed, which the campaign refuses (dm-queue kill).
+    """
+    for f in arch["forbids"]:
+        frm, to = f.get("from"), f.get("to")
+        if not frm or not to:
+            continue
+        for d in dest_crates:
+            if not fnmatch.fnmatch(d, frm):
+                continue
+            for dep in deps:
+                if not fnmatch.fnmatch(dep, to):
+                    continue
+                if any(fnmatch.fnmatch(dep, e) for e in (f.get("except") or [])):
+                    continue
+                if any(fnmatch.fnmatch(str(ex.get("from", "")), d)
+                       and fnmatch.fnmatch(str(ex.get("to", "")), dep)
+                       for ex in arch["exceptions"]):
+                    continue
+                return False, f"{d} -> {dep} violates forbid {frm} -> {to}"
+    return True, ""
+
+
+def plan(root: Path, crate: str | None = None) -> dict:
+    """Build the move plan for `crate` (default: the queue head)."""
+    root = Path(root)
+    reg = registry_for(root)
+    arch = _arch(root)
+    ctx_crates = _context_crates(reg)
+    clusters_raw = [dict(c) for c in reg.get("cluster", [])]
+    if crate is None:
+        crates_in_order = [r["crate"] for r in clusters_raw]
+        if not crates_in_order:
+            return {"crate": None, "clusters": [], "order": [],
+                    "problems": ["no [[cluster]] rows in the registry"]}
+        crate = crates_in_order[0]
+    rows = [c for c in clusters_raw if c.get("crate") == crate]
+    if not rows:
+        return {"crate": crate, "clusters": [], "order": [],
+                "problems": [f"no [[cluster]] rows for crate {crate!r}"]}
+
+    tree_lines = _ctx_lines_from_tree(root, crate, reg)
+    tree_edges = _tree_in_crate_edges(root, crate, reg)
+    tree_ext = _tree_external_consumers(root, crate, arch)
+
+    homes = {c["id"] for c in reg.get("context", [])
+             if crate in c.get("crates", [])}
+    own_lines = sum(tree_lines.get(h, [0, 0])[0] for h in homes)
+    total_lines = sum(v[0] for v in tree_lines.values())
+
+    named_dest_by_ctx = {
+        c["context"]: set(_NAMED_CRATE.findall(c.get("dest", "") or ""))
+        for c in rows}
+
+    clusters: list[dict] = []
+    for row in rows:
+        ctx = row.get("context", "?")
+        t_lines = tree_lines.get(ctx, [0, 0])
+        reg_lines = _as_int(row.get("lines")) or 0
+        reg_files = _as_int(row.get("files")) or 0
+        imports = _cluster_imports(row, "imports_clusters")
+        imported_by = _cluster_imports(row, "imported_by_clusters")
+        ext = _cluster_external(row)
+        for e in ext:
+            if e["tier"] is None:
+                e["tier"] = _crate_tier(arch, e["crate"])
+        window = _window_pair(row, "window")
+        after_port = _window_pair(row, "window_after_port")
+        dest_tiers = _dest_tiers(row)
+        dest_candidates = ctx_crates.get(ctx, [])
+        registry_dest = row.get("dest", "")
+
+        tree_imp = {d: len(v) for (s, d), v in tree_edges.items() if s == ctx}
+        tree_imp_syms = {d: sorted(set(v))[:4]
+                         for (s, d), v in tree_edges.items() if s == ctx}
+        tree_imp_by = {s: len(v) for (s, d), v in tree_edges.items() if d == ctx}
+        tree_own_deps = _tree_own_deps(root, crate, ctx, reg, arch)
+        own_dep_max = _as_int(row.get("own_dep_max_tier"))
+        consumer_min = _as_int(row.get("consumer_min_tier"))
+
+        in_window = bool(window) and any(
+            window[0] <= t <= window[1] for t in dest_tiers)
+        in_after = bool(after_port) and any(
+            after_port[0] <= t <= after_port[1] for t in dest_tiers)
+        empty_window = bool(window) and window[0] > window[1]
+
+        named = named_dest_by_ctx[ctx]
+        dest_in_crates = bool(named & set(dest_candidates)) if named \
+            else bool(dest_candidates)
+
+        # The post-move dependencies: what this cluster's files name, plus the
+        # destinations of every cluster it imports in-crate (whose symbols it
+        # will name across the new crate line). The forbid ledger is checked
+        # against the DESTINATION crate. The destination set is the row's `dest`
+        # names FILTERED to the context's own homes — the prose around them
+        # names comparison crates (understanding's dest says "the serving-policy
+        # role"), and only a home can be where this cluster lands.
+        deps = set(tree_own_deps)
+        for imp_ctx in imports:
+            deps |= (named_dest_by_ctx.get(imp_ctx)
+                     or set(ctx_crates.get(imp_ctx, [])))
+        dest_set = ((named & set(dest_candidates)) or named
+                    or set(dest_candidates))
+        exc_ok, exc_why = _no_new_exception(arch, dest_set, deps - dest_set)
+
+        share_ok = (ctx in homes) or (reg_lines >= 0 and t_lines[0] >= 0)
+
+        findings: list[str] = []
+        if t_lines[0] != reg_lines or t_lines[1] != reg_files:
+            findings.append(
+                f"lines/files differ: tree {t_lines[0]}/{t_lines[1]} vs "
+                f"registry {reg_lines}/{reg_files}")
+        if tree_imp and tree_imp != imports:
+            findings.append(
+                f"in-crate imports differ: tree {tree_imp} vs registry "
+                f"{imports}")
+        if tree_own_deps and own_dep_max is not None:
+            tmax = max(tree_own_deps.values())
+            if tmax != own_dep_max:
+                findings.append(
+                    f"own-dep max tier: tree {tmax} vs registry {own_dep_max}")
+        if named and not dest_in_crates:
+            findings.append(
+                f"registry dest {registry_dest!r} names no crate in the "
+                f"context's crates {dest_candidates}")
+        if not in_window and in_after:
+            findings.append(
+                f"dest tier {dest_tiers} in window_after_port {after_port}, "
+                f"not window {window} — the port must land first")
+
+        problems: list[str] = []
+        if empty_window:
+            syms = sorted({s for (src, _d), v in tree_edges.items()
+                           if src == ctx for s in v}) or sorted(imports)
+            fix = "port" if (tree_imp or imports) else "split"
+            problems.append(
+                f"KNOT {ctx}: empty window {window} — symbols "
+                f"{', '.join(syms[:8]) or '(none)'} — fix: {fix}")
+        if not dest_in_crates:
+            problems.append(f"{ctx}: dest not in context crates")
+        if not exc_ok:
+            problems.append(f"{ctx}: {exc_why}")
+
+        clusters.append({
+            "context": ctx, "lines": reg_lines, "files": reg_files,
+            "tree_lines": t_lines[0], "tree_files": t_lines[1],
+            "leaf": not imports, "hub": bool(imports),
+            "imports": imports, "imported_by": imported_by,
+            "tree_imports": tree_imp, "tree_imported_by": tree_imp_by,
+            "tree_import_syms": tree_imp_syms,
+            "external": ext,
+            "own_dep_max_tier": own_dep_max, "consumer_min_tier": consumer_min,
+            "tree_own_deps": tree_own_deps, "window": window,
+            "window_after_port": after_port, "dest_tiers": dest_tiers,
+            "dest_candidates": dest_candidates, "registry_dest": registry_dest,
+            "dest_exists": any(_crate_exists(root, arch, c) for c in
+                               dest_candidates),
+            "shim_sites": _as_int(row.get("shim_sites")) or 0,
+            "renames": _renames_riding(root, crate, ctx, reg),
+            "constraint": row.get("constraint", ""),
+            "asserts": {
+                "dest_in_window": in_window or in_after,
+                "dest_in_window_strict": in_window,
+                "dest_in_crates": dest_in_crates,
+                "no_new_exception": exc_ok,
+                "share_monotone": share_ok,
+            },
+            "findings": findings, "problems": problems,
+        })
+
+    movable = [c for c in clusters if c["context"] not in homes]
+    order, cycles = _move_order(movable)
+
+    # The crate-level external-consumer cross-check. The registry's per-cluster
+    # `external_consumers` are SYMBOL sets; re-deriving which symbol belongs to
+    # which cluster needs the definition graph, so the tree audit is done once
+    # for the crate (its union) and the per-cluster rows are read, not diffed.
+    tree_consumers = {k: v["sites"] for k, v in tree_ext.items()}
+    reg_consumers: dict[str, int] = {}
+    for c in clusters:
+        for e in c["external"]:
+            reg_consumers[e["crate"]] = reg_consumers.get(e["crate"], 0) \
+                + e["sites"]
+    ext_finding = ""
+    if tree_consumers != reg_consumers:
+        ext_finding = (f"external consumers differ: tree {tree_consumers} vs "
+                       f"registry {reg_consumers}")
+
+    problems = [p for c in clusters for p in c["problems"]]
+    return {"crate": crate, "homes": sorted(homes), "own_lines": own_lines,
+            "total_lines": total_lines, "clusters": clusters, "order": order,
+            "cycles": cycles, "tree_external": tree_ext,
+            "external_finding": ext_finding, "problems": problems}
+
+
+def _plan_detect(root: Path) -> list[str]:
+    """The axis's own function: truthy iff the plan has a KNOT or a violation."""
+    return plan(root)["problems"]
+
+
+def _plan_fixture(root: Path, empty_window: bool) -> None:
+    """A one-cluster crate whose window is empty (caught) or valid (refused).
+
+    The destination `widget-home` is a context home AND a workspace member, so
+    the valid case passes `dest_in_crates` and `no_new_exception`; the empty
+    case plants `window = [3, 1]` — a floor above its ceiling — which is the
+    one shape the order says prints KNOT rather than a destination.
+    """
+    (root / "quality").mkdir(parents=True, exist_ok=True)
+    window = "[3, 1]" if empty_window else "[0, 3]"
+    (root / "quality" / "DOMAINS.toml").write_text(
+        '[[context]]\n'
+        'id = "widget"\n'
+        'kind = "supporting"\n'
+        'owns = ["Sprocket"]\n'
+        'crates = ["widget-home"]\n'
+        'status = "kept"\n\n'
+        '[[module]]\n'
+        'path = "fixture-crate/src/lib.rs"\n'
+        'context = "widget"\n'
+        'lines = 10\n\n'
+        '[[cluster]]\n'
+        'crate = "fixture-crate"\n'
+        'context = "widget"\n'
+        'lines = 10\n'
+        'files = 1\n'
+        'leaf = true\n'
+        f'window = {window}\n'
+        'own_dep_max_tier = 0\n'
+        'consumer_min_tier = 3\n'
+        'dest_tier = 0\n'
+        'dest = "widget-home"\n'
+        'dest_exists = true\n'
+        'shim_sites = 0\n', encoding="utf-8")
+    (root / "quality" / "ARCH_LAYERS.toml").write_text(
+        '[[layer]]\n'
+        'name = "contract"\n'
+        'crates = ["widget-home"]\n\n'
+        '[[package]]\n'
+        'name = "widget-home"\n'
+        'crates = ["widget-home"]\n', encoding="utf-8")
+    (root / "Cargo.toml").write_text(
+        '[workspace]\nmembers = ["fixture-crate", "widget-home"]\n',
+        encoding="utf-8")
+    for name in ("fixture-crate", "widget-home"):
+        (root / name / "src").mkdir(parents=True, exist_ok=True)
+        (root / name / "Cargo.toml").write_text(
+            f'[package]\nname = "{name}"\nversion = "0.0.0"\n',
+            encoding="utf-8")
+        (root / name / "src" / "lib.rs").write_text(
+            "pub struct SprocketThing;\n", encoding="utf-8")
+
+
+def _plan_positive(root: Path) -> None:
+    """An empty tier window: caught as a KNOT."""
+    _plan_fixture(root, empty_window=True)
+
+
+def _plan_negative(root: Path) -> None:
+    """A destination inside its window and its context: refused."""
+    _plan_fixture(root, empty_window=False)
+
+
+AXES.append({
+    "id": "plan",
+    "detect": _plan_detect,
+    "positive": _plan_positive,
+    "negative": _plan_negative,
+})
+
+
+@subcommand("plan")
+def cmd_plan(args: list[str]) -> int:
+    """Print the move plan for the queue head or `--crate X`."""
+    crate = _flag_value(args, "--crate")
+    if crate is None:
+        q = queue(REPO)["queue"]
+        if not q:
+            print("plan: queue is empty — every crate is 100% its own context",
+                  file=sys.stderr)
+            return EXIT_ARTIFACT_ABSENT
+        crate = q[0]["crate"]
+    r = plan(REPO, crate)
+    if not r["clusters"]:
+        for p in r["problems"]:
+            print(f"plan: {p}", file=sys.stderr)
+        return EXIT_ARTIFACT_ABSENT
+    total = r["total_lines"]
+    share = (r["own_lines"] / total * 100) if total else 0.0
+    print(f"plan — {r['crate']}  (own context: "
+          f"{', '.join(r['homes']) or '(none)'} · own share "
+          f"{r['own_lines']}/{total} {share:.1f}%)\n")
+    print(f"  move order (leaves first, then size): {', '.join(r['order'])}\n")
+    for cyc in r["cycles"]:
+        print(f"  CYCLE (port or split before the order can be linear): "
+              f"{' -> '.join(cyc)}\n")
+    if r["external_finding"]:
+        print(f"  {r['external_finding']}\n")
+    for i, c in enumerate(r["clusters"], 1):
+        kind = "hub" if c["hub"] else "leaf"
+        stays = "  STAYS" if c["context"] in r["homes"] else ""
+        print(f"  [{i}] {c['context']:<14} {kind:<4} "
+              f"{c['tree_lines']}→{c['lines']} lines, "
+              f"{c['tree_files']}→{c['files']} files{stays}")
+        imp = ", ".join(f"{k}:{v}" for k, v in sorted(c["imports"].items())) \
+            or "—"
+        by = ", ".join(f"{k}:{v}" for k, v in sorted(c["imported_by"].items())) \
+            or "—"
+        print(f"      in-crate imports: {imp}   imported_by: {by}")
+        if c["tree_import_syms"]:
+            for d, syms in sorted(c["tree_import_syms"].items()):
+                print(f"        -> {d}: {', '.join(syms)}")
+        ext = ", ".join(f"{e['crate']}(t{e['tier']}):{e['sites']}"
+                        for e in c["external"]) or "—"
+        print(f"      external: {ext}")
+        print(f"      own-dep-max {c['own_dep_max_tier']}  consumer-min "
+              f"{c['consumer_min_tier']}  window {c['window']}"
+              f"{'  after-port ' + str(c['window_after_port']) if c['window_after_port'] else ''}")
+        print(f"      dest: {', '.join(c['dest_candidates']) or '—'} "
+              f"(exists={c['dest_exists']})   registry dest: "
+              f"{c['registry_dest']}")
+        print(f"      shim sites {c['shim_sites']}   renames riding "
+              f"{len(c['renames'])}")
+        a = c["asserts"]
+        print(f"      asserts: dest-in-window "
+              f"{'ok' if a['dest_in_window'] else 'FAIL'}  "
+              f"dest-in-crates {'ok' if a['dest_in_crates'] else 'FAIL'}  "
+              f"no-new-exception {'ok' if a['no_new_exception'] else 'FAIL'}  "
+              f"share-monotone {'ok' if a['share_monotone'] else 'FAIL'}")
+        if c["constraint"]:
+            print(f"      constraint: {c['constraint']}")
+        for f in c["findings"]:
+            print(f"      finding: {f}")
+        for p in c["problems"]:
+            print(f"      PROBLEM: {p}")
+        print()
+    print(f"  {len(r['problems'])} problems across {len(r['clusters'])} "
+          f"clusters")
+    return 1 if r["problems"] else EXIT_OK
 
 
 def self_test() -> int:
