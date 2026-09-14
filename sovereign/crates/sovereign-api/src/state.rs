@@ -348,6 +348,13 @@ pub trait LocalInferenceService: Send + Sync {
         Vec::new()
     }
 
+    /// Per-slot decode evidence behind `/healthz`. Backed by
+    /// `InferenceProvider::decode_evidence`; empty by default, which
+    /// `/healthz` reports as "not demonstrated", never as healthy.
+    fn decode_evidence(&self) -> Vec<oicp_types::SlotDecodeEvidence> {
+        Vec::new()
+    }
+
     /// Eagerly load the primary chat slot so the next chat-completions
     /// request doesn't pay the lazy-load tax. Idempotent. Default
     /// returns success without doing work — backends that don't

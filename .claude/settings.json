@@ -20,7 +20,6 @@
     "UserPromptSubmit": [
       {
         "hooks": [
-   
           {
             "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/split-enforce.py",
             "type": "command",

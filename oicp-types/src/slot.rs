@@ -74,6 +74,104 @@ pub struct ResidentSlot {
     pub placement: Option<SlotPlacement>,
 }
 
+/// What a slot has DEMONSTRATED about decoding since this process started —
+/// the evidence behind `/healthz`'s per-slot verdict.
+///
+/// Recorded at the engine's completion boundary, never produced by a probe, so
+/// reading it cannot block and cannot force a load (a status field fed by a
+/// call that can block is how a health check hangs on the thing it reports).
+/// Three harnesses reported false results on 2026-09-12 because nothing could
+/// tell "the subject died" from "the subject failed"; residency alone cannot
+/// either — weights can be resident while every decode errors.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SlotDecodeEvidence {
+    /// Role stem, the same join key as [`ResidentSlot::role`].
+    pub role: String,
+    /// Model id of the most recent attempt that named one.
+    pub model_id: String,
+    /// Completions that returned a response.
+    pub ok: u64,
+    /// Completions that returned an error.
+    pub failed: u64,
+    /// Unix seconds of the most recent success, if any.
+    #[serde(default)]
+    pub last_ok_unix: Option<u64>,
+    /// Unix seconds of the most recent failure, if any.
+    #[serde(default)]
+    pub last_failure_unix: Option<u64>,
+    /// Error text of the most recent failure, truncated.
+    #[serde(default)]
+    pub last_failure: Option<String>,
+    /// Whether the most recent outcome was a success. Stored rather than
+    /// derived from the timestamps, which collide within one second.
+    #[serde(default)]
+    pub last_outcome_ok: Option<bool>,
+}
+
+impl SlotDecodeEvidence {
+    /// Longest failure text kept; an error string is evidence, not a log.
+    pub const MAX_FAILURE_CHARS: usize = 240;
+
+    /// `None` when the slot has never been asked to decode — "not yet
+    /// demonstrated" is absence, never a default of healthy. Otherwise, whether
+    /// the latest attempt succeeded.
+    pub fn decode_capable(&self) -> Option<bool> {
+        self.last_outcome_ok
+    }
+
+    /// Record a completion that returned a response.
+    pub fn record_ok(&mut self, model_id: &str, now_unix: u64) {
+        self.ok += 1;
+        self.model_id = model_id.to_string();
+        self.last_ok_unix = Some(now_unix);
+        self.last_outcome_ok = Some(true);
+    }
+
+    /// Record a completion that returned an error; the text is truncated.
+    pub fn record_failure(&mut self, error: &str, now_unix: u64) {
+        self.failed += 1;
+        self.last_failure_unix = Some(now_unix);
+        self.last_failure = Some(error.chars().take(Self::MAX_FAILURE_CHARS).collect());
+        self.last_outcome_ok = Some(false);
+    }
+}
+
+#[cfg(test)]
+mod decode_evidence_tests {
+    use super::SlotDecodeEvidence;
+
+    #[test]
+    fn a_slot_that_never_decoded_is_not_reported_capable() {
+        assert_eq!(SlotDecodeEvidence::default().decode_capable(), None);
+    }
+
+    #[test]
+    fn the_latest_outcome_decides_even_within_one_second() {
+        let mut e = SlotDecodeEvidence::default();
+        e.record_ok("m", 100);
+        assert_eq!(e.decode_capable(), Some(true));
+        e.record_failure("decode -1", 100);
+        assert_eq!(
+            e.decode_capable(),
+            Some(false),
+            "same-second failure must win"
+        );
+        e.record_ok("m", 100);
+        assert_eq!(e.decode_capable(), Some(true));
+        assert_eq!((e.ok, e.failed), (2, 1));
+    }
+
+    #[test]
+    fn failure_text_is_bounded() {
+        let mut e = SlotDecodeEvidence::default();
+        e.record_failure(&"x".repeat(10_000), 1);
+        assert_eq!(
+            e.last_failure.map(|s| s.chars().count()),
+            Some(SlotDecodeEvidence::MAX_FAILURE_CHARS)
+        );
+    }
+}
+
 /// One supervised compute-child's live status (DISTRIBUTED_PILOT_READINESS.md
 /// P1). Surfaced by [`InferenceProvider::compute_children`] and rendered on
 /// `/status` so an operator watching a silent local-only fallback sees the

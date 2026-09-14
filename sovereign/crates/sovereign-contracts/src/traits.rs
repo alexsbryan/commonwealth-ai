@@ -671,6 +671,14 @@ pub trait InferenceProvider: Send + Sync {
         Vec::new()
     }
 
+    /// What each slot has demonstrated about decoding since process start —
+    /// recorded at the completion boundary, never probed, so this MUST NOT
+    /// block. A slot absent from the list has not been asked to decode.
+    /// Default empty for the same reason as [`Self::resident_slots`].
+    fn decode_evidence(&self) -> Vec<crate::oicp::SlotDecodeEvidence> {
+        Vec::new()
+    }
+
     /// State of the deep-reasoning ("primary") slot — the answer to
     /// "will the next synthesis pay a model load before its first
     /// token?". `None` means unknown, and callers MUST NOT narrate a

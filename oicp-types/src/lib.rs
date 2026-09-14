@@ -60,7 +60,9 @@ pub use job::{
 };
 pub use jsonrpc::{JsonRpcError, JsonRpcRequest, JsonRpcResponse, JSONRPC_VERSION};
 pub use origin::OriginKind;
-pub use slot::{ComputeChildStatus, ResidentSlot, SlotPlacement, WorkerPlacement};
+pub use slot::{
+    ComputeChildStatus, ResidentSlot, SlotDecodeEvidence, SlotPlacement, WorkerPlacement,
+};
 pub use tenant::{InvalidTenantId, TenantId};
 pub use tool::{Effect, Idempotency, Latency, Scope, ToolDescriptor, ToolExample};
 
