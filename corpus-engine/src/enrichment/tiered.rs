@@ -52,14 +52,45 @@ pub type TieredProviderHandle = Arc<dyn TieredEnrichmentProvider>;
 /// killed mid-run. `None` falls back to RAPTOR-derived entities only.
 pub type ChunkEntityExtractorHandle = Arc<dyn ChunkEntityExtractor>;
 
+/// What one NER pass produced — and what it REFUSED.
+///
+/// The refusal count travels in the return type rather than in a log
+/// line because a caller cannot drop a field it has to destructure
+/// (ARCH 6, ARCH 10). An implementor that bounds its input (the GLiNER
+/// one does — `sovereign-gliner/src/bounded_input.rs`) reports the
+/// chunks it declined to send here; the runners accumulate it and stamp
+/// it on `_enrichment_state.json` via
+/// [`EnrichmentStateFile::record_refused_over_cap`], so "this corpus's
+/// entities are thin because 412 chunks were too long for the model" is
+/// a fact on disk instead of a guess.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ChunkNerOutcome {
+    /// Mentions persisted by this call.
+    pub mentions: usize,
+    /// Chunks NOT handed to inference because they exceeded the
+    /// per-chunk input bound. Refused whole — never truncated.
+    pub refused_over_cap: usize,
+}
+
+impl ChunkNerOutcome {
+    /// The common case: everything fit.
+    pub fn mentions(mentions: usize) -> Self {
+        Self {
+            mentions,
+            refused_over_cap: 0,
+        }
+    }
+}
+
 /// Per-chunk named-entity extractor. corpus-engine declares the
 /// trait so the dispatch loop can fire it per-conversation;
 /// sovereign-tools owns the concrete impl (where the `gline-rs` dep
 /// lives) and the SqliteStateStore persistence path.
 ///
 /// One call per conversation: implementor batches chunks internally
-/// for throughput. Returns the count of mentions persisted so the
-/// runner can surface a "extracted N entities" log line.
+/// for throughput, under whatever input bound its backend needs.
+/// Returns the mentions persisted plus the chunks it refused, so the
+/// runner can surface both.
 #[async_trait::async_trait]
 pub trait ChunkEntityExtractor: Send + Sync {
     async fn extract_for_conversation(
@@ -67,7 +98,7 @@ pub trait ChunkEntityExtractor: Send + Sync {
         corpus_id: &str,
         conv_uuid: &str,
         chunks: Vec<EnrichmentChunkRow>,
-    ) -> Result<usize>;
+    ) -> Result<ChunkNerOutcome>;
 
     /// Phase B incremental hook (spec
     /// `sovereign/docs/specs/PROGRESSIVE_ENRICHMENT.md` §"Incremental
@@ -85,8 +116,8 @@ pub trait ChunkEntityExtractor: Send + Sync {
         &self,
         _corpus_id: &str,
         _index_path: &Path,
-    ) -> Result<usize> {
-        Ok(0)
+    ) -> Result<ChunkNerOutcome> {
+        Ok(ChunkNerOutcome::default())
     }
 }
 
@@ -404,6 +435,11 @@ pub async fn run_tiered_enrichment(
 
     let mut completed = 0usize;
     let mut failed = 0usize;
+    // Chunks the NER seam REFUSED for exceeding its per-chunk input bound
+    // (`sovereign-gliner/src/bounded_input.rs`). Accumulated across the
+    // whole run and stamped on the state file below — a refusal is a fact
+    // about this corpus's entities, not a per-conversation log line.
+    let mut refused_over_cap = 0u64;
     for (conv_uuid, bucket) in conv_buckets {
         let rows = match index
             .chunks_for_source_doc_with_embeddings(&conv_uuid)
@@ -470,11 +506,13 @@ pub async fn run_tiered_enrichment(
                 .extract_for_conversation(&corpus_id, &conv_uuid, chunks_for_ner)
                 .await
             {
-                Ok(n) => {
+                Ok(outcome) => {
+                    refused_over_cap += outcome.refused_over_cap as u64;
                     tracing::debug!(
                         corpus = %corpus_id,
                         conv = %conv_uuid,
-                        mentions = n,
+                        mentions = outcome.mentions,
+                        refused_over_cap = outcome.refused_over_cap,
                         "tiered enrichment: per-chunk NER persisted"
                     );
                 }
@@ -518,6 +556,7 @@ pub async fn run_tiered_enrichment(
     // transition once the whole per-conv loop has settled. (The engine
     // wires `FolderTieredProvider` for both runners, so both must stamp.)
     stamp_folder_terminal(index_path, &corpus_id, completed, failed);
+    report_refused_over_cap(index_path, &corpus_id, refused_over_cap);
 
     Ok(plan)
 }
@@ -565,11 +604,15 @@ pub async fn run_folder_tiered_enrichment(
             .extract_delta_for_corpus(&corpus_id, index_path)
             .await
         {
-            Ok(n) => tracing::debug!(
-                corpus = %corpus_id,
-                mentions = n,
-                "tiered enrichment (folder): per-chunk NER delta persisted"
-            ),
+            Ok(outcome) => {
+                report_refused_over_cap(index_path, &corpus_id, outcome.refused_over_cap as u64);
+                tracing::debug!(
+                    corpus = %corpus_id,
+                    mentions = outcome.mentions,
+                    refused_over_cap = outcome.refused_over_cap,
+                    "tiered enrichment (folder): per-chunk NER delta persisted"
+                );
+            }
             Err(e) => tracing::warn!(
                 corpus = %corpus_id,
                 error = %e,
@@ -769,6 +812,33 @@ pub async fn run_folder_tiered_enrichment(
 /// `Complete` with the failure count in the message, because the
 /// successful notes' skeletons are real, usable retrieval surface and
 /// the per-note failures are recorded in `conv_skeletons.state`.
+/// Stamp the run's over-cap refusals onto `_enrichment_state.json` and
+/// say so once at `warn`. The ONE reporting site for that number, shared
+/// by both runners (ARCH 8). Best-effort: losing the record costs the
+/// operator an explanation, not the run.
+pub fn report_refused_over_cap(index_path: &Path, corpus_id: &str, refused: u64) {
+    if refused == 0 {
+        return;
+    }
+    tracing::warn!(
+        corpus = %corpus_id,
+        refused_over_cap = refused,
+        "tiered enrichment: {refused} chunk(s) were REFUSED by the NER input bound \
+         and produced no entities — refused whole, never truncated. Recorded on \
+         _enrichment_state.json as refused_over_cap_chunks. If this is most of the \
+         corpus, the chunker is emitting units the model cannot read; see \
+         sovereign-gliner/src/bounded_input.rs::MAX_CHUNK_CHARS for the bound and \
+         where it comes from."
+    );
+    if let Err(e) = EnrichmentStateFile::record_refused_over_cap(index_path, refused) {
+        tracing::warn!(
+            corpus = %corpus_id,
+            error = %e,
+            "tiered enrichment: could not record the over-cap refusal count"
+        );
+    }
+}
+
 fn stamp_folder_terminal(index_path: &Path, corpus_id: &str, completed: usize, failed: usize) {
     let result = if completed == 0 && failed > 0 {
         EnrichmentStateFile::fail(

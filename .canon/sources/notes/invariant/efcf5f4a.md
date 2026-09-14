@@ -1,0 +1,3 @@
+# summarize_dropped_history MUST use Speed::Fast (peer_inference.rs MeshInferenceProvider only forwards Speed::Slow over the mesh). Test…
+
+summarize_dropped_history MUST use Speed::Fast (peer_inference.rs MeshInferenceProvider only forwards Speed::Slow over the mesh). Test pinned: tests/functional.rs::summarize_dropped_history_uses_fast_slot_only. Removing the Fast pin would leak local-only chat content to peers when the daemon is in mesh mode. ARCH §7.4 defence-in-depth.

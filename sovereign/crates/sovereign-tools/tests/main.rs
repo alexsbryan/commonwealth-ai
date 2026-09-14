@@ -48,6 +48,8 @@ mod recipe_author_tools;
 mod smoke_tests;
 #[path = "main/tavily_real_e2e.rs"]
 mod tavily_real_e2e;
+#[path = "main/tier2_resume_gate.rs"]
+mod tier2_resume_gate;
 #[path = "main/tool_tests.rs"]
 mod tool_tests;
 #[path = "main/watched_folder_e2e.rs"]

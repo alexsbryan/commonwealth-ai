@@ -1424,6 +1424,114 @@ pins the literal-switch count at zero. See
 canonical umbrella that reconciles all three — before assuming "enrichment"
 means one thing.
 
+**A DEAD enrichment is never resumed automatically (2026-09-12).**
+`EnrichmentState::declared_dead()`
+(`corpus-engine/src/enrichment/state.rs`) is the one decider for that:
+`phase == Stalled`, or any `error` stamped on the sidecar. `Failed` needs
+no arm — `EnrichmentStateFile::fail` always writes an error alongside it;
+`Complete` deliberately is NOT dead, because the same predicate also gates
+the INGEST auto-resume and a corpus whose enrichment finished cleanly must
+still be free to finish ingesting. `EnrichmentStateFile::declared_dead_at`
+is the reader-level form, and it FAILS OPEN — a missing or corrupt sidecar
+resumes, since one bad JSON file is not proof a corpus is doomed. Four
+boot-time scans consult it, and before this each answered the question for
+itself and all four said "resume":
+`auto_resume::resume_in_progress_ingests`
+(`sovereign/crates/sovereign-mesh/src/auto_resume.rs`, a fourth skip beside
+the PeerPulled, watched-folder-`Errored` and recently-active ones),
+`atlas_postinstall::resume_inflight_tier2`
+(`sovereign/crates/sovereign-tools/src/atlas_postinstall.rs`, on the SOURCE
+corpus's sidecar), `CorpusEngine::resume_interrupted_conversation_enrichment`
+via `conversation_enrichment_is_resumable`
+(`corpus-engine/src/engine/mod.rs`) and
+`LocalCorpusManager::resume_interrupted_enrichment`
+(`sovereign/crates/sovereign-tools/src/local_corpus/manager.rs`). The last
+two consult `EnrichmentPhase::is_resumable_interruption()`, which says
+`Stalled` IS resumable — true of a process killed mid-run, and exactly what
+re-armed a doomed pass on every boot. **Resume is now an explicit operator
+action**: `LocalCorpusManager::reset_enrichment_state`, reachable at `POST
+/internal/corpus/enrich-reset`
+(`sovereign/crates/sovereign-mesh/src/corpus_watch_http.rs`), clears the
+sidecar; the corpus then enriches again on the normal path. Every skip says
+so at `info` and names that path.
+
+**The NER inference seam is input-bounded (2026-09-12).**
+`sovereign/crates/sovereign-gliner/src/bounded_input.rs` is the ONE
+implementation: `BoundedInputs::plan` splits a caller's texts into batches
+of at most `MAX_BATCH_CHUNKS` (16) and holds back anything over
+`MAX_CHUNK_CHARS` (2,048); `BoundedInputs::extract` drives the batches and
+reassembles results in input order. Both `GlinerChunkExtractor` entry
+points — `extract_for_conversation` and `extract_delta_for_corpus`
+(`sovereign/crates/sovereign-gliner/src/chunk_extractor.rs`) — go through
+it, and neither hands `LabeledEntityExtractor::extract_mentions_batch` a
+raw slice any more.
+
+`MAX_BATCH_CHUNKS` is the bound that stops the incident: gline-rs runs one
+`inference()` per batch, so peak arena is linear in N, and
+`extract_for_conversation` previously passed EVERY chunk of a conversation
+in one call. `MAX_CHUNK_CHARS` is derived from the model — gline-rs's
+`Parameters::default().max_length` is `Some(512)` WORDS, enforced by
+breaking out of `RegexSplitter`'s token loop, i.e. a silent truncation
+with no error and no report — and 512 × 4 chars/word is 2,048. Both
+numbers, and what would change them, are in
+[`sovereign/DEFAULTS_LEDGER.md`](DEFAULTS_LEDGER.md).
+
+**A refused chunk is reported, not truncated (ARCH 6).** Over-cap chunks
+are not sent and not shortened. Each gets a `warn` naming corpus,
+conversation, chunk id and length; the count leaves the pass on
+`ChunkNerOutcome::refused_over_cap`
+(`corpus-engine/src/enrichment/tiered.rs`, which replaced both extractor
+methods' bare `usize` so a caller cannot drop the number), and the runners
+stamp it onto `_enrichment_state.json` as `refused_over_cap_chunks` via
+`EnrichmentStateFile::record_refused_over_cap`. So "this corpus's entities
+are thin because N chunks were too long for the model" is a fact on disk.
+A large `refused_over_cap_chunks` is a signal about the CHUNKER, not a
+reason to raise the ceiling — `threaded_turns`
+(`corpus-engine/src/chunkers/threaded_turns.rs`) already caps a chunk at
+2,100 chars, which is why the incident was thousands of SHORT chunks in
+one call rather than a few long ones.
+
+**`ort 2.0.0-rc.9` cannot bound the CPU arena's SIZE — reported, not
+papered over (2026-09-12).** `OrtApi::CreateArenaCfg(..., max_mem, ...)`
+exists in `ort-sys` as a raw function pointer and `ort` wraps it nowhere;
+the only `OrtArenaCfg` reference in `ort`'s own source is
+`RocmExecutionProvider::with_default_memory_arena_cfg`, which takes a raw
+pointer and applies to ROCm devices. The memory-limit knobs that exist
+(`CANNExecutionProvider::with_memory_limit`, CUDA/ROCm `gpu_mem_limit`) are
+device-side; this workload is CPU-only, and no session config key takes a
+size. **So the bound on this pass is guard 2's input bound**, and
+`sovereign/crates/sovereign-gliner/src/session_bound.rs` says so in its
+module docs rather than implying the arena is capped.
+
+What rc.9 DOES expose is applied there, by one function per backend.
+`bounded_session_builder` (used by `gliner2.rs`) sets the CPU execution
+provider with **the arena off** — `CPUExecutionProvider::default()`'s
+`register` calls `DisableCpuMemArena`, and registering no provider at all,
+which both backends did before, leaves ORT's default of arena ENABLED —
+plus `with_memory_pattern(false)` and explicit intra/inter thread counts.
+The v1 (gline-rs) path does NOT own its builder: `orp::Model::new` calls
+`Session::builder()` itself and the only caller lever is
+`RuntimeParameters`, whose default carries an EMPTY provider list — so
+`v1_runtime_parameters` is that lever, and it matters most because
+`labeled::configured_model_id` resolves to a V1 model by default, i.e. the
+path the daemon was running. `with_memory_pattern` is unreachable from
+there. `sovereign/crates/sovereign-gliner/tests/session_bound_census.rs` is
+the ratchet: no other file in the crate may call `Session::builder()` or
+pass a bare `RuntimeParameters::default()`.
+
+The incident: corpus `agent-sessions` (this machine's Claude Code
+transcripts as `threaded_turns` chunks, `[enrichment] type = "tiered"`)
+stalled at 12:09 local on 2026-09-12 and was re-entered on every daemon
+boot for the rest of the day. Instrumented on pid 47944
+(`MallocStackLogging` + `malloc_history`, `vmmap --summary`, a 15 s
+`sample`): 20.2 GB after boot plus one primary load, 79.9 GB eight minutes
+later with ZERO requests, on stackless power-of-two onnxruntime arena
+blocks of 1, 2, 2, 8 and 32 GB. The only busy thread ran
+`run_tiered_enrichment` → `TieredPass::run` →
+`GlinerChunkExtractor::extract_for_conversation` → `extract_batch` →
+onnxruntime. Two jetsam SIGTERMs, every desktop soak aborting on its memory
+rule, and the "44 GB boot peak" were all this one corpus.
+
 - **`field_model` — System 1, `enrichment/field_engine.rs`** — five-phase
   *whole-corpus* pipeline (skeleton → cluster → align → fault lines → open
   questions). `Domain` trait + `DomainRegistry`. Domains include
@@ -5773,7 +5881,50 @@ no roster route at all, so a deployed app cannot add a key to the ring,
 including its own. `roster add` then reads the roster back *through the running
 daemon* and fails if the daemon does not report it — the one way that command
 can look like it worked and do nothing is writing to a directory the daemon
-does not read (§18.1). `ring dev` is a foreground server, so it is the one
+does not read (§18.1).
+
+**And since ring-apps ra-1, a roster row can say WHY it is there.** `Roster`
+was a name and some keys, so the only answer to "why is Alex in this ring" was
+whoever typed the command remembering. Two halves, landed together:
+
+- `Introduce { person, key, reason }` (`commonwealth-rail-core/src/introduce.rs`)
+  — an act a member signs under their own key, written by `svrn ring introduce
+  <person> --key <hex> --reason <why> --ring <ns>`. **Deliberately not a
+  `RailAct` variant**: a variant is a branch inside `admit`, which is the rail
+  deciding what an act means. It rides as an ordinary opaque `Payload` on a
+  `Record`, and admission carries it exactly the way it carries an expense.
+- `Roster.vouches: BTreeMap<key, Vouch { op, by, at }>` — keyed by KEY, not by
+  person, because two laptops can join on two evenings on two people's word.
+  `#[serde(default, skip_serializing_if)]`: a `roster.json` written before this
+  reads as warrant-unknown rather than failing to parse, and a roster with no
+  vouches serializes to exactly the bytes it did before.
+
+`trace(roster, admitted_ops, person, key) -> VouchStatus` is the one resolver.
+It takes **admitted** ops, so "exists, verifies, signed by a member" is
+discharged by `admit` rather than re-checked (§10.6), and the eight non-`Traced`
+variants are the ways a well-formed-looking row still resolves to nothing: op
+refused by admission, not an introduction, introduces another key, voided by a
+correction, a key vouching for itself, an introducer whose own row is dated
+*later* than the op they signed, and a row whose stored signer disagrees with
+the op. `svrn ring roster show` (`list` is the same command) prints the rail's
+own sentence under each key, and `roster add --on <op-id>` refuses a warrant
+that does not resolve — the `Vouch` is minted from the signed op, so the
+operator names an op id and nothing else.
+
+**`Introduce` is evidence, never admission, and that is the whole cut.** An
+introduction arriving from a peer moves no roster row:
+`a_peers_introduction_arrives_readable_and_changes_no_roster_row`
+(`commonwealth-rail/src/tests.rs`) asserts on the roster FILE BYTES after
+ring-sync delivers one, and was watched failing with `ingest_all` taught to
+fold it in. `svrn ring roster add` is still the only writer of a roster, the
+roster is still not a function of the op set, and the reference app's
+no-re-division test is unchanged.
+
+**A daemon older than the CLI drops warrants silently** — serde ignores an
+unknown field, so it reads `roster.json`, re-serializes it without `vouches`,
+and every row reads warrant-unknown with the reason sitting on disk. `roster
+show` compares against the file its own writer maintains and says so, exiting
+non-zero, rather than rendering a confident wrong answer (§18.3). `ring dev` is a foreground server, so it is the one
 declared capability no journey can drive; `cli-contract.toml` says so rather
 than listing it uncovered.
 
@@ -5801,6 +5952,7 @@ prove is the dialer's Ed25519 key, so the acceptor routes on `(ALPN, dialer)`:
 | `cwth/rpc/0` | the local ggml rpc-server | REFUSED — it authenticates nothing, so there is no safe downgrade |
 | `cwth/media/0` | the declared `[iroh] media_origin` (Jellyfin's `:8096`, or any HTTP server honouring `Range`); not advertised at all when none is declared | REFUSED — same reasoning as rpc: the origin authenticates nothing, and the dial string rides in every invite |
 | `cwth/app/0` | one of SEVERAL named HTTP apps this node publishes, chosen by the FIRST PATH SEGMENT per request (`GET /chores/tasks` → the `chores` origin, forwarded as `GET /tasks`); its own allow-list (`[iroh] app_allow`), separate from media's; advertised only while something is published, and added to and removed from the live endpoint as that changes | REFUSED — an app written in an afternoon authenticates nothing |
+| `cwth/offer/0` | the declared `[iroh] offer_origin` — any HTTP server listing what this operator has to sell or lend; its own allow-list (`[iroh] offer_allow`), a THIRD list separate from media's and apps'; not advertised at all when none is declared | REFUSED — the dial string is public and gossiped, so a downgrade here would publish an inventory of a household's possessions to anyone holding an invite |
 | `cwth/guest/0` | — | admitted; the listener behind it reads the bearer |
 | `cwth/http/0` | internal router | internal router, DELIBERATELY: a joiner is not a member yet and `/internal/join` is how it becomes one. `gossip_authorized` and the join key guard the sensitive routes; the rest are a known open edge, and closing it needs a join-only listener for non-members |
 
@@ -5837,6 +5989,56 @@ leaves the path kind to that field. Watched failing:
 and `commonwealth-media reach::tests::an_offline_member_is_refused_by_name_not_handed_a_dead_port`.
 These decisions live in the package crate so the inference daemon and the
 package-only rails daemon compose ONE implementation of them (ARCH §10.6).
+
+**The mesh's marketplace, and its incompleteness is reported**
+(`OriginKind::Offer`, `commonwealth-transport/src/origin_alpn.rs`,
+`[iroh] offer_origin` / `offer_allow`, `svrn mesh offers`, ra-4, 2026-09-13).
+The third origin kind is a variant, an ALPN, an acceptor route and a config
+key — `commonwealth_media::fanout` was already generic over the kind, so the
+catalogue half cost nothing. What it buys is the sentence no marketplace can
+say: **every neighbour is a ROW**. `svrn mesh offers` enumerates the roster
+itself and names every active member in `peers`, so a neighbour that publishes
+no offer origin appears carrying that refusal rather than being absent — with
+`peers` left out, the fanout targets only members that ADVERTISE the kind and
+the absence is exactly what would happen. Self is excluded: `origin_fanout`
+never asks this node. The verb **merges, dedups, ranks and schematises
+nothing** — a served row prints the origin's own bytes, and the only thing
+counted is how many elements a JSON ARRAY has, which is a fact about the
+document rather than a claim about what an item is. `svrn mesh offers --why`
+is the first surface that reads `Roster.vouches` for somebody other than the
+operator: it joins each seller **on the gossiped node key and never on the
+display name**, across every ring this node holds (`commonwealth_rail::
+namespaces_in`, and `sovereign_cli_shared::rail::roster_and_admission` — the
+same read `svrn ring roster show` makes), rendering `commonwealth_rail::trace`'s
+own sentence or `warrant unknown`. A name-based fallback would answer a
+question about a REMOTE party out of this node's local name table, which is
+the substitution ARCH §18.3 refuses. Watched failing:
+`mesh_offers::tests::a_sellers_name_matching_a_roster_row_is_not_a_warrant`
+(name fallback: a different key resolves to a warrant) and
+`commonwealth-media fanout::tests::a_member_publishing_no_offer_origin_is_a_row_carrying_why`
+(refused names filtered out of the catalogue).
+
+**A kind a build cannot NAME is refused by name, never answered empty**
+(`commonwealth_media::fanout::AskedKind`,
+`sovereign-cli-llm/src/mesh_skew.rs::render_kind_refusal`, 2026-09-13).
+`FanoutRequest.kind` was `Option<OriginKind>` over a closed set, and serde's
+`default` applies to an ABSENT field and not to an unparseable one — so
+`{"kind":"offer"}` against an older daemon failed the whole struct, axum
+answered 422, and the operator with a rebuilt CLI and an unrestarted daemon
+read a sentence about a struct field. `AskedKind` keeps the raw JSON of any
+shape (the `IgnoredAny` reasoning from `deserialize_known_origins`) and
+refuses by name, quoting what was asked and listing what this build serves.
+That cannot repair daemons that already shipped, so the CLI side DETERMINES
+the skew rather than guessing at serde's English: it re-asks the same route
+with `kind: "media"` and `peers: []` — zero targets, nothing dialed — and
+reports skew only when the control answers 200, `could-not-judge` otherwise
+(ARCH §18.3). Watched failing:
+`fanout::tests::a_kind_this_build_cannot_name_is_refused_by_name` with
+`resolve` defaulting Unknown to Media (`called unwrap_err() on an Ok value:
+Media`). Gossip needed no change: `deserialize_known_origins` already drops a
+kind the reader cannot name, and `Offer` is the first kind that tolerance
+actually covers — but it leaves no trace, so a build that knows `offer` still
+cannot tell an older peer from one publishing none by reading gossip alone.
 
 **What a member SERVES is gossiped beside how it is reached** (`NodeCapabilities::origins`,
 `OriginKind`, 2026-09-11). `OriginKind` is defined in `oicp_types::origin` since the same
@@ -5911,8 +6113,8 @@ a_slow_peer_does_not_delay_the_others_and_is_a_failed_row` (cap ignored),
 **The catalogue half, over any origin kind**
 (`commonwealth/crates/commonwealth-media/src/fanout.rs`, the route in
 `sovereign-mesh/src/origin_fanout.rs`, `POST /v1/mesh/fanout`,
-`svrn mesh media fanout <path>` and `svrn mesh app fanout <app> <path>`,
-2026-09-11; generalised 2026-09-12).
+`svrn mesh media fanout <path>`, `svrn mesh app fanout <app> <path>` and
+`svrn mesh offers`, 2026-09-11; generalised 2026-09-12; third kind 2026-09-13).
 It never was media-shaped — the selection already read `origins.contains(kind)`
 and the ask was already an arbitrary method/path/headers/body; what was
 media-specific were two hardcoded `OriginKind::Media`. Both are the request's
@@ -5922,7 +6124,9 @@ already been copied once). For an app the wire path is composed in
 `OriginRequest::from_request` — `/{app}` prefixed, one place that knows the
 convention — and the two mismatched pairs (`kind: app` with no name, an `app`
 name under `kind: media`) are refused rather than resolved, since the second
-would quietly ask Jellyfin instead. A row also carries `json`, the origin's
+would quietly ask Jellyfin instead. `Offer` takes media's arm, not the app
+one: both are ONE declared origin per node, so the path travels unprefixed and
+only `App` multiplexes. A row also carries `json`, the origin's
 body already parsed when it said JSON and was not cut at the cap, because
 every consumer's first line was `json.loads(row["body"])`; `body` stays the
 authority and a truncated body is never parsed.

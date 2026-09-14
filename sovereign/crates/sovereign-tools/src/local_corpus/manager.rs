@@ -962,6 +962,23 @@ impl LocalCorpusManager {
             if !state.phase.is_resumable_interruption() {
                 continue;
             }
+            // ...and never a build the system already declared dead.
+            // `is_resumable_interruption()` says Stalled IS resumable,
+            // which is what re-armed a doomed tiered build on every
+            // daemon boot (2026-09-12). Same predicate as the other three
+            // boot resume scans — `EnrichmentState::declared_dead`.
+            if state.declared_dead() {
+                tracing::info!(
+                    corpus = %corpus_id,
+                    phase = state.phase.label(),
+                    error = state.error.as_deref().unwrap_or(""),
+                    "enrichment resume: refusing a build the stall-sweep already \
+                     declared dead — it would re-enter the pass that died on every \
+                     boot. Resume is an explicit operator action: reset_enrichment_state \
+                     (POST /internal/corpus/enrich-reset), then Make explorable."
+                );
+                continue;
+            }
             if self.enrichment_driver.is_running(&corpus_id).await {
                 continue; // a build is somehow already live — don't double-start
             }

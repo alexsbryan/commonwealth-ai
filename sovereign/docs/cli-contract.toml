@@ -288,6 +288,30 @@ flags = [{ name = "--json" }, { name = "--no-probe" }]
 args = ["mesh", "app", "--help"]
 expect_exit = 0
 [[command]]
+# `svrn mesh offers` — the mesh's marketplace, and the one thing no marketplace
+# can show you: EVERY neighbour is a row, including the ones that publish no
+# offer origin, carrying the refusal instead of being absent. Unlike `mesh
+# media` and `mesh app` this verb IS journeyed live and asserts on stdout,
+# because `--who` says the same sentence about itself on a mesh of one and a
+# mesh of ten — see journey `mesh-offers-catalogue`. The two-node half (a real
+# dial to a real offer origin) is `iroh_dialer_admission_e2e`, which a journey
+# on one host cannot do. Proven by `mesh_offers::tests` (the vouch join never
+# falls back to a name) and `fanout::tests` (a member publishing none is a row).
+path = "mesh offers"
+binary = "llm"
+visibility = "public"
+classification = "daemon"
+flags = [
+  { name = "--why" },
+  { name = "--who" },
+  { name = "--path" },
+  { name = "--timeout-ms" },
+  { name = "--json" },
+]
+[command.smoke]
+args = ["mesh", "offers", "--help"]
+expect_exit = 0
+[[command]]
 # The catalogue half over APPS rather than media origins: the same request to
 # every member publishing an app of that name. One route underneath
 # (`POST /v1/mesh/fanout`, kind = app), so the media form and this one cannot
@@ -1558,7 +1582,7 @@ capabilities = [
 id = "mesh-federation"
 title = "Join two machines into one pool of models and corpora"
 doc = "docs/TWO_NODE_QUICKSTART.md"
-capabilities = ["mesh create", "mesh status", "mesh plan"]
+capabilities = ["mesh create", "mesh status", "mesh plan", "mesh offers"]
 
 [[experience]]
 id = "house-apps"
@@ -1581,7 +1605,7 @@ capabilities = ["mcp add", "mcp list", "mcp tools"]
 id = "ring-deploy"
 title = "Deploy an app to exactly your trust ring, and have its state converge"
 doc = "sovereign/docs/MESHAPP_AUTHORING.md"
-capabilities = ["ring new", "ring roster add", "ring log", "ring seal"]
+capabilities = ["ring new", "ring roster add", "ring introduce", "ring log", "ring seal"]
 
 # The work plane (cw-lift 5d). Distinct from `ring-deploy` on purpose: that
 # promise is "my app's STATE converges across my ring", this one is "my ring's
@@ -1889,9 +1913,28 @@ note = "the read side of [1]: the daemon lists the person the previous step boun
 exit = 0
 stdout_contains = "journeybot"
 [[journey.step]]
+run = "ring introduce dee --key 4242424242424242424242424242424242424242424242424242424242424242 --reason \"she fixed the boiler\" --ring journey-ring"
+mutates = true
+note = """An introduction is EVIDENCE, never admission, and the output is where \
+that shows: the op id prints, and so does the sentence saying nobody has been \
+added and which command would add them. `op:` is the load-bearing token — it \
+appears only after the daemon accepted the append and answered with an id, so \
+a build whose act the door refused cannot reach it. The REFUSALS on this verb \
+(a malformed key, a blank reason, a `--on` naming an op that does not resolve) \
+go to stderr, and `[journey.step.expect]` has no `stderr_contains` — asserting \
+an exit code alone would be a code standing in for evidence, which \
+`live_read_steps_assert_output` refuses. They are proven instead by \
+`ring_cmd::tests::an_introduction_without_a_key_or_a_reason_is_refused` and by \
+the eight non-traced verdicts in `commonwealth-rail-core`'s \
+`tests_introduce.rs`."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "op:"
+
+[[journey.step]]
 run = "ring log journey-ring"
-note = """A ring with a roster and no acts yet. `complete` is the load-bearing \
-word: an empty journal that could not say whether it was empty or merely \
+note = """A ring with a roster and one act on it. `complete` is the \
+load-bearing word: a journal that could not say whether it was whole or merely \
 unreachable would be the failure the gap report exists to prevent."""
 [journey.step.expect]
 exit = 0
@@ -3517,6 +3560,42 @@ gone, which is what makes step [2] a result rather than a claim."""
 [journey.step.expect]
 exit = 0
 stdout_contains = "Unpublished journeyapp."
+
+[[journey]]
+id = "mesh-offers-catalogue"
+title = "See what the neighbours have going spare, with the ones that did not answer named"
+persona = "operator"
+experience = "mesh-federation"
+tier = 3
+visibility = "public"
+doc = "docs/internal/RING_APPLICATIONS.md"
+[[journey.step]]
+run = "mesh offers --who"
+note = """The gossip read, and the one step whose OUTPUT is stable on any host. \
+Both branches — nobody advertises an offer origin, or several do — end in the \
+same clause, because it is the verb's claim about ITSELF rather than about the \
+mesh: it reads gossip and dials nobody. So this asserts a sentence and not an \
+exit code, on a lane host with no neighbours and on one with ten. The two-node \
+half (a real dial to a real offer origin over `cwth/offer/0`) is \
+`iroh_dialer_admission_e2e`, which a journey on one host cannot reach."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "nothing is dialed"
+[[journey.step]]
+run = "mesh offers --timeout-ms 2000"
+note = """The catalogue itself. `--timeout-ms` is bounded because this step \
+genuinely fans out over iroh to every active member, and an unbounded lane \
+step on a mesh with an offline peer would sit for the default ten seconds per \
+row. `stdout_non_empty` and not a phrase: the answer is one of two paragraphs \
+depending on whether this host has neighbours at all, and asserting either \
+would make the lane pass on one kind of host and fail on the other for a \
+reason that is not about the verb. What it does prove is that the fan-out ran \
+and rendered — a daemon that refused the `offer` kind exits 1 here with the \
+skew sentence on stderr, which is the failure this step is most likely to \
+catch."""
+[journey.step.expect]
+exit = 0
+stdout_non_empty = true
 
 [[journey]]
 id = "pipeline-pods"

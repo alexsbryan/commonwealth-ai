@@ -316,6 +316,34 @@ async fn resume_in_progress_ingests(state: AppState) {
             continue;
         }
 
+        // Dead-enrichment gate. `spawn_corpus_install` re-runs the whole
+        // install, and a conversation-shaped install ends in
+        // `run_tiered_enrichment` — so an ingest whose enrichment the
+        // stall-sweep already killed re-enters the pass that died, on
+        // every boot, forever. On 2026-09-12 that pass was per-chunk
+        // GLiNER over `threaded_turns` chunks and it took the daemon
+        // from 20.2 GB to 79.9 GB in eight minutes with zero requests
+        // (pid 47944, `malloc_history` + `vmmap --summary` + a 15 s
+        // `sample`; two jetsam SIGTERMs). Resume of a dead build is an
+        // OPERATOR action, not a boot action. The predicate is
+        // `EnrichmentState::declared_dead`, shared with the other three
+        // boot resume scans; it reads the CANONICAL dir, where the
+        // sidecar is written, and fails OPEN on a corrupt one.
+        if corpus_engine::enrichment::state::EnrichmentStateFile::declared_dead_at(
+            &engine.canonical_path(&corpus_id),
+        ) {
+            tracing::info!(
+                corpus = %corpus_id,
+                "auto_resume: skipping corpus whose enrichment state records a stall \
+                 or an error — the pass that died would re-enter on every boot. \
+                 Resume is an explicit operator action: clear the state via \
+                 LocalCorpusManager::reset_enrichment_state (POST \
+                 /internal/corpus/enrich-reset, or Settings → Local Knowledge \
+                 remove + re-add), then re-request the install."
+            );
+            continue;
+        }
+
         // Activity gate. If the partition's `_corpus_meta.json` was
         // mtime'd within `RECENT_ACTIVITY_WINDOW`, an in-process CLI
         // ingest (e.g. `sovereign code index`) is plausibly still

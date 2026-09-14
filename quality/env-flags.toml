@@ -1334,6 +1334,13 @@ cluster = "dev-gates"
 default = "off"
 status = "guard"
 purpose = """Set to 1 to silence .claude/hooks/commit-smells.py, the PreToolUse hook that runs the model-free ARCH §15 smell gate (scripts/co-arch.py over quality/arch-probes.toml) on what a `git commit` would record and blocks the agent once per site per session. A kill-switch for a false-positive storm or a fixture-heavy commit; the nightly co-arch audit still judges the commit afterwards, so nothing is lost by opting out, only the in-session placement of the principle next to the diff."""
+
+[[flag]]
+name = "CANON_ACTOR"
+cluster = "dev-gates"
+default = "unset"
+status = "guard"
+purpose = """Who canon records as acting. Set by the harness, never on a command line: .claude/settings.json sets agent:claude-code. .claude/hooks/canon-actor-guard.py reads it to allow a canon propose verb (add, question, draft) only under an agent: actor, and refuses every adjudication verb whatever it holds. Unset, canon falls back to git user.name prefixed human:, which on this machine is the operator; that fallback is what the guard stops an agent inheriting (canon docs/LOAD_TEST_COMMONWEALTH.md entry 3)."""
 [[flag]]
 name = "SOVEREIGN_FAST_SHORT_QUEUE_CAP"
 cluster = "inference"

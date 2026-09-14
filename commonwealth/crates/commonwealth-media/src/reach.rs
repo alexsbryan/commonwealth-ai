@@ -258,6 +258,7 @@ pub fn class_of(kind: OriginKind) -> TrafficClass {
     match kind {
         OriginKind::Media => TrafficClass::Media,
         OriginKind::App => TrafficClass::App,
+        OriginKind::Offer => TrafficClass::Offer,
     }
 }
 

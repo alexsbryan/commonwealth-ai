@@ -41,6 +41,31 @@ pub enum OriginKind {
     /// decision as admitting them to your media library, and neither is the
     /// same as admitting them to your tensor RPC.
     App,
+    /// An HTTP origin listing what this node's operator has to SELL or LEND
+    /// (`[iroh] offer_origin`), served on `OFFER_ALPN`.
+    ///
+    /// The catalogue of a mesh marketplace is COMPUTED, never stored: there
+    /// is no listing to be excluded from and no ranking, because nobody is
+    /// positioned to rank. `origin_fanout` asks every member that publishes
+    /// one the same question and returns a row each — including a
+    /// `never_asked` row for the member that publishes none, which is the
+    /// property no marketplace has (`docs/internal/RING_APPLICATIONS.md`
+    /// §Commerce).
+    ///
+    /// **What rides behind it is the ORIGIN's, entirely.** This kind carries
+    /// no item schema and the substrate merges and dedups nothing — that
+    /// refusal is `commonwealth_media::fanout`'s and it is the reason a
+    /// marketplace can be a second fold consumer rather than a fork. What
+    /// "an offer" means is a question for a shim that speaks one seller's
+    /// catalogue; this enum only says which ALPN reaches it.
+    ///
+    /// **Its own kind rather than an `App` named `offers`, for the reason
+    /// `App` is not a path on `Media`: it is its own TRUST class.** Letting
+    /// the house see what you have for sale is a different decision from
+    /// letting them into your chore app, and a house that cannot express the
+    /// narrower grant says yes to everything instead. `[iroh] offer_allow`
+    /// is that expression, and it is a separate list.
+    Offer,
 }
 
 impl OriginKind {
@@ -59,6 +84,13 @@ impl OriginKind {
         match self {
             OriginKind::Media => "media origin",
             OriginKind::App => "published app",
+            // NOT "offer" or "catalogue". A refusal reads "'Jonas' advertises
+            // no <noun>", and the thing Jonas failed to advertise is the
+            // ORIGIN — the HTTP server behind `[iroh] offer_origin` — not the
+            // individual offers, which this repository never sees and has no
+            // business counting. "advertises no offers" would send the reader
+            // to look for an empty catalogue that does not exist.
+            OriginKind::Offer => "offer origin",
         }
     }
 
@@ -68,6 +100,13 @@ impl OriginKind {
         match self {
             OriginKind::Media => "svrn mesh media",
             OriginKind::App => "svrn mesh app",
+            // `--who` and not the bare verb, unlike the other two. Bare
+            // `svrn mesh offers` is the CATALOGUE — it asks, and its answer
+            // already carries this refusal as a row. Sending a reader who
+            // just read that row back to the command that printed it is a
+            // loop; `--who` is the gossip list, which is what "who offers
+            // one" means here.
+            OriginKind::Offer => "svrn mesh offers --who",
         }
     }
 
@@ -77,6 +116,30 @@ impl OriginKind {
         match self {
             OriginKind::Media => "set `[iroh] media_origin`",
             OriginKind::App => "run `svrn publish <name> <port>`",
+            // Config, not a verb: unlike an app, an offer origin is a server
+            // the operator already runs and wants up permanently, so the
+            // durable tier is the right one and there is no ephemeral
+            // claim tier for it in this rung.
+            OriginKind::Offer => "set `[iroh] offer_origin`",
+        }
+    }
+
+    /// Every kind, for a surface that must enumerate the closed set — the
+    /// refusal that names what a build DOES know when it meets a kind it
+    /// does not (see `sovereign_mesh::origin_fanout`).
+    ///
+    /// A const array rather than a `strum` derive or a hand-written list at
+    /// the call site: a fourth variant that forgets to appear here is a
+    /// refusal that lies about this build's own vocabulary.
+    pub const ALL: [OriginKind; 3] = [OriginKind::Media, OriginKind::App, OriginKind::Offer];
+
+    /// The wire spelling — the serde repr, as one function rather than as a
+    /// `serde_json::to_string` at each call site that wants to PRINT a kind.
+    pub fn wire(self) -> &'static str {
+        match self {
+            OriginKind::Media => "media",
+            OriginKind::App => "app",
+            OriginKind::Offer => "offer",
         }
     }
 }
@@ -104,6 +167,16 @@ impl OriginKind {
 /// Adding `App` is itself the one break this cannot retroactively prevent —
 /// peers already running a build without this function still drop the row. It
 /// is the last time the set can do that.
+///
+/// `Offer` (2026-09-13) is the first kind that tolerance actually covers: a
+/// peer carrying this function meets `["media","offer"]`, keeps `media`, and
+/// stays on the roster. What it does NOT get is a way to say so — the dropped
+/// kind leaves no trace in `NodeCapabilities`, so a build that knows `offer`
+/// cannot tell "this peer runs an older build" from "this peer publishes no
+/// offer origin" by reading gossip. That distinction is made where a kind is
+/// ASKED for by name and the answering build has no name for it
+/// (`commonwealth_media::fanout::AskedKind`), not here; the boundary's job is
+/// to keep the row, and it does.
 pub fn deserialize_known_origins<'de, D>(d: D) -> Result<Vec<OriginKind>, D::Error>
 where
     D: Deserializer<'de>,
@@ -151,6 +224,68 @@ mod tests {
             serde_json::from_str::<OriginKind>("\"app\"").unwrap(),
             OriginKind::App
         );
+        assert_eq!(
+            serde_json::to_string(&OriginKind::Offer).unwrap(),
+            "\"offer\""
+        );
+        assert_eq!(
+            serde_json::from_str::<OriginKind>("\"offer\"").unwrap(),
+            OriginKind::Offer
+        );
+    }
+
+    /// [`OriginKind::wire`] is a SECOND spelling of the serde repr, so it is
+    /// pinned to the first rather than trusted. The failing input is a
+    /// variant whose `wire()` drifts from its `rename_all` form — which a
+    /// refusal would then print as a kind no peer would accept.
+    #[test]
+    fn the_printable_wire_name_is_the_serde_name() {
+        for kind in OriginKind::ALL {
+            assert_eq!(
+                serde_json::to_string(&kind).unwrap(),
+                format!("\"{}\"", kind.wire()),
+                "{kind:?}"
+            );
+        }
+    }
+
+    /// Every variant is in `ALL`. Not provable by construction, so it is
+    /// proved by round-tripping every wire name back through serde and
+    /// counting: a fourth variant missing from `ALL` makes a refusal
+    /// understate this build's own vocabulary.
+    #[test]
+    fn all_names_every_variant() {
+        let mut seen: Vec<&str> = OriginKind::ALL.iter().map(|k| k.wire()).collect();
+        seen.sort_unstable();
+        seen.dedup();
+        assert_eq!(seen.len(), OriginKind::ALL.len(), "duplicate in ALL");
+        assert_eq!(seen, vec!["app", "media", "offer"]);
+    }
+
+    /// The three sentence fragments are per-variant so a refusal cannot
+    /// describe the wrong domain (the 2026-09-12 defect where every app
+    /// refusal said "media origin"). The failing input is a new variant
+    /// whose arms were copied from an old one.
+    #[test]
+    fn every_kind_names_itself_and_no_other() {
+        for kind in OriginKind::ALL {
+            for other in OriginKind::ALL {
+                if kind == other {
+                    continue;
+                }
+                assert_ne!(kind.noun(), other.noun(), "{kind:?} vs {other:?}");
+                assert_ne!(
+                    kind.how_to_offer(),
+                    other.how_to_offer(),
+                    "{kind:?} vs {other:?}"
+                );
+                assert_ne!(
+                    kind.viewer_verb(),
+                    other.viewer_verb(),
+                    "{kind:?} vs {other:?}"
+                );
+            }
+        }
     }
 
     #[derive(Debug, Deserialize)]

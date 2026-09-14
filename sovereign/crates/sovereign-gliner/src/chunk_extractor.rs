@@ -7,11 +7,12 @@ use std::path::Path;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use corpus_engine::enrichment::tiered::ChunkEntityExtractor;
+use corpus_engine::enrichment::tiered::{ChunkEntityExtractor, ChunkNerOutcome};
 use corpus_engine::error::{Error, Result};
 use corpus_engine::index::{CorpusIndex, EnrichmentChunkRow};
 use sovereign_store::sqlite::SqliteStateStore;
 
+use crate::bounded_input::BoundedInputs;
 use crate::labeled::LabeledEntityExtractor;
 
 /// Concrete `ChunkEntityExtractor` impl for the daemon ingest path.
@@ -63,7 +64,7 @@ impl GlinerChunkExtractor {
         &self,
         corpus_id: &str,
         index_path: &Path,
-    ) -> Result<usize> {
+    ) -> Result<ChunkNerOutcome> {
         let index = CorpusIndex::open(index_path).await?;
         let groups = index.group_chunks_by_source_doc().await?;
         let total_chunks: usize = groups.values().map(|v| v.len()).sum();
@@ -84,6 +85,7 @@ impl GlinerChunkExtractor {
         let now = crate::gliner_ner::now_unix();
         let mut new_chunks_processed = 0usize;
         let mut new_mentions = 0usize;
+        let mut refused_over_cap = 0usize;
         let mut high_chunk_id: Option<i64> = None;
 
         for (conv_uuid, chunk_ids) in groups.iter() {
@@ -118,7 +120,23 @@ impl GlinerChunkExtractor {
             // which is the whole point of the durable marker.
             let delta_ids: Vec<u64> = delta.iter().map(|c| c.id).collect();
             let texts: Vec<&str> = delta.iter().map(|c| c.content.as_str()).collect();
-            let mention_batches = match self.extractor.extract_mentions_batch(&texts) {
+            // The input bound (`bounded_input.rs`). Over-cap chunks are
+            // REFUSED, not truncated; each is named here because only this
+            // site knows the corpus, the conv and the chunk id.
+            let plan = BoundedInputs::plan(&texts);
+            for over in plan.over_cap() {
+                refused_over_cap += 1;
+                tracing::warn!(
+                    corpus = corpus_id,
+                    conv = %conv_uuid,
+                    chunk = delta[over.index].id,
+                    chars = over.chars,
+                    cap = crate::bounded_input::MAX_CHUNK_CHARS,
+                    "extract_delta_for_corpus: chunk over the NER input bound — REFUSED \
+                     whole, not truncated, so it contributes no entities"
+                );
+            }
+            let mention_batches = match plan.extract(self.extractor.as_ref()) {
                 Ok(b) => b,
                 Err(e) => {
                     tracing::warn!(
@@ -223,17 +241,25 @@ impl GlinerChunkExtractor {
                 corpus = corpus_id,
                 new_chunks = new_chunks_processed,
                 new_mentions,
+                refused_over_cap,
                 total_chunks,
                 "extract_delta_for_corpus: incremental NER pass complete"
             );
         }
-        Ok(new_mentions)
+        Ok(ChunkNerOutcome {
+            mentions: new_mentions,
+            refused_over_cap,
+        })
     }
 }
 
 #[async_trait]
 impl ChunkEntityExtractor for GlinerChunkExtractor {
-    async fn extract_delta_for_corpus(&self, corpus_id: &str, index_path: &Path) -> Result<usize> {
+    async fn extract_delta_for_corpus(
+        &self,
+        corpus_id: &str,
+        index_path: &Path,
+    ) -> Result<ChunkNerOutcome> {
         // Delegate to the inherent method so the trait + inherent
         // entry points stay bit-identical. Keeping the inherent
         // method also lets callers in sovereign-tools call directly
@@ -246,13 +272,39 @@ impl ChunkEntityExtractor for GlinerChunkExtractor {
         corpus_id: &str,
         conv_uuid: &str,
         chunks: Vec<EnrichmentChunkRow>,
-    ) -> Result<usize> {
+    ) -> Result<ChunkNerOutcome> {
         if chunks.is_empty() {
-            return Ok(0);
+            return Ok(ChunkNerOutcome::default());
         }
         let extracted_at = crate::gliner_ner::now_unix();
         let texts: Vec<&str> = chunks.iter().map(|c| c.content.as_str()).collect();
-        let mention_batches = match self.extractor.extract_mentions_batch(&texts) {
+        // THE bound. Before 2026-09-12 this handed every chunk of the
+        // conversation to gline-rs in ONE `inference()` call, and a Claude
+        // Code transcript imported as `threaded_turns` puts thousands of
+        // chunks in one conversation — which is how the daemon reached
+        // 79.9 GB with no requests in flight. See `bounded_input.rs`.
+        let plan = BoundedInputs::plan(&texts);
+        for over in plan.over_cap() {
+            tracing::warn!(
+                corpus = corpus_id,
+                conv = conv_uuid,
+                chunk = chunks[over.index].id,
+                chars = over.chars,
+                cap = crate::bounded_input::MAX_CHUNK_CHARS,
+                "extract_for_conversation: chunk over the NER input bound — REFUSED \
+                 whole, not truncated, so it contributes no entities"
+            );
+        }
+        let refused_over_cap = plan.over_cap().len();
+        tracing::debug!(
+            corpus = corpus_id,
+            conv = conv_uuid,
+            chunks = texts.len(),
+            batches = plan.batch_count(),
+            refused_over_cap,
+            "extract_for_conversation: input bound applied"
+        );
+        let mention_batches = match plan.extract(self.extractor.as_ref()) {
             Ok(b) => b,
             Err(e) => {
                 return Err(Error::Database(format!(
@@ -276,6 +328,9 @@ impl ChunkEntityExtractor for GlinerChunkExtractor {
                 "save_chunk_entities_for_conv({corpus_id}, {conv_uuid}): {e}"
             )));
         }
-        Ok(count)
+        Ok(ChunkNerOutcome {
+            mentions: count,
+            refused_over_cap,
+        })
     }
 }

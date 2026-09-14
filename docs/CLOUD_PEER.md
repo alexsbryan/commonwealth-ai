@@ -34,8 +34,9 @@ answers "is anything costing me money right now, and how much so far".
 ## Before the first run
 
 - **Vast CLI + credit.** `vastai show user --raw` should print your account;
-  read the `credit` field, not `balance`. The API key lives at
-  `~/.config/vastai/vast_api_key` (mode 0600).
+  read the `credit` field, not `balance`. `dev-pod.sh` passes the key as
+  `VAST_API_KEY` or `VAST_API_TOKEN`; if the CLI still cannot read the
+  account, `status` says so and exits 2.
 - **An SSH key registered with Vast** — `vastai show ssh-keys`; register one
   with `vastai create ssh-key "$(cat ~/.ssh/id_ed25519.pub)"`. Without it
   `tunnel` and the teardown's mesh-leave have no way in.

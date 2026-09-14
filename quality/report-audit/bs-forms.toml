@@ -70,6 +70,14 @@ incident = "With the distributed primary unavailable the streaming path returned
 example = "Ran the gate and it passed. (It ran on two crates, not the workspace.)"
 
 [[form]]
+id = "no_support"
+arch = 5
+deviation = true
+question = "Does the evidence offered contain nothing at all that bears on this claim?"
+incident = "Minted 2026-09-13. The judge returned an empty span with `overruns` on 31 of 40 claims and the code discarded every one as unjudgeable while the prompt invited exactly that answer. It is a finding -- the claim rests on nothing shown -- and it must live in this file, because a form minted in code is a second decider and the scorers count deviations by membership here (ARCH 8)."
+example = "A claim about retrieval latency offered beside a turn whose only tool output is a git status."
+
+[[form]]
 id = "hedged"
 arch = 0
 deviation = false

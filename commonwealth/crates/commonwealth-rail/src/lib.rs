@@ -215,24 +215,38 @@ impl RingRail {
     /// A missing `rings/` directory is an empty list, not an error: a daemon
     /// that has never hosted a ring is a normal daemon.
     pub fn namespaces(&self) -> Result<Vec<String>, RailError> {
-        let dir = rings_root(&self.root);
-        let entries = match std::fs::read_dir(&dir) {
-            Ok(e) => e,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-            Err(e) => return Err(RailError::Io(format!("{}: {e}", dir.display()))),
-        };
-        let mut out: Vec<String> = entries
-            .filter_map(|e| e.ok())
-            .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
-            .filter_map(|e| e.file_name().into_string().ok())
-            // A directory whose name this build would refuse to open is not a
-            // namespace — skip it rather than surfacing a path we cannot use.
-            .filter(|name| valid_namespace(name))
-            .collect();
-        out.sort();
-        Ok(out)
+        namespaces_in(&self.root)
     }
+}
 
+/// Every ring namespace under `root`, without holding a [`RingRail`].
+///
+/// A reader that only wants to LIST rings has no business minting a signer,
+/// and a second `root.join("rings")` somewhere else is how the literal gets a
+/// second spelling (ARCH §10.6 — the module note above says this is the one
+/// place it lives). `svrn mesh offers --why` is the caller that needed it:
+/// resolving a remote seller's warrant means asking every ring this node
+/// holds, and it holds no rail.
+pub fn namespaces_in(root: &Path) -> Result<Vec<String>, RailError> {
+    let dir = rings_root(root);
+    let entries = match std::fs::read_dir(&dir) {
+        Ok(e) => e,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(RailError::Io(format!("{}: {e}", dir.display()))),
+    };
+    let mut out: Vec<String> = entries
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
+        .filter_map(|e| e.file_name().into_string().ok())
+        // A directory whose name this build would refuse to open is not a
+        // namespace — skip it rather than surfacing a path we cannot use.
+        .filter(|name| valid_namespace(name))
+        .collect();
+    out.sort();
+    Ok(out)
+}
+
+impl RingRail {
     /// The journal for one namespace, opening it if this is the first touch.
     pub fn journal(&self, namespace: &str) -> Result<Arc<RingJournal>, RailError> {
         let mut open = self.open.lock().unwrap_or_else(|e| e.into_inner());

@@ -100,47 +100,13 @@ pub const CLIENT_ALPN: &[u8] = b"cwth/client/0";
 /// cannot reach the trusted listener, and a peer's inference is untouched.
 pub const GUEST_ALPN: &[u8] = b"cwth/guest/0";
 
-/// A MEMBER reaching this node's media origin — whatever HTTP media server its
-/// operator already runs (Jellyfin's `:8096`, a plain file server, anything that
-/// speaks `Range`).
-///
-/// Its own protocol rather than a path on the client API, because the product is
-/// that clients speak the media server's OWN api: the bridge is
-/// [`tokio::io::copy`] in both directions and never parses HTTP, so `Range`
-/// passes through untouched and a player seeks as if the library were local. A
-/// path on `CLIENT_ALPN` would have meant re-implementing the media server.
-///
-/// Members only, and refused rather than downgraded for a stranger — the origin
-/// authenticates nothing, so there is no safe listener to fall back to. Same
-/// rule as [`RPC_ALPN`], for the same reason.
-pub const MEDIA_ALPN: &[u8] = b"cwth/media/0";
-
-/// A MEMBER reaching one of the HTTP apps this node publishes BY NAME
-/// (`[iroh.apps]`) — a chore rotation, a print queue, a thing somebody wrote
-/// at 1am and wants to show a housemate now.
-///
-/// One ALPN for an unbounded number of apps, demultiplexed by a leading path
-/// segment (`GET /chores/tasks` → the `chores` origin, rewritten to
-/// `GET /tasks`). The closed set stays closed — one variant
-/// ([`oicp_types::origin::OriginKind::App`]), one ALPN, one acceptor route —
-/// while the open set, which apps, is config data that changes without a code
-/// change (ARCH §9). A per-app ALPN (`cwth/app/0/<name>`) was the alternative
-/// and was rejected: ALPNs are pre-registered when the endpoint is built, so
-/// publishing an app would mean rebuilding the endpoint, and the whole point
-/// of the ephemeral tier is that registering an app is cheaper than a restart.
-///
-/// **Its own trust class, and that is the reason it is not `MEDIA_ALPN` with a
-/// path convention.** Admitting a housemate to your chore app is a different
-/// decision from admitting them to your media library, which is different
-/// again from admitting them to your tensor RPC. A dialer admitted here must
-/// still be refused [`MEDIA_ALPN`] and [`RPC_ALPN`] unless separately allowed,
-/// and that is only real if a failing input proves it — see
-/// `iroh_access.rs::the_three_origin_alpns_admit_independently`.
-///
-/// Members only, refused rather than downgraded for a stranger: an app written
-/// in an afternoon authenticates nothing, so there is no safe listener to fall
-/// back to. Same rule as [`MEDIA_ALPN`] and [`RPC_ALPN`], for the same reason.
-pub const APP_ALPN: &[u8] = b"cwth/app/0";
+// The three origin protocols moved to `origin_alpn.rs` (2026-09-13, adding
+// `OFFER_ALPN`): this file is past ARCH §3.2's ceiling and a third ALPN with
+// its reasoning was where the next line would have gone, the same call
+// `iroh_path.rs` made. Re-exported here so every call site keeps spelling
+// them `commonwealth_transport::iroh::MEDIA_ALPN` — the extraction changed no
+// import anywhere, which is what makes it behaviour-preserving.
+pub use crate::origin_alpn::{APP_ALPN, MEDIA_ALPN, OFFER_ALPN};
 
 // Re-exported so feature consumers (sovereign-server, the mobile
 // core, the sovereign-mesh spike test) build endpoints without
@@ -763,6 +729,7 @@ impl IrohTransport {
             TrafficClass::RpcTensor => RPC_ALPN,
             TrafficClass::Media => MEDIA_ALPN,
             TrafficClass::App => APP_ALPN,
+            TrafficClass::Offer => OFFER_ALPN,
             _ => ALPN,
         }
     }

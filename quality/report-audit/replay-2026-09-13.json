@@ -1,0 +1,3782 @@
+[
+ {
+  "schema": "session-card/v1",
+  "session": "c01789ff-b2f4-450b-a018-862967323bb9",
+  "in_flight": false,
+  "started": "2026-09-13T03:24:03.809Z",
+  "ended": "2026-09-13T17:16:04.667Z",
+  "t1_sha": "fb983d8877fcca147bf32cf13341ece223822b91",
+  "turns": 14,
+  "operator_facing": 409,
+  "sentences": 427,
+  "adjudicable": 253,
+  "classes": {
+   "evaluative": 33,
+   "retrospective": 161,
+   "none": 86,
+   "universal": 66,
+   "predictive": 37,
+   "promissory": 26
+  },
+  "commitments": 4,
+  "advice": 22,
+  "own_commits": [
+   "61f5e7a77",
+   "ba125f21a"
+  ],
+  "verdicts": {
+   "unchecked": 4
+  },
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 10,
+   "items_offered": 131,
+   "max_offered": 26,
+   "items_per_block": 13.1,
+   "tool_calls": 213,
+   "widest": {
+    "offered": 26,
+    "ask": "The idea would be to make canon the source of truth, but we need to give it a territory to govern for a bit, trial it, and if it does good we can expand scope u",
+    "ask_words": 46,
+    "leads": [
+     "I'd start canon on `sovereign/DEFAULTS_LEDGER.md` as a four-week trial",
+     "## Correction: canon's governance holds",
+     "Two updates ago I said an agent could get past canon, and that was wro"
+    ]
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "not-mine": 310,
+     "holds": 98,
+     "broken": 1
+    },
+    "arith": {
+     "not-mine": 409
+    },
+    "green": {
+     "not-mine": 409
+    }
+   },
+   "findings": [
+    {
+     "instrument": "numbers",
+     "turn": 1,
+     "text": "The notes injection hook was cut on 2026-09-11 after 2,976 injections and not a single cited note.",
+     "reason": "`2976` appears in none of the 26 tool results, tool inputs or operator messages before turn 1",
+     "receipt": "grep -c '2976' <transcript tool_result/tool_use/user records before block 1> -> 0"
+    }
+   ],
+   "results": 213
+  },
+  "claims_routed": 87,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "d6c0c747-1df0-47cd-9605-14434d5b3295",
+  "in_flight": false,
+  "started": "2026-09-12T23:52:59.121Z",
+  "ended": "2026-09-13T16:13:03.273Z",
+  "t1_sha": "2e9b83993e4e123751cad7d7f201fb8dc7e7da6a",
+  "turns": 121,
+  "operator_facing": 515,
+  "sentences": 927,
+  "adjudicable": 326,
+  "classes": {
+   "retrospective": 204,
+   "none": 83,
+   "universal": 93,
+   "predictive": 43,
+   "evaluative": 63,
+   "promissory": 29
+  },
+  "commitments": 3,
+  "advice": 26,
+  "own_commits": [
+   "0085440c2",
+   "0883f1737",
+   "0c0ef91d7",
+   "0fc59d295",
+   "24770ebdb",
+   "2c34e96b0",
+   "2e9b83993",
+   "3096c6eab",
+   "3482403f3",
+   "41f516370",
+   "42c026b91",
+   "4f736f4db",
+   "4fb7af4ff",
+   "58c7b2efd",
+   "609464bee",
+   "70eddf9bc",
+   "7c19802d1",
+   "7ed9f0cee",
+   "7f3ca83f8",
+   "874da626c",
+   "8dd1d1b2f",
+   "8fd1963a3",
+   "a9b6087b1",
+   "af11c397f",
+   "b8292092f",
+   "bb5a042d6",
+   "c780d571f",
+   "c8a612784",
+   "d515b6f0d",
+   "f8b89c2bc"
+  ],
+  "verdicts": {
+   "unchecked": 3
+  },
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 44,
+   "items_offered": 22,
+   "max_offered": 7,
+   "items_per_block": 0.5,
+   "tool_calls": 223,
+   "widest": {
+    "offered": 7,
+    "ask": "Ok so what do we take from this to actually push our BS detector further? Plain recommendations. Don't bound you're creativity for solution making",
+    "ask_words": 24,
+    "leads": [
+     "Seven, roughly in order of what I'd actually do first.",
+     "**Generate the bank instead of writing it.**",
+     "**Turn the instability into the confidence score.**"
+    ]
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "not-mine": 426,
+     "holds": 89
+    },
+    "arith": {
+     "not-mine": 514,
+     "holds": 1
+    },
+    "green": {
+     "not-mine": 514,
+     "holds": 1
+    }
+   },
+   "findings": [],
+   "results": 223
+  },
+  "claims_routed": 80,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "8e6fdcec-f252-47f3-8d1f-c4d071a9e4c0",
+  "in_flight": false,
+  "started": "2026-09-12T23:56:30.676Z",
+  "ended": "2026-09-13T03:38:09.639Z",
+  "t1_sha": "8fd1963a33a9c64ec534bcc9dd0b5b0e86ad5056",
+  "turns": 56,
+  "operator_facing": 703,
+  "sentences": 751,
+  "adjudicable": 417,
+  "classes": {
+   "retrospective": 249,
+   "none": 127,
+   "universal": 142,
+   "predictive": 73,
+   "evaluative": 86,
+   "promissory": 26
+  },
+  "commitments": 3,
+  "advice": 23,
+  "own_commits": [
+   "308d4a275",
+   "413e25c30",
+   "4f736f4db",
+   "51faa67d8",
+   "609464bee",
+   "874da626c",
+   "c14c9b19d",
+   "c6205fde8",
+   "c8a612784",
+   "d137f4269"
+  ],
+  "verdicts": {
+   "unchecked": 3
+  },
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 28,
+   "items_offered": 29,
+   "max_offered": 6,
+   "items_per_block": 1.04,
+   "tool_calls": 267,
+   "widest": {
+    "offered": 6,
+    "ask": "What do we need to do to make that a reality?",
+    "ask_words": 11,
+    "leads": [
+     "Six things, and the first one changed the plan when I checked it.",
+     "**The inventory says this may not be new.**",
+     "**The noun is a real gate, not bikeshedding.**"
+    ]
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "not-mine": 668,
+     "holds": 35
+    },
+    "arith": {
+     "not-mine": 703
+    },
+    "green": {
+     "not-mine": 700,
+     "broken": 1,
+     "holds": 2
+    }
+   },
+   "findings": [
+    {
+     "instrument": "green",
+     "turn": 11,
+     "text": "Both new tests pass \u2014 the transport one needs `--features iroh`, which `sovereign-test.sh --filter` does not resolve and honestly reports as exit 4 / no tests matched rather than green.",
+     "reason": "the last test summary before this turn was red: test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 58 filtered out; finished in 0.00s",
+     "receipt": "transcript tool_result before block 11: test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 58 filtered out; finished in 0.00s"
+    }
+   ],
+   "results": 267
+  },
+  "claims_routed": 113,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "85b2bda8-d1f2-445c-abce-e2c14b3de2b9",
+  "in_flight": false,
+  "started": "2026-09-13T03:39:43.615Z",
+  "ended": "2026-09-13T03:47:08.259Z",
+  "t1_sha": "b8292092fa3390e5814874d719253d40a1302831",
+  "turns": 2,
+  "operator_facing": 83,
+  "sentences": 83,
+  "adjudicable": 52,
+  "classes": {
+   "none": 13,
+   "retrospective": 31,
+   "predictive": 9,
+   "universal": 20,
+   "evaluative": 9,
+   "promissory": 1
+  },
+  "commitments": 0,
+  "advice": 1,
+  "own_commits": [],
+  "verdicts": {},
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 2,
+   "items_offered": 11,
+   "max_offered": 11,
+   "items_per_block": 5.5,
+   "tool_calls": 20,
+   "widest": {
+    "offered": 11,
+    "ask": "Let's discuss how something like this interacts with the solutions here https://github.com/nostr-protocol/nostr",
+    "ask_words": 12,
+    "leads": [
+     "My read of \"this\" is the mesh plus the verification layer specced on t",
+     "**Opposite starting points.**",
+     "Commonwealth assumes a closed ring. Joining takes a BLAKE3 join key pl"
+    ]
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "not-mine": 81,
+     "holds": 2
+    },
+    "arith": {
+     "not-mine": 83
+    },
+    "green": {
+     "not-mine": 83
+    }
+   },
+   "findings": [],
+   "results": 20
+  },
+  "claims_routed": 13,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "1c5bd750-086b-4483-b6fd-53c994df028a",
+  "in_flight": false,
+  "started": "2026-09-12T23:51:44.035Z",
+  "ended": "2026-09-13T05:38:50.987Z",
+  "t1_sha": "24770ebdb3c318f92b206f52a79115d13a4dbcac",
+  "turns": 52,
+  "operator_facing": 170,
+  "sentences": 192,
+  "adjudicable": 122,
+  "classes": {
+   "retrospective": 85,
+   "none": 32,
+   "universal": 23,
+   "predictive": 12,
+   "promissory": 14,
+   "evaluative": 4
+  },
+  "commitments": 2,
+  "advice": 12,
+  "own_commits": [
+   "0085440c2",
+   "0883f1737",
+   "0c0ef91d7",
+   "0fc59d295",
+   "11c40be62",
+   "24770ebdb",
+   "2c34e96b0",
+   "3096c6eab",
+   "405b8a8fb",
+   "413e25c30",
+   "41f516370",
+   "47e7e56c0",
+   "4d0fe7d57",
+   "4f736f4db",
+   "4fb7af4ff",
+   "5125016b5",
+   "51faa67d8",
+   "609464bee",
+   "70eddf9bc",
+   "746feb173",
+   "795f0c4c3",
+   "7c19802d1",
+   "7ed9f0cee",
+   "7f3ca83f8",
+   "85a99ee72",
+   "8611f013b",
+   "874da626c",
+   "8750c0442",
+   "8dd1d1b2f",
+   "8fd1963a3",
+   "904145b64",
+   "97e4b4f16",
+   "9e8fe2189",
+   "a679cd6c9",
+   "a6dd46ec0",
+   "a9b6087b1",
+   "af11c397f",
+   "b69ebb1ea",
+   "b8292092f",
+   "bb5a042d6",
+   "c14c9b19d",
+   "c6205fde8",
+   "c780d571f",
+   "c8a612784",
+   "cd9250aab",
+   "d05a19859",
+   "d137f4269",
+   "d3dc28589",
+   "d515b6f0d",
+   "d9fd30769",
+   "ddbed9325",
+   "e1f7b16e5",
+   "f8b89c2bc",
+   "fa7aed9cd"
+  ],
+  "verdicts": {
+   "unchecked": 2
+  },
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 42,
+   "items_offered": 22,
+   "max_offered": 7,
+   "items_per_block": 0.52,
+   "tool_calls": 226,
+   "widest": {
+    "offered": 7,
+    "ask": "Pick up the frame. Relay to me the plan before starting work. Always anchor to /Users/alexsbryan/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
+    "ask_words": 16,
+    "leads": [
+     "The worker is alive: subagent a030c9eb, general-purpose, running, star",
+     "Rows are 0 in the working tree (was 13 at the frame; 24 at the order).",
+     "Nothing is committed for step 3 yet. Journal cursor sits at 2/4, last"
+    ]
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "not-mine": 143,
+     "holds": 26,
+     "broken": 1
+    },
+    "arith": {
+     "not-mine": 170
+    },
+    "green": {
+     "not-mine": 170
+    }
+   },
+   "findings": [
+    {
+     "instrument": "numbers",
+     "turn": 51,
+     "text": "Each guard has tests watched red first; the full sweep is 13,258 pass, 0 fail.",
+     "reason": "`13258` appears in none of the 224 tool results, tool inputs or operator messages before turn 51",
+     "receipt": "grep -c '13258' <transcript tool_result/tool_use/user records before block 51> -> 0"
+    }
+   ],
+   "results": 226
+  },
+  "claims_routed": 18,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "9d7835fc-bd36-4bdb-996d-03c022e7d089",
+  "in_flight": false,
+  "started": "2026-09-13T01:02:29.150Z",
+  "ended": "2026-09-13T01:02:29.150Z",
+  "t1_sha": "609464bee1416ae0dd2cc884b7b78e943d238e1c",
+  "turns": 1,
+  "operator_facing": 19,
+  "sentences": 19,
+  "adjudicable": 11,
+  "classes": {
+   "retrospective": 7,
+   "universal": 2,
+   "none": 5,
+   "predictive": 2,
+   "promissory": 2,
+   "evaluative": 1
+  },
+  "commitments": 1,
+  "advice": 1,
+  "own_commits": [],
+  "verdicts": {
+   "unchecked": 1
+  },
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 1,
+   "items_offered": 2,
+   "max_offered": 2,
+   "items_per_block": 2.0,
+   "tool_calls": 10,
+   "widest": {
+    "offered": 2,
+    "ask": "Can you fix the jellyfin install on this machine? I just downloaded it and the wizard flow froze and now I don't have any user",
+    "ask_words": 25,
+    "leads": [
+     "You do have a user, you just can't see it. The wizard didn't lose your",
+     "I'm fairly sure a script created `house`, not you. It happened three m",
+     "There are two ways to get you in, and I haven't done either:"
+    ]
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "not-mine": 19
+    },
+    "arith": {
+     "not-mine": 19
+    },
+    "green": {
+     "not-mine": 19
+    }
+   },
+   "findings": [],
+   "results": 10
+  },
+  "claims_routed": 6,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "b31822b1-8530-45f4-add2-b296993ac797",
+  "in_flight": false,
+  "started": "2026-09-12T19:59:25.770Z",
+  "ended": "2026-09-12T22:56:51.593Z",
+  "t1_sha": "650d08a4d1d70bdcb2451d183b817202bde73262",
+  "turns": 19,
+  "operator_facing": 167,
+  "sentences": 175,
+  "adjudicable": 117,
+  "classes": {
+   "retrospective": 82,
+   "none": 26,
+   "promissory": 17,
+   "evaluative": 11,
+   "universal": 18,
+   "predictive": 13
+  },
+  "commitments": 7,
+  "advice": 10,
+  "own_commits": [
+   "0650b6c71",
+   "25052d03b",
+   "3afb166f1",
+   "46c3b806f",
+   "4bb2f9d40",
+   "53cacbaaa",
+   "5d6d0a4d8",
+   "650d08a4d",
+   "6f4fa7996",
+   "8a564321e",
+   "9fdf8e040",
+   "a3bfc3968",
+   "a4bf4d074",
+   "c290f6772",
+   "e8ee7c288",
+   "ec249bf1e",
+   "ffff8041e"
+  ],
+  "verdicts": {
+   "unchecked": 7
+  },
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 17,
+   "items_offered": 8,
+   "max_offered": 3,
+   "items_per_block": 0.47,
+   "tool_calls": 309,
+   "widest": {
+    "offered": 3,
+    "ask": "Pick up the frame. Let's pause tests and cargo contention until we've built the whole thing. Ok?",
+    "ask_words": 17,
+    "leads": [
+     "Build's written and compiling clean; the full lint + test sweep is run",
+     "**The suite was already red before I touched anything.**",
+     "**Four of those red tests were pointing at a real hole, not a stale ex"
+    ]
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "not-mine": 141,
+     "holds": 26
+    },
+    "arith": {
+     "not-mine": 167
+    },
+    "green": {
+     "not-mine": 166,
+     "holds": 1
+    }
+   },
+   "findings": [],
+   "results": 309
+  },
+  "claims_routed": 47,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "7fbab671-bfbb-430b-aafb-06042eb55c84",
+  "in_flight": false,
+  "started": "2026-09-12T18:53:14.852Z",
+  "ended": "2026-09-12T22:55:46.402Z",
+  "t1_sha": "650d08a4d1d70bdcb2451d183b817202bde73262",
+  "turns": 24,
+  "operator_facing": 124,
+  "sentences": 155,
+  "adjudicable": 86,
+  "classes": {
+   "retrospective": 58,
+   "predictive": 11,
+   "none": 22,
+   "evaluative": 5,
+   "promissory": 17,
+   "universal": 11
+  },
+  "commitments": 9,
+  "advice": 8,
+  "own_commits": [
+   "0650b6c71",
+   "0958d9963",
+   "21eaba3ee",
+   "25052d03b",
+   "2a155f63e",
+   "3afb166f1",
+   "427610b70",
+   "46c3b806f",
+   "4bb2f9d40",
+   "4f43bf0ba",
+   "53cacbaaa",
+   "568697dc1",
+   "69bfefc64",
+   "6f4fa7996",
+   "8a564321e",
+   "9fdf8e040",
+   "a3bfc3968",
+   "a4bf4d074",
+   "c290f6772",
+   "d33ae773e",
+   "d36fdde0e",
+   "d44d57be9",
+   "dd8bb42e6",
+   "e8e5b6926",
+   "e8ee7c288",
+   "ec249bf1e",
+   "ed959fe29",
+   "f36a7b6a3",
+   "ffff8041e"
+  ],
+  "verdicts": {
+   "unchecked": 9
+  },
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 18,
+   "items_offered": 19,
+   "max_offered": 5,
+   "items_per_block": 1.06,
+   "tool_calls": 153,
+   "widest": {
+    "offered": 5,
+    "ask": "If it's multi session plan the small campaign now that outlines exactly what needs to be done and is accountable to the work and no more",
+    "ask_words": 26,
+    "leads": [
+     "The campaign is written, and the first dependency line is gone.",
+     "**Landed since your check-in.**",
+     "**The campaign.**"
+    ]
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "holds": 16,
+     "not-mine": 108
+    },
+    "arith": {
+     "not-mine": 124
+    },
+    "green": {
+     "not-mine": 123,
+     "holds": 1
+    }
+   },
+   "findings": [],
+   "results": 153
+  },
+  "claims_routed": 15,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "5ab14d6d-b7c8-4803-8e2e-095013657e83",
+  "in_flight": false,
+  "started": "2026-09-12T16:19:46.029Z",
+  "ended": "2026-09-12T21:04:24.782Z",
+  "t1_sha": "9e8fe21891aa8ffd9b0ee020ae11bb7f1a49cb76",
+  "turns": 47,
+  "operator_facing": 529,
+  "sentences": 586,
+  "adjudicable": 324,
+  "classes": {
+   "retrospective": 203,
+   "universal": 86,
+   "none": 96,
+   "evaluative": 66,
+   "predictive": 43,
+   "promissory": 35
+  },
+  "commitments": 4,
+  "advice": 31,
+  "own_commits": [],
+  "verdicts": {
+   "unchecked": 4
+  },
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 23,
+   "items_offered": 8,
+   "max_offered": 5,
+   "items_per_block": 0.35,
+   "tool_calls": 210,
+   "widest": {
+    "offered": 5,
+    "ask": "Let's align on user experience for this actually ends up becoming used. Sketch your impression and I'll guide it. I think only with the end goal experience in m",
+    "ask_words": 32,
+    "leads": [
+     "Sketching the moments as I picture them, with the open questions I'd w",
+     "**Moment one \u2014 mid-session, nothing happens.**",
+     "**Moment two \u2014 the agent couldn't fix it, so you see the receipt.** Be"
+    ]
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "not-mine": 442,
+     "broken": 1,
+     "holds": 86
+    },
+    "arith": {
+     "not-mine": 529
+    },
+    "green": {
+     "not-mine": 528,
+     "holds": 1
+    }
+   },
+   "findings": [
+    {
+     "instrument": "numbers",
+     "turn": 1,
+     "text": "Roughly a 250-line Python hook plus a claim-extraction pass, reusing the transcript reader that `session-frame.sh` already has.",
+     "reason": "`250` appears in none of the 5 tool results, tool inputs or operator messages before turn 1",
+     "receipt": "grep -c '250' <transcript tool_result/tool_use/user records before block 1> -> 0"
+    }
+   ],
+   "results": 210
+  },
+  "claims_routed": 76,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "b65cecbc-9ce9-49c5-b631-f134d0a19b14",
+  "in_flight": false,
+  "started": "2026-09-12T15:45:30.711Z",
+  "ended": "2026-09-12T19:51:09.294Z",
+  "t1_sha": "3afb166f1213b4a43ae39b11046c05bc229f37b8",
+  "turns": 17,
+  "operator_facing": 95,
+  "sentences": 121,
+  "adjudicable": 66,
+  "classes": {
+   "retrospective": 51,
+   "promissory": 3,
+   "universal": 12,
+   "predictive": 7,
+   "none": 15,
+   "evaluative": 7
+  },
+  "commitments": 0,
+  "advice": 3,
+  "own_commits": [],
+  "verdicts": {},
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 4,
+   "items_offered": 13,
+   "max_offered": 5,
+   "items_per_block": 3.25,
+   "tool_calls": 344,
+   "widest": {
+    "offered": 5,
+    "ask": "What do you need from me? And why leave brokenness behind without fixing?",
+    "ask_words": 13,
+    "leads": [
+     "Both gaps are closed and committed. Three commits.",
+     "**`21eaba3ee` \u2014 version skew.**",
+     "**`4f43bf0ba` \u2014 multi-origin.**"
+    ]
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "not-mine": 81,
+     "holds": 14
+    },
+    "arith": {
+     "not-mine": 95
+    },
+    "green": {
+     "not-mine": 92,
+     "holds": 3
+    }
+   },
+   "findings": [],
+   "results": 344
+  },
+  "claims_routed": 29,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "69191705-b959-497f-96ef-cb516c171245",
+  "in_flight": false,
+  "started": "2026-09-12T05:18:22.214Z",
+  "ended": "2026-09-12T17:10:37.355Z",
+  "t1_sha": "568697dc1d373a1b028197be7ffa3db73cc4e9ae",
+  "turns": 109,
+  "operator_facing": 146,
+  "sentences": 352,
+  "adjudicable": 99,
+  "classes": {
+   "retrospective": 81,
+   "none": 24,
+   "universal": 15,
+   "evaluative": 15,
+   "predictive": 8,
+   "promissory": 3
+  },
+  "commitments": 0,
+  "advice": 3,
+  "own_commits": [],
+  "verdicts": {},
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 6,
+   "items_offered": 20,
+   "max_offered": 5,
+   "items_per_block": 3.33,
+   "tool_calls": 445,
+   "widest": {
+    "offered": 4,
+    "ask": "Pick up the frame",
+    "ask_words": 4,
+    "leads": [
+     "The four stranded slices are landed and the landing is green: **13,096",
+     "**HEAD did not compile when I picked this up, in five separate ways.**",
+     "`0bc810196` inserted a `mod` line between another module's `#[path]` a"
+    ]
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "holds": 35,
+     "not-mine": 111
+    },
+    "arith": {
+     "not-mine": 146
+    },
+    "green": {
+     "holds": 2,
+     "not-mine": 144
+    }
+   },
+   "findings": [],
+   "results": 445
+  },
+  "claims_routed": 40,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "ebda3345-f8c6-4ecf-ae9b-95859fbe9899",
+  "in_flight": false,
+  "started": "2026-09-11T20:57:41.953Z",
+  "ended": "2026-09-11T22:13:54.693Z",
+  "t1_sha": "b5610c26b4ccd24ba58f04d50a799f4348b9425c",
+  "turns": 10,
+  "operator_facing": 177,
+  "sentences": 181,
+  "adjudicable": 114,
+  "classes": {
+   "retrospective": 81,
+   "universal": 28,
+   "predictive": 22,
+   "evaluative": 15,
+   "none": 26,
+   "promissory": 5
+  },
+  "commitments": 1,
+  "advice": 4,
+  "own_commits": [
+   "b5610c26b"
+  ],
+  "verdicts": {
+   "unchecked": 1
+  },
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 8,
+   "items_offered": 4,
+   "max_offered": 4,
+   "items_per_block": 0.5,
+   "tool_calls": 88,
+   "widest": {
+    "offered": 4,
+    "ask": "Let's come up with a second draft that we're confident will stick",
+    "ask_words": 12,
+    "leads": [
+     "Draft 1 had one mechanism, and two of its failure modes are already me",
+     "The first is that a list of targets doesn't move code. `quality/CLEANU",
+     "The second is habituation. Draft 1's hook fires on every edit to any o"
+    ]
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "holds": 61,
+     "not-mine": 113,
+     "broken": 3
+    },
+    "arith": {
+     "not-mine": 177
+    },
+    "green": {
+     "not-mine": 175,
+     "holds": 2
+    }
+   },
+   "findings": [
+    {
+     "instrument": "numbers",
+     "turn": 2,
+     "text": "A file declared at 400 then fails at 451 rather than at 1,201 \u2014 caught at 12% over instead of 3x over.",
+     "reason": "`451` appears in none of the 11 tool results, tool inputs or operator messages before turn 2",
+     "receipt": "grep -c '451' <transcript tool_result/tool_use/user records before block 2> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 9,
+     "text": "That one passed on its own run; the 893-second elapsed was 882 seconds of cold rebuild after I deleted the worktree targets, and about 12 seconds of tests.",
+     "reason": "`893` appears in none of the 82 tool results, tool inputs or operator messages before turn 9",
+     "receipt": "grep -c '893' <transcript tool_result/tool_use/user records before block 9> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 10,
+     "text": "Full workspace tests: 13,056 pass, 0 fail, exit 0, 966s.",
+     "reason": "`966` appears in none of the 87 tool results, tool inputs or operator messages before turn 10",
+     "receipt": "grep -c '966' <transcript tool_result/tool_use/user records before block 10> -> 0"
+    }
+   ],
+   "results": 87
+  },
+  "claims_routed": 31,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "e92735ab-f768-45bc-ba83-c56d12250778",
+  "in_flight": false,
+  "started": "2026-09-11T20:20:56.672Z",
+  "ended": "2026-09-12T07:01:00.082Z",
+  "t1_sha": "c4b9700167cdbd061e79a14dc0f0523b5b0f59ae",
+  "turns": 86,
+  "operator_facing": 853,
+  "sentences": 969,
+  "adjudicable": 496,
+  "classes": {
+   "retrospective": 300,
+   "universal": 145,
+   "none": 138,
+   "predictive": 95,
+   "evaluative": 124,
+   "promissory": 51
+  },
+  "commitments": 17,
+  "advice": 34,
+  "own_commits": [
+   "10b549b05",
+   "3e05a0e50",
+   "777a2e8a8",
+   "84da5bbbe",
+   "c866c91cb",
+   "d0e72ebdc",
+   "e76ef0a83"
+  ],
+  "verdicts": {
+   "unchecked": 17
+  },
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 38,
+   "items_offered": 60,
+   "max_offered": 11,
+   "items_per_block": 1.58,
+   "tool_calls": 291,
+   "widest": {
+    "offered": 11,
+    "ask": "But so walk me through concretely those 10 user stories from the dilletante house hackers. The ones making a robot to welcome you home, the one monitoring the f",
+    "ask_words": 51,
+    "leads": [
+     "Checked, and it surfaced the one thing that'll bite you first \u2014 I'll c",
+     "**1. The welcome-home robot.**",
+     "**2. The fridge camera that orders groceries.**"
+    ]
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "not-mine": 728,
+     "holds": 124,
+     "broken": 1
+    },
+    "arith": {
+     "not-mine": 853
+    },
+    "green": {
+     "not-mine": 853
+    }
+   },
+   "findings": [
+    {
+     "instrument": "numbers",
+     "turn": 26,
+     "text": "Then the peer's discriminator: four viewers at 256 MiB, then one viewer as control.",
+     "reason": "`256` appears in none of the 78 tool results, tool inputs or operator messages before turn 26",
+     "receipt": "grep -c '256' <transcript tool_result/tool_use/user records before block 26> -> 0"
+    }
+   ],
+   "results": 291
+  },
+  "claims_routed": 153,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "36257dfe-9d00-4dc3-b667-a003451680f1",
+  "in_flight": false,
+  "started": "2026-09-12T01:46:57.172Z",
+  "ended": "2026-09-12T05:17:36.939Z",
+  "t1_sha": "e76ef0a83cc127e8107dc1d3df77d65b38d34ecc",
+  "turns": 12,
+  "operator_facing": 74,
+  "sentences": 96,
+  "adjudicable": 50,
+  "classes": {
+   "none": 14,
+   "retrospective": 34,
+   "universal": 8,
+   "promissory": 8,
+   "predictive": 5,
+   "evaluative": 5
+  },
+  "commitments": 1,
+  "advice": 7,
+  "own_commits": [
+   "0bc810196",
+   "115395f34",
+   "12bb2bc02",
+   "9ac3948aa",
+   "e76ef0a83",
+   "f9ecf139f"
+  ],
+  "verdicts": {
+   "unchecked": 1
+  },
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 9,
+   "items_offered": 0,
+   "max_offered": 0,
+   "items_per_block": 0.0,
+   "tool_calls": 190,
+   "widest": {
+    "offered": 0,
+    "ask": "",
+    "ask_words": 0,
+    "leads": []
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "not-mine": 63,
+     "holds": 10,
+     "broken": 1
+    },
+    "arith": {
+     "not-mine": 74
+    },
+    "green": {
+     "not-mine": 72,
+     "holds": 2
+    }
+   },
+   "findings": [
+    {
+     "instrument": "numbers",
+     "turn": 7,
+     "text": "| Live use sites of forbidden crates | not measured | 198 | 0 |",
+     "reason": "`198` appears in none of the 135 tool results, tool inputs or operator messages before turn 7",
+     "receipt": "grep -c '198' <transcript tool_result/tool_use/user records before block 7> -> 0"
+    }
+   ],
+   "results": 190
+  },
+  "claims_routed": 6,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "2e83a54a-92a2-4d66-8e53-3dae7af786a4",
+  "in_flight": false,
+  "started": "2026-09-11T19:57:27.249Z",
+  "ended": "2026-09-12T00:46:26.487Z",
+  "t1_sha": "5af31d8836d916e7b0a94c24d24ee3e8cc73f457",
+  "turns": 14,
+  "operator_facing": 128,
+  "sentences": 174,
+  "adjudicable": 96,
+  "classes": {
+   "retrospective": 77,
+   "universal": 12,
+   "none": 19,
+   "promissory": 7,
+   "evaluative": 10,
+   "predictive": 3
+  },
+  "commitments": 1,
+  "advice": 6,
+  "own_commits": [
+   "05586220f",
+   "10b549b05",
+   "18d7a776f",
+   "18f51b469",
+   "1a35260e2",
+   "2693914f6",
+   "2d5b569f6",
+   "3186b06b3",
+   "3e05a0e50",
+   "4ea0201e2",
+   "504c6b6d3",
+   "5a356e11a",
+   "5af31d883",
+   "5dd7b4faa",
+   "6821c44bb",
+   "7147ba84b",
+   "a5b89aa43",
+   "abd62e180",
+   "b16578529",
+   "b5610c26b",
+   "c87e8e802",
+   "d0e72ebdc",
+   "dbd4f0038",
+   "ddc2b0642",
+   "ef4a3a06f",
+   "f462eff3c",
+   "fc2086637"
+  ],
+  "verdicts": {
+   "unchecked": 1
+  },
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 8,
+   "items_offered": 1,
+   "max_offered": 1,
+   "items_per_block": 0.12,
+   "tool_calls": 294,
+   "widest": {
+    "offered": 0,
+    "ask": "",
+    "ask_words": 0,
+    "leads": []
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "not-mine": 110,
+     "holds": 16,
+     "broken": 2
+    },
+    "arith": {
+     "not-mine": 128
+    },
+    "green": {
+     "not-mine": 127,
+     "holds": 1
+    }
+   },
+   "findings": [
+    {
+     "instrument": "numbers",
+     "turn": 7,
+     "text": "svt-2 promised 1,990 deleted lines and delivered 948.",
+     "reason": "`948` appears in none of the 256 tool results, tool inputs or operator messages before turn 7",
+     "receipt": "grep -c '948' <transcript tool_result/tool_use/user records before block 7> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 11,
+     "text": "`mesh_relay_candidates` hardcoded `9742` beside the daemon's own copy and swallowed failures into an empty vec.",
+     "reason": "`9742` appears in none of the 280 tool results, tool inputs or operator messages before turn 11",
+     "receipt": "grep -c '9742' <transcript tool_result/tool_use/user records before block 11> -> 0"
+    }
+   ],
+   "results": 294
+  },
+  "claims_routed": 48,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "cea8e256-26ff-4c1f-9bac-2615c9eb2426",
+  "in_flight": false,
+  "started": "2026-09-11T19:38:22.415Z",
+  "ended": "2026-09-11T20:45:37.536Z",
+  "t1_sha": "ddc2b0642e2588e5a8941b2a773ca74d4042b1ff",
+  "turns": 17,
+  "operator_facing": 193,
+  "sentences": 219,
+  "adjudicable": 116,
+  "classes": {
+   "retrospective": 77,
+   "none": 31,
+   "evaluative": 28,
+   "universal": 32,
+   "predictive": 18,
+   "promissory": 7
+  },
+  "commitments": 1,
+  "advice": 6,
+  "own_commits": [],
+  "verdicts": {
+   "unchecked": 1
+  },
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 10,
+   "items_offered": 7,
+   "max_offered": 4,
+   "items_per_block": 0.7,
+   "tool_calls": 97,
+   "widest": {
+    "offered": 4,
+    "ask": "Let's focus on the scheduler. It's doing a lot. How do we make it WireGuard level beautiful architecturally? We've put a lot of work into refining it already",
+    "ask_words": 28,
+    "leads": [
+     "The kernel is already the best-carved thing in the repo \u2014 pure, seeded",
+     "**`pick_better` is not an ordering, and `winners_over_local` sorts wit",
+     "**Collapse the objective.**"
+    ]
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "not-mine": 163,
+     "holds": 27,
+     "broken": 3
+    },
+    "arith": {
+     "not-mine": 193
+    },
+    "green": {
+     "not-mine": 193
+    }
+   },
+   "findings": [
+    {
+     "instrument": "numbers",
+     "turn": 2,
+     "text": "The readable unit is `oplog` (236) + `commonwealth-rail-core` (1,282) + `commonwealth-rail` (954) = 2,472 code lines, tests excluded.",
+     "reason": "`2472` appears in none of the 15 tool results, tool inputs or operator messages before turn 2",
+     "receipt": "grep -c '2472' <transcript tool_result/tool_use/user records before block 2> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 3,
+     "text": "The rail qualifies \u2014 two nodes must converge on one total order, and 2,472 lines across `oplog` + `rail-core` + `rail` already nearly is the thing.",
+     "reason": "`2472` appears in none of the 25 tool results, tool inputs or operator messages before turn 3",
+     "receipt": "grep -c '2472' <transcript tool_result/tool_use/user records before block 3> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 5,
+     "text": "`sovereign-mesh` is 58k non-test lines of which 15k+ is product HTTP \u2014 reading lists, notes, recipes, governance UI \u2014 plus a 4,904-line `daemon.rs` wiring god-object and 3,819 lines of simulator.",
+     "reason": "`4904` appears in none of the 30 tool results, tool inputs or operator messages before turn 5",
+     "receipt": "grep -c '4904' <transcript tool_result/tool_use/user records before block 5> -> 0"
+    }
+   ],
+   "results": 97
+  },
+  "claims_routed": 53,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "87f737f3-1174-4ce1-8cae-65d4d1293c4a",
+  "in_flight": false,
+  "started": "2026-09-11T19:43:09.296Z",
+  "ended": "2026-09-11T20:15:02.856Z",
+  "t1_sha": "3e05a0e50f6bfeffea3056e87d23601fbbb395db",
+  "turns": 8,
+  "operator_facing": 119,
+  "sentences": 122,
+  "adjudicable": 68,
+  "classes": {
+   "retrospective": 40,
+   "none": 33,
+   "evaluative": 13,
+   "universal": 25,
+   "predictive": 5,
+   "promissory": 3
+  },
+  "commitments": 1,
+  "advice": 2,
+  "own_commits": [
+   "3e05a0e50"
+  ],
+  "verdicts": {
+   "unchecked": 1
+  },
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 6,
+   "items_offered": 3,
+   "max_offered": 3,
+   "items_per_block": 0.5,
+   "tool_calls": 45,
+   "widest": {
+    "offered": 3,
+    "ask": "I did it, we were out of memory -- continue",
+    "ask_words": 10,
+    "leads": [
+     "Fair. Here is where I think the alignment actually sits, and I'll stop",
+     "The doc so far is inventory. What it measured that I think is worth ac",
+     "So the candidate worth building is narrow: one job kind, end to end, o"
+    ]
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "not-mine": 91,
+     "holds": 23,
+     "broken": 5
+    },
+    "arith": {
+     "not-mine": 119
+    },
+    "green": {
+     "not-mine": 119
+    }
+   },
+   "findings": [
+    {
+     "instrument": "numbers",
+     "turn": 1,
+     "text": "The 367 crates the dispatcher does not carry are the whole inference substrate: llama-cpp-4 arrives through three edges (sovereign-inference directly, sovereign-mesh, sovereign-runtime-recipe), ort plus tokenizers through sovereign-gliner, iroh through commonwealth-transport (directly and again via sovereign-mesh), pdfium, and an axum server for `meshapp dev`.",
+     "reason": "`367` appears in none of the 7 tool results, tool inputs or operator messages before turn 1",
+     "receipt": "grep -c '367' <transcript tool_result/tool_use/user records before block 1> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 1,
+     "text": "The source side is 143k lines across some 60 verb modules, and roughly half of it is not product surface at all.",
+     "reason": "`60` appears in none of the 7 tool results, tool inputs or operator messages before turn 1",
+     "receipt": "grep -c '60' <transcript tool_result/tool_use/user records before block 1> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 1,
+     "text": "bench_cmd alone is 32k lines, and bench plus eval, inner_chaos, quality_lane, search_gym, knowledge_gym, voice_eval, mesh_bench, router_fit, reading_diag and recipe_agent_live_trial come to about 68k lines.",
+     "reason": "`68` appears in none of the 7 tool results, tool inputs or operator messages before turn 1",
+     "receipt": "grep -c '68' <transcript tool_result/tool_use/user records before block 1> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 2,
+     "text": "The 41 store routes are the decision to make first, because they are where the shape is currently contradicted.",
+     "reason": "`41` appears in none of the 10 tool results, tool inputs or operator messages before turn 2",
+     "receipt": "grep -c '41' <transcript tool_result/tool_use/user records before block 2> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 2,
+     "text": "The 34 job routes collapse into one family on top of the work plane.",
+     "reason": "`34` appears in none of the 10 tool results, tool inputs or operator messages before turn 2",
+     "receipt": "grep -c '34' <transcript tool_result/tool_use/user records before block 2> -> 0"
+    }
+   ],
+   "results": 45
+  },
+  "claims_routed": 16,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "f1c44058-535b-4dea-a8be-323cfd67bcbd",
+  "in_flight": false,
+  "started": "2026-09-11T17:46:56.626Z",
+  "ended": "2026-09-11T18:27:36.149Z",
+  "t1_sha": "7d0a1d88c0b12ffe856d5aabb91858015296024a",
+  "turns": 17,
+  "operator_facing": 368,
+  "sentences": 437,
+  "adjudicable": 228,
+  "classes": {
+   "retrospective": 130,
+   "none": 71,
+   "universal": 84,
+   "predictive": 33,
+   "evaluative": 36,
+   "promissory": 14
+  },
+  "commitments": 0,
+  "advice": 14,
+  "own_commits": [],
+  "verdicts": {},
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 13,
+   "items_offered": 43,
+   "max_offered": 17,
+   "items_per_block": 3.31,
+   "tool_calls": 39,
+   "widest": {
+    "offered": 17,
+    "ask": "So let's do some sizing work and get real about the data we need and the hardware we're running (and the resources needed). I want the highest impact, quickest ",
+    "ask_words": 43,
+    "leads": [
+     "Sizing is done. Here is what the tree and the machines actually give y",
+     "**Hardware, as found.**",
+     "**Data, as found, and this is the part that changes the plan.**"
+    ]
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "not-mine": 345,
+     "broken": 2,
+     "holds": 21
+    },
+    "arith": {
+     "not-mine": 368
+    },
+    "green": {
+     "not-mine": 368
+    }
+   },
+   "findings": [
+    {
+     "instrument": "numbers",
+     "turn": 1,
+     "text": "That recipe is 60 lines of TOML and the only thing that changes for the FT is the acquire block.",
+     "reason": "`60` appears in none of the 4 tool results, tool inputs or operator messages before turn 1",
+     "receipt": "grep -c '60' <transcript tool_result/tool_use/user records before block 1> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 3,
+     "text": "So the privacy-maximal client sends the vector and an empty text field, and the FT's node sees a 1024-float direction in embedding space plus a corpus filter.",
+     "reason": "`1024` appears in none of the 11 tool results, tool inputs or operator messages before turn 3",
+     "receipt": "grep -c '1024' <transcript tool_result/tool_use/user records before block 3> -> 0"
+    }
+   ],
+   "results": 39
+  },
+  "claims_routed": 22,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "6402486e-9881-4f7f-b723-3390c76d482c",
+  "in_flight": false,
+  "started": "2026-09-11T00:38:30.471Z",
+  "ended": "2026-09-11T15:40:30.453Z",
+  "t1_sha": "af47c998d4029111231f75a314bbf99d9dd21b1f",
+  "turns": 43,
+  "operator_facing": 374,
+  "sentences": 430,
+  "adjudicable": 235,
+  "classes": {
+   "evaluative": 50,
+   "retrospective": 151,
+   "none": 57,
+   "universal": 64,
+   "predictive": 32,
+   "promissory": 20
+  },
+  "commitments": 1,
+  "advice": 19,
+  "own_commits": [
+   "39fc8857e",
+   "4dff5b52c",
+   "a9c0cdf27",
+   "af47c998d"
+  ],
+  "verdicts": {
+   "unchecked": 1
+  },
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 16,
+   "items_offered": 12,
+   "max_offered": 4,
+   "items_per_block": 0.75,
+   "tool_calls": 173,
+   "widest": {
+    "offered": 4,
+    "ask": "Also I am so done with thei inject-notes error (e.g. ```UserPromptSubmit operation blocked by hook: [python3 .claude/hooks/inject-notes.py]: /Library/Frameworks",
+    "ask_words": 84,
+    "leads": [
+     "Landed in `b9cbc8662`. My three files only; the peer's 15 staged files",
+     "**What the hook does:**",
+     "**Why it's been haunting you:**"
+    ]
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "not-mine": 274,
+     "holds": 95,
+     "broken": 5
+    },
+    "arith": {
+     "not-mine": 374
+    },
+    "green": {
+     "not-mine": 372,
+     "holds": 2
+    }
+   },
+   "findings": [
+    {
+     "instrument": "numbers",
+     "turn": 1,
+     "text": "Comments in `.rs` files make 1,411 repo-path citations.",
+     "reason": "`1411` appears in none of the 10 tool results, tool inputs or operator messages before turn 1",
+     "receipt": "grep -c '1411' <transcript tool_result/tool_use/user records before block 1> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 2,
+     "text": "518 code fences live in doc comments, 456 of them in the default-rust class that actually compiles; `quality/campaigns/conformance.toml` seats `--doctests` in CI, and the cw-lift campaign already caught three that failed to compile while the suite read green.",
+     "reason": "`456` appears in none of the 15 tool results, tool inputs or operator messages before turn 2",
+     "receipt": "grep -c '456' <transcript tool_result/tool_use/user records before block 2> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 36,
+     "text": "The other 69 are lookup material that has accumulated because nothing ever forced a trade.",
+     "reason": "`69` appears in none of the 143 tool results, tool inputs or operator messages before turn 36",
+     "receipt": "grep -c '69' <transcript tool_result/tool_use/user records before block 36> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 38,
+     "text": "Evict what was never a principle: 1,154 tokens.",
+     "reason": "`1154` appears in none of the 145 tool results, tool inputs or operator messages before turn 38",
+     "receipt": "grep -c '1154' <transcript tool_result/tool_use/user records before block 38> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 38,
+     "text": "Those are one idea seen from two sides, currently costing 2,112 tokens across two sections.",
+     "reason": "`2112` appears in none of the 145 tool results, tool inputs or operator messages before turn 38",
+     "receipt": "grep -c '2112' <transcript tool_result/tool_use/user records before block 38> -> 0"
+    }
+   ],
+   "results": 173
+  },
+  "claims_routed": 78,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "e02c5365-5b1a-4607-8c3a-5cb2e94cb32b",
+  "in_flight": false,
+  "started": "2026-09-11T15:27:51.119Z",
+  "ended": "2026-09-11T19:33:31.646Z",
+  "t1_sha": "b25c04b3ec08bfe73ed9bbc2aee9f215565689eb",
+  "turns": 19,
+  "operator_facing": 296,
+  "sentences": 302,
+  "adjudicable": 194,
+  "classes": {
+   "retrospective": 122,
+   "universal": 50,
+   "none": 42,
+   "predictive": 29,
+   "promissory": 22,
+   "evaluative": 31
+  },
+  "commitments": 3,
+  "advice": 19,
+  "own_commits": [],
+  "verdicts": {
+   "unchecked": 3
+  },
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 16,
+   "items_offered": 6,
+   "max_offered": 5,
+   "items_per_block": 0.38,
+   "tool_calls": 247,
+   "widest": {
+    "offered": 5,
+    "ask": "Ok lot's of details. THE ONE OBJECTIVE: Desktop is thin and a dumb client. Daemon logic lives in one place, is reused by all the clients (CLI + desktop + mobile",
+    "ask_words": 52,
+    "leads": [
+     "The measurement changes the plan, so it goes first.",
+     "Deleting the supervisor is not what makes the desktop fat. Of the daem",
+     "So the objective is one sentence and one number: **every desktop featu"
+    ]
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "not-mine": 273,
+     "holds": 22,
+     "broken": 1
+    },
+    "arith": {
+     "not-mine": 296
+    },
+    "green": {
+     "not-mine": 292,
+     "broken": 1,
+     "holds": 3
+    }
+   },
+   "findings": [
+    {
+     "instrument": "green",
+     "turn": 2,
+     "text": "Verification: eleven tests pass, and three plants were watched red and restored \u2014 remove the detach and the process-group test goes red, return `Ok` from the absence path and the absence test goes red, skip the first probe and the duplicate-bring-up test goes red.",
+     "reason": "the last test summary before this turn was red: {\"t\":\"summary\",\"pass\":12885,\"fail\":2,\"warn\":0,\"ms\":315122,\"empty\":false,\"doctests\":false}",
+     "receipt": "transcript tool_result before block 2: {\"t\":\"summary\",\"pass\":12885,\"fail\":2,\"warn\":0,\"ms\":315122,\"empty\":false,\"doctests\":false}"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 4,
+     "text": "`primary_idle_secs` defaults to 300 and unloads the primary slot; `fast` and `embed` have no monitor at all (`daemon_cmd/build/inference.rs:293,347`).",
+     "reason": "`347` appears in none of the 126 tool results, tool inputs or operator messages before turn 4",
+     "receipt": "grep -c '347' <transcript tool_result/tool_use/user records before block 4> -> 0"
+    }
+   ],
+   "results": 247
+  },
+  "claims_routed": 65,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "03e54838-3a21-4d34-8098-fb0802d87653",
+  "in_flight": false,
+  "started": "2026-09-10T19:58:07.311Z",
+  "ended": "2026-09-11T15:11:12.152Z",
+  "t1_sha": "39fc8857e67def6674f20ca546d0ff0685890917",
+  "turns": 29,
+  "operator_facing": 165,
+  "sentences": 192,
+  "adjudicable": 101,
+  "classes": {
+   "retrospective": 76,
+   "evaluative": 21,
+   "promissory": 5,
+   "universal": 20,
+   "none": 29,
+   "predictive": 14
+  },
+  "commitments": 3,
+  "advice": 2,
+  "own_commits": [
+   "01831c013",
+   "069660fd9",
+   "111d460ca",
+   "21f572734",
+   "24a4bd420",
+   "255bbdfe6",
+   "264adbab7",
+   "26b8af62f",
+   "2a3a78766",
+   "2a9a9e91e",
+   "3a1cf984d",
+   "4888f733e",
+   "4a83373f4",
+   "4c45a1fc9",
+   "4d91462d1",
+   "502304f63",
+   "503aeee43",
+   "55a7ff294",
+   "65b92cd15",
+   "6f7528fad",
+   "7c2fd7e9e",
+   "8de463adc",
+   "8ea494c5a",
+   "9c4216d82",
+   "9fe5db712",
+   "a2e745456",
+   "b0f4319b3",
+   "b52fa90a1",
+   "c4019115e",
+   "c45f28bc3",
+   "c67bc257c",
+   "c852ee03c",
+   "cbf198eca",
+   "d9e2577d5",
+   "dae189916",
+   "f2f127d93",
+   "fdaa06937"
+  ],
+  "verdicts": {
+   "unchecked": 3
+  },
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 16,
+   "items_offered": 4,
+   "max_offered": 4,
+   "items_per_block": 0.25,
+   "tool_calls": 73,
+   "widest": {
+    "offered": 0,
+    "ask": "",
+    "ask_words": 0,
+    "leads": []
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "holds": 19,
+     "not-mine": 146
+    },
+    "arith": {
+     "not-mine": 165
+    },
+    "green": {
+     "not-mine": 165
+    }
+   },
+   "findings": [],
+   "results": 73
+  },
+  "claims_routed": 52,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "bb36c21e-de52-4836-bbdb-bb786964c9ba",
+  "in_flight": false,
+  "started": "2026-09-11T05:09:50.500Z",
+  "ended": "2026-09-11T15:19:06.994Z",
+  "t1_sha": "ba92616dde5dfb2e06e4a1ce94e8810bc74ae677",
+  "turns": 38,
+  "operator_facing": 424,
+  "sentences": 474,
+  "adjudicable": 245,
+  "classes": {
+   "universal": 80,
+   "evaluative": 64,
+   "retrospective": 147,
+   "none": 90,
+   "predictive": 25,
+   "promissory": 18
+  },
+  "commitments": 4,
+  "advice": 14,
+  "own_commits": [
+   "01831c013",
+   "188a9e4e4",
+   "21f572734",
+   "24a4bd420",
+   "2a3a78766",
+   "2a9a9e91e",
+   "2df562caa",
+   "39fc8857e",
+   "3a1cf984d",
+   "4c45a1fc9",
+   "4c4c15a83",
+   "4d91462d1",
+   "4dff5b52c",
+   "503aeee43",
+   "55a7ff294",
+   "70868ed7a",
+   "710a0326e",
+   "8de463adc",
+   "8ea494c5a",
+   "a9c0cdf27",
+   "b9cbc8662",
+   "c4019115e",
+   "c5e5affa5",
+   "c67bc257c",
+   "cbf198eca",
+   "d250e0893",
+   "d360e212d",
+   "d9e2577d5",
+   "f2e23bfba",
+   "fdaa06937",
+   "fe5a85cc3"
+  ],
+  "verdicts": {
+   "unchecked": 4
+  },
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 18,
+   "items_offered": 29,
+   "max_offered": 5,
+   "items_per_block": 1.61,
+   "tool_calls": 342,
+   "widest": {
+    "offered": 5,
+    "ask": "Ok let's try to get a measure of the cost",
+    "ask_words": 10,
+    "leads": [
+     "Measured, from git and the tree at `cbf198eca`.",
+     "**What a route costs.**",
+     "| batch | routes | prod net | per route |"
+    ]
+   }
+  },
+  "bound_breaches": [
+   {
+    "asked": 4,
+    "offered": 5,
+    "excerpt": "Assessment, with one trace still running. Here's what's grounded.\n\n**The bar.** `sovereign-desktop` links no c"
+   }
+  ],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "not-mine": 358,
+     "holds": 61,
+     "broken": 5
+    },
+    "arith": {
+     "not-mine": 424
+    },
+    "green": {
+     "not-mine": 423,
+     "holds": 1
+    }
+   },
+   "findings": [
+    {
+     "instrument": "numbers",
+     "turn": 2,
+     "text": "| d250e0893 | 7 | +876 | 125 |",
+     "reason": "`876` appears in none of the 58 tool results, tool inputs or operator messages before turn 2",
+     "receipt": "grep -c '876' <transcript tool_result/tool_use/user records before block 2> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 2,
+     "text": "| 710a0326e | 21 | +2,177 | 105 |",
+     "reason": "`2177` appears in none of the 58 tool results, tool inputs or operator messages before turn 2",
+     "receipt": "grep -c '2177' <transcript tool_result/tool_use/user records before block 2> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 2,
+     "text": "| 4c45a1fc9 | 19 | +1,548 | 85 |",
+     "reason": "`1548` appears in none of the 58 tool results, tool inputs or operator messages before turn 2",
+     "receipt": "grep -c '1548' <transcript tool_result/tool_use/user records before block 2> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 2,
+     "text": "| 21f572734 | 19 | +3,482 | 185 |",
+     "reason": "`3482` appears in none of the 58 tool results, tool inputs or operator messages before turn 2",
+     "receipt": "grep -c '3482' <transcript tool_result/tool_use/user records before block 2> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 2,
+     "text": "Net +1,089 production and +1,263 test for 22 reads.",
+     "reason": "`1089` appears in none of the 58 tool results, tool inputs or operator messages before turn 2",
+     "receipt": "grep -c '1089' <transcript tool_result/tool_use/user records before block 2> -> 0"
+    }
+   ],
+   "results": 342
+  },
+  "claims_routed": 83,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "d332d686-245f-4ca1-a583-d56cc4a1361d",
+  "in_flight": false,
+  "started": "2026-09-10T13:45:33.487Z",
+  "ended": "2026-09-11T03:35:02.361Z",
+  "t1_sha": "cbf198eca79d3e8ec10c78304f356a26bab3641a",
+  "turns": 95,
+  "operator_facing": 164,
+  "sentences": 254,
+  "adjudicable": 130,
+  "classes": {
+   "retrospective": 81,
+   "none": 24,
+   "promissory": 12,
+   "universal": 37,
+   "predictive": 7,
+   "evaluative": 3
+  },
+  "commitments": 5,
+  "advice": 7,
+  "own_commits": [
+   "05e56c483",
+   "069660fd9",
+   "0708bd3a7",
+   "0e0efced0",
+   "111d460ca",
+   "154e14ca4",
+   "16a00257c",
+   "188a9e4e4",
+   "19946f99a",
+   "1f7ea8745",
+   "207b62b85",
+   "21f572734",
+   "24a4bd420",
+   "255bbdfe6",
+   "264adbab7",
+   "26b8af62f",
+   "2a3a78766",
+   "2a9a9e91e",
+   "3a1cf984d",
+   "3c7ad5933",
+   "4888f733e",
+   "4a83373f4",
+   "4c45a1fc9",
+   "4c4c15a83",
+   "4d91462d1",
+   "4e1f99f55",
+   "502304f63",
+   "503aeee43",
+   "55a7ff294",
+   "5f3692106",
+   "618b7eb3b",
+   "65b92cd15",
+   "65bfe22c1",
+   "6f7528fad",
+   "6ff02677c",
+   "710a0326e",
+   "748ffbdb5",
+   "75471d21e",
+   "759ea5133",
+   "7c2fd7e9e",
+   "7f7a7d1b9",
+   "827f4f6ab",
+   "895d86083",
+   "8de463adc",
+   "8ea494c5a",
+   "8ef3c8c65",
+   "94b92f6d1",
+   "966b0cdb6",
+   "9c4216d82",
+   "9e46fc4bf",
+   "9eb85de7b",
+   "9fe5db712",
+   "a2e745456",
+   "aaf09ddbe",
+   "ac21dbdb2",
+   "acda8fd65",
+   "b0f4319b3",
+   "b52fa90a1",
+   "b5802b5c1",
+   "c45f28bc3",
+   "c67bc257c",
+   "c7e7d6a73",
+   "c852ee03c",
+   "cbf198eca",
+   "d250e0893",
+   "d51cd2b4c",
+   "d9e2577d5",
+   "dae189916",
+   "f2f127d93",
+   "f6a633519",
+   "f7fe8cfff",
+   "fd4ac69b3",
+   "fdaa06937",
+   "ff87326b2"
+  ],
+  "verdicts": {
+   "unchecked": 5
+  },
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 54,
+   "items_offered": 15,
+   "max_offered": 10,
+   "items_per_block": 0.28,
+   "tool_calls": 312,
+   "widest": {
+    "offered": 0,
+    "ask": "",
+    "ask_words": 0,
+    "leads": []
+   }
+  },
+  "bound_breaches": [
+   {
+    "asked": 1,
+    "offered": 5,
+    "excerpt": "The initiative has run to its measured end. Every gate is green at `cbf198eca`, nothing was pushed, and the ho"
+   }
+  ],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "not-mine": 146,
+     "holds": 18
+    },
+    "arith": {
+     "not-mine": 164
+    },
+    "green": {
+     "not-mine": 163,
+     "holds": 1
+    }
+   },
+   "findings": [],
+   "results": 312
+  },
+  "claims_routed": 21,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "8c5078a9-818b-40db-8f6f-eb33abd5799a",
+  "in_flight": false,
+  "started": "2026-09-10T21:06:26.727Z",
+  "ended": "2026-09-10T23:00:26.519Z",
+  "t1_sha": "4888f733eb9ebe5292faae5759e43a46df64c79e",
+  "turns": 15,
+  "operator_facing": 626,
+  "sentences": 633,
+  "adjudicable": 371,
+  "classes": {
+   "retrospective": 249,
+   "none": 122,
+   "universal": 97,
+   "promissory": 25,
+   "evaluative": 89,
+   "predictive": 44
+  },
+  "commitments": 1,
+  "advice": 24,
+  "own_commits": [
+   "111d460ca",
+   "255bbdfe6",
+   "4888f733e",
+   "9fe5db712",
+   "b52fa90a1",
+   "c45f28bc3",
+   "c852ee03c"
+  ],
+  "verdicts": {
+   "unchecked": 1
+  },
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 12,
+   "items_offered": 36,
+   "max_offered": 10,
+   "items_per_block": 3.0,
+   "tool_calls": 91,
+   "widest": {
+    "offered": 10,
+    "ask": "How might you be overcomplicating this?",
+    "ask_words": 6,
+    "leads": [
+     "Materially, and your own notes store says so.",
+     "I searched it for evidence the atlas ever prevented a collision. Every",
+     "2026-07-10: \"Peer machine committed the identical version bump and cre"
+    ]
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "not-mine": 490,
+     "holds": 130,
+     "broken": 6
+    },
+    "arith": {
+     "not-mine": 626
+    },
+    "green": {
+     "not-mine": 626
+    }
+   },
+   "findings": [
+    {
+     "instrument": "numbers",
+     "turn": 3,
+     "text": "Electron 28 + React 18, 234 files and 67,537 lines in `panel/src`, no router \u2014 a hand-rolled reducer over seven modes collapsed into three pages.",
+     "reason": "`234` appears in none of the 31 tool results, tool inputs or operator messages before turn 3",
+     "receipt": "grep -c '234' <transcript tool_result/tool_use/user records before block 3> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 3,
+     "text": "`sessions.ts` is a process supervisor: a 4,300-line `SessionManager` with 76 methods that parses `ps` output, adopts orphaned engines, runs a global health monitor, drives soft/deep sleep, and has a 475-line `buildArgs()` translating UI state into 39 flags \u2014 of the 99 that `vmlx serve` accepts.",
+     "reason": "`475` appears in none of the 31 tool results, tool inputs or operator messages before turn 3",
+     "receipt": "grep -c '475' <transcript tool_result/tool_use/user records before block 3> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 3,
+     "text": "`chat.ts` holds a single `ipcMain.handle(\"chat:sendMessage\")` that runs 4,271 lines, containing its own SSE demux, its own client-side `<think>`-block reparsing for when the server does not emit `reasoning_content`, and an agentic tool loop bounded at 10 iterations.",
+     "reason": "`4271` appears in none of the 31 tool results, tool inputs or operator messages before turn 3",
+     "receipt": "grep -c '4271' <transcript tool_result/tool_use/user records before block 3> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 3,
+     "text": "That means the model-family registry exists twice \u2014 `model-config-registry.ts` registers 69 families and says in its own header that it \"mirrors the Python model_configs.py patterns\", which registers 89.",
+     "reason": "`69` appears in none of the 31 tool results, tool inputs or operator messages before turn 3",
+     "receipt": "grep -c '69' <transcript tool_result/tool_use/user records before block 3> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 3,
+     "text": "Their model registry exists twice with 69 versus 89 families and drifts by convention; their Ollama translator exists twice, kept in sync by a code comment; their multimodal scheduler duplicates 43 method names from the text scheduler and has already shipped one divergence that made `/health` lie.",
+     "reason": "`69` appears in none of the 31 tool results, tool inputs or operator messages before turn 3",
+     "receipt": "grep -c '69' <transcript tool_result/tool_use/user records before block 3> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 15,
+     "text": "Your own CLAUDE.md already carries the reason: `work_in_flight` was called 59 times across 190 sessions *despite being mandated pre-flight by the compass*, while `session_state` hit 482 because the split protocol demands it and `notes` hit 101 because a hook injects it.",
+     "reason": "`482` appears in none of the 91 tool results, tool inputs or operator messages before turn 15",
+     "receipt": "grep -c '482' <transcript tool_result/tool_use/user records before block 15> -> 0"
+    }
+   ],
+   "results": 91
+  },
+  "claims_routed": 126,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "e105cea8-e968-4cca-9be4-8b039104a4ef",
+  "in_flight": false,
+  "started": "2026-09-10T14:05:23.227Z",
+  "ended": "2026-09-10T18:47:08.433Z",
+  "t1_sha": "f6a6335191a5e77bf1725bd79c9fc737c7fbb1a7",
+  "turns": 21,
+  "operator_facing": 99,
+  "sentences": 128,
+  "adjudicable": 78,
+  "classes": {
+   "none": 14,
+   "retrospective": 63,
+   "evaluative": 5,
+   "promissory": 4,
+   "universal": 11,
+   "predictive": 2
+  },
+  "commitments": 1,
+  "advice": 3,
+  "own_commits": [
+   "188a9e4e4",
+   "1f7ea8745",
+   "207b62b85",
+   "4e1f99f55",
+   "759ea5133",
+   "9e46fc4bf",
+   "9eb85de7b",
+   "acda8fd65",
+   "b5802b5c1",
+   "c7e7d6a73",
+   "d250e0893",
+   "d51cd2b4c",
+   "f6a633519",
+   "ff87326b2"
+  ],
+  "verdicts": {
+   "unchecked": 1
+  },
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 5,
+   "items_offered": 11,
+   "max_offered": 5,
+   "items_per_block": 2.2,
+   "tool_calls": 219,
+   "widest": {
+    "offered": 4,
+    "ask": "Fix the issues you encountered",
+    "ask_words": 5,
+    "leads": [
+     "All five issues fixed and committed. Six commits from me on top of the",
+     "**concept-gate now names what crossed.**",
+     "Minted 35 \u2192 39. Of the four crossers I could recover exactly one after"
+    ]
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "not-mine": 61,
+     "holds": 37,
+     "broken": 1
+    },
+    "arith": {
+     "not-mine": 99
+    },
+    "green": {
+     "not-mine": 97,
+     "holds": 2
+    }
+   },
+   "findings": [
+    {
+     "instrument": "numbers",
+     "turn": 10,
+     "text": "Three lanes grew: `p0-root-junk` +1,576 lines net (82 files added since the freeze carrying 79,539 lines, mostly `research/engram/*.log` build and bench captures and `runs/ei-*` acceptance logs), `p1-bench-baselines` +5,779 (four obsidian vault-port baselines), `p2-code-certain` +7.",
+     "reason": "`1576` appears in none of the 121 tool results, tool inputs or operator messages before turn 10",
+     "receipt": "grep -c '1576' <transcript tool_result/tool_use/user records before block 10> -> 0"
+    }
+   ],
+   "results": 219
+  },
+  "claims_routed": 28,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "6cb727b9-d79f-4667-9b5e-a2fbd235d5e5",
+  "in_flight": false,
+  "started": "",
+  "ended": "",
+  "t1_sha": null,
+  "turns": 0,
+  "operator_facing": 0,
+  "sentences": 0,
+  "adjudicable": 0,
+  "classes": {},
+  "commitments": 0,
+  "advice": 0,
+  "own_commits": [],
+  "verdicts": {},
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 0,
+   "items_offered": 0,
+   "max_offered": 0,
+   "items_per_block": 0.0,
+   "tool_calls": 2,
+   "widest": {
+    "offered": 0,
+    "ask": "",
+    "ask_words": 0,
+    "leads": []
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {},
+    "arith": {},
+    "green": {}
+   },
+   "findings": [],
+   "results": 2
+  },
+  "claims_routed": 0,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "b37ba222-39a6-4076-91c4-0f69618a8556",
+  "in_flight": false,
+  "started": "2026-09-10T13:41:10.012Z",
+  "ended": "2026-09-10T13:41:10.012Z",
+  "t1_sha": "aaf09ddbef96079668977f97ef3cc9d72e34a9c4",
+  "turns": 1,
+  "operator_facing": 17,
+  "sentences": 17,
+  "adjudicable": 8,
+  "classes": {
+   "retrospective": 4,
+   "none": 5,
+   "universal": 3,
+   "predictive": 2,
+   "evaluative": 2,
+   "promissory": 1
+  },
+  "commitments": 0,
+  "advice": 1,
+  "own_commits": [],
+  "verdicts": {},
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 1,
+   "items_offered": 3,
+   "max_offered": 3,
+   "items_per_block": 3.0,
+   "tool_calls": 6,
+   "widest": {
+    "offered": 3,
+    "ask": "Help me fix these Claude Code settings issues. For each issue: briefly explain what the fix will do, then ask me to confirm before running any shell command tha",
+    "ask_words": 127,
+    "leads": [
+     "Both keys changed type in a recent version. The binary's own schema te",
+     "`attribution.commit` \u2014 \"Attribution text for git commits, including an",
+     "`attribution.pr` \u2014 \"Attribution text for pull request descriptions. Em"
+    ]
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "not-mine": 17
+    },
+    "arith": {
+     "not-mine": 17
+    },
+    "green": {
+     "not-mine": 17
+    }
+   },
+   "findings": [],
+   "results": 6
+  },
+  "claims_routed": 4,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "9903ea64-2aca-4d75-8f8a-af2ff9d53427",
+  "in_flight": false,
+  "started": "2026-09-09T18:47:39.388Z",
+  "ended": "2026-09-09T21:01:58.237Z",
+  "t1_sha": "e0a14402e58e17086f0f39fdbb0520fb90fcfe7e",
+  "turns": 42,
+  "operator_facing": 142,
+  "sentences": 239,
+  "adjudicable": 87,
+  "classes": {
+   "retrospective": 57,
+   "none": 24,
+   "universal": 24,
+   "predictive": 15,
+   "evaluative": 16,
+   "promissory": 6
+  },
+  "commitments": 1,
+  "advice": 5,
+  "own_commits": [
+   "0493a6f43",
+   "1d7085a3c",
+   "1de14aeb9",
+   "21158a974",
+   "21aa03a7b",
+   "3cffb4382",
+   "4984a0a51",
+   "550d5f422",
+   "56694a6f4",
+   "6016e1b1f",
+   "63885ed4b",
+   "64dfedb33",
+   "6d037c7b4",
+   "7902a4d65",
+   "92de7368e",
+   "9aebd1d45",
+   "9c3a88ac6",
+   "a3cd57617",
+   "ac7ddd8ee",
+   "b3ce327ef",
+   "b71566e14",
+   "c03e48762",
+   "c2ed3903f",
+   "ca06ac364",
+   "d82eaba96",
+   "d98e9a429",
+   "dc97c3ab9",
+   "e0a14402e",
+   "e83bcd57f",
+   "f6a73c6f7",
+   "f8fcf4775"
+  ],
+  "verdicts": {
+   "unchecked": 1
+  },
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 8,
+   "items_offered": 5,
+   "max_offered": 3,
+   "items_per_block": 0.62,
+   "tool_calls": 220,
+   "widest": {
+    "offered": 2,
+    "ask": "Write a doc on exactly these decisions and alignment on how we'll close out this project -- I want to make sure we don't drop it across sessions / if there's a ",
+    "ask_words": 35,
+    "leads": [
+     "Three durable records now, at different granularities.",
+     "The plan lives in `quality/campaigns/sv-surface.toml` (commit `21aa03a",
+     "A decision note (`0fff3ea7`) points at it and carries the session cont"
+    ]
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "not-mine": 128,
+     "holds": 14
+    },
+    "arith": {
+     "not-mine": 142
+    },
+    "green": {
+     "not-mine": 141,
+     "holds": 1
+    }
+   },
+   "findings": [],
+   "results": 220
+  },
+  "claims_routed": 37,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "995d04b9-793a-4ab9-b1e6-d51ac2a14b63",
+  "in_flight": false,
+  "started": "2026-09-09T13:48:31.817Z",
+  "ended": "2026-09-09T16:36:50.526Z",
+  "t1_sha": "56694a6f4d8d18d64f9cfbee15fe28ce96a418cf",
+  "turns": 32,
+  "operator_facing": 73,
+  "sentences": 121,
+  "adjudicable": 58,
+  "classes": {
+   "retrospective": 43,
+   "none": 9,
+   "universal": 14,
+   "evaluative": 5,
+   "predictive": 1,
+   "promissory": 1
+  },
+  "commitments": 0,
+  "advice": 1,
+  "own_commits": [],
+  "verdicts": {},
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 4,
+   "items_offered": 2,
+   "max_offered": 1,
+   "items_per_block": 0.5,
+   "tool_calls": 257,
+   "widest": {
+    "offered": 1,
+    "ask": "And did you generalize the footgun fixes? Or did we only fix insofar as it addressed the red we examining?",
+    "ask_words": 20,
+    "leads": [
+     "Two commits: `eb3681d1e` (the five root causes) and `8a303b404` (the c",
+     "Direct answer to your question: **no, not until you asked.** I had fix",
+     "**The mock-routing footgun is now generalized.**"
+    ]
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "not-mine": 66,
+     "holds": 7
+    },
+    "arith": {
+     "not-mine": 73
+    },
+    "green": {
+     "not-mine": 73
+    }
+   },
+   "findings": [],
+   "results": 257
+  },
+  "claims_routed": 17,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "4fe232fd-8807-4cdc-93bc-2219ef5592aa",
+  "in_flight": false,
+  "started": "2026-09-09T13:50:22.093Z",
+  "ended": "2026-09-09T13:50:22.093Z",
+  "t1_sha": "972fecb9ee02253740bb202e7953e90dfb7f0de0",
+  "turns": 1,
+  "operator_facing": 12,
+  "sentences": 12,
+  "adjudicable": 8,
+  "classes": {
+   "retrospective": 4,
+   "none": 2,
+   "promissory": 3,
+   "evaluative": 1,
+   "universal": 1,
+   "predictive": 1
+  },
+  "commitments": 2,
+  "advice": 1,
+  "own_commits": [],
+  "verdicts": {
+   "unchecked": 2
+  },
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 1,
+   "items_offered": 0,
+   "max_offered": 0,
+   "items_per_block": 0.0,
+   "tool_calls": 5,
+   "widest": {
+    "offered": 0,
+    "ask": "",
+    "ask_words": 0,
+    "leads": []
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "not-mine": 12
+    },
+    "arith": {
+     "not-mine": 12
+    },
+    "green": {
+     "not-mine": 12
+    }
+   },
+   "findings": [],
+   "results": 5
+  },
+  "claims_routed": 2,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "6c57fec1-bfbd-4d95-991b-8765ac9c93e8",
+  "in_flight": false,
+  "started": "2026-09-09T06:24:55.406Z",
+  "ended": "2026-09-09T08:09:20.240Z",
+  "t1_sha": "8e4d3fb11cef1ff7a7d1b368254d0d6c9a26bd1e",
+  "turns": 19,
+  "operator_facing": 82,
+  "sentences": 107,
+  "adjudicable": 55,
+  "classes": {
+   "retrospective": 37,
+   "evaluative": 6,
+   "none": 14,
+   "universal": 8,
+   "predictive": 7,
+   "promissory": 10
+  },
+  "commitments": 7,
+  "advice": 3,
+  "own_commits": [
+   "199704926",
+   "1a8e714e5",
+   "40204318e",
+   "6016e1b1f",
+   "8e4d3fb11",
+   "a7ead1645",
+   "ca06ac364",
+   "d9dcaffdb"
+  ],
+  "verdicts": {
+   "unchecked": 3,
+   "kept": 2,
+   "broken": 2
+  },
+  "integrity": 0.0,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 6,
+   "items_offered": 2,
+   "max_offered": 2,
+   "items_per_block": 0.33,
+   "tool_calls": 397,
+   "widest": {
+    "offered": 2,
+    "ask": "Let's pick up the frame to get the quality gates to green by doing rigorous root cause analysis. Here's the last message ```We're not green, and I want to be st",
+    "ask_words": 334,
+    "leads": [
+     "Interim, while the full test run finishes \u2014 the analysis is done and i",
+     "**The frame's top-ranked fix is wrong, and I can show it.**",
+     "**The real defect is one layer down, and it is much larger than one pr"
+    ]
+   }
+  },
+  "bound_breaches": [],
+  "broken": [
+   {
+    "turn": 5,
+    "text": "State at the seat right now: seven of the eight workspace test failures fixed, W2's unknowable-contract fix verified here (17/17, both directions), and one deferred item \u2014 the conformance-tag regeneration, which I'll run last because both workers are still shifting line numbers in tagged files.",
+    "reason": "git show 8e4d3fb11 6016e1b1f 199704926 a7ead1645 1a8e714e5 40204318e d9dcaffdb ca06ac364 | grep -cF '17/17' -> 0",
+    "receipt": "git show 8e4d3fb11 6016e1b1f 199704926 a7ead1645 1a8e714e5 40204318e d9dcaffdb ca06ac364 | grep -cF '17/17'",
+    "engine": "tree"
+   },
+   {
+    "turn": 8,
+    "text": "I'll thread it through as soon as W1 releases `atlas_grounding.rs` and `ground/select.rs`; shipping W3's floor without it would make production abstain on every question, so it is not optional.",
+    "reason": "git show 8e4d3fb11 6016e1b1f 199704926 a7ead1645 1a8e714e5 40204318e d9dcaffdb ca06ac364 | grep -cF 'atlas_grounding.rs' -> 0 (and 1 more)",
+    "receipt": "git show 8e4d3fb11 6016e1b1f 199704926 a7ead1645 1a8e714e5 40204318e d9dcaffdb ca06ac364 | grep -cF 'atlas_grounding.rs'",
+    "engine": "tree"
+   }
+  ],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "not-mine": 71,
+     "holds": 11
+    },
+    "arith": {
+     "not-mine": 82
+    },
+    "green": {
+     "not-mine": 82
+    }
+   },
+   "findings": [],
+   "results": 397
+  },
+  "claims_routed": 14,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "00e8b4a8-6f7b-4849-b33e-a273e5cea610",
+  "in_flight": false,
+  "started": "2026-09-09T01:32:18.850Z",
+  "ended": "2026-09-09T01:51:13.065Z",
+  "t1_sha": "af5abfcb29144eb7a71e172a1d1a88964257c4df",
+  "turns": 4,
+  "operator_facing": 41,
+  "sentences": 43,
+  "adjudicable": 29,
+  "classes": {
+   "retrospective": 15,
+   "predictive": 3,
+   "none": 5,
+   "universal": 10,
+   "promissory": 4,
+   "evaluative": 4
+  },
+  "commitments": 1,
+  "advice": 3,
+  "own_commits": [],
+  "verdicts": {
+   "unchecked": 1
+  },
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 2,
+   "items_offered": 3,
+   "max_offered": 3,
+   "items_per_block": 1.5,
+   "tool_calls": 16,
+   "widest": {
+    "offered": 3,
+    "ask": "If somehow a peer is saturating the daemon I'd like to be left alone from it",
+    "ask_words": 16,
+    "leads": [
+     "The slot is already free: a peer session on this machine cancelled the",
+     "Half of what you want already exists, for mesh peers only. Peer infere",
+     "The hole is that the daemon cannot tell you apart from its own batch w"
+    ]
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "not-mine": 32,
+     "holds": 6,
+     "broken": 3
+    },
+    "arith": {
+     "not-mine": 41
+    },
+    "green": {
+     "not-mine": 41
+    }
+   },
+   "findings": [
+    {
+     "instrument": "numbers",
+     "turn": 4,
+     "text": "The same rule `admit_peer_request` applies to peers, applied to local background callers: 503 with `yielded_to_local` and a retry hint.",
+     "reason": "`503` appears in none of the 16 tool results, tool inputs or operator messages before turn 4",
+     "receipt": "grep -c '503' <transcript tool_result/tool_use/user records before block 4> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 4,
+     "text": "The solver backend already retries on 503 but gives up after three, so it and the bench runners need to wait out the hint instead of failing the candidate.",
+     "reason": "`503` appears in none of the 16 tool results, tool inputs or operator messages before turn 4",
+     "receipt": "grep -c '503' <transcript tool_result/tool_use/user records before block 4> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 4,
+     "text": "Applying it to peers too is an outward-facing change: a peer mid-stream on your box gets a 503 and reroutes, which it already handles for a refused start but has never seen mid-turn.",
+     "reason": "`503` appears in none of the 16 tool results, tool inputs or operator messages before turn 4",
+     "receipt": "grep -c '503' <transcript tool_result/tool_use/user records before block 4> -> 0"
+    }
+   ],
+   "results": 16
+  },
+  "claims_routed": 5,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "e45b6bcb-e4c6-4a7c-973a-1ca86e4c6d23",
+  "in_flight": false,
+  "started": "2026-09-08T19:18:18.692Z",
+  "ended": "2026-09-09T00:40:53.426Z",
+  "t1_sha": "ad64282100e34041e3a95c0be41245e72516380d",
+  "turns": 187,
+  "operator_facing": 644,
+  "sentences": 1232,
+  "adjudicable": 408,
+  "classes": {
+   "retrospective": 278,
+   "none": 96,
+   "universal": 93,
+   "evaluative": 85,
+   "promissory": 37,
+   "predictive": 55
+  },
+  "commitments": 9,
+  "advice": 28,
+  "own_commits": [
+   "2a9c4d43e",
+   "31b79f4b5",
+   "3b4439b3e",
+   "3e6afe1aa",
+   "6887296a1",
+   "9ac236cf7",
+   "aff5873f1",
+   "e69db9808",
+   "f4b13a68c"
+  ],
+  "verdicts": {
+   "unchecked": 8,
+   "kept": 1
+  },
+  "integrity": 0.25,
+  "efficacy": "never-ran",
+  "frame_contradictions": null,
+  "sprawl": {
+   "operator_blocks": 53,
+   "items_offered": 35,
+   "max_offered": 7,
+   "items_per_block": 0.66,
+   "tool_calls": 396,
+   "widest": {
+    "offered": 7,
+    "ask": "So we're done with the instrument. What did we find that is broken or ugly in the process that could do with a clean up pass?",
+    "ask_words": 26,
+    "leads": [
+     "Not quite done \u2014 the targeted tests are still compiling and the lane h",
+     "**Two product defects, and they're the ones that matter.**",
+     "**The instrument says \"passed\" for things it never checked.**"
+    ]
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "not-mine": 537,
+     "broken": 6,
+     "holds": 101
+    },
+    "arith": {
+     "not-mine": 644
+    },
+    "green": {
+     "not-mine": 642,
+     "holds": 1,
+     "broken": 1
+    }
+   },
+   "findings": [
+    {
+     "instrument": "numbers",
+     "turn": 1,
+     "text": "Reservations total 1470s (24.5 min); measured actuals total 1231s (20.5 min), with chaos-monkey alone at 397s.",
+     "reason": "`1231` appears in none of the 48 tool results, tool inputs or operator messages before turn 1",
+     "receipt": "grep -c '1231' <transcript tool_result/tool_use/user records before block 1> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 4,
+     "text": "The budget arithmetic now says this run probably won't finish either: 1217s left against 1170s of remaining reservations, and if the later lanes stretch the way `chat-ask` did, `chaos-monkey` (450s) and `synth` (330s) will hit the 60s runway floor and abstain out of budget.",
+     "reason": "`1217` appears in none of the 62 tool results, tool inputs or operator messages before turn 4",
+     "receipt": "grep -c '1217' <transcript tool_result/tool_use/user records before block 4> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 5,
+     "text": "`routing` is up now with 1021s of budget against 1020s of remaining reservations, so the margin is gone \u2014 `synth`, last in line at 330s, is the one that gets starved if anything ahead of it stretches.",
+     "reason": "`1021` appears in none of the 63 tool results, tool inputs or operator messages before turn 5",
+     "receipt": "grep -c '1021' <transcript tool_result/tool_use/user records before block 5> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 6,
+     "text": "Four lanes down, 925s of budget against 850s of remaining reservations \u2014 a 75s margin, so `synth` should make it unless `chaos-monkey` stretches.",
+     "reason": "`75` appears in none of the 63 tool results, tool inputs or operator messages before turn 6",
+     "receipt": "grep -c '75' <transcript tool_result/tool_use/user records before block 6> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 10,
+     "text": "`overrun = \"kill\"` then kills it 131s short.",
+     "reason": "`131` appears in none of the 64 tool results, tool inputs or operator messages before turn 10",
+     "receipt": "grep -c '131' <transcript tool_result/tool_use/user records before block 10> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 12,
+     "text": "Full workspace, all crates, `--all-targets`, the real feature contract \u2014 errors 0, cargo exit 0, \"\u2713 Workspace checks clean\" in 124s.",
+     "reason": "`124` appears in none of the 70 tool results, tool inputs or operator messages before turn 12",
+     "receipt": "grep -c '124' <transcript tool_result/tool_use/user records before block 12> -> 0"
+    },
+    {
+     "instrument": "green",
+     "turn": 36,
+     "text": "The commit-smell hook asked whether I'd watched the new gates fail, and I hadn't; removing `RetrievalMissLeaked` from the leak set reddens exactly the two tests that should catch it and leaves 1,278 green, so now I have.",
+     "reason": "the last test summary before this turn was red: pass: 1278 fail: 2",
+     "receipt": "transcript tool_result before block 36: pass: 1278 fail: 2"
+    }
+   ],
+   "results": 396
+  },
+  "claims_routed": 100,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "db74602c-ee2d-4d01-9f95-df0629ab0823",
+  "in_flight": false,
+  "started": "2026-09-08T14:03:32.305Z",
+  "ended": "2026-09-08T21:10:14.700Z",
+  "t1_sha": "2a9c4d43e96e1face38f61e81be748927c560230",
+  "turns": 52,
+  "operator_facing": 183,
+  "sentences": 227,
+  "adjudicable": 122,
+  "classes": {
+   "promissory": 17,
+   "retrospective": 81,
+   "universal": 24,
+   "predictive": 13,
+   "none": 26,
+   "evaluative": 12,
+   "could-not-judge": 10
+  },
+  "commitments": 4,
+  "advice": 13,
+  "own_commits": [
+   "02ac6de77",
+   "04b66abd5",
+   "0a836a555",
+   "0d9fb68c2",
+   "10b9d5cd2",
+   "13d82a3b8",
+   "1d48f0d18",
+   "24f7c3195",
+   "2738ef343",
+   "31b79f4b5",
+   "32505217a",
+   "3475c4836",
+   "3e6afe1aa",
+   "43f51fe8f",
+   "4e88b47d6",
+   "505b81789",
+   "51338e592",
+   "57e7cb4a1",
+   "5924526d0",
+   "59c577976",
+   "65cd47f91",
+   "6887296a1",
+   "729d7e404",
+   "752412488",
+   "769c10f09",
+   "78237126c",
+   "7aba1bf8d",
+   "81140c127",
+   "85d0ca1b2",
+   "8cdc1cd4c",
+   "8f8f3121e",
+   "929d1cd57",
+   "976f03698",
+   "9976f67a9",
+   "9aa07c9b7",
+   "9f359e4c2",
+   "a560ce0ba",
+   "a92cecbc4",
+   "aff5873f1",
+   "ba33a9059",
+   "c25bc2daf",
+   "cc372217a",
+   "d18bb307a",
+   "d986cc7c3",
+   "da08431ab",
+   "daf6e382e",
+   "dd1a4c9cc",
+   "e4488491d",
+   "e6822f6e3",
+   "f127d00b7",
+   "f5fe849d1",
+   "f65f679eb",
+   "fca589d0c",
+   "fdb27bbd8"
+  ],
+  "verdicts": {
+   "unchecked": 4
+  },
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 28,
+   "items_offered": 28,
+   "max_offered": 7,
+   "items_per_block": 1.0,
+   "tool_calls": 187,
+   "widest": {
+    "offered": 3,
+    "ask": "Pick it back up (probably bank a frame and pick it up in a new session)",
+    "ask_words": 16,
+    "leads": [
+     "Frame is banked and the closeout is one pending verification away. Her",
+     "**Phase 4 and the initiative's done-when are landed, local and unpushe",
+     "**K2 fired and the campaign's own kill text decided the closeout.** Th"
+    ]
+   }
+  },
+  "bound_breaches": [
+   {
+    "asked": 3,
+    "offered": 6,
+    "excerpt": "Frame updated. Here is the answer to your question, with what the two censuses found.\n\n**The lines are not dea"
+   }
+  ],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "not-mine": 161,
+     "holds": 22
+    },
+    "arith": {
+     "not-mine": 183
+    },
+    "green": {
+     "not-mine": 181,
+     "holds": 2
+    }
+   },
+   "findings": [],
+   "results": 187
+  },
+  "claims_routed": 25,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "a99026b2-4694-4703-8591-8530098ef8a6",
+  "in_flight": false,
+  "started": "2026-09-08T04:03:50.675Z",
+  "ended": "2026-09-08T17:20:47.704Z",
+  "t1_sha": "f65f679ebb4e86e34eab604c64e39a2297430a3a",
+  "turns": 86,
+  "operator_facing": 555,
+  "sentences": 651,
+  "adjudicable": 365,
+  "classes": {
+   "retrospective": 256,
+   "predictive": 35,
+   "evaluative": 61,
+   "none": 94,
+   "promissory": 32,
+   "universal": 77
+  },
+  "commitments": 5,
+  "advice": 27,
+  "own_commits": [
+   "0d9fb68c2",
+   "13d82a3b8",
+   "4e88b47d6",
+   "57e7cb4a1",
+   "59c577976",
+   "724b97925",
+   "82577ab59",
+   "85d0ca1b2",
+   "8bbc8b1d0",
+   "93d63942c",
+   "a92cecbc4",
+   "b0c812032",
+   "b8541d34c",
+   "ba33a9059",
+   "c25bc2daf",
+   "c4b643dce",
+   "cc372217a",
+   "f65f679eb"
+  ],
+  "verdicts": {
+   "unchecked": 5
+  },
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 42,
+   "items_offered": 19,
+   "max_offered": 5,
+   "items_per_block": 0.45,
+   "tool_calls": 253,
+   "widest": {
+    "offered": 5,
+    "ask": "I'm gonna need you to provide a succinct summary with context, flagging the actual decision points where you weigh pros and cons and provide recs",
+    "ask_words": 25,
+    "leads": [
+     "**Where things stand.**",
+     "Two results are worth more than the green. The gym scores **9/9 on the",
+     "**Decision 1 \u2014 the deletion bar.**"
+    ]
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "not-mine": 470,
+     "holds": 85
+    },
+    "arith": {
+     "not-mine": 555
+    },
+    "green": {
+     "not-mine": 552,
+     "holds": 2,
+     "broken": 1
+    }
+   },
+   "findings": [
+    {
+     "instrument": "green",
+     "turn": 23,
+     "text": "The sweep: lint clean on the full workspace, 12,090 tests pass, 7 fail.",
+     "reason": "the last test summary before this turn was red: test result: FAILED. 45 passed; 1 failed; 0 ignored; 0 measured; 28 filtered out; finished in 63.54s",
+     "receipt": "transcript tool_result before block 23: test result: FAILED. 45 passed; 1 failed; 0 ignored; 0 measured; 28 filtered out; finished in 63.54s"
+    }
+   ],
+   "results": 253
+  },
+  "claims_routed": 116,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "09a370db-990e-4974-a681-159174cbbd27",
+  "in_flight": false,
+  "started": "2026-09-08T04:00:07.365Z",
+  "ended": "2026-09-08T06:05:55.635Z",
+  "t1_sha": "b8541d34c76524e8a38d17b8125366c70461e345",
+  "turns": 28,
+  "operator_facing": 113,
+  "sentences": 154,
+  "adjudicable": 77,
+  "classes": {
+   "none": 19,
+   "retrospective": 53,
+   "universal": 17,
+   "predictive": 7,
+   "evaluative": 10,
+   "promissory": 7
+  },
+  "commitments": 2,
+  "advice": 5,
+  "own_commits": [
+   "18eb1c140",
+   "21cddb67f",
+   "824f3b660",
+   "9aa337c0d",
+   "a9cd83437",
+   "ac3773f78",
+   "c5b0d2fa7"
+  ],
+  "verdicts": {
+   "unchecked": 1,
+   "kept": 1
+  },
+  "integrity": 0.25,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 6,
+   "items_offered": 16,
+   "max_offered": 10,
+   "items_per_block": 2.67,
+   "tool_calls": 187,
+   "widest": {
+    "offered": 10,
+    "ask": "tldr: what's left? what's incomplete?",
+    "ask_words": 5,
+    "leads": [
+     "Three buckets. The first is on me.",
+     "**Gates I did not run.**",
+     "`./scripts/pre-push.sh` \u2014 never ran. That's the eight blocking xtask r"
+    ]
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "not-mine": 107,
+     "holds": 6
+    },
+    "arith": {
+     "not-mine": 113
+    },
+    "green": {
+     "not-mine": 113
+    }
+   },
+   "findings": [],
+   "results": 187
+  },
+  "claims_routed": 34,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "1ab9a471-a877-41a1-a3d6-f25a5633636c",
+  "in_flight": false,
+  "started": "2026-09-05T00:49:30.864Z",
+  "ended": "2026-09-05T01:01:33.303Z",
+  "t1_sha": "c486892587165c3f154ed5a9ff85f8f5d216dc3a",
+  "turns": 4,
+  "operator_facing": 98,
+  "sentences": 99,
+  "adjudicable": 65,
+  "classes": {
+   "retrospective": 35,
+   "none": 14,
+   "universal": 26,
+   "promissory": 4,
+   "predictive": 8,
+   "evaluative": 11
+  },
+  "commitments": 0,
+  "advice": 4,
+  "own_commits": [],
+  "verdicts": {},
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": null,
+  "sprawl": {
+   "operator_blocks": 3,
+   "items_offered": 6,
+   "max_offered": 6,
+   "items_per_block": 2.0,
+   "tool_calls": 41,
+   "widest": {
+    "offered": 6,
+    "ask": "Let's get concrete about where we'd apply it, how, and to what ends",
+    "ask_words": 13,
+    "leads": [
+     "Apply it to `retrieval-prod` on the `sep` and `wikipedia` banks, and t",
+     "The scoring function is further along than the paper's, too. Every bas",
+     "**What `x` is.**"
+    ]
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "not-mine": 79,
+     "holds": 19
+    },
+    "arith": {
+     "not-mine": 98
+    },
+    "green": {
+     "not-mine": 98
+    }
+   },
+   "findings": [],
+   "results": 41
+  },
+  "claims_routed": 21,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "7a744442-634e-41b7-9291-709140e2d1bc",
+  "in_flight": false,
+  "started": "2026-09-04T23:46:54.393Z",
+  "ended": "2026-09-05T13:31:02.342Z",
+  "t1_sha": "95583b7378906d0ab53e0cc44c10721f9da6e768",
+  "turns": 101,
+  "operator_facing": 491,
+  "sentences": 650,
+  "adjudicable": 315,
+  "classes": {
+   "retrospective": 219,
+   "none": 89,
+   "universal": 72,
+   "promissory": 24,
+   "evaluative": 57,
+   "predictive": 30
+  },
+  "commitments": 6,
+  "advice": 18,
+  "own_commits": [
+   "22c7302e6",
+   "2e334c183",
+   "4587b81f9",
+   "4615cec70",
+   "4a7d0a5a8",
+   "571849a89",
+   "65b3745ad",
+   "6bf58a4fc",
+   "7234375ea",
+   "7238c6b14",
+   "7471ed874",
+   "92a64d778",
+   "9b7841675",
+   "b6eba84c4",
+   "b9f41d18e",
+   "bab7df796",
+   "bc600f424",
+   "c48689258",
+   "ca188f497",
+   "ccfc21e90",
+   "ccfc90e85",
+   "ce42f893f",
+   "f460df57a",
+   "fa69be382"
+  ],
+  "verdicts": {
+   "unchecked": 6
+  },
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 25,
+   "items_offered": 112,
+   "max_offered": 12,
+   "items_per_block": 4.48,
+   "tool_calls": 231,
+   "widest": {
+    "offered": 12,
+    "ask": "Let's go through the Phase 4 plan",
+    "ask_words": 7,
+    "leads": [
+     "Before the plan \u2014 the split protocol just fired at **red (505k)**. I b",
+     "**Phase 4 = retention, and it's the best-specified phase this campaign",
+     "**What exists at HEAD**"
+    ]
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "holds": 80,
+     "not-mine": 409,
+     "broken": 2
+    },
+    "arith": {
+     "not-mine": 491
+    },
+    "green": {
+     "not-mine": 489,
+     "holds": 2
+    }
+   },
+   "findings": [
+    {
+     "instrument": "numbers",
+     "turn": 50,
+     "text": "`commonwealth-api`: 489 + 83 + 19 = 591 passed, 0 failed \u2014 including the split `rail_e2e` suite at 19.",
+     "reason": "`591` appears in none of the 135 tool results, tool inputs or operator messages before turn 50",
+     "receipt": "grep -c '591' <transcript tool_result/tool_use/user records before block 50> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 65,
+     "text": "| 3b neutral couplings | `bootstrap.rs:14,659,764` | must pair with 3c |",
+     "reason": "`659764` appears in none of the 168 tool results, tool inputs or operator messages before turn 65",
+     "receipt": "grep -c '659764' <transcript tool_result/tool_use/user records before block 65> -> 0"
+    }
+   ],
+   "results": 231
+  },
+  "claims_routed": 98,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "bd06f458-57da-4947-9935-8d0b19ead7a1",
+  "in_flight": false,
+  "started": "2026-09-04T21:33:02.508Z",
+  "ended": "2026-09-05T09:03:00.158Z",
+  "t1_sha": "26e4194d0221ec61ca6eae6fc87a503bd1709d18",
+  "turns": 62,
+  "operator_facing": 677,
+  "sentences": 729,
+  "adjudicable": 431,
+  "classes": {
+   "retrospective": 295,
+   "universal": 100,
+   "none": 157,
+   "evaluative": 42,
+   "predictive": 47,
+   "promissory": 36
+  },
+  "commitments": 9,
+  "advice": 27,
+  "own_commits": [
+   "021f81cf7",
+   "1027ab126",
+   "12b9f44c2",
+   "26e4194d0",
+   "2e334c183",
+   "3554c409f",
+   "4446b07ec",
+   "4587b81f9",
+   "4615cec70",
+   "4747d6fa6",
+   "4a7d0a5a8",
+   "4deb7444d",
+   "555cd8449",
+   "571849a89",
+   "6517e291a",
+   "65b3745ad",
+   "6bf58a4fc",
+   "7234375ea",
+   "7238c6b14",
+   "73a273dd1",
+   "7471ed874",
+   "787eda806",
+   "797fc6634",
+   "893745b0c",
+   "91db04936",
+   "92a64d778",
+   "9b7841675",
+   "a4f8f2a95",
+   "a5331ecce",
+   "abf1cb282",
+   "b55b9179e",
+   "b6eba84c4",
+   "b6ed7bf3d",
+   "b9f41d18e",
+   "bab7df796",
+   "bc600f424",
+   "c48689258",
+   "c89aec089",
+   "ca188f497",
+   "ccfc21e90",
+   "ccfc90e85",
+   "ce42f893f",
+   "ce6768224",
+   "cebb03206",
+   "d48f5dcb5",
+   "dc9010181",
+   "de275e1b4",
+   "de90337de",
+   "dfa87ed19",
+   "e19d0e518",
+   "ef84419d5",
+   "f15d28a4c",
+   "f460df57a",
+   "f64e8e944",
+   "fa69be382"
+  ],
+  "verdicts": {
+   "unchecked": 8,
+   "kept": 1
+  },
+  "integrity": 0.25,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 32,
+   "items_offered": 100,
+   "max_offered": 8,
+   "items_per_block": 3.12,
+   "tool_calls": 179,
+   "widest": {
+    "offered": 8,
+    "ask": "Honestly I think we need one good full chat ask like the one in this issue which regressed embarrassingly: https://github.com/alexsbryan/commonwealth-ai/issues/",
+    "ask_words": 20,
+    "leads": [
+     "That turn's persisted record is exactly the thing to gate. The ledger",
+     "| stage | owner | ms | calls |",
+     "|---|---|---|---|"
+    ]
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "not-mine": 558,
+     "holds": 118,
+     "broken": 1
+    },
+    "arith": {
+     "not-mine": 677
+    },
+    "green": {
+     "not-mine": 675,
+     "broken": 2
+    }
+   },
+   "findings": [
+    {
+     "instrument": "green",
+     "turn": 2,
+     "text": "| sovereign-test.sh | exit 0 / 2 / 4 / 5 |",
+     "reason": "the last test summary before this turn was red: 1. **HARNESS BUG (fixed, commit 42735d56).** Commit 439c27e4 (\"workspace lint policy\") added `[lints] workspace = true` ",
+     "receipt": "transcript tool_result before block 2: 1. **HARNESS BUG (fixed, commit 42735d56).** Commit 439c27e4 (\"workspace lint policy\") added `[lints] workspace = true` to all 6 Rust scaffolds \u2192 standalone tem"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 35,
+     "text": "The 1,799/1,801 ladder test passes and requires the routes to differ, so the path selector now changes cost only.",
+     "reason": "`801` appears in none of the 139 tool results, tool inputs or operator messages before turn 35",
+     "receipt": "grep -c '801' <transcript tool_result/tool_use/user records before block 35> -> 0"
+    },
+    {
+     "instrument": "green",
+     "turn": 37,
+     "text": "The definition-of-done sweep is green for everything we landed, and the last worker is on the remaining scope.",
+     "reason": "the last test summary before this turn was red: pass: 0 fail: 1",
+     "receipt": "transcript tool_result before block 37: pass: 0 fail: 1"
+    }
+   ],
+   "results": 179
+  },
+  "claims_routed": 44,
+  "claim_verdicts": {},
+  "claims_broken": []
+ },
+ {
+  "schema": "session-card/v1",
+  "session": "822d533b-aca7-4d39-9253-a102fd70e5dd",
+  "in_flight": false,
+  "started": "2026-09-04T17:45:13.756Z",
+  "ended": "2026-09-04T18:16:00.496Z",
+  "t1_sha": "c426a9656174c40ea93aa932632d9f0ebcc98476",
+  "turns": 25,
+  "operator_facing": 139,
+  "sentences": 187,
+  "adjudicable": 80,
+  "classes": {
+   "retrospective": 55,
+   "evaluative": 23,
+   "none": 19,
+   "predictive": 17,
+   "universal": 19,
+   "promissory": 6
+  },
+  "commitments": 0,
+  "advice": 6,
+  "own_commits": [],
+  "verdicts": {},
+  "integrity": null,
+  "efficacy": "never-ran",
+  "frame_contradictions": [],
+  "sprawl": {
+   "operator_blocks": 6,
+   "items_offered": 0,
+   "max_offered": 0,
+   "items_per_block": 0.0,
+   "tool_calls": 72,
+   "widest": {
+    "offered": 0,
+    "ask": "",
+    "ask_words": 0,
+    "leads": []
+   }
+  },
+  "bound_breaches": [],
+  "broken": [],
+  "bro": null,
+  "evidence": {
+   "counts": {
+    "numbers": {
+     "not-mine": 104,
+     "holds": 29,
+     "broken": 6
+    },
+    "arith": {
+     "not-mine": 139
+    },
+    "green": {
+     "not-mine": 139
+    }
+   },
+   "findings": [
+    {
+     "instrument": "numbers",
+     "turn": 1,
+     "text": "Rust comments: 126,363 `///` + 40,850 `//!` + 85,903 `//` = 253,116 lines against 798,052 of code.",
+     "reason": "`253116` appears in none of the 9 tool results, tool inputs or operator messages before turn 1",
+     "receipt": "grep -c '253116' <transcript tool_result/tool_use/user records before block 1> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 6,
+     "text": "That is 61% of the unreachable line count in one subtree, averaging 79 lines a file \u2014 experiment arm outputs.",
+     "reason": "`61` appears in none of the 18 tool results, tool inputs or operator messages before turn 6",
+     "receipt": "grep -c '61' <transcript tool_result/tool_use/user records before block 6> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 6,
+     "text": "What remains is 334 files and 45,925 lines, and that is where the judgment actually lives.",
+     "reason": "`45925` appears in none of the 18 tool results, tool inputs or operator messages before turn 6",
+     "receipt": "grep -c '45925' <transcript tool_result/tool_use/user records before block 6> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 6,
+     "text": "Committed generated output: three `drift_report*.md` at the root, 209 lines.",
+     "reason": "`209` appears in none of the 18 tool results, tool inputs or operator messages before turn 6",
+     "receipt": "grep -c '209' <transcript tool_result/tool_use/user records before block 6> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 6,
+     "text": "And real content that merely lost its link, where archiving would be the wrong call: `LIVING_GOVERNANCE` (621), `CANON_CLI` (530), the two case studies (699 together), `commonwealth/docs/oicp-v0.2.md` (752).",
+     "reason": "`699` appears in none of the 18 tool results, tool inputs or operator messages before turn 6",
+     "receipt": "grep -c '699' <transcript tool_result/tool_use/user records before block 6> -> 0"
+    },
+    {
+     "instrument": "numbers",
+     "turn": 14,
+     "text": "What remains of the burn-down is 543 unreachable files and about 87,000 lines, and it no longer has a single lever.",
+     "reason": "`543` appears in none of the 38 tool results, tool inputs or operator messages before turn 14",
+     "receipt": "grep -c '543' <transcript tool_result/tool_use/user records before block 14> -> 0"
+    }
+   ],
+   "results": 72
+  },
+  "claims_routed": 37,
+  "claim_verdicts": {},
+  "claims_broken": []
+ }
+]

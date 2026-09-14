@@ -1099,6 +1099,27 @@ pub async fn resume_inflight_tier2(
             continue;
         }
         let source_corpus_id = name.trim_end_matches(TIER2_WORKSPACE_SUFFIX);
+        // Dead-enrichment gate, same predicate as the other three boot
+        // resume scans (`EnrichmentState::declared_dead`). Tier-2
+        // extraction runs over the SOURCE corpus's chapters, so a source
+        // whose enrichment the stall-sweep already killed would have its
+        // extraction re-spawned on every daemon boot. Resume is an
+        // explicit operator action. Fails OPEN on a missing/corrupt
+        // sidecar — most tier-2 sources have none and must still resume.
+        let source_index_dir = indexes_dir.join(source_corpus_id);
+        if corpus_engine::enrichment::state::EnrichmentStateFile::declared_dead_at(
+            &source_index_dir,
+        ) {
+            tracing::info!(
+                corpus = %source_corpus_id,
+                workspace = %name,
+                "tier2 resume: skipping workspace whose source corpus's enrichment \
+                 state records a stall or an error. Resume is an explicit operator \
+                 action: clear the state via LocalCorpusManager::reset_enrichment_state \
+                 (POST /internal/corpus/enrich-reset), then re-request extraction."
+            );
+            continue;
+        }
         let chapters_manifest_path = indexes_dir.join(name).join("chapters.json");
         let Some((done, total)) = checkpoint_progress(&path, &chapters_manifest_path) else {
             continue;

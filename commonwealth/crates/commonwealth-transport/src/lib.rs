@@ -90,6 +90,12 @@ pub mod iroh;
 pub mod iroh_identity_forward;
 #[cfg(feature = "iroh")]
 mod iroh_path;
+/// The three origin ALPNs, beside `iroh.rs` because that file is past its
+/// ceiling. `pub` rather than private-plus-re-export: `iroh` is behind a
+/// feature, so a private module re-exported only from there is dead code in
+/// every build without it — and these constants are wire vocabulary, not
+/// iroh's alone. `iroh` re-exports them, so no call site changed.
+pub mod origin_alpn;
 mod routed;
 
 pub use ip::IpTransport;
@@ -146,13 +152,24 @@ pub enum TrafficClass {
     /// to loopback on the publisher and reachable by mesh key alone, so a
     /// plaintext guess would be a hole rather than a fallback.
     App,
+    /// A member reading a peer's OFFER origin (`[iroh] offer_origin`) — the
+    /// HTTP listing of what that operator has to sell or lend. HTTP spliced
+    /// whole, never parsed: what an offer IS stays the origin's, and the
+    /// catalogue a house sees is computed by asking every publisher at once
+    /// rather than stored anywhere.
+    ///
+    /// iroh-ONLY for the reason `Media` and `App` are: the origin is bound to
+    /// loopback on the holder and admitted by mesh key, so the IP transport
+    /// returns NO candidates — a plaintext guess would be somebody's shop
+    /// list served to anyone on the overlay.
+    Offer,
 }
 
 impl TrafficClass {
     /// Every traffic class, in flip order. Callers that must apply a
     /// policy to all peer traffic — e.g. routing every class over iroh
     /// when the mesh-wide encryption policy is on — enumerate this.
-    pub const ALL: [TrafficClass; 9] = [
+    pub const ALL: [TrafficClass; 10] = [
         TrafficClass::Gossip,
         TrafficClass::ControlPlane,
         TrafficClass::KnowledgeSearch,
@@ -162,6 +179,7 @@ impl TrafficClass {
         TrafficClass::RpcTensor,
         TrafficClass::Media,
         TrafficClass::App,
+        TrafficClass::Offer,
     ];
 
     /// Stable lowercase name for tracing fields.
@@ -176,6 +194,7 @@ impl TrafficClass {
             TrafficClass::RpcTensor => "rpc_tensor",
             TrafficClass::Media => "media",
             TrafficClass::App => "app",
+            TrafficClass::Offer => "offer",
         }
     }
 }

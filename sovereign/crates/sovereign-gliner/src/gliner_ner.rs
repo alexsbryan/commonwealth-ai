@@ -40,7 +40,6 @@ use gliner::model::input::text::TextInput;
 use gliner::model::params::Parameters;
 use gliner::model::pipeline::span::SpanMode;
 use gliner::model::GLiNER;
-use orp::params::RuntimeParameters;
 use regex::Regex;
 use sovereign_core::conv_tiered::ChunkEntityRow;
 use sovereign_core::error::{Error, Result};
@@ -312,9 +311,15 @@ impl GlinerExtractor {
             )));
         }
         let (tokenizer_path, model_path) = resolve_model_paths(model_id)?;
+        // `orp::Model::new` owns this session's builder; `RuntimeParameters`
+        // is the only lever a caller has, and its default carries an EMPTY
+        // execution-provider list — so `DisableCpuMemArena` is never called
+        // and ORT's pooling CPU arena stays on. This is the path
+        // `configured_model_id` resolves to by default, i.e. the one the
+        // daemon was running on 2026-09-12. See `session_bound.rs`.
         let model = GLiNER::<SpanMode>::new(
             Parameters::default(),
-            RuntimeParameters::default(),
+            crate::session_bound::v1_runtime_parameters(),
             tokenizer_path
                 .to_str()
                 .ok_or_else(|| Error::Storage("non-utf8 tokenizer path".into()))?,

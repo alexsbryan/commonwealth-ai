@@ -1,0 +1,3 @@
+# SQL filters that semantically belong in WHERE must go in WHERE, not after a LIMIT. Pattern bug observed 2026-05-25 in…
+
+SQL filters that semantically belong in WHERE must go in WHERE, not after a LIMIT. Pattern bug observed 2026-05-25 in corpus-engine-notes::read_notes_scoped: `SELECT ... ORDER BY created_at DESC LIMIT N` then `.filter(|n| symbols.iter().any(|s| n.symbols.contains(s)))` silently drops matches that exist in the DB but landed outside the LIMIT window. Fix: build WHERE clause dynamically (json_each for JSON-array columns, IN-list for scalars). Symptom: filter "returned 0 even though the row exists" — looks like a filter bug, is actually a LIMIT bug. Whenever you see `.filter()` after a SQL query with LIMIT, treat as bug-shaped.

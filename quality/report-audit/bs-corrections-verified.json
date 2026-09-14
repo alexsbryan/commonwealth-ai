@@ -1,0 +1,270 @@
+{
+  "schema": "bs-corrections-verified/v1",
+  "rule": "Quotes verified by hand to be assertions that the CORRECTING COMMIT declares false. Labels are the correcting author's.",
+  "cases": [
+    {
+      "false_claim": "no transcript row carried answer_segments \u2014 the native path did not run on this arm",
+      "labelled_by": "3096c6eab",
+      "subject": "fix(grounding): vl-6 \u2014 segments follow whether admission RAN, not whether it decided",
+      "why": "r. The opted-out arm is untouched: `Disabled` summarizes to `NotRun`, the wire field stays absent rather than empty, and \"not computed\" and \"computed, found nothing\" stay distinguishable. Side effect, not design: `bench/calibration/ab/p1_verdict.py` reports \"no transcript row carried answer_segments \u2014 the native path did not run on this arm\". Before this that reason was wrong on a no-instrument host; now it is exactl",
+      "route": "code",
+      "anchor": "answer_segments"
+    },
+    {
+      "false_claim": "kept because `main`'s exit path cancels it",
+      "labelled_by": "ab079922b",
+      "subject": "refactor(desktop): the index build takes the route that was built for it four commits ago and never called",
+      "why": "ason is missing and names the job, which is the honest report of a daemon that failed without saying why. One correction to the commit before this one, because it was wrong in the way that matters most. R1's surviving-field comment said `health_shutdown` was \"kept because `main`'s exit path cancels it\". It is not: `cargo check` reports the field as never read, and a grep finds exactly two mentions \u2014 the declaration a",
+      "route": "ran",
+      "anchor": "exit"
+    },
+    {
+      "false_claim": "wizard-verify.sh behaves as before",
+      "labelled_by": "fc2086637",
+      "subject": "refactor(desktop): the manifest and the harnesses catch up with svt-2",
+      "why": "te/builders/*` \u2014 the in-process Runtime and `sovereign.db`, live on both bootstrap modes. That is svt-3's route migration, and the order was wrong to price them here. THREE HARNESSES ASSERTED THE SHAPE svt-2 DELETED, and the svt-2 order's own exit criterion (\"wizard-verify.sh behaves as before\") was therefore not achievable. They assert the new architecture instead: - `wizard-verify.sh` looked for a `--daemon-child` ",
+      "route": "code",
+      "anchor": "verify.sh"
+    },
+    {
+      "false_claim": "defeats hole-punching on its own",
+      "labelled_by": "bf88e79c1",
+      "subject": "bench(media): the reversed relay leg is taken \u2014 could-not-judge by construction, and the runbook's CGNAT premi",
+      "why": "100/10 route, the tailnet address 100% loss). Kept 0, discarded 1. Two findings, both about the pair. The probe read `path=mixed direct=[69.181.167.209:43327]`: the Mac punched to RuggedFox's PUBLIC UDP endpoint, so the runbook's sentence that cellular CGNAT \"defeats hole-punching on its own\" was wrong \u2014 CGNAT stops inbound punches to the phone side; it does nothing about a home NAT that admits them. Rewritten. Then ",
+      "route": "none",
+      "anchor": ""
+    },
+    {
+      "false_claim": "keeps ~28 GB resident after the window closes",
+      "labelled_by": "a9c0cdf27",
+      "subject": "quality(sv-surface): the bar was wrong about which half is load-bearing \u2014 it is the dependency edge, not the s",
+      "why": "ommit, they add a retry, then a backoff, then a health check. So the gate is the dependency edge PLUS a census that no surface retains a process handle or tracks a lifecycle. And a correction to this file's own product trade: it said a service-managed daemon \"keeps ~28 GB resident after the window closes\" and treated quitting as the way to free it. A user never wants the daemon DOWN \u2014 they want not to pay for idle, w",
+      "route": "ran",
+      "anchor": "28 GB"
+    },
+    {
+      "false_claim": "is written where the retrieval that honours it will never look",
+      "labelled_by": "c4019115e",
+      "subject": "fix(desktop, mesh): the corpus chips and the rename cross the wire with a validator, and the readiness gate st",
+      "why": "ady answers on /v1/models. The boot split buys ~300 ms and ~50 MB, so the spine is not what was wrong. The WRITES were. A CORRECTION FIRST, because this commit inherited a claim and it is wrong. The comment at set_conversation_enabled_corpora said the toggle \"is written where the retrieval that honours it will never look\". Driven against a real attached desktop (command bridge, scratch profile, live daemon on :9741):",
+      "route": "none",
+      "anchor": ""
+    },
+    {
+      "false_claim": "passed under sabotage",
+      "labelled_by": "4c45a1fc9",
+      "subject": "feat(mesh): the local-corpus manager and the conversation browse cross the wire, and the loopback census becom",
+      "why": "moved path). Watched red on this tree with mesh_router's layer deleted: the new gate failed left 405 right 403 while the three old tests stayed green \u2014 f6a633519's NOT-A-GATE reproduced, then closed. The batch-2 record that the meshapp uninstalled-corpus leg \"passed under sabotage\" was WRONG: re-watched behind an empty router it fails at its body line, because an empty 404 body cannot name the corpus \u2014 unwrap_or_defa",
+      "route": "ran",
+      "anchor": "passed"
+    },
+    {
+      "false_claim": "refused three soak nodes with three data dirs under one HOME",
+      "labelled_by": "827f4f6ab",
+      "subject": "fix(setup): a second node on one host was documented, flagged for, and impossible",
+      "why": "a silent substitution (\u00a718.3). It is wrong about a root nobody could have resolved by accident. And it re-closed at this layer what `run_lock` opened at another: the lock was re-keyed off `$HOME` onto the data root in 2026-08-24 precisely because the old key \"refused three soak nodes with three data dirs under one HOME\". A fourth verdict, `RootConflict::Fresh` \u2014 empty, another root is live, AND this root is not one o",
+      "route": "none",
+      "anchor": ""
+    },
+    {
+      "false_claim": "two ACTIVE members share one pubkey",
+      "labelled_by": "77a834f31",
+      "subject": "fix(mesh): a gossip round stops dialing the dead, because the dead share the living's bridge",
+      "why": "The peer-path decay of note a3f3fbff, root-caused live this afternoon (1ca75415) and fixed here. It is not the fix I proposed, and the difference matters. WHAT I HAD WRONG. I reported \"two ACTIVE members share one pubkey\" and recommended writing roster dedup. Both halves were wrong. `BeefyMac` is `active=false` \u2014 a TOMBSTONE \u2014 and `Alexs-MacBook-Pro-2` is the live row, and the alias rule deliberately PERMITS that pai",
+      "route": "none",
+      "anchor": ""
+    },
+    {
+      "false_claim": "this node donated nothing",
+      "labelled_by": "3338f43e4",
+      "subject": "feat(cw-lift): 5d \u2014 the daemon projects `work`, seals it, and donates",
+      "why": "tradicts this build is wrong whether or not this boot would have donated, and a local-only run must not be the reason nobody finds out (ARCH \u00a718.3). Watched red: `startup_refuses_offer_of_unregistered_kind`. `MeshService::WorkDonor` joins the boot census, so \"this node donated nothing\" is two distinguishable facts \u2014 local-only, or an offer naming no kind \u2014 and the trace says which. Watched red by sabotage: `a_local_o",
+      "route": "none",
+      "anchor": ""
+    },
+    {
+      "false_claim": "the strategy works",
+      "labelled_by": "a32d98d0b",
+      "subject": "measure(retrieval): fan-out over formulations loses to a larger k \u2014 and my bar was mis-specified",
+      "why": ", bench matcher throughout. THE BAR WAS WRONG AND THAT IS PART OF THE RESULT. It read \"fanout >= 4/8 -> live\". Fan-out returned 4/8 and the script printed LIVE. The baseline in the same harness returned 5/8. An absolute bar with no paired control cannot tell \"the strategy works\" from \"anything at this budget works\". Verdict is NEGATIVE. baseline 1 query @ 40 hard 5/8 138/158 = 87.3% 21 retrievals 182,339 chars fan-ou",
+      "route": "none",
+      "anchor": ""
+    },
+    {
+      "false_claim": "anything at this budget works",
+      "labelled_by": "a32d98d0b",
+      "subject": "measure(retrieval): fan-out over formulations loses to a larger k \u2014 and my bar was mis-specified",
+      "why": ". THE BAR WAS WRONG AND THAT IS PART OF THE RESULT. It read \"fanout >= 4/8 -> live\". Fan-out returned 4/8 and the script printed LIVE. The baseline in the same harness returned 5/8. An absolute bar with no paired control cannot tell \"the strategy works\" from \"anything at this budget works\". Verdict is NEGATIVE. baseline 1 query @ 40 hard 5/8 138/158 = 87.3% 21 retrievals 182,339 chars fan-out 4 subqs @ 10 hard 4/8 13",
+      "route": "none",
+      "anchor": ""
+    },
+    {
+      "false_claim": "its cost is unbounded",
+      "labelled_by": "3f7fd1eac",
+      "subject": "measure(verifier): depth terminates at two passes \u2014 the residual is a mutual fixed point, robust to tau",
+      "why": "y \u2014 and do not move (median shift +0.04 over four passes, 18/35 drifting toward tau, a coin flip). 34 of 35 have a pass-5 revision byte-identical to pass 4. The verifier says unsupported, the reviser says there is nothing to fix, and both are confident. \u00a710's \"its cost is unbounded\" is wrong in a way that is good news: the loop is idling, not spinning. So termination is free and it is not the gate clearing. A revisio",
+      "route": "none",
+      "anchor": ""
+    },
+    {
+      "false_claim": "reachable but never at a leaf's expense",
+      "labelled_by": "4e88b47d6",
+      "subject": "feat(atlas): RAPTOR is a source the map composes, not a path that was deleted",
+      "why": "id as much (\"the walk spends the fixed 10-chunk pool on a wider, less on-target title set, 81 -> 107 distinct\") and I over-read it into a seed race. `SeedPolicy::budgets` survives as a GUARD, not as a result: a score-ordered pool cannot otherwise say \"reachable but never at a leaf's expense\", twenty summaries against twelve slots do starve every leaf seed, and that is watched in both directions. It is a bound that ha",
+      "route": "none",
+      "anchor": ""
+    },
+    {
+      "false_claim": "Ollama does not work here",
+      "labelled_by": "824f3b660",
+      "subject": "feat(ei-3c): the Ollama arm now says whether a failing default is the endpoint or the pick",
+      "why": "Run 4 failed at step 0b with `corpus-mcp against Ollama exited non-zero` and nothing else. That is one sentence for two very different worlds \u2014 \"Ollama does not work here\" and \"the endpoint is fine, the MODEL PICK is wrong\" \u2014 and a reader of the log could not tell which. Only my run unit's fourth leg knew, and nobody running acceptance.sh has that. So the arm runs both invocations and reports both halves. The DEFAULT",
+      "route": "none",
+      "anchor": ""
+    },
+    {
+      "false_claim": "the endpoint is fine, the MODEL PICK is wrong",
+      "labelled_by": "824f3b660",
+      "subject": "feat(ei-3c): the Ollama arm now says whether a failing default is the endpoint or the pick",
+      "why": "Run 4 failed at step 0b with `corpus-mcp against Ollama exited non-zero` and nothing else. That is one sentence for two very different worlds \u2014 \"Ollama does not work here\" and \"the endpoint is fine, the MODEL PICK is wrong\" \u2014 and a reader of the log could not tell which. Only my run unit's fourth leg knew, and nobody running acceptance.sh has that. So the arm runs both invocations and reports both halves. The DEFAULT",
+      "route": "none",
+      "anchor": ""
+    },
+    {
+      "false_claim": "the seed table and the queries that search it share one space",
+      "labelled_by": "f04b1f9de",
+      "subject": "test(atlas): the stored summary vector IS the live embed, measured before it is trusted",
+      "why": "`write_summary_atoms` reuses the vector sitting beside each summary rather than re-embedding it. That is only sound if the stored vector is in the space the live query slot embeds into \u2014 and \"the seed table and the queries that search it share one space\" is the kind of claim that degrades grounding silently when it is wrong, so it is measured rather than assumed. Bar registered before the run, and BORROWED rather tha",
+      "route": "none",
+      "anchor": ""
+    },
+    {
+      "false_claim": "adds no marginal compile cost",
+      "labelled_by": "9f1ed6692",
+      "subject": "docs(mesh): the iroh forcing is one line to remove and forty-five to survive, so it stays",
+      "why": "at never runs in production is the drift mesh-of-one exists to prevent, moved from runtime to compile time. iroh leaves WITH the mesh when the mesh becomes optional. Two corrections to claims that were in the tree. The sovereign-mesh comment said the forcing \"adds no marginal compile cost\" because iroh is already in the default build via sovereign-server; `cargo tree -p sovereign-cli-daemon -e features --invert iroh`",
+      "route": "none",
+      "anchor": ""
+    },
+    {
+      "false_claim": "returning 0 results meant",
+      "labelled_by": "9bb58c434",
+      "subject": "evidence(atlas): leg 3 re-run against the store the rebuild actually built",
+      "why": "probes the two Jigsaw titles alongside the three originals, so the leg proves the thing it was staged to prove. Its comment says why, so nobody removes the flag as redundant. ONE CORRECTION TO MY OWN CORRECTION. I retracted the explanation that \"Jigsaw Puzzle\" returning 0 results meant \"present, no outgoing edges\". The verb now answers that question directly, and the explanation was RIGHT \u2014 the article is present wit",
+      "route": "none",
+      "anchor": ""
+    },
+    {
+      "false_claim": "no private kinds",
+      "labelled_by": "6ddfc45b8",
+      "subject": "feat(wikipedia): the walk gets a second backend, so wikipedia is read without being migrated",
+      "why": "ith `EdgeProvenance::WikilinkStructural`. The relationship axis (topical / causal / contested / defines / action / see-also) is OPEN text and stays a column on `edges.lance`, read by the neighbor face \u2014 not five new arms on a closed enum (principle 9; spec \u00a73 \"no private kinds\"). `confidence` is 1.0 because a wikilink has none: `occurrence_count` is PROMINENCE, and putting it in a slot named confidence would label it",
+      "route": "none",
+      "anchor": ""
+    },
+    {
+      "false_claim": "I need nothing at or below this",
+      "labelled_by": "b6ed7bf3d",
+      "subject": "chore(quality): the three ceilings the rail's sealed floor earned",
+      "why": "h reading. `Digest` stays `BTreeMap<String, u64>`: a peer uses it for exactly one decision \u2014 which ops to send \u2014 and `ops_missing_from` answers `(mark, infinity)`, which is the same answer whether the run started at zero or at a floor. So `mark` is re-read as \"I need nothing at or below this\". Byte-identical for any unsealed holding, no version tag, no defaulting, no cliff. The seat's own sketch put a floor on the wi",
+      "route": "none",
+      "anchor": ""
+    },
+    {
+      "false_claim": "SUBSUMES these three blocks and exceeds them",
+      "labelled_by": "f61d8eea4",
+      "subject": "fix(layers): the rail's \"commonwealth-core must stay absent\" was prose, and my last fix for that class was wro",
+      "why": "Two corrections in one block, the second of them to a claim I committed in 4c98dfb59 and repeated in f60fa6a4c. WHAT I GOT WRONG. I wrote that `[[package]] commonwealth` membership \"SUBSUMES these three blocks and exceeds them\". It does not, for the family that matters most. Membership refuses only what is not a member or a leaf, so it catches `commonwealth-{inference,api}` and PERMITS `commonwealth-rail -> commonwea",
+      "route": "none",
+      "anchor": ""
+    },
+    {
+      "false_claim": "neither instrument can see that and neither ever could",
+      "labelled_by": "09ccfaf97",
+      "subject": "measure(cw-lift): correcting order T \u2014 converge shape found the fork class I said no instrument could see",
+      "why": "My order T conclusion was wrong and this corrects it the same day. I wrote \"neither instrument can see that and neither ever could\" and proposed a hand census as the successor. Both were mistakes, and the tool was already installed. `svrn code converge --help` lists FOUR discovery feeds. I ran one \u2014 dry-report \u2014 and stopped surveying. `converge shape` matches on (field name, field type)",
+      "route": "none",
+      "anchor": ""
+    },
+    {
+      "false_claim": "MUST FAIL LOUDLY",
+      "labelled_by": "1199abbf2",
+      "subject": "fix(corpus): ST-8 resolved \u2014 geometry fails closed, the model NAME does not",
+      "why": "ypes`, are 768-dim against a 1024-dim model and record the SAME name as the 43 compatible ones. Zero true positives. So the exact-string check was backwards: it fired only where nothing was wrong and was blind to the only real conflict. AND THE CLAUSE'S \"MUST FAIL LOUDLY\" WAS ENFORCED NOWHERE. `open_index` only warned. `validate_corpus_readiness` does return `Err` on a width mismatch, but it has exactly one caller \u2014 ",
+      "route": "ran",
+      "anchor": "FAIL"
+    },
+    {
+      "false_claim": "This act was wrong and it never comes back",
+      "labelled_by": "5cb35d112",
+      "subject": "  feat(ring-rail): the rail carries an opaque payload, and the money is an app",
+      "why": ")` becomes `admit() -> (acts in ONE order, gaps)`, and the exhaustive 720-permutation property is asserted over that admission rather than over balances \u2014 stronger, and true for every app that will ever sit on this rail. Correction stays in the rail. \"This act was wrong and it never comes back\" is generic, and it is the rule most easily got wrong: the void set has to be built from every correction at once, never by w",
+      "route": "none",
+      "anchor": ""
+    },
+    {
+      "false_claim": "Gated on `no_host` because that is what MAKES the claim true \u2026",
+      "labelled_by": "5dde3e6e6",
+      "subject": "Flash next serving (#52)",
+      "why": "and were not re-run. * fix(inference): delete the comment that says the fit-gate discount is gated on no_host \u2014 it is not, and it misled the docs `local_fit` carried TWO comment paragraphs making opposite claims, adjacent, with the superseded one FIRST: \"Gated on `no_host` because that is what MAKES the claim true \u2026\" \"Not gated on `no_host` \u2014 that pairing was WRONG and the measurement said so.\" The code does the seco",
+      "route": "code",
+      "anchor": "`no_host`"
+    },
+    {
+      "false_claim": "Not gated on `no_host` \u2014 that pairing was WRONG and the measurement said so.",
+      "labelled_by": "5dde3e6e6",
+      "subject": "Flash next serving (#52)",
+      "why": "ys the fit-gate discount is gated on no_host \u2014 it is not, and it misled the docs `local_fit` carried TWO comment paragraphs making opposite claims, adjacent, with the superseded one FIRST: \"Gated on `no_host` because that is what MAKES the claim true \u2026\" \"Not gated on `no_host` \u2014 that pairing was WRONG and the measurement said so.\" The code does the second. `host_resident` is read unconditionally, and `wants_no_host` ",
+      "route": "code",
+      "anchor": "`no_host`"
+    },
+    {
+      "false_claim": "` is the obvious minimal fix and it is wrong: the spike tree is repo-relative with no leading slash, and this file's own test asserts `!admits(",
+      "labelled_by": "27c0fe031",
+      "subject": "Noun convergence (#47)",
+      "why": "y. The four already carrying a leading slash (`/tests/`, `/benches/`, `/examples/`, `/build.rs`) never misfired, which is the tell. The field is renamed `exclude_contains` -> `exclude_segments`, because it no longer holds substrings. Anchoring to `\"/research/\"` is the obvious minimal fix and it is wrong: the spike tree is repo-relative with no leading slash, and this file's own test asserts `!admits(\"research/spike/s",
+      "route": "code",
+      "anchor": "` is the obvious minimal fix and it is wrong: the spike tree is repo-relative with no leading slash, and this file's own test asserts `"
+    },
+    {
+      "false_claim": "neither sovereign nor commonwealth types appear here",
+      "labelled_by": "27c0fe031",
+      "subject": "Noun convergence (#47)",
+      "why": "legal, while `nc-boundary.py` classifies by PATH and calls the same edge BACKFLOW. A new `[[forbid]] from = \"corpus-engine*\" to = \"sovereign-*\" except = [\"sovereign-contracts\"]` records which reading binds new code. The `knowledge` layer's own comment claimed \"neither sovereign nor commonwealth types appear here\" \u2014 false until the previous commit, and the four types it was wrong about are now named in it. The claim i",
+      "route": "none",
+      "anchor": ""
+    },
+    {
+      "false_claim": "the one-loop rule is structural; the desktop is a driver, never an implementation",
+      "labelled_by": "a50d2fdf3",
+      "subject": "refactor(deep-research): the port and the launch leave the host layer",
+      "why": "s the root cause of several separate-looking bugs. Config does not cross a process boundary, so the operator's configured search provider and `SOVEREIGN_DR_COMPOSED_REPORT` both stopped at the process edge. The stated rationale for the subprocess was right \u2014 \"the one-loop rule is structural; the desktop is a driver, never an implementation\" \u2014 and the mechanism was wrong. The real constraint is that `quality/ARCH_LAYE",
+      "route": "none",
+      "anchor": ""
+    },
+    {
+      "false_claim": "needs peer-side work plus a gossip signal, neither measurable from here",
+      "labelled_by": "649d9c944",
+      "subject": "docs(scale): \u00a79.1.3 \u2014 the second gate is closed in code, and what is still unmeasured",
+      "why": "\u00a79.1.2 named the binding constraint and declined to work around it, saying the fix \"needs peer-side work plus a gossip signal, neither measurable from here\". Half of that was wrong: the re-dial half needs nothing from the peer, because it only reads refusals this node already receives. Both halves are now built and the section says which is which. Records the design call that the order did not anticipate: the fi",
+      "route": "none",
+      "anchor": ""
+    },
+    {
+      "false_claim": "the bench is broken",
+      "labelled_by": "08013c315",
+      "subject": "feat(backlog): a failed HARD bench lane files its own candidate, once per lane",
+      "why": "gym-gate, ci-bench:knowledge-gym-gate, ci-bench:agent-coding-gate \u2014 and the run still ended VERDICT: FAIL, unchanged. Zero writes. Live proof, into a scratch store rather than the operator's real backlog (the run was deliberately sabotaged, so items claiming \"the bench is broken\" would have been true of the run and misleading about the system): filing 1 ci-bench:routing -> filed 31150855, 2 \u2014 F Viable, cost S filing ",
+      "route": "none",
+      "anchor": ""
+    },
+    {
+      "false_claim": "on-disk-state addition, not a precondition for indexing",
+      "labelled_by": "137b09ddf",
+      "subject": "refactor(cli): hoist the project model into sovereign-cli-shared",
+      "why": "`project_toml.rs` (the durable record derived from it) move verbatim behind a new `project-model` feature. Neither file's contents changed beyond one import; both keep their unit tests. Correction to the inherited plan, which said to DROP project_toml as an \"on-disk-state addition, not a precondition for indexing\". True of indexing, wrong about the file: `.sovereign/project.toml` is read by sovereign-server (main.rs:",
+      "route": "none",
+      "anchor": ""
+    }
+  ]
+}

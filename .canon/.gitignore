@@ -1,0 +1,13 @@
+# The canon itself is meant to be committed. These are not:
+# `seen` is this machine's ingest state and `draft-runs/` is the
+# evidence from its model runs. Neither is an act.
+seen
+draft-runs/
+# `config` names ONE machine's endpoint and model. `canon init` does not list
+# it; canon's own repository does, so `canon draft` on a fresh clone says "no
+# endpoint configured" instead of calling a port on this laptop (canon
+# requirements doc, entry 17).
+config
+# `sources/` is committed: it is the history canon rules cite (canon
+# LOAD_TEST_DESIGN entry 6). scripts/canon-export-notes.py redacts it first,
+# because this repository is public.

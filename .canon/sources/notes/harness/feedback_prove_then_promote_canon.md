@@ -1,0 +1,7 @@
+# Keep canon simple — build missing capability on the commonwealth-ai side first, promote into the canon library only what proves useful in…
+
+Operator, 2026-09-13: "I want to keep canon simple for now, but if it's a core capability that makes sense we should promote it after we prove it useful on our side (this is how it'll work: we prove good ergonomics and promote to library what makes sense in the general form)."
+
+Why: canon is a standalone library with public claims — readable in one sitting, no integrations beyond MCP. A speculative feature there spends its leanness before anyone knows the feature is needed.
+
+How to apply: when canon lacks something the Commonwealth use case needs (search, anchors, a reason on a first assert, `--source` on `add`), build it on the commonwealth-ai side, log the gap in the canon load-test file marked "prove", and propose promotion only with evidence of use. Bugs and misleading output in canon are marked "fix" and batched into one pass — and the OPERATOR makes that pass (2026-09-13: "I'm handling canon fixes independently — you only work in commonwealth-ai repo right now (besides the requirements doc)"). From commonwealth-ai sessions, never edit canon code or spawn agents that do; the only canon file an agent writes is the requirements doc, docs/LOAD_TEST_COMMONWEALTH.md. Decide canon-facing questions by canon's own recorded claims (`canon list` in ~/dev/canon). Related: [[canon-guidance-migration]].

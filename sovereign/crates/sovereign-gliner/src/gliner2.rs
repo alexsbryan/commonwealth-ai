@@ -190,8 +190,11 @@ impl Gliner2Extractor {
         let (tokenizer_path, model_path) = resolve_model_paths(model_id)?;
         let tokenizer = Tokenizer::from_file(&tokenizer_path)
             .map_err(|e| Error::Storage(format!("GLiNER2 tokenizer {tokenizer_path:?}: {e}")))?;
-        let session = Session::builder()
-            .map_err(|e| Error::Storage(format!("ort Session::builder: {e}")))?
+        // Every bound rc.9 exposes for a CPU session — the CPU arena OFF
+        // above all. rc.9 has no arena SIZE limit at all; the bound on
+        // this pass is the INPUT bound in `bounded_input.rs`. Both facts
+        // are set out in `session_bound.rs`.
+        let session = crate::session_bound::bounded_session_builder()?
             .commit_from_file(&model_path)
             .map_err(|e| Error::Storage(format!("ort commit_from_file {model_path:?}: {e}")))?;
 

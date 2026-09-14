@@ -741,3 +741,86 @@ fn a_refused_line_under_a_real_floor_goes_and_is_counted() {
     assert_eq!(done.gaps_cleared, 1, "the BadSignature went with them");
     assert!(journal.admit(&r, &Ed25519Verifier).unwrap().is_complete());
 }
+
+// ── an op never changes a roster ─────────────────────────────
+
+/// **A peer's introduction arrives, is readable, and moves nothing.**
+///
+/// The load-bearing negative leg of `ra-roster-stays-independent`, and the
+/// refusal `sovereign-mesh/src/ring_roster.rs` states in prose: "there is no
+/// roster route, so a deployed app cannot add a key to the ring — including
+/// its own." It is a property of the route set rather than a check somebody
+/// remembered, which is exactly why it needs a test that would notice a route
+/// being added.
+///
+/// **Asserted on the FILE BYTES**, not on an in-memory `Roster` this test
+/// built: an in-memory comparison would pass on a node whose `roster.json`
+/// had been rewritten and re-read identically, and the thing being prevented
+/// is a write. Watched failing first, with `ingest_all` taught to fold an
+/// arriving introduction into the roster — the one line this whole rung
+/// refuses — which rewrites the file and fails here.
+///
+/// The other half is from the bar's own goodhart line: zero is the expected
+/// good result and proves nothing alone. So the same run shows the
+/// introduction ARRIVING and being READABLE — an `Introduce` no peer ever
+/// sent would score a perfect zero.
+#[test]
+fn a_peers_introduction_arrives_readable_and_changes_no_roster_row() {
+    let (mine, theirs) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let (a, b) = (open(mine.path()), open(theirs.path()));
+    let r = ring();
+    // My roster, on disk, as `svrn ring roster add` would have left it.
+    a.set_roster(&r).unwrap();
+    let before = std::fs::read(a.roster_path()).unwrap();
+
+    // bo — a member I already claim — vouches for a key nobody claims.
+    let stranger = actor_of(&key(9));
+    let intro = RailAct::Record {
+        payload: Introduce::new(Person::from("dee"), &stranger, "she fixed the boiler")
+            .payload()
+            .unwrap(),
+    };
+    let written = b.append(intro, &key(2), &r).unwrap();
+
+    // Ring-sync, the way a peer delivers: digest out, missing ops back in.
+    let for_me = b.ops_missing_from(&a.digest().unwrap()).unwrap();
+    assert_eq!(
+        a.ingest_all(&for_me).unwrap(),
+        1,
+        "the op must actually arrive"
+    );
+
+    // ── nothing moved ──
+    assert_eq!(
+        std::fs::read(a.roster_path()).unwrap(),
+        before,
+        "an arriving op rewrote {}",
+        a.roster_path().display()
+    );
+    let on_disk = a.roster_file().unwrap();
+    assert_eq!(on_disk, r, "and the roster it parses to is the one I wrote");
+    assert!(
+        !on_disk.knows(&Person::from("dee")),
+        "dee is introduced, not admitted — that is an operator's decision"
+    );
+    assert!(on_disk.vouch_for(&stranger).is_none());
+
+    // ── and the introduction is there to read ──
+    let admission = a.admit(&r, &Ed25519Verifier).unwrap();
+    assert!(admission.is_complete(), "{:?}", admission.gaps);
+    let op = admission
+        .ops
+        .iter()
+        .find(|o| o.id == written.id)
+        .expect("the introduction is admitted — it was signed by a member");
+    assert_eq!(op.person, Person::from("bo"), "and it says who vouched");
+    assert_eq!(
+        Introduce::from_payload(op.payload.as_ref().unwrap()),
+        Some(Introduce::new(
+            Person::from("dee"),
+            &stranger,
+            "she fixed the boiler"
+        )),
+        "readable, in the vocabulary an operator acts on"
+    );
+}

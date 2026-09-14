@@ -76,8 +76,8 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 use corpus_engine::enrichment::tiered::{
-    run_folder_tiered_enrichment, ChunkEntityExtractor, ChunkEntityExtractorHandle, ConvBucket,
-    TieredEnrichmentProvider, TieredProviderHandle,
+    run_folder_tiered_enrichment, ChunkEntityExtractor, ChunkEntityExtractorHandle,
+    ChunkNerOutcome, ConvBucket, TieredEnrichmentProvider, TieredProviderHandle,
 };
 use corpus_engine::{EnrichmentChunkRow, Result as EngineResult};
 use sovereign_core::traits::InferenceProvider;
@@ -486,7 +486,7 @@ impl ChunkEntityExtractor for MeteredEntityExtractor {
         corpus_id: &str,
         conv_uuid: &str,
         chunks: Vec<EnrichmentChunkRow>,
-    ) -> EngineResult<usize> {
+    ) -> EngineResult<ChunkNerOutcome> {
         self.inner
             .extract_for_conversation(corpus_id, conv_uuid, chunks)
             .await
@@ -496,7 +496,7 @@ impl ChunkEntityExtractor for MeteredEntityExtractor {
         &self,
         corpus_id: &str,
         index_path: &Path,
-    ) -> EngineResult<usize> {
+    ) -> EngineResult<ChunkNerOutcome> {
         let start = self.obs.now_ms();
         eprintln!("  [ner] corpus-wide entity extraction …");
         let out = self
@@ -505,9 +505,18 @@ impl ChunkEntityExtractor for MeteredEntityExtractor {
             .await;
         let end = self.obs.now_ms();
         let (mentions, detail) = match &out {
-            Ok(n) => {
-                self.obs.add_mentions(*n);
-                (*n, serde_json::json!({ "mentions": n }))
+            Ok(o) => {
+                self.obs.add_mentions(o.mentions);
+                (
+                    o.mentions,
+                    // The refusal count rides the phase record: a lane
+                    // whose mention total dropped because the input bound
+                    // refused chunks reads as a regression otherwise.
+                    serde_json::json!({
+                        "mentions": o.mentions,
+                        "refused_over_cap": o.refused_over_cap,
+                    }),
+                )
             }
             Err(e) => (
                 0,

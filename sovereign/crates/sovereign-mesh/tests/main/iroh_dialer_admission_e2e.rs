@@ -26,7 +26,7 @@ use std::time::Duration;
 use commonwealth_core::ids::{NodeId, NodePubkey};
 use commonwealth_transport::iroh::{
     Endpoint, EndpointAddr, EndpointBuilder, HttpBridge, IrohAcceptor, SecretKey, APP_ALPN,
-    CLIENT_ALPN, MEDIA_ALPN, RPC_ALPN,
+    CLIENT_ALPN, MEDIA_ALPN, OFFER_ALPN, RPC_ALPN,
 };
 use sovereign_api::server::{client_router, client_router_for, ClientSurface};
 use sovereign_mesh::iroh_access::{AcceptorRoutes, MemberCheck, MemberIdentity};
@@ -127,6 +127,7 @@ async fn lender(with_guest: bool) -> (Endpoint, IrohAcceptor) {
         // Nothing declared: these cases are about WHO is admitted,
         // not what the holder adds on the way to its own origin.
         media_declared: std::sync::Arc::new(Vec::new()),
+        offer: Default::default(),
     };
     let endpoint = lender_endpoint(vec![CLIENT_ALPN.to_vec(), RPC_ALPN.to_vec()]).await;
     let check = only_the_member();
@@ -341,6 +342,7 @@ async fn routing_a_member_at_the_operator_listener_is_the_hole_this_closes() {
         // Nothing declared: these cases are about WHO is admitted,
         // not what the holder adds on the way to its own origin.
         media_declared: std::sync::Arc::new(Vec::new()),
+        offer: Default::default(),
     };
     let endpoint = lender_endpoint(vec![CLIENT_ALPN.to_vec(), RPC_ALPN.to_vec()]).await;
     let check = only_the_member();
@@ -412,6 +414,7 @@ async fn lender_with_apps(allow: Vec<String>) -> (Endpoint, IrohAcceptor) {
         media: None,
         media_allow: Arc::new(Vec::new()),
         media_declared: std::sync::Arc::new(Vec::new()),
+        offer: Default::default(),
     };
     let endpoint = lender_endpoint(vec![CLIENT_ALPN.to_vec(), APP_ALPN.to_vec()]).await;
     let check = only_the_member();
@@ -526,6 +529,7 @@ async fn an_app_claimed_at_runtime_becomes_reachable_and_stops_when_released() {
         media: None,
         media_allow: Arc::new(Vec::new()),
         media_declared: std::sync::Arc::new(Vec::new()),
+        offer: Default::default(),
     };
     // No APP_ALPN at bind — exactly the state of a node whose config
     // publishes nothing.
@@ -674,6 +678,7 @@ async fn lender_with_media_allowing(
         // Nothing declared: these cases are about WHO is admitted,
         // not what the holder adds on the way to its own origin.
         media_declared: std::sync::Arc::new(Vec::new()),
+        offer: Default::default(),
     };
     let endpoint = lender_endpoint(vec![CLIENT_ALPN.to_vec(), MEDIA_ALPN.to_vec()]).await;
     let check = only_the_member();
@@ -802,6 +807,132 @@ async fn a_member_dialing_a_node_with_no_media_origin_is_closed_not_misrouted() 
     assert!(
         outcome.is_err(),
         "no origin means no route, got {:?}",
+        outcome.map(|r| r.status())
+    );
+}
+
+// ── the offer origin: the mesh's marketplace, on the wire ────────────
+//
+// The unit tests pin the admission decision. This is the byte plane, and it
+// is the half `ra-offers-catalogue-computed` calls "two daemons, the wire, no
+// credential on the caller": a member's request reaches a real HTTP server the
+// operator runs, carrying the identity the ACCEPTOR verified, and a stranger
+// holding the same public dial string gets nothing.
+
+/// A lender publishing an offer origin — a plain HTTP server answering with
+/// whatever this house has going spare, plus the verified name it was handed.
+///
+/// The catalogue is JSON here only because a JSON file is the easiest thing to
+/// serve; nothing in the substrate reads it. `offer_allow` is the parameter
+/// because the SEPARATE list is the reason `Offer` is its own kind.
+async fn lender_with_offers(offer_allow: Vec<String>) -> (Endpoint, IrohAcceptor) {
+    use axum::http::HeaderMap;
+    use axum::routing::get;
+
+    let origin = spawn_router(axum::Router::new().fallback(get(
+        move |headers: HeaderMap| async move {
+            let who = headers
+                .get("x-mesh-member")
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("<absent>")
+                .to_string();
+            format!(r#"{{"asked_by":"{who}","offers":["drill","6 eggs"]}}"#)
+        },
+    )))
+    .await;
+
+    let state = client_app_state(NodeId::from_u128(0xA11CE), Some(TOKEN), true);
+    let routes = AcceptorRoutes {
+        apps: Default::default(),
+        internal: "127.0.0.1:1".parse().unwrap(),
+        rpc: None,
+        peer: Some(spawn_router(client_router_for(state.clone(), ClientSurface::Peer)).await),
+        guest: Some(spawn_router(client_router_for(state, ClientSurface::Guest)).await),
+        // NO media origin: an offer dial must not be able to reach one, and a
+        // regression that routed it there would otherwise pass on a lender
+        // that happened to serve both.
+        media: None,
+        media_allow: Arc::new(Vec::new()),
+        media_declared: std::sync::Arc::new(Vec::new()),
+        offer: sovereign_mesh::iroh_access::OfferRoutes {
+            origin: Some(origin),
+            allow: offer_allow,
+        },
+    };
+    let endpoint = lender_endpoint(vec![CLIENT_ALPN.to_vec(), OFFER_ALPN.to_vec()]).await;
+    let check = only_the_member();
+    let acceptor = IrohAcceptor::spawn_admitting_forward(endpoint.clone(), move |alpn, dialer| {
+        let check = check.clone();
+        let routes = routes.clone();
+        async move { routes.forward_for(&alpn, dialer, &check).await }
+    });
+    (endpoint, acceptor)
+}
+
+/// A member reads what a neighbour has going spare, over `cwth/offer/0`,
+/// holding no credential of that neighbour's — and the neighbour's own server
+/// learns who asked, from the acceptor rather than from the client.
+#[tokio::test]
+async fn a_member_reads_a_neighbours_offers_by_key_holding_no_credential() {
+    let (lender, _acceptor) = lender_with_offers(Vec::new()).await;
+    // No bearer, no token, no header of the holder's: the key is the whole
+    // credential and it is proven by the QUIC handshake.
+    let resp = get_as(&lender, MEMBER_SEED, OFFER_ALPN, "/", None)
+        .await
+        .expect("a member reaches the offer origin");
+    assert_eq!(resp.status(), reqwest::StatusCode::OK);
+    let body = resp.text().await.unwrap();
+    assert!(body.contains(r#""asked_by":"LittleMac""#), "{body}");
+    assert!(body.contains("drill"), "{body}");
+}
+
+/// A stranger holding the PUBLIC dial string gets no bytes. The dial string
+/// rides in every invite, so a downgrade here would publish an inventory of a
+/// household's possessions to anyone who has ever seen one.
+#[tokio::test]
+async fn a_stranger_holding_the_dial_string_cannot_read_the_offers() {
+    let (lender, _acceptor) = lender_with_offers(Vec::new()).await;
+    let outcome = get_as(&lender, STRANGER_SEED, OFFER_ALPN, "/", None).await;
+    assert!(
+        outcome.is_err(),
+        "a stranger's offer dial must die, got {:?}",
+        outcome.map(|r| r.status())
+    );
+    // …and the same lender still serves the member, so this is a refusal and
+    // not a dead origin passing as one.
+    let resp = get_as(&lender, MEMBER_SEED, OFFER_ALPN, "/", None)
+        .await
+        .expect("the member is still served");
+    assert_eq!(resp.status(), reqwest::StatusCode::OK);
+}
+
+/// `offer_allow` is a THIRD list and it means it: a member outside it is
+/// refused the offer origin even though the roster claims them. This is the
+/// grant a house cannot express with one shared list — "everyone sees the
+/// print queue, nobody sees what I am selling."
+#[tokio::test]
+async fn a_member_outside_offer_allow_is_refused_on_the_wire() {
+    let (lender, _acceptor) = lender_with_offers(vec!["SomebodyElse".to_string()]).await;
+    let outcome = get_as(&lender, MEMBER_SEED, OFFER_ALPN, "/", None).await;
+    assert!(
+        outcome.is_err(),
+        "a member outside offer_allow must be closed, got {:?}",
+        outcome.map(|r| r.status())
+    );
+}
+
+/// A node that declares no offer origin closes even a member's dial — no
+/// route to nowhere and no accidental forward to the peer listener. This is
+/// what lets a catalogue report "publishes none" instead of timing out.
+#[tokio::test]
+async fn a_member_dialing_a_node_with_no_offer_origin_is_closed_not_misrouted() {
+    // `lender(true)` declares `offer: Default::default()` and advertises no
+    // OFFER_ALPN.
+    let (lender, _acceptor) = lender(true).await;
+    let outcome = get_as(&lender, MEMBER_SEED, OFFER_ALPN, "/", None).await;
+    assert!(
+        outcome.is_err(),
+        "no offer origin means no route, got {:?}",
         outcome.map(|r| r.status())
     );
 }

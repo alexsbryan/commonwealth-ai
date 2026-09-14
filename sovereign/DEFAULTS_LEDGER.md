@@ -30,6 +30,94 @@ store (ids cited per row).
 
 ## DARK — proven or plausible, awaiting a named condition
 
+### ONNX CPU memory arena — flipped OFF for both GLiNER backends (enrich-bounded-1, 2026-09-12)
+
+**What changed.** Neither backend registered a CPU execution provider, so
+both ran with ORT's default: the pooling CPU memory arena ENABLED. Both now
+register `CPUExecutionProvider::default()`, whose `register` calls
+`DisableCpuMemArena` (`ort-2.0.0-rc.9/src/execution_providers/cpu.rs:48-51`).
+`sovereign/crates/sovereign-gliner/src/session_bound.rs` is the one place
+that decides it; a census test stops a second session escaping.
+
+**Why.** The arena grows in power-of-two buckets and does not return them.
+`malloc_history` on pid 47944 (2026-09-12) showed exactly that shape:
+stackless blocks of 1, 2, 2, 8 and 32 GB with no frame pointers, C++ threads
+inside onnxruntime. With the arena off, transient inference buffers go to
+the system allocator and are freed on release.
+
+**What was NOT available.** rc.9 exposes no CPU arena SIZE limit at all —
+`OrtApi::CreateArenaCfg`'s `max_mem` is a raw `ort-sys` function pointer
+`ort` wraps nowhere, and `gpu_mem_limit` / `with_memory_limit` are
+device-side. The bound on this pass is therefore the INPUT bound above, and
+`session_bound.rs` states that rather than implying a cap it does not have.
+
+**The cost, unmeasured.** Disabling a pooling allocator trades allocator
+throughput for a bounded footprint. On a background CPU NER pass that is
+the right side of the trade, but the NER wall-clock delta arena-on vs
+arena-off has NOT been measured and this row exists so that is not read as
+a claim.
+
+**Flip condition.** A measured NER wall-clock comparison, arena on vs off,
+on the same corpus with peak RSS recorded per arm. If arena-off costs more
+than ~20% wall clock AND peak RSS stays inside budget with it on, revisit —
+but only together with the batch bound above, since the two interact (the
+arena's high-water mark is set by the largest batch it ever served).
+
+**Review by 2026-12-12.**
+
+### GLiNER input bound — `MAX_CHUNK_CHARS` 2,048 / `MAX_BATCH_CHUNKS` 16, shipped ON (enrich-bounded-1, 2026-09-12)
+
+**What ships.** `sovereign-gliner/src/bounded_input.rs` bounds every input
+reaching the per-chunk NER seam: a text over `MAX_CHUNK_CHARS` is REFUSED
+(never truncated) and counted, and no single `extract_mentions_batch` call
+carries more than `MAX_BATCH_CHUNKS` texts. Both `GlinerChunkExtractor`
+entry points go through it. There is no env knob and no off switch — this
+is a guard, not an experiment — but the two numbers are defaults and this
+row is where they come from.
+
+**Where 2,048 came from — the model, not a guess.** gline-rs's
+`Parameters::default()` sets `max_length: Some(512)`
+(`gline-rs-1.0.1/src/model/params.rs:23`; `Some(512)` in the `Default`
+impl at :32) and
+`sovereign-gliner` passes `Parameters::default()` verbatim; a grep for
+`Parameters::new|with_max_length` across `sovereign-gliner/src` returns
+nothing (2026-09-12). The unit is WORDS from `RegexSplitter`
+(`gline-rs-1.0.1/src/text/splitter.rs:38-47`, pattern
+`\w+(?:[-_]\w+)*|\S`), and the limit is enforced by BREAKING out of the
+token loop — a silent truncation with no error and no report. 512 words ×
+4 chars/word = 2,048, conservative for English prose and about right for
+punctuation-dense agent transcripts where `|\S` makes every bracket its own
+word. So a text under the ceiling is one gline-rs would not have cut.
+
+**Where 16 came from — nowhere, and that is the point of this row.** It is
+a batch-size default: the smallest power of two that still keeps v1's
+native batching worth having (the trait's looping fallback is N=1). It is
+NOT tuned. Peak arena is linear in it (gline-rs runs one `inference()` per
+batch), so 16 turns tens of GB into hundreds of MB; the THROUGHPUT cost of
+choosing 16 over 32 or 64 has not been measured.
+
+**Flip condition.** Two, independent:
+- `MAX_BATCH_CHUNKS`: a measured NER wall-clock comparison at 16 / 32 / 64
+  on a real conversation corpus, with peak RSS recorded per arm. Raise to
+  the largest arm whose peak RSS stays inside the daemon's idle budget.
+  Until that run exists, 16 stands on the incident, not on a number.
+- `MAX_CHUNK_CHARS`: the first corpus whose
+  `_enrichment_state.json.refused_over_cap_chunks` is a large fraction of
+  its chunk count. That is not a signal to raise the ceiling — the model
+  cannot read those inputs either way — it is a signal that the CHUNKER is
+  emitting units the model cannot use, and the fix belongs there.
+
+**Settles via.** The `refused_over_cap_chunks` field is the instrument for
+the second; the first needs a bench arm that does not exist yet, and is
+banked rather than claimed.
+
+**Review by 2026-12-12.**
+
+**Why it is not off.** The incident it prevents is a host-level failure:
+corpus `agent-sessions` took the daemon 20.2 GB → 79.9 GB in eight minutes
+with zero requests and two jetsam SIGTERMs (pid 47944, 2026-09-12).
+A default-off guard would have been off during that.
+
 ### `search_web` stays in the app — a DECLARED exception on egress custody (sv-surface svt-3b, 2026-09-11)
 
 **What stays local.** `search_web` (`commands/models.rs`) dispatches a web

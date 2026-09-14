@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Who a verified dialer is, and whether a media origin is handed its dial.
+//! Who a verified dialer is, and whether an origin is handed its dial.
 
 use std::net::SocketAddr;
 
+use commonwealth_core::capabilities::OriginKind;
 use commonwealth_core::ids::{NodeId, NodePubkey};
 use commonwealth_core::mesh::member_matches;
 use commonwealth_transport::iroh::Forward;
@@ -78,12 +79,66 @@ pub fn admit_media(
     allow: &[String],
     declared: &[(String, String)],
 ) -> Option<Forward> {
+    admit_spliced_origin(OriginKind::Media, who, dialer, origin, allow, declared)
+}
+
+/// The holder's decision for a `cwth/offer/0` dial — [`admit_media`]'s three
+/// refusals against `[iroh] offer_allow`.
+///
+/// The separate list is the whole reason `Offer` is its own kind rather than
+/// a reserved app name: "everyone in the house may see what I have going
+/// spare" and "two people may reach my chore app" are different grants, and
+/// one list for both makes the narrower one inexpressible. Same argument that
+/// split apps from media, applied a third time.
+///
+/// `declared` is in the signature because the shared implementation takes it,
+/// and every caller in this workspace passes EMPTY today. That is deliberate,
+/// not an oversight: `secrets/media/` holds credentials for a media server
+/// and handing them to a different server is exactly the substitution this
+/// repository keeps paying for, so an offer origin behind its own key needs
+/// its own store and its own `declare` verb. Neither is built, and a store
+/// nothing writes is inventory. A house serving a JSON file on loopback needs
+/// no credential at all, which is the case this rung is for.
+pub fn admit_offer(
+    who: Option<&MemberIdentity>,
+    dialer: NodePubkey,
+    origin: Option<SocketAddr>,
+    allow: &[String],
+    declared: &[(String, String)],
+) -> Option<Forward> {
+    admit_spliced_origin(OriginKind::Offer, who, dialer, origin, allow, declared)
+}
+
+/// One implementation of "may this verified dialer reach the single HTTP
+/// origin this node declared for `kind`", shared by [`admit_media`] and
+/// [`admit_offer`].
+///
+/// Shared rather than duplicated because the three refusals are the same
+/// three facts in both cases, and a second copy is how one of them learns to
+/// admit a non-member while the other does not (ARCH principle 8). What is
+/// NOT shared is the input: each caller passes its own origin, its own allow
+/// list and its own declared headers, so nothing here can hand one kind's
+/// credential to another kind's server.
+///
+/// `kind` is carried rather than spelled so every log line names the origin
+/// the dialer actually asked for — the 2026-09-12 defect where every app
+/// refusal said "media" is the failure this shape prevents.
+fn admit_spliced_origin(
+    kind: OriginKind,
+    who: Option<&MemberIdentity>,
+    dialer: NodePubkey,
+    origin: Option<SocketAddr>,
+    allow: &[String],
+    declared: &[(String, String)],
+) -> Option<Forward> {
     let Some(who) = who else {
         tracing::warn!(
             target: "transport",
+            kind = kind.wire(),
             dialer = %hex::encode(dialer.0),
-            "media: REFUSED a MEDIA_ALPN dial from a non-member — the media origin \
-             authenticates nothing, so there is no safe downgrade"
+            "{}: REFUSED a dial from a non-member — the {} authenticates nothing, \
+             so there is no safe downgrade",
+            kind.wire(), kind.noun()
         );
         return None;
     };
@@ -91,18 +146,22 @@ pub fn admit_media(
     if !allow.is_empty() && !allow.iter().any(|entry| who.named_by(entry)) {
         tracing::warn!(
             target: "transport",
+            kind = kind.wire(),
             member = %who.name,
             node_id = %who.node_id,
             allow = ?allow,
-            "media: REFUSED a MEDIA_ALPN dial from a member outside media_allow"
+            "{}: REFUSED a dial from a member outside the allow list",
+            kind.wire()
         );
         return None;
     }
     tracing::info!(
         target: "transport",
+        kind = kind.wire(),
         member = %who.name,
         node_id = %who.node_id,
-        "media: dial admitted — the origin is told who is asking"
+        "{}: dial admitted — the origin is told who is asking",
+        kind.wire()
     );
     // The verified identity FIRST, then this node's own credentials for its
     // own origin. Both go through the one `headers` vec because

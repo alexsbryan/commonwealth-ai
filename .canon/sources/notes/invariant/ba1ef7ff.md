@@ -1,0 +1,3 @@
+# UrlAllowlistConstraint::mask must pre-compute force_continue and clamp empty-bytes tokens (EOS/EOG) when set, NOT short-circuit them.…
+
+UrlAllowlistConstraint::mask must pre-compute `force_continue` and clamp empty-bytes tokens (EOS/EOG) when set, NOT short-circuit them. Mid-URL at a non-terminal trie node, an unclamped empty-bytes token lets the model end generation with a truncated-prefix URL like `/after-hour` when the trie has `/after-hours`. Regression-guarded by `empty_bytes_token_masked_mid_url_non_terminal` test. Prose / terminal nodes still defer to upstream sampler chain for EOS.
