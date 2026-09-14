@@ -4520,7 +4520,7 @@ class Kernel:
                 return "refuted", f"turn {i}: {l[:140]}"
             summ = self.summaries(turn + 1)
             whole = bool(re.search(r"\b(?:full|whole|workspace|sweep|suite|all)\b", st.get("scope", ""), re.I)) or (st.get("pass") or 0) >= 500
-            if not whole and (st.get("pass") or 0) + (st.get("fail") or 0) < 5 and not re.search(
+            if not whole and not re.search(
                     r"\b(?:tests?|suite|nextest|cargo test|crate|package|lane)\b", (st.get("scope") or "") + " " + st.get("span", ""), re.I):
                 # 'replayed 93 times', 'passes canon's pre-push gate' (66a5247a
                 # t13): not a test run; nothing in the record can judge it.
@@ -4591,14 +4591,23 @@ class Kernel:
                 return ("proved" if out else "refuted"), (f"route in {len(out.splitlines())} file(s) at {sha_t[:9]}" if out else f"nothing at {sha_t[:9]} names {nm!r}")
             if "/" in nm:
                 # A path exists or not (69191705 t70: recipe_install.rs was
-                # refuted by grepping for its name as content).
+                # refuted by grepping for its name as content). Refuted only
+                # when its first directory is this repository's -- a path in
+                # another repo is sorry here, not false.
                 body = git("show", f"{sha_t}:{nm.lstrip('./')}")
-                return ("proved" if body else "refuted"), (f"{nm} is in the tree at {sha_t[:9]}" if body else f"{nm} is not in the tree at {sha_t[:9]}")
+                if body:
+                    return "proved", f"{nm} is in the tree at {sha_t[:9]}"
+                top = nm.lstrip("./").split("/")[0]
+                if git("show", f"{sha_t}:{top}"):
+                    return "refuted", f"{nm} is not in the tree at {sha_t[:9]}"
+                return "sorry", f"{nm} is under no directory of this repository; another repo, or not a path"
             if "." in nm:
                 # A bare file name: any file so named, anywhere in the tree
                 # (9903ea64 t19 'sv-surface.toml', e02c5365 t14 'attach_watch.rs').
+                # A miss is sorry: 'guard.rs' (c01789ff t7) lives in the canon
+                # repo, which git here cannot see.
                 files = [l for l in git("ls-tree", "-r", "--name-only", sha_t).splitlines() if l.split("/")[-1] == nm]
-                return ("proved" if files else "refuted"), (f"{files[0]}" + (f" (+{len(files) - 1})" if len(files) > 1 else "") + f" at {sha_t[:9]}" if files else f"no file named {nm} at {sha_t[:9]}")
+                return ("proved" if files else "sorry"), (f"{files[0]}" + (f" (+{len(files) - 1})" if len(files) > 1 else "") + f" at {sha_t[:9]}" if files else f"no file named {nm} in this repository at {sha_t[:9]}; may be another repo")
             out = git("grep", "-lF", nm.split("::")[-1], sha_t).strip()
             return ("proved" if out else "refuted"), (f"{len(out.splitlines())} file(s) at {sha_t[:9]}" if out else f"nothing at {sha_t[:9]} contains {nm!r}")
         if k == "Measured":
@@ -5697,7 +5706,9 @@ def cmd_self_test(_a) -> int:
     eq(_kh.run({"kind": "Exists", "turn": 1, "name": "co-oplog.py"})[0], "proved", "Exists: a bare file name is found anywhere in the tree")
     eq(_kh.run({"kind": "Exists", "turn": 1, "name": "scripts/co-oplog.py"})[0], "proved", "Exists: a path is looked up as a path")
     eq(_kh.run({"kind": "Exists", "turn": 1, "name": "/internal/nope-" + hex(int(time.time()))[2:]})[0], "refuted", "Exists: a route is a string in the tree, and this one is in no tree")
-    eq(_kh.run({"kind": "Exists", "turn": 1, "name": "no_such_file_zz9.rs"})[0], "refuted", "Exists: and a missing file is refuted")
+    eq(_kh.run({"kind": "Exists", "turn": 1, "name": "no_such_file_zz9.rs"})[0], "sorry", "Exists: a bare name found nowhere is sorry (another repo is possible)")
+    eq(_kh.run({"kind": "Exists", "turn": 1, "name": "scripts/no_such_file_zz9.rs"})[0], "refuted", "Exists: a path under this repo's directory that is missing is refuted")
+    eq(_kh.run({"kind": "Exists", "turn": 1, "name": "elsewhere/no_such_file_zz9.rs"})[0], "sorry", "Exists: a path under no directory of this repo is sorry")
     eq(_kh.run({"kind": "Count", "turn": 1, "quantity": "roles", "value": "eight", "pattern": "Launch::", "in": "co-oplog.py"})[0], "refuted",
        "Count: a pattern counted in a file at the sha")
     _kc = Kernel(Path("."), {"results": [(0, "[—] 2 of 16 want attention (not passed, or passed on stale evidence)")], "asks": [], "nums": {}}, lambda i: None)
