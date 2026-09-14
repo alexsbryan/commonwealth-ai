@@ -1,0 +1,125 @@
+# Flight rules — read raw. Verdicts come from measurement rows, never prose here.
+# Defer/descope = edit a bar's `status`; git history is the ledger.
+#
+# ORDERS ARE GITIGNORED (`.sovereign/features/` is per-host). This file is the
+# committed artifact: the `[[rung]]` table below owns rung STATUS and the
+# `[[bar]]` rows own the numbers, so the plan survives without the orders. The
+# RATIONALE — why each rung exists, what it decided — lives in campaign.md.
+id        = "warrant"
+objective = "One authority primitive where there are two half-answers, and a way to PROVE it is complete: the set of things an authority token can say is equal, by the compiler and by a per-kind decider walk, to the set of things the decider reads - so `absence of a restriction` stops being a state the code can be in, rather than a state a comment asks the next reader to remember"
+spec      = "docs/internal/WARRANT_DESIGN.md (GITIGNORED, per-host) - the type, the refusal list and the seven negative legs. Claims it made were overturned on 2026-09-13 - including where the type lives, now `commonwealth_core::warrant` - and a correction block at the head of that doc names each; the sections themselves are rewritten in the rung-1 landing commit rather than ahead of the work that proves them. The citation per correction is in .sovereign/features/warrant/campaign.md under Decisions."
+declared  = "2026-09-13"
+status    = "active"
+
+# ── THE PREDICATE ────────────────────────────────────────────────────────────
+# The denominator is the COMPILER and the live guest path, not a list of
+# spellings this campaign's author wrote. That is deliberate: every bar below
+# can sit at target while the sentence stays false, because a kind table and a
+# decider can agree perfectly on the WRONG set of kinds.
+#
+# TWO-SIDED, and the second half is the load-bearing one. "A narrow warrant is
+# refused" passes vacuously - a warrant that permits nothing refuses
+# everything. The pair is the same request, same handler, same run: refused
+# under a warrant bottom in that kind, SERVED under one top in it.
+[predicate]
+statement = "Adding a field to `Limits` fails to COMPILE until the kind table names it, a kind the decider never consults turns a test red, and on a live daemon a guest link minted for exactly one model is served that model, refused every other model, refused every route its kinds do not name, and `{\"scopes\":{\"models\":[]}}` is refused at mint rather than handed back as a link that opens two routes and dispatches nothing"
+check     = "./scripts/sovereign-test.sh --human --package commonwealth-core && ./scripts/sovereign-test.sh --human --package sovereign-grants && ./scripts/sovereign-test.sh --human --package sovereign-api"
+# The compile-time half needs no assertion: if the kind table's exhaustive
+# destructuring is missing a field, `check` cannot build, and a build failure
+# is a failure (sovereign-test.sh, since 2026-07-28).
+
+# ── BARS ─────────────────────────────────────────────────────────────────────
+
+[[bar]]
+id           = "wr-kinds-are-read"
+demo         = "Add a field to Limits and watch the build refuse it"
+rung         = "wr-1"
+one_line     = "CLAIM: kinds a warrant can carry that the decider never consults = 0, proven per kind and not in aggregate"
+derives_from = "the comment at sovereign/crates/sovereign-grants/src/guest_grant.rs:159-164, which asks the reader not to collapse `None` (no model scope) with `Some(&[])` (a model scope naming nothing) - an assertion in English prose where a test could hold it (ARCH 3, ARCH 10's smell table). `Scope` is a sum where any kind may simply be absent; that absence is the property being removed."
+floor        = 0.0
+floor_basis  = "structural: COUNT of kinds present in `Limits` for which no warrant top-in-that-kind-and-bottom-elsewhere is permitted anything. Zero is the claim, not an aspiration - a kind with no decider arm is inventory, and this bar is what makes `no kind without a consumer` a rule rather than a preference."
+target       = 0.0
+direction    = "near_zero"
+instrument   = "three tests, and all three or the bar says nothing. (1) COMPILE-TIME: the kind table is built inside `let Limits { .. } = w` with no rest pattern, so a new field breaks the pattern exactly as the exhaustive match at sovereign/crates/sovereign-api/tests/main/client_auth.rs:442-444 breaks today. (2) WIRE: `serde_json::to_value(Limits::bottom())` key set equals the kind tags, following the round-trip pattern at oicp-types/src/error.rs:252-299. (3) DECIDER: per kind, top-in-K-bottom-elsewhere permits exactly K's requests and refuses every other kind's - for a CAPABILITY kind; for a PRECONDITION kind (expiry, audience) bottom denies what a capability kind would otherwise permit."
+goodhart     = "all three can be green while the kind table and the decider agree on the WRONG set - a kind that should exist and does not is invisible to every one of them, because each measures internal consistency. Test (2) alone is defeatable by a `serde(skip_serializing_if)` or a `flatten` that keeps the key set equal while the kind goes unread, which is why (1) is not optional. A verdict on this bar that does not also cite wr-behaviour-unchanged at target is reporting half a claim."
+status       = "open"
+
+[[bar]]
+id           = "wr-behaviour-unchanged"
+demo         = "Mint a link for one model; the same node refuses a second model and refuses an empty model list at mint"
+rung         = "wr-1"
+one_line     = "CLAIM: every existing guest and rail test passes with only its literals migrated - no assertion weakened, no test deleted"
+derives_from = "ARCH 2's refactor corollary: a refactor is behaviour-preserving if existing tests pass UNMODIFIED. They cannot here (the literals name a type that is going away), so the weaker honest form is `changed only where the type is spelled`, and the two places that is false are declared below rather than absorbed."
+floor        = 1.0
+floor_basis  = "structural: FRACTION of the ~30 pre-existing sites constructing a GuestGrant or Scope literal that pass after migration with their assertions byte-identical. Sites: sovereign-api/tests/main/client_auth.rs (11 tests + the two ratchets at :435 and :457), tests/rail_e2e/main.rs (10), tests/rail_e2e/ceiling.rs (2), routes_inference.rs:2152-2308 (5), routes_rail.rs:389-430 (4), guest_grant.rs's own module tests (10)."
+target       = 1.0
+direction    = "higher_is_better"
+instrument   = "`./scripts/sovereign-test.sh --human --package sovereign-api` and `--package sovereign-grants`, exit code only. TWO declared exceptions, each landing as its own commit with its own named test, NOT absorbed into the refactor: (a) `no_model_scope_is_distinct_from_an_empty_model_scope` (guest_grant.rs:388) is REPLACED - totality collapses `None` and `Some(&[])` into `models: {}`, and the replacement asserts what mattered (a warrant naming no model refuses every model and renders `nothing`); (b) `{\"scopes\":{\"models\":[]}}` goes from 200 to 400 at mint - today `into_scopes` (routes_internal/guest_grant.rs:75-84) pushes `Models(vec![])`, the emptiness check at :113 tests the Vec not the ids, and the dispatchable loop at :134-157 iterates nothing, so that body mints a link that OPENS /v1/models (200, empty list) and /v1/chat/completions (403 model_not_granted)."
+goodhart     = "a test is trivially 'migrated' by weakening its assertion - the exact failure ARCH 5 records as nine assertions pinning the wrong JSON shape for months (f6d4c770). The verdict must be a DIFF of the test bodies, not a green run: every changed line is either the type's spelling or one of the two declared exceptions. A third changed assertion is a finding, not a migration."
+status       = "open"
+
+[[bar]]
+id           = "wr-app-narrowing"
+demo         = "Everyone sees the print queue, two people see my films"
+rung         = "wr-2"
+one_line     = "CLAIM: a warranted dialer reaches 0 published apps its warrant does not name, and still reaches the one it does"
+derives_from = "the gap at commonwealth-media/src/identity.rs:142: `admit_app` answers only `may this dialer reach the App class at all` against a subject-side `app_allow`, and WHICH app binds per request in pump_by_name (commonwealth-transport/src/iroh_identity_forward.rs:399) with no per-dialer restriction of any kind. A house cannot today say `everyone may see the print queue, two people may see my films`."
+floor        = 0.0
+floor_basis  = "structural: COUNT of published apps a dialer reaches that its warrant does not name, over a node publishing at least two. Zero by construction if the narrowing is applied at admission - `admit_app` filters the apps map before building Forward::HttpByName, so pump_by_name is untouched and its existing 404 listing what this node publishes becomes what this dialer MAY REACH, disclosing nothing outside the warrant."
+target       = 0.0
+direction    = "near_zero"
+instrument   = "two members, two apps, one node, on the real acceptor - not a unit test over admit_app alone, because the disclosure half lives in pump_by_name's refusal text. The positive leg (`the named app is still served`) and the disclosure leg (`the 404 does not list the app they may not reach`) are both required."
+goodhart     = "zero because the dialer reached NOTHING - a warrant bottom in `apps`, a member outside app_allow, or an acceptor with no apps published all give a clean zero with the narrowing never exercised. The run must show the named app SERVED in the same session, and admit_app must be observed returning Some(Forward::HttpByName) with a filtered map, not None."
+status       = "open"
+
+[[bar]]
+id           = "wr-attenuation-holds"
+demo         = "Narrow a link, hand it on, and watch the minting node honour the narrower one and refuse a re-widened one"
+rung         = "wr-3"
+one_line     = "CLAIM: a warrant edited back open after attenuation is refused, and the honestly-narrowed one is served"
+derives_from = "the chain in WARRANT_DESIGN.md's `The chain` section. It lands HERE and not earlier because until sub-lending exists, nothing attenuates: a guest link is always presented back to the issuing node (sovereign-core/src/guest_link.rs:40-50), so the issuer is always the verifier and offline verification answers a question nobody asks. A MAC with no production caller is the inventory shape sovereign-tools/src/mcp_surface.rs::MCP_TOOLS_RETIRED names."
+floor        = 0.0
+floor_basis  = "structural: COUNT of tampered warrants accepted. Zero, and it is a property of the keyed MAC rather than of a check somebody remembered to write - you cannot invert it to recover an earlier tag."
+target       = 0.0
+direction    = "near_zero"
+instrument   = "attenuate, then edit the limits back open, then present. Plus the lattice laws as a property test over generated Limits: associativity, commutativity, idempotence, and meet(x,y) <= x - the last is `widening is unrepresentable`, design negative leg 6."
+goodhart     = "zero tampered warrants accepted is the expected good result and proves nothing on its own - ARCH 5's `a zero count is not a positive control` (72b3ab47). The same run must show a HONESTLY narrowed warrant SERVED by the minting node, or the bar has only demonstrated that the verifier refuses things."
+status       = "open"
+
+# ── THE LADDER ───────────────────────────────────────────────────────────────
+# The table owns STATUS — one decider for "did this rung land" (ARCH 8). The
+# rationale, and what each rung learned, stays in .sovereign/features/warrant/
+# campaign.md under Ladder and Decisions; that prose is worth more than a status
+# line and no schema should try to hold it.
+
+[[rung]]
+id     = "wr-1"
+title  = "warrant-1-collapse: GuestGrant becomes a Warrant, and absence stops being representable"
+status = "open"
+demo   = "D1"
+moves  = ["wr-kinds-are-read", "wr-behaviour-unchanged"]
+note   = "The type and its first consumer land together; a type with no consumer is one commit of inventory. Also moves D2."
+
+[[rung]]
+id     = "wr-2"
+title  = "warrant-2-apps: the acceptor, and a narrowing the mesh cannot express today"
+status = "open"
+demo   = "D3"
+moves  = ["wr-app-narrowing"]
+note   = "Second consumer is the only evidence this is a primitive rather than a guest-link detail. First surface where Audience::Node is checkable rather than merely denied."
+
+[[rung]]
+id     = "wr-3"
+title  = "warrant-3-chain: the MAC, landed with the thing that attenuates"
+status = "open"
+demo   = "D4"
+moves  = ["wr-attenuation-holds"]
+note   = "UNSCHEDULED by design — gated on sub-lending being wanted, not on the chain being designed. Until a holder attenuates, the issuer is always the verifier and offline verification answers a question nobody asks."
+
+[[rung]]
+id     = "wr-4"
+title  = "warrant-4-mcp: tools + effect, and the audit-only warn becomes a block"
+status = "descoped"
+demo   = "none"
+moves  = []
+note   = "NAMED, NOT FUNDED. Moves no declared bar, so no order is drafted. The two findings it would drag in — client_auth_layer never running for /mcp, and MCP_TOOLS_ALWAYS disagreeing with what the daemon registers — are recorded in campaign.md Decisions now, because both are true whether or not this rung ever runs."
