@@ -16,7 +16,7 @@ license.workspace = true
 # none of which a service registrar needs. One hop fewer, and it names the
 # owner (ARCH §10.6).
 sovereign-contracts = { workspace = true }
-dirs = "5"
+dirs = "6"
 
 [target.'cfg(unix)'.dependencies]
 # `current_uid` only — the launchd domain target is `gui/<uid>`.

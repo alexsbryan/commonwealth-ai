@@ -41,7 +41,7 @@ regex = { workspace = true }
 # The `covers:` tag scanner's AST reader. Same version/features as
 # corpus-engine's and kernel-types' were (ARCH §8.2 — one version per
 # third-party crate across the workspace).
-syn = { version = "2", features = ["full", "extra-traits"] }
+syn = { version = "3", features = ["full", "extra-traits"] }
 quote = "1"
 
 [lints]

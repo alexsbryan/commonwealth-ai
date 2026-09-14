@@ -56,7 +56,7 @@ tracing = { workspace = true }
 # Home-dir + platform-native config-dir resolution for setup_config.
 # `default_path()` lives at `~/.svrnmesh/config.toml`; `legacy_default_path()`
 # is the pre-consolidation XDG location used for one-shot migration.
-dirs = "5"
+dirs = "6"
 # Tier 4 — tool-result cache hashes canonical args via SHA-256
 # to derive the cache key. Workspace-version pin keeps lock-file
 # coherent with the 9+ other crates that already use sha2.
@@ -75,7 +75,7 @@ oicp-client = { workspace = true }
 # ingest path runs (`sovereign-tools`' `local_corpus::extract_stage`),
 # so there is ONE PDF-to-text implementation in the workspace and this
 # is a second CALLER of it, not a second extractor.
-pdf-extract = "0.7"
+pdf-extract = "0.12"
 # Staging file for the PDF leg — the extractor takes a path, not bytes.
 tempfile = { workspace = true }
 
