@@ -4520,6 +4520,11 @@ class Kernel:
                 return "refuted", f"turn {i}: {l[:140]}"
             summ = self.summaries(turn + 1)
             whole = bool(re.search(r"\b(?:full|whole|workspace|sweep|suite|all)\b", st.get("scope", ""), re.I)) or (st.get("pass") or 0) >= 500
+            if not whole and (st.get("pass") or 0) + (st.get("fail") or 0) < 5 and not re.search(
+                    r"\b(?:tests?|suite|nextest|cargo test|crate|package|lane)\b", (st.get("scope") or "") + " " + st.get("span", ""), re.I):
+                # 'replayed 93 times', 'passes canon's pre-push gate' (66a5247a
+                # t13): not a test run; nothing in the record can judge it.
+                return "sorry", "not a test-run statement; no summary line can judge it"
             cands = [(i, l) for i, l in summ if not whole or is_full_run(l, parse_summary(l)[0])]
             if not cands:
                 return "sorry", "no test summary in the record before this turn" + (" for a whole-scope run" if whole else "")
@@ -4553,7 +4558,13 @@ class Kernel:
                 for sha in shas:
                     subj = git("log", "-1", "--format=%h %s", sha).strip()
                     if not subj:
-                        return "refuted", f"{sha} is no commit in this repository"
+                        # 66a5247a t1: 'picked up the canon frame (c01789ff)' is a
+                        # session id; only a span that calls it a commit is refuted.
+                        if list(SESSIONS_DIR.glob(sha + "*")):
+                            return "sorry", f"{sha} is a session id, not a commit"
+                        if re.search(r"\b(?:commit|landed|committed|pushed|sha|merged)\b", st.get("span", ""), re.I):
+                            return "refuted", f"{sha} is no commit in this repository"
+                        return "sorry", f"{sha} is no commit here and the span does not call it one"
                     subjs.append(subj[:80])
                 stat = "".join(git("show", "--stat", "--format=", sha) for sha in shas)
                 patch = "".join(git("show", "--format=", sha) for sha in shas) if names else ""
@@ -4566,8 +4577,13 @@ class Kernel:
             return ("proved" if len(hits) == len(names) else "refuted"), f"at {sha_t[:9]}: in tree {hits}, not {[n for n in names if n not in hits]}"
         if k == "Exists":
             nm, sha_t = (st.get("name") or "").strip("`"), self.sha_at_turn(turn)
+            nm = re.sub(r":\d+(?:-\d+)?$", "", nm)          # model_slot.rs:3539 is the file (66a5247a t12)
             if not nm or not sha_t:
                 return "sorry", "no name or sha"
+            if re.match(r"(?:~|/Users|/private|/tmp|target/|\.sovereign/|\S*/target/)", nm) or " " in nm:
+                # Runtime and machine-local paths are not in any tree
+                # (66a5247a: target/canon-staging/..., ~/dev/canon/...).
+                return "sorry", f"{nm} is not a tracked path; git cannot speak to it"
             if nm.startswith("/"):
                 # A route, not a path: it exists as a string in the tree
                 # (69191705 t70: '/internal/corpus/catalog').
@@ -4709,13 +4725,20 @@ def supersedes(stmts: list[dict], kernel: Kernel) -> list[dict]:
     between; a later Measured on the same quantity with a different value."""
     edges = []
     tested = [s for s in stmts if s["kind"] == "Tested" and s.get("pass") is not None]
+    def same_scope(a, b):
+        wa, wb = (bool(re.search(r"\b(?:full|whole|workspace|sweep)\b", x.get("scope", ""), re.I)) or (x.get("pass") or 0) >= 500 for x in (a, b))
+        return (wa and wb) or (a.get("scope", "").lower().strip() == b.get("scope", "").lower().strip() and a.get("scope"))
     for a in tested:
         for b in tested:
-            if b["turn"] > a["turn"] and (a.get("pass"), a.get("fail")) != (b.get("pass"), b.get("fail")):
+            # Same scope only: 47/0 on one crate then 0/1 on another is two
+            # runs, not a contradiction (66a5247a t1 -> t10).
+            if b["turn"] > a["turn"] and same_scope(a, b) and (a.get("pass"), a.get("fail")) != (b.get("pass"), b.get("fail")):
                 between = [i for i, _ in kernel.summaries(b["turn"] + 1) if a["turn"] <= i <= b["turn"]]
                 if not between:
                     edges.append({"earlier": a["id"], "later": b["id"], "why": f"{a.get('pass')}/{a.get('fail')} then {b.get('pass')}/{b.get('fail')} with no run between"})
-    meas = [s for s in stmts if s["kind"] == "Measured" and s.get("quantity") and s.get("value")]
+    # 'tokens: 4000 then 17221' are two different token counts; only a
+    # quantity named in two or more words is specific enough to contradict.
+    meas = [s for s in stmts if s["kind"] == "Measured" and s.get("quantity") and s.get("value") and len(s["quantity"].split()) >= 2]
     for a in meas:
         for b in meas:
             qa, qb = a["quantity"].lower().strip(), b["quantity"].lower().strip()
@@ -4738,8 +4761,10 @@ def cmd_claims_all(a) -> int:
         if not ops:
             print(f"  {n:>2}/{len(files)} {f.stem[:8]}  no block at load >= {a.min_load}", flush=True); continue
         ns = types.SimpleNamespace(project=a.project, session=f.stem, turns=",".join(str(i) for i, _ in ops), min_load=a.min_load,
-                                   pin=a.pin, timeout=a.timeout, no_serves=True, serves_only=False)
+                                   pin=a.pin, timeout=a.timeout, no_serves=True, serves_only=False, rekernel=a.rekernel)
         t1 = time.time()
+        if a.rekernel and not (SESSIONS_DIR / f.stem / "claims.jsonl").exists():
+            print(f"  {n:>2}/{len(files)} {f.stem[:8]}  no ledger to rekernel", flush=True); continue
         try:
             rc = cmd_claims(ns)
         except DaemonDown as e:
@@ -4783,13 +4808,17 @@ def cmd_claims(a) -> int:
         goals.append({"id": f"g{n + 1}", "turn": i, "text": strip_reminders(t).strip()})
     stmts, t0 = [], time.time()
     d = SESSIONS_DIR / path.stem
-    if a.serves_only:
-        # The serves step alone, over the stored statements (it is the
-        # flaky call; a translation is not re-bought to retry it).
+    rekernel = getattr(a, "rekernel", False)
+    if a.serves_only or rekernel:
+        # The serves step alone, or the kernel alone, over the stored
+        # statements: neither re-buys the translation. The kernel is
+        # deterministic, so a tactic fix re-judges every ledger for free.
         stmts = [r for r in (json.loads(l) for l in (d / "claims.jsonl").open()) if r["node"] == "statement"]
         for st in stmts:
-            st.pop("serves", None); st.pop("node", None)
-    for i, text, _ in ([] if a.serves_only else picked):
+            st.pop("serves", None); st.pop("node", None); st.pop("deps", None); st.pop("weak", None)
+            if rekernel:
+                st["state"], st["receipt"] = kernel.run(st) if st["verbatim"] else ("sorry", "span is not verbatim in the report")
+    for i, text, _ in ([] if (a.serves_only or rekernel) else picked):
         try:
             got = translate_block(text, i, a.pin, a.timeout)
         except DaemonDown as e:
@@ -4822,7 +4851,12 @@ def cmd_claims(a) -> int:
                 st["state"], st["receipt"] = "proved", "discharged by " + later[0]["id"]
     sup = supersedes(stmts, kernel)
     types, edges = {}, []
-    if stmts and not a.no_serves:
+    if rekernel:
+        # keep the stored serves edges; only states and supersedes are recomputed
+        edges = [r for r in (json.loads(l) for l in (d / "claims.jsonl").open()) if r["node"] == "serves"]
+        for e in edges:
+            e.pop("node", None)
+    if stmts and not a.no_serves and not rekernel:
         try:
             types, edges = serves_edges(goals, stmts, a.pin, a.timeout)
         except DaemonDown as e:
@@ -5844,6 +5878,7 @@ def main() -> int:
     cl.add_argument("--timeout", type=float, default=240.0)
     cl.add_argument("--no-serves", action="store_true")
     cl.add_argument("--serves-only", action="store_true", help="redo only the serves step over the stored claims.jsonl")
+    cl.add_argument("--rekernel", action="store_true", help="re-judge the stored statements with the current kernel; no model call")
     cl.set_defaults(fn=cmd_claims)
     ca = sub.add_parser("claims-all", help="the claim graph over the last N sessions, kernel only; refuted rows collected for the hand read")
     ca.add_argument("--project", default="-Users-alexsbryan-dev-commonwealth-ai")
@@ -5854,6 +5889,7 @@ def main() -> int:
     ca.add_argument("--pin", default=DEFAULT_PIN)
     ca.add_argument("--timeout", type=float, default=240.0)
     ca.add_argument("--out", default="")
+    ca.add_argument("--rekernel", action="store_true", help="re-judge every stored ledger with the current kernel; no model call")
     ca.set_defaults(fn=cmd_claims_all)
     ia = sub.add_parser("investigate-all", help="one investigation per session over the last N: its final report, or its heaviest-claim turn")
     ia.add_argument("--project", default="-Users-alexsbryan-dev-commonwealth-ai")
