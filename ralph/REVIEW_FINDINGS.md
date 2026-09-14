@@ -26,15 +26,14 @@ Findings:
 - **ARCH 8 (one decider, one name)** · `scripts/domains-census.py:330` ·
   `_is_member_edge` spelled the peer word as a literal `"Peer"` beside the
   module constant `_PEER_WORD`, so one word had two spellings. Fixed: use
-  `_PEER_WORD`. Fixed in the REVIEW-audit-1 commit.
+  `_PEER_WORD`. Fixed in `2e5621ba6`.
 - **ARCH 8 (one accessor per path)** · `scripts/domains-census.py:228` ·
   `peer_defs` read the repo registry via `registry()` while every sibling axis
   (`shared_edges`, `word_owners`, `atom_defs`, `misnamed`, `queue`, `liftable`,
   `predicate_problems`, `plan`) reads `registry_for(root)`; a fixture-planted
   `quality/DOMAINS.toml` would be ignored by this axis alone. Fixed: use
   `registry_for(root)`. Behaviour on the tree and on every existing fixture is
-  unchanged (no peer fixture plants a registry). Fixed in the REVIEW-audit-1
-  commit.
+  unchanged (no peer fixture plants a registry). Fixed in `2e5621ba6`.
 
 Recorded, not changed:
 
