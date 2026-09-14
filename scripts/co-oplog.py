@@ -4387,7 +4387,7 @@ def investigate(path: Path, turn: int, report: str, sha: str | None, t1: str | N
 # serves edges, with verbatim spans the kernel validates; it never assigns a
 # proof state.
 
-KINDS = ("Tested", "Landed", "Exists", "Measured", "Count", "Promise", "Status", "Opinion")
+KINDS = ("Tested", "Landed", "Exists", "Proposes", "Measured", "Count", "Promise", "Status", "Opinion")
 STATES = ("proved", "refuted", "sorry", "open")
 
 STATEMENTS_TOOL = [{"type": "function", "function": {
@@ -4401,6 +4401,7 @@ STATEMENTS_TOOL = [{"type": "function", "function": {
             "sha": {"type": "string"}, "paths": {"type": "array", "items": {"type": "string"}},
             "symbols": {"type": "array", "items": {"type": "string"}},
             "name": {"type": "string"},
+            "shape": {"type": "string", "enum": ["type", "fn", "module", "crate", "file", "command", "table", "other"]},
             "quantity": {"type": "string"}, "value": {"type": "string"}, "unit": {"type": "string"},
             "of": {"type": "integer"}, "pattern": {"type": "string"}, "in": {"type": "string"},
             "action": {"type": "string"}, "goal": {"type": "string"}, "state": {"type": "string"}},
@@ -4410,7 +4411,12 @@ TRANSLATE_SYSTEM = """Translate an AI coding agent's report to its operator into
 Kinds:
 Tested {scope, pass, fail}: a test run's outcome. scope is what ran ("full workspace", a crate, a test name).
 Landed {sha, paths, symbols}: something committed or in the tree now.
-Exists {name}: a file, symbol, route or test exists.
+Exists {name}: a file, symbol, route or test exists NOW (a cited surface: "`SplitInferenceProvider` is the provider").
+Proposes {name, shape}: a NEW thing the report says it will build, add, introduce, create or needs
+  ("a `NodeClass` enum", "new crate `commonwealth-rail`", "add `svrn setup --terminal`", "we need a ledger").
+  name is the identifier or path as written; shape is what kind of thing. ONLY when the report says the
+  thing does not exist yet. A name the report uses, returns, points at, changes or extends is Exists{name};
+  a change with no new name ("`SetupConfig.models` becomes `Option`") is Promise.
 Measured {quantity, value, unit}: a number the report states as measured (lines, bytes, seconds).
 Count {quantity, value, of, pattern, in}: a count of things ("eight launch roles", "15 of 16 gates",
   "13 impls", "39 sites"); `of` for "N of M"; `pattern` and `in` when the span names what is counted
@@ -4421,7 +4427,8 @@ Opinion: a judgement or explanation with nothing to check.
 Rules: one statement per fact; `span` is VERBATIM from the report; every number the
 report states becomes a Tested or Measured statement (a hedged one too: "~300 lines"
 is Measured value 300); every commit sha is a Landed statement; a note or ticket id
-("Note 426e8eed") is Exists{name}; "watched red", "sabotage went red", "N impls
+("Note 426e8eed") is Exists{name}; every backticked name the report cites as already
+there is Exists{name}, and every backticked name it says it will create is Proposes{name}; "watched red", "sabotage went red", "N impls
 removed", "X deleted" are Landed or Tested statements, not Opinion; an open item
 ("one verification stays open") is Status{state: open}. Fill the fields you can
 read off the span, leave the rest out. Call `statements` once."""
@@ -4502,8 +4509,84 @@ class Kernel:
         r = inv.run_tool("find_number", {"number": n})
         return None if r.startswith(("NOT SEEN", "REFUSED")) else r.splitlines()[0]
 
+    RX_DEF = (r"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+|unsafe\s+|const\s+)*(?:struct|enum|trait|type|fn|mod|const|static|union|macro_rules!)\s+{n}\b"
+              r"|^\s*(?:async\s+)?(?:def|class)\s+{n}\b"
+              r"|^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?(?:function|class|interface)\s+{n}\b"
+              r"|^\s*(?:name\s*=\s*\"{n}\")")
+
+    def defined_at(self, name: str, sha: str, shape: str = "") -> str | None:
+        """Where `name` is DEFINED in the tree at `sha` (a definition line,
+        a file, a crate's Cargo.toml name), or None. The inventory tactic:
+        a proposed noun that already has a definition is the parallel
+        system before it is written (ARCH 11, the review rule)."""
+        n = name.strip("`").strip()
+        n = re.sub(r":\d+(?:-\d+)?$", "", n)
+        n = re.sub(r"\(\)$", "", n)
+        if not n or not sha or " " in n or re.search(r"[{}<>=→*]", n) or re.match(r"(?:~|/Users|/private|/tmp|target/|\.sovereign/|\S*/target/)", n):
+            return None                                  # prose or a glob ('setup_cmd/{args,mod}.rs', c3b57dbd p5.5)
+        if re.fullmatch(r"[A-Za-z_]\w*\.[a-z_]\w*", n) and not re.search(r"\.(?:rs|py|sh|toml|md|json|ts|mjs|ya?ml)$", n):
+            n = n.replace(".", "::")                     # NodeCapabilities.inference_capable is a member (c3b57dbd p9.9)
+        if "/" in n:
+            body = git("show", f"{sha}:{n.lstrip('./')}")
+            if body:
+                return f"{n} is in the tree at {sha[:9]}"
+            # a path relative to a crate ('runtime/streaming.rs:1055', c3b57dbd p3.2): by suffix
+            files = [l for l in git("ls-tree", "-r", "--name-only", sha).splitlines() if l.endswith("/" + n.lstrip("./"))]
+            return f"{files[0]} at {sha[:9]}" + (f" (+{len(files) - 1})" if len(files) > 1 else "") if files else None
+        if re.search(r"\.(?:rs|py|sh|toml|md|json|ts|mjs|ya?ml)$", n):
+            files = [l for l in git("ls-tree", "-r", "--name-only", sha).splitlines() if l.split("/")[-1] == n]
+            return f"{files[0]} at {sha[:9]}" + (f" (+{len(files) - 1})" if len(files) > 1 else "") if files else None
+        if "::" in n:
+            typ, mem = n.rsplit("::", 1)
+            typ = typ.split("::")[-1]
+            if not re.fullmatch(r"\w+", mem) or not re.fullmatch(r"\w+", typ):
+                return None
+            # a definition of the member in a file that also names the type
+            for l in git("grep", "-n", "-P", "-e", self.RX_DEF.format(n=re.escape(mem)), sha).splitlines():
+                parts = l.split(":", 2)
+                if len(parts) == 3 and git("grep", "-l", "-F", typ, sha, "--", parts[1]).strip():
+                    return f"{parts[1]}:{parts[2][:120]}"
+            return None
+        if not re.fullmatch(r"[A-Za-z_][\w-]*", n) or len(n) < 3:
+            return None
+        if re.fullmatch(r"[a-z]+", n) and shape not in ("fn", "module", "crate"):
+            return None                                  # 'models', 'entry': a field or key, not a noun git defines (c3b57dbd p5.1-2)
+        rx = self.RX_DEF.format(n=re.escape(n.replace("-", "_")) if "-" in n else re.escape(n))
+        # -P: git's -E has no \s or \b on this host (2.50, Apple); the
+        # first smoke returned 'nothing defines Kernel' at a sha carrying it.
+        out = git("grep", "-n", "-P", "-e", rx, sha).strip()
+        if not out and "-" in n:
+            out = git("grep", "-n", "-P", "-e", f'^\\s*name\\s*=\\s*"{re.escape(n)}"', sha, "--", "*Cargo.toml").strip()
+        if not out:
+            return None
+        lines = out.splitlines()
+        first = lines[0].split(":", 1)[1] if lines[0].count(":") >= 2 else lines[0]
+        return f"{first[:140]}" + (f" (+{len(lines) - 1} more)" if len(lines) > 1 else "")
+
     def run(self, st: dict) -> tuple[str, str]:
         k, turn = st["kind"], st["turn"]
+        if k == "Proposes":
+            # The inventory tactic. A proposed noun already defined at the
+            # sha is refuted with the definition as receipt; absent, the
+            # proposal is proved new; a name git cannot look for (prose, a
+            # flag, a machine-local path) is sorry.
+            nm, sha_t = (st.get("name") or "").strip("`"), self.sha_at_turn(turn)
+            if not nm or not sha_t:
+                return "sorry", "no name or sha"
+            if " " in nm.strip() and not re.search(r"[/:.]|_|[A-Z][a-z]+[A-Z]", nm):
+                return "sorry", f"{nm!r} is prose, not a name git can look for"
+            if nm.lstrip().startswith(("--", "svrn ", "sovereign ", "cargo ")):
+                return "sorry", f"{nm!r} is a command or flag; no definition to look for"
+            if re.search(r"[{}<>=→*]", nm):
+                return "sorry", f"{nm!r} is prose or a glob, not a name git can look for"
+            if re.fullmatch(r"[a-z]+", nm) and (st.get("shape") or "") not in ("fn", "module", "crate"):
+                return "sorry", f"{nm!r} is a field or key, not a noun git defines"
+            hit = self.defined_at(nm, sha_t, st.get("shape") or "")
+            if hit:
+                return "refuted", f"already defined at {sha_t[:9]}: {hit}"
+            if not re.search(r"[/:.]|_|[A-Z][a-z]+[A-Z]|^[A-Z][a-z]{3,}$|^[a-z][a-z0-9-]{3,}$", nm):
+                return "sorry", f"{nm!r} is not a name git can look for"
+            return "proved", f"nothing defines {nm} at {sha_t[:9]}"
         if k == "Tested":
             scope = (st.get("scope") or "").strip("`")
             named = [x for x in IDENT_SHAPE.findall(scope) if "_" in x or "::" in x]   # 'gate every_test_module_is_wired' names a test
@@ -4667,6 +4750,10 @@ class Kernel:
                 top = nm.lstrip("./").split("/")[0]
                 if git("show", f"{sha_t}:{top}"):
                     return "refuted", f"{nm} is not in the tree at {sha_t[:9]}"
+                # relative to a crate ('runtime/streaming.rs', c3b57dbd p3.2): by suffix
+                files = [l for l in git("ls-tree", "-r", "--name-only", sha_t).splitlines() if l.endswith("/" + nm.lstrip("./"))]
+                if files:
+                    return "proved", f"{files[0]}" + (f" (+{len(files) - 1})" if len(files) > 1 else "") + f" at {sha_t[:9]}"
                 return "sorry", f"{nm} is under no directory of this repository; another repo, or not a path"
             if "." in nm:
                 # A bare file name: any file so named, anywhere in the tree
@@ -4980,6 +5067,181 @@ def cmd_claims(a) -> int:
     n_chk = sum(1 for s in stmts if s["kind"] != "Opinion")
     from collections import Counter as _C
     print(f"  states: {dict(_C(s['state'] for s in stmts))} · arc: {n_serve}/{n_chk} checkable statements serve a goal")
+    return 0
+
+PLAN_SKIP = ("principles at stake", "restraint patterns")   # the template's boilerplate, not the plan
+
+def plan_events(path: Path) -> list[dict]:
+    """Every ExitPlanMode submission in a transcript: the plan text, its
+    timestamp, the operator's verdict on it, and the turn index (in
+    `turns()` numbering) it sits after."""
+    out, turn, pending = [], 0, {}
+    with path.open() as fh:
+        for line in fh:
+            try:
+                rec = json.loads(line)
+            except Exception:
+                continue
+            content = (rec.get("message") or {}).get("content")
+            if not isinstance(content, list):
+                continue
+            for b in content:
+                if not isinstance(b, dict):
+                    continue
+                if rec.get("type") == "assistant" and b.get("type") == "text" and len(strip_reminders(b.get("text", ""))) >= 120:
+                    turn += 1
+                elif rec.get("type") == "assistant" and b.get("type") == "tool_use" and b.get("name") == "ExitPlanMode":
+                    ev = {"turn": turn, "when": rec.get("timestamp") or "", "plan": (b.get("input") or {}).get("plan") or "", "verdict": "unknown"}
+                    pending[b.get("id")] = ev; out.append(ev)
+                elif b.get("type") == "tool_result" and b.get("tool_use_id") in pending:
+                    r = b.get("content"); r = r if isinstance(r, str) else json.dumps(r)
+                    pending[b["tool_use_id"]]["verdict"] = "approved" if "approved" in r else ("rejected" if "doesn't want" in r else ("blocked" if "hook error" in r else "unknown"))
+    return out
+
+def plan_sections(plan: str, limit: int = 6500) -> list[tuple[str, str]]:
+    """(title, text) per `## ` section, boilerplate sections dropped, long
+    ones split at `### ` then at paragraphs so each fits the translator."""
+    parts = re.split(r"(?m)^(?=## )", plan)
+    out = []
+    for part in parts:
+        if not part.strip():
+            continue
+        title = part.splitlines()[0].lstrip("# ").strip() or "(untitled)"
+        if title.lower().rstrip("?").strip() in PLAN_SKIP:
+            continue
+        if len(part) <= limit:
+            out.append((title, part)); continue
+        for sub in re.split(r"(?m)^(?=### )", part):
+            if len(sub) <= limit:
+                if sub.strip():
+                    out.append((title, sub))
+                continue
+            buf = ""
+            for para in re.split(r"\n\n+", sub):
+                if len(buf) + len(para) > limit and buf:
+                    out.append((title, buf)); buf = ""
+                buf += para + "\n\n"
+            if buf.strip():
+                out.append((title, buf))
+    return out
+
+RX_TICK = re.compile(r"`([^`\n]{2,80})`")
+
+def sweep_idents(text: str) -> list[str]:
+    """Every backticked name a plan mentions that git could look for --
+    the recall instrument for the translation: a name defined at the sha
+    the model tagged Proposes, or absent and tagged Exists, or tagged
+    neither, each is a row the hand read can price."""
+    seen, out = set(), []
+    for m in RX_TICK.finditer(text):
+        n = re.sub(r":\d+(?:-\d+)?$", "", m.group(1).strip()).rstrip("()")
+        if " " in n or n.startswith(("-", "$", "[", "{", "<", "svrn", "sovereign", "cargo", "git", "http")):
+            continue
+        if not (IDENT_SHAPE.fullmatch(n) or re.fullmatch(r"[A-Z][a-z]{3,}|[a-z][a-z0-9-]{3,}", n)):
+            continue
+        if n not in seen:
+            seen.add(n); out.append(n)
+    return out
+
+def cmd_plan_claims(a) -> int:
+    """The Proposes lane: a session's LAST submitted plan, translated by
+    section into statements, judged by the kernel at the sha that was
+    HEAD when the plan was submitted. Beside the model's rows, a
+    deterministic sweep of every backticked name in the plan."""
+    path = resolve(a.project, a.session)
+    evs = plan_events(path)
+    if not evs:
+        print("no ExitPlanMode plan in this session"); return 4
+    ev = evs[-1]
+    sha_p = sha_at(ev["when"])
+    if not sha_p:
+        print(f"could-not-judge: no commit at {ev['when']}"); return 3
+    secs = plan_sections(ev["plan"])
+    obs = session_observations(path)
+    kernel = Kernel(path, obs, lambda i: sha_p)
+    d = SESSIONS_DIR / path.stem
+    d.mkdir(parents=True, exist_ok=True)
+    stmts, t0 = [], time.time()
+    if getattr(a, "rekernel", False):
+        stmts = [r for r in (json.loads(l) for l in (d / "plan-claims.jsonl").open()) if r["node"] == "statement"]
+        for st in stmts:
+            st.pop("node", None); st.pop("deps", None)
+            st["state"], st["receipt"] = kernel.run(st) if st["verbatim"] else ("sorry", "span is not verbatim in the plan")
+    else:
+        for n, (title, text) in enumerate(secs, 1):
+            t1 = time.time()
+            try:
+                got = translate_block(f"PLAN section '{title}':\n\n{text}", ev["turn"], a.pin, a.timeout)
+            except DaemonDown as e:
+                print(f"could-not-judge: daemon {e}"); return 3
+            for k, st in enumerate(got):
+                st["id"] = f"p{n}.{k + 1}"; st["section"] = title
+                st["verbatim"] = st["verbatim"] or span_is_real(re.sub(r"[`*_]", "", st["span"]), re.sub(r"[`*_]", "", text))
+                st["state"], st["receipt"] = kernel.run(st) if st["verbatim"] else ("sorry", "span is not verbatim in the plan")
+                stmts.append(st)
+            print(f"  section {n:>2}/{len(secs)} {title[:50]:<50} {len(got):>3} statement(s) {round(time.time() - t1)}s", flush=True)
+    # the sweep: every backticked name, defined at the sha or not
+    tagged = {}
+    for st in stmts:
+        if st["kind"] in ("Proposes", "Exists") and st.get("name"):
+            tagged.setdefault(re.sub(r":\d+(?:-\d+)?$", "", st["name"].strip("`")), st["kind"])
+    sweep = []
+    for nm in sweep_idents(ev["plan"]):
+        hit = kernel.defined_at(nm, sha_p)
+        sweep.append({"name": nm, "defined": bool(hit), "where": (hit or "")[:120], "tagged": tagged.get(nm, "none")})
+    with (d / "plan-claims.jsonl").open("w") as fh:
+        fh.write(json.dumps({"node": "plan", "session": path.stem, "when": ev["when"], "sha": sha_p, "verdict": ev["verdict"],
+                             "turn": ev["turn"], "sections": len(secs), "chars": len(ev["plan"]), "title": ev["plan"].splitlines()[0][:120]}) + "\n")
+        for st in stmts:
+            fh.write(json.dumps({"node": "statement", **st}) + "\n")
+        for r in sweep:
+            fh.write(json.dumps({"node": "sweep", **r}) + "\n")
+    from collections import Counter as _C
+    print(f"plan {path.stem[:8]} · {ev['verdict']} · sha {sha_p[:9]} · {len(secs)} section(s) · {len(stmts)} statement(s) · {round(time.time() - t0)}s · {d / 'plan-claims.jsonl'}")
+    print(f"  {ev['plan'].splitlines()[0][:110]}")
+    for st in stmts:
+        if st["kind"] == "Opinion" and not a.verbose:
+            continue
+        anchor = {k: v for k, v in st.items() if k in ("scope", "pass", "fail", "sha", "paths", "symbols", "name", "shape", "quantity", "value", "action", "goal")}
+        print(f"  {st['id']:<7} {st['kind']:<9} {st['state']:<8} {json.dumps(anchor)[:60]:<62} | {st['span'][:70]}")
+        print(f"          receipt: {st['receipt'][:150]}")
+    c = _C(s["state"] for s in stmts); ck = _C((s["kind"], s["state"]) for s in stmts)
+    print(f"  states: {dict(c)} · Proposes: {dict((k[1], v) for k, v in ck.items() if k[0] == 'Proposes')} · Exists: {dict((k[1], v) for k, v in ck.items() if k[0] == 'Exists')}")
+    parallel = [r for r in sweep if r["defined"] and r["tagged"] == "Proposes"]
+    ghost = [r for r in sweep if not r["defined"] and r["tagged"] == "Exists"]
+    untagged = [r for r in sweep if r["tagged"] == "none"]
+    print(f"  sweep: {len(sweep)} name(s) · {sum(r['defined'] for r in sweep)} defined at sha · "
+          f"{len(parallel)} defined-but-Proposes · {len(ghost)} absent-but-Exists · {len(untagged)} untagged ({sum(r['defined'] for r in untagged)} defined)")
+    for r in parallel:
+        print(f"    defined-but-Proposes {r['name']}: {r['where'][:100]}")
+    for r in ghost:
+        print(f"    absent-but-Exists    {r['name']}")
+    return 0
+
+def cmd_plan_claims_all(a) -> int:
+    src = TRANSCRIPTS / a.project
+    files = [f for f in sorted(src.glob("*.jsonl"), key=lambda q: q.stat().st_mtime, reverse=True) if plan_events(f)]
+    summary, t0 = [], time.time()
+    for n, f in enumerate(files, 1):
+        ns = types.SimpleNamespace(project=a.project, session=f.stem, pin=a.pin, timeout=a.timeout, rekernel=a.rekernel, verbose=False)
+        t1 = time.time()
+        try:
+            rc = cmd_plan_claims(ns)
+        except DaemonDown as e:
+            print(f"  {n:>2}/{len(files)} {f.stem[:8]}  could-not-judge: daemon {e}", flush=True)
+            summary.append({"session": f.stem, "error": str(e)}); continue
+        if rc != 0:
+            summary.append({"session": f.stem, "error": f"rc {rc}"}); continue
+        rows = [json.loads(l) for l in (SESSIONS_DIR / f.stem / "plan-claims.jsonl").open()]
+        stmts = [r for r in rows if r["node"] == "statement"]
+        from collections import Counter as _C
+        summary.append({"session": f.stem, "plan": rows[0], "statements": len(stmts), "states": dict(_C(r["state"] for r in stmts)),
+                        "refuted": [r for r in stmts if r["state"] == "refuted"],
+                        "sweep": [r for r in rows if r["node"] == "sweep" and (r["tagged"] != "none" or r["defined"])], "seconds": round(time.time() - t1)})
+    if a.out:
+        Path(a.out).write_text(json.dumps(summary, indent=1)); print(f"written {a.out}")
+    print(f"\nplan-claims-all — {len(summary)} plan(s) · {sum(len(x.get('refuted', [])) for x in summary)} refuted row(s) · "
+          f"{sum(1 for x in summary if 'error' in x)} could-not-judge · {round(time.time() - t0)}s")
     return 0
 
 def cmd_investigate(a) -> int:
@@ -5778,6 +6040,13 @@ def cmd_self_test(_a) -> int:
            "a test name inside a longer scope is the name")
     _kh = Kernel(Path("."), {"results": [], "asks": [], "nums": {}}, lambda i: git("rev-parse", "HEAD").strip())
     eq(_kh.run({"kind": "Landed", "turn": 1, "symbols": ["Kernel::summaries"], "span": "Kernel::summaries lands"})[0], "proved", "Landed: Type::member is both names in one file at the sha")
+    # Proposes: the inventory tactic. Watched wrong first: git grep -E has
+    # no \s, so every name came back 'nothing defines' (2026-09-13).
+    for _n, _want in (("Kernel", "refuted"), ("SplitInferenceProvider", "refuted"), ("Kernel::summaries", "refuted"),
+                      ("scripts/co-oplog.py", "refuted"), ("co-oplog.py", "refuted"), ("sovereign-mesh", "refuted"),
+                      ("FooBarBazNounX", "proved"), ("Kernel::nope_nope", "proved"), ("no-such-crate-xyz", "proved"),
+                      ("a ledger of plans", "sorry"), ("svrn setup --terminal", "sorry")):
+        eq(_kh.run({"kind": "Proposes", "turn": 1, "name": _n, "span": "x"})[0], _want, f"Proposes {_n}")
     eq(_kh.run({"kind": "Exists", "turn": 1, "name": "co-oplog.py"})[0], "proved", "Exists: a bare file name is found anywhere in the tree")
     eq(_kh.run({"kind": "Exists", "turn": 1, "name": "scripts/co-oplog.py"})[0], "proved", "Exists: a path is looked up as a path")
     eq(_kh.run({"kind": "Exists", "turn": 1, "name": "/internal/nope-" + hex(int(time.time()))[2:]})[0], "refuted", "Exists: a route is a string in the tree, and this one is in no tree")
@@ -5966,6 +6235,16 @@ def main() -> int:
     cl.add_argument("--serves-only", action="store_true", help="redo only the serves step over the stored claims.jsonl")
     cl.add_argument("--rekernel", action="store_true", help="re-judge the stored statements with the current kernel; no model call")
     cl.set_defaults(fn=cmd_claims)
+    pc = sub.add_parser("plan-claims", help="the Proposes lane: a session's last submitted plan as statements, judged against the tree at the plan's sha")
+    pc.add_argument("session", nargs="?", default="")
+    pc.add_argument("--all", action="store_true", help="every session that submitted a plan")
+    pc.add_argument("--project", default="-Users-alexsbryan-dev-commonwealth-ai")
+    pc.add_argument("--pin", default=DEFAULT_PIN)
+    pc.add_argument("--timeout", type=float, default=240.0)
+    pc.add_argument("--out", default="")
+    pc.add_argument("--verbose", action="store_true", help="print Opinion rows too")
+    pc.add_argument("--rekernel", action="store_true", help="re-judge the stored ledger; no model call")
+    pc.set_defaults(fn=lambda a: cmd_plan_claims_all(a) if a.all else cmd_plan_claims(a))
     ca = sub.add_parser("claims-all", help="the claim graph over the last N sessions, kernel only; refuted rows collected for the hand read")
     ca.add_argument("--project", default="-Users-alexsbryan-dev-commonwealth-ai")
     ca.add_argument("--last", type=int, default=40)
