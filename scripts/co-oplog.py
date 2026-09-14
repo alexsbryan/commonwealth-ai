@@ -5270,9 +5270,10 @@ def cmd_plan_claims(a) -> int:
     kernel.text = ev["plan"]
     d = SESSIONS_DIR / path.stem
     d.mkdir(parents=True, exist_ok=True)
+    ledger = "plan-claims" + (f"-{a.ledger}" if getattr(a, "ledger", "") else "") + ".jsonl"   # --ledger A: a preserved run's ledger
     stmts, t0 = [], time.time()
     if getattr(a, "rekernel", False):
-        stmts = [r for r in (json.loads(l) for l in (d / "plan-claims.jsonl").open()) if r["node"] == "statement"]
+        stmts = [r for r in (json.loads(l) for l in (d / ledger).open()) if r["node"] == "statement"]
         for st in stmts:
             st.pop("node", None); st.pop("deps", None)
             st["verbatim"] = st["verbatim"] or (st["kind"] in ("Proposes", "Exists") and anchored(st.get("name") or "", ev["plan"]))
@@ -5315,7 +5316,7 @@ def cmd_plan_claims(a) -> int:
     names = sweep_idents(ev["plan"])
     found = kernel.defined_many(names, sha_p)
     sweep = [{"name": nm, "defined": bool(found[nm]), "where": (found[nm] or "")[:120], "tagged": tagged.get(nm, "none")} for nm in names]
-    with (d / "plan-claims.jsonl").open("w") as fh:
+    with (d / ledger).open("w") as fh:
         fh.write(json.dumps({"node": "plan", "session": path.stem, "when": ev["when"], "sha": sha_p, "verdict": ev["verdict"],
                              "turn": ev["turn"], "sections": len(secs), "chars": len(ev["plan"]), "title": ev["plan"].splitlines()[0][:120]}) + "\n")
         for st in stmts:
@@ -5323,7 +5324,7 @@ def cmd_plan_claims(a) -> int:
         for r in sweep:
             fh.write(json.dumps({"node": "sweep", **r}) + "\n")
     from collections import Counter as _C
-    print(f"plan {path.stem[:8]} · {ev['verdict']} · sha {sha_p[:9]} · {len(secs)} section(s) · {len(stmts)} statement(s) · {round(time.time() - t0)}s · {d / 'plan-claims.jsonl'}")
+    print(f"plan {path.stem[:8]} · {ev['verdict']} · sha {sha_p[:9]} · {len(secs)} section(s) · {len(stmts)} statement(s) · {round(time.time() - t0)}s · {d / ledger}")
     print(f"  {ev['plan'].splitlines()[0][:110]}")
     for st in stmts:
         if st["kind"] == "Opinion" and not a.verbose:
@@ -5351,7 +5352,7 @@ def cmd_plan_claims_all(a) -> int:
         files = [f for f in files if not (SESSIONS_DIR / f.stem / "plan-claims.jsonl").exists()]
     summary, t0 = [], time.time()
     for n, f in enumerate(files, 1):
-        ns = types.SimpleNamespace(project=a.project, session=f.stem, pin=a.pin, timeout=a.timeout, rekernel=a.rekernel, verbose=False)
+        ns = types.SimpleNamespace(project=a.project, session=f.stem, pin=a.pin, timeout=a.timeout, rekernel=a.rekernel, verbose=False, ledger=a.ledger)
         t1 = time.time()
         try:
             rc = cmd_plan_claims(ns)
@@ -6401,6 +6402,7 @@ def main() -> int:
     pc.add_argument("--verbose", action="store_true", help="print Opinion rows too")
     pc.add_argument("--rekernel", action="store_true", help="re-judge the stored ledger; no model call")
     pc.add_argument("--resume", action="store_true", help="with --all: skip sessions that already have a ledger")
+    pc.add_argument("--ledger", default="", help="ledger suffix: 'A' reads/writes plan-claims-A.jsonl (a preserved run)")
     pc.set_defaults(fn=lambda a: cmd_plan_claims_all(a) if a.all else cmd_plan_claims(a))
     ca = sub.add_parser("claims-all", help="the claim graph over the last N sessions, kernel only; refuted rows collected for the hand read")
     ca.add_argument("--project", default="-Users-alexsbryan-dev-commonwealth-ai")
