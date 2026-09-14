@@ -44,6 +44,7 @@ import subprocess
 import sys
 import tempfile
 import tomllib
+from collections import Counter
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -165,7 +166,7 @@ def subcommand(name: str):
 # `word-owners` axis sweeps comes from the registry; this axis is the Peer bar,
 # so its word is its definition.
 _PEER_WORD = "Peer"
-_PEER_DEF = re.compile(
+_TYPE_DEF = re.compile(
     r"^\s*pub(?:\(crate\))?\s+(?:struct|enum|type|trait)\s+(\w+)")
 _COMMONWEALTH_PREFIX = "commonwealth/crates/"
 _WALK_SKIP = frozenset({"target", ".git", "node_modules"})
@@ -236,7 +237,7 @@ def peer_defs(root: Path) -> list[dict]:
         except OSError:
             continue
         for i, line in enumerate(lines):
-            m = _PEER_DEF.match(code_part(line))
+            m = _TYPE_DEF.match(code_part(line))
             if not m or _PEER_WORD not in m.group(1):
                 continue
             if m.group(1) in kept:
@@ -461,6 +462,218 @@ def cmd_shared_edges(args: list[str]) -> int:
     print(f"\n  value: {len(counted)} live untranslated edges "
           f"({len(r['translated'])} translated, {len(r['stale'])} stale, "
           f"{len(r['offname'])} off-name)")
+    return EXIT_OK
+
+
+# ── word-owners — dm-word-owners ────────────────────────────────────────────
+#
+# Every `[[context]]` owns a NOUN, matched ANYWHERE in a type name (`owns`) or
+# as the bare name (`owns_exact`, Ingest's `Source`). A definition carrying an
+# owned word must live inside its owner — a module tagged with that context, or
+# a crate that is that context's home. A definition in a module tagged with a
+# DIFFERENT context, or in a crate that is no context's home, is a violation.
+# `kernel` and `back-of-house` are the published language and the observer: a
+# definition there counts against NO owner and is PRINTED as exempt, never
+# dropped (DOMAINS.md §10.1; the registry's own comment at its head).
+#
+# TWO REGISTRY IDS ARE THE ONE CONSTANT HERE, and the row names them: the
+# exemption is "crates tagged kernel or back-of-house". Everything else — the
+# words, the owners, the tags, the homes — is read from the registry.
+#
+# THE GOODHART IS A ZERO-REFERENCE OWNER. The bar can hit target while the
+# predicate is false if a word is made unique by a compound name nobody reads,
+# so each definition prints its reference-site count and a zero-reference
+# definition is flagged (campaigns/domains.toml, dm-word-owners goodhart).
+_EXEMPT_CONTEXTS = frozenset({"kernel", "back-of-house"})
+_TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def _module_context(reg: dict, rel: str) -> str | None:
+    """The registry tag for a source path: exact file row, else longest dir row."""
+    best: str | None = None
+    best_len = -1
+    for row in reg.get("module", []):
+        p = row.get("path")
+        if not p:
+            continue
+        prefix = p if p.endswith("/") else p + "/"
+        if rel == p or rel.startswith(prefix):
+            if len(p) > best_len:
+                best = row.get("context")
+                best_len = len(p)
+    return best
+
+
+def word_owners(root: Path) -> dict:
+    """Classify every owned-word definition at `root` against its owner.
+
+    Returns `counted` (definitions outside their owner) and `exempt`
+    (kernel/back-of-house crates), each carrying the words it carries and a
+    reference-site count. One pass collects the definitions, a second counts
+    identifier occurrences so a zero-reference owner can be flagged.
+    """
+    root = Path(root)
+    reg = registry_for(root)
+    owned: list[tuple[str, str, bool]] = []
+    for c in reg.get("context", []):
+        for w in c.get("owns", []):
+            owned.append((w, c["id"], False))
+        for w in c.get("owns_exact", []):
+            owned.append((w, c["id"], True))
+    homes: dict[str, set[str]] = {}
+    exempt_crates: set[str] = set()
+    for c in reg.get("context", []):
+        for cr in c.get("crates", []):
+            homes.setdefault(cr, set()).add(c["id"])
+            if c["id"] in _EXEMPT_CONTEXTS:
+                exempt_crates.add(cr)
+
+    defs: list[dict] = []
+    for path in _rs_files(root):
+        try:
+            rel = path.relative_to(root).as_posix()
+        except ValueError:
+            rel = path.as_posix()
+        try:
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        crate = Path(_crate_dir(path, root)).name
+        for i, line in enumerate(lines):
+            m = _TYPE_DEF.match(code_part(line))
+            if m:
+                defs.append({"file": rel, "line": i + 1, "name": m.group(1),
+                             "crate": crate})
+
+    counted: list[dict] = []
+    exempt: list[dict] = []
+    for d in defs:
+        matched = [(w, o) for (w, o, exact) in owned
+                   if (d["name"] == w if exact else w in d["name"])]
+        if not matched:
+            continue
+        if d["crate"] in exempt_crates:
+            d["words"] = matched
+            exempt.append(d)
+            continue
+        tag = _module_context(reg, d["file"])
+        ctxs = {tag} if tag else homes.get(d["crate"], set())
+        bad = [(w, o) for (w, o) in matched if o not in ctxs]
+        if bad:
+            d["words"] = bad
+            counted.append(d)
+
+    names = {d["name"] for d in defs}
+    ndefs = Counter(d["name"] for d in defs)
+    counts: Counter = Counter()
+    for path in _rs_files(root):
+        try:
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            for tok in _TOKEN.findall(code_part(line)):
+                if tok in names:
+                    counts[tok] += 1
+    for d in counted + exempt:
+        d["refs"] = counts[d["name"]] - ndefs[d["name"]]
+    return {"counted": counted, "exempt": exempt}
+
+
+def _word_owners_detect(root: Path) -> list[dict]:
+    """The axis's own function: truthy iff an owned word is defined outside it."""
+    return word_owners(root)["counted"]
+
+
+def _word_registry(root: Path, tag: str) -> None:
+    """A registry with one owning context and one tagging context.
+
+    `tag` is the context the fixture module is tagged with, so the SAME source
+    is a violation when tagged `other` and in-owner when tagged `widget`.
+    """
+    (root / "quality").mkdir(parents=True, exist_ok=True)
+    (root / "quality" / "DOMAINS.toml").write_text(
+        '[[context]]\n'
+        'id = "widget"\n'
+        'kind = "core"\n'
+        'owns = ["Sprocket"]\n'
+        'owns_exact = ["Cog"]\n'
+        'crates = ["owner-crate"]\n'
+        '\n'
+        '[[context]]\n'
+        'id = "kernel"\n'
+        'kind = "published-language"\n'
+        'owns = []\n'
+        'crates = ["exempt-crate"]\n'
+        '\n'
+        '[[module]]\n'
+        f'path = "fixture/lib.rs"\n'
+        f'context = "{tag}"\n',
+        encoding="utf-8")
+
+
+def _word_positive(root: Path) -> None:
+    """A definition carrying an owned word, tagged a different context: caught."""
+    _word_registry(root, "other")
+    (root / "fixture").mkdir(parents=True, exist_ok=True)
+    (root / "fixture" / "lib.rs").write_text(
+        "pub struct SprocketThing {\n    n: u32,\n}\n", encoding="utf-8")
+
+
+def _word_negative(root: Path) -> None:
+    """Four refusals, each a plausible near-miss.
+
+    The owned word in its owner's module (`widget`); a definition in a
+    kernel-tagged crate (exempt, never counted); a name that carries the word
+    but is not an owned match (`owns_exact` `Cog` vs `Cogwheel`); and the word
+    in a `use`, a comment, a string and a variable, none of them a definition.
+    """
+    _word_registry(root, "widget")
+    (root / "fixture").mkdir(parents=True, exist_ok=True)
+    (root / "fixture" / "lib.rs").write_text(
+        "pub struct SprocketThing;\n"
+        "use x::SprocketOther;\n"
+        "// pub struct SprocketCommented;\n"
+        "const S: &str = \"SprocketString\";\n"
+        "fn f() { let sprocket_local = 1; }\n",
+        encoding="utf-8")
+    (root / "exempt-crate").mkdir(parents=True, exist_ok=True)
+    (root / "exempt-crate" / "lib.rs").write_text(
+        "pub struct SprocketInKernel;\n", encoding="utf-8")
+    (root / "other-crate").mkdir(parents=True, exist_ok=True)
+    (root / "other-crate" / "lib.rs").write_text(
+        "pub struct Cogwheel;\n", encoding="utf-8")
+
+
+AXES.append({
+    "id": "word-owners",
+    "detect": _word_owners_detect,
+    "positive": _word_positive,
+    "negative": _word_negative,
+})
+
+
+@subcommand("word-owners")
+def cmd_word_owners(args: list[str]) -> int:
+    """Print the violating definitions, their words, refs and the exempt set."""
+    r = word_owners(REPO)
+    counted = r["counted"]
+    if "--json" in args:
+        emit_measurement(len(counted))
+        return EXIT_OK
+    print("word-owners — definitions carrying a context-owned word outside "
+          "their owner\n  (owns = anywhere in the name; owns_exact = bare "
+          "name; kernel/back-of-house crates print exempt)\n")
+    for d in sorted(counted, key=lambda d: (d["crate"], d["file"], d["line"])):
+        words = ", ".join(f"{w} ({o})" for w, o in d["words"])
+        flag = "  ZERO-REF" if d["refs"] <= 0 else ""
+        print(f"  {d['name']:<34} {d['crate']:<30} refs={d['refs']:<4} "
+              f"word={words}{flag}")
+    for d in sorted(r["exempt"], key=lambda d: (d["crate"], d["file"], d["line"])):
+        words = ", ".join(f"{w} ({o})" for w, o in d["words"])
+        print(f"  [exempt] {d['name']:<26} {d['crate']:<30} word={words}")
+    print(f"\n  value: {len(counted)} definitions outside their owner "
+          f"({len(r['exempt'])} exempt in kernel/back-of-house crates)")
     return EXIT_OK
 
 
