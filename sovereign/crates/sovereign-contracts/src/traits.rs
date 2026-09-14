@@ -1613,6 +1613,12 @@ pub struct MeshScoredChunk {
 pub enum UnavailabilityReason {
     /// The index build never finished (ingest stalled / sync paused).
     NotBuilt,
+    /// Never built AND holds no rows — nothing was ever imported. Distinct
+    /// from `NotBuilt` because nothing is stalled and a rebuild fixes
+    /// nothing. Measured 2026-09-13 chaos soak: two July e2e folder corpora
+    /// with zero chunks were named on 19 answers as "hasn't finished
+    /// building yet", which the UX judge read as a fabricated failure.
+    Empty,
     /// The build finished but the vector index was never written.
     NoVectorIndex,
     /// Built with a different embedding model than the one now loaded, so
@@ -1633,6 +1639,7 @@ impl UnavailabilityReason {
     pub fn log_tag(&self) -> &'static str {
         match self {
             Self::NotBuilt => "index_not_built",
+            Self::Empty => "corpus_empty",
             Self::NoVectorIndex => "vector_index_missing",
             Self::DimMismatch { .. } => "dim_mismatch",
             Self::PeerUnreachable => "peer_unreachable",
@@ -1644,7 +1651,10 @@ impl UnavailabilityReason {
     /// read as a cold, broken refusal (see the readiness-disclosure step).
     pub fn user_phrase(&self) -> &'static str {
         match self {
-            Self::NotBuilt => "hasn't finished building yet (a sync or import may have paused)",
+            // No parentheses: the marker wraps each phrase in its own, and a
+            // nested pair rendered as "(… (… paused))".
+            Self::NotBuilt => "hasn't finished building yet — a sync or import may have paused",
+            Self::Empty => "has no documents in it yet",
             Self::NoVectorIndex => "isn't fully indexed for search yet",
             Self::DimMismatch { .. } => "needs a quick rebuild first",
             Self::PeerUnreachable => "is on another machine that couldn't be reached just now",
@@ -1660,10 +1670,18 @@ impl UnavailabilityReason {
             Self::NotBuilt | Self::NoVectorIndex | Self::DimMismatch { .. } => {
                 "rebuilding it in Settings → Knowledge → Rebuild will fix it"
             }
+            Self::Empty => "adding files to it will make it searchable",
             Self::PeerUnreachable => {
                 "it should come back on its own once that machine is available"
             }
         }
+    }
+
+    /// Could searching this corpus have changed the answer? False only for
+    /// `Empty`: a corpus with no rows hides nothing, so an answer that "does
+    /// not draw on it" has lost nothing and must not say otherwise.
+    pub fn withholds_content(&self) -> bool {
+        !matches!(self, Self::Empty)
     }
 }
 

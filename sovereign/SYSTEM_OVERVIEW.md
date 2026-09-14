@@ -3061,7 +3061,10 @@ change removes the check). Measured on the resident primary over the same
 pairs, 2026-09-04: the #57 paraphrase scores 0.9993 support where the
 conjunction refused it, while the embassy confabulation (0.0043) and an
 out-of-corpus control (0.0000) are refused exactly as before — one verdict
-changed, in one direction (§18.6). **The exact-value rule survives as a VETO,
+changed, in one direction (§18.6). A lone PART releases its bare answer, as the
+single-pair contract does: the label only tells parts apart, and when the model
+does not split the question its PART line restates it as an instruction
+("Identify …: A2A, MCP", 10 answers in the 2026-09-13 soak). **The exact-value rule survives as a VETO,
 in code** (§7.6): `numeric_veto` refuses a pair whose answer carries a complete
 number token the evidence does not, runs BEFORE the probe, and may only refuse
 — no probe verdict licenses a number the evidence lacks. **Truncation is
@@ -3612,8 +3615,9 @@ scoped eval scored plausible numbers over a corpus that was never searched
 (note 89d5f75a). The contract now:
 
 - **One record, one field.** `UnavailabilityReason` is a closed enum
-  (`NotBuilt` / `NoVectorIndex` / `DimMismatch` / `PeerUnreachable`) and
-  `CorpusUnavailable` pairs it with the corpus id. Both loss sites write
+  (`NotBuilt` / `Empty` / `NoVectorIndex` / `DimMismatch` / `PeerUnreachable`) and
+  `CorpusUnavailable` pairs it with the corpus id. `Empty` is a never-built
+  corpus with zero rows: nothing stalled, so it is not called `NotBuilt`. Both loss sites write
   `PipelineState::unavailable_corpora` and nothing else; `main_retrieval_mesh`
   is the only writer, merging the local and mesh halves local-wins. EMPTY
   means "nothing was lost", never "nobody looked" — the mesh client's
@@ -3630,7 +3634,10 @@ scoped eval scored plausible numbers over a corpus that was never searched
   pure function of the loss list, applied immediately after the gap check on
   all four answer surfaces (KQ non-streaming, KQ stream, DeepQuery stream,
   simple) — the same position and rationale as the quote-verification
-  guardrail beside it. `step_readiness_disclosure` still injects assistant
+  guardrail beside it. It names only losses that
+  `UnavailabilityReason::withholds_content` — an `Empty` corpus hides nothing,
+  and "this answer does not draw on it" would imply a miss (2026-09-13 chaos
+  soak: two zero-row folder corpora rode on 19 answers). `step_readiness_disclosure` still injects assistant
   guidance for the empty-pool case, but nothing load-bearing depends on a
   model choosing to relay it (ARCH §7.6). The gap check remains the one
   did-we-answer judge; no second judge was minted.

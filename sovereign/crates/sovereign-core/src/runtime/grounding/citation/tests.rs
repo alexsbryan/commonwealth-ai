@@ -752,6 +752,30 @@ async fn an_answer_supported_by_the_matched_chunk_grounds_when_the_quote_alone_i
 }
 
 #[tokio::test]
+async fn a_single_part_releases_its_answer_without_the_models_label() {
+    // 2026-09-13 chaos soak: the model does not split a simple question, and
+    // writes its one PART line as an instruction. Ten answers shipped as
+    // "Identify the two protocols mentioned …: A2A, MCP". A label only tells
+    // parts apart; with one part it restates the question.
+    let parts = vec![(
+        "Identify the object stolen from the office".to_string(),
+        "Now the walnut case hung open and the chronometer was gone, and the \
+             dust on the shelf below showed the shape of its base."
+            .to_string(),
+        "the chronometer".to_string(),
+    )];
+    let chunk = "Now the walnut case hung open and the chronometer was gone, and the \
+                 dust on the shelf below showed the shape of its base."
+        .to_string();
+    match outcome(Some(true), &parts, &[chunk], 0).await {
+        CitationOutcome::Grounded { answer, .. } => {
+            assert_eq!(answer, "the chronometer", "no label on a lone part");
+        }
+        _ => panic!("a supported single part must ground"),
+    }
+}
+
+#[tokio::test]
 async fn a_refused_probe_demotes_the_whole_compound_release() {
     // The embassy guard the support check was built on: a REAL quote, an
     // answer value the text withholds. The probe refuses it, and one refused

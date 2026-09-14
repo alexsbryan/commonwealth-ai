@@ -40,7 +40,13 @@ pub(crate) fn corpus_unavailability(
     query_dims: usize,
 ) -> Option<UnavailabilityReason> {
     if !info.indexes_built {
-        return Some(UnavailabilityReason::NotBuilt);
+        // `chunk_count` is `count_rows` on the table (`CorpusIndex::info`
+        // propagates its error), so 0 means nothing was imported, not a failed read.
+        return Some(if info.chunk_count == 0 {
+            UnavailabilityReason::Empty
+        } else {
+            UnavailabilityReason::NotBuilt
+        });
     }
     if query_dims == 0 {
         return None;
@@ -968,7 +974,9 @@ mod allow_list_tests {
     use super::apply_corpus_allow_list;
     use super::corpora_outside_scope;
     use super::corpora_outside_seal;
+    use super::corpus_unavailability;
     use super::rerank_config_for_corpus;
+    use super::UnavailabilityReason;
 
     /// A pool chunk carrying nothing but its corpus id — all these tests read.
     ///
@@ -1130,6 +1138,27 @@ mod allow_list_tests {
             stream: None,
             display: None,
         }
+    }
+
+    /// Recorded from disk 2026-09-13: `folder-df-enrich-test-*` has
+    /// `indexes_built: false` and zero rows. Nothing stalled — nothing was
+    /// imported — so it is `Empty`, not `NotBuilt`. A never-built corpus
+    /// WITH rows (`wikipedia-newsworthy`, 26) is still `NotBuilt`.
+    #[test]
+    fn a_never_built_corpus_with_no_rows_is_empty_not_stalled() {
+        let mut empty = idx("folder-aurelia", None);
+        empty.indexes_built = false;
+        empty.vector_index_built = false;
+        assert_eq!(
+            corpus_unavailability(&empty, 1024),
+            Some(UnavailabilityReason::Empty)
+        );
+        let mut stalled = empty.clone();
+        stalled.chunk_count = 26;
+        assert_eq!(
+            corpus_unavailability(&stalled, 1024),
+            Some(UnavailabilityReason::NotBuilt)
+        );
     }
 
     #[test]

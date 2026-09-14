@@ -45,7 +45,15 @@ const MARKER_PREFIX: &str = "_Sources unavailable:";
 ///
 /// This is a PURE function of the loss list: same losses, same line, no
 /// model, no I/O, no clock. That is what makes it assertable in a lane.
+///
+/// Only losses that [`UnavailabilityReason::withholds_content`] are named: the
+/// line says "this answer does not draw on them", which about an empty corpus
+/// implies a miss that did not happen.
 pub(crate) fn unavailability_marker(losses: &[CorpusUnavailable]) -> Option<String> {
+    let losses: Vec<&CorpusUnavailable> = losses
+        .iter()
+        .filter(|l| l.reason.withholds_content())
+        .collect();
     if losses.is_empty() {
         return None;
     }
@@ -119,6 +127,18 @@ pub(crate) fn unavailability_guidance(losses: &[CorpusUnavailable]) -> Option<St
 /// sits beside. Idempotent: an answer that already carries a marker is
 /// returned unchanged, so a path that runs the append twice cannot stutter.
 pub(crate) fn append_unavailability_marker(answer: &str, losses: &[CorpusUnavailable]) -> String {
+    let empty: Vec<&str> = losses
+        .iter()
+        .filter(|l| !l.reason.withholds_content())
+        .map(|l| l.corpus_id.as_str())
+        .collect();
+    if !empty.is_empty() {
+        tracing::debug!(
+            target: "retrieval.pipeline",
+            corpora = ?empty,
+            "answer surface: empty corpora hide nothing — left out of the unavailability marker"
+        );
+    }
     let Some(marker) = unavailability_marker(losses) else {
         return answer.to_string();
     };
@@ -193,6 +213,41 @@ mod tests {
             out.contains("hasn't finished building yet"),
             "the plain-language cause must reach the user; got: {out}"
         );
+    }
+
+    /// The 2026-09-13 chaos shape: two zero-row folder corpora rode on 19
+    /// answers as "hasn't finished building yet". An empty corpus hides
+    /// nothing, so it is not named — but a real loss beside it still is.
+    #[test]
+    fn an_empty_corpus_is_not_named_as_a_loss() {
+        let empty = CorpusUnavailable::new("folder-aurelia", UnavailabilityReason::Empty);
+        assert_eq!(unavailability_marker(std::slice::from_ref(&empty)), None);
+        let answer = "Parcel 1234 is assessed at $1.2M.";
+        assert_eq!(
+            append_unavailability_marker(answer, std::slice::from_ref(&empty)),
+            answer
+        );
+        let line = unavailability_marker(&[empty, peer("maple-house")]).expect("real loss renders");
+        assert!(!line.contains("folder-aurelia"), "got: {line}");
+        assert!(
+            line.contains("maple-house") && line.contains("it."),
+            "got: {line}"
+        );
+    }
+
+    /// The marker wraps each cause in parentheses; a cause carrying its own
+    /// pair rendered as "(… (… paused))" on every NotBuilt answer.
+    #[test]
+    fn no_cause_nests_parentheses() {
+        for r in [
+            UnavailabilityReason::NotBuilt,
+            UnavailabilityReason::Empty,
+            UnavailabilityReason::NoVectorIndex,
+            UnavailabilityReason::DimMismatch { built: 768 },
+            UnavailabilityReason::PeerUnreachable,
+        ] {
+            assert!(!r.user_phrase().contains(['(', ')']), "{r:?}");
+        }
     }
 
     /// Five losses is the §9.6 count and all five are named; past that we

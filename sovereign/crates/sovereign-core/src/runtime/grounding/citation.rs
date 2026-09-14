@@ -662,12 +662,21 @@ async fn multiquote_outcome(
         );
         return CitationOutcome::Abstain;
     }
+    // A label only tells parts apart. When the model did not split the
+    // question, its lone PART line restates it, often as an instruction —
+    // "Identify the two protocols …: A2A, MCP" (2026-09-13 chaos soak, 10
+    // answers). One part releases exactly as the single-pair contract does.
+    let labelled = parts.len() > 1;
     let mut answer = String::new();
     for (label, _, part_answer, _) in &grounded {
         if !answer.is_empty() {
             answer.push('\n');
         }
-        answer.push_str(&format!("{label}: {part_answer}"));
+        if labelled {
+            answer.push_str(&format!("{label}: {part_answer}"));
+        } else {
+            answer.push_str(part_answer);
+        }
     }
     if !unanswered.is_empty() {
         answer.push_str(&format!(
