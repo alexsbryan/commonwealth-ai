@@ -22,7 +22,7 @@ import collections, os, re, sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HOSTS = [
     "sovereign/crates/sovereign-mesh/src",
-    "commonwealth/crates/commonwealth-api/src",
+    "sovereign/crates/sovereign-api/src",
     "sovereign/crates/sovereign-cli-daemon/src",
     "sovereign/crates/sovereign-server/src",
     "studio/crates/sovereign-workflow-host/src",
@@ -97,6 +97,11 @@ def classify(path):
     return "UNCLASSIFIED"
 
 def main():
+    for h in HOSTS:
+        if not os.path.isdir(os.path.join(ROOT, h)):
+            print(f"error: missing host directory: {h}", file=sys.stderr)
+            return 1
+
     rows = []
     for h in HOSTS:
         for dp, _, fs in os.walk(os.path.join(ROOT, h)):
@@ -136,4 +141,4 @@ def main():
             print("  ", p)
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main() or 0)
