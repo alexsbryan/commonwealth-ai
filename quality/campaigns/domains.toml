@@ -285,17 +285,35 @@ instrument   = "python3 scripts/domains-census.py queue --json"
 goodhart     = "this can hit target while the predicate is still false if a crate is made 100% its own context by RETAGGING modules (the tag table is data; a tag change with no git mv in the same commit is refused by review) or by moving a cluster into a destination that is itself the wrong context — the plan asserts dest is in the context's `crates` list and enqueues any destination whose share drops"
 kill         = "if a move empties a crate's window (no destination tier satisfies both its deps and its consumers) and the only exit is a new [[exception]] row, the cluster is two clusters — split it and re-plan; never widen the ledger to keep the loop moving"
 
-# ── NOT YET REGISTERED, deliberately ────────────────────────────────────────
+[[bar]]
+id           = "dm-context-congestion"
+one_line     = "A change stops needing to touch many contexts at once"
+derives_from = "DOMAINS.md §8 (the outcome) — nc-congestion's shape at the CONTEXT altitude; minted 2026-09-14 by scripts/domains-census.py congestion"
+status       = "open"
+# THE ONE OUTCOME BAR. Every other bar here measures structure — this one
+# measures whether the structure bought anything, since the point of bounded
+# contexts is that a change stops needing to touch five of them at once. A
+# ceiling to HOLD, not a climb (campaign K7). It was held back until its floor
+# could be minted, deliberately: a hold-bar with an invented target is
+# telemetry theater (co-lineage refuses an instrument with no threshold for the
+# same reason). It is the ninth bar, at the 9-bar cap.
 #
-# `dm-context-congestion` — distinct CONTEXTS touched per .rs commit, by author
-# month, over the registry's module tags: the one OUTCOME bar (nc-congestion's
-# shape, at the context altitude). It is the number that says whether bounded
-# contexts bought anything. It is NOT declared here because it has no minted
-# floor and a hold-bar with an invented target is telemetry theater
-# (co-lineage refuses an instrument with no threshold for the same reason).
-# domains-3 mints it over the last 90 days of history and registers it as the
-# eighth bar in the same commit as the instrument. The 9-bar cap leaves room
-# for it and one more; a ninth is a smell.
+# MEASURED, distinct module-tag contexts per `.rs` commit by AUTHOR month over
+# the last 90 days (the rolling window), 2026-09-14:
+#   2026-06  2.04  (n=90)
+#   2026-07  1.99  (n=252)
+#   2026-08  1.75  (n=344)
+#   2026-09  1.70  (n=509)
+# The value is the mean of the monthly means (1.87). Untagged files are
+# reported, never counted: the registry tags the current tree, so a path that
+# has since moved has no row and UNDER-counts, which a hold-bar can tolerate.
+floor        = 1.87
+floor_basis  = "2026-09-14, `scripts/domains-census.py congestion` over the last 90 days of `.rs` commits by AUTHOR month — the mean of the four monthly means of distinct module-tag contexts per commit (1,195 commits; untagged files reported, not counted). A rolling window, so a re-mint is a row edit"
+target       = 1.87
+direction    = "lower_is_better"
+instrument   = "python3 scripts/domains-census.py congestion --json"
+goodhart     = "this can hit target while the predicate is still false if commits get SMALLER rather than less coupled — nc-congestion measured exactly this confound (raw congestion tracks files-per-commit almost exactly), so a month with more single-file commits reads lower for reasons that are not convergence; the instrument prints files-per-commit and the untagged rate beside the value"
+kill         = "if this rises above its floor while the structural bars improve, the campaign is buying structure at the cost of the thing structure was for — stop and re-read the strategy (campaign K7)"
 
 # ── The ladder ──────────────────────────────────────────────────────────────
 #

@@ -37,6 +37,7 @@ Exit codes: 0 value valid (or self-test green), 3 artifact absent,
 """
 from __future__ import annotations
 
+import datetime as _dt
 import fnmatch
 import hashlib
 import json
@@ -1255,6 +1256,206 @@ def cmd_queue(args: list[str]) -> int:
               f"{row['total']:>7}  {share:5.1f}%")
     print(f"\n  tag-table digest: {_tag_digest(registry())}")
     print(f"  value: {len(r['queue'])} crates not yet 100% their own context")
+    return EXIT_OK
+
+
+# ── congestion — dm-context-congestion ──────────────────────────────────────
+#
+# The campaign's one OUTCOME bar: distinct CONTEXTS touched per `.rs` commit,
+# by AUTHOR month, over the registry's module tags — nc-congestion's shape at
+# the context altitude (campaigns/domains.toml, the comment that held this bar
+# back until its floor could be minted). The structural bars measure the
+# demolition; this one measures whether the demolition bought anything, since
+# a change that no longer needs to touch five contexts at once is the point.
+#
+# BUCKET BY AUTHOR DATE, NOT COMMITTER DATE. This history was rewritten around
+# 2026-08-11 and committer dates cluster there (nc-congestion's header). The
+# window is bounded by `git log --since` — a COMMITTER-date pre-filter — and
+# then filtered by the author date in `%aI`, so a rewritten commit is bucketed
+# where its author wrote it, not where the rewrite put it.
+#
+# THE WINDOW IS THE LAST 90 DAYS, AND THE VALUE IS THE AUTHOR-MONTH MEAN: the
+# mean distinct-contexts-per-commit within each author month, averaged over the
+# months the window holds (each month weighted equally, so a partial month does
+# not dominate). The per-month series is printed beside it. `--since` and the
+# author-date filter both derive from the machine clock, so a fixture committed
+# now is always inside its own window.
+#
+# A FILE WITH NO MODULE ROW IS UNTAGGED, NEVER GUESSED. The registry tags the
+# CURRENT tree; a path that has since moved or been deleted has no row, so a
+# commit's distinct-context count is over its tagged files and the untagged
+# count is reported beside the value (ARCH principle 6 — absence is reported,
+# never defaulted). This UNDER-counts historical congestion, which is the
+# direction a hold-bar can tolerate: it can never manufacture a pass.
+#
+# TWO CONSTANTS THE REGISTRY CANNOT SUPPLY, the same standing as peer-outside's
+# word and atom-outside's roots: the window length (90 days, spelled in the
+# objective and the bar) and the shape of a `git log` header. Everything else —
+# the contexts, the tags — is data.
+_WINDOW_DAYS = 90
+_CONGESTION_HEADER = re.compile(r"^([0-9a-f]{40}) (\S+)$")
+
+
+def _git_congestion_rows(root: Path, cutoff: str) -> list[tuple]:
+    """[(sha, month, {contexts}, untagged_files, rs_files)] per `.rs` commit.
+
+    One row per commit that touches a tracked `*.rs` file and whose AUTHOR date
+    is on or after `cutoff`. A commit whose every changed `.rs` file is
+    untagged still yields a row (with an empty context set and every file
+    untagged), so absence is reported rather than dropped.
+    """
+    root = Path(root)
+    try:
+        r = subprocess.run(
+            ["git", "log", f"--since={cutoff}", "--pretty=format:%H %aI",
+             "--name-only", "--", "*.rs"],
+            cwd=root, capture_output=True, text=True)
+    except OSError:
+        return []
+    if r.returncode != 0:
+        return []
+    reg = registry_for(root)
+    rows: list[tuple] = []
+    state: dict = {"sha": None, "month": None, "author": None, "files": set()}
+
+    def flush() -> None:
+        sha, author = state["sha"], state["author"]
+        files = state["files"]
+        if sha is None or not files or author is None or author[:10] < cutoff:
+            return
+        ctxs: set[str] = set()
+        untagged = 0
+        for f in files:
+            c = _module_context(reg, f)
+            if c is None:
+                untagged += 1
+            else:
+                ctxs.add(c)
+        rows.append((sha, state["month"], ctxs, untagged, len(files)))
+
+    for line in r.stdout.splitlines():
+        line = line.rstrip()
+        if not line:
+            continue
+        m = _CONGESTION_HEADER.match(line)
+        if m:
+            flush()
+            state = {"sha": m.group(1), "author": m.group(2),
+                     "month": m.group(2)[:7], "files": set()}
+            continue
+        state["files"].add(line)
+    flush()
+    return rows
+
+
+def congestion(root: Path, since_days: int = _WINDOW_DAYS) -> dict | None:
+    """The author-month congestion table at `root`, or None with no history.
+
+    `months` maps a month to `{n, mean, untagged, files}` (means are per-commit
+    averages within the month). `value` is the mean of the monthly means,
+    rounded to 2. `congested` lists the commits touching two or more distinct
+    contexts — the axis's own positive.
+    """
+    cutoff = (_dt.date.today() - _dt.timedelta(days=since_days)).isoformat()
+    rows = _git_congestion_rows(root, cutoff)
+    if not rows:
+        return None
+    per_month: dict[str, list[tuple]] = {}
+    for _sha, month, ctxs, untagged, nfiles in rows:
+        per_month.setdefault(month, []).append((len(ctxs), untagged, nfiles))
+    months: dict[str, dict] = {}
+    for mo in sorted(per_month):
+        vals = per_month[mo]
+        months[mo] = {
+            "n": len(vals),
+            "mean": sum(v[0] for v in vals) / len(vals),
+            "untagged": sum(v[1] for v in vals) / len(vals),
+            "files": sum(v[2] for v in vals) / len(vals),
+        }
+    value = sum(m["mean"] for m in months.values()) / len(months)
+    congested = [{"sha": s, "month": mo, "contexts": len(c), "files": n}
+                 for s, mo, c, _u, n in rows if len(c) >= 2]
+    return {"months": months, "value": round(value, 2), "commits": len(rows),
+            "congested": congested, "cutoff": cutoff}
+
+
+def _congestion_detect(root: Path) -> list[dict]:
+    """The axis's own function: truthy iff a commit touches 2+ contexts."""
+    c = congestion(root)
+    return c["congested"] if c else []
+
+
+def _congestion_fixture(root: Path, cross_context: bool) -> None:
+    """A one-commit git repo; the commit crosses contexts or stays in one.
+
+    `alpha` tags two files and `beta` one. The cross-context commit stages one
+    `alpha` file and the `beta` file (two contexts); the single-context commit
+    stages BOTH `alpha` files — so the negative catches a distinct-count that
+    counts files rather than contexts.
+    """
+    (root / "quality").mkdir(parents=True, exist_ok=True)
+    (root / "quality" / "DOMAINS.toml").write_text(
+        '[[module]]\n'
+        'path = "fixture/a.rs"\n'
+        'context = "alpha"\n\n'
+        '[[module]]\n'
+        'path = "fixture/a2.rs"\n'
+        'context = "alpha"\n\n'
+        '[[module]]\n'
+        'path = "fixture/b.rs"\n'
+        'context = "beta"\n', encoding="utf-8")
+    (root / "fixture").mkdir(parents=True, exist_ok=True)
+    for name in ("a.rs", "a2.rs", "b.rs"):
+        (root / "fixture" / name).write_text("pub struct A;\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-q"], cwd=root)
+    touched = (["fixture/a.rs", "fixture/b.rs"] if cross_context
+               else ["fixture/a.rs", "fixture/a2.rs"])
+    subprocess.run(["git", "add", *touched], cwd=root)
+    subprocess.run(
+        ["git", "-c", "user.email=census@test", "-c", "user.name=census",
+         "-c", "commit.gpgsign=false", "commit", "-q", "-m", "fixture"],
+        cwd=root)
+
+
+def _congestion_positive(root: Path) -> None:
+    """A commit touching two contexts: caught as congested."""
+    _congestion_fixture(root, cross_context=True)
+
+
+def _congestion_negative(root: Path) -> None:
+    """A commit touching two files of ONE context: refused."""
+    _congestion_fixture(root, cross_context=False)
+
+
+AXES.append({
+    "id": "congestion",
+    "detect": _congestion_detect,
+    "positive": _congestion_positive,
+    "negative": _congestion_negative,
+})
+
+
+@subcommand("congestion")
+def cmd_congestion(args: list[str]) -> int:
+    """Print the author-month congestion table, or the measurement line."""
+    c = congestion(REPO)
+    if c is None:
+        print(f"congestion: no `.rs` commits in the last {_WINDOW_DAYS} days — "
+              "value NOT reported", file=sys.stderr)
+        return EXIT_ARTIFACT_ABSENT
+    if "--json" in args:
+        emit_measurement(c["value"])
+        return EXIT_OK
+    print("congestion — distinct contexts touched per `.rs` commit, AUTHOR "
+          f"month\n  (window: last {_WINDOW_DAYS} days, author date; a file "
+          "with no module row is untagged and reported)\n")
+    print(f"  {'month':9} {'mean':>6} {'untagged':>9} {'files':>7}  n")
+    for mo, d in c["months"].items():
+        print(f"  {mo:9} {d['mean']:>6.2f} {d['untagged']:>9.2f} "
+              f"{d['files']:>7.2f}  {d['n']}")
+    print(f"\n  value: {c['value']} (author-month mean over "
+          f"{len(c['months'])} months, {c['commits']} commits; "
+          f"{len(c['congested'])} commits touched 2+ contexts)")
     return EXIT_OK
 
 
