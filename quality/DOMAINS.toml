@@ -10,7 +10,16 @@
 #
 # `owns` are FAMILY HEADS: the instrument matches the word anywhere in a type
 # name (`PeerFoo`, `FooPeer`, `IrohPeerPath`), not as a prefix. Rung 3's
-# inventory found 21 definitions a prefix sweep misses.
+# inventory found 21 definitions a prefix sweep misses. `owns_exact` matches
+# the bare type name only — for a word whose kin mean something else (Ingest's
+# `Source`: 72 kin mean "which producer"). Decided 2026-09-14, rung 4:
+#   - ROLE SUFFIXES ARE NOT WORDS. Candidate, Record, View, Kind, Result, Row,
+#     Dto are legal in every context; a context owns a NOUN. (`Candidate` has
+#     23 kin across four contexts; owning it would rename TensionCandidate.)
+#   - `kernel` and `back-of-house` tagged crates count against NO owner: the
+#     published language is every context's, and back-of-house may name what
+#     it observes (noun-convergence rung 3). A definition there is exempt;
+#     the instrument prints exempt hits beside the value so they stay visible.
 #
 # `status` is "kept" or "merged-into:<id>". A merge is the §8 kill bar firing
 # on purpose; it edits this row, lowers dm-contexts-liftable's target by one,
@@ -25,11 +34,19 @@ declared = "2026-09-13"
 id = "understanding"
 kind = "core"
 question = "what is this material about?"
-owns = ["Atom", "Tension", "Ontology", "Seed", "Atlas"]
-# `Gap` is defined three ways (atlas / epistemic / deep-research) and `Domain`
-# names the plugin, not the atlas noun — both are §5 shared-word calls for
-# rung 4, not owned words yet. `Cluster` is never persisted under atlas/ and
-# is not a published noun (measured 2026-09-13).
+owns = ["Atom", "Tension", "Ontology", "Seed", "Atlas", "Lacuna", "FieldModel"]
+# DECIDED 2026-09-14 (rung 4, registry [[collision]] rows): `Gap` stays
+# Answering's canonical (quality/CONCEPTS.toml:831-843 already said so); the
+# atlas detector's `Gap` (enrichment/atlas/gaps.rs:56) becomes `Lacuna` (49
+# sites / 11 files; atlas/gaps.json and its `gaps` key stay via serde rename);
+# deep_research's icd `Gap` becomes `GapRow`. The atlas "domain" has NO type
+# (`git grep domains.json -- '*.rs'` = 0), so Understanding does not take
+# `Domain`; the plugin `Domain` becomes `FieldModel` (45 refs, 2 crates) and
+# `DomainRegistry` -> `FieldModelRegistry`. `Seed`'s six homonyms rename apart
+# (SeedEdit->ProbeEdit, SeededFile->ProbedFile, SeedMemory->FixtureMemory,
+# SeededResponse/SeededWire->RulesAsserted*, SeedPlan->ConversationFixturePlan;
+# 37 refs / 11 files); SeedError/SeedReport are Understanding's own. `Cluster`
+# is never persisted under atlas/ (writer.rs has zero matches) — not a noun.
 package = ""
 lift = ""
 applicable_as = "point it at a folder, get back what the material is about — its domains, its tensions, its gaps; corpus-mcp already reads its output against a bare llama-server"
@@ -53,10 +70,16 @@ status = "kept"
 id = "ingest"
 kind = "supporting"
 question = "how do bytes become chunks?"
-owns = ["Source", "Recipe", "Extractor", "Chunk", "Acquirer"]
-# `Source` is in quality/baselines/concepts.txt's duplicate set and DOMAINS §5
-# also proposed it as Knowledge's word for a peer-as-source. It is Ingest's
-# (§4); Knowledge's word is a rung-4 decision and is NOT `Source`.
+owns = ["Recipe", "Extractor", "Chunk", "Acquirer"]
+owns_exact = ["Source"]
+# `Source` is Ingest's WORD and the kernel's TYPE: canonical is
+# `kernel_types::origin::Source` (published language, exempt), and corpus-engine
+# defines no `Source` at all. Exact match, because 72 kin mean "which producer".
+# The other three bare `Source`s rename apart (rung 7): KeySet (6 sites),
+# ItemSet (12, studio), BundleLocation (10). DOMAINS §5's "Knowledge says
+# Source" is withdrawn: the peer-as-source concept is not a context — its atlas
+# half is Understanding's (`RemoteAtlasView`, `AtlasPullLead`) and its
+# ask-a-peer half is Retrieval's (`RemoteIndexTarget`, `RemoteIndexReply`).
 package = ""
 lift = ""
 applicable_as = "a recipe-driven document pipeline"
@@ -78,11 +101,19 @@ status = "kept"
 id = "serving"
 kind = "supporting"
 question = "which engine answers this, and can I prove why?"
-# The word for a serving-side peer is a RUNG-4 DECISION. DOMAINS §5 proposed
-# `Candidate`; `converge noun Candidate` finds five first-party definitions in
-# five crates (2026-09-13), so it is not exclusive and a sixth would be the
-# disease. Left out of `owns` until decided; dm-word-owners reads `owns`.
-owns = ["Slot", "Admission", "Replay", "Decision"]
+# DECIDED 2026-09-14 (rung 4): the ranked thing is a `Venue` — zero
+# definitions, one kin (`kernel_types::quality::VenueAction`,
+# kernel-types/src/quality/triggers.rs:36, 18 sites / 3 files) renamed apart to
+# `TriggerAction` in rung 5. `Candidate` refused (5 defs + 23 kin — a role
+# suffix, not a noun); `Seat` refused as a near-synonym of `Slot`
+# (oicp-types/src/slot.rs:54); `Lender` refused because guest_lender.rs:17-27
+# already uses it for the pinned-grant concept and says "a lender is not a
+# peer". Admission's caller is a `Principal` — zero definitions, three of four
+# kin are the owner (sovereign-api/src/principal.rs:93,125,147), and it
+# CONVERGES with DAEMON_CORE.md §1's `principal -> Scope` table: zero renames.
+# Its owner may move to Answering (beside `Scope`) when daemon-core Phase 5
+# lands one resolver; until then Admission is its only consumer.
+owns = ["Venue", "Principal", "Slot", "Admission", "Replay", "Decision"]
 package = ""          # rung 9 declares [[package]] serving
 lift = ""             # rung 9 writes scripts/serving-lift.sh
 applicable_as = "a router in front of N OpenAI-compatible endpoints with admission control and replayable decisions"
@@ -932,7 +963,7 @@ note = ""
 path = "sovereign/crates/sovereign-api/src/frontdoor.rs"
 context = "host"
 lines = 5820
-note = "NOT Serving. Its whole surface reshapes a request body for a third-party agent harness - Harness enum, CODEX_TOOL_KEEPLIST (:219), heredoc canonicalization, path scrubbing, anti-repetition. It answers what prompt does this harness need, not which engine answers this. One non-test caller: routes_responses.rs:97-111. 5820 lines, 13pc of all Serving, and carrying it into a Serving crate makes the lift test drag harness-specific prompt surgery no third party wants"
+note = "NOT Serving. Its whole surface reshapes a request body for a third-party agent harness - Harness enum, CODEX_TOOL_KEEPLIST (:219), heredoc canonicalization, path scrubbing, anti-repetition. It answers what prompt does this harness need, not which engine answers this. CORRECTED 2026-09-14 (rung 4): TWO production callers, 23 sites - routes_responses.rs (14) and routes_inference.rs (9); the file's 40 raw hits include 25 in its own #[cfg(test)] module. Both callers sit above the routing decision and call it back, which strengthens Host: routes_inference cannot move without frontdoor. 5820 lines, 13pc of all Serving, and carrying it into a Serving crate makes the lift test drag harness-specific prompt surgery no third party wants"
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/headers.rs"
@@ -1310,7 +1341,7 @@ dead_note = "zero references anywhere outside the crate. TierQueueDepths has two
 live = [
     "InferenceStateStore - 5 refs: sovereign-api/src/state.rs:23, :640, :1695; sovereign-mesh/tests/main/models_http_e2e.rs:189",
     "InferencePlan - 9 refs: sovereign-api/src/routes_internal/gossip.rs:15, :180; rest in sovereign-mesh-test-harness",
-    "MeshPlan - 6 refs, ALL in sovereign-mesh-test-harness/src/simulated_mesh.rs:10, :195, :202",
+    # MeshPlan REMOVED from live 2026-09-14 (rung 4): its 6 refs are one import plus three uncalled fns; deleting the routing family takes 4 of its 7 fields, and it dies with 4 store_adapter methods + 3 harness helpers, all zero-caller (registry [[collision]] family routing-model).
     "ShardPlan - 12 real refs, all sovereign-mesh-test-harness/tests/integration.rs; 3 further hits are unrelated fixture strings in corpus-engine/tests/main/watcher_e2e.rs:64-66 and sovereign-tools/tests/main/e2e_code_intel.rs:267-327",
     "ShardAssignment - 7 refs, all sovereign-mesh-test-harness",
     "LayerRange - 7 refs, all sovereign-mesh-test-harness",
@@ -1381,22 +1412,21 @@ inward_callers = [
 inward_callers_note = "Eight production sites in ONE crate (bootstrap.rs:2301 and :2308 are the CompositeEndpointSource assembly and the constructor it feeds, counted as one site in prose). sovereign-core has ZERO: its Cargo.toml names no sovereign-mesh / -api / -serving, and every sovereign_mesh:: string inside it is a doc comment. The seam is the trait InferenceProvider at sovereign/crates/sovereign-contracts/src/traits.rs:281 - already a leaf."
 rename = "Fabric says Member; Serving says Candidate (DOMAINS.md section 5 call 1). PeerInferenceEndpoint -> Candidate, PeerEndpointSource -> CandidateSource, PeerCandidateView -> CandidateView. The translation already exists and is already the only door; Phase C is a rename plus moving this function to the Fabric side of the seam, not a new mechanism."
 
-# ═══ Nouns and edges — Peer inventory 2026-09-13 (anywhere-in-name sweep; 72 nouns, 13 edges); rung 4 turns proposed: into decided: ═══
-# domains-nouns.toml - Phase A registry: every type whose NAME CONTAINS "Peer".
-# Instrument scratchpad/peer-count.sh; four mode flags: --root DIR | --prefix STR | --all (add
-#   private/test) | --anywhere (the word anywhere in the name, not only as a prefix). Counts as
-#   defs/crates: prefix-pub 39/13 | prefix-all 51/14 | anywhere-pub 50/14 | anywhere-all 72/17.
-# anywhere-pub OUTSIDE commonwealth/crates: 35 of 50, in 9 crates (sovereign-mesh, -api, -contracts,
-#   -tools, -desktop, -cli-llm, corpus-engine, oicp-types, kernel-types); Fabric holds the other 15.
-#   Run the bar with --anywhere: DOMAINS.md §8 counts the PREFIX, which a rename to MeshPeerFoo
-#   passes while moving no coupling at all.
-# CARVE-OUTS, not renames; neither takes any of the five context words. C8 PeerStore/StoreError/
-#   Entry/SoloPeerStore/MeshPeerStore: "peer" is an adjective on the STORE -> ReplicatedKv.
-#   C9 PeerAnswer: an egress release class, sole door kernel-types/src/answer.rs:438
-#   bound_for_peer - renaming it weakens a custody gate.
-# PeerRow is defined TWICE, two concepts: commonwealth-transport/src/fanout.rs:70 (fan-out row) and
-#   sovereign-cli-llm/src/mesh_travel.rs:168 (measurement row). ONE live-path fact has THREE spellings:
-#   PeerPath(commonwealth-transport/src/iroh_path.rs:20) read as PeerPathSnapshot(:74) AND PeerTransportPath(commonwealth-media/src/reach.rs:29, stringified), enveloped by IrohPeerPath(sovereign-mesh/src/daemon.rs:483) and PeerPathObservation(iroh_watchdog.rs:84).
+# ═══ Nouns — Peer inventory 2026-09-13, ADJUDICATED 2026-09-14 by rung domains-4 (72 rows: keep 11 · rename 56 · merge 5 · delete 0; every rename carries its git-grep site count) ═══
+# domains-nouns.decided.toml — rung domains-4 adjudication output (2026-09-14).
+# The same 72 [[noun]] rows as quality/DOMAINS.toml:1401-2192, every `disposition`
+# flipped from `proposed:*` to `decided:keep|rename|delete|merge`. `word` carries the
+# FULL new type name for a rename and the `file:line Name` of the survivor for a merge.
+# Every rename cites its reference-site count from `git grep -o \b<Name>\b -- *.rs :!target :!studio`.
+#
+# THE FIVE WORDS (evidence and converge blocks: scratchpad/adjudications-words.md):
+#   serving    = Venue      (converge: 0 defs, 1 kin VenueAction @ kernel-types/src/quality/triggers.rs:36, 18 refs/3 files -> renamed apart)
+#   admission  = Principal  (converge: 0 defs, 4 kin, 3 of them the OWNER at sovereign-api/src/principal.rs — a CONVERGENCE with DAEMON_CORE.md section 1 `principal -> Scope`)
+#   knowledge  = <none>     (MERGE verdict, dm-word-owners kill bar: atlas half -> understanding (Atlas), ask-a-peer half -> retrieval (Index))
+#   fabric     = Member     (converge: 2 defs, both back-of-house/workbench; 1 exempt, 1 renamed apart at 13 refs)
+#   compute    = Donor      (converge: 0 defs; the one kin WorkDonorHandle @ sovereign-mesh/src/work_donor.rs:363 is Compute's own)
+#
+# TALLY: keep 11 · rename 56 · merge 5 · delete 0 = 72
 
 [[noun]]
 name = "MeshPeering"
@@ -1405,9 +1435,9 @@ file = "commonwealth/crates/commonwealth-core/src/mesh/mod.rs:368"
 visibility = "pub"
 concept = "C2"
 context = "fabric"
-disposition = "proposed:keep"
+disposition = "decided:keep"
 word = ""
-why = "subject is a peer MESH not a node - peer_mesh_id/peer_mesh_name/trust_level at :369-371; none of the five words applies"
+why = "Fabric-internal and inside the commonwealth package, which dm-peer-outside-fabric does not reach (campaigns/domains.toml:63-64 - Phase A is 'the retirement of the Peer* types defined OUTSIDE the commonwealth package'); subject is a peer MESH not a node - peer_mesh_id/peer_mesh_name/trust_level at :369-371"
 
 [[noun]]
 name = "PeerTrustLevel"
@@ -1416,9 +1446,9 @@ file = "commonwealth/crates/commonwealth-core/src/mesh/mod.rs:400"
 visibility = "pub"
 concept = "C2"
 context = "fabric"
-disposition = "proposed:keep"
+disposition = "decided:keep"
 word = ""
-why = "doc at :397 says 'trust between peered meshes'; federation, not membership"
+why = "Fabric-internal, inside the package; doc at :397 says 'trust between peered meshes' - federation, not membership. Its cross-context leak is E7, closed by a wire enum in oicp-types, not by renaming this"
 
 [[noun]]
 name = "PeerHealthTracker"
@@ -1427,9 +1457,9 @@ file = "commonwealth/crates/commonwealth-core/src/peer_health.rs:142"
 visibility = "pub"
 concept = "C3"
 context = "serving"
-disposition = "proposed:rename"
-word = "Candidate"
-why = "zero Fabric consumers; only is_quarantined/health_weight, both called from sovereign-mesh/src/peer_inference.rs:2096,2201"
+disposition = "decided:rename"
+word = "VenueHealthTracker"
+why = "32 refs / 7 files. Zero Fabric consumers; only is_quarantined/health_weight, both called from sovereign-mesh/src/peer_inference.rs:2096,2201. The rename CARRIES A CRATE MOVE out of commonwealth-core into Serving - leaving it renamed in place keeps Fabric holding a scheduler row (E1 closes by move, not by translation)"
 
 [[noun]]
 name = "PeerHealth"
@@ -1438,9 +1468,9 @@ file = "commonwealth/crates/commonwealth-core/src/peer_health.rs:83"
 visibility = "private"
 concept = "C3"
 context = "serving"
-disposition = "proposed:rename"
-word = "Candidate"
-why = "recent_events ring buffer at :107 drives the load balancer's soft weight - a scheduler row living in Fabric"
+disposition = "decided:rename"
+word = "VenueHealth"
+why = "5 refs / 3 files. recent_events ring buffer at :107 drives the load balancer's soft weight - a scheduler row living in Fabric; moves with VenueHealthTracker"
 
 [[noun]]
 name = "DiscoveredPeer"
@@ -1449,9 +1479,9 @@ file = "commonwealth/crates/commonwealth-discovery/src/mdns.rs:19"
 visibility = "pub"
 concept = "C1"
 context = "fabric"
-disposition = "proposed:keep"
+disposition = "decided:keep"
 word = ""
-why = "mDNS pre-membership sighting: node_id/mesh_id_hex/mesh_name/address at :20-32, before any roster row exists"
+why = "9 refs / 3 files. Fabric-internal, inside the package; mDNS pre-membership sighting at :20-32, before any roster row exists"
 
 [[noun]]
 name = "PeerTransportPath"
@@ -1460,9 +1490,9 @@ file = "commonwealth/crates/commonwealth-media/src/reach.rs:29"
 visibility = "pub"
 concept = "C1"
 context = "fabric"
-disposition = "proposed:merge"
+disposition = "decided:merge"
 word = "commonwealth/crates/commonwealth-transport/src/iroh_path.rs:74 PeerPathSnapshot"
-why = "same three facts as PeerPathSnapshot with PeerPath stringified into path: String at :33"
+why = "16 refs / 7 files. Same three facts as PeerPathSnapshot with PeerPath stringified into path: String at :33 - ARCH 8, one fact one spelling. Survivor is PeerPathSnapshot in commonwealth-transport (the origin crate that owns the PeerPath enum it stringifies); IrohPeerPath is the third spelling and becomes MemberReach in sovereign-contracts"
 
 [[noun]]
 name = "PeerPreferenceStore"
@@ -1471,9 +1501,9 @@ file = "commonwealth/crates/commonwealth-state/src/peer_preferences.rs:105"
 visibility = "pub"
 concept = "C5"
 context = "serving"
-disposition = "proposed:rename"
-word = "Candidate"
-why = "stores only the affinity row; its one cross-context reader takes multiplier at sovereign-api/src/routes_oicp.rs:402"
+disposition = "decided:rename"
+word = "VenuePreferenceStore"
+why = "12 refs / 5 files. THE ONE OWNER of the affinity row after C5 collapses 4 copies to 1 owner + 1 DTO; stores only the affinity row, its one cross-context reader takes multiplier at sovereign-api/src/routes_oicp.rs:402. Stays in commonwealth-state until the Serving crate exists (rung 10 moves it)"
 
 [[noun]]
 name = "PeerPreference"
@@ -1482,9 +1512,9 @@ file = "commonwealth/crates/commonwealth-state/src/peer_preferences.rs:55"
 visibility = "pub"
 concept = "C5"
 context = "serving"
-disposition = "proposed:rename"
-word = "Candidate"
-why = "only multiplier crosses (routes_oicp.rs:402->:406 scales claim.affinity); reason/set_at are Host-UI only"
+disposition = "decided:rename"
+word = "VenuePreference"
+why = "45 refs / 7 files. The single owning struct; only multiplier crosses (routes_oicp.rs:402->:406 scales claim.affinity), reason/set_at are Host-UI only. The other three spellings (PeerPreferenceView, SetPeerPreferenceRequest/ClearPeerPreferenceRequest, PeerPreferenceDto) collapse onto one DTO"
 
 [[noun]]
 name = "PeerFailure"
@@ -1493,9 +1523,9 @@ file = "commonwealth/crates/commonwealth-transport/src/fanout.rs:50"
 visibility = "pub"
 concept = "C7"
 context = "fabric"
-disposition = "proposed:rename"
-word = "Member"
-why = "NeverAsked is 'a fact about the roster or the transport' (:51) - a member-level outcome, not a peer noun"
+disposition = "decided:keep"
+word = ""
+why = "15 refs / 3 files. OVERTURNS proposed:rename. Fabric-internal fan-out vocabulary inside the package, which the bar does not reach; NeverAsked is 'a fact about the roster or the transport' (:51) and is already Fabric's own word. Its one cross-context reader (E3, sovereign-api/src/routes_knowledge.rs:439) reads it through the translation, not by importing it"
 
 [[noun]]
 name = "PeerVerdict"
@@ -1504,9 +1534,9 @@ file = "commonwealth/crates/commonwealth-transport/src/fanout.rs:62"
 visibility = "pub"
 concept = "C7"
 context = "fabric"
-disposition = "proposed:rename"
-word = "Member"
-why = "matched three ways by its only outside reader, sovereign-api/src/routes_knowledge.rs:355,364-365"
+disposition = "decided:keep"
+word = ""
+why = "20 refs / 2 files. OVERTURNS proposed:rename, same rule as PeerFailure. Matched three ways by its only outside reader, sovereign-api/src/routes_knowledge.rs:355,364-365 - E3's translation carries a verdict enum that does not name peer, so the Fabric-side name never crosses"
 
 [[noun]]
 name = "PeerRow"
@@ -1515,9 +1545,9 @@ file = "commonwealth/crates/commonwealth-transport/src/fanout.rs:70"
 visibility = "pub"
 concept = "C7"
 context = "fabric"
-disposition = "proposed:rename"
-word = "Member"
-why = "node_id/name/elapsed_ms/verdict at :71-75; name collides with sovereign-cli-llm/src/mesh_travel.rs:168 - rename-apart"
+disposition = "decided:rename"
+word = "MemberFanoutRow"
+why = "10 refs / 3 files SHARED with the second definition. RENAME-APART even though it is inside the package: the NAME is defined twice in two contexts (here and sovereign-cli-llm/src/mesh_travel.rs:168), which is ARCH 8 regardless of the package rule. node_id/name/elapsed_ms/verdict at :71-75 is one fan-out outcome per member"
 
 [[noun]]
 name = "PeerPath"
@@ -1526,9 +1556,9 @@ file = "commonwealth/crates/commonwealth-transport/src/iroh_path.rs:20"
 visibility = "pub"
 concept = "C1"
 context = "fabric"
-disposition = "proposed:keep"
+disposition = "decided:keep"
 word = ""
-why = "closed set with one spelling via as_str at :35 - the reach vocabulary Fabric owns"
+why = "65 refs / 4 files. Fabric-internal; closed set with one spelling via as_str at :35 - the reach vocabulary Fabric owns. E6's fix is that the watchdog reads THIS enum through the published wire form, not that a second 5-variant enum is minted"
 
 [[noun]]
 name = "PeerPathSnapshot"
@@ -1537,9 +1567,9 @@ file = "commonwealth/crates/commonwealth-transport/src/iroh_path.rs:74"
 visibility = "pub"
 concept = "C1"
 context = "fabric"
-disposition = "proposed:keep"
+disposition = "decided:keep"
 word = ""
-why = "merge survivor for PeerTransportPath: path/relay/active_direct_addrs at :75-79"
+why = "4 refs / 2 files. Fabric-internal AND the merge survivor of the three spellings: path/relay/active_direct_addrs at :75-79. PeerTransportPath merges into it; IrohPeerPath becomes its published wire envelope MemberReach"
 
 [[noun]]
 name = "PeerContact"
@@ -1548,9 +1578,9 @@ file = "commonwealth/crates/commonwealth-transport/src/lib.rs:209"
 visibility = "pub"
 concept = "C1"
 context = "fabric"
-disposition = "proposed:keep"
+disposition = "decided:keep"
 word = ""
-why = "doc at :203-207 says the struct exists so capabilities/status cannot influence dialing - the reach projection of a MemberRecord"
+why = "63 refs / 16 files. Fabric-internal; doc at :203-207 says the struct exists so capabilities/status cannot influence dialing - the reach projection of a MemberRecord. E3/E4 cross it as an OPAQUE handle (never destructured), so the translation is a newtype, not a field copy"
 
 [[noun]]
 name = "PeerEndpoint"
@@ -1559,9 +1589,9 @@ file = "commonwealth/crates/commonwealth-transport/src/lib.rs:227"
 visibility = "pub"
 concept = "C1"
 context = "fabric"
-disposition = "proposed:keep"
+disposition = "decided:keep"
 word = ""
-why = "one dialable candidate: base_url + glassbox label at :231-234"
+why = "36 refs / 10 files. Fabric-internal; one dialable candidate: base_url + glassbox label at :231-234"
 
 [[noun]]
 name = "PeerTransport"
@@ -1570,9 +1600,9 @@ file = "commonwealth/crates/commonwealth-transport/src/lib.rs:241"
 visibility = "pub"
 concept = "C1"
 context = "fabric"
-disposition = "proposed:keep"
+disposition = "decided:keep"
 word = ""
-why = "endpoints(&PeerContact, TrafficClass) at :252 is Fabric's reach port"
+why = "71 refs / 24 files. Fabric-internal; endpoints(&PeerContact, TrafficClass) at :252 is Fabric's reach port and stays Fabric's"
 
 [[noun]]
 name = "PeerArgs"
@@ -1581,9 +1611,9 @@ file = "commonwealth/crates/commonwealth-work/examples/work_peer.rs:125"
 visibility = "test"
 concept = "C10"
 context = "compute"
-disposition = "proposed:rename"
-word = "Donor"
-why = "image: Option<String> at :134 - absent means this host offers no boundary, i.e. a donor that declines"
+disposition = "decided:rename"
+word = "DonorArgs"
+why = "7 refs / 1 file. image: Option<String> at :134 - absent means this host offers no boundary, i.e. a donor that declines. Donor is Compute's word and converge reports ZERO first-party definitions for it"
 
 [[noun]]
 name = "PeerAtomRef"
@@ -1592,9 +1622,9 @@ file = "corpus-engine/src/enrichment/atlas/cross_corpus.rs:71"
 visibility = "pub"
 concept = "C6"
 context = "understanding"
-disposition = "proposed:rename"
-word = "Source"
-why = "corpus_id/atom_id/canonical_name at :72-77 - 'peer' means the other CORPUS, not a node"
+disposition = "decided:rename"
+word = "CrossCorpusAtomRef"
+why = "7 refs / 3 files. corpus_id/atom_id/canonical_name at :72-77 - 'peer' means the other CORPUS, not a node, so this is Understanding's Atom word with a cross-corpus qualifier. NOT Source (Ingest's by DOMAINS.md section 4)"
 
 [[noun]]
 name = "PeerAnswer"
@@ -1603,9 +1633,9 @@ file = "kernel-types/src/answer.rs:423"
 visibility = "pub"
 concept = "C9"
 context = "kernel"
-disposition = "proposed:keep"
+disposition = "decided:keep"
 word = ""
-why = "names an egress release class; sole door bound_for_peer at :438 decides on Custody::released_by - renaming weakens a custody gate"
+why = "24 refs / 6 files. CARVE-OUT (campaigns/domains.toml:141-143): names an egress release class; sole door bound_for_peer at :438 decides on Custody::released_by - renaming weakens a custody gate. The one place the word peer is load-bearing and correct"
 
 [[noun]]
 name = "PeerDescriptor"
@@ -1614,9 +1644,9 @@ file = "oicp-types/src/manifest.rs:289"
 visibility = "pub"
 concept = "C2"
 context = "kernel"
-disposition = "proposed:keep"
-word = ""
-why = "federated MESH entry: capabilities_url + trust_level: Option<String> at :291-293; subject is a mesh, so none of the five words applies"
+disposition = "decided:rename"
+word = "FederatedMeshDescriptor"
+why = "6 refs / 3 files. OVERTURNS proposed:keep. oicp-types is one of the 9 crates the bar's --anywhere population counts OUTSIDE commonwealth/, so a pub Peer* here fails dm-peer-outside-fabric at target 0 and a carve-out would have to be argued as C9's was. The subject IS nameable: capabilities_url + trust_level at :291-293 describe a federated MESH, so the qualifier carries the meaning and no context word is spent"
 
 [[noun]]
 name = "PeerInflightGuard"
@@ -1625,9 +1655,9 @@ file = "sovereign/crates/sovereign-api/src/admission.rs:228"
 visibility = "pub"
 concept = "C4"
 context = "serving"
-disposition = "proposed:rename"
-word = "Caller"
-why = "holds a slot for node: NodeId at :230 and releases it in Drop at :246 - an admission guard on the caller"
+disposition = "decided:rename"
+word = "PrincipalInflightGuard"
+why = "11 refs / 2 files. Holds a slot for node: NodeId at :230 and releases it in Drop at :246 - an admission guard on the CALLER. Principal is the word the same crate already uses for exactly this question (sovereign-api/src/principal.rs:2 'Who is asking')"
 
 [[noun]]
 name = "EligiblePeersRequest"
@@ -1636,9 +1666,9 @@ file = "sovereign/crates/sovereign-api/src/routes_internal/corpus_collaborate.rs
 visibility = "pub"
 concept = "C6b"
 context = "compute"
-disposition = "proposed:rename"
-word = "Donor"
-why = "request for who can help a peer-assisted ingest of corpus_id at :947"
+disposition = "decided:rename"
+word = "EligibleDonorsRequest"
+why = "2 refs / 1 file. Request for who can help a peer-assisted ingest of corpus_id at :947 - Compute's donor eligibility"
 
 [[noun]]
 name = "EligiblePeerDto"
@@ -1647,9 +1677,9 @@ file = "sovereign/crates/sovereign-api/src/routes_internal/corpus_collaborate.rs
 visibility = "pub"
 concept = "C6b"
 context = "compute"
-disposition = "proposed:rename"
-word = "Donor"
-why = "eligible/reason at :956-960 gate whether this machine may DO work - donor eligibility"
+disposition = "decided:rename"
+word = "EligibleDonorDto"
+why = "4 refs / 1 file. eligible/reason at :956-960 gate whether this machine may DO work - donor eligibility"
 
 [[noun]]
 name = "EligiblePeersResponse"
@@ -1658,9 +1688,9 @@ file = "sovereign/crates/sovereign-api/src/routes_internal/corpus_collaborate.rs
 visibility = "pub"
 concept = "C6b"
 context = "compute"
-disposition = "proposed:rename"
-word = "Donor"
-why = "grantable at :968 is a per-corpus permission to be assisted at all"
+disposition = "decided:rename"
+word = "EligibleDonorsResponse"
+why = "3 refs / 1 file. grantable at :968 is a per-corpus permission to be assisted at all"
 
 [[noun]]
 name = "PeerProgressDto"
@@ -1669,9 +1699,9 @@ file = "sovereign/crates/sovereign-api/src/routes_internal/corpus_queue.rs:733"
 visibility = "pub"
 concept = "C6b"
 context = "compute"
-disposition = "proposed:rename"
-word = "Donor"
-why = "leased/completed/failed at :736-738 are work-unit tallies, not requests served"
+disposition = "decided:rename"
+word = "DonorProgressDto"
+why = "3 refs / 1 file. leased/completed/failed at :736-738 are work-unit tallies, not requests served - C6b is Compute accounting"
 
 [[noun]]
 name = "PeerPreferenceView"
@@ -1680,9 +1710,9 @@ file = "sovereign/crates/sovereign-api/src/routes_internal/peer_preference.rs:49
 visibility = "pub"
 concept = "C5"
 context = "serving"
-disposition = "proposed:rename"
-word = "Candidate"
-why = "third of four copies of {node_id,multiplier,reason,set_at}; :43 pins it to the desktop DTO by comment"
+disposition = "decided:rename"
+word = "VenuePreferenceDto"
+why = "10 refs / 4 files. THE ONE DTO the four copies collapse onto; :43 pins it to the desktop DTO by comment today. Renamed AND promoted to sovereign-contracts/src/daemon_wire so the desktop imports it rather than restating it (E13 closes)"
 
 [[noun]]
 name = "SetPeerPreferenceRequest"
@@ -1691,9 +1721,9 @@ file = "sovereign/crates/sovereign-api/src/routes_internal/peer_preference.rs:62
 visibility = "pub"
 concept = "C5"
 context = "serving"
-disposition = "proposed:rename"
-word = "Candidate"
-why = "node_id/multiplier/reason at :63-66 - the affinity row again, as a request body"
+disposition = "decided:rename"
+word = "SetVenuePreferenceRequest"
+why = "3 refs / 2 files. node_id/multiplier/reason at :63-66 - the affinity row as a request body; stays a request type, takes the owner's word"
 
 [[noun]]
 name = "ClearPeerPreferenceRequest"
@@ -1702,9 +1732,9 @@ file = "sovereign/crates/sovereign-api/src/routes_internal/peer_preference.rs:71
 visibility = "pub"
 concept = "C5"
 context = "serving"
-disposition = "proposed:rename"
-word = "Candidate"
-why = "node_id at :72 addresses the same affinity row"
+disposition = "decided:rename"
+word = "ClearVenuePreferenceRequest"
+why = "3 refs / 2 files. node_id at :72 addresses the same affinity row"
 
 [[noun]]
 name = "PeerOffering"
@@ -1713,9 +1743,9 @@ file = "sovereign/crates/sovereign-api/src/routes_knowledge.rs:397"
 visibility = "private"
 concept = "C6"
 context = "retrieval"
-disposition = "proposed:rename"
-word = "Source"
-why = "corpora: Vec<String> at :401 is what this node can ANSWER FROM - a knowledge source, cloned out of the mesh lock"
+disposition = "decided:rename"
+word = "RemoteIndexTarget"
+why = "3 refs / 1 file. corpora: Vec<String> at :401 is what this node can ANSWER FROM, cloned out of the mesh lock. NOT Source (Ingest's) and NOT a new Knowledge word - see the Knowledge merge verdict: this half is Retrieval's, whose owned word is Index"
 
 [[noun]]
 name = "PeerServed"
@@ -1724,9 +1754,9 @@ file = "sovereign/crates/sovereign-api/src/routes_knowledge.rs:405"
 visibility = "private"
 concept = "C6"
 context = "retrieval"
-disposition = "proposed:rename"
-word = "Source"
-why = "results/corpora_served/corpora_unavailable at :406-408 - what one source answered"
+disposition = "decided:rename"
+word = "RemoteIndexReply"
+why = "3 refs / 1 file. results/corpora_served/corpora_unavailable at :406-408 - what one remote index answered"
 
 [[noun]]
 name = "PeerRequestStatus"
@@ -1735,9 +1765,9 @@ file = "sovereign/crates/sovereign-api/src/routes_status.rs:451"
 visibility = "pub"
 concept = "C4"
 context = "serving"
-disposition = "proposed:rename"
-word = "Caller"
-why = "active/served_total/last_request_at at :458-462 tally who CALLED this daemon; keyed by the X-Node-Id header"
+disposition = "decided:rename"
+word = "PrincipalRequestStatus"
+why = "7 refs / 2 files. active/served_total/last_request_at at :458-462 tally who CALLED this daemon, keyed by the X-Node-Id header - the mesh-keyed half of the same question principal.rs answers credential-keyed"
 
 [[noun]]
 name = "PeerTally"
@@ -1746,9 +1776,9 @@ file = "sovereign/crates/sovereign-api/src/state.rs:494"
 visibility = "pub"
 concept = "C4"
 context = "serving"
-disposition = "proposed:rename"
-word = "Caller"
-why = "doc at :489 - keyed by NodeId from X-Node-Id, 'the ONLY peer attribution the daemon has'; only admitted requests counted"
+disposition = "decided:rename"
+word = "PrincipalTally"
+why = "6 refs / 2 files. Doc at :489 - keyed by NodeId from X-Node-Id, 'the ONLY peer attribution the daemon has'; only admitted requests counted. Converging it on Principal makes X-Node-Id a fourth PrincipalKey branch rather than a parallel identity scheme (ARCH 8)"
 
 [[noun]]
 name = "NoPeers"
@@ -1757,9 +1787,9 @@ file = "sovereign/crates/sovereign-cli-daemon/tests/main/named_model_routes_afte
 visibility = "test"
 concept = "C10"
 context = "serving"
-disposition = "proposed:rename"
-word = "Candidate"
-why = "test double for an empty PeerEndpointSource"
+disposition = "decided:rename"
+word = "NoVenues"
+why = "Test double for an empty VenueSource. Separate crate from the sovereign-mesh copies, so it cannot merge with them"
 
 [[noun]]
 name = "PeerBody"
@@ -1768,9 +1798,9 @@ file = "sovereign/crates/sovereign-cli-llm/src/mesh_travel.rs:160"
 visibility = "private"
 concept = "C7"
 context = "host"
-disposition = "proposed:rename"
-word = "Member"
-why = "deserialize shape of GET /v1/mesh/measurements: records + unreadable at :161-164"
+disposition = "decided:rename"
+word = "TravelBody"
+why = "5 refs / 1 file. Deserialize shape of GET /v1/mesh/measurements: records + unreadable at :161-164 - a CLI wire shape, named for the command (mesh travel) rather than for a context word it does not own"
 
 [[noun]]
 name = "PeerRow"
@@ -1779,9 +1809,9 @@ file = "sovereign/crates/sovereign-cli-llm/src/mesh_travel.rs:168"
 visibility = "private"
 concept = "C7"
 context = "host"
-disposition = "proposed:rename"
-word = "Member"
-why = "origin_node/origin_name/record at :169-172 - a measurement row; SECOND definition of this name, rename-apart from fanout.rs:70"
+disposition = "decided:rename"
+word = "TravelMeasurementRow"
+why = "10 refs / 3 files SHARED with the commonwealth-transport definition. The SECOND definition of this name and the other half of the rename-apart: origin_node/origin_name/record at :169-172 is a MEASUREMENT row, not a fan-out row"
 
 [[noun]]
 name = "PeerHistory"
@@ -1790,9 +1820,9 @@ file = "sovereign/crates/sovereign-cli-llm/src/mesh_travel.rs:177"
 visibility = "pub(crate)"
 concept = "C7"
 context = "host"
-disposition = "proposed:rename"
-word = "Member"
-why = "unreadable at :183 separates 'nobody measured' from 'measured in a dialect we do not speak'"
+disposition = "decided:rename"
+word = "TravelHistory"
+why = "8 refs / 1 file. unreadable at :183 separates 'nobody measured' from 'measured in a dialect we do not speak' - absence reported, never defaulted (ARCH 6)"
 
 [[noun]]
 name = "PeerStore"
@@ -1801,9 +1831,9 @@ file = "sovereign/crates/sovereign-contracts/src/peer.rs:101"
 visibility = "pub"
 concept = "C8"
 context = "kernel"
-disposition = "proposed:rename"
+disposition = "decided:rename"
 word = "ReplicatedKv"
-why = "doc at :92 - 'a replicated key-value store'; get/set/delete/scan over (app_id,key). Peer is an adjective on the STORE; carve-out from the five words"
+why = "42 refs / 13 files. CARVE-OUT from the five words (campaigns/domains.toml:141-143): doc at :92 says 'a replicated key-value store'; get/set/delete/scan over (app_id,key). Peer is an adjective on the STORE. This trait is also the PORT PATTERN the MeshDirectory port copies - kernel declares, sovereign-mesh implements, consumers never import mesh types"
 
 [[noun]]
 name = "SoloPeerStore"
@@ -1812,9 +1842,9 @@ file = "sovereign/crates/sovereign-contracts/src/peer.rs:153"
 visibility = "pub"
 concept = "C8"
 context = "kernel"
-disposition = "proposed:rename"
-word = "ReplicatedKv"
-why = "entries: Mutex<BTreeMap<(String,String),PeerEntry>> at :156 - a single-node KV, no peers involved at all"
+disposition = "decided:rename"
+word = "SoloReplicatedKv"
+why = "22 refs / 6 files. entries: Mutex<BTreeMap<(String,String),PeerEntry>> at :156 - a single-node KV, no peers involved at all"
 
 [[noun]]
 name = "PeerStoreError"
@@ -1823,9 +1853,9 @@ file = "sovereign/crates/sovereign-contracts/src/peer.rs:58"
 visibility = "pub"
 concept = "C8"
 context = "kernel"
-disposition = "proposed:rename"
-word = "ReplicatedKv"
-why = "one variant Backend(String) at :60 - 'the backing store is the only thing that can fail'"
+disposition = "decided:rename"
+word = "ReplicatedKvError"
+why = "30 refs / 4 files. One variant Backend(String) at :60 - 'the backing store is the only thing that can fail'"
 
 [[noun]]
 name = "PeerEntry"
@@ -1834,9 +1864,9 @@ file = "sovereign/crates/sovereign-contracts/src/peer.rs:79"
 visibility = "pub"
 concept = "C8"
 context = "kernel"
-disposition = "proposed:rename"
-word = "ReplicatedKv"
-why = "app_id/key/value/timestamp/origin at :80-89 - a KV record with LWW ordering"
+disposition = "decided:rename"
+word = "ReplicatedKvEntry"
+why = "18 refs / 3 files. app_id/key/value/timestamp/origin at :80-89 - a KV record with LWW ordering; E8's consumer reads all five, which is why the fix is the rename and NOT a translation type"
 
 [[noun]]
 name = "DiscoveredPeerDto"
@@ -1845,9 +1875,9 @@ file = "sovereign/crates/sovereign-desktop/src-tauri/src/mesh_commands.rs:367"
 visibility = "pub"
 concept = "C1"
 context = "host"
-disposition = "proposed:rename"
-word = "Member"
-why = "mirrors commonwealth-discovery DiscoveredPeer field-for-field at :368-377, but lives outside the package the bar confines the word to"
+disposition = "decided:rename"
+word = "DiscoveredMemberDto"
+why = "2 refs / 1 file. Mirrors commonwealth-discovery DiscoveredPeer field-for-field at :368-377 but lives outside the package the bar confines the word to. Kept as a separate type rather than merged: it is the tauri serde boundary, and desktop taking a commonwealth- dependency to save four fields is the coupling this campaign exists to remove"
 
 [[noun]]
 name = "PeerPreferenceDto"
@@ -1856,9 +1886,9 @@ file = "sovereign/crates/sovereign-desktop/src-tauri/src/mesh_commands.rs:571"
 visibility = "pub"
 concept = "C5"
 context = "host"
-disposition = "proposed:merge"
-word = "sovereign/crates/sovereign-api/src/routes_internal/peer_preference.rs:49 PeerPreferenceView"
-why = "fourth copy of {node_id,multiplier,reason,set_at} at :572-575, held in agreement with the view by prose (peer_preference.rs:43), not by a type"
+disposition = "decided:merge"
+word = "sovereign/crates/sovereign-api/src/routes_internal/peer_preference.rs:49 VenuePreferenceDto"
+why = "6 refs / 3 files. FOURTH copy of {node_id,multiplier,reason,set_at} at :572-575, held in agreement with the view by prose (peer_preference.rs:43), not by a type. Merges into the one DTO once VenuePreferenceDto is promoted to sovereign-contracts/src/daemon_wire - this is what closes E13"
 
 [[noun]]
 name = "PeerCanonicalLead"
@@ -1867,9 +1897,9 @@ file = "sovereign/crates/sovereign-mesh/src/auto_ingest.rs:1351"
 visibility = "pub(crate)"
 concept = "C6"
 context = "understanding"
-disposition = "proposed:rename"
-word = "Source"
-why = "candidate_urls/fingerprint/coverage_ratio/chunk_count at :1352-1355 rank whose ATLAS to pull - a knowledge source, not a serving candidate"
+disposition = "decided:rename"
+word = "CanonicalAtlasLead"
+why = "4 refs / 1 file. candidate_urls/fingerprint/coverage_ratio/chunk_count at :1352-1355 rank whose ATLAS to pull - Understanding's word, not a serving venue and not a new Knowledge word"
 
 [[noun]]
 name = "PeerInferenceEndpoint"
@@ -1878,9 +1908,9 @@ file = "sovereign/crates/sovereign-mesh/src/daemon.rs:4783"
 visibility = "pub"
 concept = "C3"
 context = "serving"
-disposition = "proposed:rename"
-word = "Candidate"
-why = "base_urls/system_ram_gb/benchmark/current_in_flight/inference_availability at :4786-4808 are all scoring inputs - the canonical Serving noun"
+disposition = "decided:rename"
+word = "InferenceVenue"
+why = "95 refs / 13 files - the largest single rename in the campaign and the canonical Serving noun. base_urls/system_ram_gb/benchmark/current_in_flight/inference_availability at :4786-4808 are all scoring inputs. Venue covers the LOCAL slot and a remote lender alike; converge reports 0 definitions and 1 kin (kernel_types::quality::VenueAction, renamed apart at 18 refs / 3 files)"
 
 [[noun]]
 name = "IrohPeerPath"
@@ -1889,9 +1919,9 @@ file = "sovereign/crates/sovereign-mesh/src/daemon.rs:483"
 visibility = "pub"
 concept = "C1"
 context = "host"
-disposition = "proposed:rename"
-word = "Reach"
-why = "wire envelope {node_id,name,path:Option<PeerTransportPath>} at :484-487 - reach vocabulary; same shape as PeerPathObservation:84 minus believed_online"
+disposition = "decided:rename"
+word = "MemberReach"
+why = "5 refs / 3 files. Wire envelope {node_id,name,path} at :484-487 - the THIRD spelling of the path fact and the only one that adds member identity, so it survives as the published wire form and MOVES to sovereign-contracts/src/daemon_wire/mesh.rs, which already names it at :398. Its path field becomes the closed ReachPath enum, not a String (closes E5 and E6)"
 
 [[noun]]
 name = "PeerObservationRecord"
@@ -1900,9 +1930,9 @@ file = "sovereign/crates/sovereign-mesh/src/decision_log.rs:118"
 visibility = "pub"
 concept = "C3"
 context = "serving"
-disposition = "proposed:rename"
-word = "Candidate"
-why = "latency/throughput EWMAs + quarantined + cooldown_remaining_secs at :121-137 - the scheduler's per-candidate snapshot"
+disposition = "decided:rename"
+word = "VenueObservationRecord"
+why = "9 refs / 3 files. latency/throughput EWMAs + quarantined + cooldown_remaining_secs at :121-137 - the scheduler's per-venue snapshot"
 
 [[noun]]
 name = "Peers"
@@ -1911,9 +1941,9 @@ file = "sovereign/crates/sovereign-mesh/src/entry_endpoint.rs:167"
 visibility = "test"
 concept = "C10"
 context = "serving"
-disposition = "proposed:rename"
-word = "Candidate"
-why = "test double: a fixed Vec<PeerInferenceEndpoint> impl'ing PeerEndpointSource at :170"
+disposition = "decided:rename"
+word = "FixedVenues"
+why = "Test double: a fixed Vec<PeerInferenceEndpoint> impl'ing PeerEndpointSource at :170. In src/ under cfg(test), a different compilation unit from tests/main/, so it cannot merge with StubVenueSource"
 
 [[noun]]
 name = "PeerPathsFn"
@@ -1922,9 +1952,9 @@ file = "sovereign/crates/sovereign-mesh/src/iroh_watchdog.rs:119"
 visibility = "pub"
 concept = "C1"
 context = "host"
-disposition = "proposed:rename"
-word = "Reach"
-why = "injection shape returning Vec<PeerPathObservation>; None at spawn disables the health term (:118)"
+disposition = "decided:rename"
+word = "ReachPathsFn"
+why = "6 refs / 2 files. Injection shape returning Vec<PeerPathObservation>; None at spawn disables the health term (:118). Reach is Fabric's owned word and the watchdog is the Host reading it"
 
 [[noun]]
 name = "PeerPathVerdict"
@@ -1933,9 +1963,9 @@ file = "sovereign/crates/sovereign-mesh/src/iroh_watchdog.rs:129"
 visibility = "private"
 concept = "C1"
 context = "host"
-disposition = "proposed:rename"
-word = "Reach"
-why = "wedged/total/known/active/lost/gained/migrated at :130-153 - one poll's transport conclusion"
+disposition = "decided:rename"
+word = "ReachPathVerdict"
+why = "4 refs / 1 file. wedged/total/known/active/lost/gained/migrated at :130-153 - one poll's transport conclusion"
 
 [[noun]]
 name = "PeerPathHealth"
@@ -1944,9 +1974,9 @@ file = "sovereign/crates/sovereign-mesh/src/iroh_watchdog.rs:164"
 visibility = "private"
 concept = "C1"
 context = "host"
-disposition = "proposed:rename"
-word = "Reach"
-why = "seen_active at :168 arms the term only after a real active path - pure transport history"
+disposition = "decided:rename"
+word = "ReachPathHealth"
+why = "14 refs / 1 file. seen_active at :168 arms the term only after a real active path - pure transport history"
 
 [[noun]]
 name = "PeerPathObservation"
@@ -1955,9 +1985,9 @@ file = "sovereign/crates/sovereign-mesh/src/iroh_watchdog.rs:84"
 visibility = "pub"
 concept = "C1"
 context = "host"
-disposition = "proposed:rename"
-word = "Reach"
-why = "module doc at :80-82 states the watchdog 'does not know what a mesh member is' - and believed_online at :93 is recorded, never gated on"
+disposition = "decided:rename"
+word = "ReachPathObservation"
+why = "11 refs / 3 files. Module doc at :80-82 states the watchdog 'does not know what a mesh member is' - and believed_online at :93 is recorded, never gated on. Same shape as MemberReach minus believed_online; kept separate because this one is the Host's poll record and MemberReach is the published wire form"
 
 [[noun]]
 name = "PeerMeasurementDto"
@@ -1966,9 +1996,9 @@ file = "sovereign/crates/sovereign-mesh/src/mesh_http.rs:581"
 visibility = "pub"
 concept = "C7"
 context = "host"
-disposition = "proposed:rename"
-word = "Member"
-why = "origin_node at :587 is resolved from the journal line's signing actor through the ROSTER, never from the payload"
+disposition = "decided:rename"
+word = "MemberMeasurementDto"
+why = "5 refs / 2 files. origin_node at :587 is resolved from the journal line's signing actor through the ROSTER, never from the payload - so the row IS about a member, and Member is Fabric's word published on the daemon wire"
 
 [[noun]]
 name = "PeerMeasurementsQuery"
@@ -1977,9 +2007,9 @@ file = "sovereign/crates/sovereign-mesh/src/mesh_http.rs:598"
 visibility = "pub"
 concept = "C7"
 context = "host"
-disposition = "proposed:rename"
-word = "Member"
-why = "include_self: bool at :615, diagnostic only - no peer noun in the payload at all"
+disposition = "decided:rename"
+word = "MemberMeasurementsQuery"
+why = "3 refs / 1 file. include_self: bool at :615, diagnostic only - takes the family's word, carries no peer noun of its own"
 
 [[noun]]
 name = "PeerMeasurementsResponse"
@@ -1988,9 +2018,9 @@ file = "sovereign/crates/sovereign-mesh/src/mesh_http.rs:637"
 visibility = "pub"
 concept = "C7"
 context = "host"
-disposition = "proposed:rename"
-word = "Member"
-why = "records + unreadable at :641-648; unreadable is reported rather than swallowed"
+disposition = "decided:rename"
+word = "MemberMeasurementsResponse"
+why = "6 refs / 2 files. records + unreadable at :641-648; unreadable is reported rather than swallowed (ARCH 6)"
 
 [[noun]]
 name = "MeshPeerStore"
@@ -1999,9 +2029,9 @@ file = "sovereign/crates/sovereign-mesh/src/peer_adapter.rs:39"
 visibility = "pub"
 concept = "C8"
 context = "fabric"
-disposition = "proposed:rename"
-word = "ReplicatedKv"
-why = "inner: Arc<MeshStore> at :40; doc at :34 - 'a thin projection: four of the store's methods'. The Fabric adapter for the KV port"
+disposition = "decided:rename"
+word = "MeshReplicatedKv"
+why = "26 refs / 10 files. inner: Arc<MeshStore> at :40; doc at :34 - 'a thin projection: four of the store's methods'. The Fabric adapter for the KV port, so it takes the port's new word"
 
 [[noun]]
 name = "PeerFailureDisposition"
@@ -2010,9 +2040,9 @@ file = "sovereign/crates/sovereign-mesh/src/peer_inference.rs:2991"
 visibility = "private"
 concept = "C3"
 context = "serving"
-disposition = "proposed:rename"
-word = "Candidate"
-why = "Hard{model_id} vs Soft at :2992-2999 decides whether a route failure surfaces or falls through to local"
+disposition = "decided:rename"
+word = "VenueFailureDisposition"
+why = "12 refs / 1 file. Hard{model_id} vs Soft at :2992-2999 decides whether a route failure surfaces or falls through to local"
 
 [[noun]]
 name = "PeerEndpointSource"
@@ -2021,9 +2051,9 @@ file = "sovereign/crates/sovereign-mesh/src/peer_inference.rs:337"
 visibility = "pub"
 concept = "C3"
 context = "serving"
-disposition = "proposed:rename"
-word = "Candidate"
-why = "peer_inference_endpoints() at :338 is the discovery seam; doc at :332-335 says it exists so tests can inject a synthetic candidate list"
+disposition = "decided:rename"
+word = "VenueSource"
+why = "72 refs / 16 files - the second-largest rename. peer_inference_endpoints() at :338 is the discovery seam; doc at :332-335 says it exists so tests can inject a synthetic candidate list. This trait is what the MeshDirectory port feeds"
 
 [[noun]]
 name = "NoPeers"
@@ -2032,9 +2062,9 @@ file = "sovereign/crates/sovereign-mesh/src/peer_inference.rs:4254"
 visibility = "test"
 concept = "C10"
 context = "serving"
-disposition = "proposed:rename"
-word = "Candidate"
-why = "test double for an empty candidate source"
+disposition = "decided:rename"
+word = "NoVenues"
+why = "Test double for an empty venue source. In src/ under cfg(test) - a different compilation unit from tests/main/, so it cannot merge with StubVenueSource"
 
 [[noun]]
 name = "OnePeer"
@@ -2043,9 +2073,9 @@ file = "sovereign/crates/sovereign-mesh/src/peer_inference.rs:4534"
 visibility = "test"
 concept = "C10"
 context = "serving"
-disposition = "proposed:rename"
-word = "Candidate"
-why = "test double wrapping one PeerInferenceEndpoint"
+disposition = "decided:rename"
+word = "OneVenue"
+why = "4 refs / 1 file. Test double wrapping one InferenceVenue"
 
 [[noun]]
 name = "PeerManifestView"
@@ -2054,9 +2084,9 @@ file = "sovereign/crates/sovereign-mesh/src/scheduler_core.rs:216"
 visibility = "pub(crate)"
 concept = "C3"
 context = "serving"
-disposition = "proposed:rename"
-word = "Candidate"
-why = "rtt_ms at :218 sets the locality bonus; age_secs/from_cache at :220-221 date the copy"
+disposition = "decided:rename"
+word = "VenueManifestView"
+why = "9 refs / 3 files. rtt_ms at :218 sets the locality bonus; age_secs/from_cache at :220-221 date the copy"
 
 [[noun]]
 name = "PeerCandidateView"
@@ -2065,9 +2095,9 @@ file = "sovereign/crates/sovereign-mesh/src/scheduler_core.rs:232"
 visibility = "pub(crate)"
 concept = "C3"
 context = "serving"
-disposition = "proposed:rename"
-word = "Candidate"
-why = "manifest==None means excluded-and-recorded (:228-231); this is already the anticorruption type §5 asks for, and it is only pub(crate)"
+disposition = "decided:rename"
+word = "VenueView"
+why = "18 refs / 3 files. manifest==None means excluded-and-recorded (:228-231). This is ALREADY the anticorruption type DOMAINS.md section 5 asks for and it is only pub(crate) - rung 5 renames it and makes it the published output of MeshDirectory::venues()"
 
 [[noun]]
 name = "PeerLedger"
@@ -2076,9 +2106,9 @@ file = "sovereign/crates/sovereign-mesh/tests/main/chat_completion_e2e.rs:1291"
 visibility = "test"
 concept = "C10"
 context = "serving"
-disposition = "proposed:rename"
-word = "Candidate"
-why = "test ledger: served/refused_unresolvable at :1293-1297 is the outage signature"
+disposition = "decided:rename"
+word = "VenueLedger"
+why = "3 refs / 1 file. Test ledger: served/refused_unresolvable at :1293-1297 is the outage signature"
 
 [[noun]]
 name = "PeerLedgerHandle"
@@ -2087,9 +2117,9 @@ file = "sovereign/crates/sovereign-mesh/tests/main/chat_completion_e2e.rs:1300"
 visibility = "test"
 concept = "C10"
 context = "serving"
-disposition = "proposed:rename"
-word = "Candidate"
-why = "Arc<Mutex<PeerLedger>> at :1300"
+disposition = "decided:rename"
+word = "VenueLedgerHandle"
+why = "4 refs / 1 file. Arc<Mutex<VenueLedger>> at :1300"
 
 [[noun]]
 name = "ResolvingPeerState"
@@ -2098,9 +2128,9 @@ file = "sovereign/crates/sovereign-mesh/tests/main/chat_completion_e2e.rs:1302"
 visibility = "test"
 concept = "C10"
 context = "serving"
-disposition = "proposed:rename"
-word = "Candidate"
-why = "manifest/advertised/ledger at :1303-1305 - the in-process serving stub"
+disposition = "decided:rename"
+word = "ResolvingVenueState"
+why = "4 refs / 1 file. manifest/advertised/ledger at :1303-1305 - the in-process serving stub"
 
 [[noun]]
 name = "StubPeerSource"
@@ -2109,9 +2139,9 @@ file = "sovereign/crates/sovereign-mesh/tests/main/chat_completion_e2e.rs:67"
 visibility = "test"
 concept = "C10"
 context = "serving"
-disposition = "proposed:rename"
-word = "Candidate"
-why = "test impl of PeerEndpointSource"
+disposition = "decided:rename"
+word = "StubVenueSource"
+why = "33 refs / 4 files across the four definitions. SURVIVOR of the four: all four live in tests/main/, ONE test binary, so four definitions of one test impl is an ARCH 8 duplicate inside a single compilation unit. This one moves to a shared test-support module and the other three merge into it"
 
 [[noun]]
 name = "NoPeers"
@@ -2120,9 +2150,9 @@ file = "sovereign/crates/sovereign-mesh/tests/main/guest_lender_routing.rs:57"
 visibility = "test"
 concept = "C10"
 context = "serving"
-disposition = "proposed:rename"
-word = "Candidate"
-why = "test double for an empty candidate source"
+disposition = "decided:rename"
+word = "NoVenues"
+why = "Test double for an empty venue source. Same tests/main/ binary as StubVenueSource but a different shape (empty vs injected), so it is a rename, not a merge"
 
 [[noun]]
 name = "StubPeerSource"
@@ -2131,9 +2161,9 @@ file = "sovereign/crates/sovereign-mesh/tests/main/manifest_fanout_concurrency.r
 visibility = "test"
 concept = "C10"
 context = "serving"
-disposition = "proposed:rename"
-word = "Candidate"
-why = "test impl of PeerEndpointSource"
+disposition = "decided:merge"
+word = "sovereign/crates/sovereign-mesh/tests/main/chat_completion_e2e.rs:67 StubVenueSource"
+why = "Second of four identical test impls of PeerEndpointSource in ONE test binary (tests/main/); merges into the survivor"
 
 [[noun]]
 name = "StubPeerSource"
@@ -2142,9 +2172,9 @@ file = "sovereign/crates/sovereign-mesh/tests/main/scheduler_decision_records.rs
 visibility = "test"
 concept = "C10"
 context = "serving"
-disposition = "proposed:rename"
-word = "Candidate"
-why = "test impl of PeerEndpointSource"
+disposition = "decided:merge"
+word = "sovereign/crates/sovereign-mesh/tests/main/chat_completion_e2e.rs:67 StubVenueSource"
+why = "Third of four identical test impls of PeerEndpointSource in ONE test binary; merges into the survivor"
 
 [[noun]]
 name = "StubPeerSource"
@@ -2153,9 +2183,9 @@ file = "sovereign/crates/sovereign-mesh/tests/main/throughput_ledger_emission.rs
 visibility = "test"
 concept = "C10"
 context = "serving"
-disposition = "proposed:rename"
-word = "Candidate"
-why = "test impl of PeerEndpointSource"
+disposition = "decided:merge"
+word = "sovereign/crates/sovereign-mesh/tests/main/chat_completion_e2e.rs:67 StubVenueSource"
+why = "Fourth of four identical test impls of PeerEndpointSource in ONE test binary; merges into the survivor"
 
 [[noun]]
 name = "PeerAtlasView"
@@ -2164,9 +2194,9 @@ file = "sovereign/crates/sovereign-tools/src/atlas_peer_advice.rs:51"
 visibility = "pub"
 concept = "C6"
 context = "understanding"
-disposition = "proposed:rename"
-word = "Source"
-why = "embed_model/atlas_atom_count/atlas_tier2_count/atlas_fingerprint at :53-60; from_member at :67 is the one working anticorruption layer in the repo"
+disposition = "decided:rename"
+word = "RemoteAtlasView"
+why = "11 refs / 2 files. embed_model/atlas_atom_count/atlas_tier2_count/atlas_fingerprint at :53-60; from_member at :67 is the one working anticorruption layer in the repo and is the pattern the other twelve edges copy. Understanding's Atlas word - no Knowledge word is minted"
 
 [[noun]]
 name = "PeerAtlasPullCandidate"
@@ -2175,9 +2205,9 @@ file = "sovereign/crates/sovereign-tools/src/atlas_peer_advice.rs:90"
 visibility = "pub"
 concept = "C6"
 context = "understanding"
-disposition = "proposed:rename"
-word = "Source"
-why = "peer_tier2_count vs local_tier2_count at :92-96 decide whether to PULL an atlas instead of enriching locally"
+disposition = "decided:rename"
+word = "AtlasPullLead"
+why = "7 refs / 3 files. peer_tier2_count vs local_tier2_count at :92-96 decide whether to PULL an atlas instead of enriching locally. NOT AtlasPullCandidate: Candidate has five first-party definitions (campaigns/domains.toml:105-108) and a sixth is the disease this campaign removes - Lead matches CanonicalAtlasLead, the sibling that ranks the same thing"
 
 [[noun]]
 name = "MeshPeer"
@@ -2186,10 +2216,11 @@ file = "sovereign/crates/sovereign-work-atlas/tests/cross_node.rs:43"
 visibility = "test"
 concept = "C10"
 context = "workspace"
-disposition = "proposed:rename"
-word = "ReplicatedKv"
-why = "test PeerStore impl over Arc<MeshStore> at :43 - C8, not a peer noun"
+disposition = "decided:rename"
+word = "MeshReplicatedKvStub"
+why = "17 refs / 1 file. Test PeerStore impl over Arc<MeshStore> at :43 - C8, not a peer noun"
 
+# ═══ Edges — cross-context sharing E1-E13 (dm-shared-edges' denominator); translations are designed in quality/DOMAINS.md §10 and land in rungs 5/6/7 ═══
 [[edge]]
 from_type = "PeerHealthTracker"
 from_context = "fabric"
@@ -2306,3 +2337,835 @@ to_context = "serving"
 fields_read = ["node_id", "multiplier", "reason", "set_at"]
 translation = "none"
 note = "E13 reverse edge, held by prose: :43 'Field names are the desktop PeerPreferenceDto's verbatim and carry no serde renames'. Fourth copy of the row; fixing C5 closes this."
+
+# ═══ Collisions — rung domains-4 adjudication 2026-09-14: Serving families (8 rows) ═══
+# Serving — collision adjudications, one row per family.
+# Companion to scratchpad/adjudications-serving.md, which carries the definition
+# tables, the sketches and the evidence. Measured 2026-09-14 on main @ e19eb0f90.
+#
+# `<Word>` is a PLACEHOLDER. A sibling worker owns the decision about what
+# Serving's ranked record is called (DOMAINS.md §5 proposes `Candidate`;
+# §8's re-measure found five first-party `Candidate` definitions in five
+# crates). Every verdict here holds whichever word wins. Family 3 is the one
+# place the word changes the PRICE, and both prices are stated in its row.
+#
+# Reference counts are `grep -rn '\b<Name>\b' --include='*.rs'` over the repo
+# minus target/. "N sites" is the total including tests unless the row says
+# otherwise.
+
+# ─────────────────────────────────────────────────────────────────────────
+[[collision]]
+family = "Tier"
+context = "serving"
+definitions = [
+    "sovereign/crates/sovereign-serving/src/plan.rs:142 Tier (Quality/Throughput/FastSlot)",
+    "sovereign/crates/sovereign-core/src/role.rs:79 Tier (Fast/Primary, model_stem() at :89)",
+    "commonwealth/crates/commonwealth-media/src/apps.rs:57 Tier (Config/Claimed)",
+    "sovereign/crates/sovereign-mesh/src/tier.rs:112 TierFloor (None/TopBand)",
+    "oicp-types/src/capability.rs:276 LatencyClass (Fast/Normal/Extended) - adjacent, NOT the same concept",
+    "oicp-types/src/completion.rs:37 Speed + :744 latency_to_speed - adjacent",
+]
+verdict = "split"
+survivor = "TierFloor @ sovereign-scheduler"
+renames = [
+    "sovereign-serving plan::Tier -> DELETED (sovereign-serving, 8 sites, 0 external) - part of the family-2 eleven",
+    "sovereign-core role::Tier -> PreferredSlot; RoleProfile::preferred_tier -> preferred_slot (sovereign-core, 31 sites)",
+    "commonwealth-media apps::Tier -> Origin; PublishedApp::tier -> origin with #[serde(rename = \"tier\")] (commonwealth-media + sovereign-cli-llm, 16 sites, 2 files) - WIRE-VISIBLE, PublishedApp is Serialize",
+]
+rung = "domains-9"
+why = "Four unrelated questions wore one word; only TierFloor is Serving's, and it is a capability FLOOR, not a tier - tier.rs:105-111 pre-registers the LatencyClass derivation as a known seam, so it is not a convergence."
+
+# ─────────────────────────────────────────────────────────────────────────
+[[collision]]
+family = "routing-model"
+context = "serving"
+definitions = [
+    "sovereign/crates/sovereign-serving/src/plan.rs:135 RequestRouter (0 external refs)",
+    "sovereign/crates/sovereign-serving/src/plan.rs:169 TierRouter (alias, 0 external)",
+    "sovereign/crates/sovereign-serving/src/plan.rs:150 RoutingRule (0 external)",
+    "sovereign/crates/sovereign-serving/src/plan.rs:158 RoutingCondition (0 external)",
+    "sovereign/crates/sovereign-serving/src/plan.rs:122 LoadPolicy (0 external)",
+    "sovereign/crates/sovereign-serving/src/plan.rs:40 SchedulingStrategy (0 external)",
+    "sovereign/crates/sovereign-serving/src/plan.rs:100 NodeRole (0 external)",
+    "sovereign/crates/sovereign-serving/src/plan.rs:86 PlanTrigger (0 external)",
+    "sovereign/crates/sovereign-serving/src/plan.rs:68 UnavailableReason (0 external)",
+    "sovereign/crates/sovereign-serving/src/plan.rs:177 TierQueueDepths (0 external)",
+    "sovereign/crates/sovereign-serving/src/inference_plan.rs:55 ModelTransition (0 external)",
+    "sovereign/crates/sovereign-serving/src/inference_plan.rs:64 TransitionState (0 external)",
+    "sovereign/crates/sovereign-mesh/src/decision_log.rs:216 RoutingDecision - LIVE",
+    "sovereign/crates/sovereign-mesh/src/decision_log.rs:245 DecisionPath - LIVE",
+    "sovereign/crates/sovereign-mesh/src/scheduler_core.rs:78 RankObjective - LIVE",
+    "sovereign/crates/sovereign-mesh/src/decision_log.rs:364 LoadSource - LIVE",
+    "sovereign/crates/sovereign-mesh/src/predicted_time.rs:106 LoadDebt - LIVE",
+]
+verdict = "delete"
+survivor = ""
+renames = [
+    "RequestRouter/TierRouter/RoutingRule/RoutingCondition/LoadPolicy/SchedulingStrategy/NodeRole/PlanTrigger/UnavailableReason/Tier/TierQueueDepths/ModelTransition/TransitionState -> DELETED (sovereign-serving, 0 external refs each; callers(RequestRouter) returns 5 sites, all in-crate)",
+    "CASCADE NOT IN THE RUNG-9 ORDER: MeshPlan (plan.rs:22) loses 4 of 7 fields and dies with them; store_adapter.rs:141 set_mesh_plan, :149 get_mesh_plan, :160 set_queue_depths, :169 all_queue_depths; sovereign-mesh-test-harness/src/simulated_mesh.rs:195 propagate_mesh_plan, :202 current_mesh_plan, :209 plans_converged. ALL SEVEN HAVE ZERO CALLERS - verified by repo-wide grep. DOMAINS.toml:1312 lists MeshPlan as LIVE with 6 refs; those 6 refs are one import plus three uncalled helpers.",
+    "NOT deleted: InferencePlan/ShardPlan/ShardAssignment/LayerRange stay - InferencePlan owns Vec<ShardPlan> directly (inference_plan.rs:10) and is reached by POST /internal/scheduling/plan (sovereign-api/src/routes_internal/gossip.rs:178)",
+]
+rung = "domains-9"
+why = "A declarative rule table and a per-request predicted-cost ranker cannot both be the decider (ARCH 8); the table has never decided anything, so it is deleted rather than reconciled."
+salvage = [
+    "UnavailableReason's SHAPE -> mint GateReason in sovereign-scheduler: Verdict::Gated{gate: String} (decision_log.rs:509) is a closed set living as free text inside the serialized oicp-decision/v1 schema (ARCH 9). serde(rename_all=snake_case) keeps the JSON byte-identical for known values; an Other(String) arm keeps already-written SOVEREIGN_DECISION_LOG jsonl readable. RUNG 11, not 9 - a wire-schema change must not ride a deletion commit (ARCH 2).",
+    "PlanTrigger -> NO SALVAGE. DecisionPath (decision_log.rs:245) is the live 'why this ranking ran' and is already a closed enum stamped on every record. Say so in the commit body so the next reader does not re-mint it.",
+    "LoadPolicy -> NO SALVAGE. A policy enum next to RankObjective is two implementations of one threshold (ARCH 8). Deleting it is also what frees the word 'load' for LoadSource (measurement provenance) and LoadDebt (queue debt).",
+    "ModelTransition/TransitionState -> NO SALVAGE. Repo-wide sweep finds no live model-swap state machine in Serving (only sovereign-agent-tools/src/role/transition.rs:13 TransitionTrigger, a role switch, unrelated). Hot swap would be a new design against a spec, not a resurrection.",
+]
+
+# ─────────────────────────────────────────────────────────────────────────
+[[collision]]
+family = "candidate"
+context = "serving"
+definitions = [
+    "sovereign/crates/sovereign-mesh/src/daemon.rs:4783 PeerInferenceEndpoint - the roster record, 9 fields (94 sites / 50 outside tests/)",
+    "sovereign/crates/sovereign-mesh/src/oicp_select.rs:32 ModelCandidate - an `as`-rename of oicp_types::ScoredClaim (36 sites)",
+    "sovereign/crates/sovereign-mesh/src/scheduler_core.rs:232 PeerCandidateView (18 sites)",
+    "sovereign/crates/sovereign-mesh/src/scheduler_core.rs:207 LocalCandidateView (13 sites)",
+    "sovereign/crates/sovereign-mesh/src/scheduler_core.rs:216 PeerManifestView (9 sites)",
+    "sovereign/crates/sovereign-mesh/src/scheduler_core.rs:302 RankedCandidate (5 sites)",
+    "sovereign/crates/sovereign-mesh/src/decision_log.rs:290 CandidateRecord (21) / :383 CandidateInputs (27) / :283 CandidateKind (30)",
+    "sovereign/crates/sovereign-mesh/src/decision_log.rs:498 ExcludedCandidate (4 sites)",
+    "oicp-types/src/scoring.rs:438 ScoredClaim - THE score type, published (with pick_better :458, best_claim_for_request :481, SCORING_EPSILON :431)",
+    "commonwealth/crates/commonwealth-transport/src/lib.rs:227 PeerEndpoint - Fabric's reach record, NOT in the eight; PeerInferenceEndpoint is built from a Vec of these at daemon.rs:2312",
+]
+verdict = "converge"
+survivor = "<Word> @ sovereign-scheduler + oicp_types::ScoredClaim (score type, published name kept)"
+renames = [
+    "PeerInferenceEndpoint -> <Word> (sovereign-mesh, 94 sites / 50 non-test)",
+    "PeerCandidateView -> <Word>View (sovereign-mesh, 18 sites)",
+    "LocalCandidateView -> SelfView (sovereign-mesh, 13 sites) - NOT merged into <Word>View: scheduler_core.rs:203-205 says the staleness asymmetry IS finding F1 stated in the type system",
+    "PeerManifestView -> ManifestView (sovereign-mesh, 9 sites)",
+    "RankedCandidate -> Ranked<Word> (sovereign-mesh, 5 sites)",
+    "ModelCandidate -> DELETED, use oicp_types::ScoredClaim (sovereign-mesh, 36 sites)",
+    "score_manifest_for_request -> DELETED, use oicp_types::best_claim_for_request (oicp_select.rs:32)",
+    "SCORE_TIE_EPSILON -> DELETED, use oicp_types::SCORING_EPSILON (oicp_select.rs:34)",
+    "CandidateRecord/CandidateInputs/CandidateKind/ExcludedCandidate -> <Word>Record/<Word>Inputs/<Word>Kind/Excluded<Word> (sovereign-mesh, 82 sites) - ZERO EDITS if <Word> resolves to `Candidate`; not wire-visible either way (serde field names, not struct names, are what oicp-decision/v1 publishes)",
+]
+rung = "domains-5"
+why = "Eight nouns, one word, five genuinely different lifetimes (roster record, decider's view, score, rank position, versioned serialized record) - so the WORD converges and the roles take suffixes, while the one true duplicate (a score type wearing a local alias over a published one) is deleted."
+price_if_word_is_candidate = "175 sites"
+price_if_word_is_anything_else = "257 sites"
+seam_fields = [
+    "FABRIC - identity/reach, Serving never interprets: node_id, name, base_urls, transport (daemon.rs:4844-4850 says scoring/manifest/throughput/fan-out are oblivious to transport; only the connect site branches)",
+    "FABRIC-PUBLISHED CAPABILITY, Serving-consumed: system_ram_gb, benchmark",
+    "SERVING - load/availability/freshness: current_in_flight, inference_availability, gossip_last_seen_unix",
+    "NOT in the nine, and that is the tell: quarantine, yield_backoff, rtt_ms, manifest age, NodeObservations - all Serving's OWN memory, added when the decider builds <Word>View. That is the line between <Word> and <Word>View.",
+]
+seam_predicates = [
+    "m.node_id != self_id            (daemon.rs:2297)",
+    "m.status in {Online, Busy}      (daemon.rs:2299-2305)",
+    "m.is_dialable()                 (daemon.rs:2306)",
+    "ALL THREE read only MemberRecord - which is why the seam row's 'move this function to the Fabric side' is right: nothing in the filter is a Serving judgement",
+]
+
+# ─────────────────────────────────────────────────────────────────────────
+[[collision]]
+family = "admission"
+context = "serving"
+definitions = [
+    "sovereign/crates/sovereign-api/src/admission.rs (1447 lines): peer_admission_layer :551, client_fairness_layer :457, local_queue_shed_response :199, PeerInflightGuard :228, AdmissionReason :51, AdmissionRejection :158 - 'do I serve this inbound request at all right now?'",
+    "commonwealth/crates/commonwealth-rail-core/src/admit.rs (547 lines): admit() :299, Admission :238, AdmittedOp :198, RailGap :78 - 'which journal lines count, in what one order does every node apply them?'",
+    "sovereign/crates/sovereign-core/src/runtime/admission.rs (225 lines): AdmittedTurn :81, scope :143, current :151, stamp :159 - 'has this host already accepted this turn?' (a foreground lease + id)",
+    "sovereign/crates/sovereign-core/src/runtime/grounding/native_grounding/admission.rs (841 lines): admit() :334, AdmissionOutcome :213, NativeAdmission :260 - 'can the sealed evidence answer this question?' TELEMETRY, enforced = false on every event",
+]
+verdict = "split"
+survivor = "Admission* @ sovereign-serving-host (was sovereign-api/src/admission.rs)"
+renames = [
+    "commonwealth-rail-core admit.rs -> include.rs; Admission -> Inclusion; admit() -> include(); AdmittedOp -> IncludedOp (commonwealth-rail-core + -rail + -state, ~34 type + ~47 module-path sites) - FABRIC's campaign, not Serving's",
+    "sovereign-core runtime::admission -> runtime::turn_lease; AdmittedTurn -> TurnLease; TurnAdmission -> TurnLeaseToken (sovereign-core, 54 sites) - ANSWERING's campaign. turn_lease.rs:27 already imports it, so the noun is already there; admission.rs:23-27 says 'That lease IS the admission fact'",
+    "sovereign-core native_grounding::admission -> native_grounding::answerability; AdmissionOutcome -> AnswerabilityOutcome; NativeAdmission -> NativeAnswerability (sovereign-core, 40 sites) - ANSWERING's campaign. Its own first line is 'the answerability admission stage' and it decides nothing",
+]
+rung = "domains-10"
+why = "Four unrelated deciders wore one word and only the doorman is one - inclusion-in-a-set, a receipt for work already admitted, and a non-enforcing score are three other things; DOMAINS 4's exclusive claim is made true by renaming those three, not by Serving yielding."
+note = "THREE of the four renames (128 sites) are in contexts this campaign does not touch. Serving's rung can land only the crate move of the survivor. File B against Fabric and C/D against Answering with their prices, and do not claim the word is owned exclusively until all three land - say so in the ledger."
+existing_decider = "serving-policy/src/fair_sched.rs:244 SchedCore<K>, :448 try_grant(key,weight,cap) -> :198 TryGrant{Granted, WouldQueue{position}, Shed{..}}, :130 reciprocity_weight. Tier-0 leaf, ZERO in-repo deps, two [[forbid]] rows at ARCH_LAYERS.toml:381-389. ARCH 11: admission does not need a new decider, it needs the axum/AppState coupling cut off the one that exists."
+
+# ─────────────────────────────────────────────────────────────────────────
+[[collision]]
+family = "decision_log"
+context = "serving"
+definitions = [
+    "sovereign/crates/sovereign-mesh/src/decision_log.rs - routing decision records: RoutingDecision :216, RoutingOutcome :577, DecisionSink :617, DecisionBuilder :962, DecisionEvent :84, FleetSnapshot :161. OWNS the schema tag oicp-decision/v1 (:64) and the env var SOVEREIGN_DECISION_LOG (:68)",
+    "studio/crates/sovereign-recipe-author/src/decision_log.rs - recipe-authoring decisions: DecisionLogTool :113, DecisionKind :36, DecisionPayload :104, DecisionAttribution :83. OWNS the tool id \"decision_log\" (:134), registered at sovereign-contracts/src/intent_policy.rs:367 and :479, exposed at sovereign-tools/src/mcp_surface.rs:91, asserted at sovereign-core/tests/main/mode_declarations.rs:84",
+]
+verdict = "split"
+survivor = "decision_log (the tool id) @ sovereign-recipe-author - UNCHANGED, 0 renames"
+renames = [
+    "sovereign-mesh module decision_log -> routing_decisions (inside sovereign-scheduler) - 74 module-path sites in sovereign-mesh, most rewritten by the rung-10 git mv anyway",
+    "DecisionSink -> RoutingDecisionSink (sovereign-mesh)",
+    "DecisionBuilder -> RoutingDecisionBuilder (sovereign-mesh)",
+    "DecisionEvent -> RoutingDecisionEvent (sovereign-mesh)",
+    "NO RENAME: RoutingDecision, RoutingOutcome, DecisionPath, Verdict, FleetSnapshot - they already name the routing decider",
+]
+rung = "domains-10"
+why = "The collision is on a module name and a bare word, not on a type; the side holding a published wire id keeps the word, and Serving's decider is named RoutingDecision, not Decision."
+must_not_move = [
+    "SOVEREIGN_DECISION_LOG - operator-facing, declared in quality/env-flags.toml and cited in commonwealth/docs/MESH_QA.md:392, sovereign/SYSTEM_OVERVIEW.md:4844, quality/initiative-bars.toml:1860, .canon/sources/notes/invariant/cd7f718c.md:6, and two live test files. Renaming it breaks every runbook that arms it.",
+    "\"oicp-decision/v1\" - the schema tag on every jsonl record already on disk",
+    "DECISION_TRACE_TARGET = \"mesh.decision\" (decision_log.rs:73) - a tracing target matched by RUST_LOG filters in runbooks. It will stop describing where the code lives after the move; leave it and add a comment saying the prefix is historical, or file the runbook edits as rung 11. Do NOT change it inside the move.",
+]
+
+# ─────────────────────────────────────────────────────────────────────────
+[[collision]]
+family = "guest_lender"
+context = "serving"
+definitions = [
+    "sovereign/crates/sovereign-mesh/src/guest_lender.rs:70 GuestLender {base_url, bearer, display} (7 sites)",
+    "sovereign/crates/sovereign-mesh/src/guest_lender.rs:123 GuestLenderSource - lender_for(model_id)/posture()/invalidate() (10 sites / 7 non-test)",
+    "sovereign/crates/sovereign-mesh/src/guest_lender.rs:99 GrantPosture {NoLink, Unusable{lender,why}, Granted{lender,ids}} (20 / 15)",
+    "sovereign/crates/sovereign-mesh/src/guest_lender.rs:146 NoGuestLenders (10 sites)",
+    "sovereign/crates/sovereign-mesh/src/guest_lender.rs:171 StoredGuestLink (21 / 15)",
+    "sovereign/crates/sovereign-mesh/src/peer_inference.rs:337 PeerEndpointSource - the OTHER port (72 / 38)",
+    "sovereign/crates/sovereign-core/src/guest_link.rs:39 GuestLink - the persisted link",
+    "sovereign/crates/sovereign-grants/src/guest_grant.rs:120 GuestGrant, :76 Scope, :210 GuestGrantStore - the LENDER's side, untouched",
+]
+verdict = "split"
+survivor = "GuestLender/GuestLenderSource/NoGuestLenders/GrantPosture @ sovereign-serving-host; GuestGrant/Scope stay @ sovereign-grants"
+guest_lender_source_is_peer_endpoint_source = false
+renames = [
+    "NO RENAMES. GuestLender, GuestLenderSource, NoGuestLenders, GrantPosture keep their names and move crates (sovereign-mesh -> sovereign-serving-host).",
+    "StoredGuestLink (21 sites) stays in the HOST wiring - it reads a file, opens a tunnel, runs an HTTP client. It implements the port; it is not the port. Same standing as EmbeddedDaemon for PeerEndpointSource.",
+    "GrantPosture is NOT renamed to LenderPosture: the word 'grant' is what tells the reader why the Unusable state exists (guest_lender.rs:93-99, the 2026-08-28 silent substitution).",
+]
+rung = "domains-10"
+why = "ARCH 12 - draw the line by what each side owns about itself: sovereign-grants owns what this node LENDS OUT; guest_lender.rs owns what this node can DISPATCH TO, and consumes an authorisation it does not issue."
+why_not_one_port = [
+    "different question: 'who is routable right now?' vs 'do I hold a live grant FOR THIS MODEL ID?'",
+    "different cardinality: Vec<..> (may be empty) vs Option<..> (at most one)",
+    "different standing in the decision: ranked against local by the scorer vs a PIN that beats scoring outright",
+    "different lifecycle: stateless, re-read every decision vs invalidate() on 401 + a 60s SCOPE_TTL cache",
+    "decisive evidence: NamedModelLocation (peer_inference.rs:3104) has SEPARATE Peer(..) and Guest(..) variants, and the doc at :3116-3119 says 'Not a scoring outcome. Peer is chosen by weighing candidates; this is a PIN ... It therefore beats peer selection.'",
+    "converging them would force every roster supplier to implement invalidate() (meaningless for a gossiped peer) and every lender to enumerate - putting the pin in front of the ranker, which is the behaviour the pin exists to prevent",
+]
+rung_11_candidate = "THREE spellings of bearer-plus-label: GuestLender{base_url,bearer,display} (guest_lender.rs:70), PinnedTransport{client,bearer,label} (pinned_transport.rs:66, 13 sites), and commonwealth_transport::PeerEndpoint (lib.rs:227). A real convergence, ~20 sites, but a Compute/Serving shared leaf rather than a port - folding it inside the Serving rung risks the exact re-coupling rung 10's kill clause names."
+
+# ─────────────────────────────────────────────────────────────────────────
+[[collision]]
+family = "frontdoor"
+context = "host"
+definitions = [
+    "sovereign/crates/sovereign-api/src/frontdoor.rs - 5,820 lines; is_enabled :52, Harness :64, detect_harness :161, CODEX_TOOL_KEEPLIST :219, apply :457, apply_baseline :484, apply_distiller :2686, plus ~20 reshape/canonicalize fns",
+]
+verdict = "split"
+survivor = "frontdoor @ sovereign-api (HOST) - stays put until the daemon-core campaign moves the host surfaces"
+renames = []
+rung = "domains-4"
+why = "It imports axum, sha2, tracing, crate::openai_types, crate::responses_types, crate::routes_inference::chat_completions and crate::state::AppState (:31-46) and NOT ONE scheduler, candidate, manifest, score, decision, admission or tier type - it reshapes WHAT IS ASKED, never WHICH ENGINE ANSWERS."
+caller_census_overturns_the_note = "The registry note says one non-test caller. It is TWO production callers and 23 call sites: sovereign-api/src/routes_responses.rs 14 (:97,:107,:108,:111,:113,:119,:128,:221,:285,:363,:515,:543,:759,:1175,:1302 - its 40 raw hits include 25 inside its own inline #[cfg(test)] mod from ~:1880) and sovereign-api/src/routes_inference.rs 9 (:249,:250,:251,:260,:261,:1143,:1164,:1178,:1185), plus two doc-comment-only refs (reshaping.rs:15, turn_fidelity.rs:86) and 12 sites in sovereign-api/tests/main/turn_reshape_fidelity.rs. The two-caller fact STRENGTHENS the Host reading: a Serving module would be called by the scheduler or the provider; frontdoor is called by two route handlers that sit ABOVE the routing decision, and it calls one of them back (:45). Rung 4 must correct the count in the same edit - the next reader will reach for that note when deciding whether routes_inference can move without frontdoor. It cannot."
+
+# ─────────────────────────────────────────────────────────────────────────
+[[collision]]
+family = "serving-public-interface"
+context = "serving"
+definitions = [
+    "(a) port: sovereign/crates/sovereign-mesh/src/peer_inference.rs:337-371 PeerEndpointSource - 3 methods, 2 of them Fabric leaks",
+    "(b) scheduler entry: sovereign/crates/sovereign-mesh/src/scheduler_core.rs:339 rank(DecisionBuilder, RankInputs<'_>) -> RankResult - pub(crate) today, pure, no I/O, no clock read (:336-338)",
+    "(c) admission entry: sovereign/crates/sovereign-api/src/admission.rs:551 peer_admission_layer, :457 client_fairness_layer, :199 local_queue_shed_response, :211 shed_response, :228 PeerInflightGuard (+ state.rs:2456-2485)",
+    "(d) decision log + replay: decision_log.rs:617 DecisionSink, :1068 emit_decision, :1073 emit_outcome; decision_replay.rs:342 replay_decision, :458 replay_decisions, :517 replay_trace, :269 recompute_score, :305 recompute_verdict, :98 SCORE_TOLERANCE",
+    "(e) inward callers: 8 production sites in sovereign-cli-daemon (daemon_cmd/provider.rs:111,:117,:128,:136; bootstrap.rs:1151,:1203,:2202,:2301-2308; build/inference.rs:130) + 1 e2e test",
+]
+verdict = "converge"
+survivor = "sovereign-scheduler (a,b,d) + sovereign-serving-host (c) - five published entries"
+renames = [
+    "PeerEndpointSource -> <Word>Source, THREE methods to ONE: candidates() -> Vec<<Word>> (sovereign-mesh, 72 sites / 38 non-test; 3 production impls + 6 test stubs, all of which get SHORTER)",
+    "local_node_id() -> Option<commonwealth_core::ids::NodeId> (:348) COMES OFF the port -> a constructor argument typed kernel_types::NodeId. It is a process constant, not a per-call question, and it is what burns [[exception]] #2 down.",
+    "ledger_emission_for(..) -> Option<LedgerEmission> (:365) COMES OFF the port -> the host subscribes to RoutingOutcome (which already carries decision_id, who served, token counts) and mints emissions from it. Serving emits facts; Fabric prices them. Its #[doc(hidden)] was the tell.",
+    "MeshInferenceProvider::with_peer_source + ::with_peer_source_and_publisher -> ONE builder. The pair exists only because a reload must not mint a fresh publisher (provider.rs:95-106); a builder collapses them, and the node_id removed from the port enters here - the whole local_node_id fix, visible at the call site.",
+    "rank() pub(crate) -> pub (sovereign-mesh scheduler_core.rs:339). local_sentinel :99, beats_local :117, winners_over_local :154 STAY pub(crate) - exposing them invites a second copy of the strictly-beats-local filter.",
+]
+rung = "domains-10"
+why = "This is the package boundary SERVING_BOUNDARY.md 'The rules' is written against: one supplier port, one pure ranker entry, one admission trait over an existing tier-0 decider, one decision record + replay, and eight call sites in one crate that stop naming sovereign-mesh."
+order_guess_corrected = "The order's sketch `fn route(&self, req, candidates) -> RoutingDecision` does not exist. The real entry is free-standing, takes a fully-assembled RankInputs (now_unix, oicp_request_id, req, needs_forced_choice, objective, tier_floor, local, candidates) and returns RankResult{ranked, tie_band, decision}. THREE properties must survive the move verbatim because lift step 7 rests on all three: purity, now_unix PASSED not read, and objective + tier_floor PASSED not derived - scheduler_core.rs:293-296 says the derivation was refused on purpose because a derived floor 'would apply everywhere the moment it compiled, and no before/after would exist to price it'."
+honesty_notes = [
+    "replay_decision ASSUMES RankObjective::Product (scheduler_core.rs:72-76: a record cannot say which objective produced its verdict; closing that gap belongs to the 4.1 landing). serving-lift.sh's 'replay reproduces every decision' step must SAY SO rather than print an unqualified pass - four verdicts, not two.",
+    "decision_replay.rs:75 is the scheduler half's ONE non-Serving crate:: reference (crate::mesh_sim::scoreboard, feature-gated, in a doc comment). It is the whole reason the scheduler can be called 'already a crate'. The move must not turn it into a real dependency.",
+    "After the move sovereign-cli-daemon names sovereign-scheduler (for the port type) and sovereign-serving-host (for the router), and names sovereign-mesh ONLY for the adapter it writes itself - the daemon.rs:2286-2345 translation relocated to the Fabric side of the seam. If that adapter ends up anywhere else, the boundary is drawn wrong.",
+]
+
+# ═══ Collisions — rung domains-4 adjudication 2026-09-14: Understanding/kernel families (12 rows) + the `research` context and its 17 module rows ═══
+# Understanding / kernel collisions — one row per family.
+#
+# Design input for `domains-4-adjudication` (word decisions) and
+# `domains-8-understanding-readmodel` (the read model). Measured 2026-09-14 on
+# main @ e19eb0f90. Prose, evidence and Rust sketches: adjudications-understanding.md.
+#
+# verdict ∈ converge | split | delete | allow
+#   converge — one type survives; the others become it or an artifact row of it
+#   split    — genuinely different concepts; the ones that do not own the word rename
+#   delete   — the word leaves a context's `owns`; no read-model work follows
+#   allow    — a standing carve-out, with the reason it cannot become a hole
+#
+# `renames` entries are "Old -> New (refs/files)"; counts from
+# `git grep -n -w <Name> -- '*.rs'` and `git grep -l`, /target/ excluded.
+# `rung` names the campaign rung that should execute the row.
+
+# ─────────────────────────────────────────────────────────────────────
+# 1. Gap
+# ─────────────────────────────────────────────────────────────────────
+[[collision]]
+family = "Gap"
+context = "understanding, answering, research"
+definitions = [
+  "corpus-engine/src/enrichment/atlas/analysis/gaps.rs:56 Gap — a hole in one corpus's atom graph (kind: GapKind, referenced_atoms: Vec<AtomId>, evidence: Vec<ChunkRef>, significance: f32); GapKind at :35 is the closed set TransitionWithoutTrigger|UngroundedClaim|OpenQuestion",
+  "sovereign/crates/sovereign-contracts/src/types/epistemic.rs:294 Gap — a demand for evidence the installed corpora cannot meet (demand_idx, statement, coverage: GapCoverage, routes: Vec<AcquisitionRoute>)",
+  "sovereign/crates/sovereign-core/src/deep_research/icd.rs:407 Gap — the same demand serialised into gap-list-<round>.json (id, text, actionable_query, from_claim_id, corroboration)",
+  "sovereign/crates/sovereign-cli-dev/src/atos_cmd/run.rs:1829 Gap (private) — a reviewer-JSON wire row",
+]
+verdict = "split"
+survivor = "sovereign_contracts::types::epistemic::Gap"
+renames = [
+  "corpus-engine gaps.rs:56 Gap -> Lacuna (49/11); GapKind -> LacunaKind; GapsOutput -> LacunaeFile. On-disk file stays atlas/gaps.json and the JSON key stays `gaps` via #[serde(rename)] — a Rust rename, NOT a schema migration",
+  "deep_research icd.rs:407 Gap -> GapRow (19/8), the ICD's artifact row for the survivor, spelled like its siblings RoundRow/ResidueRow; carries actionable_query, from_claim_id and corroboration, which a Tier-1 contracts crate may not hold (CorroborationRecord is the gate's own accounting)",
+]
+rung = "domains-4 (decide) / domains-11 (execute the Lacuna rename)"
+why = """
+NOT one type. quality/CONCEPTS.toml:831-843 already decided this on 2026-08-24 \
+and the decision survives re-measurement: canonical epistemic::Gap, converge \
+the knowledge-gap family, gaps.rs:56 is the only surviving DISTINCT arm, \
+atos_cmd's is a private wire shape. kernel-types is REFUSED despite converge \
+naming it lowest-tier owner covering 6/6: the two survivors have disjoint \
+fields and hoisting either to layer 0 drags a product noun — gaps.rs needs \
+AtomId + ChunkRef, epistemic::Gap needs AcquisitionRoute, whose variants are \
+named for shipping affordances (InstallRecipe, the Add-sheet connectors). \
+Understanding renames rather than Answering because the register minted \
+epistemic::Gap five months ago, DOMAINS.toml's understanding row already omits \
+Gap from `owns`, and the atlas family is contained (11 files, 1 crate + 2 CLI \
+steps) while epistemic::Gap sits in a Tier-1 contracts crate reaching the \
+runtime, the desktop wire and the research loop (53 sites).
+"""
+
+[[collision]]
+family = "Gap (atos private)"
+context = "workspace"
+definitions = ["sovereign/crates/sovereign-cli-dev/src/atos_cmd/run.rs:1829 Gap (private, 9 refs / 1 file)"]
+verdict = "allow"
+survivor = ""
+renames = []
+rung = "domains-4"
+why = """
+A private reviewer-JSON wire shape, not a registered noun — quality/CONCEPTS.toml:843 \
+classifies it exactly this way. Not a hole: it is `struct`, not `pub struct`, so \
+a pub-scoped census never sees it and a word-anywhere census can exclude \
+non-pub definitions by a rule rather than by a name.
+"""
+
+# ─────────────────────────────────────────────────────────────────────
+# 2. Domain
+# ─────────────────────────────────────────────────────────────────────
+[[collision]]
+family = "Domain"
+context = "understanding"
+definitions = [
+  "corpus-engine/src/enrichment/domain.rs:27 trait Domain — 'Encodes the epistemic conventions of a field of knowledge'; object-safe, Arc<dyn Domain>, five impls (PhilosophyDomain, PersonalDomain, ConversationalDomain, BusinessEmailDomain, InstitutionalDomain)",
+  "corpus-engine/src/enrichment/domain_registry.rs:14 DomainRegistry — HashMap<String, fn() -> Arc<dyn Domain>>, 'replaces the match statement in FieldModelEngine::from_recipe()'",
+]
+verdict = "split"
+survivor = "none — Understanding does NOT take the word"
+renames = [
+  "corpus-engine/src/enrichment/domain.rs:27 trait Domain -> FieldModel (45/2 crates)",
+  "corpus-engine/src/enrichment/domain_registry.rs:14 DomainRegistry -> FieldModelRegistry",
+  "the five impls: PhilosophyDomain -> PhilosophyFieldModel, and so on (4 more)",
+]
+rung = "domains-4 (decide) / domains-11 (execute)"
+why = """
+The atlas noun has NO TYPE: `git grep -rn 'domains\\.json' -- '*.rs'` returns \
+zero, and the atlas writer persists atoms/edges/trajectories/gaps/ \
+tension_candidates/configurations/pattern_findings/schema_validation/ \
+resolution_failures/cross_corpus_edges — no domains file. The nearest carriers \
+of 'what is this material about' at the declared level are Vocabulary \
+(corpus-engine-vocab/src/ontology/mod.rs:48) and OntologyPolicies (:62), \
+written to atlas/ontology.json — and Understanding already owns `Ontology`. \
+So adding `Domain` to owns would claim a word against nothing, and `owns` is \
+what dm-word-owners reads. The plugin is not a squatter: its own doc says it \
+encodes 'a field of knowledge', Understanding already owns `field`, and the \
+whole output family is already spelled that way (FieldModelEngine, \
+FieldModelPass, FieldModelSource, FieldModelStats, FieldSkeleton, \
+field_skeleton.json). converge noun FieldModel -> zero definitions. \
+`Pass` is REFUSED as the target: DECOMPOSITION.md:129 is right that \
+[enrichment] type resolves through EnrichmentPassRegistry \
+(corpus-engine/src/enrichment/pass.rs:107), and that is exactly why — an \
+EnrichmentPass is a pipeline STEP and a Domain is a GENRE of material; a \
+recipe selects both independently, so merging them merges two extension points.
+"""
+
+# ─────────────────────────────────────────────────────────────────────
+# 3. Seed
+# ─────────────────────────────────────────────────────────────────────
+[[collision]]
+family = "Seed"
+context = "understanding"
+definitions = [
+  "NAVIGATION SEED (where a walk starts): corpus-engine-vocab/src/ontology/navigation.rs:134 SeedPolicy; corpus-engine/src/enrichment/atlas/seed_population.rs:77 SeedPopulation; .../atlas/ann_store.rs:124 SeedOutcome; sovereign-cli-llm/src/eval_cmd/atlas_ann.rs:21 SeedMode",
+  "EXTRACTION SEED (the Stage 1a entity list -> cache/seed.json): corpus-engine/src/enrichment/pipeline/atlas.rs:285 SeedEntity, :300 SeedEntities, :322 SeedOrigin, :348 SeedStrategy; sovereign-enrichment-build/src/seed_cmd.rs:31 SeedError, :61 SeedReport",
+  "HOMONYMS: sovereign-cli-dev/src/refactor_cmd/spec.rs:42 SeedEdit; .../refactor_cmd/discover.rs:127 SeededFile; sovereign-cli-llm/src/voice_eval/scenarios.rs:78 SeedMemory; sovereign-mesh/src/governance_http.rs:181 SeededResponse; sovereign-turn-client/src/lib.rs:3758 SeededWire; sovereign-cli-llm/src/awareness_cmd/seed.rs:159 SeedPlan",
+]
+verdict = "split"
+survivor = "Seed stays Understanding's (both senses; see why)"
+renames = [
+  "SeedEdit -> ProbeEdit (2/1)",
+  "SeededFile -> ProbedFile (5/1, private)",
+  "SeedMemory -> FixtureMemory (20/6)",
+  "SeededResponse -> RulesAssertedResponse (3/1)",
+  "SeededWire -> RulesAssertedWire (3/1, private)",
+  "SeedPlan -> ConversationFixturePlan (4/1, private)",
+]
+rung = "domains-4 (decide) / domains-11 (execute) — 37 refs / 11 files total"
+why = """
+Rename, because the instrument CANNOT be taught the difference: the \
+discriminator is the sense of an English word — 'a seed entity' (a thing you \
+start from) vs 'to seed' (to populate). No grep, no SCIP query and no path \
+pattern separates SeedEntity from SeedEdit; only a hand-maintained allow-list \
+could, and one that must grow whenever anyone uses the verb is a hole. \
+Five of the six are private or single-file; the one public pair \
+(SeededResponse/SeededWire) is a matched rename on both ends of one route. \
+TWO CORRECTIONS to scratchpad/understanding-readmodel.md §3: (a) SeedError and \
+SeedReport are NOT homonyms — seed_cmd.rs's header is 'svrn enrich seed — \
+Stage 1a driver … writes the seed entity list to cache/seed.json', the same \
+step-outcome class as GapsReport; (b) SeedPlan IS a homonym — its field is \
+conversations: Vec<PlannedConversation>, a conversation-store fixture. So the \
+outside-the-context atlas-noun count is 1 (SeedMode), not 2, and a Phase-B \
+Seed bar reads 1 -> 0. Also recorded: Seed collides WITH ITSELF inside \
+Understanding — the navigation seed and the extraction seed are two concepts \
+under one word, a later converge, not Phase B's.
+"""
+
+# ─────────────────────────────────────────────────────────────────────
+# 4. AtomSpan
+# ─────────────────────────────────────────────────────────────────────
+[[collision]]
+family = "AtomSpan"
+context = "understanding"
+definitions = [
+  "corpus-engine/src/atlas_traversal/spans.rs:43 AtomSpan — atom_id: String, atom_type: &'static str, span_start, span_end, surface_form (the detector's output; atom_type is AtomType::label() flattened to a borrow)",
+  "sovereign/crates/sovereign-mesh/src/reading_http.rs:123 AtomSpan — the same five fields with atom_type: String; own doc 'Wire shape mirrors corpus_engine::atlas_traversal::AtomSpan'; impl From<DetectorAtomSpan> at :131",
+]
+verdict = "converge"
+survivor = "corpus_engine_vocab::view::span::AtomSpan — owned, serde-able, atom_type: AtomType"
+renames = ["sovereign-mesh reading_http.rs:123 AtomSpan + its From impl DELETE; 18 refs / 5 files repointed"]
+rung = "domains-8"
+why = """
+The copy is forced by the internal type's shape, not by the boundary: a \
+&'static str cannot cross serde. Carrying the closed enum removes both the \
+flattening and the copy. The closed set lives at \
+corpus-engine-vocab/src/atoms.rs:1104 (pub enum AtomType, twelve variants, \
+Hash + Ord) — NOT taxonomy.rs, which holds EnrichmentDepth at :40. \
+label() is at atoms.rs:1163 and already the one decider for the lowercase \
+spelling the desktop's CSS classes consume. ONE function must be minted and it \
+is the only new behaviour in this row: AtomType::from_label(&str) -> \
+Option<AtomType> (git grep 'fn from_label' corpus-engine-vocab/ returns \
+nothing today), so the field serialises with #[serde(with = \
+\"crate::atoms::atom_type_label\")] and the wire does not change. It refuses \
+on an unknown label rather than defaulting, matching AtomEnvelope's deliberate \
+absence of #[serde(other)].
+"""
+
+# ─────────────────────────────────────────────────────────────────────
+# 5. Cluster
+# ─────────────────────────────────────────────────────────────────────
+[[collision]]
+family = "Cluster"
+context = "understanding (struck)"
+definitions = [
+  "39 definitions, six families. UNDERSTANDING/atlas (11): enrichment/clustering.rs:389 ClusterResult, :396 ClusterInfo; enrichment/domain.rs:263 ClusteringConfig, :318 ClusterLabel; pipeline/atlas_clustering.rs:57 FacetClusterResult, :355 ClusterDraft; pipeline/types.rs:1279 QuestionCluster, :1420 AtlasCluster, :1459 NamedCluster, :1516 ChunkCluster; pipeline/vector_clustering.rs:21 VectorClusterResult",
+  "UNDERSTANDING/meta_atlas (1): corpus-engine/src/meta_atlas/builder.rs:271 Cluster (private)",
+  "DESKTOP local-corpus ingest preview (13): sovereign-contracts/src/daemon_wire/local_corpus.rs:73 ClusterProgressView, .../local_corpus/clusterer.rs:14 ClusterConfig, :41 MultiClusterStrategy, :66 LabeledCluster, .../preview.rs:32 ClusterSummary, :80 ClusterConfidence, .../progress.rs:94 ClusterStage; sovereign-tools/src/local_corpus/clusterer.rs:45 LabeledClusterResult, :69 Clusterer; sovereign-mesh/src/lc_http.rs:172 ClusterRequest, :181 ClusterProgressQuery, :192 ClusterProgress (alias), :687 ClusterJob",
+  "WORKBENCH (3): sovereign-tools/src/code/suggest_seams.rs:74 Cluster, .../code/dry_report.rs:99 NearCluster, sovereign-cli-dev/src/code_fieldglass/model.rs:142 DupClusterSummary",
+  "RAPTOR rollup (3): sovereign-tools/src/raptor_atlas.rs:890 ClusterSummarizationInput, .../raptor_checkpoint.rs:79 LevelClustering, sovereign-eval/src/entity_resolution_score.rs:41 type Clustering",
+  "OTHER (8): corpus-engine/src/recipe.rs:730 ClusteringToml; sovereign-core/src/conv_briefing.rs:122 ClusterSignpost; sovereign-cli-dev/src/intent.rs:111 IntentCluster; sovereign-eval/src/flywheel/generators/adversarial.rs:84 EntityCluster; sovereign-enrichment-build/src/atlas_phase_cmd.rs:31 ParsedCluster, :37 ClusterReport, :634 AtlasClusterTool; sovereign-cli-llm/src/enrich_cmd/workflow_primitives.rs:146 AtlasClustersTool, :187 AtlasClusterExcerptsTool",
+]
+verdict = "delete"
+survivor = ""
+renames = []
+rung = "domains-4 (struck; already absent from DOMAINS.toml owns) — DOMAINS.md §5 loses the clause"
+why = """
+CONFIRMED as asked: `git grep -c -i 'cluster' \
+corpus-engine/src/enrichment/atlas/writer.rs` prints nothing and exits 1 — ZERO \
+occurrences of the word in the atlas writer. Understanding's clusters are never \
+persisted under atlas/, so there is no read model to publish and nothing for \
+Phase B to converge. Four converge candidates recorded for later rungs, none of \
+them read-model work: (a) ClusterResult / VectorClusterResult / \
+FacetClusterResult are three results of ONE operation; (b) ChunkCluster -> \
+NamedCluster -> AtlasCluster are one noun at three pipeline stages, and \
+meta_atlas/builder.rs:271 Cluster is that same shape re-derived one directory \
+away — all four carry a member list plus a label; (c) LabeledCluster \
+(contracts) vs LabeledClusterResult (tools) in the desktop family, where the \
+rest of the three-crate split is legitimate layering and lc_http.rs:192's \
+`type ClusterProgress = ClusterProgressView` is the RIGHT pattern; (d) \
+suggest_seams::Cluster vs dry_report::NearCluster, both 'a group of \
+near-duplicate symbols', a code-intel package question.
+"""
+
+# ─────────────────────────────────────────────────────────────────────
+# 6. The read model — projections, door, pagination
+# ─────────────────────────────────────────────────────────────────────
+[[collision]]
+family = "Atom read model (7 projections + 7 satellites)"
+context = "understanding"
+definitions = [
+  "sovereign-tools/src/atlas_view/atom_browse.rs:28 AtomFilter, :85 AtomListPage, :101 AtomSummary, :205 AtomQueryError; atom_detail.rs:40 AtomDetail, :85 EvidenceExcerpt, :106 RelatedAtom, :140 ReferencedAtom, :146 CrossCorpusLink; reader.rs:159 CurationStatus, :169 AtlasViewError; atom_browse.rs:58 PageCursor",
+  "sovereign-mesh/src/reading_http.rs:240 CorpusAtomsPage, :266 AtomCard, :291 RelatedAtom, :304 CrossCorpusLink, :318 AtomElsewhere, :325 SectionRef",
+  "sovereign-turn-client/src/lib.rs:356 AtomsPage<T>",
+  "21 definitions across 5 crates",
+]
+verdict = "converge"
+survivor = "corpus_engine_vocab::view::{AtomHead, AtomSummary, AtomDetail, AtomFilter, AtlasPage<T>, AtomQueryError, AtomElsewhere, RelatedAtom, CrossCorpusLink, ResolvedEvidence, ReferencedAtom, CurationState, CurationStatus, PageCursor, AtomSpan} — 15 in one crate; AtlasViewError stays in sovereign-tools"
+renames = [
+  "CorpusAtomsPage + AtomListPage + AtomsPage<T> -> AtlasPage<T>, with aliases AtomPage = AtlasPage<AtomEnvelope> and AtomSummaryPage = AtlasPage<AtomSummary>. total/total_matching were one number under two names and two widths (usize, u64) -> one name, u64. The browse surface gains corpus_id, schema_version, offset, limit — all four already in scope at atom_browse.rs:258",
+  "RelatedAtom x2 -> one, typed (AtomId/AtomType, not String)",
+  "CrossCorpusLink x2 -> one (six fields, already identical)",
+  "SectionRef + EvidenceExcerpt -> ResolvedEvidence { section_id, chunk_id: Option<u64>, passage_preview: Option<String> } — two names, one concept, the AtomQueryError/AtomDetailError collapse of 2026-08-20 repeated. NOT named EvidenceRef: that is taken by corpus-engine/src/enrichment/atlas/context.rs:972, a BORROWED view EvidenceRef<'a>(&'a ChunkRef) from nc-6-atom, whose chunk_id is a section-id String while this one is a LanceDB row u64",
+  "atom_id + atom_type + display_name/canonical_name + salience + subtype, duplicated across AtomSummary, AtomDetail, AtomCard and (weakened) RelatedAtom -> one AtomHead, #[serde(flatten)]-ed. Four producers -> one",
+  "curation_status + overlay_supports, the same forward-compat pair in three producers -> one CurationState; CurationStatus moves to vocab",
+  "enrichment_depth: String (AtomCard) -> EnrichmentDepth (vocab taxonomy.rs:40), as AtomSummary already has it",
+  "AtomCard DELETE (10/4) — after the collapses it is AtomDetail minus the envelope, with description and aliases hand-lifted OUT of AtomEnvelope. The reading route returns AtomDetail, which already carries the envelope the desktop renders",
+]
+rung = "domains-8"
+why = """
+21 definitions in 5 crates -> 16 in 2. Five of the seven projections already \
+carry vocab's types correctly (AtomId, AtomType, StableAtomKey, AtomEnvelope, \
+EnrichmentDepth) — they are the read model built in the wrong crate, not \
+re-derivations. AtomCard's deletion is the order's 'Not worth continuing if the \
+projection becomes a mirror of AtomEnvelope' read from the other side: it is \
+already a LOSSY mirror, which is worse. Kill-clause check (item 11) holds — \
+every type is serde + std + vocab's own types; no thiserror, no tokio, no \
+sovereign-*, so [dependencies] stays kernel-types, serde, serde_json, blake3.
+"""
+
+[[collision]]
+family = "read_atlas_* (the door)"
+context = "understanding"
+definitions = [
+  "corpus-engine/src/enrichment/atlas/writer.rs:595 read_atlas_atoms -> io::Result<AtomsFile>",
+  "corpus-engine/src/enrichment/atlas/writer.rs:604 read_atlas_edges -> io::Result<EdgesFile>",
+  "corpus-engine/src/enrichment/atlas/writer.rs:562 read_atlas_cross_corpus_edges -> io::Result<CrossCorpusEdgesFile>",
+  "corpus-engine/src/enrichment/atlas/writer.rs:43 ATLAS_DIRNAME",
+  "read_atlas_ontology DOES NOT EXIST — the only site that reads the file is corpus-engine/src/enrichment/atlas/context_loader.rs:711 (atlas.join(\"ontology.json\")), inline inside the loader",
+]
+verdict = "converge"
+survivor = "corpus_engine_vocab::read — four fns + ATLAS_DIRNAME, all returning Result<_, AtomQueryError>"
+renames = [
+  "three fns MOVE (fs::read + serde_json::from_slice and nothing else); corpus-engine re-exports at the historical path as enrichment/atlas/mod.rs:31,40,58 already does for atoms/edges",
+  "read_atlas_ontology is MINTED, not moved — ~8 lines, OntologyV1 is already vocab's at corpus-engine-vocab/src/ontology/decl.rs:213",
+  "AtomQueryError moves to vocab with THREE variants: Absent { atlas_dir, file } / Io / Parse. UnknownCorpus(String) and Task(String) do NOT cross — vocab knows directories, not corpus ids, and Task is a tokio JoinError. Both stay in sovereign-tools' AtlasViewError (reader.rs:169), which already has CorpusNotFound",
+  "AtomQueryError is hand-written Display + Error, NOT #[derive(thiserror::Error)] — vocab's deps are exactly kernel-types, serde, serde_json, blake3 and check 11 is the kill clause. ~25 lines",
+]
+rung = "domains-8"
+why = """
+Saying read_atlas_ontology 'moves' would be the fourth checklist item that \
+reads green while the defect stands — it must be minted. The Absent/Io split is \
+load-bearing: 'this corpus has no atlas yet' is an ANSWER (ARCH §18.3), not a \
+failure, and a caller that cannot tell them apart renders an error where it \
+should render an empty state.
+"""
+
+[[collision]]
+family = "AtomsFile (the one door, structural)"
+context = "understanding"
+definitions = ["corpus-engine-vocab/src/atoms.rs:1528 AtomsFile { pub schema_version, pub atoms: Vec<AtomEnvelope> (:1530) }"]
+verdict = "converge"
+survivor = "AtomsFile with pub fn atoms(&self) -> &[AtomEnvelope], pub(crate) field, and NO public Deserialize"
+renames = [
+  "atoms field -> pub(crate); add atoms()/len()/is_empty() accessors and from_atoms(schema_version, atoms) for the WRITE path",
+  "add a PRIVATE wire twin `struct AtomsFileWire` that carries the Deserialize derive; read_atlas_atoms parses that and hands back an AtomsFile",
+]
+rung = "domains-8"
+why = """
+Accessor over iterator or sealed newtype, in one line: callers index, sort, \
+group and par_iter the slice today, so an iterator costs every one of them a \
+.collect(), and a sealed newtype adds a name without adding an invariant the \
+private field does not already carry. \
+BUT `pub(crate)` ALONE DOES NOT CLOSE THE DOOR, and domains-8's check 10 says \
+it does. AtomsFile derives Deserialize and that impl is PUBLIC: a hand-rolled \
+parser outside vocab can still write serde_json::from_str::<AtomsFile>(&s) and \
+then call .atoms(). Field visibility only blocks the struct LITERAL. The fix is \
+the pattern this repo already proved for Evidence \
+(corpus-engine/src/index/evidence.rs: 'the load-bearing property is the door, \
+not the struct … every field is private, there is no pub fn new, and \
+Evidence::acquired — the only constructor — is pub(crate)'): make AtomsFile \
+!Deserialize and parse a private twin. The compile-fail test then pins \
+serde_json::from_str::<AtomsFile>(…), not a struct literal — and that line \
+compiles on today's tree, which is the red it must be watched at. \
+from_atoms() does not reopen the door: constructing from a Vec you produced is \
+not the defect; PARSING outside the door is.
+"""
+
+# ─────────────────────────────────────────────────────────────────────
+# 7. Archaeology
+# ─────────────────────────────────────────────────────────────────────
+[[collision]]
+family = "Atom* in corpus-engine-archaeology"
+context = "workspace"
+definitions = [
+  "corpus-engine-archaeology/src/archaeology_eval.rs:156 AtomWitness — atom_id, file_path, passed, failed, stale, score, matched_inquiries; the per-anchor roll-up of WitnessCheck (:143)",
+  "corpus-engine-archaeology/src/git_archaeology.rs:134 AtomProvenance — atom_id, file_path, first_seen: CommitRef, last_modified: CommitRef, stability_days, modification_count, primary_authors, staleness: Staleness",
+]
+verdict = "split"
+survivor = "none — a different concept from Understanding's atom, and it renames"
+renames = [
+  "AtomProvenance -> AnchorHistory (27/4)",
+  "AtomWitness -> WitnessTally (13/1)",
+]
+rung = "domains-8 (it changes that rung's allow-list) — 40 refs / 5 files"
+why = """
+The subject is a FILE's commit history; the atom is the join key, not the noun. \
+Neither type carries an atom field — no atom_type, no evidence, no canonical \
+name — and staleness is computed against atlas_built_at, i.e. against the atlas \
+as a whole rather than the atom. REFUSE the allow-list that \
+scratchpad/understanding-readmodel.md §2.2 proposed, for the reason that \
+section's own second falsifier names ('falsified if the count reaches zero by \
+adding a name to the allow-list'): every standing exception is a place the next \
+person adds a sixth, and `Atom` as the HEAD noun keeps converge and blast \
+reporting a Workspace crate against Understanding's word. WitnessedAtom is \
+refused for the task's own reason — it still carries the word. \
+converge noun AnchorHistory / WitnessTally -> zero definitions each. \
+atom_id: String stays as a FIELD in both; a field named for a foreign key is \
+not a claim on the word, and the bar counts type DEFINITIONS. \
+CONSEQUENCE: domains-8's allow-list is the THREE axum binders (AtomLimitQuery, \
+AtomsPageQuery, AtomBrowseRequest) and nothing else; I1 is 12 -> 0 with all 12 \
+moving or renaming, none carved out.
+"""
+
+# ─────────────────────────────────────────────────────────────────────
+# 10. Source
+# ─────────────────────────────────────────────────────────────────────
+[[collision]]
+family = "Source"
+context = "ingest, kernel"
+definitions = [
+  "kernel-types/src/origin.rs:82 Source — seven variants (Corpus { corpus, document: ContentHash, locator }, Web { url, fetched_at }, Attachment, ToolOutput, Server, Grain, …); where a piece of grounded content came from. Its doc explicitly REFUSES system prompts, persona text, compiled lessons, the tool dossier and the epistemic contract. 38 refs",
+  "sovereign/crates/sovereign-pipeline/src/recipe.rs:98 Source — SlugList | Command | Inline; where a work-unit pipeline's KEYS come from. 6 refs / 2 files",
+  "studio/crates/sovereign-workflow/src/model.rs:264 Source — Folder | List | Inline; 'where the per-item driver gets its items'. 12 refs / 5 files",
+  "sovereign/crates/sovereign-cli-llm/src/meshapp_registry.rs:324 Source (private) — Path | Url; where a meshapp bundle is fetched from. 10 refs / 1 file",
+]
+verdict = "converge"
+survivor = "kernel_types::origin::Source — Ingest keeps the WORD in [[context]].owns, the kernel holds the TYPE"
+renames = [
+  "sovereign-pipeline::recipe::Source -> KeySet (6/2)",
+  "sovereign-workflow::model::Source -> ItemSet, sibling SourceItem -> Item (12/5, inside the lifted studio package — coordinate with studio/BOUNDARY.md)",
+  "sovereign-cli-llm::meshapp_registry::Source -> BundleLocation (10/1, private)",
+]
+rung = "domains-4 (decide) / domains-11 (execute) — 28 refs / 8 files"
+why = """
+THE FINDING: none of the four is Ingest's recipe source, because Ingest defines \
+no Source at all. `git grep 'pub (enum|struct) Source' corpus-engine/` returns \
+nothing; corpus-engine/src/recipe.rs carries source_path, source_id, \
+source_doc_id and dedup_by_source as FIELDS, and its extension points are \
+Acquirer and Extractor. Ingest's owns row names a word with no type behind it — \
+the same defect as Understanding's Domain. \
+kernel_types::origin::Source IS Ingest's noun published: 'where these bytes came \
+from' is precisely Ingest's question, and the published language is where a \
+context's noun goes when every context cites it — corpus-engine-vocab holds \
+Understanding's AtomEnvelope on exactly that pattern, and DOMAINS §4 calls the \
+kernel 'the shared kernel between contexts, not an eleventh'. So the registry \
+row gains a named home and Knowledge's peer-as-source word is confirmed NOT to \
+be Source. \
+RECORDED AND NOT CLOSED: sovereign-pipeline::Source and \
+sovereign-workflow::Source are the SAME concept (enumerate the driver's work \
+items) in two packages; converging them would cross the studio package boundary \
+a lift already proved, so they take same-shaped names in two homes and the \
+duplication is named rather than hidden.
+"""
+
+[[collision]]
+family = "*Source suffix (72 morphological kin)"
+context = "all"
+definitions = [
+  "NoteSource, PolicySource, KindSource, CandidateSource, NavigationSource, EdgeSource, SymbolSource, FieldModelSource, StreamAxesSource, SourceFileManifest/Record/Status, SourceDecl, SourceLedger, SourceCitation, … — 72 reported by `converge noun Source`",
+]
+verdict = "allow"
+survivor = ""
+renames = []
+rung = "domains-3 (the instrument), domains-4 (the bar's wording)"
+why = """
+Nearly all of these are a DIFFERENT noun: 'which of N producers produced this \
+value' — provenance of a DECISION, not origin of CONTENT. A word-anywhere bar \
+on Source, the spelling the campaign uses for Peer (DOMAINS §8 re-measure), \
+would sweep all 72. The Source bar must be EXACT-MATCH on the type name. That \
+is a per-word property of the instrument, not a global one, and it belongs in \
+the bar's wording rather than being discovered when it reads 76.
+"""
+
+# ─────────────────────────────────────────────────────────────────────
+# 8. deep_research — registry rows
+# ─────────────────────────────────────────────────────────────────────
+# Verdict: an ELEVENTH [[context]]. DOMAINS.md §9's first open item is answered
+# and the answer is "not Answering". Evidence:
+#   - 25,597 lines / 17 modules — larger than six of the ten contexts.
+#   - Its reach into the rest of sovereign-core is 28 `use crate::` lines total
+#     (types 11, traits 7, oicp 4, setup_config 2, egress 2, runtime::grounding
+#     2). Only TWO touch runtime/, which is Answering's declared root. It sits
+#     BESIDE Answering, not inside it.
+#   - Its provider boundary is already a trait: ResearchPort (estate.rs).
+#     mod.rs:11-13 — "the loop itself never reaches into corpus-engine,
+#     tools-base, or the network directly."
+#   - Its owned word is clean: `converge noun Charter` reports ONE first-party
+#     definition (deep_research/icd.rs:176), 2 crates / 15 sites — the Donor of
+#     this context.
+#   - §2 test: a stranger implements ResearchPort + InferenceProvider and gets a
+#     charter frozen at launch, a multi-round loop that decides when to stop, a
+#     per-round gap list, a two-source corroboration floor, a budget ledger that
+#     caps spend by family, a run-scoped lock, and a cited report with a
+#     manifest — plus a DECLARED truncation rather than a silent short answer.
+#     Answering answers ONE turn from an index it is handed, or declines. This
+#     ACQUIRES across rounds.
+#   Counter-arguments recorded, not hidden: it shares `Gap` with Answering
+#   (resolved in the Gap row above, not a reason to fold) and it compiles inside
+#   sovereign-core (a crate fact, not a context fact — DOMAINS §6 is the whole
+#   argument that tiers and contexts are different questions). Its order
+#   inventory is thin: `.sovereign/features/drafter-attribution-discipline`
+#   (landed 2026-08-13, and its subject IS this loop's drafter inputs) and
+#   `drill-1786513597-d1` (abandoned; empty Objective and Lane).
+
+[[context]]
+id = "research"
+kind = "supporting"
+question = "what is known about this question, and what evidence is still missing?"
+owns = ["Charter", "Round", "EvidenceWindow", "AcquisitionPlan", "SourceLedger"]
+# `Charter` has ONE first-party definition (deep_research/icd.rs:176) and is
+# exclusive today — the clean word. `Round` has zero exact definitions and five
+# kin, ALL inside deep_research (EmptyRound, RoundRow, RoundOutcome,
+# RoundSummary, RoundObserver) — confirm RoundObserver's home before the row is
+# ratified. `Gap` is deliberately NOT here: it is Answering's canonical
+# (quality/CONCEPTS.toml:831-843) and this context holds its artifact row.
+package = ""          # no [[package]] yet; the ResearchPort trait is the seam a lift would cut on
+lift = ""             # no lift script; the §2 test passes on the trait boundary, not on a run
+applicable_as = "a local-only research loop: hand it a charter and a ResearchPort (search + fetch), get back a cited report with a manifest, a per-round gap list, a two-source corroboration floor, and a declared truncation when the budget runs out"
+roots = ["sovereign/crates/sovereign-core/src/deep_research"]
+status = "kept"
+
+[[module]]
+context = "research"
+path = "sovereign/crates/sovereign-core/src/deep_research/mod.rs"
+lines = 4831
+note = "the controller — drives the R11-thin state machine; every step writes its versioned ICD artifact (FR-2), the charter is frozen at launch (FR-3), abort is an input to every state"
+
+[[module]]
+context = "research"
+path = "sovereign/crates/sovereign-core/src/deep_research/audit.rs"
+lines = 3504
+note = "claim audit and the corroboration floor (FMEA F22, the two-source rule); the one decider over a round's empty-window fields"
+
+[[module]]
+context = "research"
+path = "sovereign/crates/sovereign-core/src/deep_research/synthesize.rs"
+lines = 3144
+note = "draft synthesis over the round's evidence window"
+
+[[module]]
+context = "research"
+path = "sovereign/crates/sovereign-core/src/deep_research/fetch.rs"
+lines = 2106
+note = "fetch_round — the acquisition leg, through the port"
+
+[[module]]
+context = "research"
+path = "sovereign/crates/sovereign-core/src/deep_research/port.rs"
+lines = 1642
+note = "the provider boundary's types; ResearchPort itself is in estate.rs"
+
+[[module]]
+context = "research"
+path = "sovereign/crates/sovereign-core/src/deep_research/gym.rs"
+lines = 1630
+note = "the loop's own exercise harness — back-of-house within the context"
+
+[[module]]
+context = "research"
+path = "sovereign/crates/sovereign-core/src/deep_research/render.rs"
+lines = 1397
+note = "build_manifest / render_report / not_covered — the report and its manifest"
+
+[[module]]
+context = "research"
+path = "sovereign/crates/sovereign-core/src/deep_research/acquisition.rs"
+lines = 1285
+note = "the ONE acquisition decider (closed SearchSource set: Mock | Corpus | Web)"
+
+[[module]]
+context = "research"
+path = "sovereign/crates/sovereign-core/src/deep_research/icd.rs"
+lines = 1251
+note = "the versioned artifact shapes — Charter (:176), GapList (:350), Gap (:407, -> GapRow), ClaimVerdict, CorroborationRecord, SourceLedger, Draft, Manifest"
+
+[[module]]
+context = "research"
+path = "sovereign/crates/sovereign-core/src/deep_research/containment.rs"
+lines = 1006
+note = "citation-span stripping and the containment config"
+
+[[module]]
+context = "research"
+path = "sovereign/crates/sovereign-core/src/deep_research/budget.rs"
+lines = 714
+note = "SpendDecider — families and allowances; the web-search and web-fetch ledgers"
+
+[[module]]
+context = "research"
+path = "sovereign/crates/sovereign-core/src/deep_research/launch.rs"
+lines = 711
+note = "charter parse + freeze at launch (FR-3)"
+
+[[module]]
+context = "research"
+path = "sovereign/crates/sovereign-core/src/deep_research/search.rs"
+lines = 604
+note = "the search leg, through the port"
+
+[[module]]
+context = "research"
+path = "sovereign/crates/sovereign-core/src/deep_research/notes.rs"
+lines = 598
+note = "per-round note capture"
+
+[[module]]
+context = "research"
+path = "sovereign/crates/sovereign-core/src/deep_research/estate.rs"
+lines = 551
+note = "ResearchPort — THE provider boundary, implemented by the CLI verb. The seam a lift cuts on"
+
+[[module]]
+context = "research"
+path = "sovereign/crates/sovereign-core/src/deep_research/state.rs"
+lines = 482
+note = "State / Event / RunLock — the R11-thin machine and the run-scoped lock that refuses a second run against the same dir (F19)"
+
+[[module]]
+context = "research"
+path = "sovereign/crates/sovereign-core/src/deep_research/enrich.rs"
+lines = 141
+note = "the enrichment hand-off"
+
+# ─────────────────────────────────────────────────────────────────────
+# 9. Retrieval store — one-paragraph verdict, for the domains-4 commit body
+# ─────────────────────────────────────────────────────────────────────
+# NOT generic. The genuinely generic half is index/search.rs (1,245 lines):
+# cosine over a FixedSizeListArray<Float32> plus RRF fusion over LanceDB IVF-PQ
+# and Tantivy — a thin wrapper any vector store would have. Everything else is
+# custody, portability and merge semantics a vector store has no reason to
+# carry. merge_shards (corpus-engine/src/sharding.rs:780ff) dedupes on TWO
+# keys: primary content_hash, secondary (unit_id, source_doc_id) for NULL-hash
+# rows, with a per-RecordBatch keep-mask; and at :760-768 a
+# MutableMergePolicy::SourceDocIdNewestMtime branch reconciles divergent rows
+# for one source_doc_id by newest mtime then renumbers, PROPAGATING the policy
+# onto the merged canonical so later merges take the same branch — document
+# identity, not storage. index/evidence.rs publishes Evidence/EvidenceSet with
+# every field private, no pub fn new, the only constructor pub(crate) ("the
+# load-bearing property is the door, not the struct"), so the store's answer to
+# "what do you know" is a sealed capability, not rows. index/provenance.rs
+# mints ChunkProvenance with custody_of/grain_of for TOPOLOGY §10 phase 9
+# hazard 1, "a prompt fed by content that never passed retrieve": custody sets
+# an EGRESS FLOOR, a policy obligation no vector store has. index/raptor.rs
+# keeps summary embeddings in a SEPARATE table from chunks.lance on purpose so
+# summary retrieval stays a distinct top-M and cannot organically displace
+# leaves. snapshot.rs is a .tar.zst whose _snapshot_manifest.json is read
+# BEFORE extraction and REFUSES on an embedding_model mismatch. And
+# recipe.rs:295-307's dedup_by_source records a measured retrieval lift
+# (76% -> 85% on the SEP eval bank). So: kept for investment, not merely for
+# ownership — but the investment is in five named files and search.rs is not
+# one of them, and DOMAINS §4's "closest of the ten to generic, a reason to
+# invest less" should be said of search.rs rather than of the context. One edge
+# to price in a later rung, not here: Evidence and ChunkProvenance are arguably
+# ANSWERING's nouns (custody, egress floor) living inside Retrieval — a
+# §5-style anticorruption question, not a reason to fuse.

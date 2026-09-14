@@ -178,6 +178,15 @@ status       = "open"
 # The generalisation of dm-peer-outside-fabric to every owned word in
 # quality/DOMAINS.toml `[[context]].owns`. Floor minted by domains-3 after
 # domains-4 fixes the words; target-only until then.
+# TWO MATCH MODES, decided 2026-09-14: `owns` matches the word ANYWHERE in a
+# type name (the Peer lesson); `owns_exact` matches the bare name only. The
+# one exact row today is Ingest's `Source`: its canonical type is
+# `kernel_types::origin::Source` (published language, counts against no
+# owner), corpus-engine defines no `Source` at all, and a word-anywhere sweep
+# returns 72 kin that mean "which producer" — a different noun. Role suffixes
+# (Candidate, Record, View, Kind, Result) are NOT owned words: `Candidate` has
+# 23 kin across four contexts, and making it Serving's would force renames of
+# TensionCandidate, RelayCandidate, IntentCandidate — a context owns a NOUN.
 target       = 0.0
 direction    = "lower_is_better"
 instrument   = "python3 scripts/domains-census.py word-owners --json"
@@ -204,11 +213,11 @@ status       = "open"
 # either allow-lists them or names their concept, which puts the moveable
 # target at 10).
 floor        = 12.0
-floor_basis  = "2026-09-13, I1 grep run on 1ee406165: pub Atom* outside vocab and enrichment/, minus allow-list {AtomLimitQuery, AtomsPageQuery, AtomBrowseRequest}; the twelve are listed by file:line in the domains-8 order"
+floor_basis  = "2026-09-13, I1 grep run on 1ee406165: pub Atom* outside vocab and enrichment/, minus allow-list {AtomLimitQuery, AtomsPageQuery, AtomBrowseRequest}; the twelve are listed by file:line in the domains-8 order. ADJUDICATED 2026-09-14 (registry [[collision]] rows): the allow-list is the three axum binders and NOTHING else — corpus-engine-archaeology's AtomWitness/AtomProvenance are a different concept and rename apart (WitnessTally 13 sites, AnchorHistory 27 sites), so the moveable target is all 12"
 target       = 0.0
 direction    = "lower_is_better"
 instrument   = "python3 scripts/domains-census.py atom-outside --json"
-goodhart     = "this can hit target while the predicate is still false if (a) a name is added to the allow-list — the instrument prints the allow-list digest beside the value, and a digest change with no registry diff is refused — or (b) consumers keep reading atoms.json through their own reader function typed by AtomsFile; (b) is not counted because a grep for it was drafted, measured at 65/31/5/84 against 9 real sites, and killed — it is made STRUCTURAL in domains-8 instead (AtomsFile.atoms pub(crate), reachable only through vocab::read)"
+goodhart     = "this can hit target while the predicate is still false if (a) a name is added to the allow-list — the instrument prints the allow-list digest beside the value, and a digest change with no registry diff is refused — or (b) consumers keep reading atoms.json through their own reader; (b) is not counted because a grep for it was drafted, measured at 65/31/5/84 against 9 real sites, and killed — it is made STRUCTURAL in domains-8 instead. CORRECTED 2026-09-14: `AtomsFile.atoms` as pub(crate) does NOT close the door, because the derived Deserialize stays public and `serde_json::from_str::<AtomsFile>` still works outside vocab; the structural form is the Evidence pattern — a private wire twin that deserialises, and AtomsFile itself not Deserialize, so the door is the only constructor"
 kill         = "if a consumer needs a field the vocab read model does not expose and adding it makes the model a mirror of AtomEnvelope, the model is the wrong shape — say so and stop (nc-6-atom's not-worth-continuing clause, kept verbatim in spirit)"
 
 [[bar]]
@@ -218,7 +227,14 @@ derives_from = "DOMAINS.md §2 (the test), §8 row 3 (4 of 10 -> 10 of 10)"
 status       = "open"
 floor        = 3.0
 floor_basis  = "2026-09-13 by the strict rule (a context whose row names a [[package]] that boundary-gate passes): Fabric and Compute via `commonwealth`, Workbench via `code-intel`. DOMAINS.md §8 counted 4 by including studio, which its own §4 calls 'not a context', and corpus-mcp, which is a HOST that reads Understanding's output rather than Understanding's crate. Both are recorded, neither is counted"
-target       = 10.0
+# TARGET 10 -> 11, 2026-09-14 (rung domains-4): deep_research/ (25,597 lines,
+# DOMAINS §9's open item) is an ELEVENTH context, `research` — its reach into
+# the rest of sovereign-core is 28 `use crate::` lines and two touch runtime/
+# (Answering's root); its provider boundary is already a trait (ResearchPort,
+# deep_research/estate.rs) and `Charter` is an exclusive word. Registry row +
+# 17 module rows summing to 25,597. The predicate reads the registry, so it
+# moved with the row; this target moves with it, here, with the reason.
+target       = 11.0
 direction    = "higher_is_better"
 instrument   = "python3 scripts/domains-census.py liftable --json"
 goodhart     = "this can hit target while the predicate is still false if a context is packaged as one crate that still reaches everything through the shared [[package_leaf]] budget, or if a package has an `applicable_as` sentence nobody has run — the instrument reports gated / lifted as two numbers and only lifted counts for Serving, Fabric, Compute, Workbench"

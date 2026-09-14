@@ -370,3 +370,120 @@ Named so the next reader does not take them as measured.
   store, or whether the sharding and snapshot behaviour makes it custom.
 - Every "applicable as" in §4 except the four in §2's table. Those four were
   run; the other six are claims about what a lift WOULD show.
+
+## 10. Adjudications — rung `domains-4`, 2026-09-14
+
+Every collision the three inventories surfaced is now one interface or a named
+split. The rows are data — `quality/DOMAINS.toml` `[[noun]]` (72, all
+`decided:`), `[[edge]]` (13), `[[collision]]` (20) — and this section is the
+argument beside them. Nothing here moved code; rungs 5-10 do.
+
+### 10.1 The words
+
+A context owns a NOUN, matched anywhere in a type name. Role suffixes
+(`Candidate`, `Record`, `View`, `Kind`, `Result`) are not words: `Candidate`
+has five definitions and 23 kin across four contexts, and owning it would
+rename `TensionCandidate` and `RelayCandidate` to move no coupling. §5's list
+is therefore revised, each against `converge noun` output pasted in the
+registry rows:
+
+| context | §5 said | decided | evidence |
+|---|---|---|---|
+| Fabric | Member | **`Member`** (type stays `MemberRecord`) | exclusive after `suggest_seams.rs:64,87` rename to `SeamSymbol`/`SharedSeamSymbol` (13 + 6 sites); `code_capability_graph.rs:91` is back-of-house and exempt |
+| Serving | Candidate | **`Venue`** | 0 definitions; one kin `kernel_types::quality::VenueAction` (18 sites / 3 files) renames to `TriggerAction`. `Seat` refused as a synonym of `Slot`; `Lender` refused — `guest_lender.rs:17-27` already means the pinned grant and says "a lender is not a peer" |
+| Compute | Donor | **`Donor`** | 0 definitions; sole kin `WorkDonorHandle` is Compute's |
+| Admission | Caller | **`Principal`** | 0 definitions; three of four kin are the owner (`sovereign-api/src/principal.rs:93,125,147`); converges with `DAEMON_CORE.md` §1's `principal → Scope` — zero renames |
+| Knowledge | Source | **no word — not a context** | every candidate failed the exclusivity test, which is the kill bar firing: the atlas half is Understanding's (`RemoteAtlasView`, `AtlasPullLead`), the ask-a-peer half is Retrieval's (`RemoteIndexTarget`, `RemoteIndexReply`). `Source` is Ingest's word and the kernel's type (`kernel_types::origin::Source`); `Library` is Fabric's media noun |
+
+Two match modes follow. `owns` matches anywhere; `owns_exact` matches the bare
+name — Ingest's `Source`, whose 72 kin mean "which producer". Definitions in
+`kernel` and `back-of-house` tagged crates count against no owner and are
+printed as exempt, never hidden.
+
+### 10.2 The Peer rows — 72 decided: keep 11, rename 56, merge 5, delete 0
+
+Named adjudications: `PeerRow` was two concepts (`MemberFanoutRow` in
+commonwealth-transport, `TravelMeasurementRow` in cli-llm). The three
+spellings of one live-path fact collapse: `PeerPathSnapshot` survives,
+`PeerTransportPath` merges into it, `IrohPeerPath` becomes **`MemberReach`**
+and moves down to `sovereign-contracts` — the Fabric-published view every
+other context reads. `PeerPreference`, defined four times down the stack,
+becomes one owner (`VenuePreferenceStore`) and one DTO. The `PeerStore` family
+is a replicated KV and says so (`ReplicatedKv*`). `PeerAnswer` in kernel-types
+is kept: egress custody, the one place the word is load-bearing.
+`oicp_types::PeerDescriptor` renames (`FederatedMeshDescriptor`) with its
+serde names unchanged — oicp-types is in the bar's population, and the wire is
+not.
+
+### 10.3 The edges — one translation each, and one that is already a defect
+
+`MemberRecord` crosses into Serving today through
+`EmbeddedDaemon::peer_inference_endpoints` (`sovereign-mesh/src/daemon.rs:2286-2345`),
+which reads eight fields plus three filters — over the `dm-shared-edges`
+ceiling of about four. The split that keeps the ceiling honest: four fields
+are Fabric REACH (`MemberReach`: node id, name, endpoints, alive), two are
+CAPABILITY and arrive through the published `oicp_types::Capability` claims,
+not off the roster row, and three are Serving's own (latency history,
+availability, quarantine). A `Venue` is `MemberReach` + claims + Serving's
+three; the Fabric translation carries four. E1 crosses as two methods and zero
+fields; E2 as one `f32`. E10 (`PeerAtlasView::from_member`,
+`sovereign-tools/src/atlas_peer_advice.rs:67`) is the working pattern and is
+renamed, not redesigned.
+
+E7 is a live defect, not a smell. `PeerTrustLevel` carries
+`#[serde(rename_all = "snake_case")]` (`commonwealth-core/src/mesh/mod.rs:399-405`),
+so its published spelling is `model_and_knowledge_sharing`, while
+`routes_oicp.rs:346`'s `format!("{:?}").to_lowercase()` emits
+`modelandknowledgesharing`. Two spellings of one closed set, one produced by a
+`Debug` derive. The fix is a closed wire enum in oicp-types, and the failing
+input exists today.
+
+### 10.4 Serving's collisions — eight families
+
+| family | verdict | survivor / renames | rung |
+|---|---|---|---|
+| `Tier` ×3 + `TierFloor` | split, four concepts | `TierFloor` (scheduler); `role::Tier` → `PreferredSlot` (31 sites); `apps::Tier` → `Origin` (16, wire-visible, serde rename); peg's `Tier` deleted. Not `LatencyClass`: `tier.rs:105-111` pre-registers that seam | 9, 5 |
+| routing model (13 dead types) | delete | zero external references each, by `callers`. Salvage: `UnavailableReason`'s shape → a closed `GateReason` replacing `Verdict::Gated{gate: String}`. Cascade: `MeshPlan` loses four of seven fields and dies with four `store_adapter` methods and three harness helpers, all zero-caller | 9 |
+| eight "candidate" nouns | converge the noun, split the role | one `Venue`; `VenueView`/`SelfView`/`ManifestView`/`Ranked`; score type is `oicp_types::ScoredClaim`, kept under its published name; the three `as` aliases at `oicp_select.rs:32-34` deleted; `LocalCandidateView` stays — its asymmetry is finding F1 in the type system | 5, 10 |
+| four "admission" deciders | split | Serving keeps `Admission`; rail → `Inclusion`; runtime → `TurnLease`; native grounding → `Answerability` (128 sites). The decider already exists in a tier-0 leaf, `serving_policy::fair_sched::SchedCore`; admission needs its axum/`AppState` coupling cut, not a new decider | 10 |
+| two `decision_log`s | split | mesh module → `routing_decisions`, types `RoutingDecision*`; studio's keeps the tool id in four registries. `SOVEREIGN_DECISION_LOG`, `oicp-decision/v1`, `DECISION_TRACE_TARGET` do not move | 10 |
+| `GuestLender*` | split by side of the link | four types move to the serving host unrenamed; `StoredGuestLink` is host wiring; `sovereign-grants` keeps `GuestGrant`/`Scope`. `GuestLenderSource` is NOT `PeerEndpointSource`: enumerate vs lookup-by-model-id, `Vec` vs `Option`, a 60 s TTL with `invalidate()` on 401, and a guest is a PIN that beats selection (`peer_inference.rs:3104`). Two ports | 10 |
+| `frontdoor.rs` | Host, confirmed | two production callers, 23 sites (`routes_responses.rs` 14, `routes_inference.rs` 9), both above the routing decision; imports no scheduler, candidate, score or admission type | — |
+| the public interface | five sketches | the two ports, the scheduler entry with its real signature, admission on `SchedCore`, the decision record + replay, and what `sovereign-cli-daemon`'s eight sites call — the basis of `sovereign/SERVING_BOUNDARY.md`'s rules | 9 |
+
+### 10.5 Understanding's collisions — and one correction to Phase B
+
+| family | verdict | survivor / renames |
+|---|---|---|
+| `Gap` ×3 | split two, converge two | `quality/CONCEPTS.toml:831-843` already decided it; the atlas detector's `Gap` becomes **`Lacuna`** (49 sites / 11 files; `atlas/gaps.json` and its key stay via serde rename), deep-research's becomes `GapRow` (19 / 8). kernel-types refused: either survivor drags `AtomId`/`ChunkRef` or `AcquisitionRoute` to layer 0 |
+| `Domain` | split; Understanding does not take the word | the atlas noun has no type (`git grep domains.json -- '*.rs'` = 0); the plugin `Domain` → **`FieldModel`** (45 refs), `DomainRegistry` → `FieldModelRegistry`. `Pass` refused: `EnrichmentPassRegistry` is a step, a domain is a genre |
+| `Seed` | split | six homonyms rename (37 refs / 11 files); `SeedError`/`SeedReport` are Understanding's; the outside count is 1 → 0, not 2 |
+| `AtomSpan` ×2 | converge into vocab | owned, `atom_type: AtomType` (closed set at `corpus-engine-vocab/src/atoms.rs:1104`); `AtomType::from_label` must be minted |
+| `Cluster` (39 defs, six families) | not a noun | `writer.rs` has zero matches; struck from owned words |
+| read model (21 defs, 5 crates) | converge to 16 in 2 | one `AtlasPage<T>`; `SectionRef` + `EvidenceExcerpt` one type; `RelatedAtom`/`CrossCorpusLink` each defined twice; `AtomHead` collapses a four-producer field set; **`AtomCard` deletes** (a lossy mirror of `AtomEnvelope`); `read_atlas_ontology` is minted, not moved (its only inline site is `context_loader.rs:711`) |
+| archaeology `Atom*` | split, not allow-list | `AtomProvenance` → `AnchorHistory` (27 / 4), `AtomWitness` → `WitnessTally` (13 / 1). The allow-list is the three axum binders and nothing else; I1 is 12 → 0 |
+| `Source` ×4 | converge on `kernel_types::origin::Source` | none of the four is Ingest's recipe source; `KeySet` (6), `ItemSet` (12, studio), `BundleLocation` (10) rename apart |
+
+**The correction.** `pub(crate)` on `AtomsFile.atoms` does not close the door:
+the derived `Deserialize` stays public and `serde_json::from_str::<AtomsFile>`
+still works outside vocab. The structural form is the `Evidence` pattern — a
+private wire twin that deserialises, `AtomsFile` itself not `Deserialize`, so
+`vocab::read` is the only constructor. `thiserror` would breach the leaf's
+dependency budget; `Display`/`Error` are hand-written.
+
+### 10.6 §9's open items, closed
+
+- **`deep_research/` is an eleventh context, `research`** (25,597 lines, 17
+  module rows). Its reach into the rest of `sovereign-core` is 28 `use crate::`
+  lines and two touch `runtime/`; its provider boundary is already a trait
+  (`ResearchPort`, `deep_research/estate.rs`); `Charter` is an exclusive word.
+  Answering answers one turn from an index it is handed; research acquires
+  across rounds. `dm-contexts-liftable`'s target moves 10 → 11 with the row.
+- **Retrieval store is not generic.** `index/search.rs` (1,245 lines) is; the
+  rest is not — the two-key `merge_shards` dedupe and its newest-mtime
+  propagation (`sharding.rs:760-780`), `Evidence`'s sealed door,
+  `ChunkProvenance`'s egress floor, RAPTOR's separate table, the snapshot's
+  embedding-model refusal. §4's "invest less" is true of `search.rs`, not of
+  the context.
+- The seven `Peer*` meanings are nine plus scaffolding (§8, re-measured).
+- `frontdoor.rs` is Host (§10.4).
