@@ -514,13 +514,18 @@ mod tests {
     #[test]
     fn a_renewed_claim_outlives_its_original_ttl() {
         let apps = PublishedApps::default();
-        let claim = apps
-            .claim("chores", addr(5000), Duration::from_millis(40))
-            .unwrap();
-        std::thread::sleep(Duration::from_millis(25));
+        // The margins are generous on purpose: `std::thread::sleep` is a floor,
+        // not a promise. A 25 ms sleep measured 41–175 ms on a loaded Mac
+        // (2026-09-14), so a 40 ms original TTL raced the host's scheduler and
+        // the renew landed on an already-swept claim. The assertion is
+        // unchanged — the claim must be gone by the ORIGINAL deadline unless
+        // renew moved it.
+        let original_ttl = Duration::from_millis(500);
+        let claim = apps.claim("chores", addr(5000), original_ttl).unwrap();
+        std::thread::sleep(Duration::from_millis(50));
         apps.renew(&claim.claim_id, Duration::from_secs(60))
             .unwrap();
-        std::thread::sleep(Duration::from_millis(40));
+        std::thread::sleep(original_ttl + Duration::from_millis(100));
         assert!(
             apps.snapshot().contains_key("chores"),
             "renewing must push the deadline out, not leave the original"
