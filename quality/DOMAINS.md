@@ -238,6 +238,14 @@ what `atlas/` alone has grown to.
 
 ## 7. Sequencing
 
+Executed by the `domains` campaign — flight rules in
+`quality/campaigns/domains.toml` (seven instrumented bars, a predicate, a
+thirteen-rung ladder `domains-3` … `domains-15`), the registry the instruments
+read in `quality/DOMAINS.toml` (contexts, owned words, module tags, the Peer
+dispositions and the thirteen cross-context edges), and per-rung orders under
+`.sovereign/features/domains-*/`. Drafted 2026-09-13; the campaign's Decisions
+section records where its inventory overrode this file (§8, "Re-measured").
+
 No phase here moves a line until the one before it has named something, because
 the reason this repository grew three misnamed crates is that code with no home
 goes wherever it links.
@@ -293,6 +301,58 @@ Bars before data, or the verdict is not honest (ARCH §18.1).
 it for, it is not a context and this file is wrong about it — merge it into its
 neighbour and say which. Build feedback is the first candidate and is written
 down as such rather than defended.
+
+**Re-measured 2026-09-13, before the campaign's first row.** Leading with what
+was wrong, so the table above is read as the 09-11 reading and the toml's
+floors as the baseline:
+
+- Row 1's denominator was unstated. Prefix-`pub` reads **39 across 13 crates**
+  (26 outside the commonwealth package), not 34 across 11. Sweeping for `Peer`
+  anywhere in a type name finds 21 more definitions and a fourteenth crate
+  (`commonwealth-discovery`): **50 pub-ish, 35 outside the package in 9
+  crates**. A prefix bar is passable by renaming `PeerFoo` to `MeshPeerFoo`,
+  so the campaign counts the word. Two carve-outs are registry rows:
+  `PeerStore` (a replicated KV, renamed apart) and `PeerAnswer` in
+  kernel-types (egress custody, kept). The seven concepts in §3 hold and are
+  nine: replicated KV and egress custody were missing.
+- Row 2 would read green today while the defect stands. All 20 `atoms.json`
+  readers already use `corpus-engine-vocab`'s `AtomsFile`; none declares its
+  own struct. The leak is the DOOR: `read_atlas_atoms` is at
+  `corpus-engine/src/enrichment/atlas/writer.rs:595`, not in vocab, so
+  `corpus-mcp/src/tools.rs:873` hand-rolls one and nine sites bypass it. The
+  bar becomes "pub `Atom*` outside vocab and `enrichment/`, minus three named
+  axum binders": **12 → 0**, and the door invariant is made structural rather
+  than counted. `Cluster*` is never persisted under `atlas/` and leaves §5's
+  leak sentence; `Seed*`'s outside count is 2 atlas nouns, not 6.
+- Row 3 counted studio, which §4 calls not a context, and `corpus-mcp`, which
+  is a host. By the strict rule (a `[[package]]` the gate passes) it is **3 of
+  10**: Fabric and Compute via `commonwealth`, Workbench via `code-intel`.
+- Row 4's floor is **88,255**, not 82,241 — `sv-surface` moved desktop
+  surfaces onto daemon routes hosted in `sovereign-mesh` in the two days
+  between. `*_http.rs` is 26 files / 22,017 lines against `DAEMON_CORE.md`'s
+  22 / 18,319. By module tags the crate is host 25,432 / serving 20,488 /
+  fabric 16,028 / compute 9,740 / back-of-house 4,841 / workbench 4,811 /
+  ingest 3,410 / understanding 2,316 / answering 747 / workspace 233 /
+  retrieval 209 — the bar is reachable at 16,775 only if every non-Fabric
+  tag leaves, and the host's 25,432 is a daemon-core campaign's to move.
+- §4 Serving measures **44,485 lines** module by module (38,665 if
+  `frontdoor.rs`, which reshapes prompts for third-party harnesses, is Host).
+  The scheduler half (6,356) already imports nothing foreign; the knot is
+  `peer_inference.rs` (5,399). The anticorruption layer §5 asks for exists at
+  `sovereign-mesh/src/daemon.rs:2286-2345` reading nine fields; it is misnamed
+  and lives in the host's god object. `sovereign-serving`, the peg, carries
+  eleven exported types with zero external references and 771 lines of
+  knowledge-shard assignment that drag `corpus-engine`.
+- §5's words collide. `Candidate` has five first-party definitions in five
+  crates; `Member` two; `Caller` one; `Source` is already Ingest's by §4 and
+  is in the duplicate-name baseline. `Donor` is clean. The words are decided
+  in rung `domains-4` against `converge noun` evidence, not here.
+- §9's `corpus-engine-vocab` figure of 5,161 is right; a non-recursive
+  `wc -l src/*.rs` gives 2,769 and is the trap §2's preamble warns about.
+- `scripts/daemon-route-census.py:25` still names
+  `commonwealth/crates/commonwealth-api/src`, gone since `domains-1`; every
+  route `sovereign-api` registers is uncounted and today's 213 unique paths
+  is an under-count. Repaired by rung `domains-3`.
 
 ## 9. What was not verified
 

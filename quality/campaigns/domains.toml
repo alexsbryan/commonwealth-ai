@@ -1,0 +1,341 @@
+# Flight rules — read raw. Verdicts come from measurement rows, never prose here.
+# Defer/descope = edit a bar's `status`; git history is the ledger.
+#
+# ORDERS ARE GITIGNORED (`.sovereign/features/` is per-host). This file is the
+# committed artifact and the LADDER carries the rung list, so the plan survives
+# without them. The registry this campaign reads and writes is
+# `quality/DOMAINS.toml` (contexts, the words each owns, module tags, the
+# Peer* dispositions) — DATA, so a tag or a disposition is a diff a reviewer
+# reads, never a constant in an instrument (ARCH principle 9).
+id        = "domains"
+objective = "Ten bounded contexts, each individually applicable — someone outside this repository can take one alone and get value — so a crate's name says what it holds and one word means one thing"
+spec      = "quality/DOMAINS.md"
+register  = "quality/CONCEPTS.toml"
+declared  = "2026-09-13"
+status    = "active"
+
+# ── THE PREDICATE ────────────────────────────────────────────────────────────
+#
+# DOMAINS.md §2 (operator, 2026-09-11): a context is real when someone outside
+# this repository can take it alone and get value. The mechanism already
+# exists and must not be duplicated — `[[package]]` in quality/ARCH_LAYERS.toml
+# (four rows today: studio :821, code-intel :839, corpus-mcp :865, commonwealth
+# :905), `cargo xtask boundary-gate` over them, and the two lift scripts
+# (scripts/cw-work-lift.sh, scripts/cw-rails-lift.sh). The denominator below is
+# cargo's dependency closure through boundary-gate, not a list an author wrote.
+# The only authored part is the closed set of contexts, and that set is the
+# design (§4), declared once in quality/DOMAINS.toml `[[context]]` — a context
+# that merges (§8 kill bar names Build feedback first) is a row edit with a
+# ledger line, not a constant edit.
+#
+# boundary-gate's own doc says what it cannot see: "Its unit is the CRATE"
+# (corpus-engine/xtask/src/boundary_gate.rs:40). Serving is 35,000 lines of
+# package-shaped code INSIDE two crates, invisible to the gate until it has a
+# crate — which is why Phase C exists and why the predicate cannot be green by
+# accident before it.
+#
+# UNTIL domains-3 lands, the check below reads could-not-judge (instrument
+# missing). That is the honest reading — never-ran is not passed (§18.2).
+[predicate]
+statement = "Every context kept in quality/DOMAINS.toml names a [[package]] in quality/ARCH_LAYERS.toml that cargo xtask boundary-gate passes, and no crate outside the commonwealth package defines a pub type named Peer*"
+check     = "python3 scripts/domains-census.py predicate && (cd corpus-engine && cargo xtask boundary-gate)"
+
+# ── WHAT THE INVENTORY SAID BEFORE THIS WAS WRITTEN (ARCH principle 11) ─────
+#
+# This is the THIRD campaign on this ground, and the first two are cited so
+# their lessons are structure here, not memory:
+#
+#   noun-convergence (quality/campaigns/noun-convergence.toml, PARKED 2026-08-22)
+#     drafted `nc-8-peer-capability` ("commonwealth publishes Peer") and
+#     `nc-6-atom`; nc-8 was BLOCKED on the commonwealth -> sovereign backflow.
+#     Its parking note is the rule this campaign obeys: "Reopen only with an
+#     instrument that has passed a positive AND a negative control first."
+#     Its type-count bars were blind to the real work (nc-reach moved -0.03 on
+#     a rung that deleted a live defect), so every bar below carries a
+#     `goodhart` line and the ladder puts the instrument rung FIRST, watched
+#     failing, the way cw-lift's rung -1 did.
+#   cw-lift (quality/campaigns/cw-lift.toml) proved the §2 test twice and left
+#     the lift-script shape this campaign copies for Serving.
+#
+# The register already settled Fabric's word: quality/CONCEPTS.toml:911-920,
+# concept `Peer`, canonical `commonwealth_core::mesh::MemberRecord`, "there is
+# no `pub struct Peer` anywhere in the workspace — the mesh member type is
+# MemberRecord". So Phase A is NOT a rename of Fabric's type. It is the
+# retirement of the Peer* types defined OUTSIDE the commonwealth package.
+#
+# MEASURED 2026-09-13 (hand grep, `pub (struct|enum|type|trait) Peer*`, *.rs,
+# excluding target/ and studio/). DOMAINS.md §3 said 34 across 11 crates; the
+# instrument below will be the one decider and this row records the drift:
+#   39 distinct pub Peer* definitions across 13 crates
+#   13 inside commonwealth/crates (transport 8, state 2, core 2, media 1)
+#   26 OUTSIDE — sovereign-mesh 11, sovereign-api 5, sovereign-contracts 3,
+#      sovereign-tools 2, desktop 1, cli-llm 1, oicp-types 1, kernel-types 1,
+#      corpus-engine 1
+#   Atom* pub definitions: 10 inside corpus-engine/src/enrichment/, 13 outside
+#      (sovereign-mesh 6, sovereign-tools 5, sovereign-turn-client 1,
+#      corpus-engine/atlas_traversal 1); `AtomSpan` is defined twice.
+#   sovereign-mesh: 88,255 lines (DOMAINS.md §3 said 82,241 on 09-11; +6,014
+#      in two days as sv-surface moved routes INTO it — the bar below starts
+#      with its trend running the wrong way, and says so).
+#   corpus-engine-vocab: 5,161 lines, recursive — DOMAINS.md §5 is right; an
+#      earlier draft of this file said 2,769 off a non-recursive glob that
+#      missed src/ontology/ (1,719) and atoms/tests.rs (673). Corrected, and
+#      recorded because the next reader will run the same glob.
+#   Serving, module by module: 44,485 lines (DOMAINS.md §4 said ~37,000) —
+#      sovereign-mesh 24,307, sovereign-api 16,177, sovereign-serving 1,491,
+#      serving-policy 1,241, oicp-types/src/scoring.rs 1,269; 38,665 if
+#      frontdoor.rs (5,820, third-party harness prompt shaping) is Host.
+#   sovereign-mesh/src/*_http.rs: 26 files / 22,017 lines (DAEMON_CORE.md §2
+#      said 22 / 18,319 on 09-11) — the lane a daemon-core campaign would
+#      empty is growing while this plan is written.
+#   atoms.json readers: 20 sites, ZERO declare their own struct — all use
+#      vocab's AtomsFile (17) or serde_json::Value (3). The Atom* count as
+#      DOMAINS §8 row 2 states it would read GREEN today on a tree where
+#      corpus-mcp/src/tools.rs:873 hand-rolls the reader because the door,
+#      read_atlas_atoms, is at corpus-engine/src/enrichment/atlas/writer.rs:595
+#      and not in vocab. Nine sites outside the context bypass it. Six of the
+#      seven sibling atlas files have a write_atlas_* and no reader at all.
+#
+# THE WORDS COLLIDE, and the collision is measured, not feared. DOMAINS.md §5
+# proposes Fabric=Member, Serving=Candidate, Compute=Donor, Admission=Caller,
+# Knowledge=Source. `sovereign code converge noun <W> --corpus-id commonwealth-ai`
+# on 2026-09-13:
+#   Member     2 defs (sovereign-cli-dev code_capability_graph.rs:90 — a
+#              workspace member crate; sovereign-tools suggest_seams.rs:63)
+#   Candidate  5 defs (commonwealth-rail-core admit.rs:277, sovereign-core
+#              models_manifest.rs:156 and runtime/retrieval/atom_enum.rs:308,
+#              sovereign-cli-dev refactor_cmd/affinity.rs:273, sovereign-tools
+#              code/dry_report.rs:132) + 23 morphological kin
+#   Donor      0 defs — clean
+#   Caller     1 def (corpus-engine-scip scip_graph.rs:163 — a call-graph
+#              caller, a different concept)
+#   Source     already in quality/baselines/concepts.txt's duplicate-name set,
+#              AND DOMAINS.md §4 gives **source** to Ingest. Two contexts
+#              cannot own one word (§4's own rule).
+# A sixth `Candidate` would be the disease this campaign exists to remove.
+# domains-4 chooses each word against this evidence; the bar `dm-word-owners`
+# is what makes the choice checkable rather than remembered.
+#
+# ONE INSTRUMENT IS ALREADY BROKEN. scripts/daemon-route-census.py:25 still
+# lists `commonwealth/crates/commonwealth-api/src` as a host; that path left
+# the tree at domains-1 (904145b64, 2026-09-11). Today it reports 213 unique
+# paths and never names sovereign-api, so DAEMON_CORE.md's 242 / 89-route
+# baseline is silently under-counted by every route sovereign-api registers.
+# Fixing the HOSTS row is domains-3's first step and is recorded here because
+# a Phase D bar read off that census before the repair would be a number
+# about a tree that does not exist.
+
+# ── Bars ────────────────────────────────────────────────────────────────────
+
+[[bar]]
+id           = "dm-peer-outside-fabric"
+one_line     = "No crate outside the commonwealth package defines a pub type whose name carries the word Peer"
+derives_from = "DOMAINS.md §5 call 1, §8 row 1 (falsified if any crate outside Fabric defines a Peer* type) — counted as the WORD anywhere in the name, not the prefix"
+status       = "open"
+# THE PREFIX IS THE WRONG SWEEP. Prefix-pub reads 39/13 (26 outside the
+# package). Sweeping for `Peer` ANYWHERE in the type name finds 21 more
+# definitions and a fourteenth crate (commonwealth-discovery, DiscoveredPeer):
+# 50 pub-ish across 14 crates, 35 of them outside commonwealth/. A prefix bar
+# is passed by renaming PeerFoo to MeshPeerFoo, which moves no coupling. Two
+# carve-outs are registry rows, not exceptions here: PeerStore/PeerEntry/
+# PeerStoreError (C8, a replicated KV — its right word is ReplicatedKv, so a
+# rename) and PeerAnswer in kernel-types (C9, egress custody — the one place
+# the word is load-bearing; disposition keep, with the why on the row).
+floor        = 35.0
+floor_basis  = "2026-09-13 scratchpad/peer-count.sh --anywhere (pub + pub(crate)) over the registry's [[noun]] rows: 50 across 14 crates, 35 outside commonwealth/ in 9 crates (sovereign-mesh, -api, -contracts, -tools, -desktop, -cli-llm, corpus-engine, oicp-types, kernel-types); prefix-only would read 26. domains-3 re-mints with the one instrument and records any delta"
+target       = 0.0
+direction    = "lower_is_better"
+instrument   = "python3 scripts/domains-census.py peer-outside --anywhere --json"
+goodhart     = "this can hit target while the predicate is still false if the 26 are renamed Node*/Remote*/Endpoint* and still shared across contexts — the word moved and the type sharing did not; dm-shared-edges is the check"
+kill         = "if retiring a Peer* type needs an `impl From` in BOTH directions with no field dropped, the two contexts were one context and the line is drawn wrong — stop and redraw, do not ship the adapter pair (nc-boundary's shim clause, one level down)"
+
+[[bar]]
+id           = "dm-shared-edges"
+one_line     = "Fabric's member type reaches Serving and Compute only through a named translation"
+derives_from = "DOMAINS.md §5 — 'Serving -> Fabric and Compute -> Fabric each need an anticorruption layer, and their absence is the defect'"
+status       = "open"
+# 13 edges enumerated by hand 2026-09-13 (registry `[[edge]]` rows, each with
+# the fields the consumer actually reads). Seven originate in Fabric. Two are
+# tiny: PeerHealthTracker crosses into the scheduler as TWO METHODS keyed by a
+# name string and zero fields; PeerPreference crosses into routes_oicp.rs:402
+# as ONE f32. Knowledge -> Fabric is a THIRD anticorruption seam §5 does not
+# name, and it is the one that already works: PeerAtlasView::from_member
+# (sovereign-tools/src/atlas_peer_advice.rs:67) translates five roster fields
+# at one named function. That is the pattern rungs 5 and 6 copy.
+floor        = 13.0
+floor_basis  = "2026-09-13 hand enumeration of Peer-carrying types defined in one context's crate and consumed by a module of another (registry [[edge]] rows E1-E13); domains-3 re-mints from module tags and records any delta"
+target       = 0.0
+direction    = "lower_is_better"
+instrument   = "python3 scripts/domains-census.py shared-edges --json"
+goodhart     = "this can hit target while the predicate is still false if the translation type carries every field of MemberRecord — the anticorruption layer renamed the leak; the instrument reports translated-field count beside the edge count so a mirror is visible"
+kill         = "if a Serving or Compute module needs more than ~4 fields of a member to do its job, it is doing Fabric's job — move the decision into Fabric, do not widen the translation"
+
+[[bar]]
+id           = "dm-word-owners"
+one_line     = "Each context-owned word family is defined only inside its owner"
+derives_from = "DOMAINS.md §4 — each context 'is named by the question it answers and by the word it owns exclusively'"
+status       = "open"
+# The generalisation of dm-peer-outside-fabric to every owned word in
+# quality/DOMAINS.toml `[[context]].owns`. Floor minted by domains-3 after
+# domains-4 fixes the words; target-only until then.
+target       = 0.0
+direction    = "lower_is_better"
+instrument   = "python3 scripts/domains-census.py word-owners --json"
+goodhart     = "this can hit target while the predicate is still false if a word is made unique by giving it a compound name nobody references — the instrument prints reference counts beside definitions, and a zero-reference owner is a folder, not a context"
+kill         = "if the only exclusive word available for a context is one no reader would say aloud, the context is misnamed or is not one — DOMAINS §8 kill bar: merge it into its neighbour and say which"
+
+[[bar]]
+id           = "dm-atom-outside"
+one_line     = "No consumer outside enrichment/ declares its own Atom"
+derives_from = "DOMAINS.md §5 call 2, §8 row 2"
+status       = "open"
+# RE-SPECIFIED before the first row, not after (nc-extends' tool axis was
+# re-scoped after; this is cheaper). The 13 classify as: 2 re-derivations
+# (turn-client AtomsPage<T>, generic ONLY because the crate cannot name the
+# vocab; atlas_traversal/spans.rs AtomSpan), 3 axum query binders (the
+# ALLOW-LIST below), 7 projections that are the read model built in the wrong
+# crate (five already use vocab's AtomId/AtomType/StableAtomKey), 1 duplicate
+# (reading_http.rs AtomSpan). The instrument counts pub Atom* definitions
+# outside corpus-engine-vocab/ and enrichment/, minus an ALLOW-LIST of named
+# binders — never a path pattern: `*_http.rs` returns 9 and silently drops
+# AtomSpan/AtomCard/AtomElsewhere, three types the bar exists to catch.
+# Whole-tree the count is 12 (corpus-engine-archaeology adds AtomWitness and
+# AtomProvenance — an atom's GIT PROVENANCE, a different concept; domains-4
+# either allow-lists them or names their concept, which puts the moveable
+# target at 10).
+floor        = 12.0
+floor_basis  = "2026-09-13, I1 grep run on 1ee406165: pub Atom* outside vocab and enrichment/, minus allow-list {AtomLimitQuery, AtomsPageQuery, AtomBrowseRequest}; the twelve are listed by file:line in the domains-8 order"
+target       = 0.0
+direction    = "lower_is_better"
+instrument   = "python3 scripts/domains-census.py atom-outside --json"
+goodhart     = "this can hit target while the predicate is still false if (a) a name is added to the allow-list — the instrument prints the allow-list digest beside the value, and a digest change with no registry diff is refused — or (b) consumers keep reading atoms.json through their own reader function typed by AtomsFile; (b) is not counted because a grep for it was drafted, measured at 65/31/5/84 against 9 real sites, and killed — it is made STRUCTURAL in domains-8 instead (AtomsFile.atoms pub(crate), reachable only through vocab::read)"
+kill         = "if a consumer needs a field the vocab read model does not expose and adding it makes the model a mirror of AtomEnvelope, the model is the wrong shape — say so and stop (nc-6-atom's not-worth-continuing clause, kept verbatim in spirit)"
+
+[[bar]]
+id           = "dm-contexts-liftable"
+one_line     = "Every kept context is a package the boundary gate passes and, where declared, a lift that exits 0"
+derives_from = "DOMAINS.md §2 (the test), §8 row 3 (4 of 10 -> 10 of 10)"
+status       = "open"
+floor        = 3.0
+floor_basis  = "2026-09-13 by the strict rule (a context whose row names a [[package]] that boundary-gate passes): Fabric and Compute via `commonwealth`, Workbench via `code-intel`. DOMAINS.md §8 counted 4 by including studio, which its own §4 calls 'not a context', and corpus-mcp, which is a HOST that reads Understanding's output rather than Understanding's crate. Both are recorded, neither is counted"
+target       = 10.0
+direction    = "higher_is_better"
+instrument   = "python3 scripts/domains-census.py liftable --json"
+goodhart     = "this can hit target while the predicate is still false if a context is packaged as one crate that still reaches everything through the shared [[package_leaf]] budget, or if a package has an `applicable_as` sentence nobody has run — the instrument reports gated / lifted as two numbers and only lifted counts for Serving, Fabric, Compute, Workbench"
+kill         = "if a context cannot name the standalone thing someone would use it for, it is not a context and DOMAINS.md is wrong about it — merge it into its neighbour, edit its registry row, lower this target by one in the same commit with the reason (§8 kill bar; Build feedback is the named first candidate)"
+
+[[bar]]
+id           = "dm-mesh-lines"
+one_line     = "sovereign-mesh means the mesh — at most 20,000 lines, every module Fabric"
+derives_from = "DOMAINS.md §8 row 4 (82,241 -> <= 20,000, 'it still holds a scheduler' falsifies)"
+status       = "open"
+floor        = 88255.0
+floor_basis  = "2026-09-13 `find sovereign/crates/sovereign-mesh/src -name '*.rs' | xargs wc -l`; DOMAINS.md's 82,241 was two days earlier and the +6,014 is sv-surface moving desktop surfaces onto daemon routes hosted here — the trend is UP until daemon-core moves the *_http.rs handlers to the host crate (DAEMON_CORE.md §4 last paragraph)"
+target       = 20000.0
+direction    = "lower_is_better"
+instrument   = "python3 scripts/domains-census.py crate-lines --crate sovereign-mesh --json"
+goodhart     = "this can hit target while the predicate is still false if lines move to sovereign-api, to a new sovereign-mesh-* crate, or to the host crate without a context home — the crate shrank; dm-misnamed-crates over the registry tags is the check, and a move whose destination module is untagged counts against it"
+kill         = "if after domains-15 the crate still holds a scheduler, an admission decision or a decision log, the bar is failed regardless of the line count (DOMAINS §8 row 4's falsifier, kept as written)"
+
+[[bar]]
+id           = "dm-misnamed-crates"
+one_line     = "No crate's name describes less than half of what it holds"
+derives_from = "DOMAINS.md §3 (three crates), §8 row 5 (3 -> 0)"
+status       = "open"
+floor        = 3.0
+floor_basis  = "DOMAINS.md §3, 2026-09-11, by inspection: sovereign-mesh (membership ~11%), sovereign-api (four of six domains not mesh), corpus-engine (enrichment/ 93,427 of 196,677); domains-3 re-mints from module tags, and an UNTAGGED module counts as not described by the name — absence reported, never defaulted"
+target       = 0.0
+direction    = "lower_is_better"
+instrument   = "python3 scripts/domains-census.py misnamed --json"
+goodhart     = "this can hit target while the predicate is still false if the module->context tag table in quality/DOMAINS.toml is edited instead of the code — a tag change with no `git mv` in the same commit is the smell, and the instrument prints the tag-table digest beside the value so a retag is visible in the row"
+kill         = "if a crate can only be made to describe its contents by renaming it to a list ('sovereign-mesh-and-serving'), the crate is two contexts and must split — the rename is refused"
+
+# ── NOT YET REGISTERED, deliberately ────────────────────────────────────────
+#
+# `dm-context-congestion` — distinct CONTEXTS touched per .rs commit, by author
+# month, over the registry's module tags: the one OUTCOME bar (nc-congestion's
+# shape, at the context altitude). It is the number that says whether bounded
+# contexts bought anything. It is NOT declared here because it has no minted
+# floor and a hold-bar with an invented target is telemetry theater
+# (co-lineage refuses an instrument with no threshold for the same reason).
+# domains-3 mints it over the last 90 days of history and registers it as the
+# eighth bar in the same commit as the instrument. The 9-bar cap leaves room
+# for it and one more; a ninth is a smell.
+
+# ── The ladder ──────────────────────────────────────────────────────────────
+#
+# Phase 0 LANDED before this file existed: domains-1 (904145b64) and domains-2
+# (cd9250aab), 2026-09-11 — six crates left commonwealth/, ledgered in
+# sovereign/SYSTEM_OVERVIEW.md §5. Ordering was BIG-FIRST by operator
+# direction and stays so: a small crate's destination is decided by where the
+# big one lands. Numbering continues from those two.
+#
+# Every rung names the state it makes unrepresentable, or is labelled
+# scaffolding (TOPOLOGY §10 standing bar). Cargo-touching work is one worker at
+# a time; domains-8 is independent of domains-5..7 and is the second worker's
+# rung when there are two.
+
+[[rung]]
+id = "domains-3-instrument"
+moves = ["dm-peer-outside-fabric", "dm-atom-outside", "dm-contexts-liftable", "dm-mesh-lines", "dm-misnamed-crates"]
+one_line = "quality/DOMAINS.toml + scripts/domains-census.py with a positive and a negative control per axis, floors minted; daemon-route-census HOSTS repaired — SCAFFOLDING, deletes nothing"
+
+[[rung]]
+id = "domains-4-adjudication"
+moves = []
+one_line = "Every Peer* type gets a disposition row (keep-Fabric / rename-to-word / delete / merge); the four context words are chosen against the converge evidence; §9's open items are classified — DATA only, zero code"
+
+[[rung]]
+id = "domains-5-serving-word"
+moves = ["dm-peer-outside-fabric", "dm-shared-edges", "dm-word-owners"]
+one_line = "Serving's 11 sovereign-mesh Peer* become its owned word; MemberRecord crosses into the scheduler through ONE translation — unrepresentable: a type that is a mesh member and a serving candidate at once"
+
+[[rung]]
+id = "domains-6-compute-donor"
+moves = ["dm-peer-outside-fabric", "dm-shared-edges", "dm-word-owners"]
+one_line = "Compute's Peer* become Donor; the executor half reads a Donor, never a roster row — unrepresentable: a donor selected by trust fields it never checks"
+
+[[rung]]
+id = "domains-7-peer-tail"
+moves = ["dm-peer-outside-fabric", "dm-word-owners"]
+one_line = "Admission's Caller, Knowledge's word, and the eight singleton Peer* outside Fabric go; concept-gate baseline re-pinned at origin/main — bar 1 reads 0"
+
+[[rung]]
+id = "domains-8-understanding-readmodel"
+moves = ["dm-atom-outside"]
+one_line = "corpus-engine-vocab is the one door to atoms.json; every consumer outside enrichment/ reads through it — unrepresentable: a crate re-deriving Atom because it could not read one"
+
+[[rung]]
+id = "domains-9-serving-package-red"
+moves = []
+one_line = "The peg is cleared (sovereign-serving's 11 zero-reference types deleted, knowledge_assignment.rs 771 lines evicted with its corpus-engine dep); [[package]] serving, serving/BOUNDARY.md, scripts/serving-lift.sh declared and WATCHED FAILING on the fused tree before a line moves"
+
+[[rung]]
+id = "domains-10-serving-extract"
+moves = ["dm-contexts-liftable", "dm-mesh-lines", "dm-misnamed-crates"]
+one_line = "The scheduler half moves first (scheduler_core, oicp_select, predicted_time, tier, decision_log/replay/trace, throughput_tracking — 6,356 lines, zero foreign imports), then admission and the knot (peer_inference.rs 5,399); boundary-gate green; serving-lift verdict 1 — unrepresentable: a routing decision that cannot be replayed outside the daemon"
+
+[[rung]]
+id = "domains-11-workbench-next-edit"
+moves = ["dm-contexts-liftable", "dm-misnamed-crates"]
+one_line = "next-edit (7,808 lines: next_edit* in sovereign-api, fim_adapter + lsp_tier in sovereign-mesh) joins the code-intel package — unrepresentable: an IDE completion service linked through the mesh's HTTP crate"
+
+[[rung]]
+id = "domains-12-workspace-package"
+moves = ["dm-contexts-liftable"]
+one_line = "corpus-engine-notes, -atos, -archaeology declared [[package]] workspace with a lift — unrepresentable: an agent's memory that cannot be mounted without a corpus"
+
+[[rung]]
+id = "domains-13-build-feedback-verdict"
+moves = ["dm-contexts-liftable"]
+one_line = "corpus-engine-watchers meets the §2 test: fold into Workbench or delete; 7 dependent manifests repointed; the registry row and this file's target edited in the same commit — the kill bar run on purpose"
+
+[[rung]]
+id = "domains-14-understanding-carve"
+moves = ["dm-contexts-liftable", "dm-misnamed-crates"]
+one_line = "enrichment/ (93,427) + meta_atlas/ + atlas_traversal/ become the Understanding crate; DECOMPOSITION.md Tier 7 relabelled by context; corpus-mcp lifts against it — depends on domains-8"
+
+[[rung]]
+id = "domains-15-mesh-means-mesh"
+moves = ["dm-mesh-lines", "dm-misnamed-crates"]
+one_line = "sovereign-mesh <= 20,000 and every module tagged Fabric; the Compute executor half has a home — BLOCKS on a daemon-core campaign (DAEMON_CORE.md Phases 1-3 move the 18,319 lines of *_http.rs to the host) that does not exist yet"

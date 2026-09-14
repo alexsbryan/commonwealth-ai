@@ -1,0 +1,2308 @@
+# quality/DOMAINS.toml — the bounded-context registry.
+#
+# DATA, not program (ARCH principle 9): the closed set of contexts, the word
+# families each owns, which [[package]] in quality/ARCH_LAYERS.toml realises it,
+# the module -> context tags the instruments read, and the per-type
+# dispositions Phase A executes. The instrument is scripts/domains-census.py
+# (rung domains-3); the flight rules are quality/campaigns/domains.toml; the
+# argument is quality/DOMAINS.md. Edit a row here and a reviewer reads the
+# diff — never a constant in a script.
+#
+# `owns` are FAMILY HEADS: the instrument matches the word anywhere in a type
+# name (`PeerFoo`, `FooPeer`, `IrohPeerPath`), not as a prefix. Rung 3's
+# inventory found 21 definitions a prefix sweep misses.
+#
+# `status` is "kept" or "merged-into:<id>". A merge is the §8 kill bar firing
+# on purpose; it edits this row, lowers dm-contexts-liftable's target by one,
+# and the commit body says which "applicable as" could not be named.
+
+schema = "domains/v1"
+declared = "2026-09-13"
+
+# ── Contexts (DOMAINS.md §4) ────────────────────────────────────────────────
+
+[[context]]
+id = "understanding"
+kind = "core"
+question = "what is this material about?"
+owns = ["Atom", "Tension", "Ontology", "Seed", "Atlas"]
+# `Gap` is defined three ways (atlas / epistemic / deep-research) and `Domain`
+# names the plugin, not the atlas noun — both are §5 shared-word calls for
+# rung 4, not owned words yet. `Cluster` is never persisted under atlas/ and
+# is not a published noun (measured 2026-09-13).
+package = ""
+lift = ""
+applicable_as = "point it at a folder, get back what the material is about — its domains, its tensions, its gaps; corpus-mcp already reads its output against a bare llama-server"
+roots = ["corpus-engine/src/enrichment", "corpus-engine/src/meta_atlas", "corpus-engine/src/atlas_traversal", "corpus-engine-vocab"]
+status = "kept"
+
+[[context]]
+id = "answering"
+kind = "core"
+question = "what is the answer, and where did it come from?"
+owns = ["Turn", "Scope", "Capabilities", "Lane", "Citation", "Refusal"]
+package = ""
+lift = ""
+applicable_as = "an endpoint that answers cited from an index you hand it, or declines"
+roots = ["sovereign/crates/sovereign-core/src/runtime"]
+# deep_research/ (25,597 lines in sovereign-core) is NOT tagged: DOMAINS §9
+# left it unclassified and rung 4 decides whether it is here or an eleventh.
+status = "kept"
+
+[[context]]
+id = "ingest"
+kind = "supporting"
+question = "how do bytes become chunks?"
+owns = ["Source", "Recipe", "Extractor", "Chunk", "Acquirer"]
+# `Source` is in quality/baselines/concepts.txt's duplicate set and DOMAINS §5
+# also proposed it as Knowledge's word for a peer-as-source. It is Ingest's
+# (§4); Knowledge's word is a rung-4 decision and is NOT `Source`.
+package = ""
+lift = ""
+applicable_as = "a recipe-driven document pipeline"
+roots = ["corpus-engine/src/extractors", "corpus-engine/src/chunkers", "corpus-engine/src/acquirers", "corpus-engine/src/filters", "corpus-engine/src/pii.rs"]
+status = "kept"
+
+[[context]]
+id = "retrieval"
+kind = "supporting"
+question = "given a query, which chunks?"
+owns = ["Index", "Shard", "Embedding", "Neighbor"]
+package = ""
+lift = ""
+applicable_as = "a searchable local index — the closest of the ten to generic (DOMAINS §4), which is a reason to invest less, not to fuse it"
+roots = ["corpus-engine/src/index", "corpus-engine/src/sharding.rs", "corpus-engine/src/registry.rs"]
+status = "kept"
+
+[[context]]
+id = "serving"
+kind = "supporting"
+question = "which engine answers this, and can I prove why?"
+# The word for a serving-side peer is a RUNG-4 DECISION. DOMAINS §5 proposed
+# `Candidate`; `converge noun Candidate` finds five first-party definitions in
+# five crates (2026-09-13), so it is not exclusive and a sixth would be the
+# disease. Left out of `owns` until decided; dm-word-owners reads `owns`.
+owns = ["Slot", "Admission", "Replay", "Decision"]
+package = ""          # rung 9 declares [[package]] serving
+lift = ""             # rung 9 writes scripts/serving-lift.sh
+applicable_as = "a router in front of N OpenAI-compatible endpoints with admission control and replayable decisions"
+roots = ["sovereign/crates/sovereign-serving", "serving-policy"]
+status = "kept"
+
+[[context]]
+id = "fabric"
+kind = "supporting"
+question = "who is in this group, how do I reach them, how do we agree?"
+owns = ["Member", "Ring", "Roster", "Reach"]
+# The canonical member type is commonwealth_core::mesh::MemberRecord
+# (quality/CONCEPTS.toml:911-920). Phase A renames nothing inside this package.
+package = "commonwealth"
+lift = "scripts/cw-rails-lift.sh"
+applicable_as = "proven: cw-rails joined a real mesh by invite and served another member's library (2026-09-11)"
+roots = ["commonwealth/crates"]
+status = "kept"
+
+[[context]]
+id = "compute"
+kind = "supporting"
+question = "whose machine runs this, and under what boundary?"
+owns = ["Unit", "Offer", "Lease", "Isolation", "Donor"]
+# `Donor` has ZERO first-party definitions today (converge, 2026-09-13) — the
+# one proposed word that is clean.
+package = "commonwealth"   # the vocabulary half, commonwealth-work, is inside the package
+lift = "scripts/cw-work-lift.sh --sandbox"
+applicable_as = "proven: three heterogeneous units complete outside the monorepo inside a rootless container"
+roots = ["commonwealth/crates/commonwealth-work"]
+status = "kept"
+
+[[context]]
+id = "workbench"
+kind = "supporting"
+question = "what is in this codebase?"
+owns = ["Symbol", "CallGraph", "Edit", "NextEdit"]
+package = "code-intel"
+lift = ""             # no lift script yet; the package row is gated, not lifted
+applicable_as = "a code-intelligence MCP server; next-edit is its clearest lost child (sovereign/docs/NEXT_EDIT.md)"
+roots = ["corpus-engine-scip", "corpus-engine-sections", "corpus-engine/src/enrichment/code_intel"]
+status = "kept"
+
+[[context]]
+id = "workspace"
+kind = "supporting"
+question = "what does the assistant remember about its own work?"
+owns = ["Note", "Feature", "PlanItem", "DesignSignal"]
+package = ""          # rung 12 declares [[package]] workspace
+lift = ""
+applicable_as = "a notes/decisions store any agent harness could mount"
+roots = ["corpus-engine-notes", "corpus-engine-atos", "corpus-engine-archaeology"]
+status = "kept"
+
+[[context]]
+id = "build-feedback"
+kind = "supporting"
+question = "did it compile, did the tests pass?"
+owns = ["LintResult", "TestResult", "Watcher"]
+package = ""
+lift = ""
+applicable_as = "barely — DOMAINS §4 and §8 name this the first kill-bar candidate; rung 13 runs the §2 test and either folds it into workbench or deletes it"
+roots = ["corpus-engine-watchers"]
+# 7 manifests depend on corpus-engine-watchers today: corpus-engine,
+# corpus-engine-yield, sovereign-cli-dev, sovereign-server,
+# sovereign-cli-daemon, sovereign-work-atlas, sovereign-tools.
+status = "kept"
+
+# ── Not contexts (DOMAINS.md §4) — tagged so the instrument has no `unknown` ──
+
+[[context]]
+id = "kernel"
+kind = "published-language"
+question = "what do all contexts speak?"
+owns = []
+package = ""
+lift = ""
+applicable_as = "the shared kernel between contexts, not an eleventh"
+roots = ["oicp-types", "kernel-types", "corpus-engine-vocab", "sovereign/crates/sovereign-contracts"]
+status = "kept"
+
+[[context]]
+id = "host"
+kind = "composition-root"
+question = "what assembles the four things DAEMON_CORE.md names?"
+owns = []
+package = ""
+lift = ""
+applicable_as = "not applicable by design — the daemon is not a domain (DOMAINS §4)"
+roots = ["sovereign/crates/sovereign-cli-daemon", "sovereign/crates/sovereign-desktop", "sovereign/crates/sovereign-server"]
+status = "kept"
+
+[[context]]
+id = "back-of-house"
+kind = "observer"
+question = "is the product measured?"
+owns = []
+package = ""
+lift = ""
+applicable_as = "not applicable by design — may observe every layer, nothing depends on it (TARGET_ARCHITECTURE §6)"
+roots = ["sovereign/crates/sovereign-eval", "sovereign/crates/sovereign-cli-dev", "sovereign/crates/sovereign-agent-bench", "corpus-engine-atos", "corpus-engine-archaeology"]
+status = "kept"
+
+# ── Module tags ─────────────────────────────────────────────────────────────
+# One row per module (file or directory) in the crates dm-misnamed-crates reads:
+# sovereign-mesh, sovereign-api, sovereign-serving, corpus-engine. Appended by
+# rung 3 from the 2026-09-13 census; an UNTAGGED module counts against its
+# crate (absence reported). `context = "unknown"` is legal and counts the same
+# way — a worker may not invent a context for a module.
+
+# ── Nouns: the Peer dispositions (rung 4 finalises `proposed:` -> `decided:`) ─
+# Appended by rung 3 from the 2026-09-13 inventory. Carve-outs live here as
+# `disposition = "proposed:keep"` rows with a `why`, never in the instrument.
+
+# ── Edges: cross-context sharing, E1-E13 (dm-shared-edges' denominator) ─────
+# Appended by rung 3 from the 2026-09-13 inventory, each with `fields_read`.
+
+# ═══ Module tags — census 2026-09-13 (sovereign-mesh, sovereign-api, sovereign-serving); generator asserted every .rs has a row ═══
+# Module context registry - sovereign-mesh, sovereign-api, sovereign-serving. 179 rows, no unknowns. 2026-09-13 @ 1ee406165.
+# Serving total 44,485: mesh 24,307 (20,488 tagged serving here + mesh_sim 3,819, tagged back-of-house) + api 16,177
+#   + sovereign-serving 1,491 + serving-policy 1,241 + oicp-types/scoring.rs 1,269. 38,665 with frontdoor.rs (5,820)
+#   reclassified host - see its note. Rows use the *_http -> host rule, so the mesh roll-up reads host 25,432 /
+#   serving 20,488 / fabric 16,028 / compute 9,740 / back-of-house 4,841 / workbench 4,811 / ingest 3,410.
+# The scheduler half is ALREADY clean: scheduler_core + oicp_select + predicted_time + tier + decision_log +
+#   decision_replay + decision_trace + throughput_tracking = 6,356 lines, zero commonwealth_*, zero sovereign-inference,
+#   zero axum; scheduler_core.rs has no external deps at all and is pub(crate), so peer_inference is its only door.
+# The knot is one file: peer_inference.rs, 5,399 lines, 26pc of mesh Serving, sole holder of the 11 non-Serving mesh
+#   types and of all 4 commonwealth_* leaks in the Serving set.
+# *_http.rs in sovereign-mesh: 26 files / 22,017 lines vs DAEMON_CORE.md section 4's 22 / 18,319 (2026-09-11) - +4 / +3,698.
+# Post-Serving: 88,255 - 24,307 = 63,948, still 3.2x the <=20,000 bar; fabric 16,028 (18pc) is the only name-matching slice.
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/admin_http.rs"
+context = "host"
+lines = 1308
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/assets_http.rs"
+context = "host"
+lines = 833
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/atlas_http.rs"
+context = "host"
+lines = 772
+note = "daemon handler; the read model it serves is Understanding's"
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/auto_ingest.rs"
+context = "ingest"
+lines = 1459
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/auto_resume.rs"
+context = "ingest"
+lines = 384
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/canonical_pull.rs"
+context = "fabric"
+lines = 319
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/capabilities.rs"
+context = "fabric"
+lines = 467
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/commit_harvest.rs"
+context = "workbench"
+lines = 481
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/corpus_catalog_http.rs"
+context = "host"
+lines = 866
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/corpus_watch_http.rs"
+context = "host"
+lines = 1650
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/daemon.rs"
+context = "host"
+lines = 5683
+note = "composition root; also holds PeerInferenceEndpoint (:4783) and the Member->Candidate translation (:2286)"
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/daemon_services.rs"
+context = "host"
+lines = 1076
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/decision_log.rs"
+context = "serving"
+lines = 1527
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/decision_replay.rs"
+context = "serving"
+lines = 1143
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/decision_trace.rs"
+context = "serving"
+lines = 634
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/deep_link.rs"
+context = "fabric"
+lines = 178
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/documents_http.rs"
+context = "host"
+lines = 1172
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/dst.rs"
+context = "back-of-house"
+lines = 1022
+note = "cfg(feature=\"dst\") fabric fault-injection harness; never in a production build"
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/enrich_http.rs"
+context = "host"
+lines = 125
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/entry_endpoint.rs"
+context = "serving"
+lines = 305
+note = "third PeerEndpointSource impl (:170)"
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/features_http.rs"
+context = "host"
+lines = 221
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/fim_adapter.rs"
+context = "workbench"
+lines = 745
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/gossip.rs"
+context = "fabric"
+lines = 1493
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/governance_http.rs"
+context = "fabric"
+lines = 1015
+note = "ring governance routes - the mesh's own"
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/guest_lender.rs"
+context = "serving"
+lines = 556
+note = "grant posture is a routing input; read only by peer_inference (:477-479, :2356, :3029)"
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/guest_tunnel.rs"
+context = "compute"
+lines = 134
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/http_response.rs"
+context = "host"
+lines = 120
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/inference_adapter.rs"
+context = "serving"
+lines = 2086
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/ingest_executor.rs"
+context = "ingest"
+lines = 736
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/insight_http.rs"
+context = "host"
+lines = 346
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/iroh_access.rs"
+context = "fabric"
+lines = 1614
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/iroh_watchdog.rs"
+context = "fabric"
+lines = 1043
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/job_registry.rs"
+context = "host"
+lines = 253
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/join.rs"
+context = "fabric"
+lines = 704
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/knowledge_client.rs"
+context = "retrieval"
+lines = 209
+note = "client for a peer's knowledge search; the question it asks is Retrieval's"
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/landscape_digest_client.rs"
+context = "understanding"
+lines = 281
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/landscape_digest_http.rs"
+context = "host"
+lines = 109
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/lc_http.rs"
+context = "host"
+lines = 914
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/lib.rs"
+context = "host"
+lines = 177
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/local_only.rs"
+context = "host"
+lines = 370
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/loopback_guard.rs"
+context = "host"
+lines = 353
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/lsp_tier.rs"
+context = "workbench"
+lines = 761
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/mcp_config_http.rs"
+context = "host"
+lines = 288
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/mcp_router.rs"
+context = "host"
+lines = 686
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/measurements_rail.rs"
+context = "fabric"
+lines = 309
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/media_reach.rs"
+context = "fabric"
+lines = 219
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/mesh_discovery.rs"
+context = "fabric"
+lines = 475
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/mesh_http.rs"
+context = "fabric"
+lines = 1825
+note = "membership routes - the mesh's own"
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/meshapp_http.rs"
+context = "host"
+lines = 587
+note = "app-registry explorer, not a membership/ring/rail route"
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/model_fetch.rs"
+context = "serving"
+lines = 316
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/multi_pod_coordinator.rs"
+context = "compute"
+lines = 614
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/newsworthy_host.rs"
+context = "understanding"
+lines = 639
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/notes_http.rs"
+context = "host"
+lines = 396
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/oicp_select.rs"
+context = "serving"
+lines = 946
+note = "mostly a renaming shim over oicp-types::scoring (:32)"
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/oicp_synthesis.rs"
+context = "serving"
+lines = 1264
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/origin_fanout.rs"
+context = "fabric"
+lines = 111
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/peer_adapter.rs"
+context = "fabric"
+lines = 239
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/peer_inference.rs"
+context = "serving"
+lines = 5399
+note = "THE KNOT - the only Serving module naming EmbeddedDaemon, commonwealth_core, sovereign_inference, guest_lender, yield_backoff"
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/persist.rs"
+context = "fabric"
+lines = 1146
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/pinned_pod_snapshot.rs"
+context = "compute"
+lines = 394
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/pinned_transport.rs"
+context = "compute"
+lines = 274
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/pinned_worker_source.rs"
+context = "serving"
+lines = 492
+note = "PeerEndpointSource + CompositeEndpointSource impls (:224, :271)"
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/predicted_time.rs"
+context = "serving"
+lines = 1003
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/project_http.rs"
+context = "host"
+lines = 498
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/projects.rs"
+context = "workbench"
+lines = 674
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/prompt_compactor.rs"
+context = "serving"
+lines = 519
+note = "its ONE import is sovereign_api::openai_types (:48) - wire types the ranker should not own"
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/publish_http.rs"
+context = "fabric"
+lines = 147
+note = "/v1/mesh/media + /v1/mesh/app - what this node offers the house"
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/rail_bind.rs"
+context = "fabric"
+lines = 64
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/rail_kv_pump.rs"
+context = "fabric"
+lines = 1011
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/reading_formatters.rs"
+context = "understanding"
+lines = 139
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/reading_http.rs"
+context = "host"
+lines = 1065
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/recipe_http.rs"
+context = "host"
+lines = 745
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/recipe_project_http.rs"
+context = "host"
+lines = 825
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/reindexer.rs"
+context = "workbench"
+lines = 2150
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/research_http.rs"
+context = "host"
+lines = 651
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/research_run_dir.rs"
+context = "understanding"
+lines = 706
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/ring_roster.rs"
+context = "fabric"
+lines = 311
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/ring_sync.rs"
+context = "fabric"
+lines = 2031
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/roster_repair.rs"
+context = "fabric"
+lines = 203
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/rpc_warm_http.rs"
+context = "serving"
+lines = 1214
+note = "*_http but the decision is Serving's - distributed-inference auto-warm orchestration"
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/scheduler_core.rs"
+context = "serving"
+lines = 1351
+note = "zero external deps; pub(crate), so peer_inference is its only door"
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/slot_aliases.rs"
+context = "serving"
+lines = 201
+note = "no imports at all - pure policy data"
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/source_content_validator.rs"
+context = "understanding"
+lines = 551
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/state.rs"
+context = "fabric"
+lines = 182
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/supervised_task.rs"
+context = "host"
+lines = 346
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/throughput_tracking.rs"
+context = "serving"
+lines = 353
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/tier.rs"
+context = "serving"
+lines = 399
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/tool_profile.rs"
+context = "host"
+lines = 585
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/turn_approval.rs"
+context = "answering"
+lines = 747
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/turn_extras_http.rs"
+context = "host"
+lines = 294
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/turn_http.rs"
+context = "host"
+lines = 2105
+note = "the turn wire the daemon serves; Answering is what runs behind it"
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/types.rs"
+context = "host"
+lines = 13
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/watched_folder_runtime.rs"
+context = "ingest"
+lines = 86
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/watched_folder_setup.rs"
+context = "ingest"
+lines = 221
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/work_atlas_broadcaster.rs"
+context = "workspace"
+lines = 233
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/work_donor.rs"
+context = "compute"
+lines = 1194
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/worker_controller.rs"
+context = "compute"
+lines = 846
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/worker_daemon.rs"
+context = "compute"
+lines = 291
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/worker_eligibility.rs"
+context = "compute"
+lines = 1195
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/worker_http.rs"
+context = "compute"
+lines = 2046
+note = "pod-side surface, not a daemon handler - the *_http host rule does not apply"
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/worker_inference_proxy.rs"
+context = "serving"
+lines = 542
+note = "reads worker_http::WorkerState (:67); the request it proxies is an inference one"
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/worker_pod.rs"
+context = "compute"
+lines = 763
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/worker_subprocess_runner.rs"
+context = "compute"
+lines = 1271
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/yield_backoff.rs"
+context = "serving"
+lines = 238
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/auto_ingest/heartbeat_verdict.rs"
+context = "ingest"
+lines = 110
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/auto_ingest/heartbeat_verdict/tests.rs"
+context = "ingest"
+lines = 96
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/ingest_executor/tests.rs"
+context = "ingest"
+lines = 318
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/measurements_rail/tests.rs"
+context = "fabric"
+lines = 442
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/mesh_sim/mod.rs"
+context = "back-of-house"
+lines = 2394
+note = "cfg(feature=\"mesh-sim\") Tier-1 scheduler simulator; measures Serving, ships in no build"
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/mesh_sim/rng.rs"
+context = "back-of-house"
+lines = 103
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/mesh_sim/scenario.rs"
+context = "back-of-house"
+lines = 501
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/mesh_sim/scoreboard.rs"
+context = "back-of-house"
+lines = 821
+note = "reads decision_log::{DecisionEvent,RoutingDecision,RoutingOutcome,ServedBy,Verdict} (:20)"
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/rail_kv_pump/tests.rs"
+context = "fabric"
+lines = 273
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/ring_roster/tests.rs"
+context = "fabric"
+lines = 207
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/work_donor/tests.rs"
+context = "compute"
+lines = 718
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/admission.rs"
+context = "serving"
+lines = 1447
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/auto_recover.rs"
+context = "ingest"
+lines = 860
+note = "reactive recovery for stranded corpus partitions"
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/client_auth.rs"
+context = "host"
+lines = 354
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/client_surface.rs"
+context = "host"
+lines = 117
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/frontdoor.rs"
+context = "host"
+lines = 5820
+note = "NOT Serving. Its whole surface reshapes a request body for a third-party agent harness - Harness enum, CODEX_TOOL_KEEPLIST (:219), heredoc canonicalization, path scrubbing, anti-repetition. It answers what prompt does this harness need, not which engine answers this. One non-test caller: routes_responses.rs:97-111. 5820 lines, 13pc of all Serving, and carrying it into a Serving crate makes the lift test drag harness-specific prompt surgery no third party wants"
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/headers.rs"
+context = "host"
+lines = 122
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/lib.rs"
+context = "host"
+lines = 56
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/middleware/approval_gate.rs"
+context = "answering"
+lines = 442
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/middleware/artifact_surface.rs"
+context = "host"
+lines = 306
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/middleware/context_injector.rs"
+context = "answering"
+lines = 845
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/middleware/decision_extractor.rs"
+context = "workspace"
+lines = 443
+note = "extracts agent decisions from responses; the note store's question, not routing's"
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/middleware/mod.rs"
+context = "host"
+lines = 727
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/middleware/session_briefing.rs"
+context = "answering"
+lines = 354
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/middleware/shared.rs"
+context = "host"
+lines = 219
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/middleware/tool_injector.rs"
+context = "answering"
+lines = 239
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/next_edit.rs"
+context = "workbench"
+lines = 983
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/next_edit_journal.rs"
+context = "workbench"
+lines = 389
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/next_edit_model.rs"
+context = "workbench"
+lines = 2462
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/next_edit_symbols.rs"
+context = "workbench"
+lines = 714
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/next_edit_syntax.rs"
+context = "workbench"
+lines = 342
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/openai_types.rs"
+context = "kernel"
+lines = 949
+note = "the OpenAI wire vocabulary; published language living in an application crate"
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/principal.rs"
+context = "serving"
+lines = 375
+note = "the ONE resolver from a request to a fairness principal - admission's input"
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/reshaping.rs"
+context = "host"
+lines = 435
+note = "same harness-shaping argument as frontdoor; extracted FROM routes_responses for codex"
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/responses_types.rs"
+context = "kernel"
+lines = 421
+note = "Responses-API wire vocabulary, same argument as openai_types"
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/routes_apps.rs"
+context = "host"
+lines = 165
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/routes_completions.rs"
+context = "serving"
+lines = 555
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/routes_edit_predictions.rs"
+context = "workbench"
+lines = 1412
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/routes_inference.rs"
+context = "serving"
+lines = 2342
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/routes_internal/atlas_status.rs"
+context = "host"
+lines = 47
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/routes_internal/corpus_collaborate.rs"
+context = "host"
+lines = 1048
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/routes_internal/corpus_grant.rs"
+context = "host"
+lines = 192
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/routes_internal/corpus_ingest.rs"
+context = "host"
+lines = 1496
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/routes_internal/corpus_queue.rs"
+context = "host"
+lines = 843
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/routes_internal/corpus_sync.rs"
+context = "host"
+lines = 353
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/routes_internal/enrichment_status.rs"
+context = "host"
+lines = 127
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/routes_internal/gossip.rs"
+context = "fabric"
+lines = 196
+note = "the mesh's own; also the ONE non-harness consumer of sovereign_serving::InferencePlan (:15, :180)"
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/routes_internal/guest_grant.rs"
+context = "host"
+lines = 252
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/routes_internal/knowledge.rs"
+context = "host"
+lines = 318
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/routes_internal/mesh_admin.rs"
+context = "fabric"
+lines = 1598
+note = "membership routes - the mesh's own"
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/routes_internal/mod.rs"
+context = "host"
+lines = 133
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/routes_internal/model_files.rs"
+context = "serving"
+lines = 611
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/routes_internal/newsworthy_status.rs"
+context = "host"
+lines = 236
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/routes_internal/peer_preference.rs"
+context = "serving"
+lines = 403
+note = "operator routing policy - DOMAINS 3 names PeerPreference as one of the seven Peer meanings"
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/routes_internal/pipeline_pause.rs"
+context = "host"
+lines = 431
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/routes_internal/ring_sync.rs"
+context = "fabric"
+lines = 207
+note = "the mesh's own"
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/routes_internal/rpc_warm.rs"
+context = "serving"
+lines = 94
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/routes_knowledge.rs"
+context = "retrieval"
+lines = 590
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/routes_oicp.rs"
+context = "serving"
+lines = 653
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/routes_oicp_ingest.rs"
+context = "ingest"
+lines = 292
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/routes_ollama.rs"
+context = "serving"
+lines = 716
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/routes_rail.rs"
+context = "fabric"
+lines = 443
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/routes_responses.rs"
+context = "serving"
+lines = 2746
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/routes_status.rs"
+context = "host"
+lines = 746
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/server.rs"
+context = "host"
+lines = 1259
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/state.rs"
+context = "host"
+lines = 2736
+note = "the api-side god object; every Serving module here reaches it. Names commonwealth_core::mesh::Mesh (:13), commonwealth_state (:14), corpus_engine::CorpusEngine (:15), serving_policy::fair_sched (:17), sovereign_grants (:18), sovereign_serving (:21-23)"
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/turn_fidelity.rs"
+context = "answering"
+lines = 136
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/yield_hook.rs"
+context = "host"
+lines = 366
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/prompts"
+context = "host"
+lines = 26
+note = "data directory (2 .txt), not a Rust module; declared so the tag table has no holes"
+
+[[module]]
+path = "sovereign/crates/sovereign-serving/src/inference_plan.rs"
+context = "serving"
+lines = 135
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-serving/src/lib.rs"
+context = "serving"
+lines = 42
+note = "re-exports commonwealth_core::{model,oicp}; the third import path to oicp-types"
+
+[[module]]
+path = "sovereign/crates/sovereign-serving/src/plan.rs"
+context = "serving"
+lines = 250
+note = "DEAD - every noun it exports has zero external references"
+
+[[module]]
+path = "sovereign/crates/sovereign-serving/src/scheduler/knowledge_assignment.rs"
+context = "retrieval"
+lines = 771
+note = "EVICT before the package is declared: knowledge-shard assignment, not inference serving, and it is why this crate depends on corpus-engine"
+
+[[module]]
+path = "sovereign/crates/sovereign-serving/src/scheduler/mod.rs"
+context = "serving"
+lines = 19
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-serving/src/store_adapter.rs"
+context = "serving"
+lines = 274
+note = ""
+
+[[peg]]
+crate = "sovereign-serving"
+lines = 1491
+dependents = ["sovereign-mesh", "sovereign-api", "sovereign-mesh-test-harness"]
+dead = [
+    "RequestRouter",
+    "RoutingRule",
+    "RoutingCondition",
+    "LoadPolicy",
+    "SchedulingStrategy",
+    "NodeRole",
+    "PlanTrigger",
+    "UnavailableReason",
+    "Tier",
+    "TierQueueDepths",
+    "ModelTransition",
+    "TransitionState",
+]
+dead_note = "zero references anywhere outside the crate. TierQueueDepths has two internal callers (store_adapter.rs:160, :169) and nothing else. This is the peg SYSTEM_OVERVIEW.md ~line 300 says the scheduler lands on later; nothing has ever called it."
+live = [
+    "InferenceStateStore - 5 refs: sovereign-api/src/state.rs:23, :640, :1695; sovereign-mesh/tests/main/models_http_e2e.rs:189",
+    "InferencePlan - 9 refs: sovereign-api/src/routes_internal/gossip.rs:15, :180; rest in sovereign-mesh-test-harness",
+    "MeshPlan - 6 refs, ALL in sovereign-mesh-test-harness/src/simulated_mesh.rs:10, :195, :202",
+    "ShardPlan - 12 real refs, all sovereign-mesh-test-harness/tests/integration.rs; 3 further hits are unrelated fixture strings in corpus-engine/tests/main/watcher_e2e.rs:64-66 and sovereign-tools/tests/main/e2e_code_intel.rs:267-327",
+    "ShardAssignment - 7 refs, all sovereign-mesh-test-harness",
+    "LayerRange - 7 refs, all sovereign-mesh-test-harness",
+]
+evict = "sovereign/crates/sovereign-serving/src/scheduler/knowledge_assignment.rs"
+evict_lines = 771
+evict_share = "771 of 1,491 - 52pc of the crate"
+evict_drags = "corpus-engine (LanceDB, Tantivy, rusqlite). A [[package]] id = \"serving\" that includes sovereign-serving as it stands inherits that closure and fails the lift for the same reason corpus-mcp needs three [[exception]] rows (quality/ARCH_LAYERS.toml:1110-1129). Move it to Retrieval/Understanding BEFORE the package is declared, or declare the package without this crate."
+collisions = [
+    "Tier x3: sovereign/crates/sovereign-serving/src/plan.rs:142, sovereign/crates/sovereign-core/src/role.rs:79, commonwealth/crates/commonwealth-media/src/apps.rs:57 - and none of the three is the scheduler's, whose tier concept is TierFloor at sovereign/crates/sovereign-mesh/src/tier.rs:112",
+    "routing model x2 (incompatible): RequestRouter/RoutingRule/RoutingCondition at sovereign/crates/sovereign-serving/src/plan.rs:135,150,158 is a static declarative rule table; RoutingDecision/DecisionPath at sovereign/crates/sovereign-mesh/src/decision_log.rs:216,245 plus RankObjective at sovereign/crates/sovereign-mesh/src/scheduler_core.rs:78 is per-request predicted-cost ranking (SCHEDULER_QUALITY.md 4.1). They cannot both be the decider",
+    "load x3: LoadPolicy at sovereign/crates/sovereign-serving/src/plan.rs:122 (policy), LoadSource at sovereign/crates/sovereign-mesh/src/decision_log.rs:364 (measurement provenance), LoadDebt at sovereign/crates/sovereign-mesh/src/predicted_time.rs:106 (queue debt)",
+    "candidate x8: ModelCandidate (an as-rename, see below), PeerCandidateView/LocalCandidateView/RankedCandidate at sovereign/crates/sovereign-mesh/src/scheduler_core.rs:232,207,302, CandidateRecord/CandidateInputs/CandidateKind/ExcludedCandidate at sovereign/crates/sovereign-mesh/src/decision_log.rs:290,383,283,498",
+    "as-rename of the published language: sovereign/crates/sovereign-mesh/src/oicp_select.rs:32 imports best_claim_for_request as score_manifest_for_request, ScoredClaim as ModelCandidate, SCORING_EPSILON as SCORE_TIE_EPSILON - so grep SCORING_EPSILON misses the scheduler entirely (ARCH 8, one decider one name, defeated by as)",
+    "oicp x3 import paths, one crate: sovereign_core::oicp at sovereign/crates/sovereign-core/src/lib.rs:25, commonwealth_core::oicp at commonwealth/crates/commonwealth-core/src/lib.rs:129, sovereign_serving::oicp at sovereign/crates/sovereign-serving/src/lib.rs:16 - all three are oicp_types. ProviderManifest arrives by path 1 in peer_inference.rs:61 and by path 3 in inference_adapter.rs:34, inside one crate",
+    "admission x3 unrelated deciders: sovereign/crates/sovereign-api/src/admission.rs (HTTP peer/client fair-share shedding), sovereign_core::runtime::admission (turn token; sovereign/crates/sovereign-core/src/runtime/turn_lease.rs:27, streaming.rs:986), sovereign_core::runtime::grounding::native_grounding::admission::admit (evidence; handlers/knowledge_query.rs:730). DOMAINS 4 claims admission as a word Serving owns exclusively - it does not",
+    "decision_log x2, and the OTHER one owns the wire id: sovereign/crates/sovereign-mesh/src/decision_log.rs (routing records) vs studio/crates/sovereign-recipe-author/src/decision_log.rs (DecisionLogTool, DecisionKind), registered as the tool id \"decision_log\" at sovereign/crates/sovereign-contracts/src/intent_policy.rs:367 and :479",
+]
+
+[[seam]]
+name = "member_to_candidate"
+today = "sovereign/crates/sovereign-mesh/src/daemon.rs:2286"
+today_symbol = "EmbeddedDaemon::peer_inference_endpoints"
+today_span = "sovereign/crates/sovereign-mesh/src/daemon.rs:2286-2345 - 60 lines"
+door = "sovereign/crates/sovereign-mesh/src/peer_inference.rs:337 PeerEndpointSource"
+candidate_type = "sovereign/crates/sovereign-mesh/src/daemon.rs:4783 PeerInferenceEndpoint"
+source_type = "commonwealth_core::mesh::MemberRecord"
+fields_read = [
+    "MemberRecord.node_id -> PeerInferenceEndpoint.node_id",
+    "MemberRecord.name -> PeerInferenceEndpoint.name",
+    "commonwealth_transport::peer_contact(&m) + TrafficClass::Inference -> PeerInferenceEndpoint.base_urls (each suffixed /v1)",
+    "MemberRecord.capabilities.hardware.system_ram_gb -> PeerInferenceEndpoint.system_ram_gb",
+    "MemberRecord.capabilities.benchmark -> PeerInferenceEndpoint.benchmark",
+    "MemberRecord.capabilities.current_in_flight -> PeerInferenceEndpoint.current_in_flight",
+    "MemberRecord.capabilities.inference_availability -> PeerInferenceEndpoint.inference_availability",
+    "MemberRecord.last_seen -> PeerInferenceEndpoint.gossip_last_seen_unix",
+    "constant None -> PeerInferenceEndpoint.transport (pinned pods arrive through PinnedWorkerEndpointSource instead)",
+]
+predicates = [
+    "m.node_id != self_id",
+    "m.status in {NodeStatus::Online, NodeStatus::Busy}",
+    "m.is_dialable()",
+]
+trait_methods = [
+    "peer_inference_endpoints() -> Vec<PeerInferenceEndpoint>  (peer_inference.rs:338)",
+    "local_node_id() -> Option<commonwealth_core::ids::NodeId>  (peer_inference.rs:348) - LEAK: Fabric identity on the Serving port",
+    "ledger_emission_for(&NodeId, &str, &str) -> Option<LedgerEmission>  (peer_inference.rs:365) - LEAK: contribution ledger on the Serving port",
+]
+impls_production = [
+    "sovereign/crates/sovereign-mesh/src/peer_inference.rs:374  (EmbeddedDaemon)",
+    "sovereign/crates/sovereign-mesh/src/peer_inference.rs:5376 (DeferredDaemon)",
+    "sovereign/crates/sovereign-mesh/src/pinned_worker_source.rs:224 (PinnedWorkerEndpointSource)",
+    "sovereign/crates/sovereign-mesh/src/pinned_worker_source.rs:271 (CompositeEndpointSource)",
+    "sovereign/crates/sovereign-mesh/src/entry_endpoint.rs:170",
+]
+inward_callers = [
+    "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/provider.rs:111",
+    "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/provider.rs:117",
+    "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/provider.rs:128",
+    "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/provider.rs:136",
+    "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs:1151",
+    "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs:1203",
+    "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs:2202",
+    "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs:2301",
+    "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs:2308",
+    "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/build/inference.rs:130",
+]
+inward_callers_note = "Eight production sites in ONE crate (bootstrap.rs:2301 and :2308 are the CompositeEndpointSource assembly and the constructor it feeds, counted as one site in prose). sovereign-core has ZERO: its Cargo.toml names no sovereign-mesh / -api / -serving, and every sovereign_mesh:: string inside it is a doc comment. The seam is the trait InferenceProvider at sovereign/crates/sovereign-contracts/src/traits.rs:281 - already a leaf."
+rename = "Fabric says Member; Serving says Candidate (DOMAINS.md section 5 call 1). PeerInferenceEndpoint -> Candidate, PeerEndpointSource -> CandidateSource, PeerCandidateView -> CandidateView. The translation already exists and is already the only door; Phase C is a rename plus moving this function to the Fabric side of the seam, not a new mechanism."
+
+# ═══ Nouns and edges — Peer inventory 2026-09-13 (anywhere-in-name sweep; 72 nouns, 13 edges); rung 4 turns proposed: into decided: ═══
+# domains-nouns.toml - Phase A registry: every type whose NAME CONTAINS "Peer".
+# Instrument scratchpad/peer-count.sh; four mode flags: --root DIR | --prefix STR | --all (add
+#   private/test) | --anywhere (the word anywhere in the name, not only as a prefix). Counts as
+#   defs/crates: prefix-pub 39/13 | prefix-all 51/14 | anywhere-pub 50/14 | anywhere-all 72/17.
+# anywhere-pub OUTSIDE commonwealth/crates: 35 of 50, in 9 crates (sovereign-mesh, -api, -contracts,
+#   -tools, -desktop, -cli-llm, corpus-engine, oicp-types, kernel-types); Fabric holds the other 15.
+#   Run the bar with --anywhere: DOMAINS.md §8 counts the PREFIX, which a rename to MeshPeerFoo
+#   passes while moving no coupling at all.
+# CARVE-OUTS, not renames; neither takes any of the five context words. C8 PeerStore/StoreError/
+#   Entry/SoloPeerStore/MeshPeerStore: "peer" is an adjective on the STORE -> ReplicatedKv.
+#   C9 PeerAnswer: an egress release class, sole door kernel-types/src/answer.rs:438
+#   bound_for_peer - renaming it weakens a custody gate.
+# PeerRow is defined TWICE, two concepts: commonwealth-transport/src/fanout.rs:70 (fan-out row) and
+#   sovereign-cli-llm/src/mesh_travel.rs:168 (measurement row). ONE live-path fact has THREE spellings:
+#   PeerPath(commonwealth-transport/src/iroh_path.rs:20) read as PeerPathSnapshot(:74) AND PeerTransportPath(commonwealth-media/src/reach.rs:29, stringified), enveloped by IrohPeerPath(sovereign-mesh/src/daemon.rs:483) and PeerPathObservation(iroh_watchdog.rs:84).
+
+[[noun]]
+name = "MeshPeering"
+crate = "commonwealth-core"
+file = "commonwealth/crates/commonwealth-core/src/mesh/mod.rs:368"
+visibility = "pub"
+concept = "C2"
+context = "fabric"
+disposition = "proposed:keep"
+word = ""
+why = "subject is a peer MESH not a node - peer_mesh_id/peer_mesh_name/trust_level at :369-371; none of the five words applies"
+
+[[noun]]
+name = "PeerTrustLevel"
+crate = "commonwealth-core"
+file = "commonwealth/crates/commonwealth-core/src/mesh/mod.rs:400"
+visibility = "pub"
+concept = "C2"
+context = "fabric"
+disposition = "proposed:keep"
+word = ""
+why = "doc at :397 says 'trust between peered meshes'; federation, not membership"
+
+[[noun]]
+name = "PeerHealthTracker"
+crate = "commonwealth-core"
+file = "commonwealth/crates/commonwealth-core/src/peer_health.rs:142"
+visibility = "pub"
+concept = "C3"
+context = "serving"
+disposition = "proposed:rename"
+word = "Candidate"
+why = "zero Fabric consumers; only is_quarantined/health_weight, both called from sovereign-mesh/src/peer_inference.rs:2096,2201"
+
+[[noun]]
+name = "PeerHealth"
+crate = "commonwealth-core"
+file = "commonwealth/crates/commonwealth-core/src/peer_health.rs:83"
+visibility = "private"
+concept = "C3"
+context = "serving"
+disposition = "proposed:rename"
+word = "Candidate"
+why = "recent_events ring buffer at :107 drives the load balancer's soft weight - a scheduler row living in Fabric"
+
+[[noun]]
+name = "DiscoveredPeer"
+crate = "commonwealth-discovery"
+file = "commonwealth/crates/commonwealth-discovery/src/mdns.rs:19"
+visibility = "pub"
+concept = "C1"
+context = "fabric"
+disposition = "proposed:keep"
+word = ""
+why = "mDNS pre-membership sighting: node_id/mesh_id_hex/mesh_name/address at :20-32, before any roster row exists"
+
+[[noun]]
+name = "PeerTransportPath"
+crate = "commonwealth-media"
+file = "commonwealth/crates/commonwealth-media/src/reach.rs:29"
+visibility = "pub"
+concept = "C1"
+context = "fabric"
+disposition = "proposed:merge"
+word = "commonwealth/crates/commonwealth-transport/src/iroh_path.rs:74 PeerPathSnapshot"
+why = "same three facts as PeerPathSnapshot with PeerPath stringified into path: String at :33"
+
+[[noun]]
+name = "PeerPreferenceStore"
+crate = "commonwealth-state"
+file = "commonwealth/crates/commonwealth-state/src/peer_preferences.rs:105"
+visibility = "pub"
+concept = "C5"
+context = "serving"
+disposition = "proposed:rename"
+word = "Candidate"
+why = "stores only the affinity row; its one cross-context reader takes multiplier at sovereign-api/src/routes_oicp.rs:402"
+
+[[noun]]
+name = "PeerPreference"
+crate = "commonwealth-state"
+file = "commonwealth/crates/commonwealth-state/src/peer_preferences.rs:55"
+visibility = "pub"
+concept = "C5"
+context = "serving"
+disposition = "proposed:rename"
+word = "Candidate"
+why = "only multiplier crosses (routes_oicp.rs:402->:406 scales claim.affinity); reason/set_at are Host-UI only"
+
+[[noun]]
+name = "PeerFailure"
+crate = "commonwealth-transport"
+file = "commonwealth/crates/commonwealth-transport/src/fanout.rs:50"
+visibility = "pub"
+concept = "C7"
+context = "fabric"
+disposition = "proposed:rename"
+word = "Member"
+why = "NeverAsked is 'a fact about the roster or the transport' (:51) - a member-level outcome, not a peer noun"
+
+[[noun]]
+name = "PeerVerdict"
+crate = "commonwealth-transport"
+file = "commonwealth/crates/commonwealth-transport/src/fanout.rs:62"
+visibility = "pub"
+concept = "C7"
+context = "fabric"
+disposition = "proposed:rename"
+word = "Member"
+why = "matched three ways by its only outside reader, sovereign-api/src/routes_knowledge.rs:355,364-365"
+
+[[noun]]
+name = "PeerRow"
+crate = "commonwealth-transport"
+file = "commonwealth/crates/commonwealth-transport/src/fanout.rs:70"
+visibility = "pub"
+concept = "C7"
+context = "fabric"
+disposition = "proposed:rename"
+word = "Member"
+why = "node_id/name/elapsed_ms/verdict at :71-75; name collides with sovereign-cli-llm/src/mesh_travel.rs:168 - rename-apart"
+
+[[noun]]
+name = "PeerPath"
+crate = "commonwealth-transport"
+file = "commonwealth/crates/commonwealth-transport/src/iroh_path.rs:20"
+visibility = "pub"
+concept = "C1"
+context = "fabric"
+disposition = "proposed:keep"
+word = ""
+why = "closed set with one spelling via as_str at :35 - the reach vocabulary Fabric owns"
+
+[[noun]]
+name = "PeerPathSnapshot"
+crate = "commonwealth-transport"
+file = "commonwealth/crates/commonwealth-transport/src/iroh_path.rs:74"
+visibility = "pub"
+concept = "C1"
+context = "fabric"
+disposition = "proposed:keep"
+word = ""
+why = "merge survivor for PeerTransportPath: path/relay/active_direct_addrs at :75-79"
+
+[[noun]]
+name = "PeerContact"
+crate = "commonwealth-transport"
+file = "commonwealth/crates/commonwealth-transport/src/lib.rs:209"
+visibility = "pub"
+concept = "C1"
+context = "fabric"
+disposition = "proposed:keep"
+word = ""
+why = "doc at :203-207 says the struct exists so capabilities/status cannot influence dialing - the reach projection of a MemberRecord"
+
+[[noun]]
+name = "PeerEndpoint"
+crate = "commonwealth-transport"
+file = "commonwealth/crates/commonwealth-transport/src/lib.rs:227"
+visibility = "pub"
+concept = "C1"
+context = "fabric"
+disposition = "proposed:keep"
+word = ""
+why = "one dialable candidate: base_url + glassbox label at :231-234"
+
+[[noun]]
+name = "PeerTransport"
+crate = "commonwealth-transport"
+file = "commonwealth/crates/commonwealth-transport/src/lib.rs:241"
+visibility = "pub"
+concept = "C1"
+context = "fabric"
+disposition = "proposed:keep"
+word = ""
+why = "endpoints(&PeerContact, TrafficClass) at :252 is Fabric's reach port"
+
+[[noun]]
+name = "PeerArgs"
+crate = "commonwealth-work"
+file = "commonwealth/crates/commonwealth-work/examples/work_peer.rs:125"
+visibility = "test"
+concept = "C10"
+context = "compute"
+disposition = "proposed:rename"
+word = "Donor"
+why = "image: Option<String> at :134 - absent means this host offers no boundary, i.e. a donor that declines"
+
+[[noun]]
+name = "PeerAtomRef"
+crate = "corpus-engine"
+file = "corpus-engine/src/enrichment/atlas/cross_corpus.rs:71"
+visibility = "pub"
+concept = "C6"
+context = "understanding"
+disposition = "proposed:rename"
+word = "Source"
+why = "corpus_id/atom_id/canonical_name at :72-77 - 'peer' means the other CORPUS, not a node"
+
+[[noun]]
+name = "PeerAnswer"
+crate = "kernel-types"
+file = "kernel-types/src/answer.rs:423"
+visibility = "pub"
+concept = "C9"
+context = "kernel"
+disposition = "proposed:keep"
+word = ""
+why = "names an egress release class; sole door bound_for_peer at :438 decides on Custody::released_by - renaming weakens a custody gate"
+
+[[noun]]
+name = "PeerDescriptor"
+crate = "oicp-types"
+file = "oicp-types/src/manifest.rs:289"
+visibility = "pub"
+concept = "C2"
+context = "kernel"
+disposition = "proposed:keep"
+word = ""
+why = "federated MESH entry: capabilities_url + trust_level: Option<String> at :291-293; subject is a mesh, so none of the five words applies"
+
+[[noun]]
+name = "PeerInflightGuard"
+crate = "sovereign-api"
+file = "sovereign/crates/sovereign-api/src/admission.rs:228"
+visibility = "pub"
+concept = "C4"
+context = "serving"
+disposition = "proposed:rename"
+word = "Caller"
+why = "holds a slot for node: NodeId at :230 and releases it in Drop at :246 - an admission guard on the caller"
+
+[[noun]]
+name = "EligiblePeersRequest"
+crate = "sovereign-api"
+file = "sovereign/crates/sovereign-api/src/routes_internal/corpus_collaborate.rs:946"
+visibility = "pub"
+concept = "C6b"
+context = "compute"
+disposition = "proposed:rename"
+word = "Donor"
+why = "request for who can help a peer-assisted ingest of corpus_id at :947"
+
+[[noun]]
+name = "EligiblePeerDto"
+crate = "sovereign-api"
+file = "sovereign/crates/sovereign-api/src/routes_internal/corpus_collaborate.rs:951"
+visibility = "pub"
+concept = "C6b"
+context = "compute"
+disposition = "proposed:rename"
+word = "Donor"
+why = "eligible/reason at :956-960 gate whether this machine may DO work - donor eligibility"
+
+[[noun]]
+name = "EligiblePeersResponse"
+crate = "sovereign-api"
+file = "sovereign/crates/sovereign-api/src/routes_internal/corpus_collaborate.rs:964"
+visibility = "pub"
+concept = "C6b"
+context = "compute"
+disposition = "proposed:rename"
+word = "Donor"
+why = "grantable at :968 is a per-corpus permission to be assisted at all"
+
+[[noun]]
+name = "PeerProgressDto"
+crate = "sovereign-api"
+file = "sovereign/crates/sovereign-api/src/routes_internal/corpus_queue.rs:733"
+visibility = "pub"
+concept = "C6b"
+context = "compute"
+disposition = "proposed:rename"
+word = "Donor"
+why = "leased/completed/failed at :736-738 are work-unit tallies, not requests served"
+
+[[noun]]
+name = "PeerPreferenceView"
+crate = "sovereign-api"
+file = "sovereign/crates/sovereign-api/src/routes_internal/peer_preference.rs:49"
+visibility = "pub"
+concept = "C5"
+context = "serving"
+disposition = "proposed:rename"
+word = "Candidate"
+why = "third of four copies of {node_id,multiplier,reason,set_at}; :43 pins it to the desktop DTO by comment"
+
+[[noun]]
+name = "SetPeerPreferenceRequest"
+crate = "sovereign-api"
+file = "sovereign/crates/sovereign-api/src/routes_internal/peer_preference.rs:62"
+visibility = "pub"
+concept = "C5"
+context = "serving"
+disposition = "proposed:rename"
+word = "Candidate"
+why = "node_id/multiplier/reason at :63-66 - the affinity row again, as a request body"
+
+[[noun]]
+name = "ClearPeerPreferenceRequest"
+crate = "sovereign-api"
+file = "sovereign/crates/sovereign-api/src/routes_internal/peer_preference.rs:71"
+visibility = "pub"
+concept = "C5"
+context = "serving"
+disposition = "proposed:rename"
+word = "Candidate"
+why = "node_id at :72 addresses the same affinity row"
+
+[[noun]]
+name = "PeerOffering"
+crate = "sovereign-api"
+file = "sovereign/crates/sovereign-api/src/routes_knowledge.rs:397"
+visibility = "private"
+concept = "C6"
+context = "retrieval"
+disposition = "proposed:rename"
+word = "Source"
+why = "corpora: Vec<String> at :401 is what this node can ANSWER FROM - a knowledge source, cloned out of the mesh lock"
+
+[[noun]]
+name = "PeerServed"
+crate = "sovereign-api"
+file = "sovereign/crates/sovereign-api/src/routes_knowledge.rs:405"
+visibility = "private"
+concept = "C6"
+context = "retrieval"
+disposition = "proposed:rename"
+word = "Source"
+why = "results/corpora_served/corpora_unavailable at :406-408 - what one source answered"
+
+[[noun]]
+name = "PeerRequestStatus"
+crate = "sovereign-api"
+file = "sovereign/crates/sovereign-api/src/routes_status.rs:451"
+visibility = "pub"
+concept = "C4"
+context = "serving"
+disposition = "proposed:rename"
+word = "Caller"
+why = "active/served_total/last_request_at at :458-462 tally who CALLED this daemon; keyed by the X-Node-Id header"
+
+[[noun]]
+name = "PeerTally"
+crate = "sovereign-api"
+file = "sovereign/crates/sovereign-api/src/state.rs:494"
+visibility = "pub"
+concept = "C4"
+context = "serving"
+disposition = "proposed:rename"
+word = "Caller"
+why = "doc at :489 - keyed by NodeId from X-Node-Id, 'the ONLY peer attribution the daemon has'; only admitted requests counted"
+
+[[noun]]
+name = "NoPeers"
+crate = "sovereign-cli-daemon"
+file = "sovereign/crates/sovereign-cli-daemon/tests/main/named_model_routes_after_child_serves_e2e.rs:112"
+visibility = "test"
+concept = "C10"
+context = "serving"
+disposition = "proposed:rename"
+word = "Candidate"
+why = "test double for an empty PeerEndpointSource"
+
+[[noun]]
+name = "PeerBody"
+crate = "sovereign-cli-llm"
+file = "sovereign/crates/sovereign-cli-llm/src/mesh_travel.rs:160"
+visibility = "private"
+concept = "C7"
+context = "host"
+disposition = "proposed:rename"
+word = "Member"
+why = "deserialize shape of GET /v1/mesh/measurements: records + unreadable at :161-164"
+
+[[noun]]
+name = "PeerRow"
+crate = "sovereign-cli-llm"
+file = "sovereign/crates/sovereign-cli-llm/src/mesh_travel.rs:168"
+visibility = "private"
+concept = "C7"
+context = "host"
+disposition = "proposed:rename"
+word = "Member"
+why = "origin_node/origin_name/record at :169-172 - a measurement row; SECOND definition of this name, rename-apart from fanout.rs:70"
+
+[[noun]]
+name = "PeerHistory"
+crate = "sovereign-cli-llm"
+file = "sovereign/crates/sovereign-cli-llm/src/mesh_travel.rs:177"
+visibility = "pub(crate)"
+concept = "C7"
+context = "host"
+disposition = "proposed:rename"
+word = "Member"
+why = "unreadable at :183 separates 'nobody measured' from 'measured in a dialect we do not speak'"
+
+[[noun]]
+name = "PeerStore"
+crate = "sovereign-contracts"
+file = "sovereign/crates/sovereign-contracts/src/peer.rs:101"
+visibility = "pub"
+concept = "C8"
+context = "kernel"
+disposition = "proposed:rename"
+word = "ReplicatedKv"
+why = "doc at :92 - 'a replicated key-value store'; get/set/delete/scan over (app_id,key). Peer is an adjective on the STORE; carve-out from the five words"
+
+[[noun]]
+name = "SoloPeerStore"
+crate = "sovereign-contracts"
+file = "sovereign/crates/sovereign-contracts/src/peer.rs:153"
+visibility = "pub"
+concept = "C8"
+context = "kernel"
+disposition = "proposed:rename"
+word = "ReplicatedKv"
+why = "entries: Mutex<BTreeMap<(String,String),PeerEntry>> at :156 - a single-node KV, no peers involved at all"
+
+[[noun]]
+name = "PeerStoreError"
+crate = "sovereign-contracts"
+file = "sovereign/crates/sovereign-contracts/src/peer.rs:58"
+visibility = "pub"
+concept = "C8"
+context = "kernel"
+disposition = "proposed:rename"
+word = "ReplicatedKv"
+why = "one variant Backend(String) at :60 - 'the backing store is the only thing that can fail'"
+
+[[noun]]
+name = "PeerEntry"
+crate = "sovereign-contracts"
+file = "sovereign/crates/sovereign-contracts/src/peer.rs:79"
+visibility = "pub"
+concept = "C8"
+context = "kernel"
+disposition = "proposed:rename"
+word = "ReplicatedKv"
+why = "app_id/key/value/timestamp/origin at :80-89 - a KV record with LWW ordering"
+
+[[noun]]
+name = "DiscoveredPeerDto"
+crate = "sovereign-desktop"
+file = "sovereign/crates/sovereign-desktop/src-tauri/src/mesh_commands.rs:367"
+visibility = "pub"
+concept = "C1"
+context = "host"
+disposition = "proposed:rename"
+word = "Member"
+why = "mirrors commonwealth-discovery DiscoveredPeer field-for-field at :368-377, but lives outside the package the bar confines the word to"
+
+[[noun]]
+name = "PeerPreferenceDto"
+crate = "sovereign-desktop"
+file = "sovereign/crates/sovereign-desktop/src-tauri/src/mesh_commands.rs:571"
+visibility = "pub"
+concept = "C5"
+context = "host"
+disposition = "proposed:merge"
+word = "sovereign/crates/sovereign-api/src/routes_internal/peer_preference.rs:49 PeerPreferenceView"
+why = "fourth copy of {node_id,multiplier,reason,set_at} at :572-575, held in agreement with the view by prose (peer_preference.rs:43), not by a type"
+
+[[noun]]
+name = "PeerCanonicalLead"
+crate = "sovereign-mesh"
+file = "sovereign/crates/sovereign-mesh/src/auto_ingest.rs:1351"
+visibility = "pub(crate)"
+concept = "C6"
+context = "understanding"
+disposition = "proposed:rename"
+word = "Source"
+why = "candidate_urls/fingerprint/coverage_ratio/chunk_count at :1352-1355 rank whose ATLAS to pull - a knowledge source, not a serving candidate"
+
+[[noun]]
+name = "PeerInferenceEndpoint"
+crate = "sovereign-mesh"
+file = "sovereign/crates/sovereign-mesh/src/daemon.rs:4783"
+visibility = "pub"
+concept = "C3"
+context = "serving"
+disposition = "proposed:rename"
+word = "Candidate"
+why = "base_urls/system_ram_gb/benchmark/current_in_flight/inference_availability at :4786-4808 are all scoring inputs - the canonical Serving noun"
+
+[[noun]]
+name = "IrohPeerPath"
+crate = "sovereign-mesh"
+file = "sovereign/crates/sovereign-mesh/src/daemon.rs:483"
+visibility = "pub"
+concept = "C1"
+context = "host"
+disposition = "proposed:rename"
+word = "Reach"
+why = "wire envelope {node_id,name,path:Option<PeerTransportPath>} at :484-487 - reach vocabulary; same shape as PeerPathObservation:84 minus believed_online"
+
+[[noun]]
+name = "PeerObservationRecord"
+crate = "sovereign-mesh"
+file = "sovereign/crates/sovereign-mesh/src/decision_log.rs:118"
+visibility = "pub"
+concept = "C3"
+context = "serving"
+disposition = "proposed:rename"
+word = "Candidate"
+why = "latency/throughput EWMAs + quarantined + cooldown_remaining_secs at :121-137 - the scheduler's per-candidate snapshot"
+
+[[noun]]
+name = "Peers"
+crate = "sovereign-mesh"
+file = "sovereign/crates/sovereign-mesh/src/entry_endpoint.rs:167"
+visibility = "test"
+concept = "C10"
+context = "serving"
+disposition = "proposed:rename"
+word = "Candidate"
+why = "test double: a fixed Vec<PeerInferenceEndpoint> impl'ing PeerEndpointSource at :170"
+
+[[noun]]
+name = "PeerPathsFn"
+crate = "sovereign-mesh"
+file = "sovereign/crates/sovereign-mesh/src/iroh_watchdog.rs:119"
+visibility = "pub"
+concept = "C1"
+context = "host"
+disposition = "proposed:rename"
+word = "Reach"
+why = "injection shape returning Vec<PeerPathObservation>; None at spawn disables the health term (:118)"
+
+[[noun]]
+name = "PeerPathVerdict"
+crate = "sovereign-mesh"
+file = "sovereign/crates/sovereign-mesh/src/iroh_watchdog.rs:129"
+visibility = "private"
+concept = "C1"
+context = "host"
+disposition = "proposed:rename"
+word = "Reach"
+why = "wedged/total/known/active/lost/gained/migrated at :130-153 - one poll's transport conclusion"
+
+[[noun]]
+name = "PeerPathHealth"
+crate = "sovereign-mesh"
+file = "sovereign/crates/sovereign-mesh/src/iroh_watchdog.rs:164"
+visibility = "private"
+concept = "C1"
+context = "host"
+disposition = "proposed:rename"
+word = "Reach"
+why = "seen_active at :168 arms the term only after a real active path - pure transport history"
+
+[[noun]]
+name = "PeerPathObservation"
+crate = "sovereign-mesh"
+file = "sovereign/crates/sovereign-mesh/src/iroh_watchdog.rs:84"
+visibility = "pub"
+concept = "C1"
+context = "host"
+disposition = "proposed:rename"
+word = "Reach"
+why = "module doc at :80-82 states the watchdog 'does not know what a mesh member is' - and believed_online at :93 is recorded, never gated on"
+
+[[noun]]
+name = "PeerMeasurementDto"
+crate = "sovereign-mesh"
+file = "sovereign/crates/sovereign-mesh/src/mesh_http.rs:581"
+visibility = "pub"
+concept = "C7"
+context = "host"
+disposition = "proposed:rename"
+word = "Member"
+why = "origin_node at :587 is resolved from the journal line's signing actor through the ROSTER, never from the payload"
+
+[[noun]]
+name = "PeerMeasurementsQuery"
+crate = "sovereign-mesh"
+file = "sovereign/crates/sovereign-mesh/src/mesh_http.rs:598"
+visibility = "pub"
+concept = "C7"
+context = "host"
+disposition = "proposed:rename"
+word = "Member"
+why = "include_self: bool at :615, diagnostic only - no peer noun in the payload at all"
+
+[[noun]]
+name = "PeerMeasurementsResponse"
+crate = "sovereign-mesh"
+file = "sovereign/crates/sovereign-mesh/src/mesh_http.rs:637"
+visibility = "pub"
+concept = "C7"
+context = "host"
+disposition = "proposed:rename"
+word = "Member"
+why = "records + unreadable at :641-648; unreadable is reported rather than swallowed"
+
+[[noun]]
+name = "MeshPeerStore"
+crate = "sovereign-mesh"
+file = "sovereign/crates/sovereign-mesh/src/peer_adapter.rs:39"
+visibility = "pub"
+concept = "C8"
+context = "fabric"
+disposition = "proposed:rename"
+word = "ReplicatedKv"
+why = "inner: Arc<MeshStore> at :40; doc at :34 - 'a thin projection: four of the store's methods'. The Fabric adapter for the KV port"
+
+[[noun]]
+name = "PeerFailureDisposition"
+crate = "sovereign-mesh"
+file = "sovereign/crates/sovereign-mesh/src/peer_inference.rs:2991"
+visibility = "private"
+concept = "C3"
+context = "serving"
+disposition = "proposed:rename"
+word = "Candidate"
+why = "Hard{model_id} vs Soft at :2992-2999 decides whether a route failure surfaces or falls through to local"
+
+[[noun]]
+name = "PeerEndpointSource"
+crate = "sovereign-mesh"
+file = "sovereign/crates/sovereign-mesh/src/peer_inference.rs:337"
+visibility = "pub"
+concept = "C3"
+context = "serving"
+disposition = "proposed:rename"
+word = "Candidate"
+why = "peer_inference_endpoints() at :338 is the discovery seam; doc at :332-335 says it exists so tests can inject a synthetic candidate list"
+
+[[noun]]
+name = "NoPeers"
+crate = "sovereign-mesh"
+file = "sovereign/crates/sovereign-mesh/src/peer_inference.rs:4254"
+visibility = "test"
+concept = "C10"
+context = "serving"
+disposition = "proposed:rename"
+word = "Candidate"
+why = "test double for an empty candidate source"
+
+[[noun]]
+name = "OnePeer"
+crate = "sovereign-mesh"
+file = "sovereign/crates/sovereign-mesh/src/peer_inference.rs:4534"
+visibility = "test"
+concept = "C10"
+context = "serving"
+disposition = "proposed:rename"
+word = "Candidate"
+why = "test double wrapping one PeerInferenceEndpoint"
+
+[[noun]]
+name = "PeerManifestView"
+crate = "sovereign-mesh"
+file = "sovereign/crates/sovereign-mesh/src/scheduler_core.rs:216"
+visibility = "pub(crate)"
+concept = "C3"
+context = "serving"
+disposition = "proposed:rename"
+word = "Candidate"
+why = "rtt_ms at :218 sets the locality bonus; age_secs/from_cache at :220-221 date the copy"
+
+[[noun]]
+name = "PeerCandidateView"
+crate = "sovereign-mesh"
+file = "sovereign/crates/sovereign-mesh/src/scheduler_core.rs:232"
+visibility = "pub(crate)"
+concept = "C3"
+context = "serving"
+disposition = "proposed:rename"
+word = "Candidate"
+why = "manifest==None means excluded-and-recorded (:228-231); this is already the anticorruption type §5 asks for, and it is only pub(crate)"
+
+[[noun]]
+name = "PeerLedger"
+crate = "sovereign-mesh"
+file = "sovereign/crates/sovereign-mesh/tests/main/chat_completion_e2e.rs:1291"
+visibility = "test"
+concept = "C10"
+context = "serving"
+disposition = "proposed:rename"
+word = "Candidate"
+why = "test ledger: served/refused_unresolvable at :1293-1297 is the outage signature"
+
+[[noun]]
+name = "PeerLedgerHandle"
+crate = "sovereign-mesh"
+file = "sovereign/crates/sovereign-mesh/tests/main/chat_completion_e2e.rs:1300"
+visibility = "test"
+concept = "C10"
+context = "serving"
+disposition = "proposed:rename"
+word = "Candidate"
+why = "Arc<Mutex<PeerLedger>> at :1300"
+
+[[noun]]
+name = "ResolvingPeerState"
+crate = "sovereign-mesh"
+file = "sovereign/crates/sovereign-mesh/tests/main/chat_completion_e2e.rs:1302"
+visibility = "test"
+concept = "C10"
+context = "serving"
+disposition = "proposed:rename"
+word = "Candidate"
+why = "manifest/advertised/ledger at :1303-1305 - the in-process serving stub"
+
+[[noun]]
+name = "StubPeerSource"
+crate = "sovereign-mesh"
+file = "sovereign/crates/sovereign-mesh/tests/main/chat_completion_e2e.rs:67"
+visibility = "test"
+concept = "C10"
+context = "serving"
+disposition = "proposed:rename"
+word = "Candidate"
+why = "test impl of PeerEndpointSource"
+
+[[noun]]
+name = "NoPeers"
+crate = "sovereign-mesh"
+file = "sovereign/crates/sovereign-mesh/tests/main/guest_lender_routing.rs:57"
+visibility = "test"
+concept = "C10"
+context = "serving"
+disposition = "proposed:rename"
+word = "Candidate"
+why = "test double for an empty candidate source"
+
+[[noun]]
+name = "StubPeerSource"
+crate = "sovereign-mesh"
+file = "sovereign/crates/sovereign-mesh/tests/main/manifest_fanout_concurrency.rs:46"
+visibility = "test"
+concept = "C10"
+context = "serving"
+disposition = "proposed:rename"
+word = "Candidate"
+why = "test impl of PeerEndpointSource"
+
+[[noun]]
+name = "StubPeerSource"
+crate = "sovereign-mesh"
+file = "sovereign/crates/sovereign-mesh/tests/main/scheduler_decision_records.rs:64"
+visibility = "test"
+concept = "C10"
+context = "serving"
+disposition = "proposed:rename"
+word = "Candidate"
+why = "test impl of PeerEndpointSource"
+
+[[noun]]
+name = "StubPeerSource"
+crate = "sovereign-mesh"
+file = "sovereign/crates/sovereign-mesh/tests/main/throughput_ledger_emission.rs:60"
+visibility = "test"
+concept = "C10"
+context = "serving"
+disposition = "proposed:rename"
+word = "Candidate"
+why = "test impl of PeerEndpointSource"
+
+[[noun]]
+name = "PeerAtlasView"
+crate = "sovereign-tools"
+file = "sovereign/crates/sovereign-tools/src/atlas_peer_advice.rs:51"
+visibility = "pub"
+concept = "C6"
+context = "understanding"
+disposition = "proposed:rename"
+word = "Source"
+why = "embed_model/atlas_atom_count/atlas_tier2_count/atlas_fingerprint at :53-60; from_member at :67 is the one working anticorruption layer in the repo"
+
+[[noun]]
+name = "PeerAtlasPullCandidate"
+crate = "sovereign-tools"
+file = "sovereign/crates/sovereign-tools/src/atlas_peer_advice.rs:90"
+visibility = "pub"
+concept = "C6"
+context = "understanding"
+disposition = "proposed:rename"
+word = "Source"
+why = "peer_tier2_count vs local_tier2_count at :92-96 decide whether to PULL an atlas instead of enriching locally"
+
+[[noun]]
+name = "MeshPeer"
+crate = "sovereign-work-atlas"
+file = "sovereign/crates/sovereign-work-atlas/tests/cross_node.rs:43"
+visibility = "test"
+concept = "C10"
+context = "workspace"
+disposition = "proposed:rename"
+word = "ReplicatedKv"
+why = "test PeerStore impl over Arc<MeshStore> at :43 - C8, not a peer noun"
+
+[[edge]]
+from_type = "PeerHealthTracker"
+from_context = "fabric"
+to_module = "sovereign/crates/sovereign-mesh/src/peer_inference.rs"
+to_context = "serving"
+fields_read = []
+translation = "none"
+note = "E1 methods only: is_quarantined(&peer.name) at :2096,:2143,:2240 and health_weight(&peer.name) at :2201, both keyed by a String name. Zero Fabric consumers."
+
+[[edge]]
+from_type = "PeerPreference"
+from_context = "fabric"
+to_module = "sovereign/crates/sovereign-api/src/routes_oicp.rs"
+to_context = "serving"
+fields_read = ["multiplier"]
+translation = "none"
+note = "E2 one f32: pref.multiplier() at :402 scales claim.affinity at :406. reason and set_at never cross."
+
+[[edge]]
+from_type = "PeerContact"
+from_context = "fabric"
+to_module = "sovereign/crates/sovereign-api/src/routes_knowledge.rs"
+to_context = "retrieval"
+fields_read = []
+translation = "none"
+note = "E3 passed whole, never destructured: offering.contact at :277 -> &target.contact into transport.endpoints at :466. PeerVerdict matched three ways at :355,:364-365."
+
+[[edge]]
+from_type = "PeerTransport"
+from_context = "fabric"
+to_module = "sovereign/crates/sovereign-api/src/routes_internal/corpus_queue.rs"
+to_context = "compute"
+fields_read = []
+translation = "none"
+note = "E4 whole-record snapshot: Vec<PeerContact> built at :37 via .map(peer_contact) at :42, out of the roster read-lock, to dial donors for the handoff queue."
+
+[[edge]]
+from_type = "PeerTransportPath"
+from_context = "fabric"
+to_module = "sovereign/crates/sovereign-contracts/src/daemon_wire/mesh.rs"
+to_context = "kernel"
+fields_read = []
+translation = "none"
+note = "E5 a Fabric transport fact reaching the PUBLISHED daemon wire: :398 documents Vec<daemon::IrohPeerPath> 'over commonwealth_media::PeerTransportPath'."
+
+[[edge]]
+from_type = "PeerPath"
+from_context = "fabric"
+to_module = "sovereign/crates/sovereign-mesh/src/iroh_watchdog.rs"
+to_context = "host"
+fields_read = []
+translation = "none"
+note = "E6 five variants plus is_active(), held in lost/migrated/last_active at :147,:153,:166 - by a module whose own doc at :80-82 says it does not know what a member is."
+
+[[edge]]
+from_type = "PeerTrustLevel"
+from_context = "fabric"
+to_module = "sovereign/crates/sovereign-api/src/routes_oicp.rs"
+to_context = "kernel"
+fields_read = ["peer_mesh_name", "contact_nodes", "trust_level"]
+translation = "none"
+note = "E7 roster -> oicp_types::PeerDescriptor at :337-350; trust_level flattened by format!(\"{:?}\").to_lowercase() at :346 - a closed set degraded to open text at the boundary."
+
+[[edge]]
+from_type = "PeerStore"
+from_context = "kernel"
+to_module = "sovereign/crates/sovereign-work-atlas/src/store.rs"
+to_context = "workspace"
+fields_read = ["app_id", "key", "value", "timestamp", "origin"]
+translation = "none"
+note = "E8 all four methods and the whole entry, at :24,:44,:62,:86,:282,:498. The work atlas wants a replicated KV and is handed a noun about peers - concept C8."
+
+[[edge]]
+from_type = "PeerAtomRef"
+from_context = "understanding"
+to_module = "sovereign/crates/sovereign-tools/src/atlas_view/atom_detail.rs"
+to_context = "workbench"
+fields_read = ["corpus_id", "atom_id", "canonical_name"]
+translation = "none"
+note = "E9 all three read at :417-419 into peer_corpus_id/peer_atom_id/peer_canonical_name; :818 pins that the desktop reads canonical_name or renders blank."
+
+[[edge]]
+from_type = "PeerAtlasView"
+from_context = "understanding"
+to_module = "sovereign/crates/sovereign-api/src/routes_internal/corpus_ingest.rs"
+to_context = "host"
+fields_read = ["embed_model", "corpus_id", "atlas_atom_count", "atlas_tier2_count", "atlas_fingerprint"]
+translation = "sovereign/crates/sovereign-tools/src/atlas_peer_advice.rs:67 PeerAtlasView::from_member"
+note = "E10 THE working anticorruption layer: five roster fields translated at one named function (built at :98,:108; embed_model via m.capabilities.embed_model at :105). Copy this pattern for the other twelve."
+
+[[edge]]
+from_type = "PeerInferenceEndpoint"
+from_context = "serving"
+to_module = "sovereign/crates/sovereign-mesh/src/pinned_worker_source.rs"
+to_context = "compute"
+fields_read = ["node_id", "name", "base_urls", "transport"]
+translation = "none"
+note = "E11 a Compute donor wearing the Serving shape: each pod yielded AS a PeerInferenceEndpoint at :207,:225,:272 because no donor type exists. guest_lender.rs:19 refuses the same move in writing."
+
+[[edge]]
+from_type = "PeerEndpointSource"
+from_context = "serving"
+to_module = "sovereign/crates/sovereign-core/tests/main/f26_egress_census.rs"
+to_context = "answering"
+fields_read = []
+translation = "none"
+note = "E12 named as a boundary, not constructed: :742 'Mesh is the right ceiling: dynamic's resolver is PeerEndpointSource'; sovereign-contracts/src/setup_config.rs:226,:253 defers to it too."
+
+[[edge]]
+from_type = "PeerPreferenceDto"
+from_context = "host"
+to_module = "sovereign/crates/sovereign-api/src/routes_internal/peer_preference.rs"
+to_context = "serving"
+fields_read = ["node_id", "multiplier", "reason", "set_at"]
+translation = "none"
+note = "E13 reverse edge, held by prose: :43 'Field names are the desktop PeerPreferenceDto's verbatim and carry no serde renames'. Fourth copy of the row; fixing C5 closes this."
