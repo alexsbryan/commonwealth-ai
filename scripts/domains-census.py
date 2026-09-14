@@ -1144,6 +1144,119 @@ def cmd_misnamed(args: list[str]) -> int:
     return EXIT_OK
 
 
+# ── queue — dm-queue ────────────────────────────────────────────────────────
+#
+# The loop's own progress bar (campaigns/domains.toml dm-queue): crates whose
+# modules are not all tagged with the crate's own context, ordered by lines
+# desc — the order the demolition loop pops. It reads the SAME table as
+# `misnamed` (a crate's own context is its home list, never a name match;
+# `unknown` is a legal tag that counts against the crate) at a different
+# threshold: `misnamed` is DOMAINS.md §8 row 5's pre-registered prediction
+# ("< half"), this is the loop's stop condition ("< 100%"), and it differs in
+# threshold only. One computation, two readings (ARCH principle 8).
+#
+# THE COVERAGE ASSERTION PRECEDES THE COUNT, exactly as for `crate-lines` and
+# `misnamed`: a crate whose `.rs` files are not all in the `[[module]]` census
+# would silently understate the queue, so the subcommand exits 4 naming the
+# untagged file. The whole-workspace census this bar needs landed in
+# dm3-tag-workspace; a crate no context names still has its rows (`unknown`),
+# so it is enqueued, not dropped.
+
+
+def queue(root: Path) -> dict:
+    """Crates not 100% their own context, ordered by lines desc.
+
+    Built on `misnamed`'s per-crate table so the two bars cannot disagree about
+    what a crate's own context is: a crate is enqueued when ANY line carries a
+    context outside its home list (`own < total`).
+    """
+    r = misnamed(root)
+    q = [row for row in r["rows"] if row["own"] < row["total"]]
+    return {"queue": q, "rows": r["rows"]}
+
+
+def _queue_detect(root: Path) -> list[dict]:
+    """The axis's own function: truthy iff a crate is not 100% its own context."""
+    return queue(root)["queue"]
+
+
+def _queue_fixture(root: Path, all_own: bool) -> None:
+    """A member crate with two modules, one always its home.
+
+    The second is tagged `other` unless `all_own`, so `own` is HALF the lines:
+    the crate is in the queue (`own < total`) but NOT misnamed (`own * 2 <
+    total` is false). That is the queue axis's own threshold, which the
+    misnamed fixture cannot exercise.
+    """
+    (root / "quality").mkdir(parents=True, exist_ok=True)
+    other = "widget" if all_own else "other"
+    (root / "quality" / "DOMAINS.toml").write_text(
+        '[[context]]\n'
+        'id = "widget"\n'
+        'kind = "core"\n'
+        'crates = ["fixture-crate"]\n\n'
+        '[[module]]\n'
+        'path = "fixture-crate/src/lib.rs"\n'
+        'context = "widget"\n'
+        'lines = 10\n\n'
+        '[[module]]\n'
+        'path = "fixture-crate/src/extra.rs"\n'
+        f'context = "{other}"\n'
+        'lines = 10\n',
+        encoding="utf-8")
+    crate = root / "fixture-crate"
+    (crate / "src").mkdir(parents=True, exist_ok=True)
+    (crate / "Cargo.toml").write_text(
+        '[package]\nname = "fixture-crate"\nversion = "0.0.0"\n',
+        encoding="utf-8")
+    (crate / "src" / "lib.rs").write_text("pub struct A;\n", encoding="utf-8")
+    (crate / "src" / "extra.rs").write_text("pub struct B;\n", encoding="utf-8")
+
+
+def _queue_positive(root: Path) -> None:
+    """A crate at half its own context: caught (in the queue)."""
+    _queue_fixture(root, all_own=False)
+
+
+def _queue_negative(root: Path) -> None:
+    """A crate entirely its own context: refused (queue empty)."""
+    _queue_fixture(root, all_own=True)
+
+
+AXES.append({
+    "id": "queue",
+    "detect": _queue_detect,
+    "positive": _queue_positive,
+    "negative": _queue_negative,
+})
+
+
+@subcommand("queue")
+def cmd_queue(args: list[str]) -> int:
+    """Print the demolition queue, ordered by lines desc, or --json."""
+    holes = coverage_holes(REPO)
+    if holes:
+        print("queue: coverage hole — no [[module]] row for:", file=sys.stderr)
+        for h in holes:
+            print(f"  untagged: {h}", file=sys.stderr)
+        return EXIT_COULD_NOT_JUDGE
+    r = queue(REPO)
+    if "--json" in args:
+        emit_measurement(len(r["queue"]))
+        return EXIT_OK
+    print("queue — crates whose modules are not all tagged with the crate's own "
+          "context\n  (the loop's stop condition; ordered by lines desc, the "
+          "order the loop pops)\n")
+    for row in r["queue"]:
+        share = row["own"] / row["total"] * 100
+        homes = ", ".join(row["homes"]) or "(no home)"
+        print(f"  {row['crate']:<30} {homes:<22} {row['own']:>7} / "
+              f"{row['total']:>7}  {share:5.1f}%")
+    print(f"\n  tag-table digest: {_tag_digest(registry())}")
+    print(f"  value: {len(r['queue'])} crates not yet 100% their own context")
+    return EXIT_OK
+
+
 # ── liftable — dm-contexts-liftable ─────────────────────────────────────────
 #
 # A context is liftable when someone outside this repository can take it alone
