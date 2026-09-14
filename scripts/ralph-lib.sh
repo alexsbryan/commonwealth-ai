@@ -38,6 +38,20 @@ current_unit() {
   done
 }
 
+# Per-host model configuration (ralph/models.env): strict KEY=value data, not
+# shell. Flags and explicit arguments always win; this fills only what is unset.
+load_models() { # file
+  local f="$1" k v
+  [ -f "$f" ] || return 0
+  while IFS='=' read -r k v; do
+    case "$k" in
+      MODEL) [ -n "${MODEL:-}" ] || MODEL="$v" ;;
+      REVIEW_MODEL) [ -n "${REVIEW_MODEL:-}" ] || REVIEW_MODEL="$v" ;;
+      VARIANT) [ -n "${VARIANT:-}" ] || VARIANT="$v" ;;
+    esac
+  done < <(grep -E '^(MODEL|REVIEW_MODEL|VARIANT)=' "$f")
+}
+
 notify() { # title body
   [ "${NOTIFY:-0}" -eq 1 ] || return 0
   /usr/bin/osascript -e "display notification \"${2}\" with title \"ralph: ${1}\"" >/dev/null 2>&1 || true

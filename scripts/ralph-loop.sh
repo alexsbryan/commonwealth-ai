@@ -77,10 +77,13 @@ mkdir -p "$STATE_DIR/logs"
 
 # Runtime markers must not dirty the tree the loop commits into.
 mkdir -p .git/info 2>/dev/null
-for f in "$DONE_FILE" "$STOP_FILE" "$NEEDS_HUMAN" "$LAST_REVIEW" ralph/log.txt; do
+for f in "$DONE_FILE" "$STOP_FILE" "$NEEDS_HUMAN" "$LAST_REVIEW" ralph/log.txt ralph/models.env; do
   printf '%s\n' "$f" >> .git/info/exclude
 done
 sort -u .git/info/exclude -o .git/info/exclude 2>/dev/null || true
+
+# Per-host model configuration; flags on this invocation still win.
+load_models "${RALPH_MODELS_FILE:-ralph/models.env}"
 
 if [ "$INSTALL" -eq 1 ]; then
   PLIST_LABEL="dev.ralph.$(basename "$PWD")-${LABEL}"

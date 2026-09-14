@@ -53,6 +53,10 @@ done
 cd "$WORKDIR" || exit 2
 mkdir -p ralph target/ralph
 
+# Per-host model configuration; the inner campaign's flags still win.
+MODEL=""; REVIEW_MODEL=""; VARIANT=""
+load_models "${RALPH_MODELS_FILE:-ralph/models.env}"
+
 # Inherit the campaign's review settings; model swaps have one configuration.
 for ((i=0; i<${#INNER[@]}-1; i++)); do
   case "${INNER[$i]}" in
@@ -64,6 +68,8 @@ for ((i=0; i<${#INNER[@]}-1; i++)); do
     --needs-human-file) NEEDS_HUMAN="${INNER[$((i+1))]}" ;;
   esac
 done
+[ -n "$RESOLVE_MODEL" ] || RESOLVE_MODEL="$REVIEW_MODEL"
+[ -n "$RESOLVE_VARIANT" ] || RESOLVE_VARIANT="$VARIANT"
 [ -n "$RESOLVE_MODEL" ] && MODEL_ARGS="--model $RESOLVE_MODEL"
 [ -n "$RESOLVE_VARIANT" ] && MODEL_ARGS="$MODEL_ARGS --variant $RESOLVE_VARIANT"
 

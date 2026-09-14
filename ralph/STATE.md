@@ -13,13 +13,15 @@ worker at a time (AGENTS.md):
 ```
 nohup bash scripts/ralph-loop.sh --workdir . --label domains \
   --prompt ralph/PROMPT.md --state ralph/STATE.md \
-  --model <WORKER_MODEL> --variant <EFFORT> \
-  --review-model <REVIEW_MODEL> --review-every 0 --max-stall 3 \
+  --review-every 0 --max-stall 3 \
   --session-timeout 3600 --supervise --notify >> ralph/log.txt 2>&1 &
 ```
 
 `--review-every 0` because reviews are rows here; any unit id containing
-`REVIEW` goes to the review model.
+`REVIEW` goes to the review model. Models come from `ralph/models.env`
+(per-host, gitignored): `scripts/ralph-models.sh --model <W> --review-model <R>
+[--variant high]` writes it and restarts the launchd job. The supervisor's
+resolver uses the review model; loop flags still override the file.
 
 For a detached Mac job, replace `nohup` and the output redirection with
 `--install-launchd`, then run the printed `launchctl bootstrap` command.

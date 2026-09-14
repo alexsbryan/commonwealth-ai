@@ -12,13 +12,16 @@ LOOP = Path(__file__).resolve().parents[1] / "ralph-loop.sh"
 
 
 class Routing(unittest.TestCase):
-    def run_queue(self, rows, *, models=False, supervised=False):
+    def run_queue(self, rows, *, models=False, supervised=False, models_file=None,
+                  review_flag="strong/reviewer"):
         with tempfile.TemporaryDirectory(prefix="ralph-routing-") as tmp:
             root = Path(tmp)
             (root / "ralph").mkdir()
             (root / "bin").mkdir()
             (root / "ralph/STATE.md").write_text(rows)
             (root / "ralph/PROMPT.md").write_text("Execute the selected unit.")
+            if models_file is not None:
+                (root / "ralph/models.env").write_text(models_file)
             worker = root / "bin/opencode"
             worker.write_text(
                 "#!/usr/bin/env python3\n"
@@ -33,8 +36,9 @@ class Routing(unittest.TestCase):
             env = dict(os.environ, HOME=tmp, PATH=f"{root / 'bin'}:{os.environ['PATH']}",
                        RALPH_OPENCODE_BIN=str(worker))
             subprocess.run(["git", "init", "-q", tmp], check=True, env=env)
-            cmd = ["bash", str(LOOP), "--workdir", tmp, "--max-iter", "2",
-                   "--review-model", "strong/reviewer"]
+            cmd = ["bash", str(LOOP), "--workdir", tmp, "--max-iter", "2"]
+            if review_flag:
+                cmd += ["--review-model", review_flag]
             if models:
                 cmd += ["--model", "worker/terra", "--variant", "high"]
             if supervised:
@@ -94,6 +98,24 @@ class Routing(unittest.TestCase):
         self.assertIsNone(args)
         self.assertIn("supervisor resolution: model strong/reviewer, variant high", result.stdout)
         self.assertIn("operator approval required", result.stdout)
+
+
+    def test_models_file_supplies_defaults(self):
+        _, args = self.run_queue(
+            "- [ ] dm-ready — depends []\n", review_flag=None,
+            models_file="MODEL=file/worker\nREVIEW_MODEL=file/reviewer\nVARIANT=medium\n")
+        self.assertEqual(args[:5], ["run", "--model", "file/worker", "--variant", "medium"])
+
+    def test_flags_override_models_file(self):
+        _, args = self.run_queue("- [ ] dm-ready — depends []\n", models=True,
+                                 models_file="MODEL=file/worker\nVARIANT=medium\n")
+        self.assertEqual(args[:5], ["run", "--model", "worker/terra", "--variant", "high"])
+
+    def test_review_row_reads_models_file(self):
+        _, args = self.run_queue(
+            "- [ ] REVIEW-ready — depends []\n", review_flag=None,
+            models_file="MODEL=file/worker\nREVIEW_MODEL=file/reviewer\nVARIANT=medium\n")
+        self.assertEqual(args[:5], ["run", "--model", "file/reviewer", "--variant", "medium"])
 
 
 if __name__ == "__main__":

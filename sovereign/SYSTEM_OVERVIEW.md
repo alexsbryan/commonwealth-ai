@@ -8140,6 +8140,9 @@ and notifications; ready `HUMAN-` rows and operator STOP requests never enter
 resolution. The old blocker STOP is cleared before resolution so it cannot kill
 its own resolver; a new STOP is preserved. Session logs retain distinct run ids.
 `python3 scripts/tests/ralph-supervise.py` exercises resolution and terminal stops.
+Per-host models live in `ralph/models.env` (KEY=value data, gitignored), read by
+both drivers with flags taking precedence; `scripts/ralph-models.sh` shows or
+sets it and kickstarts the loaded job (`python3 scripts/tests/ralph-models.py`).
 
 ### 8.1 Where configuration and state live
 

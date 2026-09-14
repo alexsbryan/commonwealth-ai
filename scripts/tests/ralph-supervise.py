@@ -12,7 +12,8 @@ SUPERVISOR = Path(__file__).resolve().parents[1] / "ralph-supervise.sh"
 
 
 class Supervision(unittest.TestCase):
-    def run_case(self, mode):
+    def run_case(self, mode, *, models_file=None,
+                 inner_flags=("--review-model", "strong/reviewer", "--variant", "high")):
         with tempfile.TemporaryDirectory(prefix="ralph-supervise-") as tmp:
             root = Path(tmp)
             (root / "ralph").mkdir()
@@ -23,6 +24,8 @@ class Supervision(unittest.TestCase):
                 (root / "ralph/STOP").touch()
             if mode != "operator":
                 (root / "ralph/NEEDS_HUMAN.md").write_text("fixture blocker\n")
+            if models_file is not None:
+                (root / "ralph/models.env").write_text(models_file)
             worker = root / "bin/opencode"
             worker.write_text(
                 "#!/usr/bin/env python3\n"
@@ -51,7 +54,7 @@ class Supervision(unittest.TestCase):
             subprocess.run(["git", "init", "-q", tmp], check=True, env=env)
             result = subprocess.run(
                 ["bash", str(SUPERVISOR), "--workdir", tmp, "--no-notify", "--",
-                 str(inner), "--review-model", "strong/reviewer", "--variant", "high"],
+                 str(inner), *inner_flags],
                 env=env, text=True, capture_output=True, timeout=10)
             calls = root / "calls.jsonl"
             return result, [json.loads(line) for line in calls.read_text().splitlines()] if calls.exists() else [], (root / "ralph/DONE").exists(), (root / "ralph/STOP").exists()
@@ -90,6 +93,15 @@ class Supervision(unittest.TestCase):
         self.assertFalse(done)
         self.assertTrue(stopped)
         self.assertIn("operator STOP during resolution", result.stdout)
+
+
+    def test_models_file_supplies_resolver_when_inner_has_none(self):
+        result, calls, done, _ = self.run_case(
+            "resolve", models_file="REVIEW_MODEL=file/reviewer\nVARIANT=medium\n",
+            inner_flags=())
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue(done)
+        self.assertEqual(calls[0][:5], ["run", "--model", "file/reviewer", "--variant", "medium"])
 
 
 if __name__ == "__main__":
