@@ -5307,7 +5307,7 @@ def cmd_plan_claims(a) -> int:
     # when most of the plan's cited paths do not start in this repo.
     cited = {m.group(1).split("/")[0] for m in re.finditer(r"`\.?/?([\w-]+/[\w./-]+\.\w+)", ev["plan"])}
     here = {c for c in cited if git("show", f"{sha_p}:{c}")}
-    foreign = len(cited) >= 3 and len(here) * 2 < len(cited)
+    foreign = len(cited) >= 3 and len(here) <= 1      # 5c16d4f6 cites 19 top dirs, 12 it will CREATE; 22da1ede (canon) resolves none
     for st in stmts:
         if foreign and st["state"] in ("refuted", "proved") and st["kind"] in ("Exists", "Proposes"):   # 80406ac5: 17 canon nouns 'proved new' here
             st["state"], st["receipt"] = "sorry", f"the plan's paths are in another repository ({len(cited) - len(here)} of {len(cited)} top directories are not here)"
@@ -6197,7 +6197,7 @@ def cmd_self_test(_a) -> int:
     eq(_kh.run({"kind": "Exists", "turn": 1, "name": "Kernel::summaries()", "span": "x"})[0], "proved", "Exists: call parens are not part of the name")
     eq(_kh.run({"kind": "Exists", "turn": 1, "name": "GR-19", "span": "x"})[0], "sorry", "Exists: a requirement id is judged by its document")
     eq(_kh.run({"kind": "Exists", "turn": 1, "name": "scripts/co-oplog.py::cmd_claims", "span": "x"})[0], "proved", "Exists: path::fn is the fn in that file")
-    eq(_kh.run({"kind": "Exists", "turn": 1, "name": "scripts/co-oplog.py::no_such_fn_xyz", "span": "x"})[0], "refuted", "Exists: path::fn absent from that file")
+    eq(_kh.run({"kind": "Exists", "turn": 1, "name": "docs/ARCHITECTURE_TOUR.md::no_such_fn_xyz", "span": "x"})[0], "refuted", "Exists: path::fn absent from that file (not co-oplog.py: this line would be the hit)")
     eq(_kh.run({"kind": "Exists", "turn": 1, "name": "--self-test", "span": "x"})[0], "sorry", "Exists: a flag is no name")
     eq(_kh.run({"kind": "Exists", "turn": 1, "name": "F-bars", "span": "x"})[0], "sorry", "Exists: prose is no name")
     eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "Kernel", "span": "x", "section": "Context"})[0], "sorry", "Proposes: a Context section describes what exists")
