@@ -4480,6 +4480,12 @@ class Kernel:
         self.path, self.obs, self.sha_at_turn = path, obs, sha_at_turn
         self.own_all = None
 
+    def sha_end(self) -> str | None:
+        try:
+            return self.sha_at_turn(10**6)
+        except Exception:
+            return None
+
     def summaries(self, before_turn: int) -> list[tuple[int, str]]:
         """Every test summary line seen, tool results and notifications
         alike (1c5bd750 t49: the worker's '13257 pass / 1 fail' arrived as
@@ -4501,25 +4507,39 @@ class Kernel:
         if k == "Tested":
             scope = (st.get("scope") or "").strip("`")
             named = [x for x in IDENT_SHAPE.findall(scope) if "_" in x or "::" in x]   # 'gate every_test_module_is_wired' names a test
-            if named:
+            if named and len(scope.split()) <= 3:
                 scope = named[0]
+            elif named:
+                named = []       # '--package sovereign-cli --filter report_audit' is a run, not a test name (5ab14d6d t14)
+            if not named and re.search(r"\b(?:lint|clippy|ratchet|xtask|rustfmt|fmt|check|compile|compilation|gate|venue|pre-push|prepush|sabotage|self-test|hook)\b",
+                                       scope + " " + st.get("span", "")[:80], re.I) and (st.get("pass") or 0) < 2000:
+                # 'lint 0 errors', 'all ten ratchets exit 0', 'seven sabotages
+                # watched red', 'self-test passes 4/4' (9 false rows in the
+                # 40-session run): not a test-run summary; nothing judges it.
+                return "sorry", "a lint, ratchet, gate or sabotage statement; no test summary can judge it"
             if named or IDENT_SHAPE.fullmatch(scope):
                 # A named test or gate: judged by the lines that name it
                 # (69191705 t70: 'watched fail on three distinct inputs' was
                 # refuted against the sweep's counts).
                 want_red = (st.get("fail") or 0) > 0 or bool(re.search(r"\b(?:red|fail)", st.get("span", ""), re.I)) and not (st.get("pass") or 0)
+                if not want_red and not re.search(r"\b(?:pass(?:es|ed)?|green|ok)\b", st.get("span", ""), re.I):
+                    # The span describes what the test does, not that it passes
+                    # (995d04b9 t6: 'walks the grounding tree ... and asserts').
+                    return "sorry", f"the statement names {scope} but claims no outcome"
                 lines = [(i, l.strip()) for i, t in sorted(self.obs["results"] + self.obs["asks"], key=lambda x: x[0]) if i <= turn
                          for l in t.splitlines() if scope in l and re.search(r"\b(?:ok|FAILED|passed|failed|PASS|FAIL)\b", l)]
                 if not lines:
                     return "sorry", f"no line names {scope} with an outcome before turn {turn}"
                 reds = [x for x in lines if RX_RED.search(x[1])]
+                # 'watched fail' is proved by any red line naming the test
+                # before the turn (8e6fdcec t24: red at t22, then green).
                 hit = reds[-1] if want_red and reds else (lines[-1] if not want_red and not RX_RED.search(lines[-1][1]) else None)
                 if hit:
                     return "proved", f"turn {hit[0]}: {hit[1][:140]}"
                 i, l = lines[-1]
                 return "refuted", f"turn {i}: {l[:140]}"
             summ = self.summaries(turn + 1)
-            whole = bool(re.search(r"\b(?:full|whole|workspace|sweep|suite|all)\b", st.get("scope", ""), re.I)) or (st.get("pass") or 0) >= 500
+            whole = bool(re.search(r"\b(?:full|whole|workspace|sweep|suite|all)\b", st.get("scope", ""), re.I)) or (st.get("pass") or 0) >= 2000
             if not whole and not re.search(
                     r"\b(?:tests?|suite|nextest|cargo test|crate|package|lane)\b", (st.get("scope") or "") + " " + st.get("span", ""), re.I):
                 # 'replayed 93 times', 'passes canon's pre-push gate' (66a5247a
@@ -4545,6 +4565,10 @@ class Kernel:
                 i, l = match[-1]
                 return "proved", f"turn {i}: {l[:140]}"
             i, last = cands[-1]
+            if not whole:
+                # A crate or filtered run with no matching summary: the record
+                # may simply not carry it ('sovereign-mesh: 815 passed', 7a744442).
+                return "sorry", f"no run with these counts in the record; last run turn {i}: {last[:120]}"
             return "refuted", f"no run with these counts; last run turn {i}: {last[:140]}"
         if k == "Landed":
             is_sha = lambda x: bool(re.fullmatch(r"[0-9a-f]{7,40}", x.strip("`")))
@@ -4573,13 +4597,55 @@ class Kernel:
             sha_t = self.sha_at_turn(turn)
             if not names or not sha_t:
                 return "sorry", "no sha, path or symbol to check"
-            hits = [n for n in names if git("grep", "-lF", n.split("/")[-1], sha_t).strip()]
-            return ("proved" if len(hits) == len(names) else "refuted"), f"at {sha_t[:9]}: in tree {hits}, not {[n for n in names if n not in hits]}"
+            gone = bool(re.search(r"\b(?:deleted|removed|gone|dropped|cut|went with it)\b", st.get("span", ""), re.I))
+            def in_tree(n, sha):
+                if re.match(r"(?:~|/Users|/private|/tmp|target/|\.sovereign/|\S*/target/)", n):
+                    return None                          # machine-local (5ab14d6d t7: .sovereign/features/...)
+                if "/" in n:
+                    top = n.lstrip("./").split("/")[0]
+                    if not git("show", f"{sha}:{top}"):
+                        return None                      # another repository (8e6fdcec: crates/mjolnir-mesh)
+                    return bool(git("show", f"{sha}:{n.lstrip('./')}"))
+                if "." in n and " " not in n:            # a bare file name (e92735ab t68: 'tokens.json is gone')
+                    return any(l.split("/")[-1] == n for l in git("ls-tree", "-r", "--name-only", sha).splitlines())
+                if "::" in n:                            # Type::member: both names in one file (e02c5365 t8: FastMeta::size_bytes)
+                    typ, mem = n.rsplit("::", 1)
+                    files = [f.split(":", 1)[1] if ":" in f else f            # git grep at a sha prefixes 'sha:path'
+                             for f in git("grep", "-lF", mem, sha).splitlines()]  # the member is the rarer name (bb36c21e t11: Runtime:: is everywhere)
+                    return any(typ.split("::")[-1] in git("show", f"{sha}:{f}") for f in files[:60])
+                return bool(git("grep", "-ilF", n, sha).strip())                       # -i: 'extraction_lead' is EXTRACTION_LEAD (995d04b9)
+            end = self.sha_end() or sha_t
+            head = git("rev-parse", "HEAD").strip()
+            state = {}
+            for n in names:
+                at_turn, at_end = in_tree(n, sha_t), in_tree(n, end)
+                if at_turn is None and at_end is None:
+                    state[n] = "sorry"
+                elif gone:
+                    state[n] = "proved" if not at_turn or not at_end else "refuted"      # e02c5365 t8: 'FastMeta::size_bytes is deleted'
+                elif at_turn or at_end:
+                    state[n] = "proved"
+                else:
+                    # Landed after the session ended still landed (6c57fec1 t1: a
+                    # test committed three days on); the receipt says so.
+                    state[n] = "proved-late" if in_tree(n, head) else "refuted"          # d6c0c747 t9: landed later in the session
+            if any(v == "refuted" for v in state.values()):
+                return "refuted", f"at {sha_t[:9]} and session end {end[:9]}: {state}"
+            if any(v == "sorry" for v in state.values()):
+                return "sorry", f"machine-local or under no directory of this repository: {[n for n, v in state.items() if v == 'sorry']}"
+            return "proved", f"at {sha_t[:9]} or session end {end[:9]}" + (f" (or HEAD, after the session)" if "proved-late" in state.values() else "") + f": {state}"
         if k == "Exists":
             nm, sha_t = (st.get("name") or "").strip("`"), self.sha_at_turn(turn)
             nm = re.sub(r":\d+(?:-\d+)?$", "", nm)          # model_slot.rs:3539 is the file (66a5247a t12)
             if not nm or not sha_t:
                 return "sorry", "no name or sha"
+            if re.fullmatch(r"[0-9a-f]{8,64}", nm):
+                return "sorry", f"{nm} is a hash, not a thing in the tree (995d04b9 t4: a baseline id)"
+            # A thing created later in the session is in the tree at its end
+            # (f1c44058 t10: the prereg file, committed two turns on).
+            end = self.sha_end() or sha_t
+            if "/" in nm and not nm.startswith("/") and git("show", f"{end}:{nm.lstrip('./')}"):
+                return "proved", f"{nm} is in the tree at session end {end[:9]}"
             if re.match(r"(?:~|/Users|/private|/tmp|target/|\.sovereign/|\S*/target/)", nm) or " " in nm:
                 # Runtime and machine-local paths are not in any tree
                 # (66a5247a: target/canon-staging/..., ~/dev/canon/...).
@@ -4635,6 +4701,12 @@ class Kernel:
             if n is None:
                 return "sorry", f"no count in {v!r}"
             of = st.get("of")
+            if of and not re.search(r"\bof\s+" + str(int(of)) + r"\b", st.get("span", "")):
+                of = None            # '40 sessions' is not '40 of 1' (5ab14d6d t7)
+            _pat = (st.get("pattern") or "").strip("`")
+            pat_ok = len(_pat) >= 6 and bool(re.search(r"[A-Z_:]", _pat)) and bool(re.fullmatch(r"[A-Za-z_][\w:]*(?:::|\(|\{)?", _pat))   # 'exit' counted 8 vs 3 (995d04b9 t6)
+            if not of and st.get("pattern") and not pat_ok:
+                return "sorry", f"pattern {st.get('pattern')!r} is prose, not something a file can be counted for"
             if of:
                 rx = re.compile(r"\b(\d+) of " + str(int(of)) + r"\b")
                 seen = [(i, l.strip()) for i, t in sorted(self.obs["results"] + self.obs["asks"], key=lambda x: x[0]) if i <= turn
@@ -4646,7 +4718,7 @@ class Kernel:
                 fits = m == n or (re.search(r"want attention|fail|red|not passed", l, re.I) and int(of) - m == n)
                 return ("proved" if fits else "refuted"), f"turn {i}: {l[:140]}"
             pat, where, sha_t = (st.get("pattern") or "").strip("`"), (st.get("in") or "").strip("`"), self.sha_at_turn(turn)
-            if pat and where and sha_t:
+            if pat and where and sha_t and pat_ok and len(pat) >= 4:
                 body = git("show", f"{sha_t}:{where.lstrip('./')}")
                 if not body:
                     files = [l for l in git("ls-tree", "-r", "--name-only", sha_t).splitlines() if l.split("/")[-1] == where.split("/")[-1]]
@@ -4735,8 +4807,11 @@ def supersedes(stmts: list[dict], kernel: Kernel) -> list[dict]:
     edges = []
     tested = [s for s in stmts if s["kind"] == "Tested" and s.get("pass") is not None]
     def same_scope(a, b):
-        wa, wb = (bool(re.search(r"\b(?:full|whole|workspace|sweep)\b", x.get("scope", ""), re.I)) or (x.get("pass") or 0) >= 500 for x in (a, b))
-        return (wa and wb) or (a.get("scope", "").lower().strip() == b.get("scope", "").lower().strip() and a.get("scope"))
+        # Whole-scope runs only: a lane's '0/1 then 18/1' (e45b6bcb) and a
+        # whole run against a gym lane (a99026b2) are not one series.
+        wa, wb = ((bool(re.search(r"\b(?:full|whole|workspace|sweep)\b", x.get("scope", ""), re.I)) or (x.get("pass") or 0) >= 2000)
+                  and (x.get("pass") or 0) >= 100 for x in (a, b))
+        return wa and wb
     for a in tested:
         for b in tested:
             # Same scope only: 47/0 on one crate then 0/1 on another is two
@@ -4747,12 +4822,8 @@ def supersedes(stmts: list[dict], kernel: Kernel) -> list[dict]:
                     edges.append({"earlier": a["id"], "later": b["id"], "why": f"{a.get('pass')}/{a.get('fail')} then {b.get('pass')}/{b.get('fail')} with no run between"})
     # 'tokens: 4000 then 17221' are two different token counts; only a
     # quantity named in two or more words is specific enough to contradict.
-    meas = [s for s in stmts if s["kind"] == "Measured" and s.get("quantity") and s.get("value") and len(s["quantity"].split()) >= 2]
-    for a in meas:
-        for b in meas:
-            qa, qb = a["quantity"].lower().strip(), b["quantity"].lower().strip()
-            if b["turn"] > a["turn"] and qa == qb and a["value"].replace(",", "") != b["value"].replace(",", ""):
-                edges.append({"earlier": a["id"], "later": b["id"], "why": f"{qa}: {a['value']} then {b['value']}"})
+    # Measured is not joined: 'free memory 4.5 then 0.3' is two readings
+    # (5ab14d6d), and a rounded '862k then 860,372' is one (6402486e).
     return edges
 
 def cmd_claims_all(a) -> int:
@@ -5698,11 +5769,14 @@ def cmd_self_test(_a) -> int:
         _k2.obs["results"].append((0, "test every_test_module_is_wired ... FAILED\ntest result: FAILED. 0 passed; 1 failed"))
         eq(_k2.run({"kind": "Tested", "turn": 1, "scope": "every_test_module_is_wired", "pass": 0, "fail": 1})[0], "proved",
            "a named test 'watched fail' is proved by a line naming it red")
-        eq(_k2.run({"kind": "Tested", "turn": 1, "scope": "every_test_module_is_wired", "pass": 1, "fail": 0})[0], "refuted",
+        eq(_k2.run({"kind": "Tested", "turn": 1, "scope": "every_test_module_is_wired", "pass": 1, "fail": 0, "span": "every_test_module_is_wired passes"})[0], "refuted",
            "and claimed green is refuted by it")
+        eq(_k2.run({"kind": "Tested", "turn": 1, "scope": "every_test_module_is_wired", "pass": 1, "fail": 0, "span": "every_test_module_is_wired walks the tree"})[0], "sorry",
+           "and a span that claims no outcome is sorry")
         eq(_k2.run({"kind": "Tested", "turn": 1, "scope": "gate every_test_module_is_wired", "pass": 0, "fail": 1})[0], "proved",
            "a test name inside a longer scope is the name")
     _kh = Kernel(Path("."), {"results": [], "asks": [], "nums": {}}, lambda i: git("rev-parse", "HEAD").strip())
+    eq(_kh.run({"kind": "Landed", "turn": 1, "symbols": ["Kernel::summaries"], "span": "Kernel::summaries lands"})[0], "proved", "Landed: Type::member is both names in one file at the sha")
     eq(_kh.run({"kind": "Exists", "turn": 1, "name": "co-oplog.py"})[0], "proved", "Exists: a bare file name is found anywhere in the tree")
     eq(_kh.run({"kind": "Exists", "turn": 1, "name": "scripts/co-oplog.py"})[0], "proved", "Exists: a path is looked up as a path")
     eq(_kh.run({"kind": "Exists", "turn": 1, "name": "/internal/nope-" + hex(int(time.time()))[2:]})[0], "refuted", "Exists: a route is a string in the tree, and this one is in no tree")
@@ -5712,8 +5786,8 @@ def cmd_self_test(_a) -> int:
     eq(_kh.run({"kind": "Count", "turn": 1, "quantity": "roles", "value": "eight", "pattern": "Launch::", "in": "co-oplog.py"})[0], "refuted",
        "Count: a pattern counted in a file at the sha")
     _kc = Kernel(Path("."), {"results": [(0, "[—] 2 of 16 want attention (not passed, or passed on stale evidence)")], "asks": [], "nums": {}}, lambda i: None)
-    eq(_kc.run({"kind": "Count", "turn": 1, "quantity": "gates passing", "value": "15", "of": 16})[0], "refuted", "Count: '15 of 16' vs '2 of 16 want attention'")
-    eq(_kc.run({"kind": "Count", "turn": 1, "quantity": "gates passing", "value": "14", "of": 16})[0], "proved", "Count: and 14 of 16 is what it says")
+    eq(_kc.run({"kind": "Count", "turn": 1, "quantity": "gates passing", "value": "15", "of": 16, "span": "15 of 16 pre-push gates passing"})[0], "refuted", "Count: '15 of 16' vs '2 of 16 want attention'")
+    eq(_kc.run({"kind": "Count", "turn": 1, "quantity": "gates passing", "value": "14", "of": 16, "span": "14 of 16 pre-push gates passing"})[0], "proved", "Count: and 14 of 16 is what it says")
     eq(parse_summary("13257 pass / 1 fail exit 101"), (13257, 1), "parse_summary: a worker's line")
     eq(parse_summary("total_pass=13257  total_fail=1  cargo.exit=101"), (13257, 1), "parse_summary: the scoped banner")
     eq(is_steer("<task-notification>x</task-notification>"), False, "a notification is not a steer")
