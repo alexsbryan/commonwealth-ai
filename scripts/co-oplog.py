@@ -4418,7 +4418,9 @@ Proposes {name, shape}: a NEW thing the report says it will build, add, introduc
   thing does not exist yet. A name the report uses, returns, points at, changes or extends is Exists{name};
   a change with no new name ("`SetupConfig.models` becomes `Option`") is Promise. In a code block every
   struct, enum, trait, type or fn the report DEFINES is its own Proposes{name}, one per definition; a type
-  named as what something "becomes" or "splits into" is Proposes{name} too.
+  named as what something "becomes" or "splits into" is Proposes{name} too. In a phase or build section a
+  backticked fn, method, const, file, command or flag the report will write ("`cmd_grant` POSTs to the
+  daemon", "`DEFAULT_GUEST_TTL_SECS = 2h`", "add `with_bearer(…)` constructors") is Proposes{name}.
 Measured {quantity, value, unit}: a number the report states as measured (lines, bytes, seconds).
 Count {quantity, value, of, pattern, in}: a count of things ("eight launch roles", "15 of 16 gates",
   "13 impls", "39 sites"); `of` for "N of M"; `pattern` and `in` when the span names what is counted
@@ -4499,6 +4501,8 @@ class Kernel:
         proposed 'total in place' two sections after `guest_grant.rs:120`)."""
         n = name.strip("`").split("::")[0]
         for i, l in enumerate(self.text.splitlines(), 1):
+            if re.search(r"(?<![\w])" + re.escape(n) + r"\.(?:rs|py|sh|ts)\b", l):
+                return f"L{i}: {l.strip()[:100]}"
             if n in l and re.search(r"\w\.(?:rs|py|toml|md)\b|:\d{2,}\b|[\w-]+/[\w./-]+", l.replace(n, "")):
                 return f"L{i}: {l.strip()[:100]}"
         return None
@@ -4582,6 +4586,9 @@ class Kernel:
             return None                                  # prose or a glob ('setup_cmd/{args,mod}.rs', c3b57dbd p5.5)
         if re.fullmatch(r"[A-Za-z_]\w*\.[a-z_]\w*", n) and not re.search(r"\.(?:rs|py|sh|toml|md|json|ts|mjs|ya?ml)$", n):
             n = n.replace(".", "::")                     # NodeCapabilities.inference_capable is a member (c3b57dbd p9.9)
+        if n.startswith("/"):
+            out = git("grep", "-lF", n, sha).strip()                  # a route: a string in the tree (62d5846b p13.15: /v1/models 'proved' new)
+            return f"route in {len(out.splitlines())} file(s) at {sha[:9]}" if out else None
         if "/" in n:
             body = git("show", f"{sha}:{n.lstrip('./')}")
             if body:
@@ -4629,8 +4636,12 @@ class Kernel:
             nm, sha_t = (st.get("name") or "").strip("`"), self.sha_at_turn(turn)
             if not nm or not sha_t:
                 return "sorry", "no name or sha"
-            if " " in nm.strip() and not re.search(r"[/:.]|_|[A-Z][a-z]+[A-Z]", nm):
-                return "sorry", f"{nm!r} is prose, not a name git can look for"
+            if " " in nm.strip():
+                return "sorry", f"{nm!r} is prose or a command line, not a name git can look for"       # 62d5846b p13.2-7: test commands 'proved'
+            if re.search(r":\d+(?:-\d+)?$", nm):
+                return "sorry", f"{nm!r} carries a line anchor: a citation, not a proposal"              # 5c16d4f6 p21.3: sabotage.py:868
+            if re.search(r"\(&(?:mut )?self\b", st.get("span", "")):
+                return "sorry", f"{nm} is a method; it belongs to its type, which is the proposal"       # 62d5846b p9.4: GuestGrant::is_live vs ingest_grant's
             if nm.lstrip().startswith(("--", "svrn ", "sovereign ", "cargo ")):
                 return "sorry", f"{nm!r} is a command or flag; no definition to look for"
             if re.search(r"[{}<>=→*]", nm):
@@ -4795,10 +4806,13 @@ class Kernel:
         if k == "Exists":
             nm, sha_t = (st.get("name") or "").strip("`"), self.sha_at_turn(turn)
             nm = re.sub(r":\d+(?:-\d+)?$", "", nm)          # model_slot.rs:3539 is the file (66a5247a t12)
+            nm = re.sub(r"\(\)$", "", nm)                    # Journey::exercises() is Journey::exercises (e541f77a p6.22)
             if not nm or not sha_t:
                 return "sorry", "no name or sha"
             if re.fullmatch(r"[0-9a-f]{8,64}", nm):
                 return "sorry", f"{nm} is a hash, not a thing in the tree (995d04b9 t4: a baseline id)"
+            if re.fullmatch(r"[A-Z]{1,4}-\d{1,4}", nm):
+                return "sorry", f"{nm} is a requirement or ticket id, judged by its document, not the tree (e541f77a p22.17: GR-19)"
             # A thing created later in the session is in the tree at its end
             # (f1c44058 t10: the prereg file, committed two turns on).
             end = self.sha_end() or sha_t
@@ -5266,6 +5280,10 @@ def cmd_plan_claims(a) -> int:
                 st["state"], st["receipt"] = kernel.run(st) if st["verbatim"] else ("sorry", "span is not verbatim in the plan")
                 stmts.append(st)
             print(f"  section {n:>2}/{len(secs)} {title[:50]:<50} {len(got):>3} statement(s) {round(time.time() - t1)}s", flush=True)
+    proposed = {re.sub(r":\d+(?:-\d+)?$", "", (st.get("name") or "").strip("`")) for st in stmts if st["kind"] == "Proposes"}
+    for st in stmts:
+        if st["kind"] == "Exists" and st["state"] == "refuted" and re.sub(r":\d+(?:-\d+)?$", "", (st.get("name") or "").strip("`")) in proposed:
+            st["state"], st["receipt"] = "sorry", "absent at the sha, and this plan proposes it: new by the plan's own account"
     # the sweep: every backticked name, defined at the sha or not
     tagged = {}
     for st in stmts:
@@ -6138,6 +6156,15 @@ def cmd_self_test(_a) -> int:
     eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "sovereign/DEFAULTS_LEDGER.md", "shape": "file", "span": "a `sovereign/DEFAULTS_LEDGER.md` row per rung"})[0], "sorry", "Proposes: a row in an existing file is an addition")
     eq(anchored("Outcome", "pub(crate) struct Outcome {\n local: Option<Scored>"), True, "anchored: the name is a token in the text")
     eq(anchored("come", "pub(crate) struct Outcome {"), False, "anchored: not a substring of a longer token")
+    eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "summaries", "shape": "fn", "span": "`pub fn summaries(&self, before: int)`"})[0], "sorry", "Proposes: a &self method belongs to its type")
+    eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "./scripts/sovereign-test.sh --human", "shape": "other", "span": "x"})[0], "sorry", "Proposes: a command line is prose")
+    eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "/v1/models", "shape": "other", "span": "x"})[0], "refuted", "Proposes: an existing route is a string in the tree")
+    eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "co-oplog.py:868", "shape": "other", "span": "x"})[0], "sorry", "Proposes: a line anchor is a citation")
+    eq(_kh.run({"kind": "Exists", "turn": 1, "name": "Kernel::summaries()", "span": "x"})[0], "proved", "Exists: call parens are not part of the name")
+    eq(_kh.run({"kind": "Exists", "turn": 1, "name": "GR-19", "span": "x"})[0], "sorry", "Exists: a requirement id is judged by its document")
+    _kh.text = "| `co-oplog.rs` | 228 | move |"
+    eq(_kh.plan_cites("co-oplog") is not None, True, "plan_cites: name.rs in a table cites the module")
+    _kh.text = ""
     _many = _kh.defined_many(["Kernel", "FooBarBazNounX", "NodeId", "co-oplog.py", "sovereign-mesh", "Kernel::summaries"], git("rev-parse", "HEAD").strip())
     eq({k: bool(v) for k, v in _many.items()}, {"Kernel": True, "FooBarBazNounX": False, "NodeId": True, "co-oplog.py": True, "sovereign-mesh": True, "Kernel::summaries": True},
        "defined_many agrees with defined_at on six shapes of name")
