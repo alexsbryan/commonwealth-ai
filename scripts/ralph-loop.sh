@@ -8,6 +8,9 @@
 #   nohup ralph-loop.sh --workdir . --label ring1 --prompt ralph/PROMPT.md \
 #     >> ralph/log.txt 2>&1 &
 #   tail -f ralph/log.txt
+# --model provider/model selects workers; --review-model selects review rows.
+# --variant high sets reasoning effort for both. --install-launchd writes the
+# macOS job; bootstrap it with launchctl after inspecting the generated plist.
 set -u
 ORIG_ARGS=("$@")
 SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
@@ -22,6 +25,8 @@ STATE="ralph/STATE.md"
 REVIEW_PROMPT=""
 REVIEW_EVERY=0
 REVIEW_MODEL=""
+MODEL=""
+VARIANT=""
 MAX_STALL=3
 MAX_ITER=200
 SESSION_TIMEOUT=3600
@@ -45,6 +50,8 @@ while [ $# -gt 0 ]; do
     --review-prompt) REVIEW_PROMPT="$2"; shift 2 ;;
     --review-every) REVIEW_EVERY="$2"; shift 2 ;;
     --review-model) REVIEW_MODEL="$2"; shift 2 ;;
+    --model) MODEL="$2"; shift 2 ;;
+    --variant) VARIANT="$2"; shift 2 ;;
     --max-stall) MAX_STALL="$2"; shift 2 ;;
     --max-iter) MAX_ITER="$2"; shift 2 ;;
     --session-timeout) SESSION_TIMEOUT="$2"; shift 2 ;;
@@ -89,8 +96,7 @@ if [ "$INSTALL" -eq 1 ]; then
     done
     echo '  </array>'
     echo "  <key>WorkingDirectory</key><string>${PWD}</string>"
-    echo '  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>'
-    echo '  <key>ThrottleInterval</key><integer>30</integer>'
+    # One shot: NEEDS_HUMAN must stay stopped, including a worker's exit 2.
     echo '  <key>RunAtLoad</key><true/>'
     echo '  <key>EnvironmentVariables</key><dict>'
     echo "    <key>PATH</key><string>${PATH}</string>"
@@ -111,8 +117,21 @@ current_unit() {
   [ -f "$STATE" ] || return 0
   local u
   u=$(grep -oE '^- \[~\] [A-Za-z0-9-]+' "$STATE" | head -1 | awk '{print $NF}')
-  [ -n "$u" ] || u=$(grep -oE '^- \[ \] [A-Za-z0-9-]+' "$STATE" | head -1 | awk '{print $NF}')
-  printf '%s' "$u"
+  if [ -n "$u" ]; then printf '%s' "$u"; return; fi
+  for u in $(grep -oE '^- \[ \] [A-Za-z0-9-]+' "$STATE" | awk '{print $NF}'); do
+    if deps_met "$u"; then printf '%s' "$u"; return; fi
+  done
+}
+
+select_model() { # unit id (or review for a periodic audit)
+  local model="$MODEL"
+  if [ -n "$REVIEW_MODEL" ] && printf '%s' "$1" | grep -qi 'review'; then
+    model="$REVIEW_MODEL"
+  fi
+  MODEL_ARGS=""
+  [ -n "$model" ] && MODEL_ARGS="--model $model"
+  [ -n "$VARIANT" ] && MODEL_ARGS="$MODEL_ARGS --variant $VARIANT"
+  say "unit $1 — model ${model:-configured default}, variant ${VARIANT:-configured default}"
 }
 
 commits_since_review() {
@@ -136,6 +155,7 @@ fi
 
 if [ "$PLAN" -eq 1 ]; then
   echo "prompt: $PROMPT  review: ${REVIEW_PROMPT:-none} every $REVIEW_EVERY commits"
+  select_model "$(current_unit)"
   echo "commits since review: $(commits_since_review)  head: $(git rev-parse --short HEAD 2>/dev/null)"
   exit 0
 fi
@@ -158,7 +178,7 @@ while [ "$iter" -lt "$MAX_ITER" ]; do
 
   if [ "$REVIEW_EVERY" -gt 0 ] && [ -n "$REVIEW_PROMPT" ] && [ "$(commits_since_review)" -ge "$REVIEW_EVERY" ]; then
     say "review iteration $iter ($(commits_since_review) commits since last review)"
-    MODEL_ARGS=""; [ -n "$REVIEW_MODEL" ] && MODEL_ARGS="--model $REVIEW_MODEL"
+    select_model review
     run_session "$REVIEW_PROMPT" "$PWD" "$STATE_DIR/logs/review-$iter.out"
     iter=$((iter - 1)); continue
   fi
@@ -166,11 +186,11 @@ while [ "$iter" -lt "$MAX_ITER" ]; do
   before=$(git rev-parse HEAD 2>/dev/null || echo none)
   echo "[ralph] === iteration $iter $(date -u +%FT%TZ) from $(git rev-parse --short HEAD 2>/dev/null || echo none) ==="
   unit=$(current_unit)
-  MODEL_ARGS=""
-  if [ -n "$REVIEW_MODEL" ] && printf '%s' "$unit" | grep -qi 'review'; then
-    MODEL_ARGS="--model $REVIEW_MODEL"
-    say "unit $unit is a review — model $REVIEW_MODEL"
-  fi
+  [ -n "$unit" ] || halt "no ready unit in $STATE; check dependencies and completion markers"
+  case "$unit" in
+    HUMAN-*) halt "operator approval required: $(grep -E "^- \[[~ ]\] $unit([[:space:]]|$)" "$STATE" | head -1)" ;;
+  esac
+  select_model "$unit"
   run_session "$PROMPT" "$PWD" "$STATE_DIR/logs/iter-$iter.out"
   after=$(git rev-parse HEAD 2>/dev/null || echo none)
   if [ "$before" = "$after" ]; then

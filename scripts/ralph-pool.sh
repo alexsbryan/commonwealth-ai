@@ -52,23 +52,8 @@ done
 cd "$WORKDIR" || exit 2
 BASE_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
-status_of() {
-  local line
-  line=$(grep -E "^- \[[x~ ]\] $1([[:space:]]|$)" "$STATE" | head -1)
-  case "$line" in
-    "- [x] "*) printf 'x' ;;
-    "- [~] "*) printf '~' ;;
-    "- [ ] "*) printf ' ' ;;
-    *) printf '' ;;
-  esac
-}
-deps_of() {
-  grep -E "^- \[[x~ ]\] $1([[:space:]]|$)" "$STATE" | head -1 \
-    | sed -n 's/.*depends \[\([^]]*\)\].*/\1/p' | tr ',' ' '
-}
 unit_ids() { grep -oE '^- \[[x~ ]\] [A-Za-z0-9-]+' "$STATE" | awk '{print $NF}'; }
 is_review() { case "$1" in REVIEW-*) return 0 ;; *) return 1 ;; esac; }
-deps_met() { local d; for d in $(deps_of "$1"); do [ "$(status_of "$d")" = x ] || return 1; done; return 0; }
 all_done() { local u; for u in $(unit_ids); do [ "$(status_of "$u")" = x ] || return 1; done; return 0; }
 
 # A lane session: a POOL LANE note + the prompt, run by the shared layer.

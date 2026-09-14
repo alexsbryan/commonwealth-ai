@@ -11,14 +11,19 @@ Run it serially — the rows share crates and manifests, and cargo work is one
 worker at a time (AGENTS.md):
 
 ```
-nohup scripts/ralph-loop.sh --workdir . --label domains \
+nohup bash scripts/ralph-loop.sh --workdir . --label domains \
   --prompt ralph/PROMPT.md --state ralph/STATE.md \
-  --review-model <STRONG_MODEL> --review-every 0 --max-stall 3 \
+  --model <WORKER_MODEL> --variant <EFFORT> \
+  --review-model <REVIEW_MODEL> --review-every 0 --max-stall 3 \
   --session-timeout 3600 --notify >> ralph/log.txt 2>&1 &
 ```
 
 `--review-every 0` because reviews are rows here; any unit id containing
 `REVIEW` goes to the review model.
+
+For a detached Mac job, replace `nohup` and the output redirection with
+`--install-launchd`, then run the printed `launchctl bootstrap` command.
+The job is one-shot: an operator stop requires an explicit restart.
 
 On the Fedora peer: `toolbox enter sovereign-vulkan` first and launch from
 inside it (opencode must be on its PATH); drop `--notify`, which is macOS-only.

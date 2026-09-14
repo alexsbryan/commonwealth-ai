@@ -8128,6 +8128,13 @@ retrieved chunks carry it, but the released quote does not support it, so the
 citation gate grounds a correct answer on the wrong quote — a grounding-gate
 finding.
 
+The serial campaign driver is `scripts/ralph-loop.sh`: `--model` selects workers,
+`--review-model` selects review rows, and `--variant` sets effort for both.
+It resumes `[~]` before selecting the first dependency-ready `[ ]` row, using
+the pool's shared readiness helpers in `scripts/ralph-lib.sh`. Ready `HUMAN-`
+rows stop before launching a worker. `--install-launchd` writes a one-shot Mac
+job; `python3 scripts/tests/ralph-routing.py` exercises routing with a stub worker.
+
 ### 8.1 Where configuration and state live
 
 The system's configuration and mutable state live on four roots. The rule that

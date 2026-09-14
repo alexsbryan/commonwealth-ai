@@ -11,6 +11,23 @@
 
 say() { echo "$(date -u +%FT%TZ) $*"; }
 
+# Shared queue grammar: both drivers decide readiness from these helpers.
+status_of() {
+  local line
+  line=$(grep -E "^- \[[x~ ]\] $1([[:space:]]|$)" "$STATE" | head -1)
+  case "$line" in
+    "- [x] "*) printf 'x' ;;
+    "- [~] "*) printf '~' ;;
+    "- [ ] "*) printf ' ' ;;
+    *) printf '' ;;
+  esac
+}
+deps_of() {
+  grep -E "^- \[[x~ ]\] $1([[:space:]]|$)" "$STATE" | head -1 \
+    | sed -n 's/.*depends \[\([^]]*\)\].*/\1/p' | tr ',' ' '
+}
+deps_met() { local d; for d in $(deps_of "$1"); do [ "$(status_of "$d")" = x ] || return 1; done; return 0; }
+
 notify() { # title body
   [ "${NOTIFY:-0}" -eq 1 ] || return 0
   /usr/bin/osascript -e "display notification \"${2}\" with title \"ralph: ${1}\"" >/dev/null 2>&1 || true
