@@ -608,6 +608,28 @@ def drop_sections(md, titles):
     return "\n".join(out_lines).strip()
 
 
+# ── Tier 2d: canon proposals that edits have hit ────────────────────────
+# Proposed canon rules are ratified when work runs into them, not in one
+# sitting: .claude/hooks/intent-warn.py shows a proposal before an edit that
+# names its file or identifier, and logs the hit. This tier is one line or none;
+# scripts/canon-ratify.py --hits decides which proposals are still undecided.
+try:
+    _repo = (
+        os.environ.get("SOVEREIGN_PROJECT_DIR")
+        or os.environ.get("CLAUDE_PROJECT_DIR")
+        or os.getcwd()
+    )
+    if os.path.exists(os.path.join(_repo, ".canon", "adjudication", "hits.jsonl")):
+        _line = subprocess.run(
+            ["python3", os.path.join(_repo, "scripts", "canon-ratify.py"),
+             "--hits", "--brief", "--root", _repo],
+            capture_output=True, text=True, timeout=5).stdout.strip()
+        if _line:
+            emit(_line + "\n")
+except Exception:
+    pass
+
+
 # ── Tier 1: working-set brief ───────────────────────────────────────────
 spent = sum(nbytes(p) + 1 for p in out)
 brief_budget = max(BRIEF_MIN_BYTES, TOTAL_BUDGET_BYTES - spent)

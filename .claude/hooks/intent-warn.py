@@ -12,12 +12,17 @@ WHAT IT DOES. Collects the fn names in the edit, asks the notes store for
 decisions tagged with those symbols (the records scripts/intent.py writes),
 and prints their first lines. Nothing else: no ranking, no model, no gate.
 
+It also prints the canon rules that name the file or identifiers being edited,
+ratified or proposed; scripts/canon-ratify.py --lookup decides which, and logs
+each proposed rule it shows so the operator ratifies the ones work actually hits.
+
 NEVER BLOCKS. Always exit 0; daemon down or no envelope means silence.
 Harness-neutral: JSON envelope on stdin, like every script in this directory.
 """
 import json
 import os
 import re
+import subprocess
 import sys
 import urllib.request
 
@@ -25,6 +30,22 @@ PORT = os.environ.get("SOVEREIGN_PORT", "9741")
 FN = re.compile(r"\bfn\s+([a-z_][a-z0-9_]*)\s*[(<]")
 MAX_NOTES = 3
 MAX_LINES = 8
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def canon_rules(payload, ti, text):
+    script = os.path.join(ROOT, "scripts", "canon-ratify.py")
+    if not os.path.exists(script):
+        return
+    try:
+        out = subprocess.run(
+            [sys.executable, script, "--lookup", "--root", ROOT,
+             "--file", str(ti.get("file_path") or ""), "--session", str(payload.get("session_id") or "")],
+            input=text, capture_output=True, text=True, timeout=5).stdout
+    except Exception:
+        return
+    if out.strip():
+        print(out.rstrip())
 
 
 def main():
@@ -36,6 +57,7 @@ def main():
         return
     ti = payload.get("tool_input") or {}
     text = "\n".join(str(ti.get(k) or "") for k in ("old_string", "new_string", "content"))
+    canon_rules(payload, ti, text)
     names = sorted(set(FN.findall(text)))
     if not names:
         return
