@@ -37,6 +37,7 @@ Exit codes: 0 value valid (or self-test green), 3 artifact absent,
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -674,6 +675,156 @@ def cmd_word_owners(args: list[str]) -> int:
         print(f"  [exempt] {d['name']:<26} {d['crate']:<30} word={words}")
     print(f"\n  value: {len(counted)} definitions outside their owner "
           f"({len(r['exempt'])} exempt in kernel/back-of-house crates)")
+    return EXIT_OK
+
+
+# ── atom-outside — dm-atom-outside ──────────────────────────────────────────
+#
+# No consumer outside Understanding's vocabulary may declare its own `Atom*`
+# type. The bar (campaigns/domains.toml dm-atom-outside) counts `pub Atom*`
+# definitions outside `corpus-engine-vocab/` and `corpus-engine/src/enrichment/`
+# — the two roots where the atom vocabulary is authored — minus the registry's
+# allow-list (the three axum query binders), which lives as `[[noun]]` rows with
+# `disposition = "decided:keep"` so that widening it is a registry diff a
+# reviewer reads, never a script edit (registry head, lines 1-9).
+#
+# TWO CONSTANTS, and why they are the axis's own subject rather than the rule
+# the Seams forbid. `_ATOM_WORD` is the bar's word — the same standing as
+# `_PEER_WORD`: Understanding's `[[context]].owns` row carries `Atom`, but the
+# bar hits target by driving `Atom*` to zero, so deriving the word from a row
+# the bar deletes would break at the finish line. `_ATOM_EXCLUDED_ROOTS` is the
+# bar's own scope, spelled verbatim in campaigns/domains.toml dm-atom-outside
+# ("outside corpus-engine-vocab/ and enrichment/") — like peer-outside's
+# `_COMMONWEALTH_PREFIX` ("outside the commonwealth package"). The allow-list,
+# the part that can silently grow, is registry data.
+_ATOM_WORD = "Atom"
+_ATOM_EXCLUDED_ROOTS = ("corpus-engine-vocab/", "corpus-engine/src/enrichment/")
+
+
+def atom_allowlist(reg: dict) -> list[str]:
+    """The allow-list: kept `[[noun]]` names carrying the atom word.
+
+    Read from the registry, so adding a binder to the allow-list is a registry
+    diff (campaigns/domains.toml dm-atom-outside goodhart). A kept name that
+    does not carry the word (the Peer carve-outs) is not this axis's business.
+    """
+    return sorted(n["name"] for n in reg.get("noun", [])
+                  if n.get("disposition") == "decided:keep"
+                  and _ATOM_WORD in n.get("name", ""))
+
+
+def atom_defs(root: Path) -> list[dict]:
+    """`Atom*` definitions outside the vocabulary roots, allow-list removed.
+
+    One dict per definition (`file`, `line`, `name`, `crate`), so the self-test
+    can ask it for truthiness and the subcommand can print the crate set.
+    """
+    root = Path(root)
+    allow = set(atom_allowlist(registry_for(root)))
+    found: list[dict] = []
+    for path in _rs_files(root):
+        try:
+            rel = path.relative_to(root).as_posix()
+        except ValueError:
+            rel = path.as_posix()
+        if any(rel.startswith(r) for r in _ATOM_EXCLUDED_ROOTS):
+            continue
+        try:
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        for i, line in enumerate(lines):
+            m = _TYPE_DEF.match(code_part(line))
+            if not m or not m.group(1).startswith(_ATOM_WORD):
+                continue
+            if m.group(1) in allow:
+                continue
+            found.append({"file": rel, "line": i + 1, "name": m.group(1),
+                          "crate": _crate_dir(path, root)})
+    return found
+
+
+def _allowlist_digest(allow: list[str]) -> str:
+    """A short digest of the allow-list, printed beside the value.
+
+    Tamper-evidence, not a gate: a digest change means the registry's kept
+    `Atom*` rows changed, which is exactly the diff the goodhart demands be
+    visible.
+    """
+    return hashlib.sha256("\n".join(allow).encode("utf-8")).hexdigest()[:12]
+
+
+def _atom_registry(root: Path) -> None:
+    """A registry whose only kept noun is the allow-list control."""
+    (root / "quality").mkdir(parents=True, exist_ok=True)
+    (root / "quality" / "DOMAINS.toml").write_text(
+        '[[noun]]\n'
+        'name = "AtomFixture"\n'
+        'disposition = "decided:keep"\n', encoding="utf-8")
+
+
+def _atom_positive(root: Path) -> None:
+    """A planted `Atom*` definition outside the roots: caught."""
+    _atom_registry(root)
+    (root / "fixture").mkdir(parents=True, exist_ok=True)
+    (root / "fixture" / "lib.rs").write_text(
+        "pub struct AtomWidget {\n    n: u32,\n}\n", encoding="utf-8")
+
+
+def _atom_negative(root: Path) -> None:
+    """Refusals, each a plausible near-miss.
+
+    The allow-listed name (a registry keep), a `pub` definition that does not
+    carry the word, the non-definition shapes the sibling axes refuse (`use`, a
+    commented-out definition, a doc comment, a string, a lower-case variable, an
+    `impl`), and a real definition INSIDE each excluded root — without those the
+    root filter and the allow-list subtraction are untested.
+    """
+    _atom_registry(root)
+    (root / "fixture").mkdir(parents=True, exist_ok=True)
+    (root / "fixture" / "lib.rs").write_text(
+        "pub struct AtomFixture;\n"
+        "pub struct PlainThing;\n"
+        "use x::AtomThing;\n"
+        "// pub struct AtomCommented;\n"
+        "/// A doc comment naming `pub struct AtomDoc`.\n"
+        "const NAME: &str = \"AtomString\";\n"
+        "fn f() { let atom_local = 1; }\n"
+        "impl AtomThing {}\n",
+        encoding="utf-8")
+    (root / "corpus-engine-vocab" / "src").mkdir(parents=True, exist_ok=True)
+    (root / "corpus-engine-vocab" / "src" / "atoms.rs").write_text(
+        "pub struct AtomInVocab;\n", encoding="utf-8")
+    (root / "corpus-engine" / "src" / "enrichment").mkdir(parents=True,
+                                                          exist_ok=True)
+    (root / "corpus-engine" / "src" / "enrichment" / "writer.rs").write_text(
+        "pub struct AtomInEnrichment;\n", encoding="utf-8")
+
+
+AXES.append({
+    "id": "atom-outside",
+    "detect": atom_defs,
+    "positive": _atom_positive,
+    "negative": _atom_negative,
+})
+
+
+@subcommand("atom-outside")
+def cmd_atom_outside(args: list[str]) -> int:
+    """Print the definitions, the allow-list digest, or the measurement line."""
+    found = atom_defs(REPO)
+    allow = atom_allowlist(registry())
+    if "--json" in args:
+        emit_measurement(len(found))
+        return EXIT_OK
+    print("atom-outside — pub Atom* definitions outside corpus-engine-vocab/ and "
+          "corpus-engine/src/enrichment/\n  (Understanding's word; the registry's "
+          "kept Atom* rows are the allow-list)\n")
+    for d in sorted(found, key=lambda d: (d["file"], d["line"])):
+        print(f"  {d['name']:<22} {d['file']}:{d['line']}")
+    print(f"\n  allow-list ({len(allow)}): {', '.join(allow) or '(none)'}")
+    print(f"  allow-list digest: {_allowlist_digest(allow)}")
+    print(f"\n  value: {len(found)} definitions outside the vocabulary roots")
     return EXIT_OK
 
 

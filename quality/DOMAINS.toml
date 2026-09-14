@@ -1443,7 +1443,14 @@ rename = "Fabric says Member; Serving says Candidate (DOMAINS.md section 5 call 
 #   fabric     = Member     (converge: 2 defs, both back-of-house/workbench; 1 exempt, 1 renamed apart at 13 refs)
 #   compute    = Donor      (converge: 0 defs; the one kin WorkDonorHandle @ sovereign-mesh/src/work_donor.rs:363 is Compute's own)
 #
-# TALLY: keep 11 · rename 56 · merge 5 · delete 0 = 72
+# TALLY: keep 11 · rename 56 · merge 5 · delete 0 = 72 Peer rows
+#
+# Plus THREE non-Peer rows appended 2026-09-14 by dm-atom-outside: the axum
+# query binders that are that bar's ALLOW-LIST (campaigns/domains.toml
+# dm-atom-outside; DOMAINS.toml [[collision]] "Atom* in corpus-engine-archaeology"
+# CONSEQUENCE; DOMAINS.md §10.5). They are `disposition = "decided:keep"` so the
+# instrument reads the allow-list as registry data — widening it is a diff a
+# reviewer reads, never a script edit. Total [[noun]] rows: 75.
 
 [[noun]]
 name = "MeshPeering"
@@ -2236,6 +2243,47 @@ context = "workspace"
 disposition = "decided:rename"
 word = "MeshReplicatedKvStub"
 why = "17 refs / 1 file. Test PeerStore impl over Arc<MeshStore> at :43 - C8, not a peer noun"
+
+# ── The atom-outside ALLOW-LIST (dm-atom-outside, 2026-09-14) — exactly three
+#    axum query binders, and nothing else. A wire shape that carries the word
+#    is not a claim on it: each is a `Query`/`Json` extractor over offset/limit
+#    (or a filter + page cursor), not atom vocabulary, so renaming one moves no
+#    coupling. The instrument subtracts `disposition = "decided:keep"` rows by
+#    name and prints their digest beside the value, so a fourth binder cannot
+#    join the allow-list without a registry diff (the bar's goodhart).
+
+[[noun]]
+name = "AtomLimitQuery"
+crate = "sovereign-mesh"
+file = "sovereign/crates/sovereign-mesh/src/meshapp_http.rs:87"
+visibility = "pub"
+concept = "C6"
+context = "host"
+disposition = "decided:keep"
+word = ""
+why = "ALLOW-LIST (dm-atom-outside). Axum `?limit=` binder for meshapp_claims/meshapp_questions; its only field is `limit: Option<usize>` (:88-90). A wire shape, not Understanding's atom vocabulary."
+
+[[noun]]
+name = "AtomsPageQuery"
+crate = "sovereign-mesh"
+file = "sovereign/crates/sovereign-mesh/src/reading_http.rs:221"
+visibility = "pub"
+concept = "C6"
+context = "host"
+disposition = "decided:keep"
+word = ""
+why = "ALLOW-LIST (dm-atom-outside). Axum pagination binder; `offset: usize` + `limit: usize` (:222-226). A wire shape, not Understanding's atom vocabulary."
+
+[[noun]]
+name = "AtomBrowseRequest"
+crate = "sovereign-mesh"
+file = "sovereign/crates/sovereign-mesh/src/atlas_http.rs:53"
+visibility = "pub"
+concept = "C6"
+context = "host"
+disposition = "decided:keep"
+word = ""
+why = "ALLOW-LIST (dm-atom-outside). Axum `Json` browse body; `filter: Option<AtomFilter>` + `page: Option<PageCursor>` (:54-57). A wire shape, not Understanding's atom vocabulary."
 
 # ═══ Edges — cross-context sharing E1-E13 (dm-shared-edges' denominator); translations are designed in quality/DOMAINS.md §10 and land in rungs 5/6/7 ═══
 [[edge]]
