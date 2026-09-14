@@ -4610,9 +4610,10 @@ class Kernel:
                     return any(l.split("/")[-1] == n for l in git("ls-tree", "-r", "--name-only", sha).splitlines())
                 if "::" in n:                            # Type::member: both names in one file (e02c5365 t8: FastMeta::size_bytes)
                     typ, mem = n.rsplit("::", 1)
-                    files = [f.split(":", 1)[1] if ":" in f else f            # git grep at a sha prefixes 'sha:path'
-                             for f in git("grep", "-lF", mem, sha).splitlines()]  # the member is the rarer name (bb36c21e t11: Runtime:: is everywhere)
-                    return any(typ.split("::")[-1] in git("show", f"{sha}:{f}") for f in files[:60])
+                    # --all-match: a file carrying both names, no cap, no
+                    # second read (a 60-file cap missed co-oplog.py for
+                    # 'Kernel::summaries'; Runtime:: is everywhere, bb36c21e t11).
+                    return bool(git("grep", "-l", "--all-match", "-F", "-e", typ.split("::")[-1], "-e", mem, sha).strip())
                 return bool(git("grep", "-ilF", n, sha).strip())                       # -i: 'extraction_lead' is EXTRACTION_LEAD (995d04b9)
             end = self.sha_end() or sha_t
             head = git("rev-parse", "HEAD").strip()
