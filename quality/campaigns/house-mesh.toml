@@ -235,25 +235,3 @@ status       = "open"
 # platform. Kill condition for the campaign: the house still routes media
 # through one box at month 2 — federation lost on its merits and the
 # interesting question is why, not how to evangelise harder.
-
-[[bar]]
-id           = "hm-origin-audience-per-name"
-demo         = "Everyone sees the print queue; two people see the chore ledger"
-rung         = "hm-5"
-one_line     = "CLAIM: on a two-daemon mesh one node publishes two apps with different allow lists, and in the same run one member is served by the first and refused by name by the second"
-derives_from = "`commonwealth_media::admit_app` motivates App as its own trust class with the sentence 'everyone may see the print queue, two people may see my films' (commonwealth-media/src/identity.rs:181-186). Per-kind lists express that ACROSS kinds, but `AppRoutes.allow` is ONE list for every published app (sovereign-mesh/src/iroh_access.rs:382-394), so between two apps - a print queue and a chore ledger - it cannot be said at all. The audience belongs to the origin, not the kind."
-floor        = 0.0
-floor_basis  = "structural: FRACTION of the two legs - served by app A, refused by app B - for the SAME member against the SAME node in one run. Zero at declaration: no config can express it."
-target       = 1.0
-direction    = "higher_is_better"
-# instrument   = (none yet) - co-lineage EXECS this field, and a cargo test filter
-#   naming a test that does not exist yet runs zero tests and exits 0: a vacuous
-#   pass. Owed: `cargo test -p commonwealth-rails --test two_daemons
-#   hm_origin_audience_per_name` once that test exists and has been watched failing.
-instrument_note = "the existing two_daemons.rs rig (house-mesh ambiguity policy: prove it cannot serve before adding a rig). Real iroh; the dialing member is identical across both legs, and the refusal body names the origin, never its allow list."
-goodhart     = "an app that refuses everyone scores the refused leg, and a dialer refused for not being a member proves nothing about per-origin audience. Both legs, one admitted member, one run."
-status       = "open"
-# Declared 2026-09-14 with order hm-5-one-origin (approval pending). campaign.md's
-# Ladder lists the multi-origin design as explicitly NOT in this campaign; approving
-# that order is the decision to fund it as hm-5, and belongs in campaign.md
-# Decisions when made.

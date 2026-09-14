@@ -139,6 +139,23 @@ instrument_note = "spike q6 across this Mac and the Fedora peer; the operator st
 goodhart     = "0.9 against a slow control is easy. The control must be plain HTTP over the same LAN path - not over tailnet WireGuard, not an x86_64 curl under Rosetta (the spike's loopback control was one). A reading taken before the dev-profile overrides land measures the build, not the stack."
 status       = "open"
 
+[[bar]]
+id           = "ra-origin-audience-per-name"
+demo         = "Everyone sees the print queue; two people see the chore ledger"
+rung         = "ra-3"
+one_line     = "CLAIM: on a two-daemon mesh one node publishes two apps with different allow lists, and in the same run one member is served by the first and refused by name by the second"
+derives_from = "`commonwealth_media::admit_app` motivates App as its own trust class with the sentence 'everyone may see the print queue, two people may see my films' (commonwealth-media/src/identity.rs:181-186). Per-kind lists express that ACROSS kinds, but `AppRoutes.allow` is ONE list for every published app (sovereign-mesh/src/iroh_access.rs:382-394), so between two apps - a print queue and a chore ledger - it cannot be said at all. The audience belongs to the origin, not the kind, which is what collapsing Media/App/Offer into one registry buys."
+floor        = 0.0
+floor_basis  = "structural: FRACTION of the two legs - served by app A, refused by app B - for the SAME member against the SAME node in one run. Zero at declaration: no config can express it."
+target       = 1.0
+direction    = "higher_is_better"
+# instrument   = (none yet) - co-lineage EXECS this field, and a cargo test filter
+#   naming a test that does not exist yet runs zero tests and exits 0: a vacuous
+#   pass. Owed once the test exists and has been watched failing.
+instrument_note = "the existing two-daemon rig (commonwealth-rails/tests/two_daemons.rs) before any new one. Real iroh; the dialing member is identical across both legs, and the refusal body names the origin, never its allow list."
+goodhart     = "an app that refuses everyone scores the refused leg, and a dialer refused for not being a member proves nothing about per-origin audience. Both legs, one admitted member, one run."
+status       = "open"
+
 # ── THE LADDER ───────────────────────────────────────────────────────────────
 
 [[rung]]
@@ -170,6 +187,6 @@ id     = "ra-3"
 title  = "blob distribution — iroh-blobs for the bytes an act references"
 status = "open"
 demo   = "D3"
-moves  = ["ra-send-reaches-only-the-grantee", "ra-bytes-never-served-wrong", "ra-blob-lan-parity"]
-note   = "S5. Independent of ra-1 and ra-2 and can run in parallel with a different pair of hands. Nothing visual works in either domain while a photo radiates from one node's first hop. BARS DECLARED 2026-09-14 with order ring-3-blobs (approval pending): the byte plane, a private send to one member, and the GGUF plane moved onto it so the mesh keeps one way to move files. Demo 3 is UNBLOCKED by that order, not delivered - a photo in an offer is the public case, a ring act carrying a blob reference."
+moves  = ["ra-send-reaches-only-the-grantee", "ra-bytes-never-served-wrong", "ra-blob-lan-parity", "ra-origin-audience-per-name"]
+note   = "S5. Independent of ra-1 and ra-2 and can run in parallel with a different pair of hands. Nothing visual works in either domain while a photo radiates from one node's first hop. BARS DECLARED 2026-09-14 with order ring-3-blobs (approval pending), consolidated here by operator direction: the byte plane, a private send to one member, the GGUF plane moved onto it so the mesh keeps one way to move files, and the Media/App/Offer origin stacks collapsed into one registry with an audience per name. Demo 3 is UNBLOCKED by that order, not delivered - a photo in an offer is the public case, a ring act carrying a blob reference."
 
