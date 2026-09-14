@@ -120,6 +120,11 @@ repointed. A red gate you cannot make green: §6.
 
 ## 5. Checks — from the repo root; `mkdir -p target/ralph` first
 
+On Linux (`uname` prints `Linux`) every check must run inside the
+`sovereign-vulkan` toolbox — native builds fail outside it. The loop is launched
+from inside the toolbox, so run the commands as written; if `/run/.containerenv`
+does not exist on a Linux host, you are outside it: stop (§6) before building.
+
 | name | command | passes when |
 |---|---|---|
 | LINT | `./scripts/with-cargo-lock.sh ./scripts/sovereign-lint.sh --human > target/ralph/lint.log 2>&1; echo exit=$?; tail -5 target/ralph/lint.log` | exit=0 |

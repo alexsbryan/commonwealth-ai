@@ -20,6 +20,12 @@ nohup scripts/ralph-loop.sh --workdir . --label domains \
 `--review-every 0` because reviews are rows here; any unit id containing
 `REVIEW` goes to the review model.
 
+On the Fedora peer: `toolbox enter sovereign-vulkan` first and launch from
+inside it (opencode must be on its PATH); drop `--notify`, which is macOS-only.
+The O3/O8/O9/O10 pointers are gitignored per-host files under
+`.sovereign/features/` — copy those four directories and `domains/` to the
+peer's checkout before launching, or the rows point at nothing.
+
 Pointer keys:
 DC = `quality/DAEMON_CORE.md` ·
 SB = `sovereign/SERVING_BOUNDARY.md` ·
