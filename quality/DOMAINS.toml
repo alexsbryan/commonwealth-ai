@@ -52,7 +52,7 @@ owns = ["Atom", "Tension", "Ontology", "Seed", "Atlas", "Lacuna", "FieldModel"]
 # 37 refs / 11 files); SeedError/SeedReport are Understanding's own. `Cluster`
 # is never persisted under atlas/ (writer.rs has zero matches) — not a noun.
 package = ""
-crates = ["corpus-engine-vocab"]   # + the understanding crate wave 3 creates (DECOMPOSITION spells it corpus-engine-enrichment); until then enrichment/ is misfiled in corpus-engine
+crates = ["corpus-engine-vocab", "understanding-atlas", "understanding-host"]   # + the understanding crate wave 3 creates (DECOMPOSITION spells it corpus-engine-enrichment); until then enrichment/ is misfiled in corpus-engine
 lift = ""
 applicable_as = "point it at a folder, get back what the material is about — its domains, its tensions, its gaps; corpus-mcp already reads its output against a bare llama-server"
 roots = ["corpus-engine/src/enrichment", "corpus-engine/src/meta_atlas", "corpus-engine/src/atlas_traversal", "corpus-engine-vocab"]
@@ -121,9 +121,9 @@ question = "which engine answers this, and can I prove why?"
 # CONVERGES with DAEMON_CORE.md §1's `principal -> Scope` table: zero renames.
 # Its owner may move to Answering (beside `Scope`) when daemon-core Phase 5
 # lands one resolver; until then Admission is its only consumer.
-owns = ["Venue", "Principal", "Slot", "Admission", "Replay", "Decision"]
+owns = ["Venue", "Slot", "Admission", "Replay", "Decision"]
 package = ""          # rung 9 declares [[package]] serving
-crates = ["sovereign-scheduler", "sovereign-serving-host", "serving-policy", "sovereign-serving"]   # the first two are CREATED by dm-mesh-serving (SERVING_BOUNDARY.md); sovereign-serving empties
+crates = ["sovereign-scheduler", "sovereign-serving-host", "serving-policy", "sovereign-serving", "sovereign-compute"]   # the first two are CREATED by dm-mesh-serving (SERVING_BOUNDARY.md); sovereign-serving empties
 lift = ""             # rung 9 writes scripts/serving-lift.sh
 applicable_as = "a router in front of N OpenAI-compatible endpoints with admission control and replayable decisions"
 roots = ["sovereign/crates/sovereign-serving", "serving-policy"]
@@ -151,7 +151,7 @@ owns = ["Unit", "Offer", "Lease", "Isolation", "Donor"]
 # `Donor` has ZERO first-party definitions today (converge, 2026-09-13) — the
 # one proposed word that is clean.
 package = "commonwealth"   # the vocabulary half, commonwealth-work, is inside the package
-crates = ["commonwealth-work", "sovereign-compute"]   # the executor half's home is confirmed by the wave-1 cluster graph (sovereign-compute exists at tier 3)
+crates = ["commonwealth-work", "sovereign-pods"]   # 2026-09-14 (DOMAINS.md §11.2): commonwealth-work IS the context (fold, lease predicate, executor registry); sovereign-pods (rented pods) is proposed; sovereign-compute was chosen by name and tier and is Serving's local engine
 lift = "scripts/cw-work-lift.sh --sandbox"
 applicable_as = "proven: three heterogeneous units complete outside the monorepo inside a rootless container"
 roots = ["commonwealth/crates/commonwealth-work"]
@@ -282,15 +282,15 @@ note = "daemon handler; the read model it serves is Understanding's"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/auto_ingest.rs"
-context = "ingest"
+context = "host"
 lines = 1459
-note = ""
+note = "was ingest; jobs — DAEMON_CORE.md §3.2, §4.3 (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/auto_resume.rs"
-context = "ingest"
+context = "host"
 lines = 384
-note = ""
+note = "was ingest; jobs — DAEMON_CORE.md §3.2, §4.3 (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/canonical_pull.rs"
@@ -402,9 +402,9 @@ note = ""
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/governance_http.rs"
-context = "fabric"
+context = "host"
 lines = 1015
-note = "ring governance routes - the mesh's own"
+note = "ring governance routes - the mesh's own; was fabric; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/guest_lender.rs"
@@ -414,9 +414,9 @@ note = "grant posture is a routing input; read only by peer_inference (:477-479,
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/guest_tunnel.rs"
-context = "compute"
+context = "fabric"
 lines = 134
-note = ""
+note = "was compute; reach — DOMAINS.md §11.2 (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/http_response.rs"
@@ -432,9 +432,9 @@ note = ""
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/ingest_executor.rs"
-context = "ingest"
+context = "host"
 lines = 736
-note = ""
+note = "was ingest; jobs — DAEMON_CORE.md §3.2, §4.3 (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/insight_http.rs"
@@ -468,15 +468,15 @@ note = ""
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/knowledge_client.rs"
-context = "retrieval"
+context = "kernel"
 lines = 209
-note = "client for a peer's knowledge search; the question it asks is Retrieval's"
+note = "client for a peer's knowledge search; the question it asks is Retrieval's; was retrieval; client of the daemon's own surface; the client family — DAEMON_CORE.md §4.3 (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/landscape_digest_client.rs"
-context = "understanding"
+context = "kernel"
 lines = 281
-note = ""
+note = "was understanding; client of the daemon's own surface; the client family — DAEMON_CORE.md §4.3 (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/landscape_digest_http.rs"
@@ -546,9 +546,9 @@ note = ""
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/mesh_http.rs"
-context = "fabric"
+context = "host"
 lines = 1825
-note = "membership routes - the mesh's own"
+note = "membership routes - the mesh's own; was fabric; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/meshapp_http.rs"
@@ -570,9 +570,9 @@ note = ""
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/newsworthy_host.rs"
-context = "understanding"
+context = "host"
 lines = 639
-note = ""
+note = "was understanding; adapter — DAEMON_CORE.md §4.3 (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/notes_http.rs"
@@ -618,15 +618,15 @@ note = ""
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/pinned_pod_snapshot.rs"
-context = "compute"
+context = "serving"
 lines = 394
-note = ""
+note = "was compute; sovereign-serving-host — SERVING_BOUNDARY.md corrections (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/pinned_transport.rs"
-context = "compute"
+context = "serving"
 lines = 274
-note = ""
+note = "was compute; sovereign-serving-host — SERVING_BOUNDARY.md corrections (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/pinned_worker_source.rs"
@@ -660,9 +660,9 @@ note = "its ONE import is sovereign_api::openai_types (:48) - wire types the ran
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/publish_http.rs"
-context = "fabric"
+context = "host"
 lines = 147
-note = "/v1/mesh/media + /v1/mesh/app - what this node offers the house"
+note = "/v1/mesh/media + /v1/mesh/app - what this node offers the house; was fabric; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/rail_bind.rs"
@@ -714,9 +714,9 @@ note = ""
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/research_run_dir.rs"
-context = "understanding"
+context = "research"
 lines = 706
-note = ""
+note = "was understanding; reads the research loop's own run artifacts — DAEMON_CORE.md §4.3 (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/ring_roster.rs"
@@ -738,9 +738,9 @@ note = ""
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/rpc_warm_http.rs"
-context = "serving"
+context = "host"
 lines = 1214
-note = "*_http but the decision is Serving's - distributed-inference auto-warm orchestration"
+note = "*_http but the decision is Serving's - distributed-inference auto-warm orchestration; was serving; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/scheduler_core.rs"
@@ -756,9 +756,9 @@ note = "no imports at all - pure policy data"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/source_content_validator.rs"
-context = "understanding"
+context = "serving"
 lines = 551
-note = ""
+note = "was understanding; sovereign-serving-host — SERVING_BOUNDARY.md corrections (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/state.rs"
@@ -816,27 +816,27 @@ note = ""
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/watched_folder_runtime.rs"
-context = "ingest"
+context = "host"
 lines = 86
-note = ""
+note = "was ingest; jobs — DAEMON_CORE.md §3.2, §4.3 (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/watched_folder_setup.rs"
-context = "ingest"
+context = "host"
 lines = 221
-note = ""
+note = "was ingest; jobs — DAEMON_CORE.md §3.2, §4.3 (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/work_atlas_broadcaster.rs"
-context = "workspace"
+context = "host"
 lines = 233
-note = ""
+note = "was workspace; adapter — DAEMON_CORE.md §4.3 (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/work_donor.rs"
-context = "compute"
+context = "host"
 lines = 1194
-note = ""
+note = "was compute; jobs — DAEMON_CORE.md §3.2, §4.3 (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/worker_controller.rs"
@@ -852,9 +852,9 @@ note = ""
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/worker_eligibility.rs"
-context = "compute"
+context = "serving"
 lines = 1195
-note = ""
+note = "was compute; sovereign-serving-host — SERVING_BOUNDARY.md corrections (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/worker_http.rs"
@@ -888,21 +888,21 @@ note = ""
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/auto_ingest/heartbeat_verdict.rs"
-context = "ingest"
+context = "host"
 lines = 110
-note = ""
+note = "was ingest; jobs — DAEMON_CORE.md §3.2, §4.3 (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/auto_ingest/heartbeat_verdict/tests.rs"
-context = "ingest"
+context = "host"
 lines = 96
-note = ""
+note = "was ingest; jobs — DAEMON_CORE.md §3.2, §4.3 (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/ingest_executor/tests.rs"
-context = "ingest"
+context = "host"
 lines = 318
-note = ""
+note = "was ingest; jobs — DAEMON_CORE.md §3.2, §4.3 (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/measurements_rail/tests.rs"
@@ -948,9 +948,9 @@ note = ""
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/work_donor/tests.rs"
-context = "compute"
+context = "host"
 lines = 718
-note = ""
+note = "was compute; jobs — DAEMON_CORE.md §3.2, §4.3 (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/admission.rs"
@@ -1104,9 +1104,9 @@ note = ""
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_completions.rs"
-context = "serving"
+context = "host"
 lines = 555
-note = ""
+note = "was serving; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_edit_predictions.rs"
@@ -1116,9 +1116,9 @@ note = ""
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_inference.rs"
-context = "serving"
+context = "host"
 lines = 2342
-note = ""
+note = "was serving; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_internal/atlas_status.rs"
@@ -1164,9 +1164,9 @@ note = ""
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_internal/gossip.rs"
-context = "fabric"
+context = "host"
 lines = 196
-note = "the mesh's own; also the ONE non-harness consumer of sovereign_serving::InferencePlan (:15, :180)"
+note = "the mesh's own; also the ONE non-harness consumer of sovereign_serving::InferencePlan (:15, :180); was fabric; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_internal/guest_grant.rs"
@@ -1182,9 +1182,9 @@ note = ""
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_internal/mesh_admin.rs"
-context = "fabric"
+context = "host"
 lines = 1598
-note = "membership routes - the mesh's own"
+note = "membership routes - the mesh's own; was fabric; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_internal/mod.rs"
@@ -1194,9 +1194,9 @@ note = ""
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_internal/model_files.rs"
-context = "serving"
+context = "host"
 lines = 611
-note = ""
+note = "was serving; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_internal/newsworthy_status.rs"
@@ -1206,9 +1206,9 @@ note = ""
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_internal/peer_preference.rs"
-context = "serving"
+context = "host"
 lines = 403
-note = "operator routing policy - DOMAINS 3 names PeerPreference as one of the seven Peer meanings"
+note = "operator routing policy - DOMAINS 3 names PeerPreference as one of the seven Peer meanings; was serving; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_internal/pipeline_pause.rs"
@@ -1218,51 +1218,51 @@ note = ""
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_internal/ring_sync.rs"
-context = "fabric"
+context = "host"
 lines = 207
-note = "the mesh's own"
+note = "the mesh's own; was fabric; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_internal/rpc_warm.rs"
-context = "serving"
+context = "host"
 lines = 94
-note = ""
+note = "was serving; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_knowledge.rs"
-context = "retrieval"
+context = "host"
 lines = 590
-note = ""
+note = "was retrieval; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_oicp.rs"
-context = "serving"
+context = "host"
 lines = 653
-note = ""
+note = "was serving; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_oicp_ingest.rs"
-context = "ingest"
+context = "host"
 lines = 292
-note = ""
+note = "was ingest; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_ollama.rs"
-context = "serving"
+context = "host"
 lines = 716
-note = ""
+note = "was serving; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_rail.rs"
-context = "fabric"
+context = "host"
 lines = 443
-note = ""
+note = "was fabric; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_responses.rs"
-context = "serving"
+context = "host"
 lines = 2746
-note = ""
+note = "was serving; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_status.rs"
@@ -3737,6 +3737,8 @@ note = "wiki link graph over the v2 columnar store WRITTEN by enrichment::atlas:
 # lowest-tier real consumer.
 
 # ───────────────────────────────────────────────────────────── understanding
+# 2026-09-14 design rungs: module rows were re-tagged after these cluster measurements (DAEMON_CORE.md §4,
+# DOMAINS.md §11); lines/imports below are the 09-14 morning reading and are recomputed by the census, not by hand.
 [[cluster]]
 crate = "corpus-engine"
 context = "understanding"
@@ -4531,7 +4533,7 @@ own_dep_max_tier = 5
 consumer_min_tier = 6
 window = [5, 6]
 window_after_port = [4, 6]  # sovereign-api reach cut, sovereign_core re-exports repointed
-dest = "sovereign-work-atlas"
+dest = "sovereign-daemon adapters — DAEMON_CORE.md §4.3"
 dest_exists = true
 dest_tier = "4"
 shim_sites = 1  # external import sites that break without a re-export
@@ -4609,7 +4611,7 @@ own_dep_max_tier = 3
 consumer_min_tier = 6
 window = [3, 6]
 window_after_port = [2, 6]  # sovereign-api reach cut, sovereign_core re-exports repointed
-dest = "corpus-engine"
+dest = "the client family beside sovereign-turn-client — DAEMON_CORE.md §4.3"
 dest_exists = true
 dest_tier = "1"
 shim_sites = 1  # external import sites that break without a re-export
@@ -5328,7 +5330,7 @@ own_dep_max_tier = 5
 consumer_min_tier = 6
 window = [5, 6]
 window_after_port = [2, 6]  # sovereign-api reach cut, sovereign_core re-exports repointed
-dest = "sovereign-compute"
+dest = "split: sovereign-pods (rented pods) / sovereign-daemon jobs (donor) / sovereign-serving-host (eligibility, pinned) / sovereign-mesh (guest_tunnel) — DOMAINS.md §11.2"
 dest_exists = true
 dest_tier = "3"
 shim_sites = 45  # external import sites that break without a re-export
@@ -5734,7 +5736,7 @@ own_dep_max_tier = 5
 consumer_min_tier = 6
 window = [5, 6]
 window_after_port = [2, 6]  # sovereign-api reach cut, sovereign_core re-exports repointed
-dest = "sovereign-enrichment-build"
+dest = "sovereign-daemon jobs — DAEMON_CORE.md §4.3"
 dest_exists = true
 dest_tier = "4"
 shim_sites = 2  # external import sites that break without a re-export
@@ -5894,7 +5896,7 @@ own_dep_max_tier = 5
 consumer_min_tier = -1  # no external consumer
 window = [5, 6]
 window_after_port = [4, 6]  # sovereign-api reach cut, sovereign_core re-exports repointed
-dest = "sovereign-enrichment-build"
+dest = "split by the adapter rule: sovereign-daemon adapters / research / sovereign-serving-host / the client family / Understanding read model — DAEMON_CORE.md §4.3"
 dest_exists = true
 dest_tier = "4"
 shim_sites = 0  # external import sites that break without a re-export

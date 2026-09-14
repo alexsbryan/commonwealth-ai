@@ -77,9 +77,10 @@ Tier 6 — corpus data plane (what's LEFT of corpus-engine after carve-outs)
                                                  sovereign_config, progress, yield_hook,
                                                  update/{watch, delta})
 
-Tier 7 — enrichment (its own big subsystem)
-  corpus-engine-enrich                          (enrichment/{atlas, pipeline, domains,
-                                                 investigation, entity_extraction, …})
+Tier 7 — Understanding, as a package (redrawn 2026-09-14: "Step 7, redrawn")
+  corpus-engine-vocab → understanding-vocab     (the products and the read door)
+  understanding-atlas                           (pure: resolve, classify, walk)
+  understanding-host                            (stores, writers, runner — the I/O)
 
 Tier 8 — domain-specific corpora
   corpus-engine-wikipedia                       (wikipedia_graph, canonical_sync,
@@ -107,7 +108,7 @@ catch-all.
 | `corpus-engine-archaeology` | ~2,000           | 1–2                    | Low     |
 | `corpus-engine-scip`        | ~3,700 (DONE)    | 7                      | —       |
 | `corpus-engine-watchers`    | ~3,300           | 5                      | Low     |
-| `corpus-engine-enrich`      | ~40,000          | 6                      | **Very high** |
+| `understanding-*` (was `corpus-engine-enrich`) | 102,227 measured 2026-09-14, not ~40,000 | 14 crates name it | **Very high** — Step 7, redrawn |
 | `corpus-engine-wikipedia`   | ~5,000           | 2–3                    | Medium  |
 
 ---
@@ -211,7 +212,9 @@ should follow:
 - **Don't carve `enrich` until 1–6 are done.** Enrichment has the deepest
   internal coupling (resolution.rs is 4914 lines; literary_atlas.rs is
   3127). Without the other carve-outs settled, you can't tell where the
-  enrichment ↔ ingest boundary actually lives.
+  enrichment ↔ ingest boundary actually lives. *Superseded 2026-09-14:* the
+  `domains` campaign orders crates biggest-first, and the boundary is now
+  measured rather than waited for (Step 7, redrawn).
 - **Don't split the remaining `corpus-engine` back into ingest /
   engine / recipe / snapshot sub-crates.** After the decomposition, what
   remains is ~30k LOC of coherent ingest pipeline. Keep it whole unless a
@@ -258,6 +261,116 @@ that actually grows.
 
 ---
 
+## Step 7, redrawn — Understanding leaves as a package (2026-09-14)
+
+Design only, the `domains` campaign's rung D6, reviewed before anything moves. Leading with what
+the plan above had wrong: Tier 7's `corpus-engine-enrich` was one crate of ~40,000 lines, and
+what it describes measures 102,227 lines in 170 files (`quality/DOMAINS.md` §6, §8). One crate
+that size re-mints the god crate this plan exists to split. The seam the plan waited for is
+now measured, and it is three ports and a leaf rather than a line through `enrichment/`.
+
+### The shape
+
+| tier | crate | holds | may name |
+|---|---|---|---|
+| published language | `corpus-engine-vocab`, renamed `understanding-vocab` when the door moves into it | the products — atoms, edges, ontology, the field skeleton, articulation types, the atlas layout constants — and the read door | `kernel-types` only (its `[[package_leaf]]` row) |
+| pure | `understanding-atlas` (108 files, 50,919 lines today) | the arithmetic over the language: analysis, resolution by name, classification, the ground walk, domains, ontology, reconciliation, pipeline types and schemas, meta-atlas and traversal logic | the language, `kernel-types`, and the row types the index leaf publishes; **no `async fn`** |
+| host | `understanding-host` (62 files, 51,308 lines) | the capabilities with I/O: stores and the ANN, writers, the field engine, entity extraction, the phase runner | `corpus-engine`, the index leaf, the pure tier, the language |
+
+Measured by scanning each file for the capability it reaches (index, engine, store, embedding,
+completion, filesystem, clock, env), with inline tests stripped and 14 false positives adjudicated
+by hand. The crate names are proposals for the operator.
+
+**The pure tier is synchronous.** That is the structural form of "arithmetic over the language",
+and it has a failing input today: the ground walk awaits an ANN query through `AtlasProvider`.
+Four host files — `resolution`, `ground::select`, `atlas_clustering`, `investigation`'s root,
+7,535 lines — are impure only because they call an injected embed or completion function, so
+vectors or responses passed in would make them pure. Where an algorithm has to embed as it goes,
+it stays in the host and says why; that count, not a line total, is what the pure tier is judged
+by.
+
+**This is the `corpus-mcp` package growing, not a second package.** `sovereign-enrichment-build`
+(the build orchestrator) and `sovereign-enrichment-catalog` (the enrichment store's layout) are
+already members of `[[package]] corpus-mcp`, and that package's lift — a third party querying an
+index and reading what enrichment produced against a bare `llama-server` — is Understanding's
+applicable-as for its query half. The carved tiers join that crate list.
+
+### Direction: Understanding reads Ingest and Retrieval, never the reverse
+
+- **The pass port is the engine's.** Today `engine/ingest` runs enrichment at install by resolving
+  `EnrichmentPassRegistry::builtin()` inside `corpus-engine` and handing each pass an
+  `EnrichmentContext` (recipe, index, embed and completion functions). The engine is the caller,
+  so the `EnrichmentPass` trait and its context belong to `corpus-engine`, and the engine receives
+  the registry at construction from whoever assembles it. The passes implement the port in
+  `understanding-host`, which already depends on `corpus-engine`. Passes still run at install; what
+  changes is who names whom.
+- **A config block is owned by its reader and carried by the recipe.** The recipe blocks
+  Understanding interprets (the `[enrichment]` table and the ontology and pattern declarations)
+  move to the language, and Ingest's `Recipe` embeds them — `corpus-engine` already depends on
+  vocab. Today 40 recipe sites in 22 Understanding files are this edge running the wrong way.
+- **The same rule settles the index leaf** (below): a type the index persists is defined by the
+  index, and the document that configures it embeds it.
+
+### The ports: reuse before minting
+
+| capability | today | decided |
+|---|---|---|
+| embed texts | `EmbedFn`, named in 19 Understanding files and 87 outside | keep; Retrieval's, published by the leaf |
+| complete a prompt | two closure ports for one capability, `InferenceFn` and `ChatCompletionFn`, beside `InferenceProvider::complete` | converge on one closure port before anything moves (ARCH 8), declared by the pure tier |
+| read chunks and embeddings | the concrete `CorpusIndex`; `EvidenceFetcher` is the one Understanding-owned read port, implemented by `sovereign-core` and `corpus-mcp` | the leaf publishes the read methods; `EvidenceFetcher` stays the query port |
+| the walk's seeds | `AtlasProvider` exposes a lancedb `AnnSeedTable` | closed: seeds arrive as language values, and the ANN store is a host implementation |
+| write atlas artifacts | 195 write sites in 34 files, four private atomic-write copies, no store trait | one write door in the host, the mirror of the read door. `AssetStore` was checked and is a different question: content-addressed binary assets, not per-corpus files rewritten in place |
+| clock and env | read inline in 12 and 5 host files | `now` passed in; settings as constructor arguments |
+| progress | `EnrichmentProgressSink` and `EnrichProgressFn`, the latter aliased again in `sovereign-tools` | reuse; the alias goes |
+
+### The read-port leaf, measured again
+
+It is not self-contained at 5,376 lines. The seven index files name no enrichment code, but they
+reach `CorpusIndex` in `index/mod.rs`, which names the recipe's merge policy and display metadata,
+the filter configuration, corpus metadata, `CorpusKind` and `StreamAxes`, and carries the field
+model's JSON persistence; `index/read` names the chunker's `CommittedChunk`. With `mod.rs` the leaf
+is 7,758 lines, and by the rule above the settings it persists and the `{id, content_hash}` row it
+reads are defined in the leaf and embedded by the recipe.
+
+The three items that make the retrieval-to-understanding cycle each go to the side both reach
+down to. `FieldSkeleton` goes to the language, and its four JSON methods leave `CorpusIndex` as
+host functions over the index directory. `stream_axes` splits: the per-corpus metadata goes to the
+leaf beside `IndexMeta`, the per-atom articulation types go to the language, and stability
+derivation stays with Ingest. `ATLAS_DIRNAME` goes to the language, beside the door.
+
+For `corpus-mcp`'s exception row: the leaf retires it for `serve` once the leaf publishes opening
+an index by corpus id, which today is a path join and an open with no engine involved. `ingest`
+still names `corpus-engine`, because it ingests, so the row's other two burn-down steps stand.
+Correcting the earlier cluster note: `corpus-mcp` writes no atlas file in production — those sites
+are test-only, and its `ingest` verb hands the build to `sovereign-enrichment-build`.
+
+### The door
+
+DOMAINS.md §10.5 decided the sealed door: a private wire twin, and `AtomsFile` not
+`Deserialize`. The inventory adds where the door is. The `read_atlas_*` functions live in the host
+file `writer`, so every reader of a product depends on host code — 64 call sites in 44 files outside
+`corpus-engine` — and 9 parsers outside and 3 inside bypass it. The door and the layout constants
+move to the language. The incident that justifies sealing it is already pinned by a `corpus-mcp`
+test: parsing `ontology.json` as bare policies succeeds with every field defaulted.
+`read_atlas_ontology` exists, so nothing is minted.
+
+### Who depends on which tier
+
+| consumer | crates (production sites) | names |
+|---|---|---|
+| runs enrichment | `sovereign-cli-llm` 413, `sovereign-tools` 219, `sovereign-enrichment-build` 211, `sovereign-mesh` 44 | host |
+| queries at turn time | `sovereign-core` 27, `corpus-mcp` 17 | pure tier, language, the query ports |
+| reads products | `sovereign-meshapp` 20, `sovereign-api` 7, `sovereign-runtime-recipe` 6, `sovereign-cli` 2 | language |
+| implements a port | `sovereign-gliner`, `sovereign-cli-daemon` | host's `ChunkEntityExtractor` |
+
+### Not settled
+
+Whether the algorithms that embed as they go can take vectors in without changing what they
+compute; if not, they stay host and the pure tier is smaller than 50,919. `enrichment/atlas/wiki_store/`
+was not opened.
+
+---
+
 ## Pointers
 
 - **Inspirations + concrete failure modes:** `sovereign/ARCH_PRINCIPLES.md`
@@ -287,7 +400,7 @@ that actually grows.
 - [x] **Step 4**: `corpus-engine-archaeology` (2026-05-23) — 2,709 LOC out, three consumers
 - [ ] Step 5: `corpus-engine-wikipedia`
 - [ ] Step 6: `corpus-engine-types`
-- [ ] Step 7: `corpus-engine-enrich`
+- [ ] Step 7: Understanding as a package — vocabulary half landed 2026-09-03; redrawn 2026-09-14 above
 - [ ] Step 8: `corpus-engine-extract` + `corpus-engine-index` (optional)
 
 ### Pattern lessons accumulating

@@ -35,13 +35,72 @@ only door**: `PeerEndpointSource` (`sovereign-mesh/src/peer_inference.rs:337`) p
 — nine fields, three predicates, one transport call, sixty lines. Phase C does not invent
 that seam; it renames it and moves it to the Fabric side.
 
+## Corrected 2026-09-14, before any move
+
+The design rung re-read this file against the tree; `quality/DAEMON_CORE.md` §4 holds the
+daemon-side half of the argument. Leading with what was wrong:
+
+- **The scheduler's decision is pure; the crate as listed was not.** `rank()` reads no clock —
+  `now_unix` arrives in `RankInputs`. But four of the ten modules the tier table lists as "no
+  I/O, no clock read" break it: `decision_log`'s recorder (clock stamps, a sequence counter, id
+  minting, the env-armed file sink), `yield_backoff` and `throughput_tracking` (monotonic clock
+  reads), and `oicp_select`'s local slot pick. Drawn again by what each piece does:
+  `sovereign-scheduler` holds the ranker, the decision and outcome record *types*, replay, and
+  trackers that take `now` as an argument the way `finish_at` already does; the recording sink —
+  file, env, clock, ids — is `sovereign-serving-host`'s.
+- **`pick_slot_for_oicp` is host code living in the scheduler.** It picks the *local* slot
+  through `sovereign-core`'s `DEFAULT_MANIFEST`, and its only production caller is the host's
+  inference adapter. It moves to `sovereign-serving-host`; until it does,
+  `sovereign-scheduler -> sovereign-core` is not zero.
+- **Entry (a)'s `local_node_id` is not a process constant.** Join adoption swaps the node id
+  inside a running daemon. The constructor argument is Fabric's identity reader
+  (`quality/DAEMON_CORE.md` §4.2).
+- **Entry (c)'s `Principal { Local, Member }` is withdrawn.** It folds the client fairness
+  gate's buckets into one arm, undoing the fix that gate exists for, and has no guest arm. The
+  caller's identity is published language resolved once at the daemon's edge, and admission
+  derives its keys from it (`quality/DAEMON_CORE.md` §3.3).
+- **Rule 4's count was one import; it is four files and three kinds.** The OpenAI wire types in
+  `inference_adapter` and `prompt_compactor` go to `oicp-types` — their defining modules import
+  nothing but serde and an `oicp-types` path. The `LocalInferenceService` port collapses (next
+  bullet). `EMBEDDED_FEATURES`, read by `oicp_synthesis`, moves beside it, and
+  `rpc_warm_http` is a route shell whose shard-warmer port stops taking `AppState`.
+- **`LocalInferenceService` is a second inference port** (design item D7). Ten of its fifteen
+  methods exist by name on `sovereign_contracts::traits::InferenceProvider`, a leaf; it was
+  minted when the API crate could not depend on the runtime, and that reason expired when it
+  began to. It collapses onto `InferenceProvider`: the OpenAI request and response translation
+  becomes an edge adapter in the daemon, and what only it carries — the FIM stream and edit-slot
+  status — stays with `fim_adapter` over the same provider. The four `/status` slot types beside
+  it are field-for-field copies of `oicp-types`' slot types that omit `None` where the originals
+  emit `null`, so converging them is a `/status` wire change with a golden, not a deduplication.
+- **`PeerInferenceEndpoint`, the `Venue` record, is defined in the mesh host's `daemon` module.**
+  Its definition belongs to `sovereign-scheduler`; the `MemberRecord` translation that produces
+  it is the daemon's adapter.
+- **The host half receives more than its crate row says:** `worker_eligibility`,
+  `pinned_pod_snapshot` and `pinned_transport` (tagged `compute`, but they decide which RPC
+  inference workers may hold a shard and present a pinned pod as a venue) and
+  `source_content_validator` (tool-call argument checks for the inference adapter).
+  `sovereign-compute` is Serving's local engine — one supervised child per slot behind the
+  daemon's provider facade — re-tagged `serving` and kept outside the liftable package
+  (`quality/DOMAINS.md` §11).
+- **`GateReason` needs a hand-written fallback, and one of its values is two causes.** Production
+  emits three gates, and `not_offload_eligible` covers both a privacy refusal and a latency
+  class. A derived `Other(String)` serialises as an object and will not read a bare unknown
+  string back, so tolerating jsonl at rest needs a custom or untagged fallback; splitting the
+  conflated value is a schema change of its own. Readers accept any string; writers emit only
+  known variants.
+- **The trust-level fix lives in `oicp-types`,** because `commonwealth-core` depends on
+  `oicp-types` and not the reverse. The defect is real in the types and latent on the wire
+  today: the embedded daemon answers `/oicp/v1/capabilities` before the federation block is
+  built, and no production path constructs a peering. Its failing test drives the orchestrator
+  path with a `ModelAndKnowledgeSharing` peering and asserts `model_and_knowledge_sharing`.
+
 ## The two tiers
 
 **Package crates** (`[[package]] name = "serving"`, `doc = "sovereign/SERVING_BOUNDARY.md"`):
 
 | Crate | Lines | Role |
 |---|---:|---|
-| `sovereign-scheduler` | ~6,800 | **Arithmetic over the published language.** `scheduler_core`, `oicp_select`, `predicted_time`, `tier`, `decision_log`, `decision_replay`, `decision_trace`, `throughput_tracking`, `slot_aliases`, `yield_backoff`. No I/O, no clock read, no interior mutability. |
+| `sovereign-scheduler` | ~6,800 | **Arithmetic over the published language.** `scheduler_core`, `oicp_select`, `predicted_time`, `tier`, `decision_log`, `decision_replay`, `decision_trace`, `throughput_tracking`, `slot_aliases`, `yield_backoff`. The ranking decision reads no clock and does no I/O; the recorder sink and the local slot pick move to the host (corrected above). |
 | `sovereign-serving-host` | ~11,000 | **The ports and the knot.** `peer_inference`, `inference_adapter`, `oicp_synthesis`, `guest_lender`, `pinned_worker_source`, `entry_endpoint`, plus `sovereign-api`'s `admission`. Opens connections, holds the HTTP surface, receives every candidate through a port. |
 | `serving-policy` | 1,241 | Already exists, already tier-0, ZERO in-repo deps. `fair_sched` left `commonwealth-core` 2026-09-03; two `[[forbid]]` rows pin it both ways (`quality/ARCH_LAYERS.toml:381-389`). **The precedent Phase C copies.** |
 | `sovereign-serving` | 720 → 0 | The peg: eleven exported types with zero external references, plus 771 lines of shard assignment that drag `corpus-engine`. Emptied by rung 9. |
@@ -57,9 +116,9 @@ third means the boundary is drawn in the wrong place (K4).
 clears when the remote provider is reached through `oicp-client`;
 `sovereign-serving-host → commonwealth-core` (`PeerHealthTracker`, `ids::NodeId`) clears
 when quarantine state is the host's own and identity is `kernel_types::NodeId`.
-`sovereign-scheduler → sovereign-core` is **zero from day one**: its only non-`oicp` uses
-are `traits::InferenceProvider` and `types::Speed` (`oicp_select.rs:25-26`), and the
-former is already a leaf at `sovereign-contracts/src/traits.rs:281`.
+`sovereign-scheduler → sovereign-core` is **zero once `pick_slot_for_oicp` leaves** (corrected
+above): the ranker's other non-`oicp` uses are `traits::InferenceProvider` and `types::Speed`,
+and the former is already a leaf at `sovereign-contracts/src/traits.rs:281`.
 
 ## The rules
 
@@ -68,7 +127,7 @@ former is already a leaf at `sovereign-contracts/src/traits.rs:281`.
 2. **Not `sovereign-mesh`** — the edge Phase C exists to delete; it is why a CLI wanting a
    roster inherits llama-cpp (`DAEMON_CORE.md` §4).
 3. **Not `sovereign-inference`** — ranking is not executing; only the host connects.
-4. **Not `sovereign-api`** — `prompt_compactor.rs:48` has the one such import today, and
+4. **Not `sovereign-api`** — four serving modules import it today (corrected above), and
    wire types belong to `oicp-types` or the host, never the ranker.
 5. **The host may name inference; it may NOT name `sovereign-mesh`** — it receives
    candidates through a port, never an `EmbeddedDaemon`; a dep here is the kill clause.
@@ -91,8 +150,8 @@ pub trait VenueSource: Send + Sync {
     /// guarantee: the scheduler does all three.
     async fn candidates(&self) -> Vec<Venue>;
 }
-// OFF the port: local_node_id() (:348) is a process constant -> a constructor arg
-// typed kernel_types::NodeId, burning exception #2 down. ledger_emission_for() (:365,
+// OFF the port: local_node_id() (:348) -> a constructor arg: Fabric's identity READER over
+// kernel_types::NodeId (join adoption swaps the id in a running daemon), burning exception #2 down. ledger_emission_for() (:365,
 // #[doc(hidden)] — the tell) -> the host mints emissions from RoutingOutcome instead.
 // Serving emits facts; Fabric prices them.
 // sovereign-serving-host — a PIN, not a candidate. NamedModelLocation (:3104) has
@@ -138,9 +197,9 @@ that already exists in a tier-0 leaf and is not re-minted (ARCH §11).
 ```rust
 // sovereign-serving-host, over serving-policy/src/fair_sched.rs :244 SchedCore<K> ·
 // :448 try_grant(key,weight,cap) -> :198 TryGrant{Granted, WouldQueue{position}, Shed}.
-// Principal::Local (no X-Node-Id) is ALWAYS admitted: the user's own chat must never 503.
-// `Principal` is Admission's word (DOMAINS.md §10.1) and the key of DAEMON_CORE §1's table.
-pub enum Principal { Local, Member { node: NodeId, raw_header: Option<String> } }
+// The owner's own chat is ALWAYS admitted: it must never 503.
+// `Principal` is published language resolved once at the daemon's edge (DAEMON_CORE.md §3.3);
+// admission derives its fairness and peer keys from it. The Local|Member sketch is withdrawn.
 pub trait Admission: Send + Sync {
     /// Pure over the snapshot: no axum, no AppState, no clock read.
     fn admit(&self, who: &Principal, now_unix_ms: u64) -> AdmissionVerdict;
@@ -251,9 +310,10 @@ honesty note it must carry: `replay_decision` assumes `RankObjective::Product`
 - **The `GateReason` salvage.** `Verdict::Gated { gate: String }` (`decision_log.rs:509`)
   is a closed set living as free text inside a serialized schema (ARCH §9) — the shape
   `UnavailableReason` had and the live model lost. Mint it with
-  `#[serde(rename_all = "snake_case")]` so known values stay byte-identical and an
-  `Other(String)` arm so old jsonl still parses. **Rung 11, not 9** — a wire-schema change
-  must not ride a deletion commit (ARCH §2); sweep every construction site first.
+  `#[serde(rename_all = "snake_case")]` so known values stay byte-identical, and a hand-written
+  fallback for unknown bare strings so old jsonl still parses — a derived `Other(String)` does
+  not (corrected above). **Rung 11, not 9** — a wire-schema change must not ride a deletion
+  commit (ARCH §2); sweep every construction site first.
 
 ## When the gate fails
 

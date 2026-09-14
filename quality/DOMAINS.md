@@ -506,3 +506,45 @@ dependency budget; `Display`/`Error` are hand-written.
   the context.
 - The seven `Peer*` meanings are nine plus scaffolding (§8, re-measured).
 - `frontdoor.rs` is Host (§10.4).
+
+## 11. Destinations decided — the design rungs, 2026-09-14
+
+Design only, reviewed by the operator before any move. The arguments live in the boundary
+documents; each paragraph here is what a registry row records.
+
+### 11.1 Where the rest is argued
+
+The host crate, the dissolution of `AppState` and the adapter rule are `quality/DAEMON_CORE.md`
+§4. The caller's identity — which corrects §10.1's gift of `Principal` to Serving — is its §3.3.
+Serving's corrections head `sovereign/SERVING_BOUNDARY.md`. The `[[forbid]] corpus-engine* ->
+sovereign-*` row stands, and none of the clusters it appeared to block goes to `corpus-engine` or
+`sovereign-enrichment-build`.
+
+### 11.2 Compute
+
+Leading with what the registry had wrong: Compute's `crates` list named `sovereign-compute`, and
+the cluster graph chose it by name and tier. Every module of `sovereign-compute` keeps a loaded
+model in a supervised child process and routes inference to it — Serving's local engine and a
+single-owner resource — with no `commonwealth-work` edge and no unit, lease or donor.
+
+| piece | what it is | home |
+|---|---|---|
+| `commonwealth-work` | vocabulary, fold, lease predicate, executor trait and registry, process executor, sandbox | stays — it is the context |
+| `work_donor`, `ingest_executor` | the node running units off the work fold | `sovereign-daemon`'s `jobs` |
+| rented pods: `worker_pod`, `worker_http`, `worker_controller`, `worker_daemon`, `worker_subprocess_runner`, `multi_pod_coordinator` (5,831 lines) | leasing a rented machine and running work on it — Compute's remote isolation | a new Compute crate, `sovereign-pods` |
+| `worker_eligibility`, `pinned_pod_snapshot`, `pinned_transport` (1,863) | which RPC inference workers may hold a shard; a pinned pod presented as a venue | `sovereign-serving-host` |
+| `guest_tunnel` (134) | an iroh dial to a lender, exposed as a local address | Fabric, `sovereign-mesh` — it is reach |
+| `sovereign-compute` | Serving's local engine | re-tagged `serving`; rename proposed, `sovereign-slots` |
+
+Three findings ride with the table. **Pods speak a third unit vocabulary**, beside
+`commonwealth-work`'s units and `sovereign-grants`' legacy ingest lease. A rented pod is a donor
+whose isolation is a VM — the `oicp_types::Isolation` variant exists — and converging pods onto
+`commonwealth-work` units is a behaviour rung; after it, if `sovereign-pods` names only the
+commonwealth package and leaves, it joins that package. **One config table holds two contexts**:
+`ComputeSection` carries both the slot children and the donor's `work_offer`, and splits in a
+config rung with a compatibility reader. **One supervisor**: `sovereign-compute`'s supervisor is
+context-neutral and the only one in the tree with restart, backoff and a persisted crash log;
+`worker_subprocess_runner` repeats half of it, and `commonwealth-work`'s process executor calls
+itself the seventh spawn-with-timeout, kept because of `commonwealth-work -> sovereign-*`. That
+forbid names the sovereign family, not a leaf, so process supervision becomes a leaf outside it
+that all three reach down to.
