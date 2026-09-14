@@ -40,13 +40,6 @@ third_party_allowlist = []
 # ── grounding ───────────────────────────────────────────────────────
 
 [[flag]]
-name = "SOVEREIGN_SIDECAR_FEATURES"
-cluster = "cli-binaries"
-default = "unset"
-status = "shipped"
-purpose = "Extra cargo features for the daemon sidecar that `scripts/stage-daemon-sidecar.sh` builds and stages next to the desktop app. Unset builds `sovereign-cli-daemon`'s default feature set; a non-empty value is passed straight through as `cargo build --features <value>` and echoed at stage time, so the staged binary's feature contract is visible in the build log rather than inferred from its size. It exists because the sidecar is the one binary the desktop SPAWNS rather than links (sv-surface: the app holds no daemon code, so the daemon it starts must be built separately), and that build occasionally needs a feature the default set omits — a GPU backend, or a bench-only surface — without editing the manifest. Read in one place: scripts/stage-daemon-sidecar.sh, guarded by `-n \"${VAR:-}\"` so an unset or empty value adds no flag at all."
-
-[[flag]]
 name = "SOVEREIGN_TENSOR_BUFT_OVERRIDE"
 cluster = "inference"
 default = "unset"

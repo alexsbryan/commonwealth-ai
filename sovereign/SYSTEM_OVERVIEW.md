@@ -10041,3 +10041,30 @@ write them and will not invent a justification for them. The 934 commits between
 ratchets red, so the debt is owed by those landings, not by this pin — the pin
 only stops it riding into 0.7.0 unnamed. `arch-gate --tighten` found nothing to
 bank.
+
+### 10.1w Size RE-PINNED at `origin/main` — 2026-09-14 (the domains campaign's audit could not pass a red `origin/main`)
+
+`REVIEW-audit-1` stopped because `PREPUSH` was red on `origin/main` itself.
+`arch-gate` measured `AGENTS.md` at 48,379 bytes against a 47,980 pin and the
+approach band at 200,927 lines against 200,868. Neither is this branch's:
+`git diff --stat origin/main..HEAD -- '*.rs'` is empty, and `HEAD:AGENTS.md` is
+byte-identical to `origin/main:AGENTS.md` (48,379). The baselines were stale
+against public state — `AGENTS.md` grew past §10.1v's 47,980 pin on
+`origin/main` after that pin was written — so this is §10.1u's recipe: re-pin at
+`origin/main`, never `--update-baseline` on a tree shared with other sessions.
+
+Re-pinned: `instruction_surface.txt` `AGENTS.md` 47,980 → 48,379 bytes;
+`approach_band.txt` 200,868 → 200,927 lines (205 files, unchanged). Both are
+`origin/main`'s own measurement, which is what keeps this branch's contribution
+out of the freeze — and this branch's contribution to either is zero.
+
+The other two red gates were PAID, not re-pinned. `env-gate` saw a duplicate
+`SOVEREIGN_SIDECAR_FEATURES` row (`69ab4a68f`'s `cli-binaries` copy merged
+beside `739735496`'s `dev-gates` one); the stale `cli-binaries` copy is gone and
+the current `dev-gates` row — which names svt-7's Windows GPU selection — stays.
+`sovereign-lint-scoped` saw `scripts/sovereign-lint.sh` hardcode
+`corpus-engine/treesitter`, a hard cargo error once `sovereign-desktop` dropped
+its corpus-engine dependency at svt-6 (2026-09-12) and the always-scoped desktop
+crate could no longer name the flag; it now resolves features through
+`resolve_features` in `scripts/lib/cargo-scope.sh`, the same decider the test
+runner uses (ARCH §8), so the two gates cannot drift apart again.
