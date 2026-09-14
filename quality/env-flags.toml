@@ -1650,3 +1650,10 @@ cluster = "dev-gates"
 default = "release"
 status = "shipped"
 purpose = "Cargo profile for the daemon sidecar scripts/stage-daemon-sidecar.sh stages. Release by default because the artifact ships inside an installer and `cargo tauri build` is itself a release build; `debug` exists so a local rehearsal of the PACKAGING can skip the release compile. A debug sidecar in a shipped bundle is roughly 3x the size and materially slower, so this is a dev-loop lever, not a supported release configuration."
+
+[[flag]]
+name = "SOVEREIGN_SIDECAR_FEATURES"
+cluster = "dev-gates"
+default = "unset (no extra features — the sidecar builds with sovereign-cli-daemon's defaults)"
+status = "shipped"
+purpose = "Comma-separated cargo features scripts/stage-daemon-sidecar.sh forwards as `--features` when it builds the sovereign-cli-daemon Tauri sidecar. This is how the Windows GPU backend is selected since svt-7 (2026-09-12): `windows-vulkan` / `windows-cuda` are owned by sovereign-cli-daemon — the process that loads the weights — and forward from there to sovereign-inference (sovereign/SYSTEM_OVERVIEW.md:260). Only the Windows legs set it; `scripts/windows-crosscheck.sh:28` is the worked example. Unset means the default feature set, never a silent CPU fallback: a feature the crate does not have is a cargo build failure the script refuses to stage past."

@@ -3,11 +3,11 @@
 #   cargo run -p xtask -- clock-gate --update-baseline
 # Bank improvements only (never adds, never raises — safe to run anytime):
 #   cargo run -p xtask -- clock-gate --tighten
+1	commonwealth/crates/commonwealth-media/src/apps.rs
 1	commonwealth/crates/commonwealth-rail/src/lib.rs
 1	commonwealth/crates/commonwealth-state/src/activity.rs
 1	commonwealth/crates/commonwealth-state/src/contributions.rs
 1	commonwealth/crates/commonwealth-state/src/peer_preferences.rs
-1	oicp-conformance/src/main.rs
 1	corpus-engine-archaeology/src/archaeology_eval.rs
 3	corpus-engine-notes/tests/main/propagation.rs
 1	corpus-engine-scip/src/scip_graph.rs
@@ -20,6 +20,7 @@
 6	corpus-engine/xtask/src/clock_gate.rs
 1	corpus-engine/xtask/src/target_arch.rs
 2	kernel-types/src/judgement.rs
+1	oicp-conformance/src/main.rs
 1	sovereign-mobile/src-tauri/src/commands/host.rs
 1	sovereign/crates/sovereign-api/src/admission.rs
 2	sovereign/crates/sovereign-api/src/auto_recover.rs
@@ -61,10 +62,8 @@
 1	sovereign/crates/sovereign-desktop/src-tauri/src/command_bridge.rs
 1	sovereign/crates/sovereign-desktop/src-tauri/src/commands/contribution.rs
 2	sovereign/crates/sovereign-desktop/src-tauri/src/commands/meshapp.rs
-1	sovereign/crates/sovereign-desktop/src-tauri/src/commands/recipe_testing.rs
 1	sovereign/crates/sovereign-desktop/src-tauri/src/crash_bundle.rs
 1	sovereign/crates/sovereign-desktop/src-tauri/src/import_commands.rs
-1	sovereign/crates/sovereign-desktop/src-tauri/src/local_corpus_commands.rs
 2	sovereign/crates/sovereign-grants/src/shard_manager.rs
 1	sovereign/crates/sovereign-inference/src/embedded/rpc_distribution.rs
 1	sovereign/crates/sovereign-inference/src/embedded/sampler.rs
@@ -72,6 +71,7 @@
 1	sovereign/crates/sovereign-mesh/src/inference_adapter.rs
 1	sovereign/crates/sovereign-mesh/src/pinned_pod_snapshot.rs
 3	sovereign/crates/sovereign-mesh/src/projects.rs
+1	sovereign/crates/sovereign-mesh/src/recipe_http.rs
 1	sovereign/crates/sovereign-mesh/src/roster_repair.rs
 1	sovereign/crates/sovereign-mesh/src/turn_http.rs
 1	sovereign/crates/sovereign-mesh/src/worker_daemon.rs

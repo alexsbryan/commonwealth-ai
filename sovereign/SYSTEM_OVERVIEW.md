@@ -9925,3 +9925,51 @@ source of truth for the running system. Completed-work chronicles
 extracted from this file live in [`HISTORY.md`](./HISTORY.md) —
 the overview states what IS, HISTORY preserves how it came to be,
 and dated entries there are never rewritten to match later code.
+
+### 10.1v Size and clocks RE-PINNED at `origin/main` 26ca2ad0d — 2026-09-13 (cutting `cli-v0.7.0` / `desktop-v0.7.0`)
+
+`pre-push` refused the 0.7.0 version bump on three hard gates. None of them are
+about the bump: the release commit is four files — `Cargo.toml`, `Cargo.lock`,
+`tauri.conf.json`, `package.json` — and contributes zero lines to any flagged
+file. Each gate was re-run in a clean worktree detached at `origin/main`
+(26ca2ad0d) and failed there identically, which is the citation for calling this
+public debt rather than this push's.
+
+Two of the three were PAID, not absorbed:
+
+- **`env-gate`** — `SOVEREIGN_SIDECAR_FEATURES` was undeclared. It landed with
+  svt-7 (2026-09-12) and is documented at `sovereign/SYSTEM_OVERVIEW.md:260`, in
+  `sovereign-cli-daemon/Cargo.toml:133`, `sovereign-desktop/src-tauri/Cargo.toml:186`
+  and `scripts/windows-crosscheck.sh:28` — everywhere except the registry that
+  gates it. Declared in `quality/env-flags.toml`, `docs/ENV_FLAGS.md`
+  regenerated. Gate green with 217 registered, up from 216. Nothing baselined.
+- **`clock-gate` half** — `recipe_http.rs:647` hand-read `SystemTime::now()` for
+  `ran_at_unix: u64`; it is now `sovereign_core::time::unix_now_u64()`, matching
+  the seven existing call sites in the same crate. The tree is 143 reads across
+  92 files against a 144/93 pin — below the baseline it was just given.
+
+What IS accepted, and the honest shape of it:
+
+| Ratchet finding at 26ca2ad0d | Status |
+|---|---|
+| `sovereign-cli-daemon/src/setup_cmd/mod.rs` 1,386 → 1,669 (+283) | accepted, unexplained |
+| `sovereign-mesh/src/admin_http.rs` NEW oversized 1,308 | accepted, unexplained |
+| `sovereign-mesh/src/daemon.rs` 5,560 → 5,683 (+123) | accepted; split long owed (§10.1i already names it at 4× the line) |
+| `sovereign-mesh/src/iroh_access.rs` NEW oversized 1,614 | accepted, unexplained |
+| `sovereign-mesh/src/scheduler_core.rs` 1,282 → 1,351 (+69) | accepted, unexplained |
+| `sovereign-mesh/src/turn_http.rs` 2,014 → 2,105 (+91) | accepted; split owed since §10.1i |
+| `sovereign-mesh/tests/main/loopback_parity.rs` 2,023 → 2,221 (+198) | accepted; the relocation §10.1i names is still owed |
+| `sovereign-turn-client/src/lib.rs` 4,509 → 4,800 (+291) | accepted; per-family split owed since §10.1i, one instalment paid at svt-3 |
+| `.claude/CLAUDE.md` 1,750 → 1,838 bytes (+88) | accepted |
+| `AGENTS.md` 46,726 → 47,980 bytes (+1,254) | accepted |
+| approach band 201 → 205 files, 197,106 → 200,868 lines (+3,762) | accepted |
+| `commonwealth-media/src/apps.rs:466` hand-read clock | accepted, and the reason is real: it feeds **nanosecond** resolution into a hash as entropy for a claim id, and `commonwealth_core::clock` offers only `unix_now_secs`/`unix_now_millis`. Swapping weakens the entropy. Either the decider grows a nanosecond accessor or `mint_claim_id` stops deriving identity from a clock at all (ARCH §8) |
+
+**The "what the lines bought" column is empty on purpose.** Every previous size
+acceptance in this section was written by the session that wrote the lines, and
+could say what they bought. This one was written by a release cut that did not
+write them and will not invent a justification for them. The 934 commits between
+`cli-v0.6.0` (ba38e404a, 2026-08-29) and here reached `origin/main` with these
+ratchets red, so the debt is owed by those landings, not by this pin — the pin
+only stops it riding into 0.7.0 unnamed. `arch-gate --tighten` found nothing to
+bank.
