@@ -4644,10 +4644,20 @@ class Kernel:
                 return "sorry", f"{nm!r} is prose or a command line, not a name git can look for"       # 62d5846b p13.2-7: test commands 'proved'
             if re.search(r":\d+(?:-\d+)?$", nm):
                 return "sorry", f"{nm!r} carries a line anchor: a citation, not a proposal"              # 5c16d4f6 p21.3: sabotage.py:868
+            if re.search(r"\w\.(?:rs|py|sh|ts|toml)`?:\d+", st.get("span", "")):
+                return "sorry", f"the span cites a file:line beside {nm}: a citation, not a proposal"   # e541f77a p11.25: UnverifiedReason (span_resolver.rs:58)
             if re.search(r"\b(?:modified|modify|changed|extended|edited|updated|touched|rewrite|rework|refactor|survives|stays|remains|unchanged)\b", st.get("span", ""), re.I):
                 return "sorry", f"the span says {nm} is modified or kept, not new"                       # 24f0cac7 p10.6, fd20b61e p10.1, p10.12
             if nm.startswith("/") and (st.get("section") or "").lower().startswith("verification"):
                 return "sorry", f"{nm} in a Verification section is exercised, not proposed"           # 62d5846b p13.16
+            if (st.get("shape") == "file" or re.search(r"\.(?:rs|py|sh|toml|md|json|ts|mjs|ya?ml)$", nm)) \
+                    and not re.search(r"\bnew\b|\bcreate", st.get("span", ""), re.I) \
+                    and not any(nm.split("/")[-1] in l and re.search(r"\bnew\b|\bcreate", l, re.I) for l in self.text.splitlines()):
+                # A file the plan names without calling it new is a file it
+                # edits or runs (run B: routes_rail.rs, pre-push.sh, glob.rs,
+                # Cargo.toml (+68) all 'already defined'); plans mark new
+                # files '(new, ~130 lines)' (62d5846b) or 'Create `x`'.
+                return "sorry", f"{nm} is named without 'new' or 'create': edited or run, not proposed"
             if re.search(r"\(&(?:mut )?self\b", st.get("span", "")):
                 return "sorry", f"{nm} is a method; it belongs to its type, which is the proposal"       # 62d5846b p9.4: GuestGrant::is_live vs ingest_grant's
             if nm.lstrip().startswith(("--", "svrn ", "sovereign ", "cargo ")):
@@ -6189,7 +6199,7 @@ def cmd_self_test(_a) -> int:
                       ("scripts/co-oplog.py", "refuted"), ("co-oplog.py", "refuted"), ("sovereign-mesh", "refuted"),
                       ("FooBarBazNounX", "proved"), ("Kernel::nope_nope", "proved"), ("no-such-crate-xyz", "proved"),
                       ("a ledger of plans", "sorry"), ("svrn setup --terminal", "sorry")):
-        eq(_kh.run({"kind": "Proposes", "turn": 1, "name": _n, "span": "x"})[0], _want, f"Proposes {_n}")
+        eq(_kh.run({"kind": "Proposes", "turn": 1, "name": _n, "span": f"a new {_n}"})[0], _want, f"Proposes {_n}")
     eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "NodeId", "span": "x"})[0], "refuted", "Proposes: a macro-defined type is defined (define_id!(NodeId, ..))")
     eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "sovereign/DEFAULTS_LEDGER.md", "shape": "file", "span": "a `sovereign/DEFAULTS_LEDGER.md` row per rung"})[0], "sorry", "Proposes: a row in an existing file is an addition")
     eq(anchored("Outcome", "pub(crate) struct Outcome {\n local: Option<Scored>"), True, "anchored: the name is a token in the text")
@@ -6216,6 +6226,9 @@ def cmd_self_test(_a) -> int:
     _kh.text = "1. `no_such_new_file_xyz.rs` — one `Scope` variant, one `paths()` arm"
     eq(_kh.plan_cites("Scope", git("rev-parse", "HEAD").strip()), None, "plan_cites: an anchor the plan itself will write is no citation (62d5846b)")
     eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "/v1/models", "span": "curl /v1/models", "section": "Verification"})[0], "sorry", "Proposes: a route in Verification is exercised")
+    eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "scripts/co-oplog.py", "shape": "file", "span": "`scripts/co-oplog.py` gains a verb"})[0], "sorry", "Proposes: a file named without 'new' is edited")
+    eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "scripts/co-oplog.py", "shape": "file", "span": "`scripts/co-oplog.py` (new, ~80 lines)"})[0], "refuted", "Proposes: a file called new that is in the tree")
+    eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "Kernel", "shape": "type", "span": "`Kernel` (`scripts/co-oplog.py:4486`)"})[0], "sorry", "Proposes: a span with file:line cites")
     eq(_kh.defined_at("constant_time_eq", git("rev-parse", "HEAD").strip()) is None or "Cargo.lock" not in _kh.defined_at("constant_time_eq", git("rev-parse", "HEAD").strip()), True, "defined_at: Cargo.lock is not a definition site")
     _kh.text = ""
     _many = _kh.defined_many(["Kernel", "FooBarBazNounX", "NodeId", "co-oplog.py", "sovereign-mesh", "Kernel::summaries"], git("rev-parse", "HEAD").strip())
