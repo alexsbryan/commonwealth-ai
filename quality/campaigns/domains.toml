@@ -266,6 +266,25 @@ instrument   = "python3 scripts/domains-census.py misnamed --json"
 goodhart     = "this can hit target while the predicate is still false if the module->context tag table in quality/DOMAINS.toml is edited instead of the code — a tag change with no `git mv` in the same commit is the smell, and the instrument prints the tag-table digest beside the value so a retag is visible in the row"
 kill         = "if a crate can only be made to describe its contents by renaming it to a list ('sovereign-mesh-and-serving'), the crate is two contexts and must split — the rename is refused"
 
+[[bar]]
+id           = "dm-queue"
+one_line     = "The demolition queue is empty — every crate is 100% its own context"
+derives_from = "operator direction 2026-09-14 (god crates first, biggest-first loop); the algorithm block above"
+status       = "open"
+# THE LOOP'S OWN PROGRESS BAR. Counts crates whose modules are not all tagged
+# with the crate's own context in quality/DOMAINS.toml — the queue the
+# algorithm pops from, biggest first. Three are measured today (sovereign-mesh,
+# sovereign-api, corpus-engine); the true floor waits on rung 3 tagging every
+# crate (sovereign-core carries the `research` cluster; sovereign-tools and the
+# cli crates are untagged). Target-only until then. It differs from
+# dm-misnamed-crates (DOMAINS §8 row 5, "< half") in threshold only: that one
+# is the pre-registered prediction, this one is the loop's stop condition.
+target       = 0.0
+direction    = "lower_is_better"
+instrument   = "python3 scripts/domains-census.py queue --json"
+goodhart     = "this can hit target while the predicate is still false if a crate is made 100% its own context by RETAGGING modules (the tag table is data; a tag change with no git mv in the same commit is refused by review) or by moving a cluster into a destination that is itself the wrong context — the plan asserts dest is in the context's `crates` list and enqueues any destination whose share drops"
+kill         = "if a move empties a crate's window (no destination tier satisfies both its deps and its consumers) and the only exit is a new [[exception]] row, the cluster is two clusters — split it and re-plan; never widen the ledger to keep the loop moving"
+
 # ── NOT YET REGISTERED, deliberately ────────────────────────────────────────
 #
 # `dm-context-congestion` — distinct CONTEXTS touched per .rs commit, by author
@@ -286,10 +305,57 @@ kill         = "if a crate can only be made to describe its contents by renaming
 # direction and stays so: a small crate's destination is decided by where the
 # big one lands. Numbering continues from those two.
 #
+# ── THE STRATEGY, re-sequenced 2026-09-14 by operator direction ─────────────
+#
+# God crates first. Not "names, then the read model, then a crate, then the
+# rest" (DOMAINS.md §7's phase order, which sequenced by CONCERN) but by
+# CRATE, biggest first: take the largest crate whose modules are not all its
+# own context, keep the cluster that IS its context, move every other cluster
+# to that context's home crate (creating the home when the registry says it
+# does not exist yet), then loop. The phases fold in rather than disappear:
+#   Phase A (the words)  -> a rename RIDES THE MOVE that touches the file;
+#                           every import changes anyway, so the Peer->Venue/
+#                           Donor/Member rows in the registry are applied as
+#                           each cluster leaves. No rename-only rung.
+#   Phase C (Serving)    -> wave 1's serving cluster leaving sovereign-mesh IS
+#                           the crate; SERVING_BOUNDARY.md is its declaration.
+#   Phase B (the door)   -> wave 3's first move, when the loop reaches
+#                           corpus-engine and Understanding leaves it.
+#   Phase D (the rest)   -> the loop's later iterations, one crate at a time.
+#
+# THE ALGORITHM, and it is DATA the instrument runs, not a list a person keeps:
+#   queue  := crates with own-context share < 100% (registry module tags),
+#             ordered by lines desc                          (dm-queue)
+#   loop   := pop the head; partition its modules by context; the cluster
+#             tagged with the crate's own context STAYS; every other cluster
+#             gets dest := the context's `crates` in quality/DOMAINS.toml
+#             (an existing crate, or a named crate to create);
+#             move order within the crate := LEAF clusters first (import no
+#             sibling cluster), then size desc; an edge that crosses crates
+#             after the move goes through a PORT already designed (§10.3,
+#             SERVING_BOUNDARY.md) or the cluster SPLITS — never a new
+#             [[exception]] row; a rename rides the move; the historical
+#             re-export is deleted before the rung lands;
+#             each destination whose share drops below 100% is ENQUEUED —
+#             that is the breadth-first half: a move can make a new god crate
+#             and the loop sees it on the next pass;
+#   stop   := queue empty, i.e. every crate is 100% its own context
+#             (dm-queue = 0) and every kept context is a package the gate
+#             passes (the predicate).
+#   check  := per move, `domains-census.py plan` asserts dest tier inside the
+#             cluster's window [max own-dep tier, min consumer tier],
+#             layer-gate green, no new exception, the crate's own-context
+#             share monotone non-decreasing.
+# The first three nodes were measured 2026-09-14 (scratchpad cluster graphs,
+# folded into the registry's [[cluster]] rows by rung 3): sovereign-mesh
+# 88,255 (fabric 16,028 stays; ten clusters leave), sovereign-api 43,163
+# (nothing stays — it dissolves), corpus-engine 172,204 (ingest + retrieval
+# stay; understanding, workbench, workspace, build-feedback leave).
+#
 # Every rung names the state it makes unrepresentable, or is labelled
 # scaffolding (TOPOLOGY §10 standing bar). Cargo-touching work is one worker at
-# a time; domains-8 is independent of domains-5..7 and is the second worker's
-# rung when there are two.
+# a time. A wave is one crate; its rungs are its leaving clusters in the plan's
+# order; the wave closes on a verdict rung that reads the crate at 100%.
 
 [[rung]]
 id = "domains-3-instrument"
@@ -302,56 +368,56 @@ moves = []
 one_line = "Every Peer* type gets a disposition row (keep-Fabric / rename-to-word / delete / merge); the four context words are chosen against the converge evidence; §9's open items are classified — DATA only, zero code"
 
 [[rung]]
-id = "domains-5-serving-word"
-moves = ["dm-peer-outside-fabric", "dm-shared-edges", "dm-word-owners"]
-one_line = "Serving's 11 sovereign-mesh Peer* become its owned word; MemberRecord crosses into the scheduler through ONE translation — unrepresentable: a type that is a mesh member and a serving candidate at once"
+id = "dm-mesh-serving"
+moves = ["dm-queue", "dm-mesh-lines", "dm-misnamed-crates", "dm-contexts-liftable", "dm-peer-outside-fabric", "dm-shared-edges", "dm-word-owners"]
+one_line = "WAVE 1 sovereign-mesh — the serving cluster (20,488) leaves for sovereign-scheduler + sovereign-serving-host per SERVING_BOUNDARY.md; Peer->Venue rides the move; VenueSource is the port; serving-lift verdict 1 — unrepresentable: a routing decision that cannot be replayed outside the daemon"
 
 [[rung]]
-id = "domains-6-compute-donor"
-moves = ["dm-peer-outside-fabric", "dm-shared-edges", "dm-word-owners"]
-one_line = "Compute's Peer* become Donor; the executor half reads a Donor, never a roster row — unrepresentable: a donor selected by trust fields it never checks"
+id = "dm-mesh-host"
+moves = ["dm-queue", "dm-mesh-lines", "dm-misnamed-crates"]
+one_line = "WAVE 1 — the host cluster (25,432: daemon.rs, the *_http.rs handlers, app-state builders) leaves for the host crate the cluster graph names; routes move as-is, daemon-core consolidates them where they land — unrepresentable: a daemon handler linked by a client that wants a roster"
 
 [[rung]]
-id = "domains-7-peer-tail"
-moves = ["dm-peer-outside-fabric", "dm-word-owners"]
-one_line = "Admission's Caller, Knowledge's word, and the eight singleton Peer* outside Fabric go; concept-gate baseline re-pinned at origin/main — bar 1 reads 0"
+id = "dm-mesh-compute"
+moves = ["dm-queue", "dm-mesh-lines", "dm-misnamed-crates", "dm-peer-outside-fabric", "dm-shared-edges", "dm-word-owners"]
+one_line = "WAVE 1 — the compute cluster (9,740: work_donor, worker/pod modules, guest tunnel) leaves for its home; Peer->Donor rides the move; DonorReach is the port; cw-work-lift verdict unchanged"
 
 [[rung]]
-id = "domains-8-understanding-readmodel"
-moves = ["dm-atom-outside"]
-one_line = "corpus-engine-vocab is the one door to atoms.json; every consumer outside enrichment/ reads through it — unrepresentable: a crate re-deriving Atom because it could not read one"
+id = "dm-mesh-workbench"
+moves = ["dm-queue", "dm-mesh-lines", "dm-misnamed-crates", "dm-contexts-liftable"]
+one_line = "WAVE 1 — the workbench cluster (4,811: fim_adapter, lsp_tier, next-edit's mesh half) leaves for the code-intel package crate; the taxonomy does not enter oicp-types (nc-2b)"
 
 [[rung]]
-id = "domains-9-serving-package-red"
-moves = []
-one_line = "The peg is cleared (sovereign-serving's 11 zero-reference types deleted, knowledge_assignment.rs 771 lines evicted with its corpus-engine dep); [[package]] serving, serving/BOUNDARY.md, scripts/serving-lift.sh declared and WATCHED FAILING on the fused tree before a line moves"
+id = "dm-mesh-back-of-house"
+moves = ["dm-queue", "dm-mesh-lines", "dm-misnamed-crates"]
+one_line = "WAVE 1 — mesh_sim/ and dst.rs (4,841) leave for sovereign-mesh-test-harness or a feature-gated back-of-house crate; nothing product-side depends on them after"
 
 [[rung]]
-id = "domains-10-serving-extract"
-moves = ["dm-contexts-liftable", "dm-mesh-lines", "dm-misnamed-crates"]
-one_line = "The scheduler half moves first (scheduler_core, oicp_select, predicted_time, tier, decision_log/replay/trace, throughput_tracking — 6,356 lines, zero foreign imports), then admission and the knot (peer_inference.rs 5,399); boundary-gate green; serving-lift verdict 1 — unrepresentable: a routing decision that cannot be replayed outside the daemon"
+id = "dm-mesh-ingest-understanding"
+moves = ["dm-queue", "dm-mesh-lines", "dm-misnamed-crates"]
+one_line = "WAVE 1 — the ingest (3,410) and understanding (2,316) glue leave for corpus-engine's clusters (to travel again in wave 3) or the host, by what each module imports"
 
 [[rung]]
-id = "domains-11-workbench-next-edit"
-moves = ["dm-contexts-liftable", "dm-misnamed-crates"]
-one_line = "next-edit (7,808 lines: next_edit* in sovereign-api, fim_adapter + lsp_tier in sovereign-mesh) joins the code-intel package — unrepresentable: an IDE completion service linked through the mesh's HTTP crate"
+id = "dm-mesh-small"
+moves = ["dm-queue", "dm-mesh-lines", "dm-misnamed-crates"]
+one_line = "WAVE 1 — answering (747), workspace (233), retrieval (209) leave for sovereign-core, corpus-engine-notes, corpus-engine; one rung, three commits"
 
 [[rung]]
-id = "domains-12-workspace-package"
-moves = ["dm-contexts-liftable"]
-one_line = "corpus-engine-notes, -atos, -archaeology declared [[package]] workspace with a lift — unrepresentable: an agent's memory that cannot be mounted without a corpus"
+id = "dm-mesh-closed"
+moves = ["dm-mesh-lines", "dm-misnamed-crates", "dm-queue"]
+one_line = "WAVE 1 verdict — sovereign-mesh reads 100% fabric and <= 20,000 lines (registry fabric total 16,028); lib.rs says what it holds; sovereign-mesh leaves dm-queue and the crates its clusters enlarged enter it"
 
 [[rung]]
-id = "domains-13-build-feedback-verdict"
-moves = ["dm-contexts-liftable"]
-one_line = "corpus-engine-watchers meets the §2 test: fold into Workbench or delete; 7 dependent manifests repointed; the registry row and this file's target edited in the same commit — the kill bar run on purpose"
+id = "dm-wave-2-sovereign-api"
+moves = ["dm-queue", "dm-misnamed-crates", "dm-contexts-liftable"]
+one_line = "WAVE 2 — sovereign-api (43,163) DISSOLVES: nine clusters to their homes in the plan's order (its serving cluster may need to travel WITH wave 1's — the cluster graph decides); its three [[exception]] rows retire to zero; rungs minted by `domains-census.py plan` when the loop reaches it"
 
 [[rung]]
-id = "domains-14-understanding-carve"
-moves = ["dm-contexts-liftable", "dm-misnamed-crates"]
-one_line = "enrichment/ (93,427) + meta_atlas/ + atlas_traversal/ become the Understanding crate; DECOMPOSITION.md Tier 7 relabelled by context; corpus-mcp lifts against it — depends on domains-8"
+id = "dm-wave-3-corpus-engine"
+moves = ["dm-queue", "dm-misnamed-crates", "dm-contexts-liftable", "dm-atom-outside"]
+one_line = "WAVE 3 — corpus-engine (172,204): Understanding leaves first through vocab's door (domains-8's spec, corrected in §10.5), then workbench, workspace, build-feedback (its §2 verdict on the way out); ingest + retrieval stay; rungs minted by the plan"
 
 [[rung]]
-id = "domains-15-mesh-means-mesh"
-moves = ["dm-mesh-lines", "dm-misnamed-crates"]
-one_line = "sovereign-mesh <= 20,000 and every module tagged Fabric; the Compute executor half has a home — BLOCKS on a daemon-core campaign (DAEMON_CORE.md Phases 1-3 move the 18,319 lines of *_http.rs to the host) that does not exist yet"
+id = "dm-wave-n"
+moves = ["dm-queue"]
+one_line = "WAVES 4+ — the loop: whatever `dm-queue` lists next (sovereign-core's research cluster, sovereign-tools, the destinations wave 1-3 enlarged), until dm-queue = 0 and the predicate exits 0"

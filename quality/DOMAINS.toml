@@ -21,6 +21,10 @@
 #     it observes (noun-convergence rung 3). A definition there is exempt;
 #     the instrument prints exempt hits beside the value so they stay visible.
 #
+# `crates` is a context's HOME — the crates that ARE this context, existing or
+# named-to-create. A module tagged with a context but living outside its home is
+# MISFILED, and the demolition loop (quality/campaigns/domains.toml, THE
+# STRATEGY) moves it there; the loop enqueues any home whose own share drops.
 # `status` is "kept" or "merged-into:<id>". A merge is the §8 kill bar firing
 # on purpose; it edits this row, lowers dm-contexts-liftable's target by one,
 # and the commit body says which "applicable as" could not be named.
@@ -48,6 +52,7 @@ owns = ["Atom", "Tension", "Ontology", "Seed", "Atlas", "Lacuna", "FieldModel"]
 # 37 refs / 11 files); SeedError/SeedReport are Understanding's own. `Cluster`
 # is never persisted under atlas/ (writer.rs has zero matches) — not a noun.
 package = ""
+crates = ["corpus-engine-vocab"]   # + the understanding crate wave 3 creates (DECOMPOSITION spells it corpus-engine-enrichment); until then enrichment/ is misfiled in corpus-engine
 lift = ""
 applicable_as = "point it at a folder, get back what the material is about — its domains, its tensions, its gaps; corpus-mcp already reads its output against a bare llama-server"
 roots = ["corpus-engine/src/enrichment", "corpus-engine/src/meta_atlas", "corpus-engine/src/atlas_traversal", "corpus-engine-vocab"]
@@ -59,6 +64,7 @@ kind = "core"
 question = "what is the answer, and where did it come from?"
 owns = ["Turn", "Scope", "Capabilities", "Lane", "Citation", "Refusal"]
 package = ""
+crates = ["sovereign-core"]
 lift = ""
 applicable_as = "an endpoint that answers cited from an index you hand it, or declines"
 roots = ["sovereign/crates/sovereign-core/src/runtime"]
@@ -81,6 +87,7 @@ owns_exact = ["Source"]
 # half is Understanding's (`RemoteAtlasView`, `AtlasPullLead`) and its
 # ask-a-peer half is Retrieval's (`RemoteIndexTarget`, `RemoteIndexReply`).
 package = ""
+crates = ["corpus-engine"]
 lift = ""
 applicable_as = "a recipe-driven document pipeline"
 roots = ["corpus-engine/src/extractors", "corpus-engine/src/chunkers", "corpus-engine/src/acquirers", "corpus-engine/src/filters", "corpus-engine/src/pii.rs"]
@@ -92,9 +99,10 @@ kind = "supporting"
 question = "given a query, which chunks?"
 owns = ["Index", "Shard", "Embedding", "Neighbor"]
 package = ""
+crates = ["corpus-engine"]
 lift = ""
 applicable_as = "a searchable local index — the closest of the ten to generic (DOMAINS §4), which is a reason to invest less, not to fuse it"
-roots = ["corpus-engine/src/index", "corpus-engine/src/sharding.rs", "corpus-engine/src/registry.rs"]
+roots = ["corpus-engine/src/index", "corpus-engine/src/sharding.rs"]   # registry.rs is the RECIPE registry (registry.rs:25-27, zero index refs) — Ingest's; corrected 2026-09-14 by the corpus-engine census
 status = "kept"
 
 [[context]]
@@ -115,6 +123,7 @@ question = "which engine answers this, and can I prove why?"
 # lands one resolver; until then Admission is its only consumer.
 owns = ["Venue", "Principal", "Slot", "Admission", "Replay", "Decision"]
 package = ""          # rung 9 declares [[package]] serving
+crates = ["sovereign-scheduler", "sovereign-serving-host", "serving-policy", "sovereign-serving"]   # the first two are CREATED by dm-mesh-serving (SERVING_BOUNDARY.md); sovereign-serving empties
 lift = ""             # rung 9 writes scripts/serving-lift.sh
 applicable_as = "a router in front of N OpenAI-compatible endpoints with admission control and replayable decisions"
 roots = ["sovereign/crates/sovereign-serving", "serving-policy"]
@@ -128,6 +137,7 @@ owns = ["Member", "Ring", "Roster", "Reach"]
 # The canonical member type is commonwealth_core::mesh::MemberRecord
 # (quality/CONCEPTS.toml:911-920). Phase A renames nothing inside this package.
 package = "commonwealth"
+crates = ["commonwealth-core", "commonwealth-transport", "commonwealth-discovery", "commonwealth-rail-core", "commonwealth-rail", "commonwealth-work", "commonwealth-state", "commonwealth-media", "commonwealth-rails", "sovereign-mesh"]   # sovereign-mesh is the sovereign-side adapter and is what STAYS in wave 1
 lift = "scripts/cw-rails-lift.sh"
 applicable_as = "proven: cw-rails joined a real mesh by invite and served another member's library (2026-09-11)"
 roots = ["commonwealth/crates"]
@@ -141,6 +151,7 @@ owns = ["Unit", "Offer", "Lease", "Isolation", "Donor"]
 # `Donor` has ZERO first-party definitions today (converge, 2026-09-13) — the
 # one proposed word that is clean.
 package = "commonwealth"   # the vocabulary half, commonwealth-work, is inside the package
+crates = ["commonwealth-work", "sovereign-compute"]   # the executor half's home is confirmed by the wave-1 cluster graph (sovereign-compute exists at tier 3)
 lift = "scripts/cw-work-lift.sh --sandbox"
 applicable_as = "proven: three heterogeneous units complete outside the monorepo inside a rootless container"
 roots = ["commonwealth/crates/commonwealth-work"]
@@ -152,6 +163,7 @@ kind = "supporting"
 question = "what is in this codebase?"
 owns = ["Symbol", "CallGraph", "Edit", "NextEdit"]
 package = "code-intel"
+crates = ["corpus-engine-scip", "corpus-engine-sections"]   # + the code-intel package crates CODE_TOOLING_BOUNDARY.md §2 names as they are created
 lift = ""             # no lift script yet; the package row is gated, not lifted
 applicable_as = "a code-intelligence MCP server; next-edit is its clearest lost child (sovereign/docs/NEXT_EDIT.md)"
 roots = ["corpus-engine-scip", "corpus-engine-sections", "corpus-engine/src/enrichment/code_intel"]
@@ -163,6 +175,7 @@ kind = "supporting"
 question = "what does the assistant remember about its own work?"
 owns = ["Note", "Feature", "PlanItem", "DesignSignal"]
 package = ""          # rung 12 declares [[package]] workspace
+crates = ["corpus-engine-notes", "corpus-engine-atos", "corpus-engine-archaeology"]
 lift = ""
 applicable_as = "a notes/decisions store any agent harness could mount"
 roots = ["corpus-engine-notes", "corpus-engine-atos", "corpus-engine-archaeology"]
@@ -174,6 +187,7 @@ kind = "supporting"
 question = "did it compile, did the tests pass?"
 owns = ["LintResult", "TestResult", "Watcher"]
 package = ""
+crates = ["corpus-engine-watchers"]
 lift = ""
 applicable_as = "barely — DOMAINS §4 and §8 name this the first kill-bar candidate; rung 13 runs the §2 test and either folds it into workbench or deletes it"
 roots = ["corpus-engine-watchers"]
@@ -190,6 +204,7 @@ kind = "published-language"
 question = "what do all contexts speak?"
 owns = []
 package = ""
+crates = ["oicp-types", "kernel-types", "corpus-engine-vocab", "sovereign-contracts", "oicp-client", "sovereign-turn-client"]
 lift = ""
 applicable_as = "the shared kernel between contexts, not an eleventh"
 roots = ["oicp-types", "kernel-types", "corpus-engine-vocab", "sovereign/crates/sovereign-contracts"]
@@ -201,6 +216,7 @@ kind = "composition-root"
 question = "what assembles the four things DAEMON_CORE.md names?"
 owns = []
 package = ""
+crates = ["sovereign-cli-daemon", "sovereign-desktop", "sovereign-server", "sovereign-cli", "sovereign-cli-llm", "sovereign-cli-dev", "sovereign-mobile"]   # the daemon host crate that receives sovereign-mesh's 25,432 host lines is decided by dm-mesh-host from the cluster graph (existing sovereign-cli-daemon vs a new sovereign-daemon library)
 lift = ""
 applicable_as = "not applicable by design — the daemon is not a domain (DOMAINS §4)"
 roots = ["sovereign/crates/sovereign-cli-daemon", "sovereign/crates/sovereign-desktop", "sovereign/crates/sovereign-server"]
@@ -212,6 +228,7 @@ kind = "observer"
 question = "is the product measured?"
 owns = []
 package = ""
+crates = ["sovereign-eval", "sovereign-cli-dev", "sovereign-agent-bench", "corpus-engine-atos", "corpus-engine-archaeology", "sovereign-mesh-test-harness", "xtask", "arch-layers"]
 lift = ""
 applicable_as = "not applicable by design — may observe every layer, nothing depends on it (TARGET_ARCHITECTURE §6)"
 roots = ["sovereign/crates/sovereign-eval", "sovereign/crates/sovereign-cli-dev", "sovereign/crates/sovereign-agent-bench", "corpus-engine-atos", "corpus-engine-archaeology"]
@@ -3030,6 +3047,7 @@ owns = ["Charter", "Round", "EvidenceWindow", "AcquisitionPlan", "SourceLedger"]
 # ratified. `Gap` is deliberately NOT here: it is Answering's canonical
 # (quality/CONCEPTS.toml:831-843) and this context holds its artifact row.
 package = ""          # no [[package]] yet; the ResearchPort trait is the seam a lift would cut on
+crates = ["sovereign-core"]   # deep_research/ inside sovereign-core today; its own crate when the loop reaches sovereign-core (ResearchPort is the seam)
 lift = ""             # no lift script; the §2 test passes on the trait boundary, not on a run
 applicable_as = "a local-only research loop: hand it a charter and a ResearchPort (search + fetch), get back a cited report with a manifest, a per-round gap list, a two-source corroboration floor, and a declared truncation when the budget runs out"
 roots = ["sovereign/crates/sovereign-core/src/deep_research"]
@@ -3169,3 +3187,726 @@ note = "the enrichment hand-off"
 # to price in a later rung, not here: Evidence and ChunkProvenance are arguably
 # ANSWERING's nouns (custody, egress floor) living inside Retrieval — a
 # §5-style anticorruption question, not a reason to fuse.
+
+# ═══ Module tags — corpus-engine census 2026-09-14 (72 rows, 295 files, 172,204 lines; coverage asserted, unknown = 0) ═══
+# corpus-engine module tags — the `domains` campaign registry rows.
+# Generated 2026-09-14 by the corpus-engine census worker. Append to quality/DOMAINS.toml.
+#
+# COVERAGE ASSERTED (the mesh-census method):
+#   - every .rs under corpus-engine/src is covered by exactly one row (295 files)
+#   - sum(lines) == `find corpus-engine/src -name '*.rs' | xargs wc -l` == 172204
+#   - context ids are the registry's closed set (quality/DOMAINS.toml [[context]])
+#   - a directory row means EVERY .rs beneath it shares that context; a directory that
+#     does not is split (enrichment/ splits at code_intel/, src/ splits at the leaves)
+#
+# Per-context totals:
+#   understanding     102227 lines   170 files  ( 59.4%)
+#   ingest             46482 lines    86 files  ( 27.0%)
+#   retrieval          15086 lines    18 files  (  8.8%)
+#   workbench           3980 lines     7 files  (  2.3%)
+#   back-of-house       1542 lines     7 files  (  0.9%)
+#   kernel              1523 lines     4 files  (  0.9%)
+#   workspace           1104 lines     2 files  (  0.6%)
+#   build-feedback       260 lines     1 files  (  0.2%)
+
+[[module]]
+path = "corpus-engine/src/acquirers/"
+context = "ingest"
+lines = 2102
+files = 9
+note = "registry roots: ingest"
+
+[[module]]
+path = "corpus-engine/src/asset_store/"
+context = "ingest"
+lines = 599
+files = 3
+note = "content-addressed store for binary-bearing extractors (asset_store/mod.rs:1-8)"
+
+[[module]]
+path = "corpus-engine/src/atlas_traversal/"
+context = "understanding"
+lines = 4115
+files = 6
+note = "registry roots: understanding"
+
+[[module]]
+path = "corpus-engine/src/chunkers/"
+context = "ingest"
+lines = 2746
+files = 9
+note = "registry roots: ingest"
+
+[[module]]
+path = "corpus-engine/src/engine/"
+context = "ingest"
+lines = 10006
+files = 11
+note = "CorpusEngine orchestrates acquire->extract->chunk->embed->index (engine/mod.rs:2-3)"
+
+[[module]]
+path = "corpus-engine/src/enrichment/atlas/"
+context = "understanding"
+lines = 39921
+files = 59
+note = "registry roots: understanding"
+
+[[module]]
+path = "corpus-engine/src/enrichment/code_intel/"
+context = "workbench"
+lines = 2274
+files = 4
+note = "registry roots: workbench owns enrichment/code_intel"
+
+[[module]]
+path = "corpus-engine/src/enrichment/domains/"
+context = "understanding"
+lines = 2464
+files = 6
+note = "registry roots: understanding"
+
+[[module]]
+path = "corpus-engine/src/enrichment/investigation/"
+context = "understanding"
+lines = 3693
+files = 8
+note = "registry roots: understanding"
+
+[[module]]
+path = "corpus-engine/src/enrichment/ontology/"
+context = "understanding"
+lines = 1114
+files = 4
+note = "registry roots: understanding"
+
+[[module]]
+path = "corpus-engine/src/enrichment/pipeline/"
+context = "understanding"
+lines = 27135
+files = 45
+note = "registry roots: understanding"
+
+[[module]]
+path = "corpus-engine/src/enrichment/reconciliation/"
+context = "understanding"
+lines = 2358
+files = 6
+note = "registry roots: understanding"
+
+[[module]]
+path = "corpus-engine/src/enrichment/alignment.rs"
+context = "understanding"
+lines = 145
+files = 1
+note = "registry roots: understanding"
+
+[[module]]
+path = "corpus-engine/src/enrichment/checkpoint.rs"
+context = "understanding"
+lines = 187
+files = 1
+note = "registry roots: understanding"
+
+[[module]]
+path = "corpus-engine/src/enrichment/clustering.rs"
+context = "understanding"
+lines = 579
+files = 1
+note = "registry roots: understanding"
+
+[[module]]
+path = "corpus-engine/src/enrichment/domain.rs"
+context = "understanding"
+lines = 617
+files = 1
+note = "registry roots: understanding"
+
+[[module]]
+path = "corpus-engine/src/enrichment/domain_registry.rs"
+context = "understanding"
+lines = 116
+files = 1
+note = "registry roots: understanding"
+
+[[module]]
+path = "corpus-engine/src/enrichment/entity_extraction.rs"
+context = "understanding"
+lines = 2957
+files = 1
+note = "registry roots: understanding"
+
+[[module]]
+path = "corpus-engine/src/enrichment/fault_lines.rs"
+context = "understanding"
+lines = 422
+files = 1
+note = "registry roots: understanding"
+
+[[module]]
+path = "corpus-engine/src/enrichment/field_atoms.rs"
+context = "understanding"
+lines = 924
+files = 1
+note = "registry roots: understanding"
+
+[[module]]
+path = "corpus-engine/src/enrichment/field_engine.rs"
+context = "understanding"
+lines = 1196
+files = 1
+note = "registry roots: understanding"
+
+[[module]]
+path = "corpus-engine/src/enrichment/filter.rs"
+context = "understanding"
+lines = 212
+files = 1
+note = "registry roots: understanding"
+
+[[module]]
+path = "corpus-engine/src/enrichment/governance.rs"
+context = "understanding"
+lines = 915
+files = 1
+note = "registry roots: understanding"
+
+[[module]]
+path = "corpus-engine/src/enrichment/governance_change.rs"
+context = "understanding"
+lines = 500
+files = 1
+note = "registry roots: understanding"
+
+[[module]]
+path = "corpus-engine/src/enrichment/governance_view.rs"
+context = "understanding"
+lines = 1407
+files = 1
+note = "registry roots: understanding"
+
+[[module]]
+path = "corpus-engine/src/enrichment/mod.rs"
+context = "understanding"
+lines = 66
+files = 1
+note = "registry roots: understanding"
+
+[[module]]
+path = "corpus-engine/src/enrichment/open_questions.rs"
+context = "understanding"
+lines = 83
+files = 1
+note = "registry roots: understanding"
+
+[[module]]
+path = "corpus-engine/src/enrichment/pass.rs"
+context = "understanding"
+lines = 646
+files = 1
+note = "registry roots: understanding"
+
+[[module]]
+path = "corpus-engine/src/enrichment/sep.rs"
+context = "understanding"
+lines = 298
+files = 1
+note = "registry roots: understanding"
+
+[[module]]
+path = "corpus-engine/src/enrichment/skeleton.rs"
+context = "understanding"
+lines = 490
+files = 1
+note = "registry roots: understanding"
+
+[[module]]
+path = "corpus-engine/src/enrichment/skeleton_parse.rs"
+context = "understanding"
+lines = 1060
+files = 1
+note = "registry roots: understanding"
+
+[[module]]
+path = "corpus-engine/src/enrichment/state.rs"
+context = "understanding"
+lines = 1078
+files = 1
+note = "registry roots: understanding"
+
+[[module]]
+path = "corpus-engine/src/enrichment/tiered.rs"
+context = "understanding"
+lines = 958
+files = 1
+note = "registry roots: understanding"
+
+[[module]]
+path = "corpus-engine/src/enrichment/tokens.rs"
+context = "understanding"
+lines = 51
+files = 1
+note = "registry roots: understanding"
+
+[[module]]
+path = "corpus-engine/src/extractors/"
+context = "ingest"
+lines = 16292
+files = 29
+note = "registry roots: ingest"
+
+[[module]]
+path = "corpus-engine/src/filters/"
+context = "ingest"
+lines = 1934
+files = 7
+note = "registry roots: ingest"
+
+[[module]]
+path = "corpus-engine/src/harness/"
+context = "back-of-house"
+lines = 1542
+files = 7
+note = "authoring-harness MECHANISM; policy/verdicts in sovereign-eval::authoring_harness (harness/mod.rs:1-7)"
+
+[[module]]
+path = "corpus-engine/src/index/"
+context = "retrieval"
+lines = 9253
+files = 11
+note = "registry roots: retrieval"
+
+[[module]]
+path = "corpus-engine/src/meta_atlas/"
+context = "understanding"
+lines = 4645
+files = 11
+note = "registry roots: understanding"
+
+[[module]]
+path = "corpus-engine/src/recipe_ontology/"
+context = "ingest"
+lines = 432
+files = 2
+note = "[enrichment.ontology] TOML shapes, split out of recipe.rs; re-exported from crate::recipe"
+
+[[module]]
+path = "corpus-engine/src/update/"
+context = "ingest"
+lines = 3155
+files = 5
+note = "re-ingest: delta apply, fs-watch -> reindex_file, newsworthy freshness daemon"
+
+[[module]]
+path = "corpus-engine/src/wikipedia_columnar/"
+context = "understanding"
+lines = 410
+files = 1
+note = "wiki link graph over the v2 columnar store WRITTEN by enrichment::atlas::wiki_store; read by meta_atlas/bridge/build.rs:29"
+
+[[module]]
+path = "corpus-engine/src/alignment_projector.rs"
+context = "workspace"
+lines = 645
+files = 1
+note = "materializes the alignment corpus back to ~/.claude/ (alignment_projector.rs:2-8)"
+
+[[module]]
+path = "corpus-engine/src/canonical_sync.rs"
+context = "retrieval"
+lines = 303
+files = 1
+note = "canonical-index pack/unpack for cross-peer transfer (canonical_sync.rs:2-9)"
+
+[[module]]
+path = "corpus-engine/src/corpus.rs"
+context = "kernel"
+lines = 218
+files = 1
+note = "Corpus - the published noun and the ONE decider of on-disk layout (corpus.rs:2-3)"
+
+[[module]]
+path = "corpus-engine/src/embed_http.rs"
+context = "retrieval"
+lines = 69
+files = 1
+note = "EmbedFn over POST /v1/embeddings; Embedding is Retrieval's owned noun"
+
+[[module]]
+path = "corpus-engine/src/error.rs"
+context = "kernel"
+lines = 365
+files = 1
+note = "crate-wide Error/Result, spoken by every cluster"
+
+[[module]]
+path = "corpus-engine/src/facts.rs"
+context = "workbench"
+lines = 631
+files = 1
+note = "code-facts per docs/CODE_TOOLING_BOUNDARY.md:2 table (facts,facts_check,facts_store -> code-facts, 1710 LOC)"
+
+[[module]]
+path = "corpus-engine/src/facts_check.rs"
+context = "workbench"
+lines = 312
+files = 1
+note = "code-facts per docs/CODE_TOOLING_BOUNDARY.md:2"
+
+[[module]]
+path = "corpus-engine/src/facts_store.rs"
+context = "workbench"
+lines = 763
+files = 1
+note = "code-facts per docs/CODE_TOOLING_BOUNDARY.md:2"
+
+[[module]]
+path = "corpus-engine/src/freshness.rs"
+context = "retrieval"
+lines = 99
+files = 1
+note = "_doc_freshness.json index sidecar; Atlas READS it (freshness.rs:2-8)"
+
+[[module]]
+path = "corpus-engine/src/lib.rs"
+context = "kernel"
+lines = 228
+files = 1
+note = "crate root + the re-export surface; every carve-out's shim lands here"
+
+[[module]]
+path = "corpus-engine/src/notes_sync.rs"
+context = "workspace"
+lines = 459
+files = 1
+note = "NoteStore <-> alignment-corpus sync; Note is Workspace's owned noun (notes_sync.rs:2-9)"
+
+[[module]]
+path = "corpus-engine/src/pii.rs"
+context = "ingest"
+lines = 509
+files = 1
+note = "registry roots: ingest"
+
+[[module]]
+path = "corpus-engine/src/progress.rs"
+context = "ingest"
+lines = 134
+files = 1
+note = "_source_manifest.json written during ingestion (progress.rs:3-9)"
+
+[[module]]
+path = "corpus-engine/src/recipe.rs"
+context = "ingest"
+lines = 4017
+files = 1
+note = "Recipe is Ingest's owned noun (DOMAINS.toml ingest.owns)"
+
+[[module]]
+path = "corpus-engine/src/recipe_builtin.rs"
+context = "ingest"
+lines = 422
+files = 1
+note = "include_str!s the build.rs-vendored recipes (recipe_builtin.rs:205-279)"
+
+[[module]]
+path = "corpus-engine/src/recipe_install.rs"
+context = "ingest"
+lines = 571
+files = 1
+note = "recipe install"
+
+[[module]]
+path = "corpus-engine/src/recipe_parsing.rs"
+context = "ingest"
+lines = 518
+files = 1
+note = "recipe TOML parsing"
+
+[[module]]
+path = "corpus-engine/src/recipe_schema.rs"
+context = "ingest"
+lines = 19
+files = 1
+note = "recipe schema"
+
+[[module]]
+path = "corpus-engine/src/recipe_templates.rs"
+context = "ingest"
+lines = 107
+files = 1
+note = "recipe templates"
+
+[[module]]
+path = "corpus-engine/src/registry.rs"
+context = "ingest"
+lines = 980
+files = 1
+note = "DEVIATION from registry roots (retrieval): RecipeRegistry, imports only crate::recipe::Recipe + crate::types (registry.rs:25-27), zero index refs. Proposed correction to DOMAINS.toml retrieval.roots"
+
+[[module]]
+path = "corpus-engine/src/safety.rs"
+context = "ingest"
+lines = 181
+files = 1
+note = "robots.txt/rate-limit rules for acquisition (safety.rs:2-8)"
+
+[[module]]
+path = "corpus-engine/src/sharding.rs"
+context = "retrieval"
+lines = 2710
+files = 1
+note = "registry roots: retrieval"
+
+[[module]]
+path = "corpus-engine/src/snapshot.rs"
+context = "retrieval"
+lines = 1595
+files = 1
+note = "prebuilt-index .tar.zst transport (snapshot.rs:2-6)"
+
+[[module]]
+path = "corpus-engine/src/snapshot_compat.rs"
+context = "retrieval"
+lines = 745
+files = 1
+note = "the ONE restored-snapshot acceptance decision (snapshot_compat.rs:2-9)"
+
+[[module]]
+path = "corpus-engine/src/snapshot_restore.rs"
+context = "retrieval"
+lines = 312
+files = 1
+note = "snapshot restorer, extracted from crate::snapshot"
+
+[[module]]
+path = "corpus-engine/src/sovereign_config.rs"
+context = "build-feedback"
+lines = 260
+files = 1
+note = "parser for .sovereign/sovereign.toml PER-PROJECT WATCHER config; RunnerConfig (sovereign_config.rs:2-3)"
+
+[[module]]
+path = "corpus-engine/src/stream_axes.rs"
+context = "understanding"
+lines = 518
+files = 1
+note = "meta-atom articulation/stability taxonomy; only consumers are meta_atlas/* and types.rs:432"
+
+[[module]]
+path = "corpus-engine/src/testing.rs"
+context = "ingest"
+lines = 1758
+files = 1
+note = "recipe test harness: extract->chunk->embed->search for a recipe PR (testing.rs:2-7)"
+
+[[module]]
+path = "corpus-engine/src/types.rs"
+context = "kernel"
+lines = 712
+files = 1
+note = "DECOMPOSITION Tier 0 corpus-engine-types: CorpusKind, ChunkRange, ShardInfo, IndexInfo, IndexStats, EmbedFn"
+
+[[module]]
+path = "corpus-engine/src/wikipedia_columnar.rs"
+context = "understanding"
+lines = 947
+files = 1
+note = "wiki link graph over the v2 columnar store WRITTEN by enrichment::atlas::wiki_store; read by meta_atlas/bridge/build.rs:29"
+
+# ═══ Cluster graph — corpus-engine 2026-09-14 (8 clusters): in-crate edges, external consumers, tier windows, destinations, move order — the loop's wave-3 input ═══
+# corpus-engine in-crate cluster graph — the `domains` campaign's third god-crate node.
+# Measured 2026-09-14. corpus-engine/src = 172,204 lines / 295 files / 8 contexts.
+#
+# METHOD (same as the mesh census): every `crate::…` reference site in every .rs is
+# resolved to the module it names, that module's context row is looked up, and the
+# (src_context -> dst_context) pair is counted. `super::` was checked separately at the
+# one place a directory splits (enrichment/ -> code_intel/): all 11 `super::` sites in
+# enrichment/code_intel/ resolve inside code_intel itself, so the workbench boundary is
+# clean at that level.
+#
+# `external_consumers` counts `corpus_engine::<path>` sites in the 21 crates that
+# actually declare `corpus-engine` in Cargo.toml, with comment lines stripped. The
+# unfiltered grep also hits sovereign-contracts (t0), kernel-types (t0) and
+# sovereign-turn-client (t0) — every one of those is a DOC COMMENT naming a corpus-engine
+# type it mirrors (kernel-types/src/answer.rs:32,70,89;
+# sovereign-contracts/src/daemon_wire/ingest.rs:6,43,84). Counting them would have
+# reported a tier-0 consumer and inverted every window.
+#
+# `window` = the tier band the destination crate may occupy: strictly above nothing
+# (own deps are t0-t1 and corpus-engine is itself t1 `knowledge`), strictly below the
+# lowest-tier real consumer.
+
+# ───────────────────────────────────────────────────────────── understanding
+[[cluster]]
+crate = "corpus-engine"
+context = "understanding"
+lines = 102227
+files = 170
+leaf = false
+imports_clusters = ["kernel:103", "ingest:68", "retrieval:36", "workbench:1"]
+imported_by_clusters = ["ingest:68", "retrieval:11", "workbench:4", "back-of-house:4", "kernel:1"]
+external_consumers = "558 sites / 14 crates: sovereign-cli-llm(t6):220, sovereign-tools(t4):160, sovereign-enrichment-build(t4):49, sovereign-core(t3):46, sovereign-mesh(t5):36, corpus-mcp(t6):14, sovereign-meshapp(t4):10, sovereign-runtime-recipe(t4):8, sovereign-api(t5):4, sovereign-cli-daemon(t6):3, sovereign-enrichment-catalog(t4):3, sovereign-gliner(t3):3, sovereign-cli(t6):1, sovereign-eval(t4):1"
+own_dep_max_tier = 1
+consumer_min_tier = 3
+window = "t1..t2"
+dest = "understanding (package, SERVING_BOUNDARY shape): `understanding-atlas` (arithmetic over the published language, ~46.8k / 106 files with zero index/engine/embed/fs reference) + `understanding-host` (the ports and the knot, ~55.4k / 64 files) over `understanding-vocab` (= corpus-engine-vocab RENAMED, the `serving-policy` role)"
+dest_exists = false
+dest_tier = 1
+shim_sites = 7
+renames_riding = "DOMAINS.md §10.5, measured in-crate: Domain->FieldModel 77 sites/26 files; AtomsFile sealed door 72/20; Seed six homonyms 32/17; Gap->Lacuna 24/10; DomainRegistry->FieldModelRegistry 17/8; AtomSpan converge 7/2; AtomCard deletes (0 in-crate)"
+order = 7
+note = "59.4% of corpus-engine and the whole reason the crate is a god-crate. One crate at 102k re-mints the problem this campaign demolishes, so the destination is a two-tier PACKAGE, not a crate — the split is already latent (106 of 170 files name no index, no engine, no embed fn and no fs). DECOMPOSITION.md:83 spells this `corpus-engine-enrich` and estimates 40k; DOMAINS.md §6 already corrected the estimate, and ARCH_LAYERS.toml:854 says the `corpus-engine-` prefix 'is carve-out history and actively misleads'. The knot is three files: enrichment/atlas/resolution.rs (5,473), enrichment/pipeline/runner.rs (3,488), enrichment/atlas/context.rs (2,516). The re-export precedent is exact and cheap: corpus-engine-vocab left behind THREE lines (enrichment/atlas/mod.rs:31,40,58)."
+
+# ───────────────────────────────────────────────────────────── ingest
+[[cluster]]
+crate = "corpus-engine"
+context = "ingest"
+lines = 46482
+files = 86
+leaf = false
+imports_clusters = ["kernel:118", "understanding:68", "retrieval:51", "workbench:3", "workspace:1"]
+imported_by_clusters = ["understanding:68", "retrieval:18", "back-of-house:18", "kernel:3", "workspace:2"]
+external_consumers = "252 sites / 16 crates: sovereign-tools(t4):66, sovereign-mesh(t5):61, sovereign-cli-llm(t6):56, sovereign-api(t5):22, sovereign-core(t3):11, sovereign-enrichment-build(t4):7, corpus-mcp(t6):6, sovereign-runtime-recipe(t4):5, sovereign-cli-dev(t6):4, sovereign-cli-shared(t6):3, sovereign-server(t6):3, sovereign-serving(t2):3, sovereign-cli-daemon(t6):2, sovereign-authoring-harness(t4):1, sovereign-cli(t6):1, sovereign-meshapp(t4):1"
+own_dep_max_tier = 1
+consumer_min_tier = 2
+window = "t1..t1"
+dest = "corpus-engine — STAYS"
+dest_exists = true
+dest_tier = 1
+shim_sites = 0
+renames_riding = "DOMAINS.md §10.5 `Source` x4: none of the four is Ingest's recipe source, so Ingest KEEPS the word (ingest.owns_exact = ['Source'])"
+order = 0
+note = "Owns the three filesystem rules the boundary-gate names. (1) build.rs recipe vendoring -> ingest (consumed at registry.rs:34, recipe_builtin.rs:205-279, filters/assets.rs). (2) the tree-sitter `include_str!(\"../../../queries/<lang>/symbols.scm\")` reaching outside the crate root -> ingest, and it is SIX lines in ONE file, extractors/code/mod.rs:90,97,121,128,135,142. (3) the optional corpus-engine-scip edge -> SPLIT four ways: workbench (code_intel/ 3 files + facts*.rs), ingest (update/watch.rs, update/delta.rs), understanding (atlas/context.rs, atlas/strategies/code_walk.rs), kernel (error.rs). So rule (3) does not clear with any single move."
+
+# ───────────────────────────────────────────────────────────── retrieval
+[[cluster]]
+crate = "corpus-engine"
+context = "retrieval"
+lines = 15086
+files = 18
+leaf = false
+imports_clusters = ["kernel:71", "ingest:18", "understanding:11"]
+imported_by_clusters = ["ingest:51", "understanding:36", "workbench:4", "kernel:4", "back-of-house:2", "workspace:2"]
+external_consumers = "177 sites / 14 crates: sovereign-core(t3):46, sovereign-cli-llm(t6):41, sovereign-mesh(t5):27, sovereign-tools(t4):22, sovereign-api(t5):10, sovereign-meshapp(t4):9, sovereign-cli-dev(t6):5, sovereign-enrichment-build(t4):5, corpus-mcp(t6):3, sovereign-grants(t2):3, sovereign-cli-daemon(t6):2, sovereign-gliner(t3):2, sovereign-cli(t6):1, sovereign-server(t6):1"
+own_dep_max_tier = 1
+consumer_min_tier = 2
+window = "t1..t1"
+dest = "corpus-engine — STAYS, minus a READ-PORT LEAF `corpus-index` (t1): index/{search,create,write,maintain,evidence,provenance}.rs = 4,588 lines with ZERO `crate::enrichment` AND ZERO `crate::{recipe,chunkers,extractors,filters,engine}` references, plus index/read.rs (788, 4 ingest refs)"
+dest_exists = false
+dest_tier = 1
+shim_sites = 6
+renames_riding = "`Source` x4 converges on kernel_types::origin::Source — index/ already names kernel-types at 16 sites, so this rename costs nothing here"
+order = 1
+note = "ARCH_LAYERS.toml:1128's claim CONFIRMED: `crate::enrichment` appears ZERO times in index/search.rs across 1,245 lines. The 23 lines that match /atlas/ are all one caller-supplied parameter, `atlas_article_scores: Option<&HashMap<String,f32>>` (search.rs:756, read at 866-933, traced at 1066-1096) — the atlas influences ranking as DATA, never as a dependency, which is exactly why the port is carvable. Two more files are clean the same way: create.rs (990), write.rs (796), maintain.rs (595), evidence.rs (524), provenance.rs (438) all score 0/0."
+
+# ───────────────────────────────────────────────────────────── workbench
+[[cluster]]
+crate = "corpus-engine"
+context = "workbench"
+lines = 3980
+files = 7
+leaf = false
+imports_clusters = ["kernel:10", "understanding:4", "retrieval:4"]
+imported_by_clusters = ["understanding:1"]
+external_consumers = "20 sites / 4 crates: sovereign-cli-dev(t6):10, sovereign-cli-llm(t6):6, sovereign-mesh(t5):2, sovereign-tools(t4):2"
+own_dep_max_tier = 1
+consumer_min_tier = 4
+window = "t1..t3"
+dest = "code-intel package (docs/CODE_TOOLING_BOUNDARY.md §2): facts.rs+facts_check.rs+facts_store.rs (1,706) -> `code-facts`; enrichment/code_intel/ (2,274) -> `code-enrich`"
+dest_exists = false
+dest_tier = 1
+shim_sites = 3
+renames_riding = "none"
+order = 6
+note = "Both destination crates are already NAMED and LINE-BUDGETED in CODE_TOOLING_BOUNDARY.md §2 (`code-facts` 1,710 from src/{facts,facts_check,facts_store}.rs; `code-enrich` 1,776 from enrichment/code_intel/) — the measurement here is 1,706 and 2,274, so the doc is 4 and 498 lines stale but structurally right. ONE knot: code_intel names `crate::enrichment::pipeline::types` (3 sites) and `pipeline::prompts::load_or_baked` (1) — four sites total, and they are the reason this cluster cannot leave before Understanding publishes its prompt/type surface. Its 4 retrieval sites are all `crate::index` (code_intel/store.rs indexes symbol enrichments), so the read port is its other prerequisite."
+
+# ───────────────────────────────────────────────────────────── kernel
+[[cluster]]
+crate = "corpus-engine"
+context = "kernel"
+lines = 1523
+files = 4
+leaf = false
+imports_clusters = ["retrieval:4", "ingest:3", "understanding:1"]
+imported_by_clusters = ["ingest:118", "understanding:103", "retrieval:71", "workbench:10", "back-of-house:5", "workspace:2", "build-feedback:1"]
+external_consumers = "370 sites / 17 crates: sovereign-core(t3):183, sovereign-tools(t4):68, sovereign-cli-llm(t6):31, sovereign-mesh(t5):19, sovereign-grants(t2):15, sovereign-api(t5):12, sovereign-enrichment-build(t4):11, sovereign-cli-dev(t6):9, sovereign-server(t6):5, sovereign-cli-daemon(t6):4, sovereign-atos(t4):3, corpus-mcp(t6):2, sovereign-cli-shared(t6):2, sovereign-cli(t6):2, sovereign-enrichment-catalog(t4):2, sovereign-gliner(t3):1, sovereign-runtime-recipe(t4):1"
+own_dep_max_tier = 1
+consumer_min_tier = 2
+window = "t0..t1"
+dest = "types.rs + error.rs + corpus.rs -> a t0/t1 leaf (DECOMPOSITION.md:45 calls it `corpus-engine-types`; the honest name is `corpus-engine-vocab` extended, since that leaf already exists at t1 with kernel-types as its ONE internal dep, ARCH_LAYERS.toml:744-747). lib.rs stays with corpus-engine."
+dest_exists = true
+dest_tier = 1
+shim_sites = 3
+renames_riding = "none"
+order = 4
+note = "The most-imported cluster in the crate (310 in-crate sites) and it is NOT a leaf — 8 sites point UP: types.rs:432 holds `stream: Option<crate::stream_axes::StreamAxes>` (understanding), corpus.rs names CorpusIndex (3 sites, retrieval), error.rs names corpus_engine_scip (workbench's dep). Those 8 sites are what stops a published-language leaf today, and they are the same 8 the read port has to move anyway."
+
+# ───────────────────────────────────────────────────────────── back-of-house
+[[cluster]]
+crate = "corpus-engine"
+context = "back-of-house"
+lines = 1542
+files = 7
+leaf = false
+imports_clusters = ["ingest:18", "kernel:5", "understanding:4", "retrieval:2"]
+imported_by_clusters = []
+external_consumers = "6 sites / 3 crates: sovereign-cli-llm(t6):3, sovereign-authoring-harness(t4):2, sovereign-mesh(t5):1"
+own_dep_max_tier = 1
+consumer_min_tier = 4
+window = "t1..t3"
+dest = "sovereign-authoring-harness (t4) — the POLICY half is already there (`sovereign-eval::authoring_harness`, named at harness/mod.rs:4-6, field_coverage.rs:5-6, stage_output.rs:2-3)"
+dest_exists = true
+dest_tier = 4
+shim_sites = 0
+renames_riding = "none"
+order = 5
+note = "Nothing in corpus-engine imports it (imported_by is EMPTY) — it is pure outbound, which makes it the cleanest seam in the crate by shape. The reason it is not order 2 is the 18 ingest sites: harness/runner.rs deliberately calls the production `make_extractor`/`make_chunker` factories and `crate::engine::chunk_doc` (its I2 'no second pipeline' invariant, runner.rs:5-8), so moving it out makes those three pub — a real API widening, which is a decision, not a mechanical move."
+
+# ───────────────────────────────────────────────────────────── workspace
+[[cluster]]
+crate = "corpus-engine"
+context = "workspace"
+lines = 1104
+files = 2
+leaf = false
+imports_clusters = ["ingest:2", "retrieval:2", "kernel:2"]
+imported_by_clusters = ["ingest:1"]
+external_consumers = "2 sites / 1 crate: sovereign-api(t5):2"
+own_dep_max_tier = 1
+consumer_min_tier = 5
+window = "t1..t4"
+dest = "a new `corpus-engine-notes-sync` (t1) sitting ABOVE both corpus-engine and corpus-engine-notes — notes_sync.rs (459) + alignment_projector.rs (645)"
+dest_exists = false
+dest_tier = 1
+shim_sites = 1
+renames_riding = "none"
+order = 3
+note = "It cannot go INTO corpus-engine-notes: alignment_projector.rs:37-38 names CorpusIndex and recipe::MutableMergePolicy, so notes would have to depend on corpus-engine, which is the cycle lib.rs:102-109 already refuses. DEFECT FOUND: that same lib.rs comment says corpus-engine-notes is 'reachable inside corpus-engine via the `stores` feature for the three internal users (alignment_projector, alignment_workspace, project_index_watcher)'. There are ZERO `corpus_engine_notes::` or `NoteStore` USE sites in corpus-engine/src — the dep at Cargo.toml:225 is dead, and notes_sync.rs:5 links `[crate::notes::NoteStore]`, a module that left the crate on 2026-05-23. Dropping the optional dep is a free cut."
+
+# ───────────────────────────────────────────────────────────── build-feedback
+[[cluster]]
+crate = "corpus-engine"
+context = "build-feedback"
+lines = 260
+files = 1
+leaf = true
+imports_clusters = ["kernel:1"]
+imported_by_clusters = []
+external_consumers = "6 sites / 2 crates: sovereign-cli-daemon(t6):4, sovereign-cli-dev(t6):2"
+own_dep_max_tier = 1
+consumer_min_tier = 6
+window = "t1..t5"
+dest = "corpus-engine-watchers (t1) — the rest of Build feedback left in R4 Step 1 (DECOMPOSITION.md:126) and this file did not follow it"
+dest_exists = true
+dest_tier = 1
+shim_sites = 1
+renames_riding = "none"
+order = 2
+note = "The ONLY true leaf in the crate: sovereign_config.rs imports exactly one in-crate thing (`crate::error`) and nothing imports it back. It is the parser for `.sovereign/sovereign.toml`, which is PER-PROJECT WATCHER configuration (sovereign_config.rs:2-3, `RunnerConfig`), and both its consumers are the daemon that runs the watchers and the dev CLI that reads their results. 260 lines, one file, one shim line at lib.rs — the cheapest move on this list by an order of magnitude, and it is currently scheduled nowhere."
+
+# ───────────────────────────────────────────────────────────── research
+# ZERO lines. Confirmed absent: `research` (DOMAINS.md §10.6, minted as the eleventh
+# context 2026-09-14) is 25,597 lines under sovereign/crates/sovereign-core/src/deep_research
+# and has no corpus-engine residue. No corpus-engine module answers "what is known about
+# this question, and what evidence is still missing?" — Charter/Round/EvidenceWindow/
+# AcquisitionPlan/SourceLedger appear nowhere in corpus-engine/src.

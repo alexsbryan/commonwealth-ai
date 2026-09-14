@@ -239,12 +239,31 @@ what `atlas/` alone has grown to.
 ## 7. Sequencing
 
 Executed by the `domains` campaign — flight rules in
-`quality/campaigns/domains.toml` (seven instrumented bars, a predicate, a
-thirteen-rung ladder `domains-3` … `domains-15`), the registry the instruments
-read in `quality/DOMAINS.toml` (contexts, owned words, module tags, the Peer
-dispositions and the thirteen cross-context edges), and per-rung orders under
-`.sovereign/features/domains-*/`. Drafted 2026-09-13; the campaign's Decisions
-section records where its inventory overrode this file (§8, "Re-measured").
+`quality/campaigns/domains.toml`, the registry the instruments read in
+`quality/DOMAINS.toml` (contexts, owned words, module tags, the Peer
+dispositions, the cross-context edges, the collision verdicts), and per-rung
+orders under `.sovereign/features/`. Drafted 2026-09-13; the campaign's
+Decisions section records where its inventory overrode this file (§8,
+"Re-measured"; §10).
+
+**Re-sequenced 2026-09-14, operator direction: god crates first.** The phase
+order below was wrong in one way that matters: it sequenced by CONCERN (names,
+then the read model, then a crate, then the rest), so the largest misnamed
+crate would have been demolished last and by four different rungs. The
+campaign now sequences by CRATE, biggest first, and the phases fold in. The
+loop: take the largest crate whose modules are not all its own context; the
+cluster that IS its context stays; every other cluster moves to its context's
+home crate (the registry's `crates` list, creating the home when it does not
+exist); leaf clusters first, then by size; an edge that crosses crates after
+the move goes through a port already designed (§10.3,
+`sovereign/SERVING_BOUNDARY.md`) or the cluster splits, never a new exception
+row; a rename rides the move; each destination whose own-context share drops
+is enqueued, which is the breadth-first half; stop when the queue is empty and
+the predicate holds. Phase A's renames ride the moves; Phase C is wave 1's
+serving cluster leaving `sovereign-mesh`; Phase B is wave 3's first move out
+of `corpus-engine`; Phase D is the loop. Wave 1 is `sovereign-mesh`: Fabric
+(16,028 lines) stays, ten clusters leave. The algorithm runs as
+`scripts/domains-census.py plan` (rung 3), not as a list a person keeps.
 
 No phase here moves a line until the one before it has named something, because
 the reason this repository grew three misnamed crates is that code with no home
