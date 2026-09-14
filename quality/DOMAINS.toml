@@ -4425,3 +4425,1988 @@ not payment. State it in the ledger: sovereign-core and sovereign-atos are
 LEGALISED by the host's tier, sovereign-tools likewise; only the 13 repointed
 sovereign-core sites and workspace's one sovereign-tools site are actually PAID.
 """
+
+# ═══ Cluster graph — sovereign-mesh 2026-09-14 (11 clusters): every external consumer is tier 6 (cli-daemon 111, cli-llm 94, cli-dev 11 sites); floors pinned at 5 by sovereign_api::state::AppState (15 sites / 7 clusters); PeerInferenceEndpoint is defined in host's daemon.rs:4783 (95 refs / 13 files) — a file move the [[noun]] row sanctions; move order back-of-house, workspace, retrieval, host, serving, compute, workbench, ingest, understanding, answering; host destination = a NEW sovereign-daemon library at tier 5 ═══
+# The cluster graph of sovereign-mesh — the three facts per cluster the
+# domains registry lacks: the in-crate edge table, the external consumer
+# set with tiers, and each cluster's own dependency floor.
+#
+# Measured 2026-09-14 over sovereign/crates/sovereign-mesh/src (115 files,
+# 88,255 lines) against quality/DOMAINS.toml [[module]] rows,
+# quality/ARCH_LAYERS.toml tiers, and git grep for external consumers.
+# `sites` counts REFERENCE SITES (use-tree leaves + inline paths), with
+# `mod x;` declarations excluded — a mod line dissolves when the file moves.
+
+# generated = "2026-09-14"
+# crate_total_lines = 88255
+# crate_total_files = 115
+# move_order = ["back-of-house", "workspace", "retrieval", "host", "serving", "compute", "workbench", "ingest", "understanding", "answering"]
+
+# (crate metadata kept as comments; trailing tables live under plan."sovereign-mesh")
+[[cluster]]
+crate = "sovereign-mesh"
+context = "back-of-house"
+lines = 4841
+files = 5
+leaf = false  # imports no other cluster
+no_in_crate_dependents = true
+own_dep_max_tier = 5
+consumer_min_tier = -1  # no external consumer
+window = [5, 6]
+window_after_port = [5, 6]  # sovereign-api reach cut, sovereign_core re-exports repointed
+dest = "sovereign-mesh-test-harness"
+dest_exists = true
+dest_tier = "5"
+shim_sites = 0  # external import sites that break without a re-export
+renames_riding = 0  # counted by FILE cluster — a move carries the file
+renames_context_mismatch = 0
+order = 1
+constraint = "must follow `serving`: 34 sites into decision_log/scheduler_core, and [[forbid]] sovereign-mesh-test-harness -> sovereign-* (ARCH_LAYERS.toml) has no except for sovereign-mesh; add `sovereign-scheduler` to that except"
+note = "Already satisfies the back-of-house rule mechanically: sovereign-mesh-test-harness is optional = true behind the `dst` feature (Cargo.toml:89,258) and mesh_sim behind `mesh-sim` (:264). But the 4,841 ln still count against the 20,000-line stop bar, so it must leave anyway."
+imported_by_clusters = []
+external_consumers = []
+renames = []
+rename_context_mismatch = []
+
+  [[cluster.imports_clusters]]
+  context = "fabric"
+  sites = 1
+  symbols = [
+    "gossip",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/dst.rs:43",
+  ]
+
+  [[cluster.imports_clusters]]
+  context = "serving"
+  sites = 34
+  symbols = [
+    "decision_log::DecisionEvent",
+    "scheduler_core::LOCAL_CANDIDATE_NAME",
+    "decision_log::RequestFacts",
+    "decision_log::RoutingOutcome",
+    "decision_log::ServedBy",
+    "decision_log::Verdict",
+    "decision_log::RoutingDecision",
+    "decision_log::DecisionBuilder",
+    "decision_log::DecisionPath",
+    "decision_log::DECISION_LOG_SCHEMA",
+    "oicp_select::offload_eligible",
+    "predicted_time",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/mesh_sim/mod.rs:65",
+    "sovereign/crates/sovereign-mesh/src/mesh_sim/mod.rs:65",
+    "sovereign/crates/sovereign-mesh/src/mesh_sim/mod.rs:65",
+    "sovereign/crates/sovereign-mesh/src/mesh_sim/mod.rs:65",
+  ]
+
+  [[cluster.own_deps]]
+  crate = "sovereign-mesh-test-harness"
+  tier = 5
+  sites = 7
+  cite = "sovereign/crates/sovereign-mesh/src/dst.rs:39"
+
+  [[cluster.own_deps]]
+  crate = "sovereign-core"
+  tier = 3
+  sites = 5
+  cite = "sovereign/crates/sovereign-mesh/src/mesh_sim/mod.rs:61"
+
+  [[cluster.own_deps]]
+  crate = "commonwealth-core"
+  tier = 2
+  sites = 4
+  cite = "sovereign/crates/sovereign-mesh/src/dst.rs:36"
+
+[[cluster]]
+crate = "sovereign-mesh"
+context = "workspace"
+lines = 233
+files = 1
+leaf = false  # imports no other cluster
+no_in_crate_dependents = true
+own_dep_max_tier = 5
+consumer_min_tier = 6
+window = [5, 6]
+window_after_port = [4, 6]  # sovereign-api reach cut, sovereign_core re-exports repointed
+dest = "sovereign-work-atlas"
+dest_exists = true
+dest_tier = "4"
+shim_sites = 1  # external import sites that break without a re-export
+renames_riding = 0  # counted by FILE cluster — a move carries the file
+renames_context_mismatch = 0
+order = 2
+note = "corpus-engine-notes is REFUSED by the corpus-engine* forbid (sovereign_work_atlas 3 sites, sovereign_api 1). sovereign-work-atlas already owns ClaimBroadcaster."
+imported_by_clusters = []
+renames = []
+rename_context_mismatch = []
+
+  [[cluster.imports_clusters]]
+  context = "fabric"
+  sites = 5
+  symbols = [
+    "rail_kv_pump",
+    "ring_roster::tests::member",
+    "ring_roster::tests::mesh_of",
+    "ring_roster::tests::pubkey_of",
+    "ring_roster::MeshRosterSource::install",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/work_atlas_broadcaster.rs:55",
+    "sovereign/crates/sovereign-mesh/src/work_atlas_broadcaster.rs:113",
+    "sovereign/crates/sovereign-mesh/src/work_atlas_broadcaster.rs:113",
+    "sovereign/crates/sovereign-mesh/src/work_atlas_broadcaster.rs:113",
+  ]
+
+  [[cluster.external_consumers]]
+  crate = "sovereign-cli-daemon"
+  tier = 6
+  sites = 1
+  symbols = [
+    "MeshBroadcaster",
+  ]
+
+  [[cluster.own_deps]]
+  crate = "sovereign-work-atlas"
+  tier = 4
+  sites = 3
+  cite = "sovereign/crates/sovereign-mesh/src/work_atlas_broadcaster.rs:53"
+
+  [[cluster.own_deps]]
+  crate = "sovereign-api"
+  tier = 5
+  sites = 1
+  cite = "sovereign/crates/sovereign-mesh/src/work_atlas_broadcaster.rs:52"
+
+  [[cluster.own_deps]]
+  crate = "commonwealth-core"
+  tier = 2
+  sites = 1
+  cite = "sovereign/crates/sovereign-mesh/src/work_atlas_broadcaster.rs:102"
+
+  [[cluster.own_deps]]
+  crate = "commonwealth-rail"
+  tier = 2
+  sites = 1
+  cite = "sovereign/crates/sovereign-mesh/src/work_atlas_broadcaster.rs:103"
+
+  [[cluster.own_deps]]
+  crate = "commonwealth-state"
+  tier = 2
+  sites = 1
+  cite = "sovereign/crates/sovereign-mesh/src/work_atlas_broadcaster.rs:182"
+
+[[cluster]]
+crate = "sovereign-mesh"
+context = "retrieval"
+lines = 209
+files = 1
+leaf = true  # imports no other cluster
+no_in_crate_dependents = true
+own_dep_max_tier = 3
+consumer_min_tier = 6
+window = [3, 6]
+window_after_port = [2, 6]  # sovereign-api reach cut, sovereign_core re-exports repointed
+dest = "corpus-engine"
+dest_exists = true
+dest_tier = "1"
+shim_sites = 1  # external import sites that break without a re-export
+renames_riding = 0  # counted by FILE cluster — a move carries the file
+renames_context_mismatch = 0
+order = 3
+note = "corpus-engine needs one port: sovereign_serving::oicp::{KnowledgeSearchRequest,KnowledgeSearchResponse} moves to oicp-types. Without it the destination is sovereign-serving (t2)."
+imports_clusters = []
+imported_by_clusters = []
+renames = []
+rename_context_mismatch = []
+
+  [[cluster.external_consumers]]
+  crate = "sovereign-cli-llm"
+  tier = 6
+  sites = 1
+  symbols = [
+    "MeshKnowledgeClient",
+  ]
+
+  [[cluster.own_deps]]
+  crate = "sovereign-contracts"
+  tier = 0
+  sites = 2
+  cite = "sovereign/crates/sovereign-mesh/src/knowledge_client.rs:179"
+
+  [[cluster.own_deps]]
+  crate = "sovereign-core"
+  tier = 3
+  sites = 1
+  cite = "sovereign/crates/sovereign-mesh/src/knowledge_client.rs:25"
+
+  [[cluster.own_deps]]
+  crate = "sovereign-serving"
+  tier = 2
+  sites = 1
+  cite = "sovereign/crates/sovereign-mesh/src/knowledge_client.rs:29"
+
+[[cluster]]
+crate = "sovereign-mesh"
+context = "host"
+lines = 25432
+files = 32
+leaf = false  # imports no other cluster
+no_in_crate_dependents = false
+own_dep_max_tier = 5
+consumer_min_tier = 6
+window = [5, 6]
+window_after_port = [5, 6]  # sovereign-api reach cut, sovereign_core re-exports repointed
+dest = "sovereign-daemon"
+dest_exists = false
+dest_tier = "5"
+shim_sites = 62  # external import sites that break without a re-export
+renames_riding = 2  # counted by FILE cluster — a move carries the file
+renames_context_mismatch = 1
+order = 4
+note = "Largest cluster and the composition root. Own floor 5 is real: sovereign-api 18 sites (daemon.rs 16, tool_profile.rs 2), sovereign-tools 46, sovereign-meshapp 20, and 34 genuine sovereign-core reaches (runtime/RuntimeParts/ToolRegistry/conv_tiered/insight/memory/dossier). Destination must be a LIBRARY at tier 5 — see .md for why option (a) sovereign-cli-daemon fails."
+
+  [[cluster.imports_clusters]]
+  context = "answering"
+  sites = 1
+  symbols = [
+    "turn_approval::SocketApprovalChannel",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/turn_http.rs:100",
+  ]
+
+  [[cluster.imports_clusters]]
+  context = "compute"
+  sites = 15
+  symbols = [
+    "work_donor::WorkDonorHandle",
+    "worker_eligibility::DiscoveryOutcome",
+    "worker_eligibility::DiscoveryOutcome::default",
+    "work_donor::TRACE_TARGET",
+    "worker_eligibility::DiscoveredWorker",
+    "work_donor::donor_registry",
+    "work_donor::resolve_offer",
+    "work_donor::spawn_work_donor",
+    "work_donor::DONOR_DIR",
+    "work_donor::DONOR_POLL_INTERVAL",
+    "pinned_transport::PinnedTransport",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/daemon.rs:363",
+    "sovereign/crates/sovereign-mesh/src/daemon.rs:2424",
+    "sovereign/crates/sovereign-mesh/src/daemon.rs:2472",
+    "sovereign/crates/sovereign-mesh/src/daemon.rs:2507",
+  ]
+
+  [[cluster.imports_clusters]]
+  context = "fabric"
+  sites = 59
+  symbols = [
+    "deep_link::build_join_link",
+    "iroh_access::MeshIrohAccess",
+    "gossip::announce_presence_change",
+    "gossip::PresenceChange::Parked",
+    "iroh_access::OfferRoutes",
+    "iroh_access::AppRoutes",
+    "iroh_access::MeshIrohAccess::start",
+    "peer_adapter::MeshPeerStore::in_memory",
+    "peer_adapter::MeshConvergence::new",
+    "deep_link::DeepLink",
+    "gossip::self",
+    "gossip::GossipHandle",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/daemon.rs:182",
+    "sovereign/crates/sovereign-mesh/src/daemon.rs:183",
+    "sovereign/crates/sovereign-mesh/src/daemon.rs:183",
+    "sovereign/crates/sovereign-mesh/src/daemon.rs:185",
+  ]
+
+  [[cluster.imports_clusters]]
+  context = "ingest"
+  sites = 6
+  symbols = [
+    "watched_folder_runtime",
+    "watched_folder_runtime::manager",
+    "auto_ingest::CollaborateHandle",
+    "auto_ingest::spawn_auto_collaborate_loop",
+    "auto_resume::spawn_resume_in_progress_ingests",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/corpus_catalog_http.rs:521",
+    "sovereign/crates/sovereign-mesh/src/corpus_watch_http.rs:32",
+    "sovereign/crates/sovereign-mesh/src/daemon.rs:348",
+    "sovereign/crates/sovereign-mesh/src/daemon.rs:3786",
+  ]
+
+  [[cluster.imports_clusters]]
+  context = "serving"
+  sites = 3
+  symbols = [
+    "inference_adapter::SovereignInferenceAdapter::new",
+    "rpc_warm_http::MeshRpcShardWarmer::new",
+    "slot_aliases::resolution_alias_keys",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/daemon.rs:3055",
+    "sovereign/crates/sovereign-mesh/src/daemon.rs:3063",
+    "sovereign/crates/sovereign-mesh/src/daemon.rs:4675",
+  ]
+
+  [[cluster.imports_clusters]]
+  context = "understanding"
+  sites = 6
+  symbols = [
+    "newsworthy_host::MeshNewsworthyHost::new",
+    "reading_formatters::atom_surface_fields",
+    "research_run_dir::build_report",
+    "research_run_dir::list_runs",
+    "research_run_dir::DrLiveSnapshot",
+    "research_run_dir::RunDirPoller",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/daemon.rs:4015",
+    "sovereign/crates/sovereign-mesh/src/reading_http.rs:739",
+    "sovereign/crates/sovereign-mesh/src/research_http.rs:78",
+    "sovereign/crates/sovereign-mesh/src/research_http.rs:78",
+  ]
+
+  [[cluster.imports_clusters]]
+  context = "workbench"
+  sites = 11
+  symbols = [
+    "projects::WatcherKind",
+    "projects::WatcherStatus",
+    "projects::ProjectState",
+    "projects::ProjectEntry",
+    "projects::Registry",
+    "projects::WatcherToggles",
+    "reindexer::RebuildReason",
+    "reindexer::Reindexer",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/project_http.rs:26",
+    "sovereign/crates/sovereign-mesh/src/project_http.rs:26",
+    "sovereign/crates/sovereign-mesh/src/project_http.rs:26",
+    "sovereign/crates/sovereign-mesh/src/project_http.rs:26",
+  ]
+
+  [[cluster.imported_by_clusters]]
+  context = "compute"
+  sites = 2
+  symbols = [
+    "supervised_task::SupervisedTask",
+    "supervised_task::supervise",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/work_donor.rs:103",
+    "sovereign/crates/sovereign-mesh/src/work_donor.rs:395",
+  ]
+
+  [[cluster.imported_by_clusters]]
+  context = "fabric"
+  sites = 34
+  symbols = [
+    "daemon::EmbeddedDaemon",
+    "loopback_guard::LocalOnly",
+    "local_only::LocalOnlyProfile",
+    "types::JoinConfirmation",
+    "loopback_guard::LoopbackRouter",
+    "loopback_guard::enforce_localhost",
+    "daemon_services::DaemonServices::mesh_admin",
+    "http_response::internal_error",
+    "http_response::json_error",
+    "http_response::Absence",
+    "daemon::IrohPeerPath",
+    "daemon::SelfReachability",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/deep_link.rs:17",
+    "sovereign/crates/sovereign-mesh/src/governance_http.rs:43",
+    "sovereign/crates/sovereign-mesh/src/governance_http.rs:44",
+    "sovereign/crates/sovereign-mesh/src/governance_http.rs:44",
+  ]
+
+  [[cluster.imported_by_clusters]]
+  context = "serving"
+  sites = 9
+  symbols = [
+    "daemon::PeerInferenceEndpoint",
+    "tool_profile::apply",
+    "tool_profile::global",
+    "daemon::EmbeddedDaemon",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/entry_endpoint.rs:162",
+    "sovereign/crates/sovereign-mesh/src/inference_adapter.rs:1078",
+    "sovereign/crates/sovereign-mesh/src/inference_adapter.rs:1078",
+    "sovereign/crates/sovereign-mesh/src/inference_adapter.rs:1351",
+  ]
+
+  [[cluster.imported_by_clusters]]
+  context = "understanding"
+  sites = 1
+  symbols = [
+    "research_http::is_live",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/research_run_dir.rs:27",
+  ]
+
+  [[cluster.external_consumers]]
+  crate = "sovereign-cli-daemon"
+  tier = 6
+  sites = 35
+  symbols = [
+    "ClientListener",
+    "DaemonServices",
+    "ENV_VAR",
+    "EmbedAdvertisement",
+    "EmbeddedDaemon",
+    "HeadlessExtras",
+    "HeadlessRails",
+    "LaunchParts",
+    "LocalOnlyProfile",
+    "McpMount",
+    "McpSurface",
+    "PeerInferenceEndpoint",
+    "ProviderFactory",
+    "ServingCapability",
+    "ServingCore",
+    "ServingProfile",
+    "assemble",
+    "corpus_watch_router",
+    "landscape_digest_router",
+    "loopback_only",
+    "project_router",
+  ]
+
+  [[cluster.external_consumers]]
+  crate = "sovereign-cli-llm"
+  tier = 6
+  sites = 24
+  symbols = [
+    "AckResponse",
+    "AtomCard",
+    "AtomSpan",
+    "DaemonServices",
+    "ENTITY_LIMIT_DEFAULT",
+    "ENTITY_LIMIT_MAX",
+    "EmbeddedDaemon",
+    "FEED_DOCS_DEFAULT",
+    "FEED_DOCS_MAX",
+    "FEED_DOCS_MIN",
+    "GRAPH_LIMIT_DEFAULT",
+    "GRAPH_LIMIT_MAX",
+    "LaunchParts",
+    "ListResponse",
+    "RegisterRequest",
+    "RegisterResponse",
+    "SUBGRAPH_LIMIT_DEFAULT",
+    "SUBGRAPH_LIMIT_MAX",
+    "SectionRef",
+    "StateResponse",
+    "StatusResponse",
+    "assemble",
+    "self",
+  ]
+
+  [[cluster.external_consumers]]
+  crate = "sovereign-cli-dev"
+  tier = 6
+  sites = 3
+  symbols = [
+    "FeatureRoot",
+    "McpNotifier",
+    "mcp_router",
+  ]
+
+  [[cluster.own_deps]]
+  crate = "sovereign-core"
+  tier = 3
+  sites = 111
+  cite = "sovereign/crates/sovereign-mesh/src/admin_http.rs:40"
+
+  [[cluster.own_deps]]
+  crate = "sovereign-contracts"
+  tier = 0
+  sites = 47
+  cite = "sovereign/crates/sovereign-mesh/src/admin_http.rs:39"
+
+  [[cluster.own_deps]]
+  crate = "sovereign-tools"
+  tier = 4
+  sites = 46
+  cite = "sovereign/crates/sovereign-mesh/src/atlas_http.rs:35"
+
+  [[cluster.own_deps]]
+  crate = "corpus-engine"
+  tier = 1
+  sites = 37
+  cite = "sovereign/crates/sovereign-mesh/src/atlas_http.rs:261"
+
+  [[cluster.own_deps]]
+  crate = "commonwealth-transport"
+  tier = 2
+  sites = 36
+  cite = "sovereign/crates/sovereign-mesh/src/daemon.rs:404"
+
+  [[cluster.own_deps]]
+  crate = "commonwealth-core"
+  tier = 2
+  sites = 23
+  cite = "sovereign/crates/sovereign-mesh/src/daemon.rs:14"
+
+  [[cluster.own_deps]]
+  crate = "sovereign-meshapp"
+  tier = 4
+  sites = 20
+  cite = "sovereign/crates/sovereign-mesh/src/meshapp_http.rs:30"
+
+  [[cluster.own_deps]]
+  crate = "sovereign-api"
+  tier = 5
+  sites = 18
+  cite = "sovereign/crates/sovereign-mesh/src/daemon.rs:19"
+
+  [[cluster.own_deps]]
+  crate = "commonwealth-state"
+  tier = 2
+  sites = 12
+  cite = "sovereign/crates/sovereign-mesh/src/daemon.rs:2934"
+
+  [[cluster.own_deps]]
+  crate = "sovereign-store"
+  tier = 3
+  sites = 9
+  cite = "sovereign/crates/sovereign-mesh/src/admin_http.rs:790"
+
+  [[cluster.own_deps]]
+  crate = "sovereign-gliner"
+  tier = 3
+  sites = 7
+  cite = "sovereign/crates/sovereign-mesh/src/assets_http.rs:182"
+
+  [[cluster.own_deps]]
+  crate = "commonwealth-discovery"
+  tier = 2
+  sites = 4
+  cite = "sovereign/crates/sovereign-mesh/src/daemon.rs:16"
+
+  [[cluster.rename_context_mismatch]]
+  from = "PeerInferenceEndpoint"
+  to = "InferenceVenue"
+  at = "sovereign/crates/sovereign-mesh/src/daemon.rs:4783"
+  file_cluster = "host"
+  noun_context = "serving"
+  # the registry's [[noun]] row and its [[module]] row disagree:
+  # this type must CHANGE FILE as part of the move, or the
+  # module row is mistagged. Either way it is not a free rename.
+
+  [[cluster.renames]]
+  from = "PeerInferenceEndpoint"
+  to = "InferenceVenue"
+  file = "sovereign/crates/sovereign-mesh/src/daemon.rs:4783"
+
+  [[cluster.renames]]
+  from = "IrohPeerPath"
+  to = "MemberReach"
+  file = "sovereign/crates/sovereign-mesh/src/daemon.rs:483"
+
+[[cluster]]
+crate = "sovereign-mesh"
+context = "serving"
+lines = 20488
+files = 20
+leaf = false  # imports no other cluster
+no_in_crate_dependents = false
+own_dep_max_tier = 5
+consumer_min_tier = 6
+window = [5, 6]
+window_after_port = [3, 6]  # sovereign-api reach cut, sovereign_core re-exports repointed
+dest = "sovereign-scheduler + sovereign-serving-host"
+dest_exists = false
+dest_tier = "0 / 3"
+shim_sites = 32  # external import sites that break without a re-export
+renames_riding = 13  # counted by FILE cluster — a move carries the file
+renames_context_mismatch = 0
+order = 5
+note = "Splits per sovereign/SERVING_BOUNDARY.md:44-45. scheduler half 7,795 ln (registry count) at tier 0; serving-host half 10,102 ln at tier 3. 2,591 ln UNPLACED by that doc: rpc_warm_http 1214, worker_inference_proxy 542, prompt_compactor 519, model_fetch 316."
+rename_context_mismatch = []
+
+  [[cluster.imports_clusters]]
+  context = "compute"
+  sites = 17
+  symbols = [
+    "worker_pod::mint_bootstrap",
+    "worker_pod::BootstrapInputs",
+    "guest_tunnel::GuestTunnel",
+    "guest_tunnel::GuestTunnel::open",
+    "pinned_transport::build_pinned_transport",
+    "pinned_transport::synthetic_node_id_from_seed",
+    "pinned_transport::PinnedTransport",
+    "pinned_transport::TransportError",
+    "worker_pod::BootstrapBlob",
+    "worker_eligibility::global",
+    "worker_http::WorkerState",
+    "worker_http::worker_router",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/guest_lender.rs:178",
+    "sovereign/crates/sovereign-mesh/src/guest_lender.rs:291",
+    "sovereign/crates/sovereign-mesh/src/pinned_worker_source.rs:52",
+    "sovereign/crates/sovereign-mesh/src/pinned_worker_source.rs:52",
+  ]
+
+  [[cluster.imports_clusters]]
+  context = "fabric"
+  sites = 1
+  symbols = [
+    "mesh_discovery::reachable_addresses",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/rpc_warm_http.rs:702",
+  ]
+
+  [[cluster.imports_clusters]]
+  context = "host"
+  sites = 9
+  symbols = [
+    "daemon::PeerInferenceEndpoint",
+    "tool_profile::apply",
+    "tool_profile::global",
+    "daemon::EmbeddedDaemon",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/entry_endpoint.rs:162",
+    "sovereign/crates/sovereign-mesh/src/inference_adapter.rs:1078",
+    "sovereign/crates/sovereign-mesh/src/inference_adapter.rs:1078",
+    "sovereign/crates/sovereign-mesh/src/inference_adapter.rs:1351",
+  ]
+
+  [[cluster.imports_clusters]]
+  context = "understanding"
+  sites = 2
+  symbols = [
+    "source_content_validator::ValidatorRegistry::new",
+    "source_content_validator::validate_tool_calls",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/inference_adapter.rs:1199",
+    "sovereign/crates/sovereign-mesh/src/inference_adapter.rs:1200",
+  ]
+
+  [[cluster.imports_clusters]]
+  context = "workbench"
+  sites = 2
+  symbols = [
+    "fim_adapter::fim_completion_stream",
+    "fim_adapter::edit_status",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/inference_adapter.rs:1427",
+    "sovereign/crates/sovereign-mesh/src/inference_adapter.rs:1431",
+  ]
+
+  [[cluster.imported_by_clusters]]
+  context = "back-of-house"
+  sites = 34
+  symbols = [
+    "decision_log::DecisionEvent",
+    "scheduler_core::LOCAL_CANDIDATE_NAME",
+    "decision_log::RequestFacts",
+    "decision_log::RoutingOutcome",
+    "decision_log::ServedBy",
+    "decision_log::Verdict",
+    "decision_log::RoutingDecision",
+    "decision_log::DecisionBuilder",
+    "decision_log::DecisionPath",
+    "decision_log::DECISION_LOG_SCHEMA",
+    "oicp_select::offload_eligible",
+    "predicted_time",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/mesh_sim/mod.rs:65",
+    "sovereign/crates/sovereign-mesh/src/mesh_sim/mod.rs:65",
+    "sovereign/crates/sovereign-mesh/src/mesh_sim/mod.rs:65",
+    "sovereign/crates/sovereign-mesh/src/mesh_sim/mod.rs:65",
+  ]
+
+  [[cluster.imported_by_clusters]]
+  context = "compute"
+  sites = 5
+  symbols = [
+    "worker_inference_proxy::InferenceProxyConfig",
+    "pinned_worker_source::PinnedPod",
+    "pinned_worker_source::PodCapabilities",
+    "worker_inference_proxy::inference_proxy_routes",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/pinned_pod_snapshot.rs:46",
+    "sovereign/crates/sovereign-mesh/src/pinned_pod_snapshot.rs:46",
+    "sovereign/crates/sovereign-mesh/src/worker_daemon.rs:158",
+    "sovereign/crates/sovereign-mesh/src/worker_http.rs:214",
+  ]
+
+  [[cluster.imported_by_clusters]]
+  context = "host"
+  sites = 3
+  symbols = [
+    "inference_adapter::SovereignInferenceAdapter::new",
+    "rpc_warm_http::MeshRpcShardWarmer::new",
+    "slot_aliases::resolution_alias_keys",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/daemon.rs:3055",
+    "sovereign/crates/sovereign-mesh/src/daemon.rs:3063",
+    "sovereign/crates/sovereign-mesh/src/daemon.rs:4675",
+  ]
+
+  [[cluster.imported_by_clusters]]
+  context = "workbench"
+  sites = 2
+  symbols = [
+    "inference_adapter::translate_finish_reason",
+    "inference_adapter::translate_stream_usage",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/fim_adapter.rs:43",
+    "sovereign/crates/sovereign-mesh/src/fim_adapter.rs:43",
+  ]
+
+  [[cluster.external_consumers]]
+  crate = "sovereign-cli-daemon"
+  tier = 6
+  sites = 28
+  symbols = [
+    "CompositeEndpointSource",
+    "DeferredDaemon",
+    "EntryNodeEndpoint",
+    "InferenceProxyConfig",
+    "MeshInferenceProvider",
+    "PeerEndpointSource",
+    "PinnedWorkerEndpointSource",
+    "StoredGuestLink",
+    "install_rpc_warm_orchestrator",
+    "resolution_alias_keys",
+  ]
+
+  [[cluster.external_consumers]]
+  crate = "sovereign-cli-llm"
+  tier = 6
+  sites = 4
+  symbols = [
+    "PodCapabilities",
+    "fetch_model_to_dir",
+    "list_peer_files",
+  ]
+
+  [[cluster.own_deps]]
+  crate = "sovereign-core"
+  tier = 3
+  sites = 99
+  cite = "sovereign/crates/sovereign-mesh/src/decision_log.rs:58"
+
+  [[cluster.own_deps]]
+  crate = "commonwealth-core"
+  tier = 2
+  sites = 21
+  cite = "sovereign/crates/sovereign-mesh/src/entry_endpoint.rs:62"
+
+  [[cluster.own_deps]]
+  crate = "sovereign-api"
+  tier = 5
+  sites = 18
+  cite = "sovereign/crates/sovereign-mesh/src/inference_adapter.rs:24"
+
+  [[cluster.own_deps]]
+  crate = "sovereign-inference"
+  tier = 3
+  sites = 11
+  cite = "sovereign/crates/sovereign-mesh/src/entry_endpoint.rs:63"
+
+  [[cluster.own_deps]]
+  crate = "sovereign-contracts"
+  tier = 0
+  sites = 10
+  cite = "sovereign/crates/sovereign-mesh/src/guest_lender.rs:236"
+
+  [[cluster.own_deps]]
+  crate = "commonwealth-state"
+  tier = 2
+  sites = 5
+  cite = "sovereign/crates/sovereign-mesh/src/pinned_worker_source.rs:387"
+
+  [[cluster.own_deps]]
+  crate = "sovereign-serving"
+  tier = 2
+  sites = 3
+  cite = "sovereign/crates/sovereign-mesh/src/inference_adapter.rs:34"
+
+  [[cluster.own_deps]]
+  crate = "commonwealth-transport"
+  tier = 2
+  sites = 3
+  cite = "sovereign/crates/sovereign-mesh/src/rpc_warm_http.rs:510"
+
+  [[cluster.renames]]
+  from = "PeerObservationRecord"
+  to = "VenueObservationRecord"
+  file = "sovereign/crates/sovereign-mesh/src/decision_log.rs:118"
+
+  [[cluster.renames]]
+  from = "Peers"
+  to = "FixedVenues"
+  file = "sovereign/crates/sovereign-mesh/src/entry_endpoint.rs:167"
+
+  [[cluster.renames]]
+  from = "PeerFailureDisposition"
+  to = "VenueFailureDisposition"
+  file = "sovereign/crates/sovereign-mesh/src/peer_inference.rs:2991"
+
+  [[cluster.renames]]
+  from = "PeerEndpointSource"
+  to = "VenueSource"
+  file = "sovereign/crates/sovereign-mesh/src/peer_inference.rs:337"
+
+  [[cluster.renames]]
+  from = "NoPeers"
+  to = "NoVenues"
+  file = "sovereign/crates/sovereign-mesh/src/peer_inference.rs:4254"
+
+  [[cluster.renames]]
+  from = "OnePeer"
+  to = "OneVenue"
+  file = "sovereign/crates/sovereign-mesh/src/peer_inference.rs:4534"
+
+  [[cluster.renames]]
+  from = "PeerManifestView"
+  to = "VenueManifestView"
+  file = "sovereign/crates/sovereign-mesh/src/scheduler_core.rs:216"
+
+  [[cluster.renames]]
+  from = "PeerCandidateView"
+  to = "VenueView"
+  file = "sovereign/crates/sovereign-mesh/src/scheduler_core.rs:232"
+
+  [[cluster.renames]]
+  from = "PeerLedger"
+  to = "VenueLedger"
+  file = "sovereign/crates/sovereign-mesh/tests/main/chat_completion_e2e.rs:1291"
+
+  [[cluster.renames]]
+  from = "PeerLedgerHandle"
+  to = "VenueLedgerHandle"
+  file = "sovereign/crates/sovereign-mesh/tests/main/chat_completion_e2e.rs:1300"
+
+  [[cluster.renames]]
+  from = "ResolvingPeerState"
+  to = "ResolvingVenueState"
+  file = "sovereign/crates/sovereign-mesh/tests/main/chat_completion_e2e.rs:1302"
+
+  [[cluster.renames]]
+  from = "StubPeerSource"
+  to = "StubVenueSource"
+  file = "sovereign/crates/sovereign-mesh/tests/main/chat_completion_e2e.rs:67"
+
+  [[cluster.renames]]
+  from = "NoPeers"
+  to = "NoVenues"
+  file = "sovereign/crates/sovereign-mesh/tests/main/guest_lender_routing.rs:57"
+
+[[cluster]]
+crate = "sovereign-mesh"
+context = "compute"
+lines = 9740
+files = 12
+leaf = false  # imports no other cluster
+no_in_crate_dependents = false
+own_dep_max_tier = 5
+consumer_min_tier = 6
+window = [5, 6]
+window_after_port = [2, 6]  # sovereign-api reach cut, sovereign_core re-exports repointed
+dest = "sovereign-compute"
+dest_exists = true
+dest_tier = "3"
+shim_sites = 45  # external import sites that break without a re-export
+renames_riding = 0  # counted by FILE cluster — a move carries the file
+renames_context_mismatch = 0
+order = 6
+note = "sovereign-compute already owns a child-process supervisor (src/supervisor.rs); worker_subprocess_runner.rs 1,271 + worker_controller.rs 846 are a second one — ARCH 8. commonwealth-work is NOT the home: this cluster is its CONSUMER (14 sites naming executor/process/sandbox/refusal/projection) and [[forbid]] commonwealth-work -> sovereign-* blocks the move."
+renames = []
+rename_context_mismatch = []
+
+  [[cluster.imports_clusters]]
+  context = "host"
+  sites = 2
+  symbols = [
+    "supervised_task::SupervisedTask",
+    "supervised_task::supervise",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/work_donor.rs:103",
+    "sovereign/crates/sovereign-mesh/src/work_donor.rs:395",
+  ]
+
+  [[cluster.imports_clusters]]
+  context = "ingest"
+  sites = 3
+  symbols = [
+    "ingest_executor::INGEST_KIND",
+    "ingest_executor::IngestExecutor::new",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/work_donor.rs:224",
+    "sovereign/crates/sovereign-mesh/src/work_donor.rs:231",
+    "sovereign/crates/sovereign-mesh/src/work_donor/tests.rs:699",
+  ]
+
+  [[cluster.imports_clusters]]
+  context = "serving"
+  sites = 5
+  symbols = [
+    "worker_inference_proxy::InferenceProxyConfig",
+    "pinned_worker_source::PinnedPod",
+    "pinned_worker_source::PodCapabilities",
+    "worker_inference_proxy::inference_proxy_routes",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/pinned_pod_snapshot.rs:46",
+    "sovereign/crates/sovereign-mesh/src/pinned_pod_snapshot.rs:46",
+    "sovereign/crates/sovereign-mesh/src/worker_daemon.rs:158",
+    "sovereign/crates/sovereign-mesh/src/worker_http.rs:214",
+  ]
+
+  [[cluster.imports_clusters]]
+  context = "workbench"
+  sites = 3
+  symbols = [
+    "projects::ProjectState",
+    "projects::WatcherKind",
+    "projects::WatcherStatus",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/work_donor.rs:102",
+    "sovereign/crates/sovereign-mesh/src/work_donor.rs:102",
+    "sovereign/crates/sovereign-mesh/src/work_donor.rs:366",
+  ]
+
+  [[cluster.imported_by_clusters]]
+  context = "fabric"
+  sites = 2
+  symbols = [
+    "worker_eligibility::WorkerStatusView",
+    "worker_eligibility::global",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/mesh_http.rs:197",
+    "sovereign/crates/sovereign-mesh/src/mesh_http.rs:402",
+  ]
+
+  [[cluster.imported_by_clusters]]
+  context = "host"
+  sites = 15
+  symbols = [
+    "work_donor::WorkDonorHandle",
+    "worker_eligibility::DiscoveryOutcome",
+    "worker_eligibility::DiscoveryOutcome::default",
+    "work_donor::TRACE_TARGET",
+    "worker_eligibility::DiscoveredWorker",
+    "work_donor::donor_registry",
+    "work_donor::resolve_offer",
+    "work_donor::spawn_work_donor",
+    "work_donor::DONOR_DIR",
+    "work_donor::DONOR_POLL_INTERVAL",
+    "pinned_transport::PinnedTransport",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/daemon.rs:363",
+    "sovereign/crates/sovereign-mesh/src/daemon.rs:2424",
+    "sovereign/crates/sovereign-mesh/src/daemon.rs:2472",
+    "sovereign/crates/sovereign-mesh/src/daemon.rs:2507",
+  ]
+
+  [[cluster.imported_by_clusters]]
+  context = "ingest"
+  sites = 3
+  symbols = [
+    "work_donor::DONOR_ISOLATION",
+    "work_donor::fold_now",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/auto_ingest.rs:216",
+    "sovereign/crates/sovereign-mesh/src/ingest_executor/tests.rs:195",
+    "sovereign/crates/sovereign-mesh/src/ingest_executor/tests.rs:197",
+  ]
+
+  [[cluster.imported_by_clusters]]
+  context = "serving"
+  sites = 17
+  symbols = [
+    "worker_pod::mint_bootstrap",
+    "worker_pod::BootstrapInputs",
+    "guest_tunnel::GuestTunnel",
+    "guest_tunnel::GuestTunnel::open",
+    "pinned_transport::build_pinned_transport",
+    "pinned_transport::synthetic_node_id_from_seed",
+    "pinned_transport::PinnedTransport",
+    "pinned_transport::TransportError",
+    "worker_pod::BootstrapBlob",
+    "worker_eligibility::global",
+    "worker_http::WorkerState",
+    "worker_http::worker_router",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/guest_lender.rs:178",
+    "sovereign/crates/sovereign-mesh/src/guest_lender.rs:291",
+    "sovereign/crates/sovereign-mesh/src/pinned_worker_source.rs:52",
+    "sovereign/crates/sovereign-mesh/src/pinned_worker_source.rs:52",
+  ]
+
+  [[cluster.external_consumers]]
+  crate = "sovereign-cli-llm"
+  tier = 6
+  sites = 31
+  symbols = [
+    "ControllerConfig",
+    "CoordinatorConfig",
+    "GuestTunnel",
+    "JobSpec",
+    "MultiPodCoordinator",
+    "PinnedPodSnapshot",
+    "ProviderError",
+    "ProviderInstance",
+    "ProviderResult",
+    "PublicAddress",
+    "UploadFile",
+    "WORKER_PORT",
+    "WorkUnit",
+    "WorkerController",
+    "WorkerProvider",
+    "default_snapshot_dir",
+    "delete_snapshot",
+    "save_snapshot",
+  ]
+
+  [[cluster.external_consumers]]
+  crate = "sovereign-cli-daemon"
+  tier = 6
+  sites = 14
+  symbols = [
+    "ANCHOR_FLAP_THRESHOLD",
+    "ANCHOR_SETTLE_SECS",
+    "EchoRunner",
+    "SubprocessRunner",
+    "SubprocessRunnerConfig",
+    "WorkerEligibility",
+    "WorkerRunner",
+    "default_snapshot_dir",
+    "load_all_snapshots",
+    "load_bootstrap_blob",
+    "new_disk_dump_signals",
+    "run_worker_mode_with_signals",
+    "set_global",
+  ]
+
+  [[cluster.own_deps]]
+  crate = "commonwealth-work"
+  tier = 2
+  sites = 18
+  cite = "sovereign/crates/sovereign-mesh/src/work_donor.rs:79"
+
+  [[cluster.own_deps]]
+  crate = "kernel-types"
+  tier = 0
+  sites = 13
+  cite = "sovereign/crates/sovereign-mesh/src/work_donor.rs:91"
+
+  [[cluster.own_deps]]
+  crate = "commonwealth-core"
+  tier = 2
+  sites = 10
+  cite = "sovereign/crates/sovereign-mesh/src/pinned_transport.rs:40"
+
+  [[cluster.own_deps]]
+  crate = "sovereign-core"
+  tier = 3
+  sites = 5
+  cite = "sovereign/crates/sovereign-mesh/src/pinned_pod_snapshot.rs:43"
+
+  [[cluster.own_deps]]
+  crate = "sovereign-contracts"
+  tier = 0
+  sites = 5
+  cite = "sovereign/crates/sovereign-mesh/src/pinned_pod_snapshot.rs:160"
+
+  [[cluster.own_deps]]
+  crate = "corpus-engine"
+  tier = 1
+  sites = 4
+  cite = "sovereign/crates/sovereign-mesh/src/work_donor.rs:203"
+
+  [[cluster.own_deps]]
+  crate = "oicp-types"
+  tier = 0
+  sites = 3
+  cite = "sovereign/crates/sovereign-mesh/src/work_donor/tests.rs:57"
+
+  [[cluster.own_deps]]
+  crate = "commonwealth-transport"
+  tier = 2
+  sites = 1
+  cite = "sovereign/crates/sovereign-mesh/src/guest_tunnel.rs:38"
+
+  [[cluster.own_deps]]
+  crate = "commonwealth-rail"
+  tier = 2
+  sites = 1
+  cite = "sovereign/crates/sovereign-mesh/src/work_donor.rs:78"
+
+  [[cluster.own_deps]]
+  crate = "sovereign-api"
+  tier = 5
+  sites = 1
+  cite = "sovereign/crates/sovereign-mesh/src/work_donor.rs:81"
+
+[[cluster]]
+crate = "sovereign-mesh"
+context = "workbench"
+lines = 4811
+files = 5
+leaf = false  # imports no other cluster
+no_in_crate_dependents = false
+own_dep_max_tier = 5
+consumer_min_tier = 6
+window = [5, 6]
+window_after_port = [1, 6]  # sovereign-api reach cut, sovereign_core re-exports repointed
+dest = "corpus-engine-watchers"
+dest_exists = true
+dest_tier = "1"
+shim_sites = 20  # external import sites that break without a re-export
+renames_riding = 0  # counted by FILE cluster — a move carries the file
+renames_context_mismatch = 0
+order = 7
+note = "fim_adapter.rs (745 ln) is NOT code-intel: it names sovereign-api + sovereign-inference and CODE_TOOLING_BOUNDARY rule 5 forbids a required host. It rides with serving-host. lsp_tier.rs -> corpus-engine-scip. The other 3,305 ln go to corpus-engine-watchers."
+renames = []
+rename_context_mismatch = []
+
+  [[cluster.imports_clusters]]
+  context = "ingest"
+  sites = 1
+  symbols = [
+    "auto_resume::env_truthy",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/reindexer.rs:970",
+  ]
+
+  [[cluster.imports_clusters]]
+  context = "serving"
+  sites = 2
+  symbols = [
+    "inference_adapter::translate_finish_reason",
+    "inference_adapter::translate_stream_usage",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/fim_adapter.rs:43",
+    "sovereign/crates/sovereign-mesh/src/fim_adapter.rs:43",
+  ]
+
+  [[cluster.imported_by_clusters]]
+  context = "compute"
+  sites = 3
+  symbols = [
+    "projects::ProjectState",
+    "projects::WatcherKind",
+    "projects::WatcherStatus",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/work_donor.rs:102",
+    "sovereign/crates/sovereign-mesh/src/work_donor.rs:102",
+    "sovereign/crates/sovereign-mesh/src/work_donor.rs:366",
+  ]
+
+  [[cluster.imported_by_clusters]]
+  context = "host"
+  sites = 11
+  symbols = [
+    "projects::WatcherKind",
+    "projects::WatcherStatus",
+    "projects::ProjectState",
+    "projects::ProjectEntry",
+    "projects::Registry",
+    "projects::WatcherToggles",
+    "reindexer::RebuildReason",
+    "reindexer::Reindexer",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/project_http.rs:26",
+    "sovereign/crates/sovereign-mesh/src/project_http.rs:26",
+    "sovereign/crates/sovereign-mesh/src/project_http.rs:26",
+    "sovereign/crates/sovereign-mesh/src/project_http.rs:26",
+  ]
+
+  [[cluster.imported_by_clusters]]
+  context = "serving"
+  sites = 2
+  symbols = [
+    "fim_adapter::fim_completion_stream",
+    "fim_adapter::edit_status",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/inference_adapter.rs:1427",
+    "sovereign/crates/sovereign-mesh/src/inference_adapter.rs:1431",
+  ]
+
+  [[cluster.external_consumers]]
+  crate = "sovereign-cli-daemon"
+  tier = 6
+  sites = 18
+  symbols = [
+    "ProjectEntry",
+    "Registry",
+    "Reindexer",
+    "ScipGraphHandle",
+    "read_git_head",
+  ]
+
+  [[cluster.external_consumers]]
+  crate = "sovereign-cli-dev"
+  tier = 6
+  sites = 2
+  symbols = [
+    "Registry",
+  ]
+
+  [[cluster.own_deps]]
+  crate = "corpus-engine-scip"
+  tier = 1
+  sites = 8
+  cite = "sovereign/crates/sovereign-mesh/src/lsp_tier.rs:65"
+
+  [[cluster.own_deps]]
+  crate = "sovereign-core"
+  tier = 3
+  sites = 7
+  cite = "sovereign/crates/sovereign-mesh/src/fim_adapter.rs:37"
+
+  [[cluster.own_deps]]
+  crate = "sovereign-inference"
+  tier = 3
+  sites = 5
+  cite = "sovereign/crates/sovereign-mesh/src/fim_adapter.rs:41"
+
+  [[cluster.own_deps]]
+  crate = "corpus-engine-notes"
+  tier = 1
+  sites = 4
+  cite = "sovereign/crates/sovereign-mesh/src/commit_harvest.rs:49"
+
+  [[cluster.own_deps]]
+  crate = "sovereign-api"
+  tier = 5
+  sites = 2
+  cite = "sovereign/crates/sovereign-mesh/src/fim_adapter.rs:35"
+
+  [[cluster.own_deps]]
+  crate = "corpus-engine"
+  tier = 1
+  sites = 2
+  cite = "sovereign/crates/sovereign-mesh/src/reindexer.rs:643"
+
+  [[cluster.own_deps]]
+  crate = "sovereign-contracts"
+  tier = 0
+  sites = 1
+  cite = "sovereign/crates/sovereign-mesh/src/projects.rs:364"
+
+[[cluster]]
+crate = "sovereign-mesh"
+context = "ingest"
+lines = 3410
+files = 8
+leaf = false  # imports no other cluster
+no_in_crate_dependents = false
+own_dep_max_tier = 5
+consumer_min_tier = 6
+window = [5, 6]
+window_after_port = [2, 6]  # sovereign-api reach cut, sovereign_core re-exports repointed
+dest = "sovereign-enrichment-build"
+dest_exists = true
+dest_tier = "4"
+shim_sites = 2  # external import sites that break without a re-export
+renames_riding = 1  # counted by FILE cluster — a move carries the file
+renames_context_mismatch = 1
+order = 8
+note = "corpus-engine is REFUSED by [[forbid]] corpus-engine* -> sovereign-* (except contracts): 12 sovereign-tools sites in watched_folder_setup/runtime/auto_resume, 14 sovereign-api sites in auto_ingest/auto_resume. sovereign-enrichment-build (t4) is the destination the imports allow today."
+
+  [[cluster.imports_clusters]]
+  context = "compute"
+  sites = 3
+  symbols = [
+    "work_donor::DONOR_ISOLATION",
+    "work_donor::fold_now",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/auto_ingest.rs:216",
+    "sovereign/crates/sovereign-mesh/src/ingest_executor/tests.rs:195",
+    "sovereign/crates/sovereign-mesh/src/ingest_executor/tests.rs:197",
+  ]
+
+  [[cluster.imports_clusters]]
+  context = "fabric"
+  sites = 1
+  symbols = [
+    "canonical_pull::pull_canonical_from_peer",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/auto_ingest.rs:341",
+  ]
+
+  [[cluster.imported_by_clusters]]
+  context = "compute"
+  sites = 3
+  symbols = [
+    "ingest_executor::INGEST_KIND",
+    "ingest_executor::IngestExecutor::new",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/work_donor.rs:224",
+    "sovereign/crates/sovereign-mesh/src/work_donor.rs:231",
+    "sovereign/crates/sovereign-mesh/src/work_donor/tests.rs:699",
+  ]
+
+  [[cluster.imported_by_clusters]]
+  context = "host"
+  sites = 6
+  symbols = [
+    "watched_folder_runtime",
+    "watched_folder_runtime::manager",
+    "auto_ingest::CollaborateHandle",
+    "auto_ingest::spawn_auto_collaborate_loop",
+    "auto_resume::spawn_resume_in_progress_ingests",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/corpus_catalog_http.rs:521",
+    "sovereign/crates/sovereign-mesh/src/corpus_watch_http.rs:32",
+    "sovereign/crates/sovereign-mesh/src/daemon.rs:348",
+    "sovereign/crates/sovereign-mesh/src/daemon.rs:3786",
+  ]
+
+  [[cluster.imported_by_clusters]]
+  context = "workbench"
+  sites = 1
+  symbols = [
+    "auto_resume::env_truthy",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/reindexer.rs:970",
+  ]
+
+  [[cluster.external_consumers]]
+  crate = "sovereign-cli-daemon"
+  tier = 6
+  sites = 2
+  symbols = [
+    "WatchedSubsystem",
+  ]
+
+  [[cluster.own_deps]]
+  crate = "sovereign-api"
+  tier = 5
+  sites = 14
+  cite = "sovereign/crates/sovereign-mesh/src/auto_ingest.rs:13"
+
+  [[cluster.own_deps]]
+  crate = "commonwealth-core"
+  tier = 2
+  sites = 12
+  cite = "sovereign/crates/sovereign-mesh/src/auto_ingest.rs:6"
+
+  [[cluster.own_deps]]
+  crate = "corpus-engine"
+  tier = 1
+  sites = 12
+  cite = "sovereign/crates/sovereign-mesh/src/auto_ingest.rs:12"
+
+  [[cluster.own_deps]]
+  crate = "sovereign-tools"
+  tier = 4
+  sites = 12
+  cite = "sovereign/crates/sovereign-mesh/src/auto_resume.rs:69"
+
+  [[cluster.own_deps]]
+  crate = "commonwealth-work"
+  tier = 2
+  sites = 7
+  cite = "sovereign/crates/sovereign-mesh/src/ingest_executor.rs:84"
+
+  [[cluster.own_deps]]
+  crate = "kernel-types"
+  tier = 0
+  sites = 7
+  cite = "sovereign/crates/sovereign-mesh/src/ingest_executor.rs:89"
+
+  [[cluster.own_deps]]
+  crate = "commonwealth-transport"
+  tier = 2
+  sites = 4
+  cite = "sovereign/crates/sovereign-mesh/src/auto_ingest.rs:870"
+
+  [[cluster.own_deps]]
+  crate = "commonwealth-state"
+  tier = 2
+  sites = 2
+  cite = "sovereign/crates/sovereign-mesh/src/auto_ingest.rs:703"
+
+  [[cluster.own_deps]]
+  crate = "sovereign-contracts"
+  tier = 0
+  sites = 2
+  cite = "sovereign/crates/sovereign-mesh/src/ingest_executor.rs:96"
+
+  [[cluster.rename_context_mismatch]]
+  from = "PeerCanonicalLead"
+  to = "CanonicalAtlasLead"
+  at = "sovereign/crates/sovereign-mesh/src/auto_ingest.rs:1351"
+  file_cluster = "ingest"
+  noun_context = "understanding"
+  # the registry's [[noun]] row and its [[module]] row disagree:
+  # this type must CHANGE FILE as part of the move, or the
+  # module row is mistagged. Either way it is not a free rename.
+
+  [[cluster.renames]]
+  from = "PeerCanonicalLead"
+  to = "CanonicalAtlasLead"
+  file = "sovereign/crates/sovereign-mesh/src/auto_ingest.rs:1351"
+
+[[cluster]]
+crate = "sovereign-mesh"
+context = "understanding"
+lines = 2316
+files = 5
+leaf = false  # imports no other cluster
+no_in_crate_dependents = false
+own_dep_max_tier = 5
+consumer_min_tier = -1  # no external consumer
+window = [5, 6]
+window_after_port = [4, 6]  # sovereign-api reach cut, sovereign_core re-exports repointed
+dest = "sovereign-enrichment-build"
+dest_exists = true
+dest_tier = "4"
+shim_sites = 0  # external import sites that break without a re-export
+renames_riding = 0  # counted by FILE cluster — a move carries the file
+renames_context_mismatch = 0
+order = 9
+note = "Same forbid blocks corpus-engine (8 sovereign-tools sites in newsworthy_host). research_run_dir.rs (706 ln) names sovereign_core::deep_research 5x — by the registry's own context table that is the RESEARCH context's root, not understanding's; retag it."
+external_consumers = []
+renames = []
+rename_context_mismatch = []
+
+  [[cluster.imports_clusters]]
+  context = "host"
+  sites = 1
+  symbols = [
+    "research_http::is_live",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/research_run_dir.rs:27",
+  ]
+
+  [[cluster.imported_by_clusters]]
+  context = "host"
+  sites = 6
+  symbols = [
+    "newsworthy_host::MeshNewsworthyHost::new",
+    "reading_formatters::atom_surface_fields",
+    "research_run_dir::build_report",
+    "research_run_dir::list_runs",
+    "research_run_dir::DrLiveSnapshot",
+    "research_run_dir::RunDirPoller",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/daemon.rs:4015",
+    "sovereign/crates/sovereign-mesh/src/reading_http.rs:739",
+    "sovereign/crates/sovereign-mesh/src/research_http.rs:78",
+    "sovereign/crates/sovereign-mesh/src/research_http.rs:78",
+  ]
+
+  [[cluster.imported_by_clusters]]
+  context = "serving"
+  sites = 2
+  symbols = [
+    "source_content_validator::ValidatorRegistry::new",
+    "source_content_validator::validate_tool_calls",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/inference_adapter.rs:1199",
+    "sovereign/crates/sovereign-mesh/src/inference_adapter.rs:1200",
+  ]
+
+  [[cluster.own_deps]]
+  crate = "corpus-engine"
+  tier = 1
+  sites = 10
+  cite = "sovereign/crates/sovereign-mesh/src/newsworthy_host.rs:30"
+
+  [[cluster.own_deps]]
+  crate = "sovereign-core"
+  tier = 3
+  sites = 8
+  cite = "sovereign/crates/sovereign-mesh/src/landscape_digest_client.rs:20"
+
+  [[cluster.own_deps]]
+  crate = "sovereign-tools"
+  tier = 4
+  sites = 8
+  cite = "sovereign/crates/sovereign-mesh/src/newsworthy_host.rs:253"
+
+  [[cluster.own_deps]]
+  crate = "commonwealth-core"
+  tier = 2
+  sites = 4
+  cite = "sovereign/crates/sovereign-mesh/src/newsworthy_host.rs:25"
+
+  [[cluster.own_deps]]
+  crate = "sovereign-api"
+  tier = 5
+  sites = 3
+  cite = "sovereign/crates/sovereign-mesh/src/newsworthy_host.rs:32"
+
+  [[cluster.own_deps]]
+  crate = "sovereign-contracts"
+  tier = 0
+  sites = 3
+  cite = "sovereign/crates/sovereign-mesh/src/research_run_dir.rs:28"
+
+  [[cluster.own_deps]]
+  crate = "sovereign-serving"
+  tier = 2
+  sites = 2
+  cite = "sovereign/crates/sovereign-mesh/src/landscape_digest_client.rs:22"
+
+  [[cluster.own_deps]]
+  crate = "commonwealth-state"
+  tier = 2
+  sites = 1
+  cite = "sovereign/crates/sovereign-mesh/src/newsworthy_host.rs:29"
+
+  [[cluster.own_deps]]
+  crate = "sovereign-inference"
+  tier = 3
+  sites = 1
+  cite = "sovereign/crates/sovereign-mesh/src/source_content_validator.rs:74"
+
+[[cluster]]
+crate = "sovereign-mesh"
+context = "answering"
+lines = 747
+files = 1
+leaf = true  # imports no other cluster
+no_in_crate_dependents = false
+own_dep_max_tier = 3
+consumer_min_tier = -1  # no external consumer
+window = [3, 6]
+window_after_port = [3, 6]  # sovereign-api reach cut, sovereign_core re-exports repointed
+dest = "sovereign-core"
+dest_exists = true
+dest_tier = "3"
+shim_sites = 0  # external import sites that break without a re-export
+renames_riding = 0  # counted by FILE cluster — a move carries the file
+renames_context_mismatch = 0
+order = 10
+note = "The cleanest move in the campaign: one file, zero external consumers, one in-crate dependent, and its only genuine dep is sovereign_core::approval_desk — which is the destination."
+imports_clusters = []
+external_consumers = []
+renames = []
+rename_context_mismatch = []
+
+  [[cluster.imported_by_clusters]]
+  context = "host"
+  sites = 1
+  symbols = [
+    "turn_approval::SocketApprovalChannel",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/turn_http.rs:100",
+  ]
+
+  [[cluster.own_deps]]
+  crate = "sovereign-core"
+  tier = 3
+  sites = 6
+  cite = "sovereign/crates/sovereign-mesh/src/turn_approval.rs:48"
+
+  [[cluster.own_deps]]
+  crate = "sovereign-contracts"
+  tier = 0
+  sites = 4
+  cite = "sovereign/crates/sovereign-mesh/src/turn_approval.rs:44"
+
+[[cluster]]
+crate = "sovereign-mesh"
+context = "fabric"
+lines = 16028
+files = 25
+leaf = false  # imports no other cluster
+no_in_crate_dependents = false
+own_dep_max_tier = 5
+consumer_min_tier = 6
+window = [5, 6]
+window_after_port = [3, 6]  # sovereign-api reach cut, sovereign_core re-exports repointed
+dest = "sovereign-mesh"
+dest_exists = true
+dest_tier = "5"
+shim_sites = 53  # external import sites that break without a re-export
+renames_riding = 8  # counted by FILE cluster — a move carries the file
+renames_context_mismatch = 7
+order = 0
+note = "Stays. 16,028 ln is the whole stop condition; 76 sites reach out (34 into host) and must invert or be ported before host leaves."
+
+  [[cluster.imports_clusters]]
+  context = "compute"
+  sites = 2
+  symbols = [
+    "worker_eligibility::WorkerStatusView",
+    "worker_eligibility::global",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/mesh_http.rs:197",
+    "sovereign/crates/sovereign-mesh/src/mesh_http.rs:402",
+  ]
+
+  [[cluster.imports_clusters]]
+  context = "host"
+  sites = 34
+  symbols = [
+    "daemon::EmbeddedDaemon",
+    "loopback_guard::LocalOnly",
+    "local_only::LocalOnlyProfile",
+    "types::JoinConfirmation",
+    "loopback_guard::LoopbackRouter",
+    "loopback_guard::enforce_localhost",
+    "daemon_services::DaemonServices::mesh_admin",
+    "http_response::internal_error",
+    "http_response::json_error",
+    "http_response::Absence",
+    "daemon::IrohPeerPath",
+    "daemon::SelfReachability",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/deep_link.rs:17",
+    "sovereign/crates/sovereign-mesh/src/governance_http.rs:43",
+    "sovereign/crates/sovereign-mesh/src/governance_http.rs:44",
+    "sovereign/crates/sovereign-mesh/src/governance_http.rs:44",
+  ]
+
+  [[cluster.imported_by_clusters]]
+  context = "back-of-house"
+  sites = 1
+  symbols = [
+    "gossip",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/dst.rs:43",
+  ]
+
+  [[cluster.imported_by_clusters]]
+  context = "host"
+  sites = 59
+  symbols = [
+    "deep_link::build_join_link",
+    "iroh_access::MeshIrohAccess",
+    "gossip::announce_presence_change",
+    "gossip::PresenceChange::Parked",
+    "iroh_access::OfferRoutes",
+    "iroh_access::AppRoutes",
+    "iroh_access::MeshIrohAccess::start",
+    "peer_adapter::MeshPeerStore::in_memory",
+    "peer_adapter::MeshConvergence::new",
+    "deep_link::DeepLink",
+    "gossip::self",
+    "gossip::GossipHandle",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/daemon.rs:182",
+    "sovereign/crates/sovereign-mesh/src/daemon.rs:183",
+    "sovereign/crates/sovereign-mesh/src/daemon.rs:183",
+    "sovereign/crates/sovereign-mesh/src/daemon.rs:185",
+  ]
+
+  [[cluster.imported_by_clusters]]
+  context = "ingest"
+  sites = 1
+  symbols = [
+    "canonical_pull::pull_canonical_from_peer",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/auto_ingest.rs:341",
+  ]
+
+  [[cluster.imported_by_clusters]]
+  context = "serving"
+  sites = 1
+  symbols = [
+    "mesh_discovery::reachable_addresses",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/rpc_warm_http.rs:702",
+  ]
+
+  [[cluster.imported_by_clusters]]
+  context = "workspace"
+  sites = 5
+  symbols = [
+    "rail_kv_pump",
+    "ring_roster::tests::member",
+    "ring_roster::tests::mesh_of",
+    "ring_roster::tests::pubkey_of",
+    "ring_roster::MeshRosterSource::install",
+  ]
+  cites = [
+    "sovereign/crates/sovereign-mesh/src/work_atlas_broadcaster.rs:55",
+    "sovereign/crates/sovereign-mesh/src/work_atlas_broadcaster.rs:113",
+    "sovereign/crates/sovereign-mesh/src/work_atlas_broadcaster.rs:113",
+    "sovereign/crates/sovereign-mesh/src/work_atlas_broadcaster.rs:113",
+  ]
+
+  [[cluster.external_consumers]]
+  crate = "sovereign-cli-llm"
+  tier = 6
+  sites = 34
+  symbols = [
+    "DeepLink",
+    "ForgottenMember",
+    "MediaOffer",
+    "MediaReach",
+    "MemberDto",
+    "MeshPeerStore",
+    "PeerMeasurementDto",
+    "PeerMeasurementsResponse",
+    "StatusResponse",
+    "active_mesh_id",
+    "build_guest_link",
+    "build_https_join_link",
+    "forget",
+    "list_known",
+    "load",
+    "load_node_id",
+    "load_or_generate_self_node_id",
+    "parse_deep_link",
+    "parse_join_argument",
+    "pull_canonical_from_peer",
+    "read_advertise_addr_override",
+    "relay_candidates",
+    "resolve_known",
+    "resolve_self_node_id",
+  ]
+
+  [[cluster.external_consumers]]
+  crate = "sovereign-cli-daemon"
+  tier = 6
+  sites = 13
+  symbols = [
+    "DeepLink",
+    "MeshConvergence",
+    "MeshPeerStore",
+    "MeshRoster",
+    "load",
+    "parse_join_argument",
+    "republish",
+    "resolve_self_node_id",
+    "set_shared_model_host",
+  ]
+
+  [[cluster.external_consumers]]
+  crate = "sovereign-cli-dev"
+  tier = 6
+  sites = 6
+  symbols = [
+    "MeshPeerStore",
+    "resolve_self_node_id",
+  ]
+
+  [[cluster.own_deps]]
+  crate = "commonwealth-core"
+  tier = 2
+  sites = 72
+  cite = "sovereign/crates/sovereign-mesh/src/capabilities.rs:39"
+
+  [[cluster.own_deps]]
+  crate = "commonwealth-rail"
+  tier = 2
+  sites = 24
+  cite = "sovereign/crates/sovereign-mesh/src/measurements_rail.rs:51"
+
+  [[cluster.own_deps]]
+  crate = "commonwealth-media"
+  tier = 2
+  sites = 22
+  cite = "sovereign/crates/sovereign-mesh/src/iroh_access.rs:42"
+
+  [[cluster.own_deps]]
+  crate = "commonwealth-transport"
+  tier = 2
+  sites = 21
+  cite = "sovereign/crates/sovereign-mesh/src/gossip.rs:43"
+
+  [[cluster.own_deps]]
+  crate = "sovereign-core"
+  tier = 3
+  sites = 18
+  cite = "sovereign/crates/sovereign-mesh/src/governance_http.rs:41"
+
+  [[cluster.own_deps]]
+  crate = "corpus-engine"
+  tier = 1
+  sites = 16
+  cite = "sovereign/crates/sovereign-mesh/src/canonical_pull.rs:46"
+
+  [[cluster.own_deps]]
+  crate = "sovereign-api"
+  tier = 5
+  sites = 14
+  cite = "sovereign/crates/sovereign-mesh/src/capabilities.rs:46"
+
+  [[cluster.own_deps]]
+  crate = "commonwealth-state"
+  tier = 2
+  sites = 14
+  cite = "sovereign/crates/sovereign-mesh/src/peer_adapter.rs:27"
+
+  [[cluster.own_deps]]
+  crate = "sovereign-contracts"
+  tier = 0
+  sites = 8
+  cite = "sovereign/crates/sovereign-mesh/src/capabilities.rs:164"
+
+  [[cluster.own_deps]]
+  crate = "commonwealth-work"
+  tier = 2
+  sites = 8
+  cite = "sovereign/crates/sovereign-mesh/src/rail_kv_pump.rs:106"
+
+  [[cluster.own_deps]]
+  crate = "commonwealth-discovery"
+  tier = 2
+  sites = 6
+  cite = "sovereign/crates/sovereign-mesh/src/capabilities.rs:44"
+
+  [[cluster.own_deps]]
+  crate = "sovereign-inference"
+  tier = 3
+  sites = 5
+  cite = "sovereign/crates/sovereign-mesh/src/capabilities.rs:79"
+
+  [[cluster.rename_context_mismatch]]
+  from = "PeerPathsFn"
+  to = "ReachPathsFn"
+  at = "sovereign/crates/sovereign-mesh/src/iroh_watchdog.rs:119"
+  file_cluster = "fabric"
+  noun_context = "host"
+  # the registry's [[noun]] row and its [[module]] row disagree:
+  # this type must CHANGE FILE as part of the move, or the
+  # module row is mistagged. Either way it is not a free rename.
+
+  [[cluster.rename_context_mismatch]]
+  from = "PeerPathVerdict"
+  to = "ReachPathVerdict"
+  at = "sovereign/crates/sovereign-mesh/src/iroh_watchdog.rs:129"
+  file_cluster = "fabric"
+  noun_context = "host"
+  # the registry's [[noun]] row and its [[module]] row disagree:
+  # this type must CHANGE FILE as part of the move, or the
+  # module row is mistagged. Either way it is not a free rename.
+
+  [[cluster.rename_context_mismatch]]
+  from = "PeerPathHealth"
+  to = "ReachPathHealth"
+  at = "sovereign/crates/sovereign-mesh/src/iroh_watchdog.rs:164"
+  file_cluster = "fabric"
+  noun_context = "host"
+  # the registry's [[noun]] row and its [[module]] row disagree:
+  # this type must CHANGE FILE as part of the move, or the
+  # module row is mistagged. Either way it is not a free rename.
+
+  [[cluster.rename_context_mismatch]]
+  from = "PeerPathObservation"
+  to = "ReachPathObservation"
+  at = "sovereign/crates/sovereign-mesh/src/iroh_watchdog.rs:84"
+  file_cluster = "fabric"
+  noun_context = "host"
+  # the registry's [[noun]] row and its [[module]] row disagree:
+  # this type must CHANGE FILE as part of the move, or the
+  # module row is mistagged. Either way it is not a free rename.
+
+  [[cluster.rename_context_mismatch]]
+  from = "PeerMeasurementDto"
+  to = "MemberMeasurementDto"
+  at = "sovereign/crates/sovereign-mesh/src/mesh_http.rs:581"
+  file_cluster = "fabric"
+  noun_context = "host"
+  # the registry's [[noun]] row and its [[module]] row disagree:
+  # this type must CHANGE FILE as part of the move, or the
+  # module row is mistagged. Either way it is not a free rename.
+
+  [[cluster.rename_context_mismatch]]
+  from = "PeerMeasurementsQuery"
+  to = "MemberMeasurementsQuery"
+  at = "sovereign/crates/sovereign-mesh/src/mesh_http.rs:598"
+  file_cluster = "fabric"
+  noun_context = "host"
+  # the registry's [[noun]] row and its [[module]] row disagree:
+  # this type must CHANGE FILE as part of the move, or the
+  # module row is mistagged. Either way it is not a free rename.
+
+  [[cluster.rename_context_mismatch]]
+  from = "PeerMeasurementsResponse"
+  to = "MemberMeasurementsResponse"
+  at = "sovereign/crates/sovereign-mesh/src/mesh_http.rs:637"
+  file_cluster = "fabric"
+  noun_context = "host"
+  # the registry's [[noun]] row and its [[module]] row disagree:
+  # this type must CHANGE FILE as part of the move, or the
+  # module row is mistagged. Either way it is not a free rename.
+
+  [[cluster.renames]]
+  from = "PeerPathsFn"
+  to = "ReachPathsFn"
+  file = "sovereign/crates/sovereign-mesh/src/iroh_watchdog.rs:119"
+
+  [[cluster.renames]]
+  from = "PeerPathVerdict"
+  to = "ReachPathVerdict"
+  file = "sovereign/crates/sovereign-mesh/src/iroh_watchdog.rs:129"
+
+  [[cluster.renames]]
+  from = "PeerPathHealth"
+  to = "ReachPathHealth"
+  file = "sovereign/crates/sovereign-mesh/src/iroh_watchdog.rs:164"
+
+  [[cluster.renames]]
+  from = "PeerPathObservation"
+  to = "ReachPathObservation"
+  file = "sovereign/crates/sovereign-mesh/src/iroh_watchdog.rs:84"
+
+  [[cluster.renames]]
+  from = "PeerMeasurementDto"
+  to = "MemberMeasurementDto"
+  file = "sovereign/crates/sovereign-mesh/src/mesh_http.rs:581"
+
+  [[cluster.renames]]
+  from = "PeerMeasurementsQuery"
+  to = "MemberMeasurementsQuery"
+  file = "sovereign/crates/sovereign-mesh/src/mesh_http.rs:598"
+
+  [[cluster.renames]]
+  from = "PeerMeasurementsResponse"
+  to = "MemberMeasurementsResponse"
+  file = "sovereign/crates/sovereign-mesh/src/mesh_http.rs:637"
+
+  [[cluster.renames]]
+  from = "MeshPeerStore"
+  to = "MeshReplicatedKv"
+  file = "sovereign/crates/sovereign-mesh/src/peer_adapter.rs:39"
