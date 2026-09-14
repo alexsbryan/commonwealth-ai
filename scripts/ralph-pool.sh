@@ -81,7 +81,7 @@ while true; do
   # A ready REVIEW runs serially in the main tree, retrying if a session times out.
   review=""
   for u in $(unit_ids); do
-    if [ "$(status_of "$u")" = " " ] && is_review "$u" && deps_met "$u"; then review="$u"; break; fi
+    if { [ "$(status_of "$u")" = " " ] || [ "$(status_of "$u")" = "~" ]; } && is_review "$u" && deps_met "$u"; then review="$u"; break; fi
   done
   if [ -n "$review" ]; then
     review_attempt=1; review_waiting=0
