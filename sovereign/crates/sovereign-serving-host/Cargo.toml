@@ -12,6 +12,13 @@ license.workspace = true
 sovereign-contracts = { workspace = true }
 oicp-types = { workspace = true }
 tracing = { workspace = true }
+# The recording sink is the host's (SERVING_BOUNDARY.md "Corrected
+# 2026-09-14", bullet 1): it serialises the scheduler's record types, mints
+# decision ids, and stamps them from the tier-0 `sovereign-time` leaf.
+sovereign-scheduler = { path = "../sovereign-scheduler" }
+sovereign-time = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
 
 [dev-dependencies]
 # Implementing `InferenceProvider` in the tests needs the trait's async

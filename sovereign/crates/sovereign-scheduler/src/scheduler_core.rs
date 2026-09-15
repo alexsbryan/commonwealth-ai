@@ -858,7 +858,7 @@ mod tests {
     }
 
     fn builder() -> DecisionBuilder {
-        DecisionBuilder::new("req-1", DecisionPath::RankedOicp, facts())
+        DecisionBuilder::new("d-req-1", "req-1", DecisionPath::RankedOicp, facts())
     }
 
     fn peer(name: &str, affinity: f32, in_flight: Option<u32>) -> PeerCandidateView {

@@ -7,4 +7,5 @@
 //! and `sovereign-api`'s `admission` (`sovereign/SERVING_BOUNDARY.md` "The two
 //! tiers").
 
+pub mod recorder;
 pub mod slot_select;

@@ -801,6 +801,7 @@ mod tests {
     #[test]
     fn origin_is_recovered_from_a_sim_request_id_and_falls_back_otherwise() {
         let mut d = crate::decision_log::DecisionBuilder::new(
+            "d-sim-7-1234",
             "sim-7-1234",
             crate::decision_log::DecisionPath::RankedOicp,
             crate::decision_log::RequestFacts {
@@ -813,7 +814,7 @@ mod tests {
                 explicit_model_id: None,
             },
         )
-        .finish(Verdict::StayLocal, &[]);
+        .finish_at(Verdict::StayLocal, &[], 0);
         assert_eq!(origin_of(&d), "7");
         d.oicp_request_id = "wl-knowledge-42".into();
         assert_eq!(origin_of(&d), "wl-knowledge-42");

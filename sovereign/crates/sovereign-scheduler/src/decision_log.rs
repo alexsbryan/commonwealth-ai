@@ -39,19 +39,15 @@
 //!
 //! # Where the records go
 //!
-//! [`DecisionSink`] is the seam. Production installs
-//! [`TracingDecisionSink`], which always emits a summary line at
-//! `tracing` target `mesh.decision` and — when
-//! `SOVEREIGN_DECISION_LOG` names a path — appends the full record
-//! as one JSON object per line. That JSONL file is the P4
-//! trace-replay fixture substrate; see [`crate::decision_trace`].
-//!
-//! Tests install [`CaptureDecisionSink`] and assert on the records
-//! directly, which is why the sink is a constructor-injected field
-//! on `MeshInferenceProvider` rather than a process-global.
+//! [`DecisionSink`] is the seam. Tests install [`CaptureDecisionSink`]
+//! and assert on the records directly, which is why the sink is a
+//! constructor-injected field on `MeshInferenceProvider` rather than a
+//! process-global. Production installs the recording sink — file, env,
+//! clock and ids — which is `sovereign-serving-host`'s
+//! (`sovereign/SERVING_BOUNDARY.md` "Corrected 2026-09-14", bullet 1):
+//! this crate takes the decision id and `now` as arguments and never
+//! reads a clock or mints an id itself.
 
-use std::io::Write;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use oicp_types::{BenchmarkResult, NodeLocality, NodeObservations, ScoreBreakdown};
@@ -627,234 +623,6 @@ impl DecisionSink for NullDecisionSink {
     fn record(&self, _event: DecisionEvent) {}
 }
 
-/// The production sink.
-///
-/// Always emits to `tracing` under [`DECISION_TRACE_TARGET`]: a
-/// human-readable summary at `info`, the full JSON record at `debug`.
-/// When [`DECISION_LOG_ENV`] names a path, also appends the full
-/// record as one JSON object per line, flushed per record — a daemon
-/// that runs for weeks must not hold the last decisions in a buffer.
-pub struct TracingDecisionSink {
-    file: Option<Mutex<std::io::BufWriter<std::fs::File>>>,
-}
-
-impl std::fmt::Debug for TracingDecisionSink {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("TracingDecisionSink")
-            .field("jsonl", &self.file.is_some())
-            .finish()
-    }
-}
-
-impl TracingDecisionSink {
-    /// Build from the environment. A configured path that cannot be
-    /// opened is a warning, not a failure — instrumentation must
-    /// never take the daemon down.
-    pub fn from_env() -> Self {
-        let Some(path) = std::env::var_os(DECISION_LOG_ENV) else {
-            return Self { file: None };
-        };
-        let path = std::path::PathBuf::from(path);
-        if let Some(parent) = path.parent() {
-            if !parent.as_os_str().is_empty() {
-                let _ = std::fs::create_dir_all(parent);
-            }
-        }
-        match std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)
-        {
-            Ok(f) => {
-                tracing::info!(
-                    target: DECISION_TRACE_TARGET,
-                    path = %path.display(),
-                    schema = DECISION_LOG_SCHEMA,
-                    "decision log: appending routing decision records"
-                );
-                Self {
-                    file: Some(Mutex::new(std::io::BufWriter::new(f))),
-                }
-            }
-            Err(e) => {
-                tracing::warn!(
-                    target: DECISION_TRACE_TARGET,
-                    path = %path.display(),
-                    error = %e,
-                    "decision log: could not open sink path — records stay in tracing only"
-                );
-                Self { file: None }
-            }
-        }
-    }
-
-    /// Build a sink that writes JSONL to an explicit path, ignoring
-    /// the environment. The trace-capture CLI verb uses this.
-    pub fn to_path(path: &std::path::Path) -> std::io::Result<Self> {
-        if let Some(parent) = path.parent() {
-            if !parent.as_os_str().is_empty() {
-                std::fs::create_dir_all(parent)?;
-            }
-        }
-        let f = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path)?;
-        Ok(Self {
-            file: Some(Mutex::new(std::io::BufWriter::new(f))),
-        })
-    }
-}
-
-impl DecisionSink for TracingDecisionSink {
-    fn record(&self, event: DecisionEvent) {
-        match &event {
-            DecisionEvent::Decision(d) => {
-                let winner = d
-                    .candidates
-                    .iter()
-                    .find(|c| c.selected)
-                    .map(|c| c.name.as_str())
-                    .unwrap_or("<none>");
-                // A gated decision scored nothing — it is policy, not
-                // scheduling — and it used to sit at `debug` so the
-                // `info` line stayed one-per-decision that actually
-                // chose between candidates.
-                //
-                // That reasoning cost a whole measurement. The deployed
-                // daemon filters `mesh.decision=info`
-                // (`sovereign-cli-daemon`'s `DAEMON_TRACING_FILTER`), so
-                // "why did this turn stay home?" was the ONE routing
-                // question the operator's log could not answer. §9.1.1 of
-                // MESH_SCALE_100_USERS_1000_CORPORA.md ran 100 turns at a
-                // census-verified 2-node mesh, saw zero peer dispatches,
-                // and had to record the firing gate as UNKNOWN — every
-                // one of those turns emitted a `Gated` record naming it,
-                // at a level nothing was listening to. The record was
-                // there; the operator was not allowed to see it.
-                //
-                // Cost of the promotion, measured on this host's own
-                // decision log (49,167 records, 2026-08-06 → 08-13):
-                // 2,245 gated decisions, ~320/day, ~1 line per 4.5
-                // minutes. That is not a stream. `gate` is lifted out of
-                // the label into its own field so it is greppable
-                // without parsing, and `path` rides along because
-                // "gated on the ranked path" and "gated on the named
-                // fallthrough" are different stories.
-                if let Verdict::Gated { gate } = &d.verdict {
-                    tracing::info!(
-                        target: DECISION_TRACE_TARGET,
-                        decision_id = %d.decision_id,
-                        oicp_request_id = %d.oicp_request_id,
-                        path = ?d.path,
-                        gate = %gate,
-                        verdict = %verdict_label(&d.verdict),
-                        hint = %d.request.capability_hint,
-                        latency = %d.request.latency_class,
-                        sharding = %d.request.sharding,
-                        "routing decision (gated) — stayed local before scoring"
-                    );
-                } else {
-                    tracing::info!(
-                        target: DECISION_TRACE_TARGET,
-                        decision_id = %d.decision_id,
-                        oicp_request_id = %d.oicp_request_id,
-                        path = ?d.path,
-                        verdict = %verdict_label(&d.verdict),
-                        winner = %winner,
-                        scored = d.candidates.len(),
-                        excluded = d.excluded.len(),
-                        hint = %d.request.capability_hint,
-                        latency = %d.request.latency_class,
-                        "routing decision"
-                    );
-                }
-            }
-            DecisionEvent::Outcome(o) => {
-                tracing::info!(
-                    target: DECISION_TRACE_TARGET,
-                    decision_id = %o.decision_id,
-                    oicp_request_id = %o.oicp_request_id,
-                    served_by = %served_by_label(&o.served_by),
-                    attempt = o.attempt_index,
-                    ttft_ms = ?o.ttft_ms,
-                    total_ms = ?o.total_ms,
-                    tokens = ?o.output_tokens,
-                    shed = o.shed,
-                    "routing outcome"
-                );
-            }
-            DecisionEvent::Snapshot(s) => {
-                // The two headline diagnostics, in the log where an
-                // operator will actually see them: is gossip lag
-                // comparable to service time (F1), and does the
-                // throughput term discriminate this fleet (F3)?
-                tracing::info!(
-                    target: DECISION_TRACE_TARGET,
-                    peers = s.peers.len(),
-                    median_gossip_age_secs = ?s.median_gossip_age_secs(),
-                    observed_tg_spread = ?s.observed_tg_spread(),
-                    quarantined = s.peers.iter().filter(|p| p.quarantined).count(),
-                    "fleet observation snapshot"
-                );
-            }
-        }
-
-        // The full record is expensive to render and only wanted when
-        // someone is actually collecting. Serialise once and reuse for
-        // both the debug event and the file.
-        let want_json = self.file.is_some()
-            || tracing::enabled!(target: DECISION_TRACE_TARGET, tracing::Level::DEBUG);
-        if !want_json {
-            return;
-        }
-        let line = match serde_json::to_string(&event) {
-            Ok(l) => l,
-            Err(e) => {
-                tracing::warn!(
-                    target: DECISION_TRACE_TARGET,
-                    error = %e,
-                    "decision log: record failed to serialise"
-                );
-                return;
-            }
-        };
-        tracing::debug!(target: DECISION_TRACE_TARGET, record = %line, "routing record");
-        if let Some(file) = &self.file {
-            if let Ok(mut w) = file.lock() {
-                if let Err(e) = writeln!(w, "{line}").and_then(|()| w.flush()) {
-                    tracing::warn!(
-                        target: DECISION_TRACE_TARGET,
-                        error = %e,
-                        "decision log: write failed"
-                    );
-                }
-            }
-        }
-    }
-}
-
-fn verdict_label(v: &Verdict) -> String {
-    match v {
-        Verdict::Gated { gate } => format!("gated:{gate}"),
-        Verdict::StayLocal => "stay_local".into(),
-        Verdict::Peers { ranked } => format!("peers:{}", ranked.len()),
-        Verdict::NamedLocal { .. } => "named_local".into(),
-        Verdict::NamedPeer { peer, .. } => format!("named_peer:{peer}"),
-        Verdict::NamedLender { lender, .. } => format!("named_lender:{lender}"),
-        Verdict::NamedUnknown { .. } => "named_unknown".into(),
-    }
-}
-
-fn served_by_label(s: &ServedBy) -> String {
-    match s {
-        ServedBy::Local { model_id } => format!("local:{model_id}"),
-        ServedBy::LocalFallback { model_id } => format!("local_fallback:{model_id}"),
-        ServedBy::Peer { name, .. } => format!("peer:{name}"),
-        ServedBy::Failed => "failed".into(),
-    }
-}
-
 /// In-memory sink for tests: records are appended in emission order
 /// and readable through [`CaptureDecisionSink::events`].
 #[derive(Debug, Default)]
@@ -907,27 +675,6 @@ impl DecisionSink for CaptureDecisionSink {
 // Helpers shared by the emission sites
 // ---------------------------------------------------------------
 
-/// Monotonic within a process, so a decision id sorts by issue order
-/// even when two decisions land in the same millisecond.
-static DECISION_SEQ: AtomicU64 = AtomicU64::new(0);
-
-/// Mint a decision id. Prefixed with the process-local sequence so a
-/// tailed log reads in order; suffixed with a short random tail so
-/// ids from different nodes never collide when traces are merged.
-pub fn new_decision_id() -> String {
-    let seq = DECISION_SEQ.fetch_add(1, Ordering::Relaxed);
-    let tail = uuid::Uuid::new_v4().simple().to_string();
-    format!("d{seq:08x}-{}", &tail[..12])
-}
-
-pub fn now_unix_ms() -> u64 {
-    sovereign_time::unix_millis()
-}
-
-pub fn now_unix_secs() -> u64 {
-    sovereign_time::unix_now_u64()
-}
-
 /// Stable string form of a locality bucket, for the record.
 pub fn locality_label(l: NodeLocality) -> &'static str {
     match l {
@@ -969,9 +716,18 @@ pub struct DecisionBuilder {
 }
 
 impl DecisionBuilder {
-    pub fn new(oicp_request_id: &str, path: DecisionPath, request: RequestFacts) -> Self {
+    /// `decision_id` is minted by the caller — the recording sink's host
+    /// owns id minting and the clock (`sovereign/SERVING_BOUNDARY.md`
+    /// "Corrected 2026-09-14", bullet 1), so this crate reads no clock
+    /// and mints no id.
+    pub fn new(
+        decision_id: impl Into<String>,
+        oicp_request_id: &str,
+        path: DecisionPath,
+        request: RequestFacts,
+    ) -> Self {
         Self {
-            decision_id: new_decision_id(),
+            decision_id: decision_id.into(),
             oicp_request_id: oicp_request_id.to_string(),
             path,
             request,
@@ -1022,22 +778,16 @@ impl DecisionBuilder {
 
     /// Mark the winners in ranked order and finish. `ranked` names the
     /// candidates in cascade order; the first is `selected`.
-    pub fn finish(self, verdict: Verdict, ranked: &[String]) -> RoutingDecision {
-        let now = now_unix_ms();
-        self.finish_at(verdict, ranked, now)
-    }
-
-    /// [`Self::finish`] with the timestamp supplied rather than read
-    /// from the wall clock.
     ///
-    /// Production calls `finish`. A *simulated* decider
-    /// (the mesh simulator) runs on virtual time, and a record stamped
-    /// with the host's wall clock would be unorderable against the
-    /// episode it belongs to — the scoreboard reads `ts_unix_ms` to
-    /// build per-window herding and fairness series, so the sim's
-    /// records have to carry sim time. Same reason the core takes
-    /// `now_unix` rather than reading a clock: a decision is a pure
-    /// function of its inputs, and time is one of them.
+    /// `ts_unix_ms` is supplied rather than read from the wall clock.
+    /// The host passes wall time; a *simulated* decider (the mesh
+    /// simulator) runs on virtual time, and a record stamped with the
+    /// host's wall clock would be unorderable against the episode it
+    /// belongs to — the scoreboard reads `ts_unix_ms` to build
+    /// per-window herding and fairness series, so the sim's records have
+    /// to carry sim time. Same reason the core takes `now_unix` rather
+    /// than reading a clock: a decision is a pure function of its
+    /// inputs, and time is one of them.
     pub fn finish_at(
         mut self,
         verdict: Verdict,
@@ -1089,11 +839,13 @@ pub struct OutcomeContext {
 
 impl OutcomeContext {
     /// Emit the terminal record for a request that produced timings.
+    /// `ts_unix_ms` is read by the host, not here.
     pub fn complete(
         &self,
         ttft_ms: Option<f64>,
         total_ms: Option<f64>,
         output_tokens: Option<u64>,
+        ts_unix_ms: u64,
     ) {
         emit_outcome(
             &self.sink,
@@ -1101,7 +853,7 @@ impl OutcomeContext {
                 schema: DECISION_LOG_SCHEMA.to_string(),
                 decision_id: self.decision_id.clone(),
                 oicp_request_id: self.oicp_request_id.clone(),
-                ts_unix_ms: now_unix_ms(),
+                ts_unix_ms,
                 served_by: self.served_by.clone(),
                 attempt_index: self.attempt_index,
                 ttft_ms,
@@ -1117,15 +869,16 @@ impl OutcomeContext {
     /// Emit the terminal record for a request that never produced a
     /// stream. `shed` distinguishes an admission rejection from a
     /// transport failure — the two are one channel in the code today
-    /// (spec F4) and the scoreboard needs them apart.
-    pub fn failed(&self, error: String, shed: bool) {
+    /// (spec F4) and the scoreboard needs them apart. `ts_unix_ms` is
+    /// read by the host, not here.
+    pub fn failed(&self, error: String, shed: bool, ts_unix_ms: u64) {
         emit_outcome(
             &self.sink,
             RoutingOutcome {
                 schema: DECISION_LOG_SCHEMA.to_string(),
                 decision_id: self.decision_id.clone(),
                 oicp_request_id: self.oicp_request_id.clone(),
-                ts_unix_ms: now_unix_ms(),
+                ts_unix_ms,
                 served_by: ServedBy::Failed,
                 attempt_index: self.attempt_index,
                 ttft_ms: None,
@@ -1340,26 +1093,18 @@ mod tests {
     }
 
     #[test]
-    fn decision_ids_are_unique_and_ordered() {
-        let a = new_decision_id();
-        let b = new_decision_id();
-        assert_ne!(a, b);
-        // The sequence prefix sorts by issue order.
-        assert!(a < b, "{a} should sort before {b}");
-    }
-
-    #[test]
-    fn finish_marks_rank_and_single_selection() {
-        let mut b = DecisionBuilder::new("req-1", DecisionPath::RankedOicp, facts());
+    fn finish_at_marks_rank_and_single_selection() {
+        let mut b = DecisionBuilder::new("d1", "req-1", DecisionPath::RankedOicp, facts());
         b.push_candidate(candidate("local", 0.5));
         b.push_candidate(candidate("hub", 0.9));
         b.push_candidate(candidate("laptop", 0.7));
         let ranked = vec!["hub".to_string(), "laptop".to_string()];
-        let d = b.finish(
+        let d = b.finish_at(
             Verdict::Peers {
                 ranked: ranked.clone(),
             },
             &ranked,
+            1_000_000,
         );
 
         let hub = d.candidates.iter().find(|c| c.name == "hub").unwrap();
@@ -1376,12 +1121,13 @@ mod tests {
 
     #[test]
     fn gated_decision_has_no_candidates_but_names_the_gate() {
-        let b = DecisionBuilder::new("req-2", DecisionPath::RankedOicp, facts());
-        let d = b.finish(
+        let b = DecisionBuilder::new("d2", "req-2", DecisionPath::RankedOicp, facts());
+        let d = b.finish_at(
             Verdict::Gated {
                 gate: "not_offload_eligible".into(),
             },
             &[],
+            1,
         );
         assert!(d.candidates.is_empty());
         assert!(matches!(d.verdict, Verdict::Gated { .. }));
@@ -1389,10 +1135,10 @@ mod tests {
 
     #[test]
     fn events_round_trip_through_json() {
-        let mut b = DecisionBuilder::new("req-3", DecisionPath::RankedOicp, facts());
+        let mut b = DecisionBuilder::new("d3", "req-3", DecisionPath::RankedOicp, facts());
         b.push_candidate(candidate("local", 0.5));
         b.exclude("sick-peer", None, ExclusionReason::Quarantined);
-        let d = b.finish(Verdict::StayLocal, &[]);
+        let d = b.finish_at(Verdict::StayLocal, &[], 1);
         let ev = DecisionEvent::Decision(Box::new(d));
         let line = serde_json::to_string(&ev).unwrap();
         let back: DecisionEvent = serde_json::from_str(&line).unwrap();
@@ -1421,9 +1167,9 @@ mod tests {
     #[test]
     fn capture_sink_separates_halves() {
         let sink: Arc<dyn DecisionSink> = Arc::new(CaptureDecisionSink::new());
-        let b = DecisionBuilder::new("req-4", DecisionPath::NamedModel, facts());
+        let b = DecisionBuilder::new("d4", "req-4", DecisionPath::NamedModel, facts());
         let id = b.decision_id().to_string();
-        emit_decision(&sink, b.finish(Verdict::StayLocal, &[]));
+        emit_decision(&sink, b.finish_at(Verdict::StayLocal, &[], 1));
 
         let ctx = OutcomeContext {
             sink: Arc::clone(&sink),
@@ -1435,15 +1181,18 @@ mod tests {
             attempt_index: 0,
             failovers: Vec::new(),
         };
-        ctx.complete(Some(90.0), Some(1000.0), Some(42));
+        ctx.complete(Some(90.0), Some(1000.0), Some(42), 1);
 
         // Downcast-free assertion: hold the concrete type too.
         let concrete = Arc::new(CaptureDecisionSink::new());
         let dyn_sink: Arc<dyn DecisionSink> = concrete.clone();
         emit_decision(
             &dyn_sink,
-            DecisionBuilder::new("req-5", DecisionPath::RankedOicp, facts())
-                .finish(Verdict::StayLocal, &[]),
+            DecisionBuilder::new("d5", "req-5", DecisionPath::RankedOicp, facts()).finish_at(
+                Verdict::StayLocal,
+                &[],
+                1,
+            ),
         );
         assert_eq!(concrete.decisions().len(), 1);
         assert_eq!(concrete.outcomes().len(), 0);
@@ -1453,9 +1202,9 @@ mod tests {
     fn decision_and_outcome_join_on_decision_id() {
         let concrete = Arc::new(CaptureDecisionSink::new());
         let sink: Arc<dyn DecisionSink> = concrete.clone();
-        let b = DecisionBuilder::new("req-6", DecisionPath::RankedOicp, facts());
+        let b = DecisionBuilder::new("d6", "req-6", DecisionPath::RankedOicp, facts());
         let id = b.decision_id().to_string();
-        emit_decision(&sink, b.finish(Verdict::StayLocal, &[]));
+        emit_decision(&sink, b.finish_at(Verdict::StayLocal, &[], 1));
         OutcomeContext {
             sink: Arc::clone(&sink),
             decision_id: id.clone(),
@@ -1469,7 +1218,7 @@ mod tests {
                 yield_retry_after_secs: None,
             }],
         }
-        .failed("503 Service Unavailable".into(), true);
+        .failed("503 Service Unavailable".into(), true, 1);
 
         let events = concrete.events();
         assert_eq!(events.len(), 2);
@@ -1501,27 +1250,5 @@ mod tests {
         .with_benchmark(Some(&bench), 1_600);
         assert_eq!(inputs.bench_age_secs, Some(600));
         assert_eq!(inputs.bench_tg_tok_s, Some(30.0));
-    }
-
-    #[test]
-    fn jsonl_sink_appends_one_line_per_record() {
-        let dir = std::env::temp_dir().join(format!("decision-log-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("trace.jsonl");
-        let sink = TracingDecisionSink::to_path(&path).unwrap();
-        for i in 0..3 {
-            sink.record(DecisionEvent::Decision(Box::new(
-                DecisionBuilder::new(&format!("r{i}"), DecisionPath::RankedOicp, facts())
-                    .finish(Verdict::StayLocal, &[]),
-            )));
-        }
-        let body = std::fs::read_to_string(&path).unwrap();
-        let lines: Vec<&str> = body.lines().collect();
-        assert_eq!(lines.len(), 3);
-        for l in lines {
-            let ev: DecisionEvent = serde_json::from_str(l).unwrap();
-            assert!(matches!(ev, DecisionEvent::Decision(_)));
-        }
-        let _ = std::fs::remove_dir_all(&dir);
     }
 }

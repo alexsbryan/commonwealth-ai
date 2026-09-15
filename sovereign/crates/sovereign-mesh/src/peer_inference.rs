@@ -62,6 +62,7 @@ use sovereign_core::oicp::{ExtensionRegistry, ExtensionStats, NodeObservations, 
 use sovereign_core::traits::{InferenceProvider, ServingLocus};
 use sovereign_core::types::{CompletionRequest, CompletionResponse, ProviderCapabilities, Speed};
 use sovereign_inference::remote::RemoteApiProvider;
+use sovereign_serving_host::recorder;
 use tokio::sync::RwLock;
 
 use crate::daemon::{EmbeddedDaemon, PeerInferenceEndpoint};
@@ -544,7 +545,7 @@ pub struct MeshInferenceProvider {
     /// can assert on the exact records a scenario produced without
     /// racing each other, and so a caller that wants no
     /// instrumentation pays nothing. Production wiring installs
-    /// [`decision_log::TracingDecisionSink::from_env`].
+    /// [`recorder::TracingDecisionSink::from_env`].
     ///
     /// Emitting through this sink changes no routing decision. It is
     /// the observer that makes the decision legible in hindsight and
@@ -710,7 +711,7 @@ impl MeshInferenceProvider {
             )),
             slot_aliases: arc_swap::ArcSwap::from_pointee(std::collections::HashMap::new()),
             in_flight_publisher: Arc::new(AtomicU32::new(0)),
-            decision_sink: Arc::new(decision_log::TracingDecisionSink::from_env()),
+            decision_sink: Arc::new(recorder::TracingDecisionSink::from_env()),
             last_snapshot_unix: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         }
     }
@@ -720,9 +721,9 @@ impl MeshInferenceProvider {
     ///
     /// Tests install [`decision_log::CaptureDecisionSink`] to assert
     /// on exactly the records a scenario produced; a trace-capture
-    /// session installs a [`decision_log::TracingDecisionSink`]
+    /// session installs a [`recorder::TracingDecisionSink`]
     /// pointed at an explicit JSONL path. The default —
-    /// [`decision_log::TracingDecisionSink::from_env`] — emits to
+    /// [`recorder::TracingDecisionSink::from_env`] — emits to
     /// `tracing` and, when `SOVEREIGN_DECISION_LOG` is set, to that
     /// file.
     pub fn with_decision_sink(mut self, sink: Arc<dyn DecisionSink>) -> Self {
@@ -1159,8 +1160,13 @@ impl MeshInferenceProvider {
             failovers,
         );
         match &result {
-            Ok(_) => ctx.complete(None, Some(started.elapsed().as_secs_f64() * 1000.0), None),
-            Err(e) => ctx.failed(e.to_string(), false),
+            Ok(_) => ctx.complete(
+                None,
+                Some(started.elapsed().as_secs_f64() * 1000.0),
+                None,
+                recorder::now_unix_ms(),
+            ),
+            Err(e) => ctx.failed(e.to_string(), false, recorder::now_unix_ms()),
         }
         result
     }
@@ -1445,7 +1451,12 @@ impl MeshInferenceProvider {
         // candidates but do name the gate. "The hub lost" and "the
         // hub was never considered" are different failures and the
         // record has to be able to say which happened.
-        let rec = DecisionBuilder::new(oicp_request_id, path, Self::request_facts(request));
+        let rec = DecisionBuilder::new(
+            recorder::new_decision_id(),
+            oicp_request_id,
+            path,
+            Self::request_facts(request),
+        );
         // There is deliberately NO envelope-presence gate here any more.
         //
         // Until 2026-08-13 this was `if !has_routing_signal(request) {
@@ -1746,11 +1757,12 @@ impl MeshInferenceProvider {
     /// record stream as a scored one — "stayed local because
     /// `latency == Fast`" is an answer; a missing record is not.
     fn gated(&self, rec: DecisionBuilder, gate: &str) -> RankedSelection {
-        let decision = rec.finish(
+        let decision = rec.finish_at(
             Verdict::Gated {
                 gate: gate.to_string(),
             },
             &[],
+            recorder::now_unix_ms(),
         );
         let decision_id = decision.decision_id.clone();
         let oicp_request_id = decision.oicp_request_id.clone();
@@ -2451,6 +2463,7 @@ impl MeshInferenceProvider {
         // guarantee is that **every** outcome has a decision to
         // join back to, on both routing surfaces.
         let rec = DecisionBuilder::new(
+            recorder::new_decision_id(),
             request
                 .oicp
                 .as_ref()
@@ -2625,7 +2638,7 @@ impl MeshInferenceProvider {
                 model_id: model_id.to_string(),
             },
         };
-        let decision = rec.finish(verdict, &[]);
+        let decision = rec.finish_at(verdict, &[], recorder::now_unix_ms());
         let decision_id = decision.decision_id.clone();
         let oicp_request_id = decision.oicp_request_id.clone();
         decision_log::emit_decision(&self.decision_sink, decision);
@@ -2806,7 +2819,7 @@ impl MeshInferenceProvider {
                         // matters most.
                         let msg = reason.refusal(&model_id);
                         self.outcome_ctx(&decision_id, &oicp_request_id, ServedBy::Failed, 0, &[])
-                            .failed(msg.clone(), false);
+                            .failed(msg.clone(), false, recorder::now_unix_ms());
                         Err(sovereign_core::error::Error::ModelNotLoaded(msg))
                     }
                 }
@@ -3506,6 +3519,7 @@ impl InferenceProvider for MeshInferenceProvider {
                                     None,
                                     Some(started.elapsed().as_secs_f64() * 1000.0),
                                     None,
+                                    recorder::now_unix_ms(),
                                 );
                                 return Ok(Self::annotate(resp, &peer.name));
                             }
@@ -3546,7 +3560,11 @@ impl InferenceProvider for MeshInferenceProvider {
                                 attempt_index,
                                 &failovers,
                             )
-                            .failed(err_text.clone(), shed);
+                            .failed(
+                                err_text.clone(),
+                                shed,
+                                recorder::now_unix_ms(),
+                            );
                             return Err(sovereign_core::error::Error::Routing(format!(
                                 "model '{}' is advertised by peer '{}' but all peer \
                                  addresses failed: {}",
@@ -3587,10 +3605,13 @@ impl InferenceProvider for MeshInferenceProvider {
                         &failovers,
                     );
                     match &result {
-                        Ok(_) => {
-                            ctx.complete(None, Some(started.elapsed().as_secs_f64() * 1000.0), None)
-                        }
-                        Err(e) => ctx.failed(e.to_string(), false),
+                        Ok(_) => ctx.complete(
+                            None,
+                            Some(started.elapsed().as_secs_f64() * 1000.0),
+                            None,
+                            recorder::now_unix_ms(),
+                        ),
+                        Err(e) => ctx.failed(e.to_string(), false, recorder::now_unix_ms()),
                     }
                     return result;
                 }
@@ -3829,7 +3850,11 @@ impl InferenceProvider for MeshInferenceProvider {
                                 attempt_index,
                                 &failovers,
                             )
-                            .failed(step_err, shed);
+                            .failed(
+                                step_err,
+                                shed,
+                                recorder::now_unix_ms(),
+                            );
                             return Err(sovereign_core::error::Error::Routing(format!(
                                 "model '{}' is advertised by peer '{}' but all peer \
                                  addresses failed: {}",
@@ -3895,7 +3920,7 @@ impl InferenceProvider for MeshInferenceProvider {
                 failovers.len() as u32,
                 &failovers,
             )
-            .failed(err_text, shed);
+            .failed(err_text, shed, recorder::now_unix_ms());
         }
         Err(last_err.unwrap_or_else(|| {
             sovereign_core::error::Error::Routing(

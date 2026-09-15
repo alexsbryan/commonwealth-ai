@@ -11,16 +11,15 @@ license.workspace = true
 oicp-types = { workspace = true }
 # The scheduler half of sovereign-mesh moved in here (domains row
 # REVIEW-build-sched-move): the decision records and replay fixtures are
-# serde-serialised, the sink and the ranker log through `tracing`, decision
-# ids are minted from `uuid`, and `decision_log`'s clock stamps come from the
-# tier-0 `sovereign-time` leaf. Verified 2026-09-15 by `grep` over the seven
-# modules — none of them names `sovereign-contracts`, `futures`, `tokio` or
-# `async-trait`.
+# serde-serialised and the ranker logs through `tracing`. The recording sink —
+# file, env, clock, ids — is `sovereign-serving-host`'s
+# (REVIEW-build-sched-split-sink), so this crate reads no clock and mints no
+# id: `uuid` and `sovereign-time` left with the sink. Verified 2026-09-15 by
+# `grep` over the seven modules — none of them names `sovereign-contracts`,
+# `futures`, `tokio` or `async-trait`.
 serde = { workspace = true }
 serde_json = { workspace = true }
-sovereign-time = { workspace = true }
 tracing = { workspace = true }
-uuid = { workspace = true }
 
 [lints]
 workspace = true

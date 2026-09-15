@@ -1538,7 +1538,12 @@ impl Sim {
         let facts = request_facts(&req, arrival);
         self.seq += 1;
         let oicp_request_id = format!("sim-{origin}-{}", self.seq);
-        let rec = DecisionBuilder::new(&oicp_request_id, DecisionPath::RankedOicp, facts);
+        let rec = DecisionBuilder::new(
+            sovereign_serving_host::recorder::new_decision_id(),
+            &oicp_request_id,
+            DecisionPath::RankedOicp,
+            facts,
+        );
 
         // The production gate, called directly — which is what makes
         // "LocalOnly never crossed the wire" a property of the code

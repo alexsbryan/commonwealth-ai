@@ -252,7 +252,12 @@ where
             // early-returned would silently break calibration.
             if let Some(ctx) = outcome {
                 let total_ms = now.duration_since(dispatched).as_secs_f64() * 1000.0;
-                ctx.complete(ttft_ms, Some(total_ms), observable.then_some(count));
+                ctx.complete(
+                    ttft_ms,
+                    Some(total_ms),
+                    observable.then_some(count),
+                    sovereign_serving_host::recorder::now_unix_ms(),
+                );
             }
 
             if !observable {

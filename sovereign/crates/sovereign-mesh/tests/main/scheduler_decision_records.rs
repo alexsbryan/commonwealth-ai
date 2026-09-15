@@ -51,10 +51,11 @@ use sovereign_core::types::{CompletionRequest, Speed};
 use sovereign_mesh::daemon::PeerInferenceEndpoint;
 use sovereign_mesh::decision_log::{
     CandidateKind, CaptureDecisionSink, DecisionEvent, DecisionPath, DecisionSink, ExclusionReason,
-    LoadSource, RoutingDecision, RoutingOutcome, ServedBy, TracingDecisionSink, Verdict,
+    LoadSource, RoutingDecision, RoutingOutcome, ServedBy, Verdict,
 };
 use sovereign_mesh::decision_trace::SchedulerTrace;
 use sovereign_mesh::peer_inference::{MeshInferenceProvider, PeerEndpointSource};
+use sovereign_serving_host::recorder::TracingDecisionSink;
 
 use crate::common;
 use crate::common::TestProvider;

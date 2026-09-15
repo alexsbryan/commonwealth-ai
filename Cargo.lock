@@ -12828,9 +12828,7 @@ dependencies = [
  "oicp-types",
  "serde",
  "serde_json",
- "sovereign-time",
  "tracing",
- "uuid",
 ]
 
 [[package]]
@@ -12908,8 +12906,12 @@ dependencies = [
  "async-trait",
  "futures",
  "oicp-types",
+ "serde_json",
  "sovereign-contracts",
+ "sovereign-scheduler",
+ "sovereign-time",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

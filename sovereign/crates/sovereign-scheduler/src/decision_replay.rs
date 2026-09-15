@@ -750,7 +750,7 @@ mod tests {
     /// Build a decision the way production does: push candidates in
     /// scoring order, then finish with the ranked list `rank` derived.
     fn decision(candidates: Vec<CandidateRecord>) -> RoutingDecision {
-        let mut b = DecisionBuilder::new("req", DecisionPath::RankedOicp, facts());
+        let mut b = DecisionBuilder::new("d-req", "req", DecisionPath::RankedOicp, facts());
         for c in &candidates {
             b.push_candidate(c.clone());
         }
@@ -1056,21 +1056,21 @@ mod tests {
 
     #[test]
     fn gated_and_named_decisions_are_skipped_with_their_reason_not_scored() {
-        let gated = DecisionBuilder::new("g", DecisionPath::RankedOicp, facts()).finish_at(
+        let gated = DecisionBuilder::new("d-g", "g", DecisionPath::RankedOicp, facts()).finish_at(
             Verdict::Gated {
                 gate: "not_offload_eligible".into(),
             },
             &[],
             1,
         );
-        let named = DecisionBuilder::new("n", DecisionPath::NamedModel, facts()).finish_at(
+        let named = DecisionBuilder::new("d-n", "n", DecisionPath::NamedModel, facts()).finish_at(
             Verdict::NamedLocal {
                 model_id: "m".into(),
             },
             &[],
             2,
         );
-        let empty = DecisionBuilder::new("e", DecisionPath::RankedOicp, facts()).finish_at(
+        let empty = DecisionBuilder::new("d-e", "e", DecisionPath::RankedOicp, facts()).finish_at(
             Verdict::StayLocal,
             &[],
             3,

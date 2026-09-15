@@ -22,8 +22,8 @@
 //! # P4 — trace-replay fixtures
 //!
 //! [`SchedulerTrace`] is a snapshot plus an ordered stream of
-//! [`DecisionEvent`]s, loaded back from the JSONL a
-//! [`crate::decision_log::TracingDecisionSink`] wrote. It is the
+//! [`DecisionEvent`]s, loaded back from the JSONL the recording sink
+//! (`sovereign-serving-host`'s) wrote. It is the
 //! replay substrate the calibration contract requires: a real
 //! household evening becomes a repeatable Tier-1 scenario, and the
 //! gate — decision-agreement between simulator and hardware — is
@@ -350,16 +350,21 @@ mod tests {
         let mut decisions = Vec::new();
         let mut ids = Vec::new();
         for i in 0..n {
-            let mut b =
-                DecisionBuilder::new(&format!("req-{i}"), DecisionPath::RankedOicp, facts());
+            let mut b = DecisionBuilder::new(
+                format!("d-req-{i}"),
+                &format!("req-{i}"),
+                DecisionPath::RankedOicp,
+                facts(),
+            );
             b.push_candidate(candidate("hub", 0.9));
             ids.push(b.decision_id().to_string());
             let ranked = vec!["hub".to_string()];
-            decisions.push(b.finish(
+            decisions.push(b.finish_at(
                 Verdict::Peers {
                     ranked: ranked.clone(),
                 },
                 &ranked,
+                1,
             ));
         }
         let mut lines = Vec::new();
@@ -490,9 +495,9 @@ mod tests {
 
     #[test]
     fn decision_without_outcome_lowers_the_join_rate() {
-        let mut b = DecisionBuilder::new("r", DecisionPath::RankedOicp, facts());
+        let mut b = DecisionBuilder::new("d-r1", "r", DecisionPath::RankedOicp, facts());
         b.push_candidate(candidate("hub", 0.9));
-        let d = b.finish(Verdict::StayLocal, &[]);
+        let d = b.finish_at(Verdict::StayLocal, &[], 1);
         let line = serde_json::to_string(&DecisionEvent::Decision(Box::new(d))).unwrap();
         let (joined, _) = interleaved_log(1);
         let both = format!("{joined}\n{line}");
@@ -503,9 +508,9 @@ mod tests {
 
     #[test]
     fn unknown_schema_is_refused_not_partially_read() {
-        let mut b = DecisionBuilder::new("r", DecisionPath::RankedOicp, facts());
+        let mut b = DecisionBuilder::new("d-r2", "r", DecisionPath::RankedOicp, facts());
         b.push_candidate(candidate("hub", 0.9));
-        let mut d = b.finish(Verdict::StayLocal, &[]);
+        let mut d = b.finish_at(Verdict::StayLocal, &[], 1);
         d.schema = "oicp-decision/v99".into();
         let line = serde_json::to_string(&DecisionEvent::Decision(Box::new(d))).unwrap();
         match SchedulerTrace::from_jsonl(line.as_bytes()) {
@@ -538,11 +543,12 @@ mod tests {
     #[test]
     fn scored_episodes_exclude_gated_decisions() {
         let (jsonl, _) = interleaved_log(2);
-        let gated = DecisionBuilder::new("f", DecisionPath::RankedOicp, facts()).finish(
+        let gated = DecisionBuilder::new("d-f", "f", DecisionPath::RankedOicp, facts()).finish_at(
             Verdict::Gated {
                 gate: "not_offload_eligible".into(),
             },
             &[],
+            1,
         );
         let line = serde_json::to_string(&DecisionEvent::Decision(Box::new(gated))).unwrap();
         let trace = SchedulerTrace::from_jsonl(format!("{jsonl}\n{line}").as_bytes()).unwrap();
