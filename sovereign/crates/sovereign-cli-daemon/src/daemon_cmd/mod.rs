@@ -54,6 +54,7 @@ pub(crate) mod lifecycle;
 // grows a `#[cfg]`, and a build without `--features ocr` still logs WHY OCR
 // is unavailable instead of doing nothing.
 mod ocr_install;
+mod principal;
 mod solve_http;
 mod solve_tools;
 // Liveness probe for the pidfile-managed (manual) daemon — consumed by
@@ -1088,7 +1089,42 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
         &sovereign_runtime_recipe::TracingProgress,
     )
     .await;
-    let runtime = sovereign_runtime_recipe::commission(common.parts);
+    // ── The turn's Scope: resolved, not absent ───────────────────────────
+    //
+    // `quality/DAEMON_CORE.md` §3.3 measured BOTH slots at named absence on
+    // this host, and absence was permissive: `sensitive_corpora: None` meant
+    // "no sensitivity gate, all corpora eligible" and `corpus_principal: None`
+    // meant the turn's `corpus_ceiling` was never computed. The daemon is the
+    // host that answers turns, so both are wired here.
+    //
+    //   * `sensitive_corpora` — the daemon's OWN watched-folder manager (the
+    //     canonical `SensitiveCorpusOracle`, the same handle `lc_http` serves
+    //     over). A corpus the user marked sensitive is structurally absent
+    //     from ambient retrieval on the daemon, not only in the desktop's old
+    //     in-process build.
+    //   * `corpus_principal` — the local owner. The daemon is single-user, so
+    //     every conversation it serves resolves and `build_context` produces a
+    //     `Some(..)` ceiling rather than an absent one. A resolver that cannot
+    //     name a caller returns `None`, and that turn REFUSES
+    //     (`PrincipalScope::Unresolved`) instead of seeing every corpus.
+    let sensitive_corpora: Option<Arc<dyn sovereign_core::traits::SensitiveCorpusOracle>> =
+        sovereign_mesh::watched_folder_runtime::manager()
+            .map(|m| m as Arc<dyn sovereign_core::traits::SensitiveCorpusOracle>);
+    if sensitive_corpora.is_none() {
+        // Named, not silent: the subsystem failed to install above, so there is
+        // no oracle to consult. `None` here still means "no sensitivity gate"
+        // (the pre-v1 behaviour) — reported so the gap is visible (ARCH §18.3).
+        tracing::warn!(
+            "daemon: no LocalCorpusManager installed — the sensitivity gate is \
+             absent; sensitive watched-folder corpora will not be excluded from \
+             ambient retrieval"
+        );
+    }
+    let runtime = sovereign_runtime_recipe::commission(sovereign_core::RuntimeParts {
+        sensitive_corpora,
+        corpus_principal: Some(Arc::new(principal::LocalOwnerPrincipal)),
+        ..common.parts
+    });
     tracing::info!(
         tools = runtime.tools.count(),
         "daemon: Runtime commissioned — this process can serve a turn"

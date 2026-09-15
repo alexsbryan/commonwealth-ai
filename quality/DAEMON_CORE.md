@@ -196,6 +196,18 @@ oracle. Which callers other than the owner can start a turn on the node was not 
 exposure is not sized here. The absence is a defect, not a design choice, and no code move fixes
 it.
 
+**Wired 2026-09-16 (Wave 0, `REVIEW-build-corpus-ceiling`).** The daemon now commissions its
+`Runtime` with `sensitive_corpora` = its own `LocalCorpusManager` and `corpus_principal` =
+`LocalOwnerPrincipal` (`sovereign-cli-daemon/src/daemon_cmd/principal.rs`), so the turn's ceiling is
+a resolved `Some(..)` rather than an absent `None`. `build_context` now takes a `PrincipalScope`
+and distinguishes "no resolver on this host" (`Unscoped`, single-user, ceiling absent) from "a
+resolver that could not name the caller" (`Unresolved`, ceiling `Some(empty)` — it refuses). The
+caller classes the tree actually serves, measured: the turn surface is `.localhost_only_with`
+(`turn_http.rs:142`), so only loopback callers — the attached desktop, `svrn chat`, MCP, other
+local processes — reach a turn, and every one is the single local owner; remote callers reach the
+OpenAI-compat surface (`/v1/chat/completions`), which performs no corpus retrieval, or the
+peer-admission-gated mesh routes. The full edge resolver below is still `REVIEW-mint-principal`.
+
 The resolver, decided:
 
 - **One resolution at the edge, one value.** The daemon's `edge` authenticates a request once and

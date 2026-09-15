@@ -5,7 +5,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use futures::Stream;
 
-use sovereign_core::context::{build_context, format_history_as_prompt};
+use sovereign_core::context::{build_context, format_history_as_prompt, PrincipalScope};
 use sovereign_core::error::{Error, Result};
 use sovereign_core::executor::{AutoApprovalChannel, Executor, TaskContext};
 use sovereign_core::planner::LlmPlanner;
@@ -540,7 +540,7 @@ fn skill_registry_merge_memory_rules() {
 #[tokio::test]
 async fn build_context_new_conversation() {
     let store = MockStore::new();
-    let ctx = build_context(&store, "new-convo", "", None).await.unwrap();
+    let ctx = build_context(&store, "new-convo", "", PrincipalScope::Unscoped).await.unwrap();
     assert_eq!(ctx.conversation.id, "new-convo");
     assert!(ctx.conversation.messages.is_empty());
     assert!(ctx.memories.is_empty());
@@ -563,7 +563,7 @@ async fn build_context_existing_conversation() {
         .await
         .unwrap();
 
-    let ctx = build_context(&store, "c1", "hello", None).await.unwrap();
+    let ctx = build_context(&store, "c1", "hello", PrincipalScope::Unscoped).await.unwrap();
     assert_eq!(ctx.conversation.messages.len(), 1);
     assert_eq!(ctx.conversation.messages[0].content, "hello");
 }

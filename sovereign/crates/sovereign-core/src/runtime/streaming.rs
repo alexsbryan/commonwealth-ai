@@ -934,17 +934,9 @@ impl Runtime {
         }
 
         // Prior history only — no working-memory / topic shaping.
-        let principal = self
-            .corpus_principal
-            .as_ref()
-            .and_then(|r| r.principal_for(conversation_id));
-        let mut context = build_context(
-            self.store.as_ref(),
-            conversation_id,
-            message,
-            principal.as_deref(),
-        )
-        .await?;
+        let scope = self.principal_scope(conversation_id);
+        let mut context =
+            build_context(self.store.as_ref(), conversation_id, message, scope).await?;
 
         // Persist the user turn (same as the situated path).
         let user_msg = Message {
@@ -3795,17 +3787,9 @@ impl Runtime {
         // fetched by this turn's own post-stream spawns via `current()`.
         let _ = self.post_stream_preemption.begin_turn(conversation_id);
         // 1. Build context.
-        let principal = self
-            .corpus_principal
-            .as_ref()
-            .and_then(|r| r.principal_for(conversation_id));
-        let mut context = build_context(
-            self.store.as_ref(),
-            conversation_id,
-            message,
-            principal.as_deref(),
-        )
-        .await?;
+        let scope = self.principal_scope(conversation_id);
+        let mut context =
+            build_context(self.store.as_ref(), conversation_id, message, scope).await?;
         tracing::debug!(
             messages = context.conversation.messages.len(),
             memories = context.memories.len(),

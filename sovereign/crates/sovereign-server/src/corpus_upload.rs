@@ -351,10 +351,14 @@ mod tests {
 
         // The loop closes through the A3b-1 ceiling. Alice retrieves over her
         // upload…
-        let alice_ctx =
-            sovereign_core::context::build_context(&store, "alice:c", "passphrase", Some("alice"))
-                .await
-                .unwrap();
+        let alice_ctx = sovereign_core::context::build_context(
+            &store,
+            "alice:c",
+            "passphrase",
+            sovereign_core::context::PrincipalScope::resolved("alice"),
+        )
+        .await
+        .unwrap();
         assert!(
             alice_ctx
                 .corpus_ceiling
@@ -366,10 +370,14 @@ mod tests {
 
         // …and Bob — a different tenant on the same hub — never sees it, on
         // the default chat path (no enabled_corpora selection at all).
-        let bob_ctx =
-            sovereign_core::context::build_context(&store, "bob:c", "passphrase", Some("bob"))
-                .await
-                .unwrap();
+        let bob_ctx = sovereign_core::context::build_context(
+            &store,
+            "bob:c",
+            "passphrase",
+            sovereign_core::context::PrincipalScope::resolved("bob"),
+        )
+        .await
+        .unwrap();
         assert!(
             !bob_ctx
                 .corpus_ceiling

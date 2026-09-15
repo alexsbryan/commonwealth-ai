@@ -7,13 +7,59 @@ use crate::types::*;
 
 use crate::time::unix_now as now;
 
+/// How a turn's caller was resolved — the input [`build_context`] turns into
+/// the conversation's corpus ceiling.
+///
+/// # Why three arms and not `Option<&str>`
+///
+/// `None` used to carry two different facts — "this host has no tenancy" and
+/// "a resolver is wired but could not name this caller" — and BOTH were
+/// permissive, so the second read as *all corpora eligible*. They are not the
+/// same fact and they must not resolve the same way: a host with no tenancy is
+/// a declared single-user host, while an unattributable caller is an absence,
+/// and absence refuses (ARCH principle 6 — never silently substitute; an
+/// `Err`-shaped state is not a success-shaped value).
+///
+/// The daemon and the desktop reach retrieval through the same `Runtime`, so
+/// the distinction is structural here rather than a rule each host remembers
+/// (ARCH principle 10).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PrincipalScope {
+    /// No `PrincipalResolver` is wired on this host. Single-user: every corpus
+    /// is visible and the ceiling is absent, bit-identical to the behaviour
+    /// before tenancy existed.
+    Unscoped,
+    /// A resolver is wired and attributed this conversation to a principal.
+    /// Only `Org` corpora and this principal's own `Private` corpora are
+    /// visible; the ceiling is `Some`.
+    Resolved(String),
+    /// A resolver is wired and could NOT attribute this conversation. The
+    /// ceiling is EMPTY — nothing is visible. Absence refuses.
+    Unresolved,
+}
+
+impl PrincipalScope {
+    /// The principal, when the caller was attributed.
+    pub fn principal(&self) -> Option<&str> {
+        match self {
+            Self::Resolved(p) => Some(p.as_str()),
+            Self::Unscoped | Self::Unresolved => None,
+        }
+    }
+
+    /// A resolver's answer for a conversation it named.
+    pub fn resolved(p: impl Into<String>) -> Self {
+        Self::Resolved(p.into())
+    }
+}
+
 /// Build a ConversationContext from the store, creating the conversation if it doesn't exist.
 /// The `query` parameter is used for memory retrieval (FTS5 matching).
 pub async fn build_context(
     store: &dyn StateStore,
     conversation_id: &str,
     query: &str,
-    principal: Option<&str>,
+    scope: PrincipalScope,
 ) -> Result<ConversationContext> {
     let conversation = match store.get_conversation(conversation_id).await {
         Ok(c) => c,
@@ -38,10 +84,10 @@ pub async fn build_context(
     // memories. Without this, a general chat could surface a memory
     // extracted in inner-work, breaching the trust contract behind
     // the wall. See `MemoryScope` docs for the bidirectional invariant.
-    let scope =
+    let memory_scope =
         crate::traits::MemoryScope::from_conversation_skill(conversation.skill_id.as_deref());
     let memories = store
-        .get_relevant_memories_for_scope(&scope, query, 5)
+        .get_relevant_memories_for_scope(&memory_scope, query, 5)
         .await
         .unwrap_or_default();
 
@@ -54,34 +100,45 @@ pub async fn build_context(
     // `parent_corpus_id`); here we only do the parent-level
     // intersection that drives the model's "installed corpora" prompt
     // list. See `Conversation::enabled_corpora` docs.
-    // Scope the corpus set to what this principal may retrieve from. On a
-    // multi-user hub `principal` is the conversation's owner; a `Private`
+    // Scope the corpus set to what this caller may retrieve from. On a
+    // multi-user hub the resolver names the conversation's owner; a `Private`
     // corpus owned by anyone else is excluded here, so it can never enter
-    // retrieval. `None` (single-user / desktop) hides nothing — every
-    // corpus, `Org` or `Private`, is visible. This is the in-process twin of
-    // the server's read-surface deny-set (`TenantRuntime::forbidden_corpora`).
-    let all_installed: Vec<String> = store
-        .list_corpus_states()
-        .await
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|s| s.deleted_at.is_none())
-        .filter(|s| match (&s.visibility, principal) {
-            (CorpusVisibility::Private { owner }, Some(p)) => owner == p,
-            _ => true,
-        })
-        .map(|s| s.corpus_id)
-        .collect();
-    // The PURE principal ceiling — the corpora this principal may ever
-    // retrieve from, independent of the per-conversation `enabled_corpora`
-    // selection. `Some(..)` only when a principal is present (a multi-tenant
-    // hub injected a PrincipalResolver); `None` on the single-user / desktop
-    // path, where retrieval stays bit-identical to pre-feature behaviour
-    // (`None` enabled_corpora ⇒ every index searched). Applied as the
-    // independent `corpus_ceiling` Filter 5 at every corpus-chunk search —
-    // the airtight backstop that a forged or absent `enabled_corpora` cannot
-    // widen past. See `ConversationContext::corpus_ceiling`.
-    let corpus_ceiling: Option<Vec<String>> = principal.map(|_| all_installed.clone());
+    // retrieval. `Unscoped` (single-user / desktop, no resolver wired) hides
+    // nothing — every corpus, `Org` or `Private`, is visible. `Unresolved` (a
+    // resolver was wired and could not name the caller) sees NOTHING: absence
+    // refuses rather than defaulting to all-corpora-eligible. This is the
+    // in-process twin of the server's read-surface deny-set
+    // (`TenantRuntime::forbidden_corpora`).
+    let all_installed: Vec<String> = match scope {
+        PrincipalScope::Unresolved => Vec::new(),
+        _ => store
+            .list_corpus_states()
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|s| s.deleted_at.is_none())
+            .filter(|s| match (&s.visibility, scope.principal()) {
+                (CorpusVisibility::Private { owner }, Some(p)) => owner == p,
+                _ => true,
+            })
+            .map(|s| s.corpus_id)
+            .collect(),
+    };
+    // The PURE principal ceiling — the corpora this caller may ever retrieve
+    // from, independent of the per-conversation `enabled_corpora` selection.
+    // `Some(..)` for every attributed caller (a multi-tenant hub injected a
+    // `PrincipalResolver`), and `Some(empty)` for an unattributable one, so an
+    // unresolved caller can see nothing. `None` only on the declared
+    // single-user path (`Unscoped`), where retrieval stays bit-identical to
+    // pre-feature behaviour (`None` enabled_corpora ⇒ every index searched).
+    // Applied as the independent `corpus_ceiling` Filter 5 at every
+    // corpus-chunk search — the airtight backstop that a forged or absent
+    // `enabled_corpora` cannot widen past. See
+    // `ConversationContext::corpus_ceiling`.
+    let corpus_ceiling: Option<Vec<String>> = match scope {
+        PrincipalScope::Unscoped => None,
+        _ => Some(all_installed.clone()),
+    };
     let installed_corpora: Vec<String> = match &conversation.enabled_corpora {
         Some(allow) => {
             let allow_set: std::collections::HashSet<&str> =

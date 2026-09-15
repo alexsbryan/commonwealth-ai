@@ -2,7 +2,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::context::{build_context, format_history_as_prompt};
+use crate::context::{build_context, format_history_as_prompt, PrincipalScope};
 use crate::error::Result;
 use crate::executor::{Executor, TaskContext};
 use crate::memory;
@@ -663,6 +663,24 @@ impl Runtime {
         }
     }
 
+    /// Resolve this turn's caller into the scope [`build_context`] consumes.
+    ///
+    /// The load-bearing distinction: `None` from a wired resolver is NOT the
+    /// single-user path. A host with no resolver is [`PrincipalScope::Unscoped`]
+    /// — every corpus visible, a declared single-user host. A resolver that
+    /// cannot name the conversation is [`PrincipalScope::Unresolved`], which
+    /// refuses. Both were one `None` before 2026-09-16, and it was permissive:
+    /// an unattributable caller read as "all corpora eligible".
+    pub(crate) fn principal_scope(&self, conversation_id: &str) -> PrincipalScope {
+        match self.corpus_principal.as_ref() {
+            None => PrincipalScope::Unscoped,
+            Some(r) => match r.principal_for(conversation_id) {
+                Some(p) => PrincipalScope::Resolved(p),
+                None => PrincipalScope::Unresolved,
+            },
+        }
+    }
+
     /// Merge this turn's fresh relational recall with the entries the
     /// witness has actually SPOKEN ABOUT in this conversation (pinned
     /// by `pin_referenced_memory` from the grounding verifier's
@@ -822,7 +840,13 @@ impl Runtime {
     pub async fn end_conversation(&self, conversation_id: &str) -> Result<()> {
         // Memory-extraction pass at conversation end — no retrieval, so no
         // principal scoping is needed.
-        let context = build_context(self.store.as_ref(), conversation_id, "", None).await?;
+        let context = build_context(
+            self.store.as_ref(),
+            conversation_id,
+            "",
+            PrincipalScope::Unscoped,
+        )
+        .await?;
         if context.conversation.messages.len() < 4 {
             return Ok(());
         }

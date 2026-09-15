@@ -292,9 +292,13 @@ impl Runtime {
         message: &str,
         conversation_id: &str,
     ) -> Result<EvidenceRetrieval> {
-        let context =
-            crate::context::build_context(self.store.as_ref(), conversation_id, message, None)
-                .await?;
+        let context = crate::context::build_context(
+            self.store.as_ref(),
+            conversation_id,
+            message,
+            self.principal_scope(conversation_id),
+        )
+        .await?;
         let intent = self
             .router
             .classify(message, &context, &[])
