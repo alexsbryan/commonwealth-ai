@@ -103,7 +103,8 @@ implementations. Two are a second host: `/v1/conversations/{id}/messages` and
 are `/v1/chat/completions`, `/v1/models`, `/v1/embeddings` and
 `/oicp/v1/capabilities` in both commonwealth-api and sovereign-mesh; the
 sovereign-mesh copies are the worker-mode inference proxy
-(`worker_inference_proxy.rs`), a different process, and stay. One non-turn
+(`worker_inference_proxy.rs`), the pod's `:9742` tunnel, a different process —
+not a turn path; it moves with the rented pods to `sovereign-pods`. One non-turn
 duplicate is inside one process: `/internal/corpus/status` is registered by
 both commonwealth-api and sovereign-mesh in the same daemon, and Phase 1
 removes one of them.

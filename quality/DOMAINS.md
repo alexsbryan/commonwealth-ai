@@ -531,7 +531,7 @@ single-owner resource — with no `commonwealth-work` edge and no unit, lease or
 |---|---|---|
 | `commonwealth-work` | vocabulary, fold, lease predicate, executor trait and registry, process executor, sandbox | stays — it is the context |
 | `work_donor`, `ingest_executor` | the node running units off the work fold | `sovereign-daemon`'s `jobs` |
-| rented pods: `worker_pod`, `worker_http`, `worker_controller`, `worker_daemon`, `worker_subprocess_runner`, `multi_pod_coordinator` (5,831 lines) | leasing a rented machine and running work on it — Compute's remote isolation | a new Compute crate, `sovereign-pods` |
+| rented pods: `worker_pod`, `worker_http`, `worker_inference_proxy`, `worker_controller`, `worker_daemon`, `worker_subprocess_runner`, `multi_pod_coordinator` (6,373 lines) | leasing a rented machine and running work on it — Compute's remote isolation | a new Compute crate, `sovereign-pods` |
 | `worker_eligibility`, `pinned_pod_snapshot`, `pinned_transport` (1,863) | which RPC inference workers may hold a shard; a pinned pod presented as a venue | `sovereign-serving-host` |
 | `guest_tunnel` (134) | an iroh dial to a lender, exposed as a local address | Fabric, `sovereign-mesh` — it is reach |
 | `sovereign-compute` | Serving's local engine | re-tagged `serving`; rename proposed, `sovereign-slots` |
