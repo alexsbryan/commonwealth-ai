@@ -52,6 +52,8 @@ done
 [ ${#INNER[@]} -gt 0 ] || { echo "ralph-supervise: the campaign command is required after --" >&2; exit 2; }
 cd "$WORKDIR" || exit 2
 mkdir -p ralph target/ralph
+mkdir -p .git/info 2>/dev/null
+grep -qxF 'ralph/.heartbeat' .git/info/exclude 2>/dev/null || printf '%s\n' 'ralph/.heartbeat' >> .git/info/exclude
 
 # Per-host model configuration; the inner campaign's flags still win.
 MODEL=""; REVIEW_MODEL=""; VARIANT=""
@@ -73,13 +75,26 @@ done
 [ -n "$RESOLVE_MODEL" ] && MODEL_ARGS="--model $RESOLVE_MODEL"
 [ -n "$RESOLVE_VARIANT" ] && MODEL_ARGS="$MODEL_ARGS --variant $RESOLVE_VARIANT"
 
+# Progress is a unit completed, not a commit: a resolver that commits junk must
+# not reset the bound (a commit every cycle is not progress).
+done_count() {
+  [ -f "$STATE" ] || { echo 0; return; }
+  grep -c '^- \[x\]' "$STATE" 2>/dev/null; true
+}
+
 terminal_stop() {
   if [ -f "$DONE_FILE" ]; then
     say "supervisor: campaign DONE"; notify "DONE" "campaign complete"; exit 0
   fi
-  if [ -f "$STOP_FILE" ] && [ ! -s "$NEEDS_HUMAN" ]; then
+  if [ -f "$STOP_FILE" ] && [ ! -s "$STOP_FILE" ] && [ ! -s "$NEEDS_HUMAN" ]; then
+    # An EMPTY STOP with no package is the operator's. halt() writes its reason
+    # into STOP, so a halt whose package write failed (disk full) is not one.
     say "supervisor: operator STOP — leaving it stopped"
     notify "STOP" "operator stop preserved"; exit 0
+  fi
+  if [ -s "$STOP_FILE" ] && [ ! -s "$NEEDS_HUMAN" ]; then
+    printf '%s\n\nresolve by hand, then remove %s\n' "$(cat "$STOP_FILE")" "$STOP_FILE" > "$NEEDS_HUMAN" 2>/dev/null || true
+    say "supervisor: halt package was missing — wrote one from $STOP_FILE"
   fi
   local unit
   unit=$(current_unit)
@@ -95,16 +110,19 @@ say "supervisor resolution: model ${RESOLVE_MODEL:-configured default}, variant 
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
 attempt=0
 resolution=0
+last_done=$(done_count)
 while true; do
   terminal_stop
 
-  before=$(git rev-parse HEAD 2>/dev/null || true)
   "${INNER[@]}"
   rc=$?
-  after=$(git rev-parse HEAD 2>/dev/null || true)
-  [ "$before" = "$after" ] || attempt=0
 
   terminal_stop
+
+  now_done=$(done_count)
+  if [ "$now_done" -gt "$last_done" ]; then
+    attempt=0; last_done=$now_done
+  fi
 
   reason="campaign exited $rc"
   [ -f "$NEEDS_HUMAN" ] && reason=$(head -1 "$NEEDS_HUMAN")
@@ -144,11 +162,12 @@ You are the resolution session. Diagnose and fix so the campaign flows again:
    The supervisor cleared the old blocker STOP before starting you; a NEW
    \`$STOP_FILE\` is an operator request and you must not remove it.
 EOF
+  pkg_before=""; [ -s "$NEEDS_HUMAN" ] && pkg_before=$(file_hash "$NEEDS_HUMAN")
+  head_before=$(git rev-parse HEAD 2>/dev/null || true)
   # A blocker STOP would otherwise kill its own resolver in run_session.
   [ -s "$NEEDS_HUMAN" ] && rm -f "$STOP_FILE"
   say "supervisor: dispatching resolution session $attempt — $reason"
   notify "resolving" "attempt $attempt: $reason"
-  before=$(git rev-parse HEAD 2>/dev/null || true)
   run_session "$prompt" "$PWD" "target/ralph/supervise-$RUN_ID-$resolution.out"
   rm -f "$prompt"
   if [ -f "$STOP_FILE" ]; then
@@ -157,10 +176,15 @@ EOF
   fi
 
   if [ -f "$NEEDS_HUMAN" ] && [ -s "$NEEDS_HUMAN" ]; then
+    pkg_after=$(file_hash "$NEEDS_HUMAN")
+    head_after=$(git rev-parse HEAD 2>/dev/null || true)
+    if [ "$pkg_after" = "$pkg_before" ] && [ "$head_after" = "$head_before" ]; then
+      say "supervisor: resolution $attempt changed nothing — escalating to the operator"
+      notify "escalate" "resolution achieved nothing: $reason"
+      exit 2
+    fi
     say "supervisor: resolution $attempt left NEEDS_HUMAN — retrying"
   else
     say "supervisor: resolution $attempt cleared the halt — resuming the campaign"
-    after=$(git rev-parse HEAD 2>/dev/null || true)
-    [ "$before" = "$after" ] || attempt=0
   fi
 done

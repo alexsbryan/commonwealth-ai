@@ -20,10 +20,13 @@ class Supervision(unittest.TestCase):
             (root / "bin").mkdir()
             row = "HUMAN-design" if mode == "human" else "dm-build"
             (root / "ralph/STATE.md").write_text(f"- [ ] {row} — depends []\n")
-            if mode in ("human", "operator", "resolve", "unresolved"):
-                (root / "ralph/STOP").touch()
-            if mode != "operator":
-                (root / "ralph/NEEDS_HUMAN.md").write_text("fixture blocker\n")
+            if mode == "haltstop":
+                (root / "ralph/STOP").write_text("halt: fixture\n")
+            else:
+                if mode in ("human", "operator", "resolve", "unresolved", "noop", "junk"):
+                    (root / "ralph/STOP").touch()
+                if mode != "operator":
+                    (root / "ralph/NEEDS_HUMAN.md").write_text("fixture blocker\n")
             if models_file is not None:
                 (root / "ralph/models.env").write_text(models_file)
             worker = root / "bin/opencode"
@@ -35,6 +38,12 @@ class Supervision(unittest.TestCase):
                 "if os.environ['CASE'] == 'resolve':\n"
                 " pathlib.Path('ralph/NEEDS_HUMAN.md').unlink()\n"
                 " pathlib.Path('resolved').touch()\n"
+                "if os.environ['CASE'] == 'haltstop':\n"
+                " pathlib.Path('ralph/NEEDS_HUMAN.md').unlink(missing_ok=True)\n"
+                " pathlib.Path('resolved').touch()\n"
+                "if os.environ['CASE'] == 'junk':\n"
+                " open('junk', 'a').write('x')\n"
+                " os.system('git add junk && git commit -q -m junk')\n"
                 "if os.environ['CASE'] == 'interrupt': pathlib.Path('ralph/STOP').touch()\n"
             )
             worker.chmod(0o755)
@@ -52,6 +61,8 @@ class Supervision(unittest.TestCase):
                        PATH=f"{root / 'bin'}:{os.environ['PATH']}",
                        RALPH_OPENCODE_BIN=str(worker), RALPH_RESOLVE_MAX="2")
             subprocess.run(["git", "init", "-q", tmp], check=True, env=env)
+            subprocess.run(["git", "-C", tmp, "config", "user.email", "t@t"], check=True, env=env)
+            subprocess.run(["git", "-C", tmp, "config", "user.name", "t"], check=True, env=env)
             result = subprocess.run(
                 ["bash", str(SUPERVISOR), "--workdir", tmp, "--no-notify", "--",
                  str(inner), *inner_flags],
@@ -80,13 +91,6 @@ class Supervision(unittest.TestCase):
         self.assertTrue(stopped)
         self.assertIn("operator STOP", result.stdout)
 
-    def test_unresolved_blocker_has_bounded_attempts(self):
-        result, calls, done, _ = self.run_case("unresolved")
-        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
-        self.assertEqual(len(calls), 2)
-        self.assertFalse(done)
-        self.assertIn("leaving it to the operator", result.stdout)
-
     def test_operator_stop_during_resolution_is_preserved(self):
         result, calls, done, stopped = self.run_case("interrupt")
         self.assertEqual(len(calls), 1)
@@ -94,6 +98,25 @@ class Supervision(unittest.TestCase):
         self.assertTrue(stopped)
         self.assertIn("operator STOP during resolution", result.stdout)
 
+    def test_noop_resolution_escalates_immediately(self):
+        result, calls, done, _ = self.run_case("noop")
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertEqual(len(calls), 1)
+        self.assertFalse(done)
+        self.assertIn("changed nothing", result.stdout)
+
+    def test_junk_commits_do_not_reset_the_bound(self):
+        result, calls, done, _ = self.run_case("junk")
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertEqual(len(calls), 2)
+        self.assertFalse(done)
+        self.assertIn("did not clear it", result.stdout)
+
+    def test_halt_stop_without_package_is_not_an_operator_stop(self):
+        result, calls, done, _ = self.run_case("haltstop")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(len(calls), 1)
+        self.assertTrue(done)
 
     def test_models_file_supplies_resolver_when_inner_has_none(self):
         result, calls, done, _ = self.run_case(

@@ -31,6 +31,7 @@ VARIANT=""
 MAX_STALL=3
 MAX_ITER=200
 SESSION_TIMEOUT=3600
+MARKER_TIMEOUT="${RALPH_MARKER_TIMEOUT:-7200}"
 DONE_FILE="ralph/DONE"
 STOP_FILE="ralph/STOP"
 NEEDS_HUMAN="ralph/NEEDS_HUMAN.md"
@@ -57,6 +58,7 @@ while [ $# -gt 0 ]; do
     --max-stall) MAX_STALL="$2"; shift 2 ;;
     --max-iter) MAX_ITER="$2"; shift 2 ;;
     --session-timeout) SESSION_TIMEOUT="$2"; shift 2 ;;
+    --marker-timeout) MARKER_TIMEOUT="$2"; shift 2 ;;
     --done-file) DONE_FILE="$2"; shift 2 ;;
     --stop-file) STOP_FILE="$2"; shift 2 ;;
     --needs-human-file) NEEDS_HUMAN="$2"; shift 2 ;;
@@ -77,7 +79,7 @@ mkdir -p "$STATE_DIR/logs"
 
 # Runtime markers must not dirty the tree the loop commits into.
 mkdir -p .git/info 2>/dev/null
-for f in "$DONE_FILE" "$STOP_FILE" "$NEEDS_HUMAN" "$LAST_REVIEW" ralph/log.txt ralph/models.env; do
+for f in "$DONE_FILE" "$STOP_FILE" "$NEEDS_HUMAN" "$LAST_REVIEW" ralph/log.txt ralph/models.env ralph/.heartbeat ralph/waiting; do
   printf '%s\n' "$f" >> .git/info/exclude
 done
 sort -u .git/info/exclude -o .git/info/exclude 2>/dev/null || true
@@ -175,6 +177,7 @@ RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
 stall=0; iter=0
 while [ "$iter" -lt "$MAX_ITER" ]; do
   iter=$((iter + 1))
+  heartbeat "iteration $iter"
   [ -f "$STOP_FILE" ] && { say "STOP after $iter iterations"; exit 0; }
   [ -f "$DONE_FILE" ] && { say "DONE after $iter iterations ($(git rev-parse --short HEAD))"; notify "DONE" "$LABEL complete"; exit 0; }
   if [ -f "$NEEDS_HUMAN" ]; then

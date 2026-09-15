@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import time
 import unittest
 
 
@@ -13,7 +14,7 @@ LOOP = Path(__file__).resolve().parents[1] / "ralph-loop.sh"
 
 class Routing(unittest.TestCase):
     def run_queue(self, rows, *, models=False, supervised=False, models_file=None,
-                  review_flag="strong/reviewer"):
+                  review_flag="strong/reviewer", extra_args=(), waiting_age=None):
         with tempfile.TemporaryDirectory(prefix="ralph-routing-") as tmp:
             root = Path(tmp)
             (root / "ralph").mkdir()
@@ -22,6 +23,10 @@ class Routing(unittest.TestCase):
             (root / "ralph/PROMPT.md").write_text("Execute the selected unit.")
             if models_file is not None:
                 (root / "ralph/models.env").write_text(models_file)
+            if waiting_age is not None:
+                w = root / "ralph/waiting"
+                w.write_text("never.done\n")
+                os.utime(w, (time.time() - waiting_age, time.time() - waiting_age))
             worker = root / "bin/opencode"
             worker.write_text(
                 "#!/usr/bin/env python3\n"
@@ -43,6 +48,7 @@ class Routing(unittest.TestCase):
                 cmd += ["--model", "worker/terra", "--variant", "high"]
             if supervised:
                 cmd += ["--supervise"]
+            cmd += list(extra_args)
             result = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=10)
             args = root / "argv.json"
             return result, json.loads(args.read_text()) if args.exists() else None
@@ -116,6 +122,27 @@ class Routing(unittest.TestCase):
             "- [ ] REVIEW-ready — depends []\n", review_flag=None,
             models_file="MODEL=file/worker\nREVIEW_MODEL=file/reviewer\nVARIANT=medium\n")
         self.assertEqual(args[:5], ["run", "--model", "file/reviewer", "--variant", "medium"])
+
+
+    def test_stale_waiting_marker_halts(self):
+        result, args = self.run_queue(
+            "- [ ] dm-ready — depends []\n", waiting_age=7200,
+            extra_args=("--marker-timeout", "60"))
+        self.assertIsNone(args)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("HALT", result.stdout)
+        self.assertIn("never.done", result.stdout)
+
+    def test_heartbeat_writes_timestamp_and_context(self):
+        with tempfile.TemporaryDirectory(prefix="ralph-hb-") as tmp:
+            hb = f"{tmp}/hb"
+            r = subprocess.run(
+                ["bash", "-c",
+                 '. scripts/ralph-lib.sh; HEARTBEAT_FILE="$1" heartbeat "iteration 7"; cat "$1"',
+                 "_", hb],
+                cwd=str(LOOP.parent.parent), env=dict(os.environ),
+                text=True, capture_output=True, timeout=10)
+            self.assertRegex(r.stdout, r"^\d+ iteration 7\n$")
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import time
 import unittest
 
 
@@ -11,7 +12,7 @@ WATCH = Path(__file__).resolve().parents[1] / "ralph-watch.sh"
 
 
 class Watch(unittest.TestCase):
-    def run_watch(self, root, *, running=True, df_mb=100_000):
+    def run_watch(self, root, *, running=True, df_mb=100_000, heartbeat_age=None, stop=None):
         bin_dir = root / "bin"
         bin_dir.mkdir(exist_ok=True)
         stub = bin_dir / "launchctl"
@@ -22,6 +23,12 @@ class Watch(unittest.TestCase):
                       "echo 'Filesystem 1M-blocks Used Available Capacity Mounted on'\n"
                       f"echo '/dev/disk3s5 948000 756000 {df_mb} 86% /System/Volumes/Data'\n")
         df.chmod(0o755)
+        if heartbeat_age is not None:
+            hb = root / "ralph/.heartbeat"
+            hb.write_text(f"{int(time.time()) - heartbeat_age} session\n")
+            os.utime(hb, (time.time() - heartbeat_age, time.time() - heartbeat_age))
+        if stop is not None:
+            (root / "ralph/STOP").write_text(stop)
         env = dict(os.environ, HOME=str(root), RALPH_WATCH_DRY="1",
                    RALPH_WATCH_LAUNCHCTL=str(stub), RALPH_WATCH_DF=str(df))
         return subprocess.run(
@@ -68,6 +75,34 @@ class Watch(unittest.TestCase):
             (root / "ralph").mkdir()
             r = self.run_watch(root, running=True, df_mb=100)
             self.assertIn("disk low", r.stdout)
+
+    def test_stale_heartbeat_notifies(self):
+        with tempfile.TemporaryDirectory(prefix="ralph-watch-") as tmp:
+            root = Path(tmp)
+            (root / "ralph").mkdir()
+            r = self.run_watch(root, heartbeat_age=600)
+            self.assertIn("loop stalled", r.stdout)
+
+    def test_fresh_heartbeat_is_silent(self):
+        with tempfile.TemporaryDirectory(prefix="ralph-watch-") as tmp:
+            root = Path(tmp)
+            (root / "ralph").mkdir()
+            r = self.run_watch(root, heartbeat_age=1)
+            self.assertEqual(r.stdout.strip(), "")
+
+    def test_operator_stop_is_silent(self):
+        with tempfile.TemporaryDirectory(prefix="ralph-watch-") as tmp:
+            root = Path(tmp)
+            (root / "ralph").mkdir()
+            r = self.run_watch(root, running=False, stop="")
+            self.assertEqual(r.stdout.strip(), "")
+
+    def test_halt_stop_is_not_silent(self):
+        with tempfile.TemporaryDirectory(prefix="ralph-watch-") as tmp:
+            root = Path(tmp)
+            (root / "ralph").mkdir()
+            r = self.run_watch(root, running=False, stop="halt: boom\n")
+            self.assertIn("loop down", r.stdout)
 
     def test_done_or_stop_is_not_a_down_nag(self):
         with tempfile.TemporaryDirectory(prefix="ralph-watch-") as tmp:

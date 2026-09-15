@@ -76,22 +76,34 @@ fi
 condition=""
 body=""
 if [ -f ralph/NEEDS_HUMAN.md ]; then
-  condition="needs-human:$(shasum -a 256 ralph/NEEDS_HUMAN.md | cut -c1-16)"
+  condition="needs-human:$(shasum -a 256 ralph/NEEDS_HUMAN.md 2>/dev/null | cut -c1-16)"
   body="$(head -1 ralph/NEEDS_HUMAN.md) — $(basename "$PWD")-$LABEL"
-elif [ -f ralph/DONE ] || [ -f ralph/STOP ]; then
+elif [ -f ralph/DONE ]; then
   condition=""
+elif [ -f ralph/STOP ] && [ ! -s ralph/STOP ]; then
+  condition=""          # empty STOP: an operator stop, intentional and terminal
 else
   state=$("$LAUNCHCTL" print "gui/$(id -u)/$JOB" 2>/dev/null | grep -c "state = running" || true)
   if [ "${state:-0}" -eq 0 ]; then
     condition="down"
-    body="$(basename "$PWD")-$LABEL is not running and has no DONE/STOP"
+    body="$(basename "$PWD")-$LABEL is not running and has no DONE/operator-STOP"
   else
+    # A driver that is alive but wedged writes no heartbeat (2026-09-15).
+    if [ -f ralph/.heartbeat ]; then
+      age=$(( $(date +%s) - $(stat -f %m ralph/.heartbeat 2>/dev/null || stat -c %Y ralph/.heartbeat 2>/dev/null || echo 0) ))
+      if [ "$age" -gt "${RALPH_WATCH_STALL_SECS:-300}" ]; then
+        condition="stalled"
+        body="$(basename "$PWD")-$LABEL: no driver heartbeat for ${age}s"
+      fi
+    fi
     # A full volume kills the loop mid-write and the halt cannot leave a
     # package (2026-09-15); warn while the loop still has room to work.
-    avail_mb=$("$DF" -m /System/Volumes/Data 2>/dev/null | awk 'NR==2 {print $4}')
-    if [ -n "$avail_mb" ] && [ "$avail_mb" -lt "${RALPH_WATCH_MIN_FREE_MB:-5120}" ]; then
-      condition="disk-low"
-      body="$(basename "$PWD")-$LABEL: ${avail_mb}MB free on the data volume"
+    if [ -z "$condition" ]; then
+      avail_mb=$("$DF" -m /System/Volumes/Data 2>/dev/null | awk 'NR==2 {print $4}')
+      if [ -n "$avail_mb" ] && [ "$avail_mb" -lt "${RALPH_WATCH_MIN_FREE_MB:-5120}" ]; then
+        condition="disk-low"
+        body="$(basename "$PWD")-$LABEL: ${avail_mb}MB free on the data volume"
+      fi
     fi
   fi
 fi
@@ -106,6 +118,7 @@ if [ -n "$condition" ]; then
     case "$condition" in
       needs-human:*) notify "needs human" "$body" ;;
       down) notify "loop down" "$body" ;;
+      stalled) notify "loop stalled" "$body" ;;
       disk-low) notify "disk low" "$body" ;;
     esac
     printf '%s %s\n' "$condition" "$now" > "$STAMP"
