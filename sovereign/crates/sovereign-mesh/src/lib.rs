@@ -150,8 +150,8 @@ pub mod yield_backoff;
 // replaces the full-mesh-pod path. Pods become single-owner workers,
 // not gossip peers. Spec: sovereign/docs/EPHEMERAL_WORKER_PODS.md.
 pub mod multi_pod_coordinator;
-pub mod worker_controller;
 pub mod worker_daemon;
+pub use sovereign_pods::worker_controller; // shim: moved by domains dm-pods-move-controller
 pub use sovereign_pods::worker_http; // shim: moved by domains dm-pods-move-worker-http
 pub use sovereign_pods::worker_inference_proxy; // shim: moved by domains dm-pods-move-worker-http
 pub use sovereign_pods::worker_pod; // shim: moved by domains dm-pods-move-worker-pod

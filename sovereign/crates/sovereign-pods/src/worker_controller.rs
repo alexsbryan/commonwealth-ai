@@ -277,12 +277,10 @@ impl WorkerController {
 
     /// Same as [`Self::create_and_run`] but also returns the bootstrap
     /// blob and the pinned reqwest client. Needed by callers (notably
-    /// [`MultiPodCoordinator`]) that own the polling loop themselves —
+    /// `MultiPodCoordinator`) that own the polling loop themselves —
     /// the blob carries the seed used to derive the per-pod cert, and
     /// the client is the only one whose root-of-trust matches that
     /// cert.
-    ///
-    /// [`MultiPodCoordinator`]: crate::multi_pod_coordinator::MultiPodCoordinator
     pub async fn create_and_run_with_blob(
         &self,
         spec: &JobSpec,
