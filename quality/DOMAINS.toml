@@ -361,7 +361,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/daemon.rs"
 context = "host"
-lines = 5683
+lines = 5611
 note = "composition root; also holds PeerInferenceEndpoint (:4783) and the Member->Candidate translation (:2286)"
 
 [[module]]
@@ -373,7 +373,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-scheduler/src/decision_log.rs"
 context = "serving"
-lines = 1254
+lines = 1258
 note = ""
 
 [[module]]
@@ -463,7 +463,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/inference_adapter.rs"
 context = "serving"
-lines = 2086
+lines = 2155
 note = ""
 
 [[module]]
@@ -529,8 +529,14 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/lib.rs"
 context = "host"
-lines = 177
+lines = 173
 note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/local_inflight.rs"
+context = "serving"
+lines = 66
+note = "the local in-flight RAII guards, split out of peer_inference.rs (REVIEW-audit-6)"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/local_only.rs"
@@ -643,7 +649,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/peer_inference.rs"
 context = "serving"
-lines = 5399
+lines = 5425
 note = "THE KNOT - the only Serving module naming EmbeddedDaemon, commonwealth_core, sovereign_inference, guest_lender, yield_backoff"
 
 [[module]]
@@ -667,7 +673,7 @@ note = "was compute; sovereign-serving-host — SERVING_BOUNDARY.md corrections 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/pinned_worker_source.rs"
 context = "serving"
-lines = 492
+lines = 439
 note = "PeerEndpointSource + CompositeEndpointSource impls (:224, :271)"
 
 [[module]]
@@ -811,7 +817,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/throughput_tracking.rs"
 context = "serving"
-lines = 353
+lines = 322
 note = ""
 
 [[module]]
@@ -855,6 +861,12 @@ path = "sovereign/crates/sovereign-mesh/src/types.rs"
 context = "host"
 lines = 13
 note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/venue_host.rs"
+context = "fabric"
+lines = 144
+note = "the mesh-side VenueHost / ledger / pinned-transport ports and their EmbeddedDaemon impls, split out of peer_inference.rs (REVIEW-audit-6); names commonwealth_core/state, so it stays in Fabric"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/watched_folder_runtime.rs"
@@ -961,7 +973,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/mesh_sim/mod.rs"
 context = "back-of-house"
-lines = 2394
+lines = 2398
 note = "cfg(feature=\"mesh-sim\") Tier-1 scheduler simulator; measures Serving, ships in no build"
 
 [[module]]
@@ -1159,19 +1171,19 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_completions.rs"
 context = "host"
-lines = 555
+lines = 599
 note = "was serving; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_edit_predictions.rs"
 context = "workbench"
-lines = 1412
+lines = 1455
 note = ""
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_inference.rs"
 context = "host"
-lines = 2342
+lines = 2408
 note = "was serving; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
@@ -1237,7 +1249,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_internal/mesh_admin.rs"
 context = "host"
-lines = 1598
+lines = 1631
 note = "membership routes - the mesh's own; was fabric; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
@@ -1333,7 +1345,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-api/src/state.rs"
 context = "host"
-lines = 2736
+lines = 2455
 note = "the api-side god object; every Serving module here reaches it. Names commonwealth_core::mesh::Mesh (:13), commonwealth_state (:14), corpus_engine::CorpusEngine (:15), serving_policy::fair_sched (:17), sovereign_grants (:18), sovereign_serving (:21-23)"
 
 [[module]]
@@ -1369,7 +1381,7 @@ note = "re-exports commonwealth_core::{model,oicp}; the third import path to oic
 [[module]]
 path = "sovereign/crates/sovereign-scheduler/src/lib.rs"
 context = "serving"
-lines = 20
+lines = 21
 note = "the crate root; modules lifted out of sovereign-mesh across REVIEW-build-sched-* (2026-09-15)"
 
 [[module]]
@@ -1399,7 +1411,7 @@ note = "the recording sink — file, env, clock, ids; split out of decision_log 
 [[module]]
 path = "sovereign/crates/sovereign-serving-host/src/slot_select.rs"
 context = "serving"
-lines = 330
+lines = 415
 note = "the local slot pick; split out of oicp_select by REVIEW-build-sched-split-pick-slot (2026-09-15)"
 
 [[module]]
@@ -7712,7 +7724,7 @@ note = ""
 [[module]]
 path = "oicp-types/src/lib.rs"
 context = "kernel"
-lines = 101
+lines = 107
 note = ""
 
 [[module]]
@@ -8342,7 +8354,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs"
 context = "host"
-lines = 2857
+lines = 2864
 note = ""
 
 [[module]]
@@ -8402,7 +8414,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/provider.rs"
 context = "host"
-lines = 174
+lines = 179
 note = ""
 
 [[module]]
@@ -11460,9 +11472,15 @@ lines = 139
 note = ""
 
 [[module]]
+path = "sovereign/crates/sovereign-contracts/src/local_inference.rs"
+context = "kernel"
+lines = 91
+note = "LocalInferenceService split out of traits.rs (REVIEW-audit-6); re-exported at the old path"
+
+[[module]]
 path = "sovereign/crates/sovereign-contracts/src/lib.rs"
 context = "kernel"
-lines = 121
+lines = 134
 note = ""
 
 [[module]]
@@ -11506,6 +11524,12 @@ path = "sovereign/crates/sovereign-contracts/src/peer/tests.rs"
 context = "kernel"
 lines = 205
 note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/principal.rs"
+context = "kernel"
+lines = 288
+note = "the published Principal union of the five identities (DC §3.3; REVIEW-build-serving-principal)"
 
 [[module]]
 path = "sovereign/crates/sovereign-contracts/src/rebrand.rs"
@@ -11618,7 +11642,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-contracts/src/traits.rs"
 context = "kernel"
-lines = 2062
+lines = 2077
 note = ""
 
 [[module]]

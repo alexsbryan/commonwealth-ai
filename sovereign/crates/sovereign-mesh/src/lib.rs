@@ -69,6 +69,7 @@ pub mod knowledge_client;
 pub mod landscape_digest_client;
 pub mod landscape_digest_http;
 pub mod lc_http;
+pub mod local_inflight;
 pub mod local_only;
 pub mod loopback_guard;
 #[cfg(feature = "treesitter")]
@@ -138,6 +139,7 @@ pub mod turn_approval;
 pub mod turn_extras_http;
 pub mod turn_http;
 pub mod types;
+pub mod venue_host;
 pub mod watched_folder_runtime;
 pub mod watched_folder_setup;
 pub mod work_atlas_broadcaster;

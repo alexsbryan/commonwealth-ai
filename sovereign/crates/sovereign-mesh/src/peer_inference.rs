@@ -70,6 +70,7 @@ use crate::decision_log::{
     self, DecisionBuilder, DecisionPath, DecisionSink, OutcomeContext, RequestFacts, ServedBy,
     Verdict,
 };
+use crate::local_inflight::{LocalInflightGuard, LocalTotalGuard};
 use crate::oicp_synthesis::build_self_manifest;
 use crate::scheduler_core::{
     self, LocalCandidateView, RankInputs, RankObjective, RankResult, VenueManifestView, VenueView,
@@ -328,135 +329,12 @@ struct CachedManifest {
 // here keeps the rest of this file unchanged.
 use crate::oicp_select::{classify_rtt_ms, ModelCandidate};
 
-/// The host-side companion to [`VenueSource`].
-///
-/// `VenueSource` (`sovereign_scheduler::venue`) carries only the candidate
-/// list. The two facts the old `PeerEndpointSource` also carried are host
-/// concerns and ride here instead:
-///
-/// - the local node id, Fabric's identity READER (`quality/DAEMON_CORE.md`
-///   §4.2 "Identity is a reader" — join adoption swaps the id inside a running
-///   daemon, so a cached value goes stale);
-/// - the contribution-ledger PORT (`sovereign_serving_host::ledger`), which
-///   the daemon implements over its `ContributionEmitter`. The host mints the
-///   fact from `RoutingOutcome` (`SERVING_BOUNDARY.md` (a)), so this trait no
-///   longer builds a pre-filled emission per request.
-///
-/// `MeshInferenceProvider` holds one of these as a constructor argument.
-#[async_trait]
-pub trait VenueHost: Send + Sync {
-    /// This node's id. Stamped onto outbound manifest fetches via the
-    /// `X-Node-Id` header so the peer can apply local-only affinity
-    /// preferences before serializing the manifest. `None` when the daemon has
-    /// not joined a mesh.
-    async fn local_node_id(&self) -> Option<commonwealth_core::ids::NodeId> {
-        None
-    }
-
-    /// The contribution-ledger port, or `None` when this host has none.
-    /// Default returns `None` — test stubs without a wired
-    /// `ContributionEmitter` skip the emission entirely.
-    async fn ledger_emitter(
-        &self,
-    ) -> Option<Arc<dyn sovereign_serving_host::ledger::LedgerEmitter>> {
-        None
-    }
-}
-
-/// The daemon's implementation of the host's ledger port.
-///
-/// This is the only place the `commonwealth_state` emitter is named on the
-/// serving path (`quality/DAEMON_CORE.md` §4.2 "The facts rule" — no context
-/// outside Fabric names `ContributionEmitter`; Serving emits facts and Fabric
-/// prices them). The host mints the fact from `RoutingOutcome` and this
-/// records it.
-struct DaemonLedger {
-    emitter: commonwealth_state::ContributionEmitter,
-}
-
-impl sovereign_serving_host::ledger::LedgerEmitter for DaemonLedger {
-    fn record_inference_received(
-        &self,
-        from_node: &kernel_types::NodeId,
-        model_id: &str,
-        tokens_generated: u64,
-    ) {
-        self.emitter.record(
-            commonwealth_core::contributions::LedgerEventKind::InferenceReceived {
-                from_node: *from_node,
-                model_id: model_id.to_string(),
-                tokens_generated,
-            },
-        );
-    }
-}
-
-/// The ledger port to attach to a peer-routed stream: the host's, unless the
-/// venue is a pinned worker pod.
-///
-/// Pinned pods are not mesh members (spec §8 — no shared secret, no gossip, no
-/// node id), so a "received from self" fact about one is meaningless. The
-/// composite source used to suppress this by node id; the venue already
-/// carries the fact ([`InferenceVenue::pinned_transport`]), so the decision
-/// lives where the route is chosen.
-async fn ledger_emitter_for_venue(
-    host: &Arc<dyn VenueHost>,
-    venue: &InferenceVenue,
-) -> Option<Arc<dyn sovereign_serving_host::ledger::LedgerEmitter>> {
-    if venue.pinned_transport {
-        return None;
-    }
-    host.ledger_emitter().await
-}
-
-/// Resolve the TLS-pinned transport handle for a pinned venue, by `node_id`.
-///
-/// The scheduler may not name `PinnedTransport`, so the handle does not travel
-/// with [`InferenceVenue`]; the host's router holds this resolver instead and
-/// the pinned source supplies it. Default: no pinned transports.
-#[async_trait]
-pub trait PinnedTransportResolver: Send + Sync {
-    async fn resolve(
-        &self,
-        node_id: &commonwealth_core::ids::NodeId,
-    ) -> Option<crate::pinned_transport::PinnedTransport>;
-}
-
-/// The default resolver: the mesh carries no pinned transports.
-pub struct NoPinnedTransports;
-
-#[async_trait]
-impl PinnedTransportResolver for NoPinnedTransports {
-    async fn resolve(
-        &self,
-        _node_id: &commonwealth_core::ids::NodeId,
-    ) -> Option<crate::pinned_transport::PinnedTransport> {
-        None
-    }
-}
-
-#[async_trait]
-impl VenueSource for EmbeddedDaemon {
-    async fn candidates(&self) -> Vec<InferenceVenue> {
-        EmbeddedDaemon::peer_inference_endpoints(self).await
-    }
-}
-
-#[async_trait]
-impl VenueHost for EmbeddedDaemon {
-    async fn local_node_id(&self) -> Option<commonwealth_core::ids::NodeId> {
-        EmbeddedDaemon::self_node_id(self).await
-    }
-
-    async fn ledger_emitter(
-        &self,
-    ) -> Option<Arc<dyn sovereign_serving_host::ledger::LedgerEmitter>> {
-        let app_state = self.app_state().await?;
-        Some(Arc::new(DaemonLedger {
-            emitter: app_state.inner.contribution_emitter.clone(),
-        }))
-    }
-}
+// The host ports (`VenueHost`, `PinnedTransportResolver`, the ledger emitter)
+// and their `EmbeddedDaemon` implementations live in `crate::venue_host`,
+// re-exported here so the historical `crate::peer_inference::` paths keep
+// resolving. Split out by domains `REVIEW-audit-6` (ARCH §3.1).
+pub(crate) use crate::venue_host::ledger_emitter_for_venue;
+pub use crate::venue_host::{NoPinnedTransports, PinnedTransportResolver, VenueHost};
 
 pub struct MeshInferenceProvider {
     local: Arc<dyn InferenceProvider>,
@@ -3021,67 +2899,6 @@ impl MeshInferenceProvider {
         self.in_flight_publisher.fetch_add(1, Ordering::Relaxed);
         LocalTotalGuard {
             publisher: Arc::clone(&self.in_flight_publisher),
-        }
-    }
-}
-
-/// RAII guard for the per-model local in-flight counter. Decrements
-/// the counter in `Drop`; safe to drop after the entry has been
-/// pruned to zero (saturating subtract + no-op when absent).
-///
-/// Composes a [`LocalTotalGuard`] in `_total` so the gossiped
-/// publisher decrements in lock-step. Rust's struct-field drop order
-/// (declaration order) means the HashMap-entry decrement runs
-/// before `_total`'s Drop fires — readers that race the decrement
-/// see "either both committed or neither has", never "publisher
-/// decremented while HashMap still high."
-struct LocalInflightGuard {
-    counter: Arc<std::sync::Mutex<std::collections::HashMap<String, u32>>>,
-    model_id: String,
-    _total: LocalTotalGuard,
-}
-
-impl Drop for LocalInflightGuard {
-    fn drop(&mut self) {
-        let Ok(mut map) = self.counter.lock() else {
-            return;
-        };
-        if let Some(v) = map.get_mut(&self.model_id) {
-            *v = v.saturating_sub(1);
-            if *v == 0 {
-                map.remove(&self.model_id);
-            }
-        }
-    }
-}
-
-/// RAII guard for the gossiped total in-flight counter. Saturating
-/// subtract in Drop — the counter is correctness-best-effort for
-/// scoring purposes, not load-bearing for correctness, so we never
-/// want a bug to underflow it to `u32::MAX`.
-struct LocalTotalGuard {
-    publisher: Arc<AtomicU32>,
-}
-
-impl Drop for LocalTotalGuard {
-    fn drop(&mut self) {
-        // Compare-exchange loop because `fetch_sub` would underflow
-        // on a hypothetical unbalanced drop. The counter starts at 0
-        // and every `enter_local_total` bumps it by 1 before yielding
-        // the guard, so the only way to reach 0 with a live guard is
-        // a logic bug — saturate rather than wrap.
-        let mut cur = self.publisher.load(Ordering::Relaxed);
-        loop {
-            let new = cur.saturating_sub(1);
-            match self.publisher.compare_exchange_weak(
-                cur,
-                new,
-                Ordering::Relaxed,
-                Ordering::Relaxed,
-            ) {
-                Ok(_) => break,
-                Err(actual) => cur = actual,
-            }
         }
     }
 }

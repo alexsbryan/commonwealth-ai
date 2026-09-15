@@ -43,6 +43,7 @@ pub mod health;
 pub mod intent_policy;
 pub mod launch;
 pub mod lessons;
+pub mod local_inference;
 pub mod mcp_config;
 pub mod memory_config;
 pub mod mobile_host;
