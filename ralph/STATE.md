@@ -28,6 +28,9 @@ For a detached Mac job, replace `nohup` and the output redirection with
 The job is one-shot: an operator stop requires an explicit restart.
 The supervisor inherits the review model and effort; fixable blockers receive
 bounded resolution attempts, while ready `HUMAN-` rows remain operator-only.
+`scripts/ralph-watch.sh --workdir . --label domains --install-launchd` (then
+`launchctl bootstrap`) adds the watchdog: a notification when this job stops
+without DONE or a decision package sits unresolved, re-nagging every 30 min.
 
 On the Fedora peer: `toolbox enter sovereign-vulkan` first and launch from
 inside it (opencode must be on its PATH); drop `--notify`, which is macOS-only.
@@ -75,7 +78,7 @@ O10 = `.sovereign/features/domains-10-serving-extract/order.md`
 - [x] dm-time-reexport ae1374852 — depends [HUMAN-design-review] — EDIT sovereign/crates/sovereign-core/src/time.rs: confirm each `pub fn` has an identical body in sovereign/crates/sovereign-time/src/lib.rs, then replace the file's contents with `pub use sovereign_time::{<the same names>};` (add sovereign-time to sovereign-core's Cargo.toml if absent); any body that differs is §6 — read: ARCH principle 8 — check: LINT; TEST(sovereign-core); TEST(sovereign-time)
 - [x] dm-time-repoint-api e5b6264d5 — depends [dm-time-reexport] — EDIT sovereign/crates/sovereign-api: every `sovereign_core::time::` becomes `sovereign_time::` (9 sites today; add the dependency) — check: LINT; TEST(sovereign-api)
 - [x] dm-time-repoint-mesh 6f25e1a33 — depends [dm-time-reexport] — EDIT sovereign/crates/sovereign-mesh: the same rewrite (21 sites today) — check: LINT; TEST(sovereign-mesh)
-- [ ] dm-wire-openai-types — depends [HUMAN-design-review] — MOVE sovereign/crates/sovereign-api/src/openai_types.rs -> oicp-types; the row also allows rewriting its `sovereign_serving::oicp::` imports to `crate::` paths inside oicp-types (InferenceRequirements lives in oicp-types' requirements module, SamplingMode in its completion module) — read: SB "Corrected 2026-09-14" bullet "Rule 4's count" — check: LINT; LAYER; TEST(oicp-types); TEST(sovereign-api)
+- [~] dm-wire-openai-types — depends [HUMAN-design-review] — MOVE sovereign/crates/sovereign-api/src/openai_types.rs -> oicp-types; the row also allows rewriting its `sovereign_serving::oicp::` imports to `crate::` paths inside oicp-types (InferenceRequirements lives in oicp-types' requirements module, SamplingMode in its completion module) — read: SB "Corrected 2026-09-14" bullet "Rule 4's count" — check: LINT; LAYER; TEST(oicp-types); TEST(sovereign-api)
 - [ ] dm-wire-responses-types — depends [dm-wire-openai-types] — MOVE sovereign/crates/sovereign-api/src/responses_types.rs -> oicp-types — read: the same bullet — check: LINT; LAYER; TEST(oicp-types); TEST(sovereign-api)
 - [ ] dm-wire-repoint-mesh — depends [dm-wire-responses-types] — EDIT sovereign/crates/sovereign-mesh: `sovereign_api::openai_types::` becomes `oicp_types::openai_types::` and `sovereign_api::responses_types::` becomes `oicp_types::responses_types::` — check: LINT; TEST(sovereign-mesh)
 - [ ] dm-serving-dead-types — depends [HUMAN-design-review] — DELETE from sovereign/crates/sovereign-serving the eleven zero-reference types O9's Objective bullet 1 lists, plus `Tier` and `TierQueueDepths`; run CALLERS on each first, and any caller outside sovereign-serving's own definitions and tests is §6 — read: O9 "Adjudicated 2026-09-14" bullet 1; O9 step 1 — check: LINT; TEST(sovereign-serving); TEST(sovereign-mesh-test-harness)
