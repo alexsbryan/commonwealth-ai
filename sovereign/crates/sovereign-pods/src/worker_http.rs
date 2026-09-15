@@ -140,7 +140,7 @@ pub trait WorkerRunner: Send + Sync + 'static {
     /// config has been written.
     ///
     /// Default: no-op. The echo / instant runners don't need a warmup
-    /// step. [`crate::worker_subprocess_runner::SubprocessRunner`]
+    /// step. The subprocess runner's `SubprocessRunner`
     /// overrides this to spawn the child daemon immediately, which
     /// unblocks the pinned-inference proxy's `child_ready` gate
     /// without waiting for a job dispatch — matters for pinned-pod

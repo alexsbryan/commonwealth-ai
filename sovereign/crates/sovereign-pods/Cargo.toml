@@ -15,6 +15,17 @@ rcgen = "0.13"
 base64 = "0.22"
 rand = "0.9"
 sovereign-time = { workspace = true }
+axum = { workspace = true }
+tokio = { workspace = true }
+reqwest = { workspace = true, features = ["stream"] }
+futures = { workspace = true }
+tokio-stream = { version = "0.1", features = ["sync"] }
+tracing = { workspace = true }
+bytes = "1"
+
+[dev-dependencies]
+tower = { workspace = true }
+tempfile = "3"
 
 [lints]
 workspace = true

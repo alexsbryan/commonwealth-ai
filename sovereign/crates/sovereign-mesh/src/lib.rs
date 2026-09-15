@@ -152,8 +152,8 @@ pub mod yield_backoff;
 pub mod multi_pod_coordinator;
 pub mod worker_controller;
 pub mod worker_daemon;
-pub mod worker_http;
-pub mod worker_inference_proxy;
+pub use sovereign_pods::worker_http; // shim: moved by domains dm-pods-move-worker-http
+pub use sovereign_pods::worker_inference_proxy; // shim: moved by domains dm-pods-move-worker-http
 pub use sovereign_pods::worker_pod; // shim: moved by domains dm-pods-move-worker-pod
 pub mod worker_subprocess_runner;
 // Pinned-pod inference routing — lets ephemeral worker pods join the
