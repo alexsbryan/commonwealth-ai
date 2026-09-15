@@ -89,7 +89,7 @@ O10 = `.sovereign/features/domains-10-serving-extract/order.md`
 ## Wave 1 — sovereign-mesh: rented pods (Compute)
 
 - [x] dm-pods-crate a2850f279 — depends [REVIEW-audit-2] — CREATE sovereign/crates/sovereign-pods in layer `runtime`, doc "Compute's remote isolation: leasing a rented machine and running work on it" — read: DM §11.2 — check: LINT; LAYER; DOCS
-- [ ] dm-pods-move-worker-pod — depends [dm-pods-crate, dm-time-repoint-mesh] — MOVE sovereign/crates/sovereign-mesh/src/worker_pod.rs -> sovereign-pods — check: LINT; LAYER; TEST(sovereign-pods); TEST(sovereign-mesh)
+- [x] dm-pods-move-worker-pod 562e8dca9 — depends [dm-pods-crate, dm-time-repoint-mesh] — MOVE sovereign/crates/sovereign-mesh/src/worker_pod.rs -> sovereign-pods — check: LINT; LAYER; TEST(sovereign-pods); TEST(sovereign-mesh)
 - [ ] dm-pods-move-worker-http — depends [dm-pods-move-worker-pod] — MOVE sovereign/crates/sovereign-mesh/src/worker_http.rs -> sovereign-pods — check: LINT; LAYER; TEST(sovereign-pods); TEST(sovereign-mesh)
 - [ ] dm-pods-move-subprocess-runner — depends [dm-pods-move-worker-http] — MOVE sovereign/crates/sovereign-mesh/src/worker_subprocess_runner.rs -> sovereign-pods — check: LINT; LAYER; TEST(sovereign-pods); TEST(sovereign-mesh)
 - [ ] dm-pods-move-controller — depends [dm-pods-move-worker-http] — MOVE sovereign/crates/sovereign-mesh/src/worker_controller.rs -> sovereign-pods — check: LINT; LAYER; TEST(sovereign-pods); TEST(sovereign-mesh)
