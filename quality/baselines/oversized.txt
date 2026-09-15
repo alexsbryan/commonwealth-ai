@@ -157,8 +157,6 @@
 1214	sovereign/crates/sovereign-mesh/src/rpc_warm_http.rs
 1351	sovereign/crates/sovereign-mesh/src/scheduler_core.rs
 2105	sovereign/crates/sovereign-mesh/src/turn_http.rs
-2046	sovereign/crates/sovereign-mesh/src/worker_http.rs
-1271	sovereign/crates/sovereign-mesh/src/worker_subprocess_runner.rs
 1954	sovereign/crates/sovereign-mesh/tests/main/chat_completion_e2e.rs
 2221	sovereign/crates/sovereign-mesh/tests/main/loopback_parity.rs
 2784	sovereign/crates/sovereign-mesh/tests/main/mesh_sim_scoreboard.rs
@@ -166,6 +164,8 @@
 1636	sovereign/crates/sovereign-mesh/tests/main/turn_surface.rs
 1230	sovereign/crates/sovereign-meshapp/src/wrapped.rs
 1403	sovereign/crates/sovereign-meshapp/src/wrapped/semantic.rs
+2046	sovereign/crates/sovereign-pods/src/worker_http.rs
+1271	sovereign/crates/sovereign-pods/src/worker_subprocess_runner.rs
 1740	sovereign/crates/sovereign-service/src/lib.rs
 1594	sovereign/crates/sovereign-store/src/postgres.rs
 1362	sovereign/crates/sovereign-store/src/sqlite/conv_tiered.rs

@@ -85,7 +85,14 @@ A move keeps behaviour identical and keeps every old path compiling.
 5. **Source.** Replace `pub mod <name>;` (or `mod <name>;`) in its `src/lib.rs`
    with `pub use <dest_crate_ident>::<name>; // shim: moved by domains <unit-id>`
    and add the destination crate to the source `Cargo.toml` if it is absent.
-6. **Visibility.** If the compiler reports an item private because it now
+6. **Baseline.** If `git grep -n '<old path>' quality/baselines/` names the
+   file, re-key that row to `<dest>/src/<name>.rs` in the same commit: the path
+   changes, the line count does not. This is a move, not `--update-baseline`
+   (§7) and not new debt — §10.1d "path re-key, no debt", as `atoms.rs`'s row
+   did at `9722bf821`. `arch-gate` keys `oversized.txt` by path, so without
+   this a moved oversized file reads as a false "NEW oversized file" and
+   PREPUSH blocks at the next audit.
+7. **Visibility.** If the compiler reports an item private because it now
    crosses a crate line, change that item's `pub(crate)` to `pub` and list it in
    the commit body. Any other error you cannot fix with an import path: §6 after
    two tries.
@@ -162,9 +169,12 @@ Never print a whole log into the session; grep it.
   or widen an `except` list unless the row names that exact row.
 - Never build `--release`. Never run bare `cargo build`/`test`/`check`/`clippy`
   — only the §5 commands, which take the cargo lock.
-- Never edit `sovereign/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/`,
-  `scripts/ralph-*.sh` or `quality/baselines/`. Never stop or restart the
-  daemon.
+- Never edit `sovereign/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/` or
+  `scripts/ralph-*.sh`. Never stop or restart the daemon. Never
+  `--update-baseline` a ratchet (first bullet). `quality/baselines/` is
+  machine-written and off-limits except for §3a step 6: a move re-keys its own
+  file's row to the new path, the line count unchanged — a re-key absorbs no
+  growth.
 - When a move changes a path that `quality/DAEMON_CORE.md`,
   `sovereign/SERVING_BOUNDARY.md` or `corpus-engine/DECOMPOSITION.md` names,
   fix that line in the same commit.

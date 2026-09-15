@@ -195,18 +195,16 @@ Recorded, not changed:
   the campaign's own growth and the gate is `warn_gate` by design (AGENTS.md).
   Not re-pinned; it does not block PREPUSH.
 
-Blocked (not fixable in this unit's rules):
+Resolved by the supervisor resolution (attempt 1):
 
-- **`arch-gate` — two NEW oversized files at moved paths.**
-  `sovereign-pods/src/worker_http.rs` (2046) and
-  `sovereign-pods/src/worker_subprocess_runner.rs` (1271) were oversized and
-  frozen in `quality/baselines/oversized.txt:160-161` under their old
-  `sovereign-mesh/src/` paths. The baseline is keyed by path, so the move
-  reads as new debt at an unchanged line count. The documented handling is a
-  re-key (`SYSTEM_OVERVIEW.md:8644` "Path re-key, no debt"; `:9089`
-  "`atoms.rs` moved crates … its `oversized.txt` row followed it"), but
-  PROMPT §7 forbids editing `quality/baselines/`. The in-rules alternative —
-  splitting both files below 1200 — is a real refactor (`worker_http.rs`'s
-  910 test lines out leaves 1135, which ENTERS the 800-1200 approach band and
-  grows that counter; it must fall below 800, so ~335 production lines must
-  move too). Escalated as `ralph/NEEDS_HUMAN.md`.
+- **`arch-gate` — two NEW oversized files at moved paths, re-keyed.** The pod
+  moves `git mv`'d `worker_http.rs` (2046) and `worker_subprocess_runner.rs`
+  (1271) from `sovereign-mesh/src/` to `sovereign-pods/src/`; `oversized.txt`
+  is keyed by path, so the two frozen rows stopped matching and the move read
+  as new debt at unchanged counts. Fixed: both rows re-keyed to
+  `sovereign-pods/src/` with their counts unchanged — §10.1d "path re-key, no
+  debt", the `atoms.rs` precedent (`9722bf821`), not `--update-baseline`.
+  Ledgered `sovereign/SYSTEM_OVERVIEW.md` §10.1x. The MOVE recipe
+  (`ralph/PROMPT.md` §3a) gained step 6, which carries a moved file's baseline
+  row in the same commit, so wave 1's remaining moves (`peer_inference.rs`
+  5,399 and the rest) do not re-open it. `arch-gate` exit=0.

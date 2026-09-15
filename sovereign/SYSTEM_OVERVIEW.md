@@ -10070,3 +10070,26 @@ its corpus-engine dependency at svt-6 (2026-09-12) and the always-scoped desktop
 crate could no longer name the flag; it now resolves features through
 `resolve_features` in `scripts/lib/cargo-scope.sh`, the same decider the test
 runner uses (ARCH §8), so the two gates cannot drift apart again.
+
+### 10.1x Size RE-KEYED for the pod moves — 2026-09-15 (a move is not new debt)
+
+`REVIEW-audit-3` stopped because `arch-gate` read the pod moves as two NEW
+oversized files. The seven pod units `git mv`'d their modules out of
+`sovereign-mesh` into `sovereign-pods`; two of them are baselined oversized —
+`worker_http.rs` (2,046) and `worker_subprocess_runner.rs` (1,271) — and
+`oversized.txt` is keyed by path, so the frozen rows under
+`sovereign/crates/sovereign-mesh/src/` stopped matching and the same line
+counts read as new debt.
+
+This is §10.1d's "path re-key, no debt" and §10.1u's rename re-key, at two
+rows: both rows moved to `sovereign/crates/sovereign-pods/src/` with their
+counts unchanged. A move is not `--update-baseline` (PROMPT §7) — nothing was
+absorbed, the two files stay frozen at 2,046 and 1,271, and growth past slack
+still fails, so the bar is intact. The `atoms.rs` carve (`9722bf821`) is the
+same handling: "its `oversized.txt` row followed it (a move, not a new debt)".
+
+The recurrence is closed structurally: the MOVE recipe (`ralph/PROMPT.md`
+§3a) gained step 6, which re-keys a moved file's baseline row in the same
+commit, and §7's `quality/baselines/` prohibition now names that step as its
+only hand edit. Wave 1's remaining moves (`peer_inference.rs` 5,399 and the
+rest) would otherwise re-open this at every rung.
