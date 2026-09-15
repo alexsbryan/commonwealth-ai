@@ -269,7 +269,7 @@ should encrypt-at-rest before upload; out of scope for this spec.
 ## Touch list
 
 ### New: owner-side controller
-**`sovereign-mesh/src/worker_pod.rs`** (new module). Owns:
+**`sovereign-pods/src/worker_pod.rs`** (new module). Owns:
 
 - `WorkerHandle` — typed wrapper around a pod's public address +
   pinned cert + job state.
@@ -284,7 +284,7 @@ should encrypt-at-rest before upload; out of scope for this spec.
   destroy.
 
 ### New: worker-side endpoints
-**`sovereign-mesh/src/worker_http.rs`** (new module). Pod-side
+**`sovereign-pods/src/worker_http.rs`** (new module). Pod-side
 implementation of:
 
 - `POST /internal/worker/upload` — accepts streamed model/corpus

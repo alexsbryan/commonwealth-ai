@@ -226,7 +226,6 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // this file's test module; class unchanged.
     ("sovereign/crates/sovereign-mesh/src/ring_sync.rs", Class::Mesh, 16),
     ("sovereign/crates/sovereign-mesh/src/rpc_warm_http.rs", Class::Mesh, 7),
-    ("sovereign/crates/sovereign-mesh/src/worker_http.rs", Class::Mesh, 6),
     // 5 -> 7 (2026-08-23): the two reload-diff regression tests
     // (`reload_applies_a_context_size_change_without_a_restart`,
     // `reload_applies_a_code_slot_change_without_a_restart`) each build a
@@ -340,12 +339,20 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-mesh/src/join.rs", Class::Mesh, 2),
     ("sovereign/crates/sovereign-mesh/src/daemon.rs", Class::Mesh, 2),
     ("sovereign/crates/sovereign-mesh/src/auto_ingest.rs", Class::Mesh, 2),
-    ("sovereign/crates/sovereign-mesh/src/worker_subprocess_runner.rs", Class::Mesh, 1),
-    ("sovereign/crates/sovereign-mesh/src/worker_inference_proxy.rs", Class::Mesh, 1),
     ("sovereign/crates/sovereign-mesh/src/landscape_digest_client.rs", Class::Mesh, 1),
     ("sovereign/crates/sovereign-mesh/src/knowledge_client.rs", Class::Mesh, 1),
     ("sovereign/crates/sovereign-mesh/src/gossip.rs", Class::Mesh, 1),
     ("sovereign/crates/sovereign-mesh/src/canonical_pull.rs", Class::Mesh, 1),
+
+    // ---- sovereign-pods: the rented-pod modules (Wave 1) ----
+    // Lifted out of sovereign-mesh across dm-pods-move-*. `Class::Mesh`
+    // is the class this file's enum doc gives "mesh / peer / pod
+    // traffic — the estate's own transport", so the classification
+    // does not change with the crate (the deep_research/port.rs
+    // precedent) and each count is the one its mesh row carried.
+    ("sovereign/crates/sovereign-pods/src/worker_http.rs", Class::Mesh, 6),
+    ("sovereign/crates/sovereign-pods/src/worker_subprocess_runner.rs", Class::Mesh, 1),
+    ("sovereign/crates/sovereign-pods/src/worker_inference_proxy.rs", Class::Mesh, 1),
 
     // ---- sovereign-desktop: the host daemon on :9741 (LocalDaemon) ----
     // All desktop commands talk to the local daemon's /internal/*

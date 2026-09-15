@@ -599,7 +599,7 @@ lines = 316
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/multi_pod_coordinator.rs"
+path = "sovereign/crates/sovereign-pods/src/multi_pod_coordinator.rs"
 context = "compute"
 lines = 614
 note = ""
@@ -875,13 +875,13 @@ lines = 1194
 note = "was compute; jobs — DAEMON_CORE.md §3.2, §4.3 (2026-09-14)"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/worker_controller.rs"
+path = "sovereign/crates/sovereign-pods/src/worker_controller.rs"
 context = "compute"
-lines = 846
+lines = 844
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/worker_daemon.rs"
+path = "sovereign/crates/sovereign-pods/src/worker_daemon.rs"
 context = "compute"
 lines = 291
 note = ""
@@ -893,28 +893,34 @@ lines = 1195
 note = "was compute; sovereign-serving-host — SERVING_BOUNDARY.md corrections (2026-09-14)"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/worker_http.rs"
+path = "sovereign/crates/sovereign-pods/src/worker_http.rs"
 context = "compute"
 lines = 2046
 note = "pod-side surface, not a daemon handler - the *_http host rule does not apply"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/worker_inference_proxy.rs"
+path = "sovereign/crates/sovereign-pods/src/worker_inference_proxy.rs"
 context = "compute"
 lines = 542
 note = "re-tagged serving->compute 2026-09-15 on consumer evidence: every production consumer is a pod module (worker_http.rs:214,817; worker_daemon.rs:159) plus the CLI host (sovereign-cli-daemon/src/daemon_cmd/worker.rs:82,120), and its only in-crate import is the pod's worker_http::WorkerState (:67). It is the pod's :9742 TLS tunnel (PINNED_WORKER_AS_INFERENCE_PEER.md:5), not an inference decider — ARCH 12: its uses are all pod-side, so the serving line was drawn wrong."
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/worker_pod.rs"
+path = "sovereign/crates/sovereign-pods/src/worker_pod.rs"
 context = "compute"
 lines = 763
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/worker_subprocess_runner.rs"
+path = "sovereign/crates/sovereign-pods/src/worker_subprocess_runner.rs"
 context = "compute"
 lines = 1271
 note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-pods/src/lib.rs"
+context = "compute"
+lines = 10
+note = "the Compute crate root; modules lifted out of sovereign-mesh across dm-pods-move-* (2026-09-15)"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/yield_backoff.rs"
@@ -1109,7 +1115,7 @@ lines = 342
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-api/src/openai_types.rs"
+path = "oicp-types/src/openai_types.rs"
 context = "kernel"
 lines = 949
 note = "the OpenAI wire vocabulary; published language living in an application crate"
@@ -1127,7 +1133,7 @@ lines = 435
 note = "same harness-shaping argument as frontdoor; extracted FROM routes_responses for codex"
 
 [[module]]
-path = "sovereign/crates/sovereign-api/src/responses_types.rs"
+path = "oicp-types/src/responses_types.rs"
 context = "kernel"
 lines = 421
 note = "Responses-API wire vocabulary, same argument as openai_types"
@@ -8331,6 +8337,12 @@ note = ""
 path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/ocr_install.rs"
 context = "host"
 lines = 296
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/principal.rs"
+context = "host"
+lines = 64
 note = ""
 
 [[module]]

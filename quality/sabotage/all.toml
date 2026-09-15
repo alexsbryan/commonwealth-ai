@@ -1046,7 +1046,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-37-proxy_rejects_unauthenticated_requests"
 requirement = "FE-37"
-target = "sovereign/crates/sovereign-mesh/src/worker_http.rs"
+target = "sovereign/crates/sovereign-pods/src/worker_http.rs"
 find = "    router\n        .layer(axum::middleware::from_fn_with_state(\n            state.clone(),\n            require_worker_token,\n        ))\n        .with_state(state)"
 replace = "    // MUTATION: Remove the auth layer to violate FE-37. \n    // This allows unauthenticated requests (strangers) to access routes that should be refused.\n    router.with_state(state)"
 mustFail = ["proxy_rejects_unauthenticated_requests"]

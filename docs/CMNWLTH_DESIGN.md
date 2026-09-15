@@ -55,7 +55,7 @@ capabilities and interact through three shapes — calls, jobs, and sessions.**
 | Noun | Contract | Existing instance |
 |---|---|---|
 | **Ring** | A founded trust group: join key (BLAKE3, shared out of band) + Ed25519 proof-of-possession; membership converges by gossip; social trust, not cryptographic attestation. | `sovereign/crates/sovereign-mesh/src/join.rs`, `src/gossip.rs`, `commonwealth/crates/commonwealth-discovery/` |
-| **Member** | A node in the ring. Durable (a machine you own) or **ephemeral** (a rented machine with a TTL and a Provider that minted it). Ephemeral members bootstrap with seed-derived keys and a cert thumbprint known to the owner *before* boot — no TOFU window. | `sovereign-mesh/src/worker_pod.rs` (`BootstrapBlob`), `worker_controller.rs` (`WorkerProvider`) |
+| **Member** | A node in the ring. Durable (a machine you own) or **ephemeral** (a rented machine with a TTL and a Provider that minted it). Ephemeral members bootstrap with seed-derived keys and a cert thumbprint known to the owner *before* boot — no TOFU window. | `sovereign-pods/src/worker_pod.rs` (`BootstrapBlob`), `worker_controller.rs` (`WorkerProvider`) |
 | **Grant** | TTL'd, allowlisted authorization for a member to participate in a named scope. Dual-enforced (at enrollment and at lease), dual-teardown, never a standing share. | `commonwealth/crates/commonwealth-knowledge/src/ingest_grant.rs` (`EphemeralGrantStore`, corpus-typed today) |
 
 ### Capability plane
@@ -70,7 +70,7 @@ capabilities and interact through three shapes — calls, jobs, and sessions.**
 | Shape | Contract | Existing instances |
 |---|---|---|
 | **Call** | Synchronous, budgeted, possibly streaming request/response. Not leased, not verified by the rail — the caller judges the response and degrades gracefully on peer failure. | Chat/embed routing; federated knowledge search (3s/peer budget, scatter-gather); model blob fetch |
-| **Job** | Asynchronous leased work: submit → lease → heartbeat → complete, with a reaper, max-attempts, and requeue on lease expiry. Verification is a consumer-supplied policy, run by the submitter. Envelope: `{ unit_id, kind, payload }`. | Peer-assisted ingest (`commonwealth-knowledge/src/work_queue.rs`); worker-pod dispatch (`sovereign-mesh/src/worker_http.rs` — the envelope already exists here, generic, with only `kind = "chat"` wired) |
+| **Job** | Asynchronous leased work: submit → lease → heartbeat → complete, with a reaper, max-attempts, and requeue on lease expiry. Verification is a consumer-supplied policy, run by the submitter. Envelope: `{ unit_id, kind, payload }`. | Peer-assisted ingest (`commonwealth-knowledge/src/work_queue.rs`); worker-pod dispatch (`sovereign-pods/src/worker_http.rs` — the envelope already exists here, generic, with only `kind = "chat"` wired) |
 | **Session** | A long-lived coupled circuit between members with latency/affinity requirements the lease model cannot express. **Named in the contract, deferred in v1.** | Tensor-split RPC (raw TCP, `:50052`) is the motivating edge case; the iroh `HttpBridge` per-(peer, ALPN) tunnel is session-shaped plumbing that already exists |
 
 Cross-cutting, already general, adopted as-is: the transport seam

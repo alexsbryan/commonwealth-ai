@@ -4683,7 +4683,7 @@ the plan healthy as nodes come and go.
   the internal API (:9742) in the clear; the unused per-session-cert /
   `TrustStore` scaffolding (`discovery/tls.rs`) was removed (2026-06-15)
   rather than left as a security façade. TLS *is* used on the separate
-  worker-pod path (`sovereign-mesh/worker_daemon.rs`,
+  worker-pod path (`sovereign-pods/worker_daemon.rs`,
   `axum_server::bind_rustls`).
   - **Encrypted mesh (opt-in, founder-set at creation).** A mesh created
     with `require_encryption` flips every node to the iroh dial-by-key
