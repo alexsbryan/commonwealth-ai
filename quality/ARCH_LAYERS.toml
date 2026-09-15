@@ -641,13 +641,19 @@ reason = "must stay consumable without the agent runtime — it names NO soverei
 [[forbid]]
 from = "sovereign-api"
 to = "sovereign-*"
-except = ["sovereign-contracts", "sovereign-serving", "sovereign-grants", "sovereign-meshapp-registry"]
+except = ["sovereign-contracts", "sovereign-serving", "sovereign-grants", "sovereign-meshapp-registry", "sovereign-time"]
 # `except` gained sovereign-{serving,grants,meshapp-registry} at the domains-1
 # move (2026-09-11): they were `commonwealth-{inference,knowledge,app}` and left
 # `commonwealth/crates/` in the same commit as this crate. They were ALWAYS in
 # its closure and were never part of R6 — the census counts 11 types / 38 refs
 # into sovereign-{contracts,tools,atos} only. Excepting them preserves R6's
 # measurement exactly; without it the rule fires on three edges it never meant.
+# `except` gained sovereign-time at dm-time-repoint-api (2026-09-15, e5b6264d5):
+# the row repointed nine `sovereign_core::time::` sites at the leaf clock-gate
+# routes every non-core sovereign crate to (`[[package_leaf]]` at :752-760,
+# `[dependencies]` empty), and this list was not widened with it, so layer-gate
+# was red from that commit. Same shape as the three above: a contract-family
+# leaf always in the closure, never part of R6's measurement.
 
 reason = "cross-family reach — the mesh API should meet the runtime at the OICP/contracts seam (R6)"
 
