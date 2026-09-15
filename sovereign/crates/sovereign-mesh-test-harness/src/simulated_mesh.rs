@@ -7,7 +7,6 @@ use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::latency::{LatencyMatrix, LatencyRecord};
 use commonwealth_core::mesh::Mesh;
 use sovereign_meshapp_registry::manifest::MeshAppManifest;
-use sovereign_serving::plan::MeshPlan;
 
 use crate::simulated_node::{SimulatedNode, SimulatedNodeBuilder};
 
@@ -190,42 +189,6 @@ impl SimulatedMesh {
     // (The adaptive-scheduler helpers that lived here died with the
     // dead-twin scheduler — 2026-06-10 rationalization; see
     // commonwealth-inference/src/scheduler/mod.rs.)
-
-    /// Write a MeshPlan to all nodes' stores (simulating gossip propagation).
-    pub fn propagate_mesh_plan(&self, plan: &MeshPlan) {
-        for node in &self.nodes {
-            node.state.inner.inference_store.set_mesh_plan(plan);
-        }
-    }
-
-    /// Read the current MeshPlan from the first node (all should agree after propagation).
-    pub fn current_mesh_plan(&self) -> Option<MeshPlan> {
-        self.nodes
-            .first()
-            .and_then(|n| n.state.inner.inference_store.get_mesh_plan())
-    }
-
-    /// Check if all nodes have the same MeshPlan version.
-    pub fn plans_converged(&self) -> bool {
-        let versions: Vec<Option<u64>> = self
-            .nodes
-            .iter()
-            .map(|n| {
-                n.state
-                    .inner
-                    .inference_store
-                    .get_mesh_plan()
-                    .map(|p| p.version)
-            })
-            .collect();
-
-        if versions.is_empty() {
-            return false;
-        }
-
-        let first = versions[0];
-        first.is_some() && versions.iter().all(|v| *v == first)
-    }
 }
 
 /// Builder for the twenty-node hacker collective demo scenario.

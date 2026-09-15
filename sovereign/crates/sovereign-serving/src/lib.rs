@@ -17,7 +17,6 @@ pub use commonwealth_core::{model, oicp};
 // `commonwealth-core` no longer declares it. Re-exported from the same path
 // callers already used, so the seam did not move for them.
 pub use oicp::model_aliases;
-pub mod plan;
 pub mod store_adapter;
 
 pub mod scheduler;
@@ -33,5 +32,4 @@ pub use oicp::{
     KnowledgeResult, KnowledgeSearchRequest, KnowledgeSearchResponse, LatencyClass, MatchQuality,
     OicpResponseMeta, ProviderManifest, ProviderModel, ShardingPrivacy, OICP_VERSION,
 };
-pub use plan::MeshPlan;
 pub use store_adapter::{InferenceStateStore, INFERENCE_APP_ID};

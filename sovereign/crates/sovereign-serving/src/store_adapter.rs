@@ -135,25 +135,6 @@ impl InferenceStateStore {
             .collect()
     }
 
-    // ── Mesh plan (adaptive scheduler) ────────────────────────────────
-
-    /// Write the current MeshPlan. All nodes read this to know their role.
-    pub fn set_mesh_plan(&self, plan: &crate::plan::MeshPlan) {
-        if let Ok(bytes) = serde_json::to_vec(plan) {
-            let _ = self
-                .store
-                .set(APP_ID, "mesh_plan", Bytes::from(bytes), self.node_id);
-        }
-    }
-
-    pub fn get_mesh_plan(&self) -> Option<crate::plan::MeshPlan> {
-        self.store
-            .get(APP_ID, "mesh_plan")
-            .ok()
-            .flatten()
-            .and_then(|e| serde_json::from_slice(&e.value).ok())
-    }
-
     // ── llama-server addresses ───────────────────────────────────────
 
     pub fn get_llama_address(&self, model_id: ModelId) -> Option<String> {
