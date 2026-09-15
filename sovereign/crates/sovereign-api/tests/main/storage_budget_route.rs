@@ -169,7 +169,7 @@ async fn budget_unset_returns_no_remaining() {
 use commonwealth_core::mesh::MemberRecord;
 use commonwealth_core::oicp::EmbedModelInfo;
 use corpus_engine::{SourceFileRecord, SourceFileStatus};
-use sovereign_serving::scheduler::knowledge_assignment::plan_collaborative_ingestion;
+use sovereign_grants::knowledge_assignment::plan_collaborative_ingestion;
 
 fn embed() -> EmbedModelInfo {
     use commonwealth_core::oicp::{NormalizationStrategy, PoolingStrategy};

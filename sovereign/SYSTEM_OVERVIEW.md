@@ -4819,7 +4819,7 @@ deleted; see `docs/specs/OICP_RATIONALIZATION.md` for the audit):
 | Serving peer picks Fast-vs-Slow slot | `sovereign-mesh/oicp_select.rs::pick_slot_for_oicp` | canonical `slot_policy::latency_to_speed` + hint veto; `pick_slot` backstops `x:forced_choice` sentinels onto Primary |
 | Synthesis tier (Fast vs Primary) | `sovereign-core/runtime/evidence.rs::resolve_synthesis_route` | intent + atom-enum + evidence-shape heuristic |
 | Distributed placement (model > one node) | `sovereign-inference/embedded/rpc_distribution.rs` | LocalOnly default; StreamSplit ≤500MB; warmed owned-overrides as last resort |
-| Collaborative ingest partitioning | `sovereign-serving/scheduler/knowledge_assignment.rs` | `plan_collaborative_ingestion*`: embed-model-compatible peers, storage-proportional contiguous blocks, zero-storage peers skipped |
+| Collaborative ingest partitioning | `sovereign-grants/knowledge_assignment.rs` | `plan_collaborative_ingestion*`: embed-model-compatible peers, storage-proportional contiguous blocks, zero-storage peers skipped |
 
 **Slot policy is normative** in [`docs/SLOT_POLICY.md`](./docs/SLOT_POLICY.md)
 (OICP-first rationalization, 2026-07-08): call sites declare a

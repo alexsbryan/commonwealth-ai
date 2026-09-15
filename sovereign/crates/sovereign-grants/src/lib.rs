@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pub mod guest_grant;
 pub mod ingest_grant;
+pub mod knowledge_assignment;
 pub mod shard_manager;
 pub mod work_queue;
 

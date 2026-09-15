@@ -25,7 +25,7 @@
 //! module also clamps the published `free_storage_gb` — on both the
 //! static `HardwareProfile` and the live `AvailableResources` — to
 //! `min(actual_free, max(0, budget_remaining))`. The schedulers in
-//! `commonwealth-inference::scheduler::knowledge_assignment` already
+//! `sovereign-grants::knowledge_assignment` already
 //! drive every distribution decision off `free_storage_gb`, so
 //! lowering this single number at the publish boundary makes the
 //! budget self-enforcing across both local install paths and any

@@ -2077,7 +2077,7 @@ impl CorpusEngine {
         //   entries inside the ZIP the extractor streams. This is the
         //   safe partition key for multi-shard JSONL — article-range
         //   partitioning is unsound across peers with non-identical
-        //   extractions (see scheduler::knowledge_assignment docs).
+        //   extractions (see sovereign_grants::knowledge_assignment docs).
         if let Some(indices) = file_indices {
             match (&mut recipe.acquire, &mut recipe.extract) {
                 (

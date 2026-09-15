@@ -1355,18 +1355,6 @@ lines = 250
 note = "DEAD - every noun it exports has zero external references"
 
 [[module]]
-path = "sovereign/crates/sovereign-serving/src/scheduler/knowledge_assignment.rs"
-context = "retrieval"
-lines = 771
-note = "EVICT before the package is declared: knowledge-shard assignment, not inference serving, and it is why this crate depends on corpus-engine"
-
-[[module]]
-path = "sovereign/crates/sovereign-serving/src/scheduler/mod.rs"
-context = "serving"
-lines = 19
-note = ""
-
-[[module]]
 path = "sovereign/crates/sovereign-serving/src/store_adapter.rs"
 context = "serving"
 lines = 274
@@ -1399,10 +1387,10 @@ live = [
     "ShardAssignment - 7 refs, all sovereign-mesh-test-harness",
     "LayerRange - 7 refs, all sovereign-mesh-test-harness",
 ]
-evict = "sovereign/crates/sovereign-serving/src/scheduler/knowledge_assignment.rs"
+evict = "sovereign/crates/sovereign-grants/src/knowledge_assignment.rs"   # moved out of the peg 2026-09-15 by REVIEW-build-knowledge-assignment; was sovereign-serving/src/scheduler/knowledge_assignment.rs
 evict_lines = 771
 evict_share = "771 of 1,491 - 52pc of the crate"
-evict_drags = "corpus-engine (LanceDB, Tantivy, rusqlite). A [[package]] id = \"serving\" that includes sovereign-serving as it stands inherits that closure and fails the lift for the same reason corpus-mcp needs three [[exception]] rows (quality/ARCH_LAYERS.toml:1110-1129). Move it to Retrieval/Understanding BEFORE the package is declared, or declare the package without this crate."
+evict_drags = "corpus-engine (LanceDB, Tantivy, rusqlite). A [[package]] id = \"serving\" that includes sovereign-serving as it stands inherits that closure and fails the lift for the same reason corpus-mcp needs three [[exception]] rows (quality/ARCH_LAYERS.toml:1110-1129). MOVED to sovereign-grants (tier 2, already depends on corpus-engine) rather than Retrieval/Understanding: the planner names commonwealth-core (mesh-foundation, tier 2), so corpus-engine (knowledge, tier 1) cannot host it — same tier reasoning as the auto_recover cluster below."
 collisions = [
     "Tier x3: sovereign/crates/sovereign-serving/src/plan.rs:142, sovereign/crates/sovereign-core/src/role.rs:79, commonwealth/crates/commonwealth-media/src/apps.rs:57 - and none of the three is the scheduler's, whose tier concept is TierFloor at sovereign/crates/sovereign-mesh/src/tier.rs:112",
     "routing model x2 (incompatible): RequestRouter/RoutingRule/RoutingCondition at sovereign/crates/sovereign-serving/src/plan.rs:135,150,158 is a static declarative rule table; RoutingDecision/DecisionPath at sovereign/crates/sovereign-mesh/src/decision_log.rs:216,245 plus RankObjective at sovereign/crates/sovereign-mesh/src/scheduler_core.rs:78 is per-request predicted-cost ranking (SCHEDULER_QUALITY.md 4.1). They cannot both be the decider",
@@ -13486,6 +13474,12 @@ path = "sovereign/crates/sovereign-grants/src/work_queue.rs"
 context = "unknown"
 lines = 754
 note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-grants/src/knowledge_assignment.rs"
+context = "retrieval"
+lines = 771
+note = "collaborative-ingestion planner: assigns ingest shards/work units across embed-model-compatible mesh peers. Moved here from sovereign-serving by REVIEW-build-knowledge-assignment (2026-09-15). It names commonwealth-core (mesh-foundation, tier 2), so corpus-engine (knowledge, tier 1) cannot host it; sovereign-grants is tier 2, already depends on corpus-engine, and owns the ShardManager/WorkQueueManager that consume its IngestionHandoff/WorkUnit output (shard_manager.rs:8, work_queue.rs:15-25)"
 
 [[module]]
 path = "sovereign/crates/sovereign-inference/src/capacity.rs"

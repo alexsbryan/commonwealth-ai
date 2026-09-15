@@ -19,8 +19,6 @@ pub use commonwealth_core::{model, oicp};
 pub use oicp::model_aliases;
 pub mod store_adapter;
 
-pub mod scheduler;
-
 pub use commonwealth_core::{Error, Result};
 
 // Convenient re-exports for callers.
