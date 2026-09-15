@@ -1812,6 +1812,56 @@ AXES.append({
 })
 
 
+def _lift_run_fixture(root: Path, rc: int) -> None:
+    """A kept domain context declaring a lift whose stub exits `rc`.
+
+    The declared `lift` is a shell command run from the repo root
+    (`_run_lift`), so the stub is referenced by absolute path. `package = ""`
+    keeps the read tier out of it: only the run tier can score this row, which
+    is the branch under test.
+    """
+    (root / "quality").mkdir(parents=True, exist_ok=True)
+    stub = root / "stub-lift.sh"
+    stub.write_text(f"#!/usr/bin/env bash\nexit {rc}\n", encoding="utf-8")
+    (root / "quality" / "DOMAINS.toml").write_text(
+        '[[context]]\n'
+        'id = "widget"\n'
+        'kind = "supporting"\n'
+        'owns = ["Sprocket"]\n'
+        'package = ""\n'
+        f'lift = "bash {stub}"\n'
+        'status = "kept"\n'
+        'applicable_as = "a widget you can hand a stranger"\n', encoding="utf-8")
+    (root / "quality" / "ARCH_LAYERS.toml").write_text(
+        '[[package]]\n'
+        'name = "fixture-package"\n'
+        'crates = ["fixture-crate"]\n', encoding="utf-8")
+
+
+def _lift_run_detect(root: Path) -> list[dict]:
+    """The axis's own function: truthy iff a declared lift RAN and passed."""
+    return [r for r in liftable(root, run_lifts=True)["rows"]
+            if r["lifted"] is True]
+
+
+def _lift_run_positive(root: Path) -> None:
+    """A stub lift exiting 0: run and read as lifted (caught)."""
+    _lift_run_fixture(root, 0)
+
+
+def _lift_run_negative(root: Path) -> None:
+    """A stub lift exiting non-zero: run and read as not lifted (refused)."""
+    _lift_run_fixture(root, 3)
+
+
+AXES.append({
+    "id": "lift-run",
+    "detect": _lift_run_detect,
+    "positive": _lift_run_positive,
+    "negative": _lift_run_negative,
+})
+
+
 def _bar_timeout_s(instrument_token: str) -> int | None:
     """The campaign row's `timeout_s` for the bar that names this subcommand.
 
@@ -1962,8 +2012,10 @@ def cmd_predicate(args: list[str]) -> int:
 # THE ASSERTS PER MOVE, all four named by the order: dest tier in the window;
 # dest named by the context's `crates` list; no new `[[exception]]` (checked
 # against ARCH_LAYERS' own forbid/exception ledger); the crate's own-context
-# share monotone. The first three are hard; `share_monotone` is structural (a
-# move carries only non-own lines out) but is computed, not asserted.
+# share monotone. All four are hard: `share_monotone` reads the registry's
+# proposal (a cluster whose `dest` does not name the crate is a leaver) and a
+# leaver that is one of the crate's own contexts fails loudly, because moving
+# own lines out is the one thing that drops the share (ARCH 5).
 _PLAN_REF = re.compile(
     r"crate::([A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)*)")
 _WS_CRATE_REF = re.compile(r"\b([a-z][a-z0-9_]*)::")
@@ -2489,7 +2541,15 @@ def plan(root: Path, crate: str | None = None) -> dict:
                     or set(dest_candidates))
         exc_ok, exc_why = _no_new_exception(arch, dest_set, deps - dest_set)
 
-        share_ok = (ctx in homes) or (reg_lines >= 0 and t_lines[0] >= 0)
+        # The own-context share is monotone iff the move carries only non-own
+        # lines out: a cluster whose `dest` does not name this crate is a
+        # leaver, and a leaver that IS one of the crate's own contexts would
+        # carry own lines out and drop the share. The plan's order already
+        # filters the homes out, so this asserts the registry's proposal — a
+        # `[[cluster]]` row that would move own lines fails loudly (ARCH 5).
+        # The share itself stays telemetry, printed in the header.
+        leaving = crate not in named
+        share_ok = (not leaving) or (ctx not in homes)
 
         findings: list[str] = []
         if t_lines[0] != reg_lines or t_lines[1] != reg_files:
@@ -2526,6 +2586,10 @@ def plan(root: Path, crate: str | None = None) -> dict:
             problems.append(f"{ctx}: dest not in context crates")
         if not exc_ok:
             problems.append(f"{ctx}: {exc_why}")
+        if not share_ok:
+            problems.append(
+                f"{ctx}: registry `dest` {registry_dest!r} would carry the "
+                f"crate's own context out — share not monotone")
 
         clusters.append({
             "context": ctx, "lines": reg_lines, "files": reg_files,
