@@ -87,3 +87,67 @@ campaign bar:
   `thread::sleep` floor; the margins widened, the assertion unchanged.
   `quality/conformance/sovereign-core.toml` line pins refreshed to match
   `quote_verification.rs`.
+
+## REVIEW-audit-2 — wave 0
+
+Range audited: `git log 0d7261da2..HEAD` (the previous audit's hash), the
+wave-0 units plus the census-constants/checks rows. Checks: TESTALL exit=0
+(13312 pass, 0 fail), PREPUSH exit=0.
+
+Findings, fixed:
+
+- **ARCH 8 (one decider, one name)** · `sovereign-core/src/runtime.rs:674` ·
+  wave 0 introduced `PrincipalScope` and made a wired resolver's `None`
+  refuse, but left the resolver→scope mapping inline in
+  `Runtime::principal_scope`. One decision, two homes once a test needs it.
+  Fixed: the mapping is one named function,
+  `PrincipalScope::from_resolver` (`context.rs:55`), beside the type it
+  constructs; `principal_scope` delegates. Fixed in `7f1f74501`.
+- **ARCH 5 (a branch with no planted control)** ·
+  `sovereign-core/tests/main/core_tests.rs:575` · the mapping's three arms
+  were exercised by nothing: the refusal test constructs
+  `PrincipalScope::Unresolved` directly and never enters `from_resolver`.
+  Fixed: `principal_scope_from_resolver_has_three_distinct_arms` drives all
+  three with an input each would fail on if the arms collapsed. Fixed in
+  `7f1f74501`.
+- **ARCH 3 (write for the next reader)** · four doc claims wave 0's
+  behaviour change falsified, fixed in the same pass:
+  `sovereign-contracts/src/traits.rs:96` (`PrincipalResolver` said a `None`
+  "means no tenancy … no corpus is hidden"; it now refuses),
+  `sovereign-server/src/tenant.rs:97` (unprefixed id "no scoping" → the turn
+  refuses), `sovereign-core/src/runtime.rs:341` (`corpus_principal` field) and
+  `:442` (`RuntimeParts` "does NOT yet fix" bullet now records the daemon
+  resolves `sensitive_corpora`), `sovereign-runtime-recipe/src/lib.rs:392`
+  (host-override example omitted the daemon). Fixed in `7f1f74501`/`e2e51f64c`.
+- **ARCH 3/4 (a comment naming a path that no longer owns the fact)** ·
+  three non-code references still named the old shim path
+  `sovereign_api::openai_types` after dm-wire-openai-types moved the wire
+  vocabulary to oicp-types: `oicp-types/src/completion.rs:391`,
+  `sovereign-inference/src/embedded/grammar.rs:43`,
+  `quality/DOMAINS.toml:695`. Repointed to the canonical home. Fixed in
+  `56b578f1a`.
+- **Gate: `arch-gate` approach band GREW 200927 → 200932 (+5, a hard gate)** ·
+  the wave-0 code growth (`runtime.rs` +13 net, `runtime/turn.rs` -8) plus the
+  audit's own doc additions. Fixed behaviour-preservingly — the same facts in
+  the original line count — not with `--update-baseline` (PROMPT §7). Band
+  back to 205 files / 200927 lines. Fixed in `e2e51f64c`.
+
+Recorded, not changed:
+
+- **`size-gate` (advisory)**: 37 keys grew, e.g. `sovereign-mesh::tests`
+  +1700. This is the campaign's own growth and the gate is `warn_gate` by
+  design (AGENTS.md: promote after a week with no false positive). Not
+  re-pinned — that would absorb the growth the gate exists to surface. It does
+  not block PREPUSH (which exits 0).
+- **`concept-gate` could-not-judge (exit 3, declared)**: a verdict, not a
+  failure; the pre-push runner counts it as attention, not blocking.
+
+Verified claims of the wave-0 rows (spot-checked against the tree, ARCH 4):
+the two MOVE rows keep the old path compiling via the shim
+(`sovereign-api/src/lib.rs:35,38`) and name the moved files' real imports
+(`oicp_types::openai_types`, `crate::requirements`, `crate::completion`);
+`dm-serving-dead-types`/`dm-serving-meshplan-cascade` deleted only types whose
+every hit was an in-crate definition, re-export or test (CALLERS proof in each
+commit body); `REVIEW-build-knowledge-assignment` moved the planner to
+`sovereign-grants` and dropped `corpus-engine` from `sovereign-serving`, with
+the registry note and SYSTEM_OVERVIEW updated in the same commit.
