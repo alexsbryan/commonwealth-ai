@@ -269,7 +269,7 @@ pub fn apply_guest_link(globals: &mut ChatGlobals, link: Option<GuestLink>, base
     //
     // So the base stays LOCAL. The guest's own daemon runs the turn and
     // resolves the granted id to the lender itself
-    // (`sovereign_mesh::guest_lender`), which is also why no bearer is set
+    // (`sovereign_serving_host::guest_lender`), which is also why no bearer is set
     // here: the daemon holds the grant, and a token aimed at our own loopback
     // daemon would be meaningless.
     //

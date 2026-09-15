@@ -150,7 +150,7 @@ impl Runtime {
         //
         // Pattern lifted from sovereign-agent-bench's proven path
         // (`SOVEREIGN_ALTERNATION_GRAMMAR=1` route in
-        // `sovereign-mesh::inference_adapter`); we replicate the
+        // `sovereign-serving-host::inference_adapter`); we replicate the
         // schema builder + Lark string locally because sovereign-core
         // can't take a sovereign-inference dep (cycle).
         let envelope_schema = build_envelope_schema(&tool_schemas).map(inject_done_variant);
@@ -615,7 +615,7 @@ fn render_transcript(prior: &[Message], current_partner_message: &str) -> String
 
 /// Build a JSON-Schema envelope describing the per-tool oneOf
 /// shape llguidance constrains the sampler against. Mirrors
-/// `sovereign_mesh::inference_adapter::tool_envelope_schema_for`,
+/// `sovereign_serving_host::inference_adapter::tool_envelope_schema_for`,
 /// replicated here because sovereign-core can't depend on
 /// sovereign-mesh (cycle).
 ///
@@ -653,7 +653,7 @@ fn build_envelope_schema(tools: &[ToolSchema]) -> Option<serde_json::Value> {
 /// model has a structured way to say "I'm finished — here's why."
 /// The handler intercepts `name == "done"` and treats `arguments.reason`
 /// as the partner-facing final text instead of dispatching to a real
-/// tool. Pattern mirrored from `sovereign-mesh::inference_adapter::
+/// tool. Pattern mirrored from `sovereign-serving-host::inference_adapter::
 /// inject_done_tool` (the agent-bench / pi alternation-grammar
 /// adoption — same convention).
 fn inject_done_variant(mut envelope: serde_json::Value) -> serde_json::Value {

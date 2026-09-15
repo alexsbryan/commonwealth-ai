@@ -567,7 +567,7 @@ name = "SOVEREIGN_DISABLE_PEER_INFERENCE"
 cluster = "mesh"
 default = "unset"
 status = "guard"
-purpose = "Kill-switch: =1 keeps all inference local instead of load-balancing to mesh peers (solo bench runs, reproducibility). Read in sovereign-mesh/src/peer_inference.rs."
+purpose = "Kill-switch: =1 keeps all inference local instead of load-balancing to mesh peers (solo bench runs, reproducibility). Read in sovereign-serving-host/src/peer_inference.rs."
 
 [[flag]]
 name = "SOVEREIGN_DISABLE_AUTO_COLLAB"

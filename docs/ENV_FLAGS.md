@@ -229,7 +229,7 @@ dead-codepath survey lives in `docs/ENV_VAR_AUDIT.md`.
 | `SOVEREIGN_ADVERTISE_ADDR` | unset | shipped | Address this node advertises to mesh peers. |
 | `SOVEREIGN_DISABLE_AUTO_COLLAB` | unset | guard | Kill-switch: disable auto-collaboration (peer ingest handoff) on the mesh. |
 | `SOVEREIGN_DISABLE_MDNS` | unset | guard | Kill-switch: disable mDNS LAN peer discovery. *(shadows `SetupConfig.discovery.mdns`)* |
-| `SOVEREIGN_DISABLE_PEER_INFERENCE` | unset | guard | Kill-switch: =1 keeps all inference local instead of load-balancing to mesh peers (solo bench runs, reproducibility). Read in sovereign-mesh/src/peer_inference.rs. |
+| `SOVEREIGN_DISABLE_PEER_INFERENCE` | unset | guard | Kill-switch: =1 keeps all inference local instead of load-balancing to mesh peers (solo bench runs, reproducibility). Read in sovereign-serving-host/src/peer_inference.rs. |
 | `SOVEREIGN_IROH` | unset | guard | Toggle for the iroh (no-VPN) mesh transport. *(shadows `SetupConfig.iroh.enabled`)* |
 | `SOVEREIGN_IROH_RELAY_ONLY` | unset | guard | Force the iroh transport onto relay-only paths (what iroh.relay_urls/discovery express declaratively). *(shadows `SetupConfig.iroh.relay_urls`)* |
 | `SOVEREIGN_JOIN_HOST` | unset | shipped | Mesh join target host override. |

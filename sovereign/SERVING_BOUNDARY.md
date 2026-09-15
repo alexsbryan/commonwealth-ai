@@ -250,7 +250,7 @@ pub fn replay_trace(t: &SchedulerTrace) -> ReplayReport;                        
 crate; `sovereign-core` has zero, its seam being `InferenceProvider`, already a leaf at
 `sovereign-contracts/src/traits.rs:281`.
 ```rust
-// provider.rs:111              dyn sovereign_mesh::peer_inference::PeerEndpointSource
+// provider.rs:111              dyn sovereign_mesh::peer_inference::VenueSource
 //                          ->  dyn sovereign_scheduler::VenueSource
 // provider.rs:117,:128,:136    with_peer_source{,_and_publisher}(raw, src[, publisher])
 //                          ->  InferenceRouter::builder(raw).candidates(src)

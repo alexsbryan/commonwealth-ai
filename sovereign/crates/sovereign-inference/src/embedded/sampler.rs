@@ -293,7 +293,7 @@ pub(crate) fn build_sampler(
 ) -> Result<ConstrainedSampler> {
     // Two ways to engage llguidance:
     //   1. `request.lark_grammar` — pre-built Lark string (tool envelope
-    //      + alternation, set by `sovereign-mesh::inference_adapter`
+    //      + alternation, set by `sovereign-serving-host::inference_adapter`
     //      when tools are present).
     //   2. `request.structured_output` — JSON Schema body; the schema
     //      runs through `default_additional_properties_false` before

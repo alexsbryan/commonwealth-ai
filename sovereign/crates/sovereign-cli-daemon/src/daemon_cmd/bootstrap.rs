@@ -551,7 +551,7 @@ pub(super) fn spawn_rpc_worker_discovery(
         });
         // Worker eligibility gate — only distribute to PROVEN-STABLE workers, so a
         // flapping worker can neither thrash the reload loop nor (by crashing
-        // mid-compute) GGML_ABORT the host. See `sovereign_mesh::worker_eligibility`.
+        // mid-compute) GGML_ABORT the host. See `sovereign_serving_host::worker_eligibility`.
         let eligibility =
             std::sync::Arc::new(sovereign_mesh::worker_eligibility::WorkerEligibility::default());
         sovereign_mesh::worker_eligibility::set_global(std::sync::Arc::clone(&eligibility));

@@ -223,7 +223,7 @@ which fired with **no inference in flight**, when the prune-reload tore down a
 model still sharded across the just-dead worker (and is nondeterministic: an
 earlier identical prune got lucky). Any in-flight request is lost. The defences:
 
-- **Eligibility gate** (`sovereign-mesh::worker_eligibility`). The host
+- **Eligibility gate** (`sovereign-serving-host::worker_eligibility`). The host
   distributes only to PROVEN-STABLE workers. A freshly-discovered worker is
   *Probationary* until continuously advertised for `…_SETTLE_SECS`; a worker that
   flaps (`…_FLAP_THRESHOLD` cycles in `…_FLAP_WINDOW_SECS`) is *Quarantined* with

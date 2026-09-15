@@ -277,7 +277,7 @@ impl DaemonInferenceClient {
         // truncated-output failures (we were seeing 361-token completions
         // with no signal whether the model hit EOS or the daemon clamped
         // max_tokens). Daemon-side population: see
-        // `sovereign_mesh::inference_adapter::translate_finish_reason`.
+        // `sovereign_serving_host::inference_adapter::translate_finish_reason`.
         let finish_reason = v
             .pointer("/choices/0/finish_reason")
             .and_then(|s| s.as_str())

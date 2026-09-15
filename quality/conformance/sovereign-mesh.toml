@@ -18,20 +18,6 @@ line = 181
 asserts = 3
 
 [[claim]]
-requirement = "FE-133"
-test = "sovereign-mesh::worker_eligibility::tests::stable_worker_eligible_after_settle"
-file = "sovereign/crates/sovereign-mesh/src/worker_eligibility.rs"
-line = 748
-asserts = 3
-
-[[claim]]
-requirement = "FE-135"
-test = "sovereign-mesh::worker_eligibility::tests::anchor_profile_is_stricter_than_default"
-file = "sovereign/crates/sovereign-mesh/src/worker_eligibility.rs"
-line = 734
-asserts = 6
-
-[[claim]]
 requirement = "FE-15"
 test = "sovereign-mesh::main::rotate_pre_split_guard::the_refusal_tells_an_unconfirmed_peer_apart_from_an_old_build"
 file = "sovereign/crates/sovereign-mesh/tests/main/rotate_pre_split_guard.rs"
@@ -63,5 +49,5 @@ asserts = 3
 requirement = "UI-22"
 test = "sovereign-mesh::daemon::tests::the_client_api_binds_loopback_by_default_and_never_exposes_an_unauthenticated_listener"
 file = "sovereign/crates/sovereign-mesh/src/daemon.rs"
-line = 5283
+line = 5285
 asserts = 21

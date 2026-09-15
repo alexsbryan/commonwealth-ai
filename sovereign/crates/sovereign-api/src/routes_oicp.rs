@@ -17,7 +17,7 @@ use crate::state::AppState;
 /// ~12 GB covers a 9B Q8 / 14B Q4 — the sizes that actually deliver
 /// sub-second TTFT on the hardware this project targets; the 30B+
 /// primaries stay Normal-only. Mirrors the FastShort claim shape in
-/// `sovereign-mesh::oicp_synthesis` (2 048 ctx / 512 out, affinity
+/// `sovereign-serving-host::oicp_synthesis` (2 048 ctx / 512 out, affinity
 /// +0.05) so hub-served and Sovereign-served manifests agree on what
 /// a fast claim looks like.
 const FAST_CLAIM_MAX_SIZE_BYTES: u64 = 12_000_000_000;

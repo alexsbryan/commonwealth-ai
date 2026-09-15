@@ -23,7 +23,7 @@
 //!
 //! Backend selection (qwen-27B vs gemma-31B vs an external API)
 //! and the inference adapter live elsewhere
-//! (`sovereign-mesh::inference_adapter` etc.). This module owns
+//! (`sovereign-serving-host::inference_adapter` etc.). This module owns
 //! the prompt construction, output parsing, and contradiction-
 //! detection contract. Having a small trait keeps unit tests
 //! pure — the test suite covers prompt shape and parsing without

@@ -42,7 +42,7 @@ Cross-node routing decides in `sovereign-scheduler/src/scheduler_core.rs:339`
 per-claim at `:585-609`).
 
 A manifest reaches the ranker by being **pulled**: `get_peer_manifest` in
-`sovereign-mesh/src/peer_inference.rs` fetches `GET /oicp/v1/capabilities` from
+`sovereign-serving-host/src/peer_inference.rs` fetches `GET /oicp/v1/capabilities` from
 each peer with `MANIFEST_FETCH_TIMEOUT = 800ms` (`:230`), cached for
 `MANIFEST_TTL = 60s` (`:85`). Manifests are built by `synthesize_default_claims`
 (`sovereign-api/src/routes_oicp.rs:40-97`) and served at `:234-273`.

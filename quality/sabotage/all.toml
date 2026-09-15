@@ -386,7 +386,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-43-tool_envelope_schema_oneof_includes_each"
 requirement = "CI-43"
-target = "sovereign/crates/sovereign-mesh/src/inference_adapter.rs"
+target = "sovereign/crates/sovereign-serving-host/src/inference_adapter.rs"
 find = "        props.insert(\n            \"name\".to_string(),\n            serde_json::json!({ \"type\": \"string\", \"enum\": [t.function.name] }),\n        );"
 replace = "        // MUTATION: Introduce a typo in the property name to violate the schema contract.\n        // The test expects 'name' but will find 'naem', causing the assertion on names to fail or panic during unwrap."
 mustFail = ["tool_envelope_schema_oneof_includes_each_tool"]

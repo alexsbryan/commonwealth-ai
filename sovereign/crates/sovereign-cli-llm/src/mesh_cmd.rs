@@ -3627,7 +3627,7 @@ async fn cmd_logs() -> i32 {
 ///
 /// Integrity: the peer's listing carries a SHA-256; the response
 /// stream is hashed on the fly and the file is rejected on
-/// mismatch. See `sovereign_mesh::model_fetch::fetch_model_to_dir`.
+/// mismatch. See `sovereign_serving_host::model_fetch::fetch_model_to_dir`.
 async fn cmd_fetch_model(args: &[String]) -> i32 {
     if sovereign_cli_shared::help::wants_help(args) {
         eprintln!("Usage: svrn mesh fetch-model <name> [--peer <host:port>] [--out <dir>]");

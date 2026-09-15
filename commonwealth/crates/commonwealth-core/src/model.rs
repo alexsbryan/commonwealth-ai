@@ -86,7 +86,7 @@ pub enum ModelAvailability {
 //
 // The wire vocabulary for `/internal/v1/models/*`, which one peer serves
 // (`commonwealth-api::routes_internal::model_files`) and another consumes
-// (`sovereign-mesh::model_fetch`, `::rpc_warm_http`). It lives here because
+// (`sovereign-serving-host::model_fetch`, `::rpc_warm_http`). It lives here because
 // BOTH ends must agree on these bytes for a fetch to work, and this is the
 // lowest crate both already depend on.
 //

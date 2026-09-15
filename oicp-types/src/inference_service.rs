@@ -68,7 +68,7 @@ pub struct FimStreamStart {
 /// `None` from `edit_status()` means no editing model at all.
 ///
 /// Mirrors `sovereign_core::types::EditSlotInfo` across the seam. The
-/// translation is `sovereign_mesh::fim_adapter::edit_status`, and it is the
+/// translation is `sovereign_serving_host::fim_adapter::edit_status`, and it is the
 /// only one.
 ///
 /// **The two lanes are independent `Option`s.** A field is `None`

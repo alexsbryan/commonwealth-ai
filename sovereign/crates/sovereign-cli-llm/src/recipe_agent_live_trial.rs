@@ -681,7 +681,7 @@ fn synthesize_loop_break_message(call: &ToolCall, count: usize, kind: &'static s
 /// Salvage `<tool_call>...</tool_call>` blocks the model emitted as
 /// plain text but the daemon's tool-call parser didn't pick up.
 ///
-/// Why this is needed: the daemon (`sovereign-mesh::inference_adapter`)
+/// Why this is needed: the daemon (`sovereign-serving-host::inference_adapter`)
 /// is supposed to extract every `<tool_call>...</tool_call>` JSON
 /// block from a model's raw output and surface it as a structured
 /// `tool_calls[]` field on the response, then strip the block from

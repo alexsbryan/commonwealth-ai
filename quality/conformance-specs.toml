@@ -120,12 +120,12 @@ id = "FE-105"
 family = "FE"
 status = "landed"
 clause = '''A refusal produced by *this* gate MUST be exempted from peer health tracking — a busy response is a healthy peer declining, and booking it as a fault quarantines that peer.'''
-target = '''sovereign/crates/sovereign-mesh/src/peer_inference.rs:1055::book_peer_failure'''
+target = '''sovereign/crates/sovereign-serving-host/src/peer_inference.rs:1049::book_peer_failure'''
 asserts = '''book_peer_failure(peer, err, shed=true) repeated past FAILURE_THRESHOLD leaves is_quarantined(peer) false; the same calls with shed=false quarantine it.'''
 catches = '''dropping the shed early-exit so our own busy/shed refusals are booked as peer faults, quarantining a healthy peer after a few concurrent turns.'''
-destination = '''sovereign/crates/sovereign-mesh/src/peer_inference.rs (mod tests)'''
+destination = '''sovereign/crates/sovereign-serving-host/src/peer_inference.rs (mod tests)'''
 kind = '''rust-unit'''
-landed = '''sovereign-mesh::peer_inference::tests::our_own_shed_refusals_never_quarantine_the_peer_that_shed'''
+landed = '''sovereign-serving-host::peer_inference::tests::our_own_shed_refusals_never_quarantine_the_peer_that_shed'''
 
 [[spec]]
 id = "FE-119"
@@ -467,18 +467,18 @@ id = "FE-133"
 family = "FE"
 status = "landed"
 clause = '''A host preparing a distributed load MUST be able to ask a participant to seed its portion **before** the load begins, and MUST distribute only to participants that pass an eligibility profile — a settling period plus quarantine on instability, surfaced to the operator.'''
-target = '''sovereign/crates/sovereign-mesh/src/worker_eligibility.rs:625::eligible'''
-existing = '''sovereign/crates/sovereign-mesh/src/worker_eligibility.rs:746::stable_worker_eligible_after_settle'''
-landed = '''sovereign-mesh::worker_eligibility::tests::stable_worker_eligible_after_settle'''
+target = '''sovereign/crates/sovereign-serving-host/src/worker_eligibility.rs:625::eligible'''
+existing = '''sovereign/crates/sovereign-serving-host/src/worker_eligibility.rs:748::stable_worker_eligible_after_settle'''
+landed = '''sovereign-serving-host::worker_eligibility::tests::stable_worker_eligible_after_settle'''
 
 [[spec]]
 id = "FE-135"
 family = "FE"
 status = "landed"
 clause = '''Where a topology stratifies into anchors (holding the split) and consumers, anchors MUST advertise their anchor profile, and the candidate filter MUST exclude non-anchors so a casual peer never joins the split. Anchors MUST get the stricter eligibility profile.'''
-target = '''sovereign/crates/sovereign-mesh/src/worker_eligibility.rs:218::EligibilityConfig::anchor'''
-existing = '''sovereign/crates/sovereign-mesh/src/worker_eligibility.rs:733::anchor_profile_is_stricter_than_default'''
-landed = '''sovereign-mesh::worker_eligibility::tests::anchor_profile_is_stricter_than_default'''
+target = '''sovereign/crates/sovereign-serving-host/src/worker_eligibility.rs:218::EligibilityConfig::anchor'''
+existing = '''sovereign/crates/sovereign-serving-host/src/worker_eligibility.rs:734::anchor_profile_is_stricter_than_default'''
+landed = '''sovereign-serving-host::worker_eligibility::tests::anchor_profile_is_stricter_than_default'''
 
 [[spec]]
 id = "FE-137"
@@ -794,8 +794,8 @@ id = "IN-5"
 family = "IN"
 status = "exists-untagged"
 clause = '''The system MUST report, per slot: which model is resident, whether it is resident or cold, and whether it is running in a degraded substitute form. **Cold is not an outage** and MUST be reported distinctly.'''
-target = '''sovereign/crates/sovereign-mesh/src/oicp_synthesis.rs:119::build_self_manifest'''
-existing = '''sovereign/crates/sovereign-mesh/src/oicp_synthesis.rs:938::manifest_reports_indeterminate_and_absent_residency_as_cold'''
+target = '''sovereign/crates/sovereign-serving-host/src/oicp_synthesis.rs:121::build_self_manifest'''
+existing = '''sovereign/crates/sovereign-serving-host/src/oicp_synthesis.rs:952::manifest_reports_indeterminate_and_absent_residency_as_cold'''
 
 [[spec]]
 id = "IN-7"

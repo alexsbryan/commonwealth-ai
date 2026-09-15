@@ -137,7 +137,7 @@ pub struct CompletionRequest {
     /// `/v1/models` — the gguf file stem.
     ///
     /// Threaded through from the OpenAI `model` field by
-    /// `sovereign_mesh::inference_adapter::build_completion_request`,
+    /// `sovereign_serving_host::inference_adapter::build_completion_request`,
     /// and from `ChatPrompt::phase_id` resolved against
     /// `EnrichConfig.chat_models` by the enrich-side inference
     /// client.
@@ -256,7 +256,7 @@ pub struct CompletionRequest {
     /// Mutually exclusive with `structured_output`: when both are
     /// set the lark path wins (this is the newer mechanism).
     ///
-    /// Set by `sovereign_mesh::inference_adapter::build_completion_request`
+    /// Set by `sovereign_serving_host::inference_adapter::build_completion_request`
     /// when `tools.is_some()` and `tool_choice != Some("none")` AND
     /// the `SOVEREIGN_ALTERNATION_GRAMMAR` env var is truthy. The
     /// rendered grammar is the alternation shape

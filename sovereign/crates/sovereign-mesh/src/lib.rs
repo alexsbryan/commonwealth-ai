@@ -70,7 +70,6 @@ pub mod knowledge_client;
 pub mod landscape_digest_client;
 pub mod landscape_digest_http;
 pub mod lc_http;
-pub use sovereign_serving_host::local_inflight; // shim: moved by domains REVIEW-build-serving-move-peer
 pub mod local_only;
 pub mod loopback_guard;
 #[cfg(feature = "treesitter")]
@@ -92,7 +91,6 @@ pub use sovereign_serving_host::model_fetch; // shim: moved by domains dm-servin
 pub mod newsworthy_host;
 pub mod notes_http;
 pub(crate) use sovereign_scheduler::oicp_select; // shim: moved by domains REVIEW-build-sched-move
-pub use sovereign_serving_host::oicp_synthesis; // shim: moved by domains REVIEW-build-serving-move-synthesis
 pub mod origin_fanout;
 /// The mesh implementations of `sovereign-contracts::peer`'s two ports — the
 /// N>1 half of what the daemon speaks to its peers through (cw-lift 3b).
@@ -107,7 +105,6 @@ pub use sovereign_scheduler::predicted_time; // shim: moved by domains REVIEW-bu
 #[cfg(feature = "treesitter")]
 pub mod project_http;
 pub mod projects;
-pub use sovereign_serving_host::prompt_compactor; // shim: moved by domains dm-serving-move-leaves
 pub mod publish_http;
 pub mod rail_bind;
 pub mod rail_kv_pump;
@@ -138,7 +135,7 @@ pub mod supervised_task;
 /// capability filters the candidate set, predicted cost ranks what
 /// survives.
 pub use sovereign_scheduler::tier;
-pub use sovereign_serving_host::throughput_tracking; // shim: moved by domains REVIEW-build-serving-move-throughput-guest // shim: moved by domains dm-sched-move-tier
+pub use sovereign_serving_host::throughput_tracking; // shim: moved by domains REVIEW-build-serving-move-throughput-guest
 pub use sovereign_serving_host::tool_profile; // shim: moved by domains REVIEW-build-serving-move-adapter
 pub mod turn_approval;
 pub mod turn_extras_http;
@@ -150,18 +147,14 @@ pub mod watched_folder_setup;
 pub mod work_atlas_broadcaster;
 pub mod work_donor;
 pub use sovereign_serving_host::worker_eligibility; // shim: moved by domains dm-serving-move-leaves
-                                                    // Short-lived memory of peers that refused with `yielded_to_local`, so
-                                                    // the next turn does not re-dial into the same refusal.
-pub use sovereign_scheduler::yield_backoff; // shim: moved by domains REVIEW-build-sched-move
-                                            // Ephemeral worker pods — owner-initiated TLS-pinned transport that
-                                            // replaces the full-mesh-pod path. Pods become single-owner workers,
-                                            // not gossip peers. Spec: sovereign/docs/EPHEMERAL_WORKER_PODS.md.
+                                                    // Ephemeral worker pods — owner-initiated TLS-pinned transport that
+                                                    // replaces the full-mesh-pod path. Pods become single-owner workers,
+                                                    // not gossip peers. Spec: sovereign/docs/EPHEMERAL_WORKER_PODS.md.
 pub use sovereign_contracts::worker_pod; // shim: moved by domains REVIEW-build-serving-worker-port
                                          // Pinned-pod inference routing — lets ephemeral worker pods join the
                                          // mesh scheduler's inference pool as one more peer, scored by the
                                          // same load balancer. Spec: docs/PINNED_WORKER_AS_INFERENCE_PEER.md.
 pub use sovereign_serving_host::pinned_pod_snapshot; // shim: moved by domains REVIEW-build-serving-move-peer
-pub use sovereign_serving_host::pinned_transport; // shim: moved by domains REVIEW-build-serving-move-peer
 pub use sovereign_serving_host::pinned_worker_source; // shim: moved by domains REVIEW-build-serving-move-peer
 
 pub use daemon::{ClientListener, EmbeddedDaemon};

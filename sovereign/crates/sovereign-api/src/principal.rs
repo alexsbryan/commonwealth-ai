@@ -36,7 +36,7 @@
 //!    fingerprint, never by the secret itself, so a principal key is safe to
 //!    log and safe to hold in a map. This branch also covers the owner-signed
 //!    `WorkerToken` the order names: a worker token rides as a plain bearer
-//!    (`sovereign-mesh/src/pinned_transport.rs:128`), so it needs no branch of
+//!    (`sovereign-serving-host/src/pinned_transport.rs:127`), so it needs no branch of
 //!    its own — one decider, not two.
 //! 2. **`X-Principal`, from a loopback caller only.** The local multi-caller
 //!    case: desktop, CLI and MCP all reach `127.0.0.1` and are all

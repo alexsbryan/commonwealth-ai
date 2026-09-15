@@ -100,7 +100,7 @@ pub async fn chat_completions(
     // `X-Sovereign-Tool-Profile: <name>` lets per-request callers pick
     // a daemon-configured tool profile (defined in
     // `~/.svrnmesh/tool_profiles.toml`). The downstream inference
-    // adapter consults `sovereign_mesh::tool_profile::global()` and
+    // adapter consults `sovereign_serving_host::tool_profile::global()` and
     // filters `request.tools[]` accordingly. We surface the value
     // here, not deeper, because route handlers own header access; the
     // service layer only sees the request body.

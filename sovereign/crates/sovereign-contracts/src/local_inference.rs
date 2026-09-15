@@ -27,7 +27,7 @@ use crate::traits::InferenceProvider;
 /// `REVIEW-build-local-inference`).
 ///
 /// The OpenAI request and response translation is an EDGE adapter implemented in
-/// the daemon (`sovereign_mesh::inference_adapter`), not part of the port's
+/// the daemon (`sovereign_serving_host::inference_adapter`), not part of the port's
 /// arithmetic; the FIM stream and edit-slot status stay with `fim_adapter` over
 /// the same provider.
 #[async_trait]

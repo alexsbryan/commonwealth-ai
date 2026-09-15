@@ -74,7 +74,7 @@ pub struct ChatCompletionRequest {
     /// headers. `None` (default) means "use the registry default".
     /// Profiles filter `tools[]` in place to cut prompt size for
     /// tools-heavy clients (opencode, Aider) that ship every tool
-    /// every turn. See `sovereign_mesh::tool_profile` for semantics.
+    /// every turn. See `sovereign_serving_host::tool_profile` for semantics.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_profile: Option<String>,
     /// Commonwealth extension: explicit sampler-profile selector
@@ -312,7 +312,7 @@ pub struct Usage {
 //
 // These mirror `sovereign_core::types::{StreamFrame, FinishReason,
 // StreamUsage}` exactly. Translation lives in
-// `sovereign-mesh::inference_adapter::SovereignInferenceAdapter`.
+// `sovereign-serving-host::inference_adapter::SovereignInferenceAdapter`.
 // We don't share the type because commonwealth has no `sovereign`
 // dep — keeping a parallel definition here is preferable to a new
 // cross-project re-export through `oicp-types`.
