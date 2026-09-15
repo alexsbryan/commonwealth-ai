@@ -208,3 +208,78 @@ Resolved by the supervisor resolution (attempt 1):
   (`ralph/PROMPT.md` §3a) gained step 6, which carries a moved file's baseline
   row in the same commit, so wave 1's remaining moves (`peer_inference.rs`
   5,399 and the rest) do not re-open it. `arch-gate` exit=0.
+
+## REVIEW-audit-5 — the scheduler cycle
+
+Range audited: `git log f067f7571..HEAD` (the previous audit's hash), the
+scheduler mint and its six rows, the pod-to-`sovereign-scheduler` move and
+the two splits. Checks: TESTALL exit=0 (13312 pass, 0 fail); PREPUSH exit=1,
+**one blocking lane — `boundary-gate` — which is the `serving` package's
+declared-red**, approved 2026-09-15 (`ada68c8cd`) and pasted verbatim by
+`dm-serving-package-rows` (`c219d4a62`). Its five violations are unchanged and
+this audit adds none: `sovereign-serving → commonwealth-{core,state}`, the
+`lib.rs:7` embed inside a COMMENT, and the two host `[[exception]]` rows that
+are stale-by-construction until the host half lands. O9's own gate line is
+`./scripts/pre-push.sh  # everything else green`; every other lane passed
+(`size-gate` is the only other and it is an advisory `warn_gate`). Recorded,
+not "fixed": the red is the approved state, not a defect this audit may clear
+without drawing the boundary in the wrong place (K4).
+
+Findings, fixed (all in `adc29b1ba`):
+
+- **ARCH 3 (the doc lands with the code)** · `quality/DOMAINS.toml` · the nine
+  `[[module]]` rows for the moved modules still keyed `sovereign-mesh/src/`,
+  and the four new files (scheduler `lib.rs`, host `lib.rs`/`recorder.rs`/
+  `slot_select.rs`) had no row. Re-keyed and added; line counts re-measured
+  (`decision_log` 1527→1254 after the sink split, `oicp_select` 946→664 after
+  the slot-pick split, `decision_trace` 634→640; `scheduler_core`'s note
+  updated for the `pub` boundary items).
+- **ARCH 3 (the doc lands with the code)** · `sovereign/SYSTEM_OVERVIEW.md` ·
+  the §8 module tables, the "Understand OICP routing" row and the mesh-sim
+  scoreboard line still named `sovereign-mesh/…`; re-keyed to
+  `sovereign-scheduler/`.
+- **ARCH 3/4 (a path that no longer owns the fact)** ·
+  `quality/conformance/sovereign-scheduler.toml` (NEW, generated) ·
+  `conformance_tags_are_fresh` was red until the yield_backoff FE-106 claim
+  followed the file out of `sovereign-mesh.toml`; regenerated.
+- **ARCH 3/4 (path-keyed registries)** · `quality/conformance-specs.toml:435-437,
+  741-742` · FE-106 (`yield_backoff` :79/:195) and IN-2 (`slot_aliases`
+  :88/:126) still keyed the mesh paths, and FE-106's `landed` named the
+  `sovereign-mesh::` binary; re-keyed to `sovereign-scheduler`. The canon note
+  `.canon/sources/notes/invariant/c719398a.md` names this file as a
+  non-baseline path key that must be re-keyed on a move.
+- **ARCH 3/4 (path-keyed registries)** · `quality/sabotage/fe-dst.toml:257`,
+  `quality/sabotage/fe-dst-mesh.toml:252` · the `fe-15-a` mutant's `target`
+  still named the mesh `yield_backoff.rs`; repointed, or the mutant can never
+  be planted (the `all.toml` precedent from `928ec78a4`).
+- **ARCH 3/4 (a doc naming a path that no longer owns the fact)** ·
+  `docs/CMNWLTH_DESIGN.md:114`, `docs/LAZY_INFERENCE_ON_THE_RAIL.md:39`,
+  `sovereign/SYSTEM_OVERVIEW.md:7695`, `sovereign/docs/specs/VERIFIER_V0.md:414`,
+  `research/smb-onprem-adoption/MULTI_TENANT_SMB_ADOPTION.md:193`, and the
+  `sovereign-contracts/src/types/next_edit_journal.rs:26` doc comment.
+  Repointed to the canonical home (the audit-2 precedent: a shim path in a doc
+  is still a stale pointer once the owner moves).
+
+Recorded, not changed:
+
+- **Frozen measurement coordinates** · `quality/DOMAINS.toml`'s `[[noun]]`
+  `file` fields, `[[collision]]` `definitions`, and the `[[cluster]]` graph
+  `cite`/`file` rows still name the mesh paths; so do
+  `sovereign/docs/specs/SCHEDULER_QUALITY.md:825,964` (dated 2026-07-26
+  measurement blocks). They are the measurement's own coordinates at
+  measurement time, not live pointers; a re-key would falsify the record
+  (ARCH 3/4; the audit-3 precedent for the cluster graph).
+- **The shims stay** · the audit's VERB ("delete any shim whose importers are
+  all repointed") does not fire: every `sovereign_mesh::{scheduler_core,
+  oicp_select, decision_log, decision_replay, decision_trace, predicted_time,
+  yield_backoff, tier, slot_aliases}` shim still has live importers — the
+  mesh host modules (`peer_inference`, `inference_adapter`, `oicp_synthesis`,
+  `throughput_tracking`, `mesh_sim`) resolve them through `crate::<m>`, and
+  the mesh integration tests through `sovereign_mesh::<m>`. They are deleted
+  when the host half moves (`REVIEW-mint-serving-host`).
+- **`yield_backoff`'s monotonic clock read** (`yield_backoff.rs:81,85,118`) ·
+  recorded as a residual by `REVIEW-build-sched-move` (SB "Corrected
+  2026-09-14" bullet 1); the rewrite to take `now` is owed, not done here.
+- **`size-gate` (advisory)** · 41 keys grew, the campaign's own growth; the
+  new crates read as "new and unbaselined". `warn_gate` by design, does not
+  block PREPUSH. Not re-pinned.
