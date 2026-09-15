@@ -57,3 +57,22 @@ pub fn unix_millis() -> u64 {
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn all_three_agree_on_the_same_instant() {
+        // A recent lower bound: 2025-01-01T00:00:00Z. The clock is well past it,
+        // so every helper must exceed it (in its own unit) — cheap sanity that
+        // none returns the pre-epoch 0 fallback and the units are right.
+        const Y2025_SECS: i64 = 1_735_689_600;
+        assert!(unix_now() > Y2025_SECS);
+        assert!(unix_now_u64() > Y2025_SECS as u64);
+        assert!(unix_millis() > Y2025_SECS as u64 * 1000);
+        // Seconds views agree; millis is ~1000× the seconds view.
+        assert_eq!(unix_now() as u64, unix_now_u64());
+        assert!(unix_millis() / 1000 >= unix_now_u64() - 1);
+    }
+}

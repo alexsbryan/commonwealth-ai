@@ -14,6 +14,10 @@ sovereign-contracts = { workspace = true }
 # rather than re-declaring the same four variants and the same wire form
 # (noun-convergence rung nc-10-judgement). Layer 0: this edge points DOWN.
 kernel-types = { workspace = true }
+# The Tier-0 wall-clock leaf. `src/time.rs` was a byte-identical twin of
+# `sovereign_time`; it is now a re-export so there is ONE implementation
+# (ARCH principle 8, domains row dm-time-reexport).
+sovereign-time = { workspace = true }
 # `treesitter` feature dropped 2026-05-22: sovereign-core's
 # corpus-engine usages (FeatureStore, NoteStore, EmbedFn, etc) are
 # not treesitter-gated. The only "ScipGraph" / "symbol_lookup"

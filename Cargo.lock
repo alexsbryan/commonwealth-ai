@@ -12405,6 +12405,7 @@ dependencies = [
  "sha2 0.10.9",
  "sovereign-contracts",
  "sovereign-store",
+ "sovereign-time",
  "sovereign-tools",
  "sovereign-tools-base",
  "tempfile",
