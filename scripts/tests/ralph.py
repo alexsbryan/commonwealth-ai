@@ -384,5 +384,20 @@ class PoolTests(unittest.TestCase):
             self.assertEqual(pool.run(), 0)
 
 
+class GuardTests(unittest.TestCase):
+    def test_guarded_turns_an_io_error_into_a_package(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "ralph/STATE.md", "- [ ] dm-a — depends []\n")
+            paths = ralph.Paths(pathlib.Path(tmp))
+
+            def boom():
+                raise OSError(28, "No space left on device")
+
+            rc = ralph.guarded(boom, paths, notify_enabled=False)
+            self.assertEqual(rc, 3)
+            self.assertIn("No space left",
+                          (pathlib.Path(tmp) / "ralph/NEEDS_HUMAN.md").read_text())
+
+
 if __name__ == "__main__":
     unittest.main()

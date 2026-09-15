@@ -88,6 +88,18 @@ def halt(paths, reason, *, notifier=notify, notify_enabled=True):
     return Result(Outcome.HALT, reason)
 
 
+def guarded(fn, paths, *, notifier=notify, notify_enabled=True):
+    """A driver's I/O error must become a package, not a traceback. The disk
+    ceiling on 2026-09-15 crashed the supervisor mid-resolution (OSError 28)
+    and left the job down with no decision package."""
+    try:
+        return fn()
+    except OSError as e:
+        halt(paths, f"unhandled I/O error: {e}", notifier=notifier,
+             notify_enabled=notify_enabled)
+        return 3
+
+
 def wait_for_marker(paths, marker_timeout):
     """None to proceed, "wait" to yield this tick, or a reason string to halt."""
     waiting = paths.p(paths.waiting)
@@ -893,7 +905,7 @@ def cmd_pool(args):
                                 str(state_dir_for(paths, args.label) / "launchd.log"))
         print(f"wrote {plist}")
         return 0
-    return pool.run()
+    return guarded(pool.run, paths, notify_enabled=args.notify)
 
 
 def cmd_watch(args):
@@ -936,7 +948,9 @@ def cmd_run(args):
             paths.workdir, str(state_dir_for(paths, args.label) / "launchd.log"))
         print(f"wrote {plist}")
         return 0
-    result = campaign.run()
+    result = guarded(campaign.run, paths, notify_enabled=args.notify)
+    if isinstance(result, int):
+        return result
     print(f"campaign: {result.outcome.value} — {result.reason}")
     return {Outcome.DONE: 0, Outcome.OPERATOR_STOP: 0, Outcome.NEEDS_HUMAN: 2,
             Outcome.OPERATOR_REQUIRED: 2, Outcome.HALT: 3}[result.outcome]
@@ -989,7 +1003,7 @@ def cmd_supervise(args):
             paths.workdir, str(state_dir_for(paths, args.label) / "launchd.log"))
         print(f"wrote {plist}")
         return 0
-    return supervisor.run()
+    return guarded(supervisor.run, paths, notify_enabled=args.notify)
 
 
 def main(argv=None):
