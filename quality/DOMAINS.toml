@@ -692,7 +692,7 @@ note = ""
 path = "sovereign/crates/sovereign-mesh/src/prompt_compactor.rs"
 context = "serving"
 lines = 519
-note = "its ONE import is sovereign_api::openai_types (:48) - wire types the ranker should not own"
+note = "its ONE import is oicp_types::openai_types (:48) - wire types the ranker should not own (repointed off sovereign_api by dm-wire-repoint-mesh, 2026-09-15)"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/publish_http.rs"

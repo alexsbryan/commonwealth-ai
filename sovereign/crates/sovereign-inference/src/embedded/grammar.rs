@@ -40,7 +40,7 @@ use crate::hardware::HardwareProfile;
 /// Convert a JSON schema to a GBNF (GGML BNF) grammar string.
 ///
 /// A single tool call extracted from model output. The adapter maps
-/// this into `sovereign_api::openai_types::ToolCall` (with a
+/// this into `oicp_types::openai_types::ToolCall` (with a
 /// generated id) before emitting the chat-completion response.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsedToolCall {
