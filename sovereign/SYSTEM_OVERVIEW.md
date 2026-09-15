@@ -8128,25 +8128,20 @@ retrieved chunks carry it, but the released quote does not support it, so the
 citation gate grounds a correct answer on the wrong quote — a grounding-gate
 finding.
 
-The serial campaign driver is `scripts/ralph-loop.sh`: `--model` selects workers,
-`--review-model` selects review rows, and `--variant` sets effort for both.
-It resumes `[~]` before selecting the first dependency-ready `[ ]` row, using
-the pool's shared readiness helpers in `scripts/ralph-lib.sh`. Ready `HUMAN-`
-rows stop before launching a worker. `--install-launchd` writes a one-shot Mac
-job; `python3 scripts/tests/ralph-routing.py` exercises routing with a stub worker.
-`--supervise` wraps the driver in `scripts/ralph-supervise.sh`, inheriting the
-review model and effort once. Blockers get bounded, logged resolution sessions
-and notifications; ready `HUMAN-` rows and operator STOP requests never enter
-resolution. The old blocker STOP is cleared before resolution so it cannot kill
-its own resolver; a new STOP is preserved. Session logs retain distinct run ids.
-`python3 scripts/tests/ralph-supervise.py` exercises resolution and terminal stops.
-Per-host models live in `ralph/models.env` (KEY=value data, gitignored), read by
-both drivers with flags taking precedence; `scripts/ralph-models.sh` shows or
-sets it and kickstarts the loaded job (`python3 scripts/tests/ralph-models.py`).
-`scripts/ralph-watch.sh` is the watchdog a detached job cannot be: it notifies
-when a decision package sits unresolved, the job is stopped without DONE/STOP,
-or free disk drops below 5 GB, re-nagging at most once per 30 min
-(`--install-launchd`; test: `python3 scripts/tests/ralph-watch.py`).
+The serial campaign is `scripts/ralph.py` (subcommands `run`, `supervise`,
+`watch`, `models`, `plan`): a typed queue parser over `ralph/STATE.md`, a
+session layer (process group, timeout, STOP, heartbeat), and three explicit
+FSMs. `run` resumes `[~]` before the first dependency-ready `[ ]` row and halts
+on a ready `HUMAN-` row, the stall bound, a stale `ralph/waiting` marker or
+MAX_ITER; `supervise` wraps a campaign command with bounded resolutions whose
+progress is a unit COMPLETED, escalating a resolution that changes nothing and
+never treating a halt STOP (non-empty) as the operator's (an empty
+`ralph/STOP`); `watch` notifies on needs-human, stopped-without-DONE, a stale
+`ralph/.heartbeat` and low disk, re-nagging at most once per 30 min. Every
+terminal state is DONE, an operator stop, or an escalation —
+`python3 scripts/tests/ralph.py` proves the FSMs in-process (21 tests). The
+shell `ralph-{lib,pool,supervise}.sh` remain for the parallel pool until it is
+ported; `ralph-loop.sh`, `ralph-watch.sh` and `ralph-models.sh` are superseded.
 
 ### 8.1 Where configuration and state live
 

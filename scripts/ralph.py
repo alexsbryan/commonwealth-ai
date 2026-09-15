@@ -350,9 +350,7 @@ class Campaign:
             if unit.id.startswith("HUMAN-"):
                 return self.halt(f"operator approval required: {unit.id}")
             model_args = select_model_args(unit.id, self.model, self.review_model, self.variant)
-            say(f"unit {unit.id} — model {self.model or 'default'}"
-                f"{'/' + self.review_model if self.review_model else ''}, "
-                f"variant {self.variant or 'default'}")
+            say(f"unit {unit.id} — {' '.join(model_args) or 'configured default'}")
             before = head_of(self.paths.workdir)
             self.session_run(model_args, self._prompt_text(), self._log_path(iteration))
             after = head_of(self.paths.workdir)
@@ -655,7 +653,7 @@ def cmd_watch(args):
     if args.install_launchd:
         plist = install_launchd(
             f"dev.ralphwatch.{paths.workdir.name}-{args.label}",
-            ["/usr/bin/python3", str(pathlib.Path(__file__).resolve()),
+            [sys.executable, str(pathlib.Path(__file__).resolve()),
              "watch", "--workdir", str(paths.workdir), "--label", args.label],
             paths.workdir, state_dir / "watch.log", interval=120)
         print(f"wrote {plist}")
@@ -682,7 +680,7 @@ def cmd_run(args):
         ensure_excludes(paths.workdir, RUNTIME_MARKERS)
         plist = install_launchd(
             f"dev.ralph.{paths.workdir.name}-{args.label}",
-            ["/usr/bin/python3", str(pathlib.Path(__file__).resolve()), "run",
+            [sys.executable, str(pathlib.Path(__file__).resolve()), "run",
              "--workdir", str(paths.workdir), "--label", args.label,
              "--prompt", args.prompt, "--state", args.state],
             paths.workdir, str(state_dir_for(paths, args.label) / "launchd.log"))
@@ -735,7 +733,7 @@ def cmd_supervise(args):
         ensure_excludes(paths.workdir, RUNTIME_MARKERS)
         plist = install_launchd(
             f"dev.ralph.{paths.workdir.name}-{args.label}",
-            ["/usr/bin/python3", str(pathlib.Path(__file__).resolve()), "supervise",
+            [sys.executable, str(pathlib.Path(__file__).resolve()), "supervise",
              "--workdir", str(paths.workdir), "--label", args.label,
              "--session-timeout", str(args.session_timeout)] + campaign,
             paths.workdir, str(state_dir_for(paths, args.label) / "launchd.log"))

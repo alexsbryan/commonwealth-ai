@@ -11,26 +11,26 @@ Run it serially — the rows share crates and manifests, and cargo work is one
 worker at a time (AGENTS.md):
 
 ```
-nohup bash scripts/ralph-loop.sh --workdir . --label domains \
-  --prompt ralph/PROMPT.md --state ralph/STATE.md \
-  --review-every 0 --max-stall 3 \
-  --session-timeout 3600 --supervise --notify >> ralph/log.txt 2>&1 &
+nohup python3 scripts/ralph.py supervise --workdir . --label domains \
+  -- python3 scripts/ralph.py run --workdir . --label domains \
+  --prompt ralph/PROMPT.md --state ralph/STATE.md --max-stall 3 --notify \
+  >> ralph/log.txt 2>&1 &
 ```
 
-`--review-every 0` because reviews are rows here; any unit id containing
-`REVIEW` goes to the review model. Models come from `ralph/models.env`
-(per-host, gitignored): `scripts/ralph-models.sh --model <W> --review-model <R>
-[--variant high]` writes it and restarts the launchd job. The supervisor's
-resolver uses the review model; loop flags still override the file.
+Reviews are rows here: any unit id containing `REVIEW` routes to the review
+model. Models come from `ralph/models.env` (per-host, gitignored):
+`python3 scripts/ralph.py models --model <W> --review-model <R> [--variant
+high] --label domains` writes it and restarts the loaded job. The supervisor's
+resolver uses the review model; flags still override the file.
 
-For a detached Mac job, replace `nohup` and the output redirection with
-`--install-launchd`, then run the printed `launchctl bootstrap` command.
-The job is one-shot: an operator stop requires an explicit restart.
-The supervisor inherits the review model and effort; fixable blockers receive
-bounded resolution attempts, while ready `HUMAN-` rows remain operator-only.
-`scripts/ralph-watch.sh --workdir . --label domains --install-launchd` (then
-`launchctl bootstrap`) adds the watchdog: a notification when this job stops
-without DONE or a decision package sits unresolved, re-nagging every 30 min.
+For a detached Mac job, add `--install-launchd` to `supervise` and to `watch`,
+then run the printed `launchctl bootstrap` command. The job is one-shot: an
+operator stop (an EMPTY `ralph/STOP`) requires an explicit restart. Every
+terminal state is DONE, an operator stop, or an escalation; fixable blockers
+receive bounded resolutions, while ready `HUMAN-` rows remain operator-only.
+`python3 scripts/ralph.py watch --workdir . --label domains --install-launchd`
+adds the watchdog: needs-human, stopped-without-DONE, a stale heartbeat and low
+disk, re-nagging every 30 min.
 
 On the Fedora peer: `toolbox enter sovereign-vulkan` first and launch from
 inside it (opencode must be on its PATH); drop `--notify`, which is macOS-only.
@@ -84,7 +84,7 @@ O10 = `.sovereign/features/domains-10-serving-extract/order.md`
 - [x] dm-serving-dead-types 335609897 — depends [HUMAN-design-review] — DELETE from sovereign/crates/sovereign-serving the eleven zero-reference types O9's Objective bullet 1 lists, plus `Tier` and `TierQueueDepths`; run CALLERS on each first, and any caller outside sovereign-serving's own definitions and tests is §6 — read: O9 "Adjudicated 2026-09-14" bullet 1; O9 step 1 — check: LINT; TEST(sovereign-serving); TEST(sovereign-mesh-test-harness)
 - [x] dm-serving-meshplan-cascade efee46c25 — depends [dm-serving-dead-types] — DELETE what the previous row left dead: MeshPlan's orphaned fields, the four zero-caller store_adapter methods and the three zero-caller harness helpers, CALLERS on each — read: SB "What is enforced, and what is not", bullet "The `MeshPlan` cascade" — check: LINT; TEST(sovereign-serving); TEST(sovereign-mesh-test-harness)
 - [x] REVIEW-build-knowledge-assignment f8a2d3ebb — depends [dm-serving-meshplan-cascade] — MOVE sovereign-serving's knowledge_assignment module out by what it assigns (shards go to `sovereign-grants`, the mesh-foundation crate that owns shard assignment and already depends on corpus-engine; corpus-engine itself cannot host it because the planner names commonwealth-core), so sovereign-serving's Cargo.toml no longer names corpus-engine — read: O9 step 2 and its "Not worth continuing if" — check: LINT; LAYER; `./scripts/with-cargo-lock.sh cargo tree -p sovereign-serving -i corpus-engine` prints nothing
-- [ ] REVIEW-audit-2 — depends [dm-time-repoint-api, dm-time-repoint-mesh, dm-wire-repoint-mesh, REVIEW-build-knowledge-assignment, REVIEW-build-corpus-ceiling] — AUDIT wave 0 — check: TESTALL; PREPUSH
+- [~] REVIEW-audit-2 — depends [dm-time-repoint-api, dm-time-repoint-mesh, dm-wire-repoint-mesh, REVIEW-build-knowledge-assignment, REVIEW-build-corpus-ceiling] — AUDIT wave 0 — check: TESTALL; PREPUSH
 
 ## Wave 1 — sovereign-mesh: rented pods (Compute)
 
