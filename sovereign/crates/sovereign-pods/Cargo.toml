@@ -5,6 +5,16 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+hex = "0.4"
+sha2 = { workspace = true }
+ed25519-dalek = { workspace = true }
+rcgen = "0.13"
+base64 = "0.22"
+rand = "0.9"
+sovereign-time = { workspace = true }
 
 [lints]
 workspace = true

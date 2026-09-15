@@ -12642,6 +12642,7 @@ dependencies = [
  "sovereign-mesh-test-harness",
  "sovereign-meshapp",
  "sovereign-meshapp-registry",
+ "sovereign-pods",
  "sovereign-serving",
  "sovereign-store",
  "sovereign-time",
@@ -12758,6 +12759,18 @@ dependencies = [
 [[package]]
 name = "sovereign-pods"
 version = "0.7.0"
+dependencies = [
+ "base64 0.22.1",
+ "ed25519-dalek 2.2.0",
+ "hex",
+ "rand 0.9.4",
+ "rcgen 0.13.2",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sovereign-time",
+ "thiserror 2.0.18",
+]
 
 [[package]]
 name = "sovereign-recipe-author"

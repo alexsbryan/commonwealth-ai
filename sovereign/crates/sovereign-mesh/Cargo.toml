@@ -118,6 +118,10 @@ sovereign-core = { workspace = true }
 # The Tier-0 wall-clock leaf, named directly rather than reached through the
 # `sovereign_core::time` re-export (domains row dm-time-repoint-mesh).
 sovereign-time = { workspace = true }
+# The rented-pod modules lifted out of this crate (domains row
+# dm-pods-move-worker-pod); reached through the shim in lib.rs until the
+# remaining pod modules land and importers repoint.
+sovereign-pods = { path = "../sovereign-pods" }
 # RemoteApiProvider — synthesised at request time when routing to
 # a peer for federated inference.
 sovereign-inference = { workspace = true }

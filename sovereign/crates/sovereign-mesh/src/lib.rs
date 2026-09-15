@@ -154,7 +154,7 @@ pub mod worker_controller;
 pub mod worker_daemon;
 pub mod worker_http;
 pub mod worker_inference_proxy;
-pub mod worker_pod;
+pub use sovereign_pods::worker_pod; // shim: moved by domains dm-pods-move-worker-pod
 pub mod worker_subprocess_runner;
 // Pinned-pod inference routing — lets ephemeral worker pods join the
 // mesh scheduler's inference pool as one more peer, scored by the
