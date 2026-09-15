@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use futures::Stream;
-use sovereign_api::openai_types::ChatCompletionRequest;
+use oicp_types::openai_types::ChatCompletionRequest;
 use sovereign_api::state::LocalInferenceService;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{

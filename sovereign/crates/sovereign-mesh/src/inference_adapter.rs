@@ -21,7 +21,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use futures::{Stream, StreamExt};
-use sovereign_api::openai_types::{
+use oicp_types::openai_types::{
     self as wire, ChatChoice, ChatCompletionRequest, ChatCompletionResponse, ChatMessage,
     FunctionCall, Role, ToolCall, Usage,
 };
@@ -1305,7 +1305,7 @@ impl LocalInferenceService for SovereignInferenceAdapter {
         &self,
         mut request: ChatCompletionRequest,
     ) -> Result<
-        Pin<Box<dyn Stream<Item = sovereign_api::openai_types::StreamFrame> + Send>>,
+        Pin<Box<dyn Stream<Item = oicp_types::openai_types::StreamFrame> + Send>>,
         LocalInferenceError,
     > {
         let tools_present = request.tools.as_ref().is_some_and(|t| !t.is_empty());
@@ -1368,7 +1368,7 @@ impl LocalInferenceService for SovereignInferenceAdapter {
             .map_err(map_provider_error)?;
         tracing::info!("sovereign inference adapter: typed streaming started");
         // Translate sovereign_core::types::StreamFrame →
-        // sovereign_api::openai_types::StreamFrame. The two
+        // oicp_types::openai_types::StreamFrame. The two
         // shapes are identical by design (see openai_types.rs);
         // translation is a per-variant copy.
         let mapped = inner.map(translate_stream_frame);
@@ -1554,7 +1554,7 @@ mod guard_tests {
 #[cfg(test)]
 mod adapter_translation_tests {
     use super::{strip_tool_call_blocks, SovereignInferenceAdapter};
-    use sovereign_api::openai_types::{
+    use oicp_types::openai_types::{
         ChatCompletionRequest, ChatMessage, FunctionCall, ToolCall, ToolDefinition, ToolFunction,
     };
 

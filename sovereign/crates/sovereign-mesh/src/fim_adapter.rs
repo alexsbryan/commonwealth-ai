@@ -32,7 +32,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use futures::StreamExt;
-use sovereign_api::openai_types::{self as wire};
+use oicp_types::openai_types::{self as wire};
 use sovereign_api::state::{EditSlotStatus, FimCompletionRequest, FimStreamStart};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{
