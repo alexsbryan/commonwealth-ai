@@ -201,7 +201,11 @@ pub struct SovereignInferenceAdapter {
 /// serving package's two grandfathered exceptions are `sovereign-inference`
 /// and `commonwealth-core`, and a third means the boundary is drawn in the
 /// wrong place). The host names the port; this side supplies the manifest.
-struct CoreSlotManifest;
+///
+/// `pub(crate)` because `peer_inference` supplies the same adapter to the
+/// host's `oicp_synthesis::build_self_manifest` (moved by domains
+/// REVIEW-build-serving-move-synthesis): one manifest reader, one name.
+pub(crate) struct CoreSlotManifest;
 
 impl sovereign_serving_host::slot_select::SlotManifest for CoreSlotManifest {
     fn capabilities_for_file(&self, file: &str) -> Option<oicp_types::CapabilityProfile> {
@@ -1417,6 +1421,7 @@ impl LocalInferenceService for SovereignInferenceAdapter {
     fn provider_manifest(&self) -> Option<ProviderManifest> {
         Some(crate::oicp_synthesis::build_self_manifest(
             self.provider.as_ref(),
+            &CoreSlotManifest,
         ))
     }
 

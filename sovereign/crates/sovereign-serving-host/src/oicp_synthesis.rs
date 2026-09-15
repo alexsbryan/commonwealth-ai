@@ -9,12 +9,14 @@
 //! (local-side self-scoring) consume the same builder so the two
 //! views can't drift.
 
-use sovereign_core::traits::{InferenceProvider, ResidentSlot};
-use sovereign_core::types::Speed;
-use sovereign_serving::oicp::{
+use oicp_types::{
     Capability, CapabilityClaim, CapabilityHint, CapabilityProfile, LatencyClass, ModelStatus,
     ProviderInfo, ProviderManifest, ProviderModel, ProviderType, OICP_VERSION,
 };
+use sovereign_contracts::traits::{InferenceProvider, ResidentSlot};
+use sovereign_contracts::types::Speed;
+
+use crate::slot_select::SlotManifest;
 
 /// This node's live residency for the slot backing `backing_model_id`,
 /// **read** from the provider rather than asserted.
@@ -116,7 +118,10 @@ pub fn resolve_primary_model_name(provider: &dyn InferenceProvider) -> String {
 /// consults it. Duplicate entries (same model id in Fast + Slow
 /// — happens when the provider collapses slots) are coalesced to
 /// one, since the OICP scorer treats identical models identically.
-pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest {
+pub fn build_self_manifest(
+    provider: &dyn InferenceProvider,
+    manifest: &dyn SlotManifest,
+) -> ProviderManifest {
     let mut seen_ids = std::collections::HashSet::new();
     let mut models: Vec<ProviderModel> = Vec::new();
     // Read residency ONCE for the whole manifest, so every row below
@@ -173,7 +178,7 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
         if !seen_ids.insert(model_name.clone()) {
             continue;
         }
-        let info = sovereign_core::models_manifest::DEFAULT_MANIFEST.info_for_file(&model_name);
+        let info = manifest.info_for_file(&model_name);
         let (capabilities, size_gb) = match info {
             Some(slot) => (slot.capabilities, slot.size_gb),
             None => {
@@ -231,8 +236,7 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
     // appear as a candidate.
     let slow_model_name = provider.model_id_for(Speed::Slow);
     if !slow_model_name.is_empty() && slow_model_name != "unknown" {
-        let info =
-            sovereign_core::models_manifest::DEFAULT_MANIFEST.info_for_file(&slow_model_name);
+        let info = manifest.info_for_file(&slow_model_name);
         let (capabilities, size_gb) = match info {
             Some(slot) => (slot.capabilities, slot.size_gb),
             None => {
@@ -242,7 +246,7 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
                 (caps, None)
             }
         };
-        for alias_id in crate::slot_aliases::advertised_alias_ids("primary") {
+        for alias_id in sovereign_scheduler::slot_aliases::advertised_alias_ids("primary") {
             if !seen_ids.insert(alias_id.clone()) {
                 continue;
             }
@@ -290,8 +294,7 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
     // block's gate.
     let fast_model_name = provider.model_id_for(Speed::Fast);
     if !fast_model_name.is_empty() && fast_model_name != "unknown" {
-        let info =
-            sovereign_core::models_manifest::DEFAULT_MANIFEST.info_for_file(&fast_model_name);
+        let info = manifest.info_for_file(&fast_model_name);
         let (capabilities, size_gb) = match info {
             Some(slot) => (slot.capabilities, slot.size_gb),
             None => {
@@ -301,7 +304,7 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
                 (caps, None)
             }
         };
-        for alias_id in crate::slot_aliases::advertised_alias_ids("fast") {
+        for alias_id in sovereign_scheduler::slot_aliases::advertised_alias_ids("fast") {
             if !seen_ids.insert(alias_id.clone()) {
                 continue;
             }
@@ -346,7 +349,7 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
     // hot this row correctly reads cold.
     if let Some(code_name) = provider.code_model_id() {
         if !code_name.is_empty() && code_name != "unknown" && seen_ids.insert(code_name.clone()) {
-            let info = sovereign_core::models_manifest::DEFAULT_MANIFEST.info_for_file(&code_name);
+            let info = manifest.info_for_file(&code_name);
             let (capabilities, size_gb) = match info {
                 Some(slot) => (slot.capabilities, slot.size_gb),
                 None => {
@@ -402,8 +405,7 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
         {
             continue;
         }
-        let info =
-            sovereign_core::models_manifest::DEFAULT_MANIFEST.info_for_file(&extras_model_id);
+        let info = manifest.info_for_file(&extras_model_id);
         let (capabilities, size_gb) = match info {
             Some(slot) => (slot.capabilities, slot.size_gb),
             None => {
@@ -469,11 +471,11 @@ fn manifest_of(provider_name: String, models: Vec<ProviderModel>) -> ProviderMan
         // peers can negotiate (§2.1) instead of guessing — previously
         // `Vec::new()`, which left the whole mesh blind to feature
         // support and forced the forced-choice scheduler filter to fail
-        // open. Single source of truth is commonwealth-api's
-        // `EMBEDDED_FEATURES` (mesh nodes run the embedded llama.cpp
-        // path); the HTTP `/oicp/v1/capabilities` route derives from the
-        // same const via `apply_v04_enrichment`.
-        features: sovereign_api::routes_oicp::EMBEDDED_FEATURES
+        // open. Single source of truth is `oicp_types::features::EMBEDDED_FEATURES`
+        // (mesh nodes run the embedded llama.cpp path); the HTTP
+        // `/oicp/v1/capabilities` route derives from the same const via
+        // `apply_v04_enrichment`.
+        features: oicp_types::features::EMBEDDED_FEATURES
             .iter()
             .map(|s| s.to_string())
             .collect(),
@@ -625,13 +627,27 @@ mod self_manifest_tests {
     use super::{build_self_manifest, synthesize_code_slot_claims};
     use async_trait::async_trait;
     use futures::Stream;
-    use sovereign_core::traits::{InferenceProvider, ResidentSlot};
-    use sovereign_core::types::{
+    use oicp_types::{Capability, CapabilityHint, CapabilityProfile, LatencyClass};
+    use sovereign_contracts::traits::{InferenceProvider, ResidentSlot};
+    use sovereign_contracts::types::{
         CompletionRequest, CompletionResponse, Depth, ProviderCapabilities, Speed,
     };
-    use sovereign_core::Result;
-    use sovereign_serving::oicp::{Capability, CapabilityHint, CapabilityProfile, LatencyClass};
+    use sovereign_contracts::Result;
     use std::pin::Pin;
+
+    /// The manifest port stub: no file is annotated, so every slot takes the
+    /// BYOM default branch — the same branch `DEFAULT_MANIFEST` took for these
+    /// synthetic ids before the manifest arrived through the port.
+    struct NoManifest;
+
+    impl crate::slot_select::SlotManifest for NoManifest {
+        fn capabilities_for_file(&self, _file: &str) -> Option<CapabilityProfile> {
+            None
+        }
+        fn info_for_file(&self, _file: &str) -> Option<crate::slot_select::SlotManifestInfo> {
+            None
+        }
+    }
 
     /// Minimal stub that mimics the three-slot shape: fast + primary
     /// + optional code. We intentionally don't need a real model —
@@ -714,7 +730,7 @@ mod self_manifest_tests {
             code_id: None,
             slots: WARM_FAST_AND_PRIMARY,
         };
-        let manifest = build_self_manifest(&stub);
+        let manifest = build_self_manifest(&stub, &NoManifest);
         // No model in the manifest carries a `code` claim when
         // the provider has no code slot configured.
         let any_code_claim = manifest
@@ -763,7 +779,7 @@ mod self_manifest_tests {
             // The weightless case: names resolve, residency is empty.
             slots: &[],
         };
-        let manifest = build_self_manifest(&stub);
+        let manifest = build_self_manifest(&stub, &NoManifest);
         assert!(
             manifest.models.is_empty(),
             "a provider holding no weights advertised {} model(s) — peers would \
@@ -779,7 +795,7 @@ mod self_manifest_tests {
         // path's honoured features (previously `Vec::new()`), so peers
         // can negotiate `x:forced_choice` instead of the scheduler
         // failing open. The list is the single-source-of-truth
-        // `EMBEDDED_FEATURES` const from commonwealth-api, shared with
+        // `EMBEDDED_FEATURES` const from `oicp-types`, shared with
         // the HTTP `/oicp/v1/capabilities` route.
         let stub = SlotStub {
             fast_id: "fast.Q4_0",
@@ -787,22 +803,22 @@ mod self_manifest_tests {
             code_id: None,
             slots: WARM_FAST_AND_PRIMARY,
         };
-        let manifest = build_self_manifest(&stub);
+        let manifest = build_self_manifest(&stub, &NoManifest);
         assert!(
             manifest
                 .features
                 .iter()
-                .any(|f| f.as_str() == sovereign_core::oicp::features::X_FORCED_CHOICE),
+                .any(|f| f.as_str() == oicp_types::features::X_FORCED_CHOICE),
             "gossip manifest must advertise x:forced_choice: {:?}",
             manifest.features
         );
         assert_eq!(
             manifest.features,
-            sovereign_api::routes_oicp::EMBEDDED_FEATURES
+            oicp_types::features::EMBEDDED_FEATURES
                 .iter()
                 .map(|s| s.to_string())
                 .collect::<Vec<_>>(),
-            "gossip features must mirror commonwealth-api EMBEDDED_FEATURES"
+            "gossip features must mirror oicp-types EMBEDDED_FEATURES"
         );
     }
 
@@ -820,7 +836,7 @@ mod self_manifest_tests {
             code_id: None,
             slots: WARM_FAST_AND_PRIMARY,
         };
-        let manifest = build_self_manifest(&stub);
+        let manifest = build_self_manifest(&stub, &NoManifest);
         let alias_ids: Vec<&str> = manifest
             .models
             .iter()
@@ -899,7 +915,7 @@ mod self_manifest_tests {
                 ("primary.Q5_K_M", false, false),
             ],
         };
-        let manifest = build_self_manifest(&stub);
+        let manifest = build_self_manifest(&stub, &NoManifest);
 
         for id in ["primary.Q5_K_M", "commonwealth/primary", "primary"] {
             let m = manifest
@@ -947,7 +963,7 @@ mod self_manifest_tests {
             // Fast is mid load/unload; primary is absent from the report.
             slots: &[("fast.Q4_0", true, true)],
         };
-        let manifest = build_self_manifest(&stub);
+        let manifest = build_self_manifest(&stub, &NoManifest);
 
         let fast = manifest
             .models
@@ -995,7 +1011,7 @@ mod self_manifest_tests {
                 ("primary.Q5_K_M", false, false),
             ],
         };
-        let manifest = build_self_manifest(&stub);
+        let manifest = build_self_manifest(&stub, &NoManifest);
         assert!(
             !manifest.models.is_empty(),
             "guard is vacuous if the manifest is empty"
@@ -1024,7 +1040,7 @@ mod self_manifest_tests {
             // code-slot assertion below is actually about.
             slots: WARM_FAST_AND_PRIMARY,
         };
-        let manifest = build_self_manifest(&stub);
+        let manifest = build_self_manifest(&stub, &NoManifest);
         // fast + primary GGUF + 2 primary aliases + 2 fast aliases + code = 7.
         assert_eq!(
             manifest.models.len(),
@@ -1082,7 +1098,7 @@ mod self_manifest_tests {
                 ("qwen-coder-32b-instruct.Q4_K_M", true, false),
             ],
         };
-        let manifest = build_self_manifest(&stub);
+        let manifest = build_self_manifest(&stub, &NoManifest);
         let code_model = manifest
             .models
             .iter()
@@ -1117,7 +1133,7 @@ mod self_manifest_tests {
             code_id: Some("shared.Q5_K_M"),
             slots: &[("fast.Q4_0", true, false), ("shared.Q5_K_M", true, false)],
         };
-        let manifest = build_self_manifest(&stub);
+        let manifest = build_self_manifest(&stub, &NoManifest);
         let ids: Vec<_> = manifest.models.iter().map(|m| m.id.clone()).collect();
         let mut uniq = ids.clone();
         uniq.sort();
@@ -1175,7 +1191,9 @@ mod self_manifest_tests {
     /// resolution map (also table-derived) may not honour.
     #[test]
     fn manifest_advertises_exactly_the_policy_alias_set() {
-        use crate::slot_aliases::{advertised_alias_ids, resolution_alias_keys, SLOT_ALIAS_POLICY};
+        use sovereign_scheduler::slot_aliases::{
+            advertised_alias_ids, resolution_alias_keys, SLOT_ALIAS_POLICY,
+        };
 
         let stub = SlotStub {
             fast_id: "fast.Q4_0",
@@ -1186,7 +1204,7 @@ mod self_manifest_tests {
             // code-slot assertion below is actually about.
             slots: WARM_FAST_AND_PRIMARY,
         };
-        let manifest = build_self_manifest(&stub);
+        let manifest = build_self_manifest(&stub, &NoManifest);
         let manifest_ids: std::collections::HashSet<&str> =
             manifest.models.iter().map(|m| m.id.as_str()).collect();
 
@@ -1252,7 +1270,7 @@ mod self_manifest_tests {
                 ("chat-primary.Q5_K_M", true, false),
             ],
         };
-        let manifest = build_self_manifest(&stub);
+        let manifest = build_self_manifest(&stub, &NoManifest);
         let provider = manifest.provider.expect("provider block populated");
         assert_eq!(
             provider.name.as_deref(),

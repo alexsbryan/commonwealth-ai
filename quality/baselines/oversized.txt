@@ -149,7 +149,7 @@
 1614	sovereign/crates/sovereign-mesh/src/iroh_access.rs
 1825	sovereign/crates/sovereign-mesh/src/mesh_http.rs
 2394	sovereign/crates/sovereign-mesh/src/mesh_sim/mod.rs
-1264	sovereign/crates/sovereign-mesh/src/oicp_synthesis.rs
+1264	sovereign/crates/sovereign-serving-host/src/oicp_synthesis.rs
 5399	sovereign/crates/sovereign-mesh/src/peer_inference.rs
 2150	sovereign/crates/sovereign-mesh/src/reindexer.rs
 2031	sovereign/crates/sovereign-mesh/src/ring_sync.rs

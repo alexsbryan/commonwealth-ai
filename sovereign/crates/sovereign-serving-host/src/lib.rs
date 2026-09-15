@@ -10,6 +10,7 @@
 pub mod guest_lender;
 pub mod ledger;
 pub mod model_fetch;
+pub mod oicp_synthesis;
 pub mod prompt_compactor;
 pub mod recorder;
 pub mod slot_select;

@@ -70,6 +70,7 @@ use crate::decision_log::{
     self, DecisionBuilder, DecisionPath, DecisionSink, OutcomeContext, RequestFacts, ServedBy,
     Verdict,
 };
+use crate::inference_adapter::CoreSlotManifest;
 use crate::local_inflight::{LocalInflightGuard, LocalTotalGuard};
 use crate::oicp_synthesis::build_self_manifest;
 use crate::scheduler_core::{
@@ -571,7 +572,7 @@ impl MeshInferenceProvider {
     /// observe that one happened. The causes are few and all interesting: a slot
     /// hot-loaded, a compute child reaching Serving, a child retired.
     pub fn refresh_self_manifest_because(&self, cause: &str) {
-        let new_manifest = build_self_manifest(self.local.as_ref());
+        let new_manifest = build_self_manifest(self.local.as_ref(), &CoreSlotManifest);
         tracing::info!(
             target: "compute_child",
             models = new_manifest.models.len(),
@@ -598,7 +599,7 @@ impl MeshInferenceProvider {
             ids.sort();
             ids
         };
-        let fresh_manifest = build_self_manifest(self.local.as_ref());
+        let fresh_manifest = build_self_manifest(self.local.as_ref(), &CoreSlotManifest);
         let fresh: Vec<String> = {
             let mut ids: Vec<String> = fresh_manifest.models.iter().map(|m| m.id.clone()).collect();
             ids.sort();
@@ -627,7 +628,7 @@ impl MeshInferenceProvider {
         mesh: Arc<dyn VenueSource>,
         host: Arc<dyn VenueHost>,
     ) -> Self {
-        let self_manifest = build_self_manifest(local.as_ref());
+        let self_manifest = build_self_manifest(local.as_ref(), &CoreSlotManifest);
         tracing::info!(
             models = self_manifest.models.len(),
             "mesh-inference: wrapper initialised (OICP-driven)"

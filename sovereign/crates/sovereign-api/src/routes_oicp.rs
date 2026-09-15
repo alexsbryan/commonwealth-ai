@@ -4,7 +4,7 @@ use axum::http::HeaderMap;
 use axum::Json;
 
 use commonwealth_core::ids::NodeId;
-use sovereign_serving::oicp::features;
+use sovereign_serving::oicp::features::{self, EMBEDDED_FEATURES};
 use sovereign_serving::oicp::{
     Capability, CapabilityClaim, CapabilityHint, CapabilityProfile, CorpusDescriptor,
     FederationManifest, IngestEndpoints, KnowledgeManifest, LatencyClass, ModelStatus,
@@ -96,28 +96,12 @@ pub(crate) fn synthesize_default_claims(
     }
 }
 
-/// OICP v0.4 §2.1 features the *embedded* llama.cpp inference path
-/// honours. The embedded sampler enforces JSON-Schema and Lark grammars
-/// and the sampler allow-lists, consumes the `oicp` request envelope,
-/// honours `think_budget`, and stamps model fingerprints — the full set.
-/// Exposed `pub` so the mesh gossip manifest (`oicp_synthesis::
-/// build_self_manifest`) advertises the identical set instead of
-/// re-deriving it — one source of truth for "what the embedded path can
-/// do", reachable over the existing `sovereign-mesh → commonwealth-api`
-/// cargo edge (SLOT_POLICY §6).
-pub const EMBEDDED_FEATURES: &[&str] = &[
-    features::CONSTRAINT_JSON_SCHEMA,
-    features::CONSTRAINT_JSON_OBJECT,
-    features::CONSTRAINT_LARK,
-    features::CONSTRAINT_ALLOWLIST_URL,
-    features::CONSTRAINT_ALLOWLIST_EVIDENCE_ID,
-    features::CONSTRAINT_ALLOWLIST_CMD_PREFIX,
-    features::THINK_BUDGET,
-    features::OICP_REQUEST_PROPERTIES,
-    // Commonwealth-local: the embedded path answers the forced-choice
-    // sentinel with a one-pass calibrated distribution (see model_slot).
-    features::X_FORCED_CHOICE,
-];
+// `EMBEDDED_FEATURES` lives in `oicp-types::features` (moved by domains
+// REVIEW-build-serving-move-synthesis): the serving host's gossip manifest
+// (`oicp_synthesis::build_self_manifest`) reads the identical set, and the
+// host may not name `sovereign-api` (SERVING_BOUNDARY.md rule 4). Imported
+// above through the `sovereign_serving::oicp::features` re-export — one
+// source of truth for "what the embedded path can do" (SLOT_POLICY §6).
 
 /// Conservative feature set for the standalone-Commonwealth orchestrator
 /// path, which may front heterogeneous backends. We claim only what any

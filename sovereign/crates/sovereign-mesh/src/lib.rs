@@ -91,7 +91,7 @@ pub use sovereign_serving_host::model_fetch; // shim: moved by domains dm-servin
 pub mod newsworthy_host;
 pub mod notes_http;
 pub(crate) use sovereign_scheduler::oicp_select; // shim: moved by domains REVIEW-build-sched-move
-pub mod oicp_synthesis;
+pub use sovereign_serving_host::oicp_synthesis; // shim: moved by domains REVIEW-build-serving-move-synthesis
 pub mod origin_fanout;
 /// The mesh implementations of `sovereign-contracts::peer`'s two ports — the
 /// N>1 half of what the daemon speaks to its peers through (cw-lift 3b).

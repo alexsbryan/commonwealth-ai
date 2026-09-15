@@ -641,7 +641,7 @@ lines = 664
 note = "mostly a renaming shim over oicp-types::scoring (:32)"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/oicp_synthesis.rs"
+path = "sovereign/crates/sovereign-serving-host/src/oicp_synthesis.rs"
 context = "serving"
 lines = 1264
 note = ""

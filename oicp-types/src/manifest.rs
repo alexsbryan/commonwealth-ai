@@ -61,6 +61,33 @@ pub mod features {
     /// dispatch (SLOT_POLICY §6).
     pub const X_FORCED_CHOICE: &str = "x:forced_choice";
 
+    /// OICP v0.4 §2.1 features the *embedded* llama.cpp inference path
+    /// honours. The embedded sampler enforces JSON-Schema and Lark grammars
+    /// and the sampler allow-lists, consumes the `oicp` request envelope,
+    /// honours `think_budget`, and stamps model fingerprints — the full set.
+    ///
+    /// One source of truth for "what the embedded path can do": the HTTP
+    /// `/oicp/v1/capabilities` route (`sovereign-api`'s `routes_oicp::
+    /// apply_v04_enrichment`) and the mesh gossip manifest
+    /// (`sovereign-serving-host`'s `oicp_synthesis::build_self_manifest`)
+    /// both advertise this identical set rather than re-deriving it
+    /// (SLOT_POLICY §6). It lives here, in the shared leaf both sides already
+    /// name, because the host may not reach the API crate (SERVING_BOUNDARY.md
+    /// rule 4) and the API crate may not reach the host.
+    pub const EMBEDDED_FEATURES: &[&str] = &[
+        CONSTRAINT_JSON_SCHEMA,
+        CONSTRAINT_JSON_OBJECT,
+        CONSTRAINT_LARK,
+        CONSTRAINT_ALLOWLIST_URL,
+        CONSTRAINT_ALLOWLIST_EVIDENCE_ID,
+        CONSTRAINT_ALLOWLIST_CMD_PREFIX,
+        THINK_BUDGET,
+        OICP_REQUEST_PROPERTIES,
+        // Commonwealth-local: the embedded path answers the forced-choice
+        // sentinel with a one-pass calibrated distribution (see model_slot).
+        X_FORCED_CHOICE,
+    ];
+
     /// Extension-feature prefix (§2.1). A host MAY advertise
     /// `x:`-prefixed features not registered in this crate build.
     pub const EXTENSION_PREFIX: &str = "x:";
