@@ -1031,7 +1031,7 @@ impl DecisionBuilder {
     /// from the wall clock.
     ///
     /// Production calls `finish`. A *simulated* decider
-    /// (`crate::mesh_sim`) runs on virtual time, and a record stamped
+    /// (the mesh simulator) runs on virtual time, and a record stamped
     /// with the host's wall clock would be unorderable against the
     /// episode it belongs to — the scoreboard reads `ts_unix_ms` to
     /// build per-window herding and fairness series, so the sim's

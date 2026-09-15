@@ -230,8 +230,8 @@ impl SchedulerTrace {
     }
 
     /// Attach a P3 snapshot taken out-of-band (a test fixture, or a
-    /// one-shot [`crate::peer_inference::MeshInferenceProvider::observation_snapshot`]
-    /// call) to a trace that has none.
+    /// one-shot `MeshInferenceProvider::observation_snapshot` call in the
+    /// mesh host) to a trace that has none.
     pub fn with_snapshot(mut self, snapshot: FleetSnapshot) -> Self {
         self.snapshots.push(snapshot);
         self.snapshots.sort_by_key(|s| s.captured_at_unix);

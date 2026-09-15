@@ -22,9 +22,9 @@ use tokio::sync::RwLock;
 /// Where a `ThroughputObservedStream` should write its measurements
 /// when it terminates: either onto the local-side single
 /// `NodeObservations` slot, or onto the per-peer map keyed by name.
-/// Mirrors the dual storage already present on
-/// [`crate::peer_inference::MeshInferenceProvider::peer_observations`] /
-/// [`crate::peer_inference::MeshInferenceProvider::local_observations`].
+/// Mirrors the dual storage already present on the mesh host's
+/// `MeshInferenceProvider::peer_observations` /
+/// `MeshInferenceProvider::local_observations`.
 #[derive(Clone)]
 pub(crate) enum ThroughputTarget {
     Local(Arc<RwLock<NodeObservations>>),
@@ -41,7 +41,7 @@ pub(crate) enum ThroughputTarget {
 /// `None` — the dimensional ledger is intra-mesh-only per spec
 /// §10, and a "received from self" event is meaningless.
 ///
-/// `pub` because the [`crate::peer_inference::PeerEndpointSource`]
+/// `pub` because the mesh host's `PeerEndpointSource`
 /// trait method `ledger_emission_for` returns `Option<LedgerEmission>`
 /// — implementors outside this module need to construct values of
 /// this type. Fields stay `pub(crate)` so the construction shape

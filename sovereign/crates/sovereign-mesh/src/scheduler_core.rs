@@ -15,7 +15,7 @@
 //!   - **Production** — `MeshInferenceProvider::select_peers_ranked`
 //!     gathers the snapshot (manifest fetches, quarantine state, the
 //!     gossiped endpoint fields) and calls [`rank`].
-//!   - **Tier 1** — `crate::mesh_sim` builds the same snapshot from a
+//!   - **Tier 1** — the mesh simulator builds the same snapshot from a
 //!     simulated fleet and calls [`rank`]. Arm 0 of the sim is
 //!     therefore *the production decision*, not a transcription of
 //!     it, which is what makes "F1/F3/F5 reproduce" a falsifiable

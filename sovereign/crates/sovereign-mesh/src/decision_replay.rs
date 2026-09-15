@@ -69,10 +69,9 @@
 //! a test: it has a known answer.
 //!
 //! On a *hardware* capture the same 1.000 is the S1 gate itself, and
-//! it may only be computed from [`RecordMetrics`]-style facts — never
-//! from anything a production capture cannot carry.
-//!
-//! [`RecordMetrics`]: crate::mesh_sim::scoreboard
+//! it may only be computed from `RecordMetrics`-style facts (the mesh
+//! simulator's scoreboard) — never from anything a production capture
+//! cannot carry.
 
 use sovereign_core::oicp::{score_with_adjustments, BenchmarkResult, NodeObservations};
 
