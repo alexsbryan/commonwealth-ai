@@ -540,7 +540,9 @@ fn skill_registry_merge_memory_rules() {
 #[tokio::test]
 async fn build_context_new_conversation() {
     let store = MockStore::new();
-    let ctx = build_context(&store, "new-convo", "", PrincipalScope::Unscoped).await.unwrap();
+    let ctx = build_context(&store, "new-convo", "", PrincipalScope::Unscoped)
+        .await
+        .unwrap();
     assert_eq!(ctx.conversation.id, "new-convo");
     assert!(ctx.conversation.messages.is_empty());
     assert!(ctx.memories.is_empty());
@@ -563,7 +565,9 @@ async fn build_context_existing_conversation() {
         .await
         .unwrap();
 
-    let ctx = build_context(&store, "c1", "hello", PrincipalScope::Unscoped).await.unwrap();
+    let ctx = build_context(&store, "c1", "hello", PrincipalScope::Unscoped)
+        .await
+        .unwrap();
     assert_eq!(ctx.conversation.messages.len(), 1);
     assert_eq!(ctx.conversation.messages[0].content, "hello");
 }
