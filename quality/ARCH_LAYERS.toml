@@ -210,6 +210,10 @@ crates = [
     # Supervised compute-child process boundary (P1). Depends on
     # sovereign-inference (same layer) + sovereign-contracts (lower).
     "sovereign-compute",
+    # Compute's remote isolation: leasing a rented machine and running work on
+    # it (DOMAINS.md §11.2). Holds the rented-pod modules lifted out of
+    # sovereign-mesh.
+    "sovereign-pods",
     # GLiNER NER inference (ort/gline-rs carve-out). Depends on sovereign-core
     # + sovereign-store (same layer) + corpus-engine (lower); consumed from
     # capabilities (sovereign-tools) and hosts.

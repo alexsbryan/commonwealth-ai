@@ -120,6 +120,10 @@ members = [
     # native lossless wire + child server/entrypoint + daemon-side provider
     # facade & replica pool.
     "sovereign/crates/sovereign-compute",
+    # Compute's remote isolation — leasing a rented machine and running work on
+    # it (DOMAINS.md §11.2). Receives the worker_pod / worker_http / controller
+    # / daemon / subprocess-runner / multi-pod-coordinator modules.
+    "sovereign/crates/sovereign-pods",
     "sovereign/crates/sovereign-service",
     "sovereign/crates/sovereign-server",
     "sovereign/crates/sovereign-desktop/src-tauri",

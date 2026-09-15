@@ -12756,6 +12756,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "sovereign-pods"
+version = "0.7.0"
+
+[[package]]
 name = "sovereign-recipe-author"
 version = "0.1.0"
 dependencies = [
