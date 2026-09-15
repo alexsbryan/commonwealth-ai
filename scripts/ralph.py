@@ -27,6 +27,7 @@ import signal
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 HASH_RE = re.compile(r"^[0-9a-f]{7,40}$")
 ROW_RE = re.compile(
@@ -69,6 +70,45 @@ def first_line(path) -> str:
         return p.read_text().splitlines()[0]
     except (OSError, IndexError):
         return ""
+
+
+def halt(paths, reason, *, notifier=notify, notify_enabled=True):
+    """The one halt: a package, a reason in STOP, a notification. Shared by
+    the campaign and the pool so neither can invent a quieter stop."""
+    pkg = paths.p(paths.needs_human)
+    pkg.parent.mkdir(parents=True, exist_ok=True)
+    pkg.write_text(f"# {reason}\n\nresolve by hand, then remove "
+                   f"{paths.stop} {paths.needs_human}\n")
+    if not pkg.stat().st_size:
+        say(f"HALT could not write {pkg} (disk full?) — no decision package exists")
+        notifier("halt-unwritable", reason, notify_enabled)
+    paths.p(paths.stop).write_text(f"halt: {reason}\n")
+    say(f"HALT: {reason}")
+    notifier("HALT", reason, notify_enabled)
+    return Result(Outcome.HALT, reason)
+
+
+def wait_for_marker(paths, marker_timeout):
+    """None to proceed, "wait" to yield this tick, or a reason string to halt."""
+    waiting = paths.p(paths.waiting)
+    if not waiting.exists():
+        return None
+    m = re.search(r"[A-Za-z0-9._/-]+\.done", waiting.read_text())
+    if not m:
+        say("ralph/waiting names no *.done marker — ignoring it")
+        waiting.unlink()
+        return None
+    marker = paths.p(m.group(0))
+    if marker.exists():
+        say(f"{marker} present — resuming")
+        waiting.unlink()
+        return None
+    age = int(time.time() - waiting.stat().st_mtime)
+    if age >= marker_timeout:
+        return (f"waiting on {marker} for {age}s (limit {marker_timeout}s) "
+                "— the detached run never wrote its marker")
+    say(f"waiting on {marker} (no session this tick, {age}s)")
+    return "wait"
 
 
 class Status(enum.Enum):
@@ -144,6 +184,48 @@ class Queue:
                 return r
         return None
 
+    def status_of(self, row_id):
+        return self.by_id()[row_id].status
+
+    def set_status(self, row_id, status):
+        """Rewrite one row's checkbox, preserving the rest of the line."""
+        row = self.by_id()[row_id]
+        lines = self.path.read_text().splitlines()
+        old = lines[row.lineno - 1]
+        if old[:5] != f"- [{row.status.value}]":
+            raise ValueError(f"{self.path}:{row.lineno}: row moved under set_status")
+        lines[row.lineno - 1] = f"- [{status.value}]" + old[5:]
+        self.path.write_text("\n".join(lines) + "\n")
+        self.rows = self._parse()
+
+    def all_done(self):
+        return all(r.status is Status.DONE for r in self.rows)
+
+    def first_ready_review(self):
+        for r in self.rows:
+            if (r.status in (Status.PENDING, Status.ACTIVE)
+                    and r.id.startswith("REVIEW-") and self.deps_met(r)):
+                return r
+        return None
+
+    def pick_wave(self, lanes, conflicts):
+        """Ready non-review units, up to `lanes`, no conflicting pair.
+        `[~]` rows are resumable lanes: a killed session leaves one behind."""
+        wave = []
+        for r in self.rows:
+            if len(wave) >= lanes:
+                break
+            if r.status not in (Status.PENDING, Status.ACTIVE):
+                continue
+            if r.id.startswith("REVIEW-"):
+                continue
+            if not self.deps_met(r):
+                continue
+            if any(frozenset((r.id, w)) in conflicts for w in wave):
+                continue
+            wave.append(r.id)
+        return wave
+
 
 MODEL_KEYS = ("MODEL", "REVIEW_MODEL", "VARIANT")
 
@@ -195,13 +277,14 @@ class Session:
     timeout, a STOP check, a heartbeat, and permission-reject detection."""
 
     def __init__(self, paths, *, timeout=3600, opencode=None, poll=30,
-                 notifier=notify, notify_enabled=True):
+                 notifier=notify, notify_enabled=True, cwd=None):
         self.paths = paths
         self.timeout = timeout
         self.opencode = opencode or os.environ.get("RALPH_OPENCODE_BIN", "opencode")
         self.poll = poll
         self.notifier = notifier
         self.notify_enabled = notify_enabled
+        self.cwd = pathlib.Path(cwd) if cwd else paths.workdir
 
     def heartbeat(self, context):
         try:
@@ -210,7 +293,7 @@ class Session:
             pass
 
     def run(self, model_args, prompt_text, log_path):
-        workdir = str(self.paths.workdir)
+        workdir = str(self.cwd)
         status = subprocess.run(["git", "-C", workdir, "status", "--porcelain"],
                                 capture_output=True, text=True).stdout
         note = ""
@@ -289,38 +372,8 @@ class Campaign:
         self.variant = variant
 
     def halt(self, reason):
-        pkg = self.paths.p(self.paths.needs_human)
-        pkg.parent.mkdir(parents=True, exist_ok=True)
-        pkg.write_text(f"# {reason}\n\nresolve by hand, then remove "
-                       f"{self.paths.stop} {self.paths.needs_human}\n")
-        if not pkg.stat().st_size:
-            say(f"HALT could not write {pkg} (disk full?) — no decision package exists")
-            self.notifier("halt-unwritable", reason, self.notify_enabled)
-        self.paths.p(self.paths.stop).write_text(f"halt: {reason}\n")
-        say(f"HALT: {reason}")
-        self.notifier("HALT", reason, self.notify_enabled)
-        return Result(Outcome.HALT, reason)
-
-    def wait_for_marker(self):
-        waiting = self.paths.p(self.paths.waiting)
-        if not waiting.exists():
-            return None
-        m = re.search(r"[A-Za-z0-9._/-]+\.done", waiting.read_text())
-        if not m:
-            say("ralph/waiting names no *.done marker — ignoring it")
-            waiting.unlink()
-            return None
-        marker = self.paths.p(m.group(0))
-        if marker.exists():
-            say(f"{marker} present — resuming")
-            waiting.unlink()
-            return None
-        age = int(time.time() - waiting.stat().st_mtime)
-        if age >= self.marker_timeout:
-            return self.halt(f"waiting on {marker} for {age}s (limit {self.marker_timeout}s) "
-                             "— the detached run never wrote its marker")
-        say(f"waiting on {marker} (no session this tick, {age}s)")
-        return "wait"
+        return halt(self.paths, reason, notifier=self.notifier,
+                    notify_enabled=self.notify_enabled)
 
     def run(self):
         stall = 0
@@ -336,9 +389,9 @@ class Campaign:
                     and self.paths.p(self.paths.needs_human).stat().st_size:
                 return Result(Outcome.NEEDS_HUMAN,
                               first_line(self.paths.p(self.paths.needs_human)))
-            marker = self.wait_for_marker()
-            if isinstance(marker, Result):
-                return marker
+            marker = wait_for_marker(self.paths, self.marker_timeout)
+            if marker is not None and marker != "wait":
+                return self.halt(marker)
             if marker == "wait":
                 self.sleep(self.wait_poll)
                 iteration -= 1
@@ -467,6 +520,169 @@ class Supervisor:
                 say(f"supervisor: resolution {attempt} left NEEDS_HUMAN — retrying")
             else:
                 say(f"supervisor: resolution {attempt} cleared the halt — resuming the campaign")
+
+
+class Pool:
+    """The parallel driver: waves of ready units in git worktrees, serial
+    merges, a conflict halts (never auto-resolved). REVIEW rows run serially
+    in the main tree. Progress is the same file protocol as the serial flow."""
+
+    def __init__(self, paths, *, session_for, notifier=notify, notify_enabled=True,
+                 lanes=2, base_branch="", conflicts="ralph/conflicts.txt",
+                 prompt="ralph/PROMPT.md", state="ralph/STATE.md",
+                 marker_timeout=7200, wait_poll=120, sleep=time.sleep,
+                 model="", review_model="", variant="", max_review_attempts=3):
+        self.paths = paths
+        self.session_for = session_for
+        self.notifier = notifier
+        self.notify_enabled = notify_enabled
+        self.lanes = lanes
+        self.base_branch = base_branch
+        self.conflicts = conflicts
+        self.prompt = prompt
+        self.state = state
+        self.marker_timeout = marker_timeout
+        self.wait_poll = wait_poll
+        self.sleep = sleep
+        self.model = model
+        self.review_model = review_model
+        self.variant = variant
+        self.max_review_attempts = max_review_attempts
+
+    def _git(self, *args, cwd=None):
+        return subprocess.run(["git", "-C", str(cwd or self.paths.workdir), *args],
+                              capture_output=True, text=True)
+
+    def _queue(self):
+        try:
+            return Queue(self.paths.p(self.state))
+        except (OSError, ValueError):
+            return None
+
+    def _conflict_pairs(self):
+        pairs = set()
+        p = self.paths.p(self.conflicts)
+        if p.exists():
+            for line in p.read_text().splitlines():
+                parts = line.split()
+                if len(parts) >= 2:
+                    pairs.add(frozenset(parts[:2]))
+        return pairs
+
+    def _halt(self, reason):
+        halt(self.paths, reason, notifier=self.notifier, notify_enabled=self.notify_enabled)
+        return 3
+
+    def _prompt_text(self):
+        return self.paths.p(self.prompt).read_text()
+
+    def run(self):
+        # `ralph/lanes/` not `ralph/done/`: on a case-insensitive filesystem
+        # (macOS) the lane-marker directory and `ralph/DONE` are one path, and
+        # the completion marker could never be written.
+        (self.paths.workdir / "ralph" / "lanes").mkdir(parents=True, exist_ok=True)
+        (self.paths.workdir / ".ralph" / "wt").mkdir(parents=True, exist_ok=True)
+        say(f"pool: lanes={self.lanes} base={self.base_branch}")
+        while True:
+            if self.paths.p(self.paths.stop).exists():
+                say("pool: STOP")
+                return 0
+            queue = self._queue()
+            if queue is None:
+                self.sleep(60)
+                continue
+            if queue.all_done():
+                self.paths.p(self.paths.done).write_text("")
+                say("pool: DONE — all units [x]")
+                self.notifier("DONE", "pool complete", self.notify_enabled)
+                return 0
+            marker = wait_for_marker(self.paths, self.marker_timeout)
+            if marker is not None and marker != "wait":
+                return self._halt(marker)
+            if marker == "wait":
+                self.sleep(self.wait_poll)
+                continue
+            review = queue.first_ready_review()
+            if review is not None:
+                result = self.run_review(review)
+                if result is not None:
+                    return result
+                continue
+            wave = queue.pick_wave(self.lanes, self._conflict_pairs())
+            if not wave:
+                say("pool: no ready unit and no ready review — waiting (dependencies unmet?)")
+                self.sleep(60)
+                continue
+            result = self.run_wave(wave)
+            if result is not None:
+                return result
+
+    def run_review(self, review):
+        session = self.session_for(self.paths.workdir)
+        model_args = select_model_args(review.id, self.model, self.review_model, self.variant)
+        log = str(self.paths.workdir / "target" / "ralph" / f"review-{review.id}.out")
+        for attempt in range(1, self.max_review_attempts + 1):
+            say(f"pool: serial review {review.id} (main tree) attempt {attempt}")
+            session.run(model_args, self._prompt_text(), log)
+            queue = self._queue()
+            if queue is not None and queue.status_of(review.id) is Status.DONE:
+                return None
+            marker = wait_for_marker(self.paths, self.marker_timeout)
+            if marker == "wait":
+                return None          # handed off to a detached run; resume the loop
+            if marker is not None:
+                return self._halt(marker)
+            say(f"pool: review {review.id} did not mark [x] (attempt {attempt}) — resuming")
+        return self._halt(f"review {review.id} did not finish after "
+                          f"{self.max_review_attempts} attempts")
+
+    def run_lane(self, unit):
+        wt = self.paths.workdir / ".ralph" / "wt" / unit
+        branch = f"ralph/{unit}"
+        if not wt.exists():
+            r = self._git("worktree", "add", "-q", "-b", branch, str(wt), self.base_branch)
+            if r.returncode != 0:
+                say(f"pool: worktree add failed for {unit}: {r.stderr.strip()}")
+                return
+            say(f"pool: lane start {unit} (worktree {wt})")
+        else:
+            say(f"pool: lane {unit} resuming in its existing worktree")
+        note = (f"POOL LANE: you are working unit {unit} in an isolated git worktree.\n"
+                f"Commit your work here. When the unit passes its OWN tests, write "
+                f"ralph/lanes/{unit}.done and commit it — the pool merges your branch then.\n"
+                "Do NOT edit ralph/STATE.md; the pool marks the unit done after the merge.\n\n")
+        model_args = select_model_args(unit, self.model, self.review_model, self.variant)
+        session = self.session_for(wt)
+        session.run(model_args, note + self._prompt_text(),
+                    str(self.paths.workdir / "target" / "ralph" / f"lane-{unit}.out"))
+
+    def run_wave(self, wave):
+        say(f"pool: wave {', '.join(wave)}")
+        with ThreadPoolExecutor(max_workers=len(wave)) as ex:
+            list(ex.map(self.run_lane, wave))
+        for unit in wave:
+            wt = self.paths.workdir / ".ralph" / "wt" / unit
+            branch = f"ralph/{unit}"
+            if not wt.exists():
+                continue
+            if not (wt / "ralph" / "lanes" / f"{unit}.done").exists():
+                say(f"pool: lane {unit} ended without ralph/lanes/{unit}.done — branch {branch} kept")
+                continue
+            say(f"pool: lane {unit} finished — merging {branch}")
+            r = self._git("merge", "--no-ff", "-m", f"merge {unit}", branch)
+            if r.returncode != 0:
+                self._git("merge", "--abort")
+                return self._halt(f"merge conflict merging {branch} — resolve in the "
+                                  "main tree, then resume")
+            queue = self._queue()
+            if queue is not None:
+                queue.set_status(unit, Status.DONE)
+                self._git("add", self.state)
+                self._git("commit", "-q", "-m", f"{unit}: merged (pool)")
+            self._git("worktree", "remove", "--force", str(wt))
+            self._git("branch", "-D", branch)
+            say(f"pool: lane {unit} merged and marked [x]")
+        return None
 
 
 class Watch:
@@ -646,6 +862,40 @@ def cmd_models(args):
     return 0
 
 
+def cmd_pool(args):
+    paths = Paths(pathlib.Path(args.workdir).resolve())
+    models = load_models(paths.p(paths.models))
+    base = args.base_branch or subprocess.run(
+        ["git", "-C", str(paths.workdir), "rev-parse", "--abbrev-ref", "HEAD"],
+        capture_output=True, text=True).stdout.strip()
+
+    def session_for(cwd):
+        return Session(paths, timeout=args.session_timeout,
+                       notify_enabled=args.notify, cwd=cwd)
+
+    pool = Pool(paths, session_for=session_for, notify_enabled=args.notify,
+                lanes=args.lanes, base_branch=base, conflicts=args.conflicts,
+                prompt=args.prompt, state=args.state,
+                marker_timeout=args.marker_timeout,
+                model=args.model or models.get("MODEL", ""),
+                review_model=args.review_model or models.get("REVIEW_MODEL", ""),
+                variant=args.variant or models.get("VARIANT", ""))
+    if args.install_launchd:
+        ensure_excludes(paths.workdir, RUNTIME_MARKERS + (".ralph/",))
+        inner = [sys.executable, str(pathlib.Path(__file__).resolve()), "pool",
+                 "--workdir", str(paths.workdir), "--label", args.label,
+                 "--prompt", args.prompt, "--state", args.state,
+                 "--lanes", str(args.lanes)]
+        if args.notify:
+            inner.append("--notify")
+        plist = install_launchd(f"dev.ralph.{paths.workdir.name}-{args.label}", inner,
+                                paths.workdir,
+                                str(state_dir_for(paths, args.label) / "launchd.log"))
+        print(f"wrote {plist}")
+        return 0
+    return pool.run()
+
+
 def cmd_watch(args):
     paths = Paths(pathlib.Path(args.workdir).resolve())
     state_dir = state_dir_for(paths, args.label)
@@ -773,6 +1023,16 @@ def main(argv=None):
     p.add_argument("--install-launchd", action="store_true")
     p.add_argument("campaign", nargs=argparse.REMAINDER)
     p.set_defaults(fn=cmd_supervise)
+
+    p = sub.add_parser("pool")
+    common(p)
+    p.add_argument("--prompt", default="ralph/PROMPT.md")
+    p.add_argument("--state", default="ralph/STATE.md")
+    p.add_argument("--lanes", type=int, default=2)
+    p.add_argument("--conflicts", default="ralph/conflicts.txt")
+    p.add_argument("--base-branch", default="")
+    p.add_argument("--install-launchd", action="store_true")
+    p.set_defaults(fn=cmd_pool)
 
     p = sub.add_parser("watch")
     p.add_argument("--workdir", default=".")

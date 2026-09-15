@@ -7,6 +7,7 @@ input is explicit.
 """
 import os
 import pathlib
+import subprocess
 import sys
 import tempfile
 import time
@@ -282,6 +283,105 @@ class WatchTests(unittest.TestCase):
             (pathlib.Path(tmp) / "ralph/NEEDS_HUMAN.md").unlink()
             w.run(state)
             self.assertEqual(state.read_text(), "")
+
+
+class FakeLane:
+    """A lane session: writes its unit's file, commits, and marks done."""
+
+    def __init__(self, cwd, body=None, shared=False):
+        self.cwd = pathlib.Path(cwd)
+        self.body = body if body is not None else self.cwd.name
+        self.shared = shared
+
+    def run(self, model_args, prompt, log):
+        unit = self.cwd.name
+        name = "shared.txt" if self.shared else f"{unit}.txt"
+        (self.cwd / name).write_text(self.body)
+        (self.cwd / "ralph" / "lanes").mkdir(parents=True, exist_ok=True)
+        (self.cwd / "ralph" / "lanes" / f"{unit}.done").write_text("")
+        subprocess.run(["git", "-C", str(self.cwd), "add", "-A"], check=True)
+        subprocess.run(["git", "-C", str(self.cwd), "commit", "-q", "-m", unit], check=True)
+        return 0
+
+
+class FakeReview:
+    """A main-tree review session: marks its row [x] and commits."""
+
+    def __init__(self, root, unit="REVIEW-a"):
+        self.root = pathlib.Path(root)
+        self.unit = unit
+
+    def run(self, model_args, prompt, log):
+        q = ralph.Queue(self.root / "ralph/STATE.md")
+        q.set_status(self.unit, ralph.Status.DONE)
+        subprocess.run(["git", "-C", str(self.root), "add", "-A"], check=True)
+        subprocess.run(["git", "-C", str(self.root), "commit", "-q", "-m", "review"], check=True)
+        return 0
+
+
+class PoolTests(unittest.TestCase):
+    def fixture(self, tmp, rows):
+        subprocess.run(["git", "init", "-q", "-b", "main", tmp], check=True)
+        subprocess.run(["git", "-C", tmp, "config", "user.email", "t@t"], check=True)
+        subprocess.run(["git", "-C", tmp, "config", "user.name", "t"], check=True)
+        write(tmp, "ralph/STATE.md", rows)
+        write(tmp, "ralph/PROMPT.md", "Execute the selected unit.")
+        write(tmp, "seed.txt", "seed")
+        subprocess.run(["git", "-C", tmp, "add", "-A"], check=True)
+        subprocess.run(["git", "-C", tmp, "commit", "-q", "-m", "seed"], check=True)
+        return pathlib.Path(tmp)
+
+    def make(self, root, session_for, **kwargs):
+        paths = ralph.Paths(root)
+        return ralph.Pool(paths, session_for=session_for, notify_enabled=False,
+                          lanes=2, base_branch="main", sleep=lambda s: None, **kwargs)
+
+    def test_pick_wave_excludes_reviews_deps_and_conflicts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "ralph/STATE.md",
+                  "- [ ] dm-a — depends []\n"
+                  "- [ ] REVIEW-r — depends []\n"
+                  "- [ ] dm-b — depends [dm-a]\n"
+                  "- [~] dm-c — depends []\n"
+                  "- [ ] dm-d — depends []\n")
+            q = ralph.Queue(pathlib.Path(tmp) / "ralph/STATE.md")
+            self.assertEqual(q.pick_wave(2, set()), ["dm-a", "dm-c"])
+            self.assertEqual(q.pick_wave(4, {frozenset(("dm-a", "dm-c"))}),
+                             ["dm-a", "dm-d"])
+
+    def test_wave_merges_marks_and_writes_done(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] dm-a — depends []\n- [ ] dm-b — depends []\n")
+            pool = self.make(root, lambda cwd: FakeLane(cwd))
+            self.assertEqual(pool.run(), 0)
+            self.assertTrue((root / "ralph/DONE").exists())
+            self.assertTrue((root / "dm-a.txt").exists())
+            self.assertTrue((root / "dm-b.txt").exists())
+            q = ralph.Queue(root / "ralph/STATE.md")
+            self.assertTrue(q.all_done())
+
+    def test_merge_conflict_halts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] dm-a — depends []\n- [ ] dm-b — depends []\n")
+            pool = self.make(root, lambda cwd: FakeLane(cwd, body=cwd.name, shared=True))
+            self.assertEqual(pool.run(), 3)
+            pkg = (root / "ralph/NEEDS_HUMAN.md").read_text()
+            self.assertIn("merge conflict", pkg)
+            self.assertIn("halt: merge conflict", (root / "ralph/STOP").read_text())
+
+    def test_review_runs_serially_and_completes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] REVIEW-a — depends []\n")
+            pool = self.make(root, lambda cwd: FakeReview(cwd))
+            self.assertEqual(pool.run(), 0)
+            self.assertTrue((root / "ralph/DONE").exists())
+
+    def test_operator_stop_is_terminal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] dm-a — depends []\n")
+            write(tmp, "ralph/STOP", "")
+            pool = self.make(root, lambda cwd: FakeLane(cwd))
+            self.assertEqual(pool.run(), 0)
 
 
 if __name__ == "__main__":
