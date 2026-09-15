@@ -357,3 +357,87 @@ Recorded, not changed:
   unit's work. Audit-5 recorded the same.
 - **`size-gate` (advisory)** · 41 keys grew, the campaign's own growth; the
   new crates read "new and unbaselined". `warn_gate` by design.
+
+## REVIEW-audit-7 — the knot's moves
+
+Range audited: `git log be0cfbd9a..HEAD` (the previous audit's hash) — the
+serving-host moves `dm-serving-move-leaves`, `REVIEW-build-serving-move-synthesis`,
+`-move-throughput-guest`, `-move-adapter`, `-move-peer`, `-move-admission`.
+Check: TESTALL exit=0 (13343 pass, 0 fail). PREPUSH rides the wave-close
+`REVIEW-audit-8` per the row. All in `d43188ff9`.
+
+The row's two claims, verified:
+
+- **No module the package holds names `sovereign-mesh` (rule 5), `sovereign-api`
+  (rule 4) or `sovereign-core`.** `cargo xtask boundary-gate` reports exactly
+  three violations, all the peg `sovereign-serving`'s (`commonwealth-core`,
+  `commonwealth-state`, the `lib.rs:7` `include_str`) — none the host's. Rule 4
+  and rule 5 edges are zero.
+- **The two grandfathered `[[exception]]` rows now match real edges.**
+  `sovereign-serving-host → sovereign-inference` and
+  `sovereign-serving-host → commonwealth-core` are live `[dependencies]`
+  (`sovereign-serving-host/Cargo.toml:36,:35`); boundary-gate reports neither as
+  stale, and no third serving `[[exception]]` was added (K4).
+
+Findings, fixed:
+
+- **ARCH 3/4 (a pointer to a path that no longer owns the fact)** · the moves
+  left 18 `.rs` comment lines and four docs naming the moved modules under
+  `sovereign_mesh::` / `sovereign-mesh/src/` (inference_adapter, peer_inference,
+  model_fetch, guest_lender, oicp_synthesis, tool_profile,
+  source_content_validator, worker_eligibility, fim_adapter). Repointed to
+  `sovereign_serving_host::` / `sovereign-serving-host/src/` across cli-dev,
+  cli-daemon, cli-llm, contracts, core, enrichment-build, inference, tools,
+  commonwealth-core, corpus-engine, oicp-types; and
+  `docs/RPC_DISTRIBUTED_INFERENCE.md:226`,
+  `docs/LAZY_INFERENCE_ON_THE_RAIL.md:45`, `quality/NOUN_CONVERGENCE.md:1111`,
+  `quality/env-flags.toml:570` (+ regenerated `docs/ENV_FLAGS.md`). Fixed in
+  `d43188ff9`.
+- **ARCH 3/4 (path-keyed registries)** · `quality/conformance-specs.toml`
+  FE-105/FE-133/FE-135/IN-5 and `quality/sabotage/all.toml` `ci-43` still keyed
+  the mesh paths; re-keyed to `sovereign-serving-host`, line numbers
+  re-measured. Fixed in `d43188ff9`.
+- **ARCH 3 (a comment citing a unit that did not do this)** ·
+  `sovereign-mesh/src/lib.rs` · the `throughput_tracking` shim carried a second
+  attribution `// shim: moved by domains dm-sched-move-tier`, but that unit
+  moved `tier`; removed. Fixed in `d43188ff9`.
+- **Shims whose importers are all repointed (the row's VERB)** · five deleted:
+  `local_inflight`, `oicp_synthesis`, `prompt_compactor`, `pinned_transport`,
+  `yield_backoff`. A word-boundary count of `sovereign_mesh::<m>` over the
+  workspace and `crate::<m>` over `sovereign-mesh` gave 0/0 for each. The
+  remaining shims keep live importers (the daemon's `sovereign_mesh::peer_inference`
+  sites wait on `REVIEW-build-serving-repoint-daemon`). Fixed in `d43188ff9`.
+- **TESTALL red — `conformance_tags_are_fresh`** · `quality/conformance/
+  sovereign-api.toml` line 675 → 676 (the admission move shifted a
+  `routes_status.rs` test). Regenerated: FE-133/FE-135 followed
+  `worker_eligibility` into the new `quality/conformance/sovereign-serving-host.toml`,
+  and the UI-22 (`daemon.rs`) pin moved 5283 → 5285. Fixed in `d43188ff9`.
+
+Recorded, not changed:
+
+- **Frozen measurement coordinates** · `quality/DOMAINS.toml`'s `[[noun]]`
+  `file` fields, `[[collision]]` `definitions`, and the `[[cluster]]` graph
+  `cite`/`file` rows still name the mesh paths; they are the 2026-09-14
+  measurement's own coordinates, not live pointers (the audit-3/5 precedent). A
+  re-key would falsify the record.
+- **FE-105's `landed` test name resolves nowhere** ·
+  `quality/conformance-specs.toml` · `our_own_shed_refusals_never_quarantine_the_peer_that_shed`
+  is absent from the tree, and was already absent at `be0cfbd9a` and in the
+  pre-move file (`10f757158^`): a pre-existing over-claim (`status = "landed"`
+  with no tagged test), not this range's doing. The path fields were re-keyed;
+  the name is left for the operator, since no test covers `book_peer_failure`'s
+  shed exemption anywhere (ARCH 5).
+- **`SERVING_BOUNDARY.md` (e)'s signature sketch predates the ports** · the
+  `with_peer_source{,_and_publisher}(raw, src[, publisher])` line is now
+  `with_peer_source(raw, source, host, manifest)` /
+  `with_peer_source_and_publisher(..., publisher)`
+  (`sovereign-cli-daemon/src/daemon_cmd/provider.rs:119,132,142`). The one stale
+  type name (`PeerEndpointSource` → `VenueSource`) is fixed in `d43188ff9`; the
+  signature is guidance for the still-pending `REVIEW-build-serving-repoint-daemon`,
+  which re-measures its sites at premise-check time.
+- **`boundary-gate` (blocking, approved)** · the `serving` package's three
+  remaining violations are the peg `sovereign-serving`'s, the state
+  `HUMAN-design-review` approved; `REVIEW-build-serving-empty-peg` empties them.
+  This audit adds none (K4).
+- **`size-gate` (advisory)** · the campaign's own growth; `warn_gate` by design,
+  does not block PREPUSH. Not re-pinned.
