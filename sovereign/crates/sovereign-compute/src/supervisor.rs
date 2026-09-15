@@ -1425,19 +1425,28 @@ mod tests {
         run_handle.abort();
     }
 
-    /// The backoff floor. A generation that cost 400ms to load must not
+    /// The backoff floor. A generation that cost 2000ms to load must not
     /// be retried on the 20ms schedule — otherwise an expensive child
     /// spends nearly all its wall-clock inside a load, which is what
     /// turned one worker-side crash into host-wide GPU-memory
     /// exhaustion. Measured as the gap between the crash and the next
     /// spawn.
+    ///
+    /// The load cost is 2000ms rather than a token 400ms because the gap
+    /// is observed from the TEST's clock: under a saturated `--workspace`
+    /// run the `Restarting` broadcast can arrive late enough to compress a
+    /// 400ms gap to ~246ms and trip the 300ms floor on scheduling latency,
+    /// not on behaviour (seen twice, 2026-09-15). The assertion is
+    /// unchanged at 75% of the load cost; the margin widened — the same
+    /// treatment `handshake_mode_parses_port_and_reaches_healthy` records
+    /// above.
     #[tokio::test]
     async fn backoff_is_floored_by_the_last_generation_s_load_cost() {
         let _timing = supervisor_timing_lock();
         let dir = TempDir::new().unwrap();
-        const LOAD: Duration = Duration::from_millis(400);
+        const LOAD: Duration = Duration::from_millis(2000);
         let (port, _server) = spawn_slow_health_server(LOAD).await;
-        let script = write_script(&dir, "daemon.sh", "#!/bin/sh\nsleep 0.6\nexit 1\n");
+        let script = write_script(&dir, "daemon.sh", "#!/bin/sh\nsleep 3.5\nexit 1\n");
         let mut config = base_config(
             script,
             dir.path().join("crashes"),
@@ -1479,7 +1488,7 @@ mod tests {
 
         let gap = gap.expect("supervisor never restarted");
         assert!(
-            gap >= Duration::from_millis(300),
+            gap >= Duration::from_millis(1500),
             "backoff should have been floored at the ~{}ms load cost, but the \
              next spawn came after only {gap:?} (the 20ms schedule)",
             LOAD.as_millis()
