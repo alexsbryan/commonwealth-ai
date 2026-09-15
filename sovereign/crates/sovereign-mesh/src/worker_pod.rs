@@ -414,7 +414,7 @@ pub fn mint_bootstrap(inputs: BootstrapInputs<'_>) -> Result<(BootstrapBlob, Sha
     Ok((blob, pod_thumbprint))
 }
 
-use sovereign_core::time::unix_now_u64 as now_unix;
+use sovereign_time::unix_now_u64 as now_unix;
 
 // ───── WorkerHandle ─────────────────────────────────────────────────
 

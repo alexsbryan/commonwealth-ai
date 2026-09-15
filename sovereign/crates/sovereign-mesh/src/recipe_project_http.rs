@@ -473,7 +473,7 @@ async fn link_recent_artifact(
     };
     if summary.recipe_id.as_deref() != Some(id.as_str()) {
         summary.recipe_id = Some(id.clone());
-        summary.updated_at = sovereign_core::time::unix_now();
+        summary.updated_at = sovereign_time::unix_now();
         if let Err(e) = project.write_summary(&summary) {
             return Ok(internal_error(&format!("write summary: {e}")));
         }

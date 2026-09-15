@@ -354,7 +354,7 @@ async fn record_recovery(status: &Arc<RwLock<ReachabilityStatus>>, action: &str,
     let mut s = status.write().await;
     s.last_recovery = Some(RecoveryEvent {
         action: action.to_string(),
-        at_unix: sovereign_core::time::unix_now_u64(),
+        at_unix: sovereign_time::unix_now_u64(),
         ok,
     });
 }

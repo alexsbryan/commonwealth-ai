@@ -1103,7 +1103,7 @@ async fn enrich_once_handler(
         // phase. Treating a wedged `Starting` as live would block every
         // retry, so a stale state falls through to a fresh build below.
         // Same `is_stale` the status endpoint uses to surface the stall.
-        let now = sovereign_core::time::unix_now();
+        let now = sovereign_time::unix_now();
         if !state.phase.is_terminal() && !state.is_stale(now) {
             tracing::info!(
                 corpus_id = %corpus_id, phase = ?state.phase,
@@ -1354,7 +1354,7 @@ pub(crate) fn record_ingest_outcome(
         Ok(stats) => IngestOutcome {
             corpus_id: corpus_id.to_string(),
             job_id: job_id.to_string(),
-            finished_at: sovereign_core::time::unix_now(),
+            finished_at: sovereign_time::unix_now(),
             stats: Some(stats.clone()),
             error: None,
         },
@@ -1367,7 +1367,7 @@ pub(crate) fn record_ingest_outcome(
             IngestOutcome {
                 corpus_id: corpus_id.to_string(),
                 job_id: job_id.to_string(),
-                finished_at: sovereign_core::time::unix_now(),
+                finished_at: sovereign_time::unix_now(),
                 stats: None,
                 error: Some(e),
             }

@@ -921,11 +921,11 @@ pub fn new_decision_id() -> String {
 }
 
 pub fn now_unix_ms() -> u64 {
-    sovereign_core::time::unix_millis()
+    sovereign_time::unix_millis()
 }
 
 pub fn now_unix_secs() -> u64 {
-    sovereign_core::time::unix_now_u64()
+    sovereign_time::unix_now_u64()
 }
 
 /// Stable string form of a locality bucket, for the record.

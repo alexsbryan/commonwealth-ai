@@ -398,7 +398,7 @@ async fn start(
     };
     let job_id = launched.run_id.clone();
     let run_dir = launched.run_dir.clone();
-    let started_at_unix = sovereign_core::time::unix_now();
+    let started_at_unix = sovereign_time::unix_now();
     let job = Arc::new(ResearchJob {
         job_id: job_id.clone(),
         run_dir: run_dir.clone(),
@@ -486,7 +486,7 @@ async fn poll_run_dir(job: Arc<ResearchJob>, done: Arc<AtomicBool>) {
             last = snapshot.clone();
             if let Some(s) = snapshot {
                 job.last_change_unix
-                    .store(sovereign_core::time::unix_now(), Ordering::SeqCst);
+                    .store(sovereign_time::unix_now(), Ordering::SeqCst);
                 job.push(ResearchFrame::Live {
                     round: s.round,
                     max_rounds: s.max_rounds,
@@ -527,7 +527,7 @@ async fn progress(
         ),
         Err(_) => return Err(Absence::internal("progress: the frame log is poisoned")),
     };
-    let now = sovereign_core::time::unix_now();
+    let now = sovereign_time::unix_now();
     let finished = job.finished.load(Ordering::SeqCst);
     let stage = job
         .stage

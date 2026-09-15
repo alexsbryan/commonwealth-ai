@@ -12644,6 +12644,7 @@ dependencies = [
  "sovereign-meshapp-registry",
  "sovereign-serving",
  "sovereign-store",
+ "sovereign-time",
  "sovereign-tools",
  "sovereign-work-atlas",
  "tempfile",

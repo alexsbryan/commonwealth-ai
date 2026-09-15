@@ -660,7 +660,7 @@ async fn wait_for_child_ready(inner: &Arc<Inner>) -> Result<(), SubprocessRunner
     }
 }
 
-use sovereign_core::time::unix_now_u64 as now_unix;
+use sovereign_time::unix_now_u64 as now_unix;
 
 // ───── Tests ────────────────────────────────────────────────────────
 

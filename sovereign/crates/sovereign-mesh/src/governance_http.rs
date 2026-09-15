@@ -38,7 +38,7 @@ use corpus_engine::enrichment::governance_view::section_titles;
 use corpus_engine::enrichment::{GovernanceOpKind, GovernanceView, TensionDisposition};
 use corpus_engine::oplog::{Op, Oplog};
 use corpus_engine::CorpusEngine;
-use sovereign_core::time::unix_now;
+use sovereign_time::unix_now;
 
 use crate::daemon::EmbeddedDaemon;
 use crate::http_response::{internal_error, json_error, Absence};

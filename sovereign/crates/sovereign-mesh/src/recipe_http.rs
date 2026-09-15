@@ -644,7 +644,7 @@ async fn run_harness_job(
         frozen_docs: frozen_run.frozen_docs(),
         frozen_captured_at: frozen_run.captured_at(),
         frozen_captured_now: frozen_run.captured_now,
-        ran_at_unix: sovereign_core::time::unix_now_u64(),
+        ran_at_unix: sovereign_time::unix_now_u64(),
         run,
     })
 }

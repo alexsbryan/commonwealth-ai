@@ -790,7 +790,7 @@ mod tests {
             sovereign_store::sqlite::SqliteStateStore::open(&tmp.path().join("sovereign.db"))
                 .expect("open sqlite state store"),
         );
-        let now = sovereign_core::time::unix_now();
+        let now = sovereign_time::unix_now();
         // The shape the runtime persists: provenance nested under
         // `metadata["provenance"]`, `completion_tokens` preferred over
         // `tokens_used`, one retrieved source per corpus.

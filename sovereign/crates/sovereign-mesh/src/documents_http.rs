@@ -599,7 +599,7 @@ async fn ask_document(
         ));
     }
 
-    let now = sovereign_core::time::unix_now();
+    let now = sovereign_time::unix_now();
     let user_msg = Message {
         id: uuid::Uuid::new_v4().to_string(),
         conversation_id: req.conversation_id.clone(),
@@ -772,7 +772,7 @@ async fn run_ask(
         context_window: None,
     };
     let sources: Vec<String> = output.citations.iter().map(|c| c.content.clone()).collect();
-    let now = sovereign_core::time::unix_now();
+    let now = sovereign_time::unix_now();
     let assistant_msg = Message {
         id: assistant_message_id.clone(),
         conversation_id: conversation_id.to_string(),

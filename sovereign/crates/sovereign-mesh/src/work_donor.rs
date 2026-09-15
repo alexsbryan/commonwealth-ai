@@ -1187,7 +1187,7 @@ async fn append(app_state: &AppState, rail: &RingRail, act: &WorkAct) -> Result<
 
 /// Now, in the milliseconds the fold speaks.
 fn now_ms() -> u64 {
-    sovereign_core::time::unix_millis()
+    sovereign_time::unix_millis()
 }
 
 #[cfg(test)]

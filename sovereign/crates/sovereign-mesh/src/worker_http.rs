@@ -275,7 +275,7 @@ impl WorkerState {
     }
 
     fn now_unix() -> u64 {
-        sovereign_core::time::unix_now_u64()
+        sovereign_time::unix_now_u64()
     }
 
     /// Spawn a background task that polls upload state and dumps

@@ -652,7 +652,7 @@ async fn record_messages(
     // only because the model took time. Order within the tie is insertion
     // order, which is what `ORDER BY created_at ASC` reads back
     // (`sovereign-store/src/sqlite/conversation.rs:81`).
-    let now = sovereign_core::time::unix_now();
+    let now = sovereign_time::unix_now();
     let mut message_ids = Vec::with_capacity(body.messages.len());
     for recorded in body.messages {
         let msg = sovereign_contracts::types::Message {

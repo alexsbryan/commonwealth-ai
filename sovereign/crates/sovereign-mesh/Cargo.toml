@@ -111,6 +111,9 @@ sovereign-authoring-harness = { workspace = true }
 
 # Sovereign core (for InferenceProvider + MeshKnowledgeSource traits)
 sovereign-core = { workspace = true }
+# The Tier-0 wall-clock leaf, named directly rather than reached through the
+# `sovereign_core::time` re-export (domains row dm-time-repoint-mesh).
+sovereign-time = { workspace = true }
 # RemoteApiProvider — synthesised at request time when routing to
 # a peer for federated inference.
 sovereign-inference = { workspace = true }
