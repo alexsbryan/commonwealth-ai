@@ -5,6 +5,19 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+# The host's only in-repo reaches are the shared leaves (SERVING_BOUNDARY.md
+# "The two tiers"): the contract vocabulary (`InferenceProvider`, `Speed`,
+# `CompletionRequest`) and the published OICP language the slot pick is
+# arithmetic over.
+sovereign-contracts = { workspace = true }
+oicp-types = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+# Implementing `InferenceProvider` in the tests needs the trait's async
+# machinery and its stream type.
+async-trait = { workspace = true }
+futures = { workspace = true }
 
 [lints]
 workspace = true

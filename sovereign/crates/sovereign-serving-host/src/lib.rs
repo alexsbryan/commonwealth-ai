@@ -6,3 +6,5 @@
 //! `oicp_synthesis`, `guest_lender`, `pinned_worker_source`, `entry_endpoint`
 //! and `sovereign-api`'s `admission` (`sovereign/SERVING_BOUNDARY.md` "The two
 //! tiers").
+
+pub mod slot_select;

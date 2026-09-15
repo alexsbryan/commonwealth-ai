@@ -95,6 +95,11 @@ sovereign-mesh-test-harness = { path = "../sovereign-mesh-test-harness", optiona
 # re-exported via sovereign-serving::oicp — we POST/parse those
 # bodies from the mesh knowledge client.
 sovereign-serving = { path = "../../../sovereign/crates/sovereign-serving" }
+# The serving package's host half (SERVING_BOUNDARY.md "The two tiers"). Named
+# for the local slot pick, which is host code that left `oicp_select` (domains
+# row REVIEW-build-sched-split-pick-slot): `SovereignInferenceAdapter` calls it
+# through this crate until `inference_adapter` itself moves host-side.
+sovereign-serving-host = { path = "../sovereign-serving-host" }
 # `treesitter` feature dropped from the unconditional dep 2026-05-22:
 # only `reindexer` + `project_http` (the SCIP-graph modules) need it,
 # and those are now feature-gated by this crate's `treesitter` feature

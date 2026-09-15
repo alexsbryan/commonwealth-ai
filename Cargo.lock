@@ -12647,6 +12647,7 @@ dependencies = [
  "sovereign-pods",
  "sovereign-scheduler",
  "sovereign-serving",
+ "sovereign-serving-host",
  "sovereign-store",
  "sovereign-time",
  "sovereign-tools",
@@ -12898,6 +12899,13 @@ dependencies = [
 [[package]]
 name = "sovereign-serving-host"
 version = "0.7.0"
+dependencies = [
+ "async-trait",
+ "futures",
+ "oicp-types",
+ "sovereign-contracts",
+ "tracing",
+]
 
 [[package]]
 name = "sovereign-store"

@@ -188,6 +188,22 @@ pub struct SovereignInferenceAdapter {
     provider: Arc<dyn InferenceProvider>,
 }
 
+/// The daemon's [`SlotManifest`](sovereign_serving_host::slot_select::SlotManifest)
+/// adapter over `sovereign-core`'s bundled manifest.
+///
+/// It lives here, not in `sovereign-serving-host`, because the host may not
+/// name `sovereign-core` (`sovereign/SERVING_BOUNDARY.md` rule 5; the
+/// serving package's two grandfathered exceptions are `sovereign-inference`
+/// and `commonwealth-core`, and a third means the boundary is drawn in the
+/// wrong place). The host names the port; this side supplies the manifest.
+struct CoreSlotManifest;
+
+impl sovereign_serving_host::slot_select::SlotManifest for CoreSlotManifest {
+    fn capabilities_for_file(&self, file: &str) -> Option<oicp_types::CapabilityProfile> {
+        sovereign_core::models_manifest::DEFAULT_MANIFEST.capabilities_for_file(file)
+    }
+}
+
 impl SovereignInferenceAdapter {
     pub fn new(provider: Arc<dyn InferenceProvider>) -> Self {
         Self { provider }
@@ -512,7 +528,11 @@ impl SovereignInferenceAdapter {
             (sovereign_core::types::Speed::Slow, "tools_bias_slow")
         } else {
             (
-                crate::oicp_select::pick_slot_for_oicp(self.provider.as_ref(), &req),
+                sovereign_serving_host::slot_select::pick_slot_for_oicp(
+                    self.provider.as_ref(),
+                    &CoreSlotManifest,
+                    &req,
+                ),
                 "oicp_select",
             )
         };
