@@ -32,6 +32,32 @@
 schema = "domains/v1"
 declared = "2026-09-13"
 
+# ── The census axes' subjects (rung 3) ──────────────────────────────────────
+# Each axis of scripts/domains-census.py sweeps a SUBJECT. The script carries
+# none of them as a constant (ARCH 8; the order's "Seams"): a word, a context
+# id or a package name that an axis needs is a row here. Three are DERIVED from
+# facts this registry already carries, so the fact stays single-spelled:
+#   peer_word            the word the peer-outside bar retires. Fabric owns
+#                        `Member` (:136) and `Peer` is the legacy word the bar
+#                        removes, so no `owns` row carries it — it is declared
+#                        here, not re-derived from rows the bar will rename away.
+#   atom_context         the context whose vocabulary the atom-outside axis
+#                        sweeps: its word is the head of that context's `owns`
+#                        (`Atom`, :41) and its roots are `vocab_roots` on the
+#                        same row.
+#   commonwealth_package the ARCH_LAYERS `[[package]]` the peer-outside axis
+#                        scopes to ("outside the commonwealth package",
+#                        campaigns/domains.toml:132); the prefix is derived from
+#                        that package's crates, never spelled here.
+# The exempt contexts are `exempt = true` on their own `[[context]]` rows, and
+# the member type is the leaf of the `member_to_candidate` [[seam]].source_type
+# (:1388) — both read, neither re-spelled.
+
+[instrument]
+peer_word = "Peer"
+atom_context = "understanding"
+commonwealth_package = "commonwealth"
+
 # ── Contexts (DOMAINS.md §4) ────────────────────────────────────────────────
 
 [[context]]
@@ -56,6 +82,10 @@ crates = ["corpus-engine-vocab", "understanding-atlas", "understanding-host"]   
 lift = ""
 applicable_as = "point it at a folder, get back what the material is about — its domains, its tensions, its gaps; corpus-mcp already reads its output against a bare llama-server"
 roots = ["corpus-engine/src/enrichment", "corpus-engine/src/meta_atlas", "corpus-engine/src/atlas_traversal", "corpus-engine-vocab"]
+# The two roots where the ATOM vocabulary is authored — the atom-outside axis's
+# scope (campaigns/domains.toml dm-atom-outside). A subset of `roots`: the atom
+# read model is authored here, not in meta_atlas/ or atlas_traversal/.
+vocab_roots = ["corpus-engine-vocab", "corpus-engine/src/enrichment"]
 status = "kept"
 
 [[context]]
@@ -203,6 +233,9 @@ id = "kernel"
 kind = "published-language"
 question = "what do all contexts speak?"
 owns = []
+# A definition in a crate tagged `kernel` counts against NO owner (registry
+# head, :19-22); the word-owners axis reads this flag, never a hardcoded id.
+exempt = true
 package = ""
 crates = ["oicp-types", "kernel-types", "corpus-engine-vocab", "sovereign-contracts", "oicp-client", "sovereign-turn-client"]
 lift = ""
@@ -227,6 +260,9 @@ id = "back-of-house"
 kind = "observer"
 question = "is the product measured?"
 owns = []
+# Back-of-house may name what it observes, so its definitions are exempt from
+# the word-owners bar too (registry head, :19-22); read, never hardcoded.
+exempt = true
 package = ""
 crates = ["sovereign-eval", "sovereign-cli-dev", "sovereign-agent-bench", "corpus-engine-atos", "corpus-engine-archaeology", "sovereign-mesh-test-harness", "xtask", "arch-layers"]
 lift = ""

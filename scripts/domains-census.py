@@ -93,6 +93,117 @@ def registry_for(root: Path) -> dict:
     return registry()
 
 
+def instrument(reg: dict) -> dict:
+    """The census axes' subjects — `[instrument]`, DATA (ARCH 8, O3 "Seams").
+
+    The script carries no crate name, word or path as a constant: the word each
+    axis sweeps, the context whose vocabulary it reads and the ARCH_LAYERS
+    package it scopes to are all rows here. A rule that needs a constant goes
+    into the registry, never into this file.
+    """
+    return reg.get("instrument", {})
+
+
+def context_by_id(reg: dict, cid: str) -> dict | None:
+    """The `[[context]]` row named `cid`, or None."""
+    for c in reg.get("context", []):
+        if c.get("id") == cid:
+            return c
+    return None
+
+
+def peer_word(reg: dict) -> str:
+    """The word the peer-outside bar retires.
+
+    Fabric owns `Member` (quality/DOMAINS.toml:136) — `Peer` is the legacy word
+    the bar exists to remove, so no `[[context]].owns` row carries it and the
+    axis's subject is declared as `[instrument].peer_word` instead.
+    """
+    return instrument(reg).get("peer_word", "")
+
+
+def atom_context(reg: dict) -> dict | None:
+    """The context whose word and roots the atom-outside axis reads."""
+    return context_by_id(reg, instrument(reg).get("atom_context", ""))
+
+
+def atom_word(reg: dict) -> str:
+    """The atom axis's word: the head of the atom context's `owns` list.
+
+    READ, never re-spelled (ARCH 8): Understanding's `owns` carries `Atom` as
+    its primary word (quality/DOMAINS.toml:41), and the axis sweeps it.
+    """
+    c = atom_context(reg)
+    owns = c.get("owns", []) if c else []
+    return owns[0] if owns else ""
+
+
+def atom_roots(reg: dict) -> list[str]:
+    """The roots where the atom vocabulary is authored — `vocab_roots`."""
+    c = atom_context(reg)
+    return list(c.get("vocab_roots", [])) if c else []
+
+
+def exempt_contexts(reg: dict) -> set[str]:
+    """Context ids whose crates count against NO owner (`exempt = true`)."""
+    return {c["id"] for c in reg.get("context", []) if c.get("exempt")}
+
+
+def member_edge_types(reg: dict) -> set[str]:
+    """The member types: the leaf of every `[[seam]].source_type`.
+
+    READ, never re-spelled (ARCH 8): the canonical member type is the seam's
+    `source_type` (quality/DOMAINS.toml:1388, `commonwealth_core::mesh::MemberRecord`).
+    """
+    out: set[str] = set()
+    for s in reg.get("seam", []):
+        src = s.get("source_type", "")
+        if src:
+            out.add(src.split("::")[-1].strip())
+    return out
+
+
+def _arch_package_crates(root: Path, package: str) -> list[str]:
+    """The crates an ARCH_LAYERS `[[package]]` names, fixture-aware.
+
+    A fixture with no `quality/ARCH_LAYERS.toml` falls back to the repo's,
+    exactly as `arch_packages_for` does.
+    """
+    p = Path(root) / "quality" / "ARCH_LAYERS.toml"
+    if not p.exists():
+        p = REPO / "quality" / "ARCH_LAYERS.toml"
+    try:
+        with open(p, "rb") as f:
+            data = tomllib.load(f)
+    except (OSError, tomllib.TOMLDecodeError):
+        return []
+    for pkg in data.get("package", []):
+        if pkg.get("name") == package:
+            return list(pkg.get("crates", []))
+    return []
+
+
+def commonwealth_prefix(root: Path, package: str) -> str:
+    """The directory the package's crates live under, as a path prefix.
+
+    The peer-outside scope is "outside the commonwealth package"
+    (campaigns/domains.toml:132), and the package's crate list is the registry
+    of what that package IS (ARCH_LAYERS.toml:906). DERIVED from that list and
+    the workspace members, so the script carries no path (O3 "Seams"). Empty
+    when no member resolves (a bare fixture), which skips nothing.
+    """
+    names = set(_arch_package_crates(root, package))
+    dirs = [d for n, d in _workspace_crates(root) if n in names]
+    if not dirs:
+        return ""
+    common = Path(os.path.commonpath([str(d) for d in dirs]))
+    try:
+        rel = common.relative_to(Path(root)).as_posix()
+    except ValueError:
+        return ""
+    return "" if rel == "." else rel + "/"
+
+
 def code_part(content: str) -> str:
     """The executable part of a source line — comments removed.
 
@@ -160,18 +271,13 @@ def subcommand(name: str):
 # coupling (campaigns/domains.toml:135-139). `--anywhere` is therefore the only
 # mode; a `--prefix` mode is not implemented.
 #
-# TWO LITERALS THE REGISTRY CANNOT SUPPLY, and why they are not the constant
-# the Seams forbid. The word `Peer` is the axis's own subject — Fabric owns
-# `Member`, so no `[[context]].owns` row carries `Peer`, and deriving it from
-# the `[[noun]]` rows would break the moment the bar hits target and the rows
-# are renamed away. The package prefix is the bar's own scope ("outside the
-# commonwealth package", campaigns/domains.toml:132). Every word the
-# `word-owners` axis sweeps comes from the registry; this axis is the Peer bar,
-# so its word is its definition.
-_PEER_WORD = "Peer"
+# NO LITERAL SUBJECT. The word is `[instrument].peer_word` and the scope is
+# derived from the ARCH_LAYERS `commonwealth` package's crates — the script
+# carries neither (ARCH 8, O3 "Seams"). `Peer` has no `[[context]].owns` home
+# because Fabric owns `Member` (:136) and the bar exists to remove the legacy
+# word; the registry declares it rather than the script.
 _TYPE_DEF = re.compile(
     r"^\s*pub(?:\(crate\))?\s+(?:struct|enum|type|trait)\s+(\w+)")
-_COMMONWEALTH_PREFIX = "commonwealth/crates/"
 _WALK_SKIP = frozenset({"target", ".git", "node_modules"})
 
 
@@ -225,15 +331,18 @@ def peer_defs(root: Path) -> list[dict]:
     C9 egress custody), not an exception in this script.
     """
     root = Path(root)
-    kept = {n["name"] for n in registry_for(root).get("noun", [])
+    reg = registry_for(root)
+    kept = {n["name"] for n in reg.get("noun", [])
             if n.get("disposition") == "decided:keep"}
+    word = peer_word(reg)
+    prefix = commonwealth_prefix(root, instrument(reg).get("commonwealth_package", ""))
     found: list[dict] = []
     for path in _rs_files(root):
         try:
             rel = path.relative_to(root).as_posix()
         except ValueError:
             rel = path.as_posix()
-        if rel.startswith(_COMMONWEALTH_PREFIX):
+        if prefix and rel.startswith(prefix):
             continue
         try:
             lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
@@ -241,7 +350,7 @@ def peer_defs(root: Path) -> list[dict]:
             continue
         for i, line in enumerate(lines):
             m = _TYPE_DEF.match(code_part(line))
-            if not m or _PEER_WORD not in m.group(1):
+            if not m or not word or word not in m.group(1):
                 continue
             if m.group(1) in kept:
                 continue
@@ -322,12 +431,16 @@ def cmd_peer_outside(args: list[str]) -> int:
 # edge is live iff its `to_module` file names the `from_type` or any field it
 # reads. A row whose file names neither is STALE and is printed, never counted
 # (ARCH principle 6 — absence is reported, not defaulted).
-_MEMBER_EDGE = "MemberRecord"
+#
+# THE MEMBER TYPE IS READ, NOT RE-SPELLED. `MemberRecord` is the leaf of the
+# `member_to_candidate` [[seam]].source_type (:1388); `_is_member_edge` takes
+# the peer word and the seam-derived set from the registry, so neither is a
+# constant here (ARCH 8, O3 "Seams").
 
 
-def _is_member_edge(name: str) -> bool:
-    """The bar's own scope: a name carrying `Peer`, or `MemberRecord`."""
-    return _PEER_WORD in name or name == _MEMBER_EDGE
+def _is_member_edge(name: str, peer: str, members: set[str]) -> bool:
+    """The bar's own scope: a name carrying the peer word, or a member type."""
+    return (bool(peer) and peer in name) or name in members
 
 
 def _field_leaf(field: str) -> str:
@@ -343,6 +456,8 @@ def shared_edges(root: Path) -> dict:
     prints so an excluded edge is visible rather than silently dropped.
     """
     reg = registry_for(root)
+    peer = peer_word(reg)
+    members = member_edge_types(reg)
     counted: list[dict] = []
     translated: list[dict] = []
     stale: list[dict] = []
@@ -357,7 +472,7 @@ def shared_edges(root: Path) -> dict:
         names = [edge["from_type"]] + [_field_leaf(f)
                                        for f in edge.get("fields_read", [])]
         row["live"] = bool(text) and any(n and n in text for n in names)
-        if not _is_member_edge(edge["from_type"]):
+        if not _is_member_edge(edge["from_type"], peer, members):
             offname.append(row)
         elif edge.get("translation", "none") != "none":
             translated.append(row)
@@ -378,6 +493,13 @@ def _shared_positive(root: Path) -> None:
     """A live, untranslated member edge: caught."""
     (root / "quality").mkdir(parents=True, exist_ok=True)
     (root / "quality" / "DOMAINS.toml").write_text(
+        '[instrument]\n'
+        'peer_word = "Peer"\n'
+        '\n'
+        '[[seam]]\n'
+        'name = "member_to_candidate"\n'
+        'source_type = "commonwealth_core::mesh::MemberRecord"\n'
+        '\n'
         '[[edge]]\n'
         'from_type = "MemberRecord"\n'
         'from_context = "fabric"\n'
@@ -400,6 +522,13 @@ def _shared_negative(root: Path) -> None:
     """
     (root / "quality").mkdir(parents=True, exist_ok=True)
     (root / "quality" / "DOMAINS.toml").write_text(
+        '[instrument]\n'
+        'peer_word = "Peer"\n'
+        '\n'
+        '[[seam]]\n'
+        'name = "member_to_candidate"\n'
+        'source_type = "commonwealth_core::mesh::MemberRecord"\n'
+        '\n'
         '[[edge]]\n'
         'from_type = "PeerFoo"\n'
         'from_context = "fabric"\n'
@@ -479,15 +608,15 @@ def cmd_shared_edges(args: list[str]) -> int:
 # definition there counts against NO owner and is PRINTED as exempt, never
 # dropped (DOMAINS.md §10.1; the registry's own comment at its head).
 #
-# TWO REGISTRY IDS ARE THE ONE CONSTANT HERE, and the row names them: the
-# exemption is "crates tagged kernel or back-of-house". Everything else — the
-# words, the owners, the tags, the homes — is read from the registry.
+# THE EXEMPTION IS REGISTRY DATA. Which contexts are exempt is `exempt = true`
+# on their `[[context]]` rows (`kernel` :202, `back-of-house` :226); the script
+# reads it and carries no id. Everything else — the words, the owners, the tags,
+# the homes — is read from the registry too.
 #
 # THE GOODHART IS A ZERO-REFERENCE OWNER. The bar can hit target while the
 # predicate is false if a word is made unique by a compound name nobody reads,
 # so each definition prints its reference-site count and a zero-reference
 # definition is flagged (campaigns/domains.toml, dm-word-owners goodhart).
-_EXEMPT_CONTEXTS = frozenset({"kernel", "back-of-house"})
 _TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 
@@ -524,11 +653,12 @@ def word_owners(root: Path) -> dict:
         for w in c.get("owns_exact", []):
             owned.append((w, c["id"], True))
     homes: dict[str, set[str]] = {}
+    exempt = exempt_contexts(reg)
     exempt_crates: set[str] = set()
     for c in reg.get("context", []):
         for cr in c.get("crates", []):
             homes.setdefault(cr, set()).add(c["id"])
-            if c["id"] in _EXEMPT_CONTEXTS:
+            if c["id"] in exempt:
                 exempt_crates.add(cr)
 
     defs: list[dict] = []
@@ -607,6 +737,7 @@ def _word_registry(root: Path, tag: str) -> None:
         'id = "kernel"\n'
         'kind = "published-language"\n'
         'owns = []\n'
+        'exempt = true\n'
         'crates = ["exempt-crate"]\n'
         '\n'
         '[[module]]\n'
@@ -684,23 +815,15 @@ def cmd_word_owners(args: list[str]) -> int:
 #
 # No consumer outside Understanding's vocabulary may declare its own `Atom*`
 # type. The bar (campaigns/domains.toml dm-atom-outside) counts `pub Atom*`
-# definitions outside `corpus-engine-vocab/` and `corpus-engine/src/enrichment/`
-# — the two roots where the atom vocabulary is authored — minus the registry's
-# allow-list (the three axum query binders), which lives as `[[noun]]` rows with
-# `disposition = "decided:keep"` so that widening it is a registry diff a
-# reviewer reads, never a script edit (registry head, lines 1-9).
+# definitions outside the vocabulary roots — where the atom vocabulary is
+# authored — minus the registry's allow-list (the three axum query binders),
+# which lives as `[[noun]]` rows with `disposition = "decided:keep"` so that
+# widening it is a registry diff a reviewer reads, never a script edit.
 #
-# TWO CONSTANTS, and why they are the axis's own subject rather than the rule
-# the Seams forbid. `_ATOM_WORD` is the bar's word — the same standing as
-# `_PEER_WORD`: Understanding's `[[context]].owns` row carries `Atom`, but the
-# bar hits target by driving `Atom*` to zero, so deriving the word from a row
-# the bar deletes would break at the finish line. `_ATOM_EXCLUDED_ROOTS` is the
-# bar's own scope, spelled verbatim in campaigns/domains.toml dm-atom-outside
-# ("outside corpus-engine-vocab/ and enrichment/") — like peer-outside's
-# `_COMMONWEALTH_PREFIX` ("outside the commonwealth package"). The allow-list,
-# the part that can silently grow, is registry data.
-_ATOM_WORD = "Atom"
-_ATOM_EXCLUDED_ROOTS = ("corpus-engine-vocab/", "corpus-engine/src/enrichment/")
+# NO LITERAL SUBJECT. The word is READ from Understanding's `owns` (its primary
+# word, `Atom` at :41) and the roots are `vocab_roots` on the same context row;
+# neither is a constant here (ARCH 8, O3 "Seams"). The allow-list, the part
+# that can silently grow, is registry data too.
 
 
 def atom_allowlist(reg: dict) -> list[str]:
@@ -710,9 +833,10 @@ def atom_allowlist(reg: dict) -> list[str]:
     diff (campaigns/domains.toml dm-atom-outside goodhart). A kept name that
     does not carry the word (the Peer carve-outs) is not this axis's business.
     """
+    word = atom_word(reg)
     return sorted(n["name"] for n in reg.get("noun", [])
                   if n.get("disposition") == "decided:keep"
-                  and _ATOM_WORD in n.get("name", ""))
+                  and word and word in n.get("name", ""))
 
 
 def atom_defs(root: Path) -> list[dict]:
@@ -722,14 +846,17 @@ def atom_defs(root: Path) -> list[dict]:
     can ask it for truthiness and the subcommand can print the crate set.
     """
     root = Path(root)
-    allow = set(atom_allowlist(registry_for(root)))
+    reg = registry_for(root)
+    allow = set(atom_allowlist(reg))
+    word = atom_word(reg)
+    roots = [r.rstrip("/") + "/" for r in atom_roots(reg)]
     found: list[dict] = []
     for path in _rs_files(root):
         try:
             rel = path.relative_to(root).as_posix()
         except ValueError:
             rel = path.as_posix()
-        if any(rel.startswith(r) for r in _ATOM_EXCLUDED_ROOTS):
+        if any(rel.startswith(r) for r in roots):
             continue
         try:
             lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
@@ -737,7 +864,7 @@ def atom_defs(root: Path) -> list[dict]:
             continue
         for i, line in enumerate(lines):
             m = _TYPE_DEF.match(code_part(line))
-            if not m or not m.group(1).startswith(_ATOM_WORD):
+            if not m or not word or not m.group(1).startswith(word):
                 continue
             if m.group(1) in allow:
                 continue
@@ -757,9 +884,23 @@ def _allowlist_digest(allow: list[str]) -> str:
 
 
 def _atom_registry(root: Path) -> None:
-    """A registry whose only kept noun is the allow-list control."""
+    """A registry whose only kept noun is the allow-list control.
+
+    The context row carries the axis's word (`owns`) and roots (`vocab_roots`),
+    read by `atom_word` / `atom_roots`; `[instrument]` names the context. Without
+    them the fixture would exercise a different word and root set than the tree.
+    """
     (root / "quality").mkdir(parents=True, exist_ok=True)
     (root / "quality" / "DOMAINS.toml").write_text(
+        '[instrument]\n'
+        'atom_context = "understanding"\n'
+        '\n'
+        '[[context]]\n'
+        'id = "understanding"\n'
+        'kind = "core"\n'
+        'owns = ["Atom"]\n'
+        'vocab_roots = ["corpus-engine-vocab", "corpus-engine/src/enrichment"]\n'
+        '\n'
         '[[noun]]\n'
         'name = "AtomFixture"\n'
         'disposition = "decided:keep"\n', encoding="utf-8")
