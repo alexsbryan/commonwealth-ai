@@ -51,10 +51,12 @@ What the id prefix tells you:
    not ask for — no renames inside a move, no logic edits, no nearby cleanup
    (ARCH principle 2).
 4. **Build hygiene.** Before the first check that builds, run CLEAN once
-   (§5): a clean canonical build, ~5 min. It resets the debug profile and pins
-   the feature soup for the unit — the accumulated target (100G, 503 crates
-   with duplicate rlibs, 2026-09-15) is what filled the disk and took the loop
-   down. Never build with bare `cargo`.
+   (§5). The script cleans the debug profile only when it has grown past its
+   threshold (50G), so a warm unit keeps its cache and its checks stay
+   incremental; a cold unit pays the rebuild. Never build with bare `cargo` —
+   a `-p` build resolves features differently and rebuilds the dependents
+   twice, and the accumulated target (100G, 503 crates with duplicate rlibs,
+   2026-09-15) is what filled the disk and took the loop down.
 5. Run the row's checks. On a failure: read the log, fix, re-run. Two honest
    attempts at the same failure and still red: §6.
 6. Commit: `git add` the paths you changed, by name — never `git add -A`, never

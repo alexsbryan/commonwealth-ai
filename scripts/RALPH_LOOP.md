@@ -54,10 +54,12 @@ halt), `ralph/NEEDS_HUMAN.md` (the decision package).
 A campaign that builds accumulates: measured 2026-09-15, this workspace's
 `target/` reached 100G — 47G incremental, 35G deps, and 503 crates holding more
 than one rlib from differing feature sets — and the disk ceiling took the loop
-down twice. So a unit opens with a clean canonical build
-(`scripts/dev-build.sh --clean`, ~5 min here) and every later build goes
-through that entry or the check scripts, never bare `cargo`: a `-p` build
-resolves features differently and rebuilds the dependents twice.
+down twice. So a unit opens with `scripts/dev-build.sh --clean`, which cleans
+the debug profile only when it has grown past 50G (`RALPH_CLEAN_MB`): an
+unconditional clean costs a full rebuild every unit — measured 7.2m of a 30m
+unit, on top of checks that are cold anyway. Every build goes through that
+entry or the check scripts, never bare `cargo`: a `-p` build resolves features
+differently and rebuilds the dependents twice.
 
 ## Parallel lanes
 

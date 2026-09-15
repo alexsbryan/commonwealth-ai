@@ -74,11 +74,24 @@ fi
 # Workers accumulate build assets across units: measured 2026-09-15, target/
 # was 100G (47G incremental, 35G deps) with 503 crates holding more than one
 # rlib from differing feature sets, and the disk ceiling took the loop down
-# twice. `cargo clean --profile dev` resets the debug profile (~5 min to
-# rebuild) while leaving target/ralph and other non-cargo trees alone.
+# twice. But an UNCONDITIONAL clean costs a full rebuild every unit — measured
+# the same day: 7.2m of a 30m unit, on top of checks that are cold anyway
+# (TESTALL 20.8m), because `cargo clean --profile dev` re-runs every build
+# script (llama.cpp) and every scoped compile.
+#
+# So the clean is CONDITIONAL: the debug profile is cleaned only when it has
+# grown past RALPH_CLEAN_MB (default 50G), which bounds the disk without
+# paying the rebuild on every unit. Force it with RALPH_CLEAN_MB=0.
 if [[ "${1:-}" == "--clean" ]]; then
     shift
-    cargo clean --profile dev
+    size_mb=$(du -sm target/debug 2>/dev/null | cut -f1)
+    limit_mb="${RALPH_CLEAN_MB:-51200}"
+    if [[ -n "${size_mb:-}" && "$size_mb" -ge "$limit_mb" ]]; then
+        echo "dev-build: debug target is $((size_mb / 1024))G (>= $((limit_mb / 1024))G) — cleaning" >&2
+        cargo clean --profile dev
+    else
+        echo "dev-build: debug target is $(( ${size_mb:-0} / 1024 ))G (under $((limit_mb / 1024))G) — keeping the cache" >&2
+    fi
 fi
 
 FEATURES="corpus-engine/treesitter,sovereign-cli/dev-tools"
