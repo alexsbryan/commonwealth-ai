@@ -32,7 +32,7 @@ pub mod next_edit_journal;
 pub mod next_edit_model;
 pub mod next_edit_symbols;
 pub mod next_edit_syntax;
-pub mod openai_types;
+pub use oicp_types::openai_types; // shim: moved by domains dm-wire-openai-types
 pub mod principal;
 pub mod reshaping;
 pub mod responses_types;

@@ -38,6 +38,7 @@ pub mod jsonrpc;
 pub mod knowledge;
 pub mod manifest;
 pub mod model_aliases;
+pub mod openai_types;
 pub mod origin;
 pub mod registry;
 pub mod requirements;

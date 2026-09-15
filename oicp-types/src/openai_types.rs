@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use serde::{Deserialize, Serialize};
 
-use sovereign_serving::oicp::InferenceRequirements;
+use crate::requirements::InferenceRequirements;
 
 /// OpenAI-compatible chat completion request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -83,7 +83,7 @@ pub struct ChatCompletionRequest {
     /// `tools` + `chat_template_kwargs.enable_thinking`). Maps onto
     /// `sovereign_core::types::SamplingMode` via serde rename.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub sampling_mode: Option<sovereign_core::types::SamplingMode>,
+    pub sampling_mode: Option<crate::completion::SamplingMode>,
     /// Commonwealth extension: prefill text appended after the
     /// rendered chat-template prompt, before the model's first
     /// generation token. Used by frontdoor nudges (read-attractor,
