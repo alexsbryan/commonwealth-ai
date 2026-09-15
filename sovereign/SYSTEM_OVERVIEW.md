@@ -8139,9 +8139,11 @@ never treating a halt STOP (non-empty) as the operator's (an empty
 `ralph/STOP`); `watch` notifies on needs-human, stopped-without-DONE, a stale
 `ralph/.heartbeat` and low disk, re-nagging at most once per 30 min. Every
 terminal state is DONE, an operator stop, or an escalation —
-`python3 scripts/tests/ralph.py` proves the FSMs in-process (21 tests). The
-shell `ralph-{lib,pool,supervise}.sh` remain for the parallel pool until it is
-ported; `ralph-loop.sh`, `ralph-watch.sh` and `ralph-models.sh` are superseded.
+`python3 scripts/tests/ralph.py` proves the FSMs in-process (26 tests). `pool`
+runs waves of ready units in git worktrees with serial merges (a conflict
+halts) and lane markers at `ralph/lanes/<unit>.done`; the shell family
+(`ralph-*.sh`) is superseded and is deleted once the Ersilia job switches to
+`supervise -- ... pool`.
 
 ### 8.1 Where configuration and state live
 
