@@ -339,12 +339,9 @@ pub struct Runtime {
     /// wires sovereign-tools' `LocalCorpusManager` here.
     pub sensitive_corpora: Option<Arc<dyn crate::traits::SensitiveCorpusOracle>>,
     /// Resolves the per-request principal from a conversation id so
-    /// `build_context` can hide other principals' `Private` corpora on a
-    /// multi-user hub. The field's `None` (desktop / CLI / tests: no resolver
-    /// wired) ⇒ no corpus is hidden, a declared single-user host. A wired
-    /// resolver that cannot name the caller resolves to
-    /// [`PrincipalScope::Unresolved`], which refuses — it does NOT fall back to
-    /// "nothing hidden".
+    /// `build_context` hides other principals' `Private` corpora. `None` here
+    /// (no resolver) hides nothing; a wired resolver that cannot name the
+    /// caller resolves to [`PrincipalScope::Unresolved`] and refuses.
     pub corpus_principal: Option<Arc<dyn crate::traits::PrincipalResolver>>,
     /// Per-folder metadata oracle. Folder-ingest v1 §6.3 — when
     /// retrieval pulls chunks from a watched-folder corpus, this
@@ -440,11 +437,9 @@ pub struct Runtime {
 ///   the *field* non-optional means giving every test harness a real engine,
 ///   which is a separate change; naming the absence is what this one buys.
 /// - `sensitive_corpora: None` still means "no sensitivity gate applied, all
-///   corpora eligible" — a privacy control whose absence is permissive, which
-///   §3.5 flags as §7 inverted. The daemon now RESOLVES it to its own
-///   `LocalCorpusManager` (`REVIEW-build-corpus-ceiling`), so the host that
-///   answers turns no longer takes the permissive default; the field semantics
-///   are unchanged, and a host that genuinely has no oracle still writes the
+///   corpora eligible" — permissive by absence, which §3.5 flags as §7
+///   inverted. The daemon now resolves it (`REVIEW-build-corpus-ceiling`); the
+///   field semantics are unchanged, and a host with no oracle still writes the
 ///   `None` where the choice is visible.
 pub struct RuntimeParts {
     pub inference: Arc<dyn InferenceProvider>,
