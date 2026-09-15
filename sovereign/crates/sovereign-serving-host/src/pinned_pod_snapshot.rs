@@ -39,12 +39,12 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use oicp_types::BenchmarkResult;
 use serde::{Deserialize, Serialize};
-use sovereign_core::oicp::BenchmarkResult;
 
 use crate::pinned_transport::TransportError;
 use crate::pinned_worker_source::{PinnedPod, PodCapabilities};
-use crate::worker_pod::BootstrapBlob;
+use sovereign_contracts::worker_pod::BootstrapBlob;
 
 /// JSON-on-disk shape. The `version` field is bumped when the wire
 /// shape gains a wire-incompatible change; loaders refuse versions
@@ -259,8 +259,8 @@ pub fn filter_by_vast_ids(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::worker_pod::{mint_bootstrap, BootstrapInputs};
     use ed25519_dalek::SigningKey;
+    use sovereign_contracts::worker_pod::{mint_bootstrap, BootstrapInputs};
     use std::collections::BTreeMap;
 
     fn fixed_owner() -> SigningKey {

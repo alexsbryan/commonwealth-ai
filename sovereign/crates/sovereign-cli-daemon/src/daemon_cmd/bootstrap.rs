@@ -2310,6 +2310,7 @@ pub(super) async fn build_mesh_provider(
             Arc::clone(&provider),
             Arc::clone(&composite) as Arc<dyn sovereign_mesh::peer_inference::VenueSource>,
             Arc::clone(&composite) as Arc<dyn sovereign_mesh::peer_inference::VenueHost>,
+            Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest),
         ),
     );
     // The pinned pods' TLS handles do not travel with the venue (the scheduler

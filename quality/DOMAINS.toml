@@ -413,7 +413,7 @@ lines = 125
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/entry_endpoint.rs"
+path = "sovereign/crates/sovereign-serving-host/src/entry_endpoint.rs"
 context = "serving"
 lines = 305
 note = "third PeerEndpointSource impl (:170)"
@@ -545,7 +545,7 @@ lines = 174
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/local_inflight.rs"
+path = "sovereign/crates/sovereign-serving-host/src/local_inflight.rs"
 context = "serving"
 lines = 66
 note = "the local in-flight RAII guards, split out of peer_inference.rs (REVIEW-audit-6)"
@@ -659,10 +659,10 @@ lines = 239
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/peer_inference.rs"
+path = "sovereign/crates/sovereign-serving-host/src/peer_inference.rs"
 context = "serving"
-lines = 5425
-note = "THE KNOT - the only Serving module naming EmbeddedDaemon, commonwealth_core, sovereign_inference, guest_lender, yield_backoff"
+lines = 5408
+note = "THE KNOT - moved host-side by REVIEW-build-serving-move-peer; the EmbeddedDaemon reaches became the VenueSource port + the identity reader, and DeferredDaemon split back to sovereign-mesh/src/venue_host.rs"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/persist.rs"
@@ -671,21 +671,21 @@ lines = 1146
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/pinned_pod_snapshot.rs"
+path = "sovereign/crates/sovereign-serving-host/src/pinned_pod_snapshot.rs"
 context = "serving"
 lines = 394
 note = "was compute; sovereign-serving-host — SERVING_BOUNDARY.md corrections (2026-09-14)"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/pinned_transport.rs"
+path = "sovereign/crates/sovereign-serving-host/src/pinned_transport.rs"
 context = "serving"
 lines = 274
 note = "was compute; sovereign-serving-host — SERVING_BOUNDARY.md corrections (2026-09-14)"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/pinned_worker_source.rs"
+path = "sovereign/crates/sovereign-serving-host/src/pinned_worker_source.rs"
 context = "serving"
-lines = 439
+lines = 437
 note = "PeerEndpointSource + CompositeEndpointSource impls (:224, :271)"
 
 [[module]]
@@ -879,8 +879,8 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/venue_host.rs"
 context = "fabric"
-lines = 144
-note = "the mesh-side VenueHost / ledger / pinned-transport ports and their EmbeddedDaemon impls, split out of peer_inference.rs (REVIEW-audit-6); names commonwealth_core/state, so it stays in Fabric"
+lines = 140
+note = "the daemon-side serving ports: the EmbeddedDaemon VenueSource/VenueHost impls and the DeferredDaemon handle, split out of peer_inference.rs (REVIEW-audit-6); the ports themselves moved to sovereign-serving-host by REVIEW-build-serving-move-peer, and this half stays because it names commonwealth_core/state and EmbeddedDaemon"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/watched_folder_runtime.rs"

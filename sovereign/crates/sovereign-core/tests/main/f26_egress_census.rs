@@ -288,9 +288,9 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // re-baselines the whole file, not to a row being added.
     ("sovereign/crates/sovereign-mesh/src/assets_http.rs", Class::Mesh, 4),
     ("sovereign/crates/sovereign-mesh/src/project_http.rs", Class::Mesh, 4),
-    ("sovereign/crates/sovereign-mesh/src/model_fetch.rs", Class::Mesh, 4),
+    ("sovereign/crates/sovereign-serving-host/src/model_fetch.rs", Class::Mesh, 4),
     ("sovereign/crates/sovereign-mesh/src/loopback_guard.rs", Class::Mesh, 3),
-    ("sovereign/crates/sovereign-mesh/src/peer_inference.rs", Class::Mesh, 2),
+    ("sovereign/crates/sovereign-serving-host/src/peer_inference.rs", Class::Mesh, 2),
     // setup_cmd/terminal.rs (2026-08-30, the `terminal` node class; 1 -> 3 on
     // 2026-08-31 when `--terminal` learned to take a join link). THREE clients,
     // and the traffic class is unchanged — every destination is either this

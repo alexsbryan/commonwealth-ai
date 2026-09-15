@@ -41,7 +41,7 @@ use commonwealth_core::ids::NodeId;
 use reqwest::Certificate;
 use sha2::{Digest, Sha256};
 
-use crate::worker_pod::{self_signed_cert, BootstrapBlob, WorkerPodError};
+use sovereign_contracts::worker_pod::{self_signed_cert, BootstrapBlob, WorkerPodError};
 
 /// Result alias for transport-construction errors. Surfaces the same
 /// error type the worker_pod module already exposes so callers don't
@@ -171,8 +171,8 @@ pub fn pinned_transport_and_node_id(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::worker_pod::{mint_bootstrap, BootstrapInputs};
     use ed25519_dalek::SigningKey;
+    use sovereign_contracts::worker_pod::{mint_bootstrap, BootstrapInputs};
     use std::collections::BTreeMap;
 
     fn fixed_owner_key() -> SigningKey {

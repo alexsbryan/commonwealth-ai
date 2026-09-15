@@ -44,6 +44,11 @@ serde = { workspace = true }
 # `tool_profile` parses `~/.svrnmesh/tool_profiles.toml` (moved host-side by
 # domains REVIEW-build-serving-move-adapter).
 toml = { workspace = true }
+# `peer_inference` (the knot, moved host-side by domains
+# REVIEW-build-serving-move-peer) holds its self-manifest, per-peer cache and
+# slot-alias map in `ArcSwap`s so the routing read path stays lock-free, and
+# mints the pinned-pod synthetic node id with `sha2` (already a dep).
+arc-swap = { workspace = true }
 
 [dev-dependencies]
 # Implementing `InferenceProvider` in the tests needs the trait's async
@@ -54,6 +59,9 @@ tokio = { workspace = true }
 # `model_fetch`'s tests stand up an in-process axum server over a tempdir.
 axum = { workspace = true }
 tempfile = "3"
+# The pinned-pod snapshot/transport tests mint a bootstrap blob with a fixed
+# owner key (moved host-side by domains REVIEW-build-serving-move-peer).
+ed25519-dalek = { workspace = true }
 
 [lints]
 workspace = true

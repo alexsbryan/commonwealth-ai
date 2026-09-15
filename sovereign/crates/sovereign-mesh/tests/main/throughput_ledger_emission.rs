@@ -218,7 +218,12 @@ async fn peer_routed_stream_emits_inference_received_on_drop() {
     // 4. Local stub that loses OICP scoring → request routes to peer.
     let local: Arc<dyn InferenceProvider> =
         Arc::new(TestProvider::new().with_model_id("qwen2.5-3b-instruct-q4_k_m"));
-    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source.clone(), peer_source);
+    let wrapper = MeshInferenceProvider::with_peer_source(
+        local,
+        peer_source.clone(),
+        peer_source,
+        Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest),
+    );
 
     // 5. DeepQuery-shaped request opted into mesh routing.
     let envelope = InferenceRequirements::new()
@@ -343,7 +348,12 @@ async fn peer_route_failure_without_chunks_does_not_emit_ledger_event() {
     });
     let local: Arc<dyn InferenceProvider> =
         Arc::new(TestProvider::new().with_model_id("qwen2.5-3b-instruct-q4_k_m"));
-    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source.clone(), peer_source);
+    let wrapper = MeshInferenceProvider::with_peer_source(
+        local,
+        peer_source.clone(),
+        peer_source,
+        Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest),
+    );
 
     let envelope = InferenceRequirements::new()
         .with_hint(CapabilityHint::general())

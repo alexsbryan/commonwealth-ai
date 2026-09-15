@@ -1,52 +1,23 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The mesh-side ports `MeshInferenceProvider` asks its host through: the
-//! identity reader, the contribution-ledger emitter and the pinned-transport
-//! resolver, plus their `EmbeddedDaemon` implementations. Split out of
-//! `peer_inference.rs` (ARCH §3.1): these are the reaches that name
-//! `commonwealth_core` / `commonwealth_state`, which the serving package may
-//! not (`sovereign/SERVING_BOUNDARY.md`), so they stay in the mesh while
-//! `peer_inference` is host-bound.
+//! The daemon-side implementations of the host's serving ports: the identity
+//! reader, the contribution-ledger port and the venue source, plus the
+//! `DeferredDaemon` handle that stands in for the daemon before it is
+//! commissioned.
+//!
+//! The ports themselves now live in `sovereign_serving_host::venue_host`
+//! (`MeshInferenceProvider` holds them, and it moved host-side by domains
+//! `REVIEW-build-serving-move-peer`). What stays here is the half that names
+//! `commonwealth_core` / `commonwealth_state` / `EmbeddedDaemon`, which the
+//! serving package may not (`sovereign/SERVING_BOUNDARY.md` rule 5): the
+//! `EmbeddedDaemon` impls and the deferred handle.
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use sovereign_scheduler::venue::{InferenceVenue, VenueSource};
+use sovereign_serving_host::ledger::LedgerEmitter;
+use sovereign_serving_host::venue_host::VenueHost;
 
 use crate::daemon::EmbeddedDaemon;
-
-/// The host-side companion to [`VenueSource`].
-///
-/// `VenueSource` (`sovereign_scheduler::venue`) carries only the candidate
-/// list. The two facts the old `PeerEndpointSource` also carried are host
-/// concerns and ride here instead:
-///
-/// - the local node id, Fabric's identity READER (`quality/DAEMON_CORE.md`
-///   §4.2 "Identity is a reader" — join adoption swaps the id inside a running
-///   daemon, so a cached value goes stale);
-/// - the contribution-ledger PORT (`sovereign_serving_host::ledger`), which
-///   the daemon implements over its `ContributionEmitter`. The host mints the
-///   fact from `RoutingOutcome` (`SERVING_BOUNDARY.md` (a)), so this trait no
-///   longer builds a pre-filled emission per request.
-///
-/// `MeshInferenceProvider` holds one of these as a constructor argument.
-#[async_trait]
-pub trait VenueHost: Send + Sync {
-    /// This node's id. Stamped onto outbound manifest fetches via the
-    /// `X-Node-Id` header so the peer can apply local-only affinity
-    /// preferences before serializing the manifest. `None` when the daemon has
-    /// not joined a mesh.
-    async fn local_node_id(&self) -> Option<commonwealth_core::ids::NodeId> {
-        None
-    }
-
-    /// The contribution-ledger port, or `None` when this host has none.
-    /// Default returns `None` — test stubs without a wired
-    /// `ContributionEmitter` skip the emission entirely.
-    async fn ledger_emitter(
-        &self,
-    ) -> Option<Arc<dyn sovereign_serving_host::ledger::LedgerEmitter>> {
-        None
-    }
-}
 
 /// The daemon's implementation of the host's ledger port.
 ///
@@ -59,7 +30,7 @@ struct DaemonLedger {
     emitter: commonwealth_state::ContributionEmitter,
 }
 
-impl sovereign_serving_host::ledger::LedgerEmitter for DaemonLedger {
+impl LedgerEmitter for DaemonLedger {
     fn record_inference_received(
         &self,
         from_node: &kernel_types::NodeId,
@@ -76,50 +47,6 @@ impl sovereign_serving_host::ledger::LedgerEmitter for DaemonLedger {
     }
 }
 
-/// The ledger port to attach to a peer-routed stream: the host's, unless the
-/// venue is a pinned worker pod.
-///
-/// Pinned pods are not mesh members (spec §8 — no shared secret, no gossip, no
-/// node id), so a "received from self" fact about one is meaningless. The
-/// composite source used to suppress this by node id; the venue already
-/// carries the fact ([`InferenceVenue::pinned_transport`]), so the decision
-/// lives where the route is chosen.
-pub(crate) async fn ledger_emitter_for_venue(
-    host: &Arc<dyn VenueHost>,
-    venue: &InferenceVenue,
-) -> Option<Arc<dyn sovereign_serving_host::ledger::LedgerEmitter>> {
-    if venue.pinned_transport {
-        return None;
-    }
-    host.ledger_emitter().await
-}
-
-/// Resolve the TLS-pinned transport handle for a pinned venue, by `node_id`.
-///
-/// The scheduler may not name `PinnedTransport`, so the handle does not travel
-/// with [`InferenceVenue`]; the host's router holds this resolver instead and
-/// the pinned source supplies it. Default: no pinned transports.
-#[async_trait]
-pub trait PinnedTransportResolver: Send + Sync {
-    async fn resolve(
-        &self,
-        node_id: &commonwealth_core::ids::NodeId,
-    ) -> Option<crate::pinned_transport::PinnedTransport>;
-}
-
-/// The default resolver: the mesh carries no pinned transports.
-pub struct NoPinnedTransports;
-
-#[async_trait]
-impl PinnedTransportResolver for NoPinnedTransports {
-    async fn resolve(
-        &self,
-        _node_id: &commonwealth_core::ids::NodeId,
-    ) -> Option<crate::pinned_transport::PinnedTransport> {
-        None
-    }
-}
-
 #[async_trait]
 impl VenueSource for EmbeddedDaemon {
     async fn candidates(&self) -> Vec<InferenceVenue> {
@@ -133,12 +60,81 @@ impl VenueHost for EmbeddedDaemon {
         EmbeddedDaemon::self_node_id(self).await
     }
 
-    async fn ledger_emitter(
-        &self,
-    ) -> Option<Arc<dyn sovereign_serving_host::ledger::LedgerEmitter>> {
+    async fn ledger_emitter(&self) -> Option<Arc<dyn LedgerEmitter>> {
         let app_state = self.app_state().await?;
         Some(Arc::new(DaemonLedger {
             emitter: app_state.inner.contribution_emitter.clone(),
         }))
+    }
+}
+
+/// A handle to a daemon this host will commission later in its boot, usable as
+/// a [`VenueSource`] in the meantime.
+///
+/// Production wiring is genuinely cyclic and always was: the daemon serves
+/// peers through a [`MeshInferenceProvider`](sovereign_serving_host::peer_inference::MeshInferenceProvider),
+/// and that provider routes through the daemon. One of the two has to exist
+/// first. Before 2026-08-24 the cycle was broken by leaving the daemon's
+/// provider slot empty and punching it in afterwards, which is what made "no
+/// provider installed" and "this host has no inference role" the same
+/// observable state.
+///
+/// This breaks it in the other direction, and it is the ONLY late binding
+/// left in the daemon's assembly. Before [`bind`](Self::bind) every method
+/// answers exactly as a commissioned-but-stopped daemon does — no peers, no
+/// node id, no ledger emission — so no caller can tell the two apart, and no
+/// *capability* is deferred, only the daemon's own handle.
+pub struct DeferredDaemon {
+    daemon: std::sync::OnceLock<Arc<EmbeddedDaemon>>,
+}
+
+impl Default for DeferredDaemon {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl DeferredDaemon {
+    pub fn new() -> Self {
+        Self {
+            daemon: std::sync::OnceLock::new(),
+        }
+    }
+
+    /// Bind the commissioned daemon. Idempotent by `OnceLock`: a second call
+    /// is a no-op, so a host cannot swap the routing target mid-flight.
+    pub fn bind(&self, daemon: Arc<EmbeddedDaemon>) {
+        if self.daemon.set(daemon).is_err() {
+            tracing::warn!("DeferredDaemon already bound — ignoring rebind");
+        }
+    }
+
+    /// The commissioned daemon, or `None` before [`bind`](Self::bind).
+    /// Callers that run after boot (the admin-reload provider factory) can
+    /// treat `None` as "reload arrived before the daemon existed", which is
+    /// not reachable through the HTTP surface the daemon itself serves.
+    pub fn get(&self) -> Option<Arc<EmbeddedDaemon>> {
+        self.daemon.get().cloned()
+    }
+}
+
+#[async_trait]
+impl VenueSource for DeferredDaemon {
+    async fn candidates(&self) -> Vec<InferenceVenue> {
+        match self.daemon.get() {
+            Some(d) => EmbeddedDaemon::peer_inference_endpoints(d).await,
+            None => Vec::new(),
+        }
+    }
+}
+
+#[async_trait]
+impl VenueHost for DeferredDaemon {
+    async fn local_node_id(&self) -> Option<commonwealth_core::ids::NodeId> {
+        EmbeddedDaemon::self_node_id(self.daemon.get()?).await
+    }
+
+    async fn ledger_emitter(&self) -> Option<Arc<dyn LedgerEmitter>> {
+        self.daemon.get()?.ledger_emitter().await
     }
 }

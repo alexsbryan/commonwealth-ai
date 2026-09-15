@@ -120,6 +120,7 @@ impl ProviderFactory for LlamaCppFactory {
                         raw,
                         Arc::clone(&peer_source),
                         Arc::clone(&peer_host),
+                        Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest),
                         publisher,
                     ),
                 ),
@@ -132,6 +133,7 @@ impl ProviderFactory for LlamaCppFactory {
                         raw,
                         Arc::clone(&peer_source),
                         Arc::clone(&peer_host),
+                        Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest),
                     ),
                 ),
             }
@@ -141,6 +143,7 @@ impl ProviderFactory for LlamaCppFactory {
                     raw,
                     Arc::clone(&peer_source),
                     Arc::clone(&peer_host),
+                    Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest),
                 ),
             )
         };

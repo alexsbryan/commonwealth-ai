@@ -51,7 +51,7 @@ use sovereign_scheduler::venue::{InferenceVenue, VenueSource};
 use crate::pinned_transport::{
     build_pinned_transport, synthetic_node_id_from_seed, PinnedTransport, TransportError,
 };
-use crate::worker_pod::BootstrapBlob;
+use sovereign_contracts::worker_pod::BootstrapBlob;
 
 /// Operator-stamped capabilities for a pinned pod. Defaults are
 /// conservative; production callers fill in the real RAM/benchmark
@@ -66,7 +66,7 @@ use crate::worker_pod::BootstrapBlob;
 #[derive(Debug, Clone)]
 pub struct PodCapabilities {
     pub system_ram_gb: u32,
-    pub benchmark: Option<sovereign_core::oicp::BenchmarkResult>,
+    pub benchmark: Option<oicp_types::BenchmarkResult>,
     /// Self-reported concurrent inference count from the pod. `None`
     /// until the pod's `/internal/worker/health` is wired to report
     /// it — the scheduler falls back to `peer_observations`-based
@@ -223,7 +223,7 @@ impl VenueSource for PinnedWorkerEndpointSource {
 }
 
 #[async_trait]
-impl crate::peer_inference::PinnedTransportResolver for PinnedWorkerEndpointSource {
+impl crate::venue_host::PinnedTransportResolver for PinnedWorkerEndpointSource {
     /// A pinned pod's TLS handle, by its synthetic node id. This is what
     /// `MeshInferenceProvider::set_pinned_transports` installs.
     async fn resolve(&self, node_id: &NodeId) -> Option<PinnedTransport> {
@@ -250,14 +250,14 @@ pub struct CompositeEndpointSource {
     /// beside `mesh` because `VenueSource` no longer carries those
     /// (`SERVING_BOUNDARY.md` (a)); production passes the same
     /// `EmbeddedDaemon` for both.
-    mesh_host: Arc<dyn crate::peer_inference::VenueHost>,
+    mesh_host: Arc<dyn crate::venue_host::VenueHost>,
     pinned: Arc<PinnedWorkerEndpointSource>,
 }
 
 impl CompositeEndpointSource {
     pub fn new(
         mesh: Arc<dyn VenueSource>,
-        mesh_host: Arc<dyn crate::peer_inference::VenueHost>,
+        mesh_host: Arc<dyn crate::venue_host::VenueHost>,
         pinned: Arc<PinnedWorkerEndpointSource>,
     ) -> Self {
         Self {
@@ -278,14 +278,12 @@ impl VenueSource for CompositeEndpointSource {
 }
 
 #[async_trait]
-impl crate::peer_inference::VenueHost for CompositeEndpointSource {
+impl crate::venue_host::VenueHost for CompositeEndpointSource {
     async fn local_node_id(&self) -> Option<NodeId> {
         self.mesh_host.local_node_id().await
     }
 
-    async fn ledger_emitter(
-        &self,
-    ) -> Option<Arc<dyn sovereign_serving_host::ledger::LedgerEmitter>> {
+    async fn ledger_emitter(&self) -> Option<Arc<dyn crate::ledger::LedgerEmitter>> {
         self.mesh_host.ledger_emitter().await
     }
 }
@@ -293,9 +291,9 @@ impl crate::peer_inference::VenueHost for CompositeEndpointSource {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::peer_inference::VenueHost;
-    use crate::worker_pod::{mint_bootstrap, BootstrapInputs};
+    use crate::venue_host::VenueHost;
     use ed25519_dalek::SigningKey;
+    use sovereign_contracts::worker_pod::{mint_bootstrap, BootstrapInputs};
     use std::collections::BTreeMap;
 
     fn fixed_owner_key() -> SigningKey {
@@ -390,7 +388,7 @@ mod tests {
     }
 
     #[async_trait]
-    impl crate::peer_inference::VenueHost for StubMesh {}
+    impl crate::venue_host::VenueHost for StubMesh {}
 
     fn mesh_peer(node_id_seed: u128, name: &str) -> InferenceVenue {
         InferenceVenue {

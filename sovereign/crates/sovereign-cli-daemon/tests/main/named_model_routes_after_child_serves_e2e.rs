@@ -194,6 +194,7 @@ async fn a_named_request_for_the_distributed_primary_routes_once_the_child_serve
         facade,
         Arc::new(NoPeers),
         Arc::new(NoPeers),
+        Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest),
     ));
 
     // The real wiring under test.

@@ -270,6 +270,7 @@ fn build(peers: Vec<InferenceVenue>) -> (MeshInferenceProvider, Arc<CaptureDecis
             peers: peers.clone(),
         }) as Arc<dyn VenueSource>,
         Arc::new(StubPeerSource { peers }) as Arc<dyn VenueHost>,
+        Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest),
     )
     .with_decision_sink(sink);
     (provider, capture)
@@ -638,6 +639,7 @@ async fn jsonl_capture_loads_back_as_a_replayable_trace() {
         Arc::new(StubPeerSource {
             peers: vec![peer_endpoint("hub", addr, 14)],
         }) as Arc<dyn VenueHost>,
+        Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest),
     )
     .with_decision_sink(sink);
 
@@ -718,6 +720,7 @@ async fn the_sink_does_not_change_the_routing_decision() {
         Arc::new(StubPeerSource {
             peers: vec![peer_endpoint("hub", addr, 11)],
         }) as Arc<dyn VenueHost>,
+        Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest),
     )
     .with_decision_sink(Arc::new(sovereign_mesh::decision_log::NullDecisionSink));
 
@@ -1016,6 +1019,7 @@ async fn the_local_candidate_is_scored_on_this_nodes_real_in_flight_count() {
             Arc::new(StubPeerSource {
                 peers: vec![peer_endpoint("hub", addr, 12)],
             }) as Arc<dyn VenueHost>,
+            Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest),
             Arc::clone(&publisher),
         )
         .with_decision_sink(sink);

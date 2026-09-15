@@ -29,7 +29,8 @@ knot is `peer_inference.rs` (5,399 lines, 38% of Serving's mesh lines) and, api-
 `admission` + `routes_inference` + `routes_responses`.
 
 The anticorruption layer `DOMAINS.md` §5 asks for **already exists and is already the
-only door**: `PeerEndpointSource` (`sovereign-mesh/src/peer_inference.rs:337`) plus the
+only door**: `PeerEndpointSource` (`sovereign-serving-host/src/peer_inference.rs:337`, moved host-side
+by `REVIEW-build-serving-move-peer`) plus the
 `MemberRecord → PeerInferenceEndpoint` translation at `sovereign-mesh/src/daemon.rs:2286-2345`
 — nine fields, three predicates, one transport call, sixty lines. Phase C does not invent
 that seam; it renames it and moves it to the Fabric side.

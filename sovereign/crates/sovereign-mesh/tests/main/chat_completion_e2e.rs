@@ -100,7 +100,12 @@ fn mip_with_peers(
     peers: Vec<InferenceVenue>,
 ) -> MeshInferenceProvider {
     let src = Arc::new(StubPeerSource { peers });
-    MeshInferenceProvider::with_peer_source(local, src.clone(), src)
+    MeshInferenceProvider::with_peer_source(
+        local,
+        src.clone(),
+        src,
+        Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest),
+    )
 }
 
 // ── Mock peer HTTP server (the "Founder" role) ──────────────
@@ -488,7 +493,12 @@ async fn joiner_streams_through_mesh_and_attributes_peer() {
     let local: Arc<dyn InferenceProvider> = local_byom();
 
     // 4. The wrapper under test.
-    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source.clone(), peer_source);
+    let wrapper = MeshInferenceProvider::with_peer_source(
+        local,
+        peer_source.clone(),
+        peer_source,
+        Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest),
+    );
 
     // 5. Build a DeepQuery-shaped request — this is what
     //    `runtime::build_oicp` emits for Intent::DeepQuery.
@@ -760,7 +770,12 @@ async fn local_only_sharding_never_routes_to_peer() {
     }];
     let peer_source = Arc::new(StubPeerSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
-    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source.clone(), peer_source);
+    let wrapper = MeshInferenceProvider::with_peer_source(
+        local,
+        peer_source.clone(),
+        peer_source,
+        Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest),
+    );
 
     let envelope = InferenceRequirements::new()
         .with_hint(CapabilityHint::general())
@@ -812,7 +827,12 @@ async fn mesh_allowed_normal_latency_routes_to_peer_without_speed_signal() {
     }];
     let peer_source = Arc::new(StubPeerSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
-    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source.clone(), peer_source);
+    let wrapper = MeshInferenceProvider::with_peer_source(
+        local,
+        peer_source.clone(),
+        peer_source,
+        Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest),
+    );
 
     // Normal latency is an EXACT class match for the mock peer's
     // Normal-latency claims, so the peer scores at least as well as
@@ -866,7 +886,12 @@ async fn local_only_judge_shaped_request_stays_local() {
     }];
     let peer_source = Arc::new(StubPeerSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
-    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source.clone(), peer_source);
+    let wrapper = MeshInferenceProvider::with_peer_source(
+        local,
+        peer_source.clone(),
+        peer_source,
+        Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest),
+    );
 
     let envelope = InferenceRequirements::new()
         .with_hint(CapabilityHint::general())
@@ -910,7 +935,12 @@ async fn latency_fast_never_routes_even_when_mesh_allowed() {
     }];
     let peer_source = Arc::new(StubPeerSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
-    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source.clone(), peer_source);
+    let wrapper = MeshInferenceProvider::with_peer_source(
+        local,
+        peer_source.clone(),
+        peer_source,
+        Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest),
+    );
 
     let envelope = InferenceRequirements::new()
         .with_hint(CapabilityHint::general())
@@ -955,7 +985,12 @@ async fn forced_choice_sentinel_excludes_peer_without_feature() {
     }];
     let peer_source = Arc::new(StubPeerSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
-    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source.clone(), peer_source);
+    let wrapper = MeshInferenceProvider::with_peer_source(
+        local,
+        peer_source.clone(),
+        peer_source,
+        Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest),
+    );
 
     let envelope = InferenceRequirements::new()
         .with_hint(CapabilityHint::general())
@@ -1004,7 +1039,12 @@ async fn forced_choice_sentinel_routes_to_peer_advertising_feature() {
     }];
     let peer_source = Arc::new(StubPeerSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
-    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source.clone(), peer_source);
+    let wrapper = MeshInferenceProvider::with_peer_source(
+        local,
+        peer_source.clone(),
+        peer_source,
+        Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest),
+    );
 
     let envelope = InferenceRequirements::new()
         .with_hint(CapabilityHint::general())
@@ -1065,7 +1105,12 @@ async fn explicit_peer_model_id_routes_to_peer_without_oicp_envelope() {
     }];
     let peer_source = Arc::new(StubPeerSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
-    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source.clone(), peer_source);
+    let wrapper = MeshInferenceProvider::with_peer_source(
+        local,
+        peer_source.clone(),
+        peer_source,
+        Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest),
+    );
 
     // No OICP envelope, Speed::Fast (which would normally bail
     // peer routing). The model name is the routing signal.
@@ -1114,7 +1159,12 @@ async fn explicit_unknown_model_id_errors_instead_of_silent_substitution() {
     }];
     let peer_source = Arc::new(StubPeerSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
-    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source.clone(), peer_source);
+    let wrapper = MeshInferenceProvider::with_peer_source(
+        local,
+        peer_source.clone(),
+        peer_source,
+        Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest),
+    );
 
     let request = CompletionRequest::new("hi")
         .with_speed(Speed::Slow)
@@ -1160,7 +1210,12 @@ async fn empty_model_id_falls_through_to_oicp_path() {
     }];
     let peer_source = Arc::new(StubPeerSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
-    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source.clone(), peer_source);
+    let wrapper = MeshInferenceProvider::with_peer_source(
+        local,
+        peer_source.clone(),
+        peer_source,
+        Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest),
+    );
 
     let envelope = InferenceRequirements::new()
         .with_hint(CapabilityHint::general())

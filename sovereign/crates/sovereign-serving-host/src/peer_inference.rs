@@ -10,7 +10,7 @@
 //! these onto every `CompletionRequest` via `build_oicp`. On the
 //! peer side, each node advertises a `ProviderManifest` at
 //! `/oicp/v1/capabilities` derived from its local inference stack
-//! (`sovereign_mesh::oicp_synthesis::build_self_manifest`).
+//! (`crate::oicp_synthesis::build_self_manifest`).
 //!
 //! This wrapper is the point where the request's requirements meet
 //! the available manifests and a single best backend is chosen:
@@ -55,29 +55,30 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 
+use crate::recorder;
 use async_trait::async_trait;
 use futures::{Stream, StreamExt};
-use sovereign_core::error::Result;
-use sovereign_core::oicp::{ExtensionRegistry, ExtensionStats, NodeObservations, ProviderManifest};
-use sovereign_core::traits::{InferenceProvider, ServingLocus};
-use sovereign_core::types::{CompletionRequest, CompletionResponse, ProviderCapabilities, Speed};
+use oicp_types::{ExtensionRegistry, ExtensionStats, NodeObservations, ProviderManifest};
+use sovereign_contracts::error::Result;
+use sovereign_contracts::traits::{InferenceProvider, ServingLocus};
+use sovereign_contracts::types::{
+    CompletionRequest, CompletionResponse, ProviderCapabilities, Speed,
+};
 use sovereign_inference::remote::RemoteApiProvider;
-use sovereign_serving_host::recorder;
 use tokio::sync::RwLock;
 
-use crate::daemon::EmbeddedDaemon;
-use crate::decision_log::{
+use crate::local_inflight::{LocalInflightGuard, LocalTotalGuard};
+use crate::oicp_synthesis::build_self_manifest;
+use crate::slot_select::SlotManifest;
+use crate::throughput_tracking::{ThroughputObservedStream, ThroughputTarget};
+use sovereign_scheduler::decision_log::{
     self, DecisionBuilder, DecisionPath, DecisionSink, OutcomeContext, RequestFacts, ServedBy,
     Verdict,
 };
-use crate::local_inflight::{LocalInflightGuard, LocalTotalGuard};
-use crate::oicp_synthesis::build_self_manifest;
-use crate::scheduler_core::{
+use sovereign_scheduler::scheduler_core::{
     self, LocalCandidateView, RankInputs, RankObjective, RankResult, VenueManifestView, VenueView,
 };
-use crate::slot_manifest::CoreSlotManifest;
-use crate::throughput_tracking::{ThroughputObservedStream, ThroughputTarget};
-use crate::tier::TierFloor;
+use sovereign_scheduler::tier::TierFloor;
 pub use sovereign_scheduler::venue::{InferenceVenue, VenueSource};
 
 /// How long to trust a fetched peer manifest before re-fetching.
@@ -323,17 +324,19 @@ struct CachedManifest {
     rtt_ms: u32,
 }
 
-// OICP selection primitives live in `crate::oicp_select` so the
+// OICP selection primitives live in `sovereign_scheduler::oicp_select` so the
 // same scoring + tie-break policy drives both sides of the wire:
 // the Joiner picking a peer (here) AND the peer-side adapter
 // picking which loaded slot to serve the request from. Importing
 // here keeps the rest of this file unchanged.
-use crate::oicp_select::{classify_rtt_ms, ModelCandidate};
+use sovereign_scheduler::oicp_select::{classify_rtt_ms, ModelCandidate};
 
 // The host ports (`VenueHost`, `PinnedTransportResolver`, the ledger emitter)
-// and their `EmbeddedDaemon` implementations live in `crate::venue_host`,
-// re-exported here so the historical `crate::peer_inference::` paths keep
-// resolving. Split out by domains `REVIEW-audit-6` (ARCH §3.1).
+// live in `crate::venue_host`, re-exported here so the historical
+// `crate::peer_inference::` paths keep resolving. Their `EmbeddedDaemon`
+// implementations stay mesh-side (rule 5). Split out by domains
+// `REVIEW-audit-6` (ARCH §3.1); moved host-side with this file by domains
+// `REVIEW-build-serving-move-peer`.
 pub(crate) use crate::venue_host::ledger_emitter_for_venue;
 pub use crate::venue_host::{NoPinnedTransports, PinnedTransportResolver, VenueHost};
 
@@ -344,6 +347,12 @@ pub struct MeshInferenceProvider {
     /// contribution-ledger port, neither of which is `VenueSource`'s
     /// (`SERVING_BOUNDARY.md` (a)).
     host: Arc<dyn VenueHost>,
+    /// The declared slot facts the self-manifest advertises (capability
+    /// profiles and sizes). The manifest itself lives in `sovereign-core`,
+    /// which the host may not name (rule 5), so the daemon supplies this port
+    /// through the constructor — the same shape `SovereignInferenceAdapter`
+    /// takes.
+    manifest: Arc<dyn SlotManifest>,
     /// Resolves a pinned venue's TLS handle by `node_id`. Default: none.
     /// Supplied by `PinnedWorkerEndpointSource` through
     /// [`Self::set_pinned_transports`]. `RwLock<Arc<..>>` like `guest`, so the
@@ -433,8 +442,8 @@ pub struct MeshInferenceProvider {
     /// fetch — for that window, so a peer serving its own user costs this
     /// node nothing instead of a refused round-trip per turn. Distinct
     /// from `peer_health` on purpose: a refusal is not a fault and books
-    /// nothing toward quarantine. See [`crate::yield_backoff`].
-    yield_backoff: Arc<crate::yield_backoff::YieldBackoff>,
+    /// nothing toward quarantine. See [`sovereign_scheduler::yield_backoff`].
+    yield_backoff: Arc<sovereign_scheduler::yield_backoff::YieldBackoff>,
     /// Per-model in-flight counter for explicit-model-id requests
     /// served by the local slot. Drives load-aware routing in
     /// [`MeshInferenceProvider::locate_named_model`]: when a request
@@ -515,10 +524,9 @@ pub struct MeshInferenceProvider {
 const SNAPSHOT_INTERVAL_SECS: u64 = 60;
 
 impl MeshInferenceProvider {
-    /// Standard constructor — takes the live `EmbeddedDaemon` so
-    /// production wiring is unchanged. Internally upcasts to
-    /// `Arc<dyn VenueSource>` via the blanket impl above;
-    /// callers don't have to think about the trait.
+    /// Standard constructor — takes the mesh view as the two host ports and
+    /// the daemon's manifest reader, so callers don't have to think about the
+    /// trait objects.
     ///
     /// Creates a private in-flight publisher — fine for tests and
     /// for the rare daemon path that doesn't share counter state
@@ -526,12 +534,13 @@ impl MeshInferenceProvider {
     /// [`MeshInferenceProvider::with_in_flight_publisher`] so the
     /// gossip emitter reads the same atomic the MIP guards write
     /// to.
-    pub fn new(local: Arc<dyn InferenceProvider>, mesh: Arc<EmbeddedDaemon>) -> Self {
-        Self::with_peer_source(
-            local,
-            Arc::clone(&mesh) as Arc<dyn VenueSource>,
-            mesh as Arc<dyn VenueHost>,
-        )
+    pub fn new(
+        local: Arc<dyn InferenceProvider>,
+        mesh: Arc<dyn VenueSource>,
+        host: Arc<dyn VenueHost>,
+        manifest: Arc<dyn SlotManifest>,
+    ) -> Self {
+        Self::with_peer_source(local, mesh, host, manifest)
     }
 
     /// Install the source that answers "do I hold a live guest grant for this
@@ -572,7 +581,7 @@ impl MeshInferenceProvider {
     /// observe that one happened. The causes are few and all interesting: a slot
     /// hot-loaded, a compute child reaching Serving, a child retired.
     pub fn refresh_self_manifest_because(&self, cause: &str) {
-        let new_manifest = build_self_manifest(self.local.as_ref(), &CoreSlotManifest);
+        let new_manifest = build_self_manifest(self.local.as_ref(), self.manifest.as_ref());
         tracing::info!(
             target: "compute_child",
             models = new_manifest.models.len(),
@@ -599,7 +608,7 @@ impl MeshInferenceProvider {
             ids.sort();
             ids
         };
-        let fresh_manifest = build_self_manifest(self.local.as_ref(), &CoreSlotManifest);
+        let fresh_manifest = build_self_manifest(self.local.as_ref(), self.manifest.as_ref());
         let fresh: Vec<String> = {
             let mut ids: Vec<String> = fresh_manifest.models.iter().map(|m| m.id.clone()).collect();
             ids.sort();
@@ -627,8 +636,9 @@ impl MeshInferenceProvider {
         local: Arc<dyn InferenceProvider>,
         mesh: Arc<dyn VenueSource>,
         host: Arc<dyn VenueHost>,
+        manifest: Arc<dyn SlotManifest>,
     ) -> Self {
-        let self_manifest = build_self_manifest(local.as_ref(), &CoreSlotManifest);
+        let self_manifest = build_self_manifest(local.as_ref(), manifest.as_ref());
         tracing::info!(
             models = self_manifest.models.len(),
             "mesh-inference: wrapper initialised (OICP-driven)"
@@ -643,13 +653,14 @@ impl MeshInferenceProvider {
         // Seed local observations above the cold-start threshold so
         // the `self` side never gets depressed by "new node" weight.
         let local_obs = NodeObservations {
-            samples: sovereign_core::oicp::COLD_START_SAMPLES * 2,
+            samples: oicp_types::COLD_START_SAMPLES * 2,
             ..Default::default()
         };
         Self {
             local,
             mesh,
             host,
+            manifest,
             pinned_transports: std::sync::RwLock::new(Arc::new(NoPinnedTransports)),
             self_manifest: arc_swap::ArcSwap::from_pointee(self_manifest),
             shared_model_id: arc_swap::ArcSwapOption::empty(),
@@ -662,7 +673,7 @@ impl MeshInferenceProvider {
             peer_health: Arc::new(commonwealth_core::peer_health::PeerHealthTracker::new()),
             guest: std::sync::RwLock::new(Arc::new(crate::guest_lender::NoGuestLenders)
                 as Arc<dyn crate::guest_lender::GuestLenderSource>),
-            yield_backoff: Arc::new(crate::yield_backoff::YieldBackoff::new()),
+            yield_backoff: Arc::new(sovereign_scheduler::yield_backoff::YieldBackoff::new()),
             local_inflight_by_model: Arc::new(std::sync::Mutex::new(
                 std::collections::HashMap::new(),
             )),
@@ -729,14 +740,12 @@ impl MeshInferenceProvider {
     /// the new MIP's guards do.
     pub fn with_in_flight_publisher(
         local: Arc<dyn InferenceProvider>,
-        mesh: Arc<EmbeddedDaemon>,
+        mesh: Arc<dyn VenueSource>,
+        host: Arc<dyn VenueHost>,
+        manifest: Arc<dyn SlotManifest>,
         publisher: Arc<AtomicU32>,
     ) -> Self {
-        let mut me = Self::with_peer_source(
-            local,
-            Arc::clone(&mesh) as Arc<dyn VenueSource>,
-            mesh as Arc<dyn VenueHost>,
-        );
+        let mut me = Self::with_peer_source(local, mesh, host, manifest);
         me.in_flight_publisher = publisher;
         me
     }
@@ -751,9 +760,10 @@ impl MeshInferenceProvider {
         local: Arc<dyn InferenceProvider>,
         mesh: Arc<dyn VenueSource>,
         host: Arc<dyn VenueHost>,
+        manifest: Arc<dyn SlotManifest>,
         publisher: Arc<AtomicU32>,
     ) -> Self {
-        let mut me = Self::with_peer_source(local, mesh, host);
+        let mut me = Self::with_peer_source(local, mesh, host, manifest);
         me.in_flight_publisher = publisher;
         me
     }
@@ -857,8 +867,10 @@ impl MeshInferenceProvider {
     /// Read-only and allocation-cheap; safe to call from a diagnostic
     /// route on a live daemon.
     pub async fn observation_snapshot(&self) -> decision_log::FleetSnapshot {
-        use crate::decision_log::{FleetSnapshot, LocalObservationRecord, PeerObservationRecord};
-        use crate::decision_trace::TRACE_SCHEMA;
+        use sovereign_scheduler::decision_log::{
+            FleetSnapshot, LocalObservationRecord, PeerObservationRecord,
+        };
+        use sovereign_scheduler::decision_trace::TRACE_SCHEMA;
         let now = Self::now_unix_secs();
         let peer_obs = self.peer_observations.read().await.clone();
         let health: std::collections::HashMap<String, (bool, u32, u64)> = self
@@ -1177,7 +1189,7 @@ impl MeshInferenceProvider {
     /// make anyway, repurposed as a locality probe — sub-5ms is
     /// same-host, sub-25ms is LAN, else WAN (see
     /// [`classify_rtt_ms`]). Caller folds this into
-    /// [`crate::oicp_select::adjust_for_observations`] so LAN peers pick up their
+    /// [`sovereign_scheduler::oicp_select::adjust_for_observations`] so LAN peers pick up their
     /// locality bonus in real deployments instead of defaulting
     /// to `Far`.
     async fn get_peer_manifest(&self, peer: &InferenceVenue) -> Option<ManifestRead> {
@@ -1501,8 +1513,8 @@ impl MeshInferenceProvider {
         // it here rather than branching downstream keeps ONE scoring shape
         // — an absent envelope is a request with default requirements, not
         // a second kind of request.
-        let verdict = crate::oicp_select::offload_verdict_opt(request.oicp.as_ref());
-        if verdict != crate::oicp_select::OffloadVerdict::Eligible {
+        let verdict = sovereign_scheduler::oicp_select::offload_verdict_opt(request.oicp.as_ref());
+        if verdict != sovereign_scheduler::oicp_select::OffloadVerdict::Eligible {
             // The budget case is reported apart from the other two on
             // purpose: it does not mean "this work stays home by policy",
             // it means SOME OTHER NODE already forwarded this request and
@@ -2316,7 +2328,7 @@ impl MeshInferenceProvider {
         let offloadable = request
             .oicp
             .as_ref()
-            .is_some_and(crate::oicp_select::offload_eligible);
+            .is_some_and(sovereign_scheduler::oicp_select::offload_eligible);
         if !offloadable {
             return None;
         }
@@ -2383,7 +2395,7 @@ impl MeshInferenceProvider {
                      from the local model would answer a borrowed question with \
                      our own"
                 );
-                Err(sovereign_core::error::Error::Routing(format!(
+                Err(sovereign_contracts::error::Error::Routing(format!(
                     "the guest link for {lender} is in effect but not usable: {why}. \
                      Nothing was served from this node in its place — run \
                      `svrn mesh use --forget` to drop the link, or ask the lending \
@@ -2798,7 +2810,7 @@ impl MeshInferenceProvider {
                         let msg = reason.refusal(&model_id);
                         self.outcome_ctx(&decision_id, &oicp_request_id, ServedBy::Failed, 0, &[])
                             .failed(msg.clone(), false, recorder::now_unix_ms());
-                        Err(sovereign_core::error::Error::ModelNotLoaded(msg))
+                        Err(sovereign_contracts::error::Error::ModelNotLoaded(msg))
                     }
                 }
             }
@@ -3314,7 +3326,7 @@ impl InferenceProvider for MeshInferenceProvider {
             oicp_request_id,
         } = self.select_route(request).await?;
         let mut failovers: Vec<decision_log::FailoverAttempt> = Vec::new();
-        let mut last_err: Option<sovereign_core::error::Error> = None;
+        let mut last_err: Option<sovereign_contracts::error::Error> = None;
 
         for (attempt_index, step) in steps.into_iter().enumerate() {
             let attempt_index = attempt_index as u32;
@@ -3357,7 +3369,7 @@ impl InferenceProvider for MeshInferenceProvider {
                             // named a model this node does not have and
                             // explicitly borrowed; serving something else is
                             // the substitution this surface exists to refuse.
-                            return Err(sovereign_core::error::Error::Routing(format!(
+                            return Err(sovereign_contracts::error::Error::Routing(format!(
                                 "the guest link for {} could not serve '{}': {}. The grant \
                                  may have expired, been revoked, or the lending node may \
                                  have restarted (grants are held in memory). Nothing was \
@@ -3486,7 +3498,7 @@ impl InferenceProvider for MeshInferenceProvider {
                                 shed,
                                 recorder::now_unix_ms(),
                             );
-                            return Err(sovereign_core::error::Error::Routing(format!(
+                            return Err(sovereign_contracts::error::Error::Routing(format!(
                                 "model '{}' is advertised by peer '{}' but all peer \
                                  addresses failed: {}",
                                 model_id, peer.name, err_text
@@ -3499,7 +3511,7 @@ impl InferenceProvider for MeshInferenceProvider {
                                 "mesh-inference: peer step failed, continuing the cascade"
                             );
                             last_err =
-                                Some(sovereign_core::error::Error::Routing(err_text.clone()));
+                                Some(sovereign_contracts::error::Error::Routing(err_text.clone()));
                         }
                     }
                 }
@@ -3545,7 +3557,7 @@ impl InferenceProvider for MeshInferenceProvider {
         // `select_route` does not currently produce. Reported rather
         // than unwrapped so a future plan shape cannot panic here.
         Err(last_err.unwrap_or_else(|| {
-            sovereign_core::error::Error::Routing(
+            sovereign_contracts::error::Error::Routing(
                 "the route plan ended with no step able to serve".into(),
             )
         }))
@@ -3586,7 +3598,7 @@ impl InferenceProvider for MeshInferenceProvider {
     ) -> Result<(Pin<Box<dyn Stream<Item = Result<String>> + Send>>, String)> {
         let (frames, model_id) = self.complete_stream_with_id_and_finish(request).await?;
         Ok((
-            sovereign_core::traits::frames_to_text_stream(frames),
+            sovereign_contracts::traits::frames_to_text_stream(frames),
             model_id,
         ))
     }
@@ -3607,16 +3619,16 @@ impl InferenceProvider for MeshInferenceProvider {
         &self,
         request: &CompletionRequest,
     ) -> Result<(
-        Pin<Box<dyn Stream<Item = sovereign_core::types::StreamFrame> + Send>>,
+        Pin<Box<dyn Stream<Item = sovereign_contracts::types::StreamFrame> + Send>>,
         String,
     )> {
-        use sovereign_core::types::StreamFrame;
+        use sovereign_contracts::types::StreamFrame;
         let RoutePlan {
             steps,
             decision_id,
             oicp_request_id,
         } = self.select_route(request).await?;
-        let mut last_err: Option<sovereign_core::error::Error> = None;
+        let mut last_err: Option<sovereign_contracts::error::Error> = None;
         let mut failovers: Vec<decision_log::FailoverAttempt> = Vec::new();
         for (attempt_index, step) in steps.into_iter().enumerate() {
             let attempt_index = attempt_index as u32;
@@ -3656,7 +3668,7 @@ impl InferenceProvider for MeshInferenceProvider {
                             // named a model this node does not have and
                             // explicitly borrowed; serving something else is
                             // the substitution this surface exists to refuse.
-                            return Err(sovereign_core::error::Error::Routing(format!(
+                            return Err(sovereign_contracts::error::Error::Routing(format!(
                                 "the guest link for {} could not serve '{}': {}. The grant \
                                  may have expired, been revoked, or the lending node may \
                                  have restarted (grants are held in memory). Nothing was \
@@ -3786,7 +3798,7 @@ impl InferenceProvider for MeshInferenceProvider {
                                 shed,
                                 recorder::now_unix_ms(),
                             );
-                            return Err(sovereign_core::error::Error::Routing(format!(
+                            return Err(sovereign_contracts::error::Error::Routing(format!(
                                 "model '{}' is advertised by peer '{}' but all peer \
                                  addresses failed: {}",
                                 model_id,
@@ -3799,8 +3811,8 @@ impl InferenceProvider for MeshInferenceProvider {
                                 peer = %peer.name,
                                 "mesh-inference: typed peer failed, falling through to next route"
                             );
-                            last_err =
-                                last_transport_err.map(sovereign_core::error::Error::Inference);
+                            last_err = last_transport_err
+                                .map(sovereign_contracts::error::Error::Inference);
                             continue;
                         }
                     }
@@ -3854,7 +3866,7 @@ impl InferenceProvider for MeshInferenceProvider {
             .failed(err_text, shed, recorder::now_unix_ms());
         }
         Err(last_err.unwrap_or_else(|| {
-            sovereign_core::error::Error::Routing(
+            sovereign_contracts::error::Error::Routing(
                 "mesh-inference: route cascade exhausted with no success".into(),
             )
         }))
@@ -3870,7 +3882,7 @@ impl InferenceProvider for MeshInferenceProvider {
     async fn complete_stream_with_finish(
         &self,
         request: &CompletionRequest,
-    ) -> Result<Pin<Box<dyn Stream<Item = sovereign_core::types::StreamFrame> + Send>>> {
+    ) -> Result<Pin<Box<dyn Stream<Item = sovereign_contracts::types::StreamFrame> + Send>>> {
         Ok(self.complete_stream_with_id_and_finish(request).await?.0)
     }
 
@@ -3922,7 +3934,7 @@ impl InferenceProvider for MeshInferenceProvider {
         self.local.rerank_batch(query, docs).await
     }
 
-    fn edit_slot_info(&self) -> Option<sovereign_core::types::EditSlotInfo> {
+    fn edit_slot_info(&self) -> Option<sovereign_contracts::types::EditSlotInfo> {
         // FIM serving is inherently local (the keystroke path never
         // leaves this machine), so the honest answer is the local
         // engine's arrangement. Without this forward the mesh wrapper
@@ -3931,7 +3943,7 @@ impl InferenceProvider for MeshInferenceProvider {
         self.local.edit_slot_info()
     }
 
-    fn resident_slots(&self) -> Vec<sovereign_core::traits::ResidentSlot> {
+    fn resident_slots(&self) -> Vec<sovereign_contracts::traits::ResidentSlot> {
         // Residency is about THIS node's locally-loaded weights, so
         // delegate to the underlying local engine. Without this forward
         // the mesh wrapper (the provider the daemon actually installs)
@@ -3940,7 +3952,7 @@ impl InferenceProvider for MeshInferenceProvider {
         self.local.resident_slots()
     }
 
-    fn compute_children(&self) -> Vec<sovereign_core::traits::ComputeChildStatus> {
+    fn compute_children(&self) -> Vec<sovereign_contracts::traits::ComputeChildStatus> {
         // Same reason as `resident_slots`: the compute children live under
         // THIS node's local routing facade, and the mesh wrapper is the
         // installed provider — without this forward `/status.inference.
@@ -4115,12 +4127,12 @@ fn effective_peer_in_flight(self_observed: u32, gossiped: Option<u32>) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sovereign_core::error::Error;
-    use sovereign_core::oicp::{
+    use oicp_types::{
         CapabilityHint, InferenceRequirements, LatencyClass, ModelStatus, ProviderModel,
         ShardingPrivacy,
     };
-    use sovereign_core::types::Depth;
+    use sovereign_contracts::error::Error;
+    use sovereign_contracts::types::Depth;
     use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
     /// A warm slot, for stubs that own weights.
@@ -4131,8 +4143,8 @@ mod tests {
     /// remote, owns nothing" and advertises no models. A stub that skipped this
     /// would be modelling a thin client while claiming to serve, which is the
     /// exact confusion the manifest gate exists to prevent.
-    fn warm_slot(role: &str, model_id: &str) -> sovereign_core::traits::ResidentSlot {
-        sovereign_core::traits::ResidentSlot {
+    fn warm_slot(role: &str, model_id: &str) -> sovereign_contracts::traits::ResidentSlot {
+        sovereign_contracts::traits::ResidentSlot {
             role: role.to_string(),
             model_id: model_id.to_string(),
             resident: true,
@@ -4198,7 +4210,7 @@ mod tests {
         /// the big model joins it only once the compute child serves. Stated
         /// rather than inherited, so the "advertised lineup flips" premise is
         /// carried by residency too and not only by the names.
-        fn resident_slots(&self) -> Vec<sovereign_core::traits::ResidentSlot> {
+        fn resident_slots(&self) -> Vec<sovereign_contracts::traits::ResidentSlot> {
             let mut slots = vec![warm_slot("fast", "small-fast-model")];
             if self.serving.load(Ordering::SeqCst) {
                 slots.push(warm_slot("primary", "big-late-model"));
@@ -4221,22 +4233,36 @@ mod tests {
     #[async_trait]
     impl VenueHost for NoPeers {}
 
+    /// A manifest reader that knows nothing. The stub model ids these tests
+    /// use are absent from `DEFAULT_MANIFEST`, so this is what the real
+    /// `CoreSlotManifest` returns for them too — an absent row, not a
+    /// different one.
+    struct NoManifest;
+
+    impl SlotManifest for NoManifest {
+        fn capabilities_for_file(&self, _file: &str) -> Option<oicp_types::CapabilityProfile> {
+            None
+        }
+
+        fn info_for_file(&self, _file: &str) -> Option<crate::slot_select::SlotManifestInfo> {
+            None
+        }
+    }
+
     /// A host that wires a ledger port, so the pinned-venue suppression can be
     /// asserted without a full dispatch.
     struct LedgerHost;
 
     #[async_trait]
     impl VenueHost for LedgerHost {
-        async fn ledger_emitter(
-            &self,
-        ) -> Option<Arc<dyn sovereign_serving_host::ledger::LedgerEmitter>> {
+        async fn ledger_emitter(&self) -> Option<Arc<dyn crate::ledger::LedgerEmitter>> {
             Some(Arc::new(RecordingLedger))
         }
     }
 
     struct RecordingLedger;
 
-    impl sovereign_serving_host::ledger::LedgerEmitter for RecordingLedger {
+    impl crate::ledger::LedgerEmitter for RecordingLedger {
         fn record_inference_received(
             &self,
             _from_node: &kernel_types::NodeId,
@@ -4278,8 +4304,12 @@ mod tests {
         let local = Arc::new(LateLoadingProvider {
             serving: Arc::clone(&serving),
         });
-        let mip =
-            MeshInferenceProvider::with_peer_source(local, Arc::new(NoPeers), Arc::new(NoPeers));
+        let mip = MeshInferenceProvider::with_peer_source(
+            local,
+            Arc::new(NoPeers),
+            Arc::new(NoPeers),
+            Arc::new(NoManifest),
+        );
         (serving, mip)
     }
 
@@ -4495,7 +4525,7 @@ mod tests {
             self.id.to_string()
         }
 
-        fn resident_slots(&self) -> Vec<sovereign_core::traits::ResidentSlot> {
+        fn resident_slots(&self) -> Vec<sovereign_contracts::traits::ResidentSlot> {
             vec![warm_slot("primary", self.id)]
         }
     }
@@ -4540,7 +4570,7 @@ mod tests {
 
         /// The slot is HELD — that is why there is a queue to shed from. A shed
         /// is backpressure on a model this node owns, never absence of one.
-        fn resident_slots(&self) -> Vec<sovereign_core::traits::ResidentSlot> {
+        fn resident_slots(&self) -> Vec<sovereign_contracts::traits::ResidentSlot> {
             vec![warm_slot("primary", "shed-model")]
         }
     }
@@ -4623,6 +4653,7 @@ mod tests {
             local,
             Arc::new(OnePeer(peer.clone())),
             Arc::new(NoPeers),
+            Arc::new(NoManifest),
         );
         mip.peer_cache.write().await.insert(
             peer.node_id.to_hex(),
@@ -4652,16 +4683,16 @@ mod tests {
         async fn complete(
             &self,
             _r: &CompletionRequest,
-        ) -> sovereign_core::error::Result<CompletionResponse> {
+        ) -> sovereign_contracts::error::Result<CompletionResponse> {
             unreachable!("these tests resolve routing; they never dispatch")
         }
         async fn complete_stream(
             &self,
             _r: &CompletionRequest,
-        ) -> sovereign_core::error::Result<
+        ) -> sovereign_contracts::error::Result<
             Pin<
                 Box<
-                    dyn futures::Stream<Item = sovereign_core::error::Result<String>>
+                    dyn futures::Stream<Item = sovereign_contracts::error::Result<String>>
                         + Send
                         + 'static,
                 >,
@@ -4669,7 +4700,7 @@ mod tests {
         > {
             unreachable!("these tests resolve routing; they never stream")
         }
-        async fn embed(&self, _t: &str) -> sovereign_core::error::Result<Vec<f32>> {
+        async fn embed(&self, _t: &str) -> sovereign_contracts::error::Result<Vec<f32>> {
             unreachable!("these tests resolve routing; they never embed")
         }
         fn capabilities(&self) -> ProviderCapabilities {
@@ -4682,7 +4713,7 @@ mod tests {
         }
         /// Empty, and that is the premise: this node holds nothing, so
         /// `build_self_manifest` advertises nothing and no name resolves here.
-        fn resident_slots(&self) -> Vec<sovereign_core::traits::ResidentSlot> {
+        fn resident_slots(&self) -> Vec<sovereign_contracts::traits::ResidentSlot> {
             Vec::new()
         }
         fn serving_locus(&self) -> ServingLocus {
@@ -4695,6 +4726,7 @@ mod tests {
             Arc::new(Forwarder(locus)),
             Arc::new(NoPeers),
             Arc::new(NoPeers),
+            Arc::new(NoManifest),
         )
     }
 
@@ -4739,6 +4771,7 @@ mod tests {
             Arc::new(Forwarder(locus)),
             Arc::new(OnePeer(peer.clone())),
             Arc::new(NoPeers),
+            Arc::new(NoManifest),
         );
         mip.peer_cache.write().await.insert(
             peer.node_id.to_hex(),
@@ -4899,8 +4932,12 @@ mod tests {
             served: Arc::new(AtomicU32::new(0)),
             saw_model: Arc::new(std::sync::Mutex::new(None)),
         });
-        let mip =
-            MeshInferenceProvider::with_peer_source(local, Arc::new(NoPeers), Arc::new(NoPeers));
+        let mip = MeshInferenceProvider::with_peer_source(
+            local,
+            Arc::new(NoPeers),
+            Arc::new(NoPeers),
+            Arc::new(NoManifest),
+        );
         match mip
             .locate_named_model("not-a-real-model", MeshRoutingConsent::Withheld)
             .await
@@ -5090,8 +5127,12 @@ mod tests {
     async fn a_local_queue_shed_reaches_the_caller_named_and_closes_the_join() {
         let local = Arc::new(ShedsLocally);
         let sink = Arc::new(decision_log::CaptureDecisionSink::new());
-        let mip =
-            MeshInferenceProvider::with_peer_source(local, Arc::new(NoPeers), Arc::new(NoPeers));
+        let mip = MeshInferenceProvider::with_peer_source(
+            local,
+            Arc::new(NoPeers),
+            Arc::new(NoPeers),
+            Arc::new(NoManifest),
+        );
         let mip = mip.with_decision_sink(sink.clone());
 
         let err = mip.complete(&named("shed-model")).await.expect_err(
@@ -5195,8 +5236,12 @@ mod tests {
             served: Arc::clone(&served),
             saw_model: Arc::clone(&saw),
         });
-        let mip =
-            MeshInferenceProvider::with_peer_source(local, Arc::new(NoPeers), Arc::new(NoPeers));
+        let mip = MeshInferenceProvider::with_peer_source(
+            local,
+            Arc::new(NoPeers),
+            Arc::new(NoPeers),
+            Arc::new(NoManifest),
+        );
         mip.set_shared_model_id(Some("shared-model".into()));
 
         let request = CompletionRequest::new("hi")
@@ -5309,8 +5354,12 @@ mod tests {
             served: Arc::clone(&served),
             saw_model: Arc::new(std::sync::Mutex::new(None)),
         });
-        let mip =
-            MeshInferenceProvider::with_peer_source(local, Arc::new(NoPeers), Arc::new(NoPeers));
+        let mip = MeshInferenceProvider::with_peer_source(
+            local,
+            Arc::new(NoPeers),
+            Arc::new(NoPeers),
+            Arc::new(NoManifest),
+        );
 
         let plan = mip
             .select_route(&bare())
@@ -5350,77 +5399,5 @@ mod tests {
             Verdict::Gated { gate } => assert_eq!(gate, "not_offload_eligible"),
             other => panic!("a local_only envelope must stay home; got {other:?}"),
         }
-    }
-}
-
-/// A handle to a daemon this host will commission later in its boot, usable as
-/// a [`VenueSource`] in the meantime.
-///
-/// Production wiring is genuinely cyclic and always was: the daemon serves
-/// peers through a [`MeshInferenceProvider`], and that provider routes through
-/// the daemon. One of the two has to exist first. Before 2026-08-24 the cycle
-/// was broken by leaving the daemon's provider slot empty and punching it in
-/// afterwards, which is what made "no provider installed" and "this host has
-/// no inference role" the same observable state.
-///
-/// This breaks it in the other direction, and it is the ONLY late binding
-/// left in the daemon's assembly. Before [`bind`](Self::bind) every method
-/// answers exactly as a commissioned-but-stopped daemon does — no peers, no
-/// node id, no ledger emission — so no caller can tell the two apart, and no
-/// *capability* is deferred, only the daemon's own handle.
-pub struct DeferredDaemon {
-    daemon: std::sync::OnceLock<Arc<EmbeddedDaemon>>,
-}
-
-impl Default for DeferredDaemon {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl DeferredDaemon {
-    pub fn new() -> Self {
-        Self {
-            daemon: std::sync::OnceLock::new(),
-        }
-    }
-
-    /// Bind the commissioned daemon. Idempotent by `OnceLock`: a second call
-    /// is a no-op, so a host cannot swap the routing target mid-flight.
-    pub fn bind(&self, daemon: Arc<EmbeddedDaemon>) {
-        if self.daemon.set(daemon).is_err() {
-            tracing::warn!("DeferredDaemon already bound — ignoring rebind");
-        }
-    }
-
-    /// The commissioned daemon, or `None` before [`bind`](Self::bind).
-    /// Callers that run after boot (the admin-reload provider factory) can
-    /// treat `None` as "reload arrived before the daemon existed", which is
-    /// not reachable through the HTTP surface the daemon itself serves.
-    pub fn get(&self) -> Option<Arc<EmbeddedDaemon>> {
-        self.daemon.get().cloned()
-    }
-}
-
-#[async_trait]
-impl VenueSource for DeferredDaemon {
-    async fn candidates(&self) -> Vec<InferenceVenue> {
-        match self.daemon.get() {
-            Some(d) => EmbeddedDaemon::peer_inference_endpoints(d).await,
-            None => Vec::new(),
-        }
-    }
-}
-
-#[async_trait]
-impl VenueHost for DeferredDaemon {
-    async fn local_node_id(&self) -> Option<commonwealth_core::ids::NodeId> {
-        EmbeddedDaemon::self_node_id(self.daemon.get()?).await
-    }
-
-    async fn ledger_emitter(
-        &self,
-    ) -> Option<Arc<dyn sovereign_serving_host::ledger::LedgerEmitter>> {
-        self.daemon.get()?.ledger_emitter().await
     }
 }

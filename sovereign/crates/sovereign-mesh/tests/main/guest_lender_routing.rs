@@ -131,6 +131,7 @@ fn provider_with_link(root: &std::path::Path) -> MeshInferenceProvider {
         local_without_the_model(),
         Arc::new(NoPeers) as Arc<dyn VenueSource>,
         Arc::new(NoPeers) as Arc<dyn VenueHost>,
+        Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest),
     );
     p.set_guest_source(stored_guest_source_in(root.to_path_buf()));
     p
@@ -288,6 +289,7 @@ fn provider_with_link_and_answering_local(root: &std::path::Path) -> MeshInferen
         local_that_answers(),
         Arc::new(NoPeers) as Arc<dyn VenueSource>,
         Arc::new(NoPeers) as Arc<dyn VenueHost>,
+        Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest),
     );
     p.set_guest_source(stored_guest_source_in(root.to_path_buf()));
     p

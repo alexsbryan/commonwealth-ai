@@ -62,7 +62,7 @@ use async_trait::async_trait;
 use commonwealth_core::ids::NodeId;
 use sovereign_inference::remote::EndpointResolver;
 
-use crate::peer_inference::VenueSource;
+use sovereign_scheduler::venue::VenueSource;
 
 /// A terminal's entry node, named by mesh identity and located on demand.
 pub struct EntryNodeEndpoint {
@@ -161,7 +161,7 @@ impl EndpointResolver for EntryNodeEndpoint {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::daemon::InferenceVenue;
+    use sovereign_scheduler::venue::InferenceVenue;
 
     /// A mesh view with a fixed peer set.
     struct Peers(Vec<InferenceVenue>);

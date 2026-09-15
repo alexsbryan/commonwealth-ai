@@ -12910,9 +12910,11 @@ dependencies = [
 name = "sovereign-serving-host"
 version = "0.7.0"
 dependencies = [
+ "arc-swap",
  "async-trait",
  "axum",
  "commonwealth-core",
+ "ed25519-dalek 2.2.0",
  "futures",
  "kernel-types",
  "oicp-types",

@@ -43,7 +43,7 @@ pub mod documents_http;
 #[cfg(feature = "dst")]
 pub mod dst;
 pub mod enrich_http;
-pub mod entry_endpoint;
+pub use sovereign_serving_host::entry_endpoint; // shim: moved by domains REVIEW-build-serving-move-peer
 pub mod features_http;
 pub use sovereign_serving_host::fim_adapter; // shim: moved by domains REVIEW-build-serving-move-adapter
 pub mod gossip;
@@ -70,7 +70,7 @@ pub mod knowledge_client;
 pub mod landscape_digest_client;
 pub mod landscape_digest_http;
 pub mod lc_http;
-pub mod local_inflight;
+pub use sovereign_serving_host::local_inflight; // shim: moved by domains REVIEW-build-serving-move-peer
 pub mod local_only;
 pub mod loopback_guard;
 #[cfg(feature = "treesitter")]
@@ -97,7 +97,7 @@ pub mod origin_fanout;
 /// The mesh implementations of `sovereign-contracts::peer`'s two ports — the
 /// N>1 half of what the daemon speaks to its peers through (cw-lift 3b).
 pub mod peer_adapter;
-pub mod peer_inference;
+pub use sovereign_serving_host::peer_inference; // shim: moved by domains REVIEW-build-serving-move-peer
 pub mod persist;
 /// The §4.1 candidate objective — rank on predicted time-to-answer
 /// rather than on a product of dimensionless multipliers
@@ -160,9 +160,9 @@ pub use sovereign_contracts::worker_pod; // shim: moved by domains REVIEW-build-
                                          // Pinned-pod inference routing — lets ephemeral worker pods join the
                                          // mesh scheduler's inference pool as one more peer, scored by the
                                          // same load balancer. Spec: docs/PINNED_WORKER_AS_INFERENCE_PEER.md.
-pub mod pinned_pod_snapshot;
-pub mod pinned_transport;
-pub mod pinned_worker_source;
+pub use sovereign_serving_host::pinned_pod_snapshot; // shim: moved by domains REVIEW-build-serving-move-peer
+pub use sovereign_serving_host::pinned_transport; // shim: moved by domains REVIEW-build-serving-move-peer
+pub use sovereign_serving_host::pinned_worker_source; // shim: moved by domains REVIEW-build-serving-move-peer
 
 pub use daemon::{ClientListener, EmbeddedDaemon};
 pub use daemon_services::{
@@ -172,7 +172,7 @@ pub use daemon_services::{
 };
 pub use deep_link::{parse_deep_link, DeepLink};
 pub use local_only::{LocalOnlyProfile, LocalOnlySource, MeshService, RunningServices};
-pub use peer_inference::DeferredDaemon;
 pub use state::MeshState;
 pub use types::*;
+pub use venue_host::DeferredDaemon;
 pub use work_atlas_broadcaster::MeshBroadcaster;

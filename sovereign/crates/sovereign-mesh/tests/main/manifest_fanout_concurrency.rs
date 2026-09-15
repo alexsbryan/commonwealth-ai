@@ -185,6 +185,7 @@ fn build(peers: Vec<InferenceVenue>) -> MeshInferenceProvider {
             peers: peers.clone(),
         }) as Arc<dyn VenueSource>,
         Arc::new(StubPeerSource { peers }) as Arc<dyn VenueHost>,
+        Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest),
     )
 }
 
