@@ -1,0 +1,10 @@
+[package]
+name = "sovereign-scheduler"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

@@ -251,6 +251,8 @@ crates/
 ├── sovereign-mesh           # In-process cmnwlth embed; owns the `work` donor loop + both job executors' sovereign half (`ingest:v1`)
 ├── sovereign-compute        # Supervised compute-child process boundary (P1): child-process supervisor + native lossless wire + child server/entrypoint + daemon-side single-child routing facade. Value = crash isolation + distributed case, NOT parallelism (see doc)
 ├── sovereign-pods           # Compute's remote isolation — leasing a rented machine and running work on it (DOMAINS.md §11.2); receives the worker_pod / worker_http / controller / daemon / subprocess-runner / multi-pod-coordinator modules lifted out of sovereign-mesh
+├── sovereign-scheduler      # Arithmetic over the published language — the serving package's ranker, decision/outcome record types and replay, lifted out of sovereign-mesh; names `oicp-types` and nothing else (SERVING_BOUNDARY.md "The two tiers"). A stub until the scheduler half moves in
+├── sovereign-serving-host   # The serving package's ports and the knot — peer_inference, inference_adapter, oicp_synthesis, guest_lender, pinned_worker_source, entry_endpoint, plus sovereign-api's admission (SERVING_BOUNDARY.md "The two tiers"). A stub until the host half moves in
 ├── sovereign-server         # Axum REST + WebSocket, multi-tenant + approvals
 ├── sovereign-desktop        # Tauri 2 + Svelte 5
 ├── sovereign-cli            # User-facing dispatcher — execs into sibling binaries

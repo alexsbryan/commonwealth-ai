@@ -126,6 +126,12 @@ crates = [
     # back. See the two [[forbid]] blocks below — the layer entry alone would
     # be a green gate enforcing nothing (§5.1).
     "serving-policy",
+    # The serving package's ranker (SERVING_BOUNDARY.md "The two tiers"). Here
+    # for the same reason serving-policy is: rule 1 lets it name `oicp-types`
+    # and nothing else in this repo, so any layer above this one would put a
+    # cross-family edge back. A stub until the scheduler half of sovereign-mesh
+    # moves in.
+    "sovereign-scheduler",
     # The append-only journal. Tier-0 for a sharper reason than the others:
     # `OpId` is content-addressed AND GOSSIPED, so a second derivation is a
     # wire break with nothing red anywhere (§10.6, §7.5). Every crate that
@@ -214,6 +220,11 @@ crates = [
     # it (DOMAINS.md §11.2). Holds the rented-pod modules lifted out of
     # sovereign-mesh.
     "sovereign-pods",
+    # The serving package's ports and knot (SERVING_BOUNDARY.md "The two
+    # tiers"): peer_inference, inference_adapter, oicp_synthesis, guest_lender,
+    # pinned_worker_source, entry_endpoint, admission. A stub until the host
+    # half moves in.
+    "sovereign-serving-host",
     # GLiNER NER inference (ort/gline-rs carve-out). Depends on sovereign-core
     # + sovereign-store (same layer) + corpus-engine (lower); consumed from
     # capabilities (sovereign-tools) and hosts.

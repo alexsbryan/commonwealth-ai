@@ -12820,6 +12820,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "sovereign-scheduler"
+version = "0.7.0"
+
+[[package]]
 name = "sovereign-server"
 version = "0.7.0"
 dependencies = [
@@ -12886,6 +12890,10 @@ dependencies = [
  "tokio-util",
  "tracing",
 ]
+
+[[package]]
+name = "sovereign-serving-host"
+version = "0.7.0"
 
 [[package]]
 name = "sovereign-store"

@@ -124,6 +124,12 @@ members = [
     # it (DOMAINS.md §11.2). Receives the worker_pod / worker_http / controller
     # / daemon / subprocess-runner / multi-pod-coordinator modules.
     "sovereign/crates/sovereign-pods",
+    # The serving package's two crates (SERVING_BOUNDARY.md "The two tiers"),
+    # created as stubs so the boundary has crates to name. The scheduler half
+    # of sovereign-mesh moves into sovereign-scheduler, the host half into
+    # sovereign-serving-host.
+    "sovereign/crates/sovereign-scheduler",
+    "sovereign/crates/sovereign-serving-host",
     "sovereign/crates/sovereign-service",
     "sovereign/crates/sovereign-server",
     "sovereign/crates/sovereign-desktop/src-tauri",
