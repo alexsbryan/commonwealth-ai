@@ -432,9 +432,9 @@ id = "FE-106"
 family = "FE"
 status = "landed"
 clause = '''A peer that refuses with a stated retry delay MUST be excluded from candidacy for that delay, capped, and cleared by any success — **before** any manifest fetch, so a yielding peer costs nothing rather than a cheaper something.'''
-target = '''sovereign/crates/sovereign-mesh/src/yield_backoff.rs:79::record_refusal'''
-existing = '''sovereign/crates/sovereign-mesh/src/yield_backoff.rs:194::backoff_is_capped_however_long_the_peer_asks'''
-landed = '''sovereign-mesh::yield_backoff::tests::backoff_is_capped_however_long_the_peer_asks'''
+target = '''sovereign/crates/sovereign-scheduler/src/yield_backoff.rs:79::record_refusal'''
+existing = '''sovereign/crates/sovereign-scheduler/src/yield_backoff.rs:195::backoff_is_capped_however_long_the_peer_asks'''
+landed = '''sovereign-scheduler::yield_backoff::tests::backoff_is_capped_however_long_the_peer_asks'''
 
 [[spec]]
 id = "FE-11"
@@ -738,8 +738,8 @@ id = "IN-2"
 family = "IN"
 status = "exists-untagged"
 clause = '''Slots MUST be able to alias one another so a single resident copy serves several roles, and the resolution order for an alias MUST have one decider.'''
-target = '''sovereign/crates/sovereign-mesh/src/slot_aliases.rs:88::resolution_alias_keys'''
-existing = '''sovereign/crates/sovereign-mesh/src/slot_aliases.rs:126::every_advertised_alias_is_resolvable'''
+target = '''sovereign/crates/sovereign-scheduler/src/slot_aliases.rs:88::resolution_alias_keys'''
+existing = '''sovereign/crates/sovereign-scheduler/src/slot_aliases.rs:126::every_advertised_alias_is_resolvable'''
 
 [[spec]]
 id = "IN-22"

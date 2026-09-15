@@ -23,7 +23,7 @@
 //! Two lines, not one mutated line: an append-only JSONL cannot rewrite
 //! history, and the outcome arrives seconds to minutes after the
 //! episode. This is the same decision→outcome join
-//! `sovereign_mesh::decision_log` makes for routing, for the same
+//! `sovereign_scheduler::decision_log` makes for routing, for the same
 //! reason.
 //!
 //! # What it deliberately does not carry

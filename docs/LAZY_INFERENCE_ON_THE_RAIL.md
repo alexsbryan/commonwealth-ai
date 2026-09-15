@@ -36,7 +36,7 @@ signed, ordered, deduped, self-compacting. The rail needs no work at all.
 
 ## What is there today, and why it is the thing to replace
 
-Cross-node routing decides in `sovereign-mesh/src/scheduler_core.rs:339`
+Cross-node routing decides in `sovereign-scheduler/src/scheduler_core.rs:339`
 (`rank`), scoring each peer's `ProviderManifest` through
 `oicp_types::scoring::best_claim_for_request` (`oicp-types/src/scoring.rs:481`,
 per-claim at `:585-609`).

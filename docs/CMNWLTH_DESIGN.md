@@ -111,7 +111,7 @@ the scorer ranks local + online peers' claims; highest wins, local wins ties;
 streaming response; fall back to local on any error.
 Stresses: the Selector's need/claim vocabulary must generalize beyond
 `InferenceRequirements` without losing the decision log or the
-downgrade-vs-declined-upgrade distinction (`sovereign-mesh/src/tier.rs`).
+downgrade-vs-declined-upgrade distinction (`sovereign-scheduler/src/tier.rs`).
 
 ### UC2 — Federated knowledge search (exists)
 Shape: **Call**, scatter-gather with a per-peer budget. Peer answers only if

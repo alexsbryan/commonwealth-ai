@@ -371,21 +371,21 @@ lines = 1076
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/decision_log.rs"
+path = "sovereign/crates/sovereign-scheduler/src/decision_log.rs"
 context = "serving"
-lines = 1527
+lines = 1254
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/decision_replay.rs"
+path = "sovereign/crates/sovereign-scheduler/src/decision_replay.rs"
 context = "serving"
-lines = 1143
+lines = 1142
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/decision_trace.rs"
+path = "sovereign/crates/sovereign-scheduler/src/decision_trace.rs"
 context = "serving"
-lines = 634
+lines = 640
 note = ""
 
 [[module]]
@@ -617,9 +617,9 @@ lines = 396
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/oicp_select.rs"
+path = "sovereign/crates/sovereign-scheduler/src/oicp_select.rs"
 context = "serving"
-lines = 946
+lines = 664
 note = "mostly a renaming shim over oicp-types::scoring (:32)"
 
 [[module]]
@@ -671,7 +671,7 @@ lines = 492
 note = "PeerEndpointSource + CompositeEndpointSource impls (:224, :271)"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/predicted_time.rs"
+path = "sovereign/crates/sovereign-scheduler/src/predicted_time.rs"
 context = "serving"
 lines = 1003
 note = ""
@@ -779,13 +779,13 @@ lines = 1214
 note = "*_http but the decision is Serving's - distributed-inference auto-warm orchestration; was serving; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/scheduler_core.rs"
+path = "sovereign/crates/sovereign-scheduler/src/scheduler_core.rs"
 context = "serving"
 lines = 1351
-note = "zero external deps; pub(crate), so peer_inference is its only door"
+note = "zero external deps; the ranker's boundary items are pub, so peer_inference (production) and mesh_sim (Tier 1) share one decider — was pub(crate) with peer_inference its only door"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/slot_aliases.rs"
+path = "sovereign/crates/sovereign-scheduler/src/slot_aliases.rs"
 context = "serving"
 lines = 201
 note = "no imports at all - pure policy data"
@@ -815,7 +815,7 @@ lines = 353
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/tier.rs"
+path = "sovereign/crates/sovereign-scheduler/src/tier.rs"
 context = "serving"
 lines = 399
 note = ""
@@ -923,7 +923,7 @@ lines = 10
 note = "the Compute crate root; modules lifted out of sovereign-mesh across dm-pods-move-* (2026-09-15)"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/yield_backoff.rs"
+path = "sovereign/crates/sovereign-scheduler/src/yield_backoff.rs"
 context = "serving"
 lines = 238
 note = ""
@@ -1353,6 +1353,30 @@ path = "sovereign/crates/sovereign-serving/src/lib.rs"
 context = "serving"
 lines = 42
 note = "re-exports commonwealth_core::{model,oicp}; the third import path to oicp-types"
+
+[[module]]
+path = "sovereign/crates/sovereign-scheduler/src/lib.rs"
+context = "serving"
+lines = 20
+note = "the crate root; modules lifted out of sovereign-mesh across REVIEW-build-sched-* (2026-09-15)"
+
+[[module]]
+path = "sovereign/crates/sovereign-serving-host/src/lib.rs"
+context = "serving"
+lines = 11
+note = "the host crate root; the host half arrives in rung domains-10 (2026-09-15)"
+
+[[module]]
+path = "sovereign/crates/sovereign-serving-host/src/recorder.rs"
+context = "serving"
+lines = 327
+note = "the recording sink — file, env, clock, ids; split out of decision_log by REVIEW-build-sched-split-sink (2026-09-15)"
+
+[[module]]
+path = "sovereign/crates/sovereign-serving-host/src/slot_select.rs"
+context = "serving"
+lines = 330
+note = "the local slot pick; split out of oicp_select by REVIEW-build-sched-split-pick-slot (2026-09-15)"
 
 [[module]]
 path = "sovereign/crates/sovereign-serving/src/plan.rs"

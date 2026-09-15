@@ -18,13 +18,6 @@ line = 181
 asserts = 3
 
 [[claim]]
-requirement = "FE-106"
-test = "sovereign-mesh::yield_backoff::tests::backoff_is_capped_however_long_the_peer_asks"
-file = "sovereign/crates/sovereign-mesh/src/yield_backoff.rs"
-line = 195
-asserts = 1
-
-[[claim]]
 requirement = "FE-133"
 test = "sovereign-mesh::worker_eligibility::tests::stable_worker_eligible_after_settle"
 file = "sovereign/crates/sovereign-mesh/src/worker_eligibility.rs"
