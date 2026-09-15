@@ -60,101 +60,19 @@ use tokio::sync::RwLock;
 
 use sovereign_core::guest_link::{self, GuestLink};
 
+// The `GuestLenderSource` port and its published vocabulary moved to the
+// serving host (`sovereign/SERVING_BOUNDARY.md` "The five entries" (a),
+// domains REVIEW-build-serving-guest-port). `StoredGuestLink` below is the
+// wiring that reaches the tunnel and the link file, so it stays here and
+// implements the port; it travels with this file in
+// REVIEW-build-serving-move-throughput-guest, which resolves those reaches.
+pub use sovereign_serving_host::guest_lender::{
+    GrantPosture, GuestLender, GuestLenderSource, NoGuestLenders,
+};
+
 /// How long a fetched model list stays good. Short, because a grant can be
 /// revoked at any moment and the lender is the only one who knows.
 const SCOPE_TTL: Duration = Duration::from_secs(60);
-
-/// A lender this node holds a live guest link with, resolved to something
-/// dispatchable.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GuestLender {
-    /// Where to send `/v1/chat/completions` — the tunnel's local bridge when
-    /// the link carries a dial string, else the link's plain URL. Never
-    /// `link.url` when a dial is present: that mesh closed its plaintext
-    /// ingress on purpose and there is no plaintext fallback (§18.3).
-    pub base_url: String,
-    /// The grant token, presented as `Authorization: Bearer`.
-    pub bearer: String,
-    /// The lender's advertised URL, for glassbox and attribution. Display
-    /// only — never used to build a request.
-    pub display: String,
-}
-
-/// What this node's guest link is worth RIGHT NOW.
-///
-/// # Why this is three states and not an `Option`
-///
-/// It was an `Option<(String, Vec<String>)>`, and `None` meant both "this
-/// node has no guest link" and "this node has a live link the lender just
-/// refused". Those demand opposite behaviour: the first should route
-/// normally, the second must not quietly answer from the local model —
-/// that is the silent substitution §18.3 forbids, and it is the SAME defect
-/// the two-machine run was convened to catch, reached by a different route.
-///
-/// Observed live 2026-08-28: the lending node's service manager restarted it
-/// (grants are held in RAM), MAC's next four requests got `403`, and every
-/// one of them was answered by MAC's own 27B with nothing said. The operator
-/// had asked to borrow a model and got their own, and no surface disagreed.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum GrantPosture {
-    /// No guest link on this node — the overwhelmingly common case. Route
-    /// local/peer as if the feature did not exist.
-    NoLink,
-    /// A link that is live BY ITS OWN TTL, which the lender is nonetheless
-    /// not honouring: revoked, the lender restarted, or the tunnel to it
-    /// cannot be opened. Never treated as `NoLink`.
-    Unusable {
-        /// The lender's display URL, for the error the operator reads.
-        lender: String,
-        /// Why, in the words the operator needs — a status code, or the
-        /// transport failure. Carried, not summarised: "refused" and
-        /// "unreachable" have different repairs.
-        why: String,
-    },
-    /// A live link the lender is honouring, and what it currently buys.
-    Granted { lender: String, ids: Vec<String> },
-}
-
-/// "Do I hold a live grant for this model id?"
-///
-/// A trait so the dispatch path can be tested without a lender, a tunnel, or
-/// a file on disk — mirroring `VenueSource`.
-#[async_trait]
-pub trait GuestLenderSource: Send + Sync + std::fmt::Debug {
-    /// The lender to dispatch `model_id` to, or `None` to fall through to the
-    /// ordinary local/peer resolution.
-    async fn lender_for(&self, model_id: &str) -> Option<GuestLender>;
-
-    /// What this node's guest link is worth right now.
-    ///
-    /// `/v1/models` MUST include a `Granted` posture's ids. The listing's
-    /// contract is that it matches what name resolution can actually serve —
-    /// omitting a model `locate_named_model` will happily route is the same
-    /// lie, in the other direction, that the peer listing was fixed for
-    /// (§10.6). `Unusable` is equally load-bearing: it is what stops a
-    /// refused grant being served as if it were an absent one.
-    async fn posture(&self) -> GrantPosture;
-
-    /// Called when the lender refuses a dispatch with 401. The grant is gone —
-    /// expired, revoked, or the lender restarted (its store is RAM-only) — so
-    /// the cached scope must not keep claiming the model is reachable.
-    async fn invalidate(&self);
-}
-
-/// The null source: a node with no guest link, which is almost every node.
-#[derive(Debug, Default)]
-pub struct NoGuestLenders;
-
-#[async_trait]
-impl GuestLenderSource for NoGuestLenders {
-    async fn lender_for(&self, _model_id: &str) -> Option<GuestLender> {
-        None
-    }
-    async fn posture(&self) -> GrantPosture {
-        GrantPosture::NoLink
-    }
-    async fn invalidate(&self) {}
-}
 
 #[derive(Debug)]
 struct CachedScope {
@@ -516,11 +434,6 @@ mod tests {
     #[tokio::test]
     async fn a_non_bridge_url_is_not_reported_dead() {
         assert!(tunnel_is_accepting("https://lender.example:9741").await);
-    }
-
-    #[tokio::test]
-    async fn a_node_with_no_link_lends_nothing() {
-        assert!(NoGuestLenders.lender_for("anything").await.is_none());
     }
 
     /// An absent `guest.json` is the overwhelmingly common case and must be a

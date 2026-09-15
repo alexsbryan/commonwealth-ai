@@ -19,12 +19,16 @@ sovereign-scheduler = { path = "../sovereign-scheduler" }
 sovereign-time = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }
+# `guest_lender.rs` publishes the `GuestLenderSource` port as an async trait
+# (SERVING_BOUNDARY.md "The five entries" (a)).
+async-trait = { workspace = true }
 
 [dev-dependencies]
 # Implementing `InferenceProvider` in the tests needs the trait's async
 # machinery and its stream type.
-async-trait = { workspace = true }
 futures = { workspace = true }
+# The guest-port controls are async.
+tokio = { workspace = true }
 
 [lints]
 workspace = true

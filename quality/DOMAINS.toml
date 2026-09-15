@@ -445,8 +445,8 @@ note = "ring governance routes - the mesh's own; was fabric; route shell — DAE
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/guest_lender.rs"
 context = "serving"
-lines = 556
-note = "grant posture is a routing input; read only by peer_inference (:477-479, :2356, :3029)"
+lines = 469
+note = "grant posture is a routing input; read only by peer_inference (:477-479, :2356, :3029). The port and its four published types moved to sovereign-serving-host (REVIEW-build-serving-guest-port); StoredGuestLink — the tunnel/link-file wiring — stays and moves with this file in REVIEW-build-serving-move-throughput-guest"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/guest_tunnel.rs"
@@ -1363,8 +1363,14 @@ note = "the crate root; modules lifted out of sovereign-mesh across REVIEW-build
 [[module]]
 path = "sovereign/crates/sovereign-serving-host/src/lib.rs"
 context = "serving"
-lines = 11
+lines = 12
 note = "the host crate root; the host half arrives in rung domains-10 (2026-09-15)"
+
+[[module]]
+path = "sovereign/crates/sovereign-serving-host/src/guest_lender.rs"
+context = "serving"
+lines = 215
+note = "the GuestLenderSource port and its four published types (GuestLender/GrantPosture/NoGuestLenders); moved out of sovereign-mesh by REVIEW-build-serving-guest-port (2026-09-15) — SERVING_BOUNDARY.md (a)"
 
 [[module]]
 path = "sovereign/crates/sovereign-serving-host/src/recorder.rs"

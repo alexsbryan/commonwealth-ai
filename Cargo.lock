@@ -12913,6 +12913,7 @@ dependencies = [
  "sovereign-contracts",
  "sovereign-scheduler",
  "sovereign-time",
+ "tokio",
  "tracing",
  "uuid",
 ]
