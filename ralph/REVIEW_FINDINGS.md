@@ -283,3 +283,77 @@ Recorded, not changed:
 - **`size-gate` (advisory)** · 41 keys grew, the campaign's own growth; the
   new crates read as "new and unbaselined". `warn_gate` by design, does not
   block PREPUSH. Not re-pinned.
+
+## REVIEW-audit-6 — the knot's ports
+
+Range audited: `git log e21ac9c88..HEAD` (the previous audit's hash), the
+seven rows that landed the knot's ports — venue, guest-port, worker-port,
+emitter-port, manifest-port, local-inference, serving-principal. Checks:
+TESTALL exit=0 (13327 pass, 0 fail); PREPUSH exit=1, **one blocking lane —
+`boundary-gate` — the `serving` package's declared-red**, five violations
+unchanged from audit-5 (`sovereign-serving → commonwealth-{core,state}`, the
+`lib.rs:7` embed, and the two host `[[exception]]` rows that are
+stale-by-construction until the host half lands). `arch-gate` was red on two
+files and is green after the splits below; `size-gate` is advisory;
+`concept-gate` is could-not-judge on a stale graph, as audit-5 recorded.
+
+The row's two claims, verified:
+
+- **Every port carries a planted positive and a planted negative (ARCH 5).**
+  `VenueSource` — `OnePeer` (a candidate routes) vs `NoPeers` (empty falls
+  local), `peer_inference.rs` tests; `VenueHost` — `LedgerHost` (a gossiped
+  peer emits) vs `NoPeers` (absence, never a defaulting emitter) and a pinned
+  venue (`peer_inference.rs:4252`); `GuestLenderSource` — `a_live_grant_…`
+  vs `a_node_with_no_link_…` and `an_unusable_link_is_not_an_absent_one`
+  (`sovereign-serving-host/src/guest_lender.rs:128`); `WorkerState` —
+  `a_registered_pod_resolves_its_state` vs `an_unregistered_pod_is_absent`
+  (`worker_state.rs:40`); `LedgerEmitter` — `a_peer_outcome_with_tokens_mints_one_fact`
+  vs three negatives (`ledger.rs:66`); `SlotManifest` —
+  `an_annotated_file_resolves_capabilities_and_size` vs
+  `an_unannotated_file_is_absent` (`slot_select.rs:365`); `Principal` — the
+  five distinct keys vs `only_a_member_has_a_peer_key`
+  (`sovereign-contracts/src/principal.rs:152`); `LocalInferenceService` —
+  `StubFim` vs `NoFim` (`sovereign-api/src/routes_completions.rs:532`).
+- **The three `[[exception]]`-shaped risks resolve with no third exception
+  (K4).** `worker_pod` — the pod wire protocol moved to the shared leaf
+  `sovereign-contracts::worker_pod` (`worker_state.rs:57`); `models_manifest`
+  — the `SlotManifest` port replaces the six `DEFAULT_MANIFEST` reaches;
+  `commonwealth_state` — the `LedgerEmitter` port, the daemon implementing
+  it. `quality/ARCH_LAYERS.toml:1240,1247` still carries exactly the two
+  grandfathered serving rows; none added.
+
+Findings, fixed:
+
+- **ARCH §3.1 (trim or split)** · `peer_inference.rs`, `traits.rs` · the
+  ports added since audit-5 pushed both past arch-gate's 50-line slack (5609
+  vs 5449; 2155 vs 2086). Split out `venue_host.rs` (the Fabric-side ports)
+  and `local_inflight.rs` (the RAII guards) from `peer_inference`, and
+  `local_inference.rs` from `traits.rs`, every historical path re-exported.
+  Fixed in `f1f50aab6`.
+- **ARCH §3.1 (trim or split)** · `sovereign-api/src/routes_inference.rs`,
+  `sovereign-mesh/src/inference_adapter.rs` · the `InferenceProvider`
+  collapse grew both past slack (2408 vs 2392; 2155 vs 2136). The route
+  file's two test modules and the adapter's two move to sibling files via
+  `#[path]`, so every module path and `use super::*` is unchanged. Fixed in
+  `0f55c49c4`.
+- **ARCH 3 (the doc lands with the code)** · `quality/DOMAINS.toml` · the new
+  `principal.rs` had no `[[module]]` row, so `crate-lines --crate
+  sovereign-mesh` exited 4 on a coverage hole (ARCH 6 — the count would have
+  silently understated); the split files needed rows; and 19 line counts the
+  audited commits left stale were re-measured. Fixed in `f1f50aab6`
+  (splits) and `0f55c49c4` (the four test files).
+- **ARCH 3/4 (path-keyed registry)** · `quality/conformance/sovereign-mesh.toml`
+  · the UI-22 line followed `daemon.rs`'s test when `PeerInferenceEndpoint`
+  left the file. Fixed in `f1f50aab6`.
+
+Recorded, not changed:
+
+- **`boundary-gate` (blocking, approved)** · the `serving` package's five
+  declared-red violations are unchanged from audit-5 and are the state
+  `HUMAN-design-review` approved; this audit adds none (K4 — clearing them
+  here would draw the boundary in the wrong place).
+- **`concept-gate` could-not-judge** · the SCIP graph is stale (indexed
+  `f1f50aab`, HEAD `0f55c49c`); re-index is `svrn project refresh`, not this
+  unit's work. Audit-5 recorded the same.
+- **`size-gate` (advisory)** · 41 keys grew, the campaign's own growth; the
+  new crates read "new and unbaselined". `warn_gate` by design.
