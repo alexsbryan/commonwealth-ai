@@ -76,7 +76,14 @@ daemon-side half of the argument. Leading with what was wrong:
   emit `null`, so converging them is a `/status` wire change with a golden, not a deduplication.
 - **`PeerInferenceEndpoint`, the `Venue` record, is defined in the mesh host's `daemon` module.**
   Its definition belongs to `sovereign-scheduler`; the `MemberRecord` translation that produces
-  it is the daemon's adapter.
+  it is the daemon's adapter. Corrected 2026-09-15: the record's `transport:
+  Option<PinnedTransport>` field (`daemon.rs:4852`) does NOT travel with it. The scheduler may
+  not name `PinnedTransport` — rule 2 (`quality/ARCH_LAYERS.toml:426-429`) and layer direction
+  (`contract` vs host `runtime`) both refuse it — and it has no use for it: its whole view of
+  that fact is `PeerCandidateView.pinned_transport: bool`
+  (`sovereign-scheduler/src/scheduler_core.rs:244,:532`, the only transport mention in the
+  crate). `Venue` carries the bool; the host resolves the handle by `node_id` through a
+  host-defined resolver, supplied by `PinnedWorkerEndpointSource`.
 - **The host half receives more than its crate row says:** `worker_eligibility`,
   `pinned_pod_snapshot` and `pinned_transport` (tagged `compute`, but they decide which RPC
   inference workers may hold a shard and present a pinned pod as a venue) and
@@ -156,6 +163,10 @@ pub trait VenueSource: Send + Sync {
 // kernel_types::NodeId (join adoption swaps the id in a running daemon), burning exception #2 down. ledger_emission_for() (:365,
 // #[doc(hidden)] — the tell) -> the host mints emissions from RoutingOutcome instead.
 // Serving emits facts; Fabric prices them.
+// OFF the port, corrected 2026-09-15: the transport HANDLE. `Venue` carries
+// `pinned_transport: bool` only; the host resolves `PinnedTransport` by `node_id` through a
+// host-defined resolver (`PinnedWorkerEndpointSource` supplies it), because the scheduler may
+// not name the type and never reads it.
 // sovereign-serving-host — a PIN, not a candidate. NamedModelLocation (:3104) has
 // separate Peer(..)/Guest(..) variants; :3116 says "Not a scoring outcome ... a PIN".
 #[async_trait]
