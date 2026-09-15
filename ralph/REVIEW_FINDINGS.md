@@ -151,3 +151,62 @@ every hit was an in-crate definition, re-export or test (CALLERS proof in each
 commit body); `REVIEW-build-knowledge-assignment` moved the planner to
 `sovereign-grants` and dropped `corpus-engine` from `sovereign-serving`, with
 the registry note and SYSTEM_OVERVIEW updated in the same commit.
+
+## REVIEW-audit-3 — the pod moves
+
+Range audited: `git log 7f1f74501..HEAD` (the previous audit's hash), the
+seven pod units. Checks: TESTALL exit=0 (13312 pass, 0 fail); PREPUSH exit=1,
+one blocking gate (arch-gate) — §6, see `ralph/NEEDS_HUMAN.md`.
+
+Findings, fixed:
+
+- **ARCH 8 (one decider, one name)** · `sovereign-pods/src/worker_daemon.rs:89`
+  · `EchoRunner` spelled the `SystemTime -> secs` conversion inline while the
+  other three pod modules already call `sovereign_time::unix_now_u64`
+  (`worker_http.rs:278`, `worker_subprocess_runner.rs:663`,
+  `worker_pod.rs:417`). Fixed: the shared decider. Fixed in `a4b5e7756`.
+- **ARCH 3 (the doc lands with the code)** · `quality/DOMAINS.toml:886,905` ·
+  the clock fix removed three lines (291 -> 288) and moved
+  `InferenceProxyConfig` to `worker_daemon.rs:156`, staling the `[[module]]`
+  row and the `worker_inference_proxy` note's cite. Fixed: both re-keyed in
+  the same pass; the note's other cites verified against the tree
+  (`worker_http.rs:214,817`, `worker_inference_proxy.rs:67`,
+  `sovereign-cli-daemon/src/daemon_cmd/worker.rs:82,120`). Fixed in
+  `5db144fec`.
+- **Shims whose importers are all repointed (the row's VERB)** · the six pod
+  shims were deleted and `sovereign-cli-llm` / `sovereign-cli-daemon`
+  repointed at `sovereign_pods::`; `worker_pod`'s shim stays because
+  `pinned_pod_snapshot.rs:47`, `pinned_transport.rs:44` and
+  `pinned_worker_source.rs:56` still resolve `crate::worker_pod` through it.
+  Verified: `git grep 'sovereign_mesh::worker_(controller|daemon|http|inference_proxy|subprocess_runner)|sovereign_mesh::multi_pod_coordinator' -- '*.rs'` is empty. Fixed in
+  `38b0d37fa`.
+
+Recorded, not changed:
+
+- **Frozen cluster-graph cites name the old mesh paths** ·
+  `quality/DOMAINS.toml:5230-5231,5459-5460` · four `cites` in the sovereign-mesh
+  cluster graph (measured 2026-09-14, banner at `:4509`) point at
+  `sovereign-mesh/src/worker_daemon.rs:158` and `.../worker_http.rs:214`. They
+  are the 2026-09-14 measurement's own coordinates, not live pointers; the
+  banner at `:3818` says module rows were re-tagged after the measurement. A
+  re-key would falsify the measurement, so it is recorded here (ARCH 3/4).
+- **`size-gate` (advisory)** · 37 keys grew (`sovereign-cli-daemon::tests`
+  +220, `sovereign-cli-llm::tests` +426, `commonwealth-media` +429, …). This is
+  the campaign's own growth and the gate is `warn_gate` by design (AGENTS.md).
+  Not re-pinned; it does not block PREPUSH.
+
+Blocked (not fixable in this unit's rules):
+
+- **`arch-gate` — two NEW oversized files at moved paths.**
+  `sovereign-pods/src/worker_http.rs` (2046) and
+  `sovereign-pods/src/worker_subprocess_runner.rs` (1271) were oversized and
+  frozen in `quality/baselines/oversized.txt:160-161` under their old
+  `sovereign-mesh/src/` paths. The baseline is keyed by path, so the move
+  reads as new debt at an unchanged line count. The documented handling is a
+  re-key (`SYSTEM_OVERVIEW.md:8644` "Path re-key, no debt"; `:9089`
+  "`atoms.rs` moved crates … its `oversized.txt` row followed it"), but
+  PROMPT §7 forbids editing `quality/baselines/`. The in-rules alternative —
+  splitting both files below 1200 — is a real refactor (`worker_http.rs`'s
+  910 test lines out leaves 1135, which ENTERS the 800-1200 approach band and
+  grows that counter; it must fall below 800, so ~335 production lines must
+  move too). Escalated as `ralph/NEEDS_HUMAN.md`.

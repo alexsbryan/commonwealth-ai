@@ -95,7 +95,7 @@ O10 = `.sovereign/features/domains-10-serving-extract/order.md`
 - [x] dm-pods-move-controller 375d4d81d — depends [dm-pods-move-worker-http] — MOVE sovereign/crates/sovereign-mesh/src/worker_controller.rs -> sovereign-pods — check: LINT; LAYER; TEST(sovereign-pods); TEST(sovereign-mesh)
 - [x] dm-pods-move-worker-daemon 7fef58b06 — depends [dm-pods-move-worker-http] — MOVE sovereign/crates/sovereign-mesh/src/worker_daemon.rs -> sovereign-pods — check: LINT; LAYER; TEST(sovereign-pods); TEST(sovereign-mesh)
 - [x] dm-pods-move-multi-pod b4b8838b7 — depends [dm-pods-move-controller] — MOVE sovereign/crates/sovereign-mesh/src/multi_pod_coordinator.rs -> sovereign-pods — check: LINT; LAYER; TEST(sovereign-pods); TEST(sovereign-mesh)
-- [ ] REVIEW-audit-3 — depends [dm-pods-move-subprocess-runner, dm-pods-move-worker-daemon, dm-pods-move-multi-pod] — AUDIT the pod moves; repoint sovereign-cli-llm and sovereign-cli-daemon off the shims — check: TESTALL; PREPUSH
+- [~] REVIEW-audit-3 — depends [dm-pods-move-subprocess-runner, dm-pods-move-worker-daemon, dm-pods-move-multi-pod] — AUDIT the pod moves; repoint sovereign-cli-llm and sovereign-cli-daemon off the shims — check: TESTALL; PREPUSH
 
 ## Wave 1 — sovereign-mesh: serving
 
