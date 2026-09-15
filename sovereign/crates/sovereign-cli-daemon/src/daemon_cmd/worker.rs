@@ -30,7 +30,7 @@ pub(super) async fn run_worker_daemon(args: &[String]) -> i32 {
         }
     }
 
-    let (blob, source) = match sovereign_mesh::worker_daemon::load_bootstrap_blob(
+    let (blob, source) = match sovereign_pods::worker_daemon::load_bootstrap_blob(
         "SOVEREIGN_BOOTSTRAP",
         blob_path.as_deref(),
     ) {
@@ -63,7 +63,7 @@ pub(super) async fn run_worker_daemon(args: &[String]) -> i32 {
     // with the WorkerState. Without this the runner would never
     // observe the dump completing (it'd hold a different Notify
     // than the watcher fires).
-    let signals = sovereign_mesh::worker_daemon::new_disk_dump_signals();
+    let signals = sovereign_pods::worker_daemon::new_disk_dump_signals();
 
     // `SOVEREIGN_WORKER_RUNNER=echo` falls back to the stub used
     // during early integration testing — useful when validating the
@@ -78,15 +78,15 @@ pub(super) async fn run_worker_daemon(args: &[String]) -> i32 {
     // sibling the proxy can never be enabled because the trait
     // object hides the readiness flag.
     let (runner, inference_proxy): (
-        Arc<dyn sovereign_mesh::worker_http::WorkerRunner>,
-        Option<Arc<sovereign_mesh::worker_inference_proxy::InferenceProxyConfig>>,
+        Arc<dyn sovereign_pods::worker_http::WorkerRunner>,
+        Option<Arc<sovereign_pods::worker_inference_proxy::InferenceProxyConfig>>,
     ) = match runner_kind.as_str() {
         "echo" => {
             eprintln!("[worker-daemon] runner: echo (stub — no inference will run)");
             // Echo runner has no child daemon — leave the proxy
             // disabled. The /v1/* routes return 404 and the wire
             // protocol stays at /internal/worker/*.
-            (Arc::new(sovereign_mesh::worker_daemon::EchoRunner), None)
+            (Arc::new(sovereign_pods::worker_daemon::EchoRunner), None)
         }
         other => {
             if other != "subprocess" {
@@ -99,13 +99,13 @@ pub(super) async fn run_worker_daemon(args: &[String]) -> i32 {
                 "[worker-daemon] runner: subprocess (child daemon will spawn against {})",
                 config_path.display()
             );
-            let cfg = sovereign_mesh::worker_subprocess_runner::SubprocessRunnerConfig {
+            let cfg = sovereign_pods::worker_subprocess_runner::SubprocessRunnerConfig {
                 config_path: config_path.clone(),
                 ..Default::default()
             };
             let child_port = cfg.child_client_port;
             let subprocess = Arc::new(
-                sovereign_mesh::worker_subprocess_runner::SubprocessRunner::new(
+                sovereign_pods::worker_subprocess_runner::SubprocessRunner::new(
                     cfg,
                     signals.0.clone(),
                     signals.1.clone(),
@@ -117,7 +117,7 @@ pub(super) async fn run_worker_daemon(args: &[String]) -> i32 {
             // owner-side scheduler calls naturally 503 during the
             // ~90s model warmup instead of seeing ECONNREFUSED.
             let proxy = Arc::new(
-                sovereign_mesh::worker_inference_proxy::InferenceProxyConfig::for_local_child(
+                sovereign_pods::worker_inference_proxy::InferenceProxyConfig::for_local_child(
                     format!("http://127.0.0.1:{child_port}"),
                     subprocess.child_ready_signal(),
                 ),
@@ -126,12 +126,12 @@ pub(super) async fn run_worker_daemon(args: &[String]) -> i32 {
                 "[worker-daemon] inference proxy enabled (→ http://127.0.0.1:{child_port}) — \
                  owner-side mesh scheduler can now route /v1/chat/completions to this pod"
             );
-            let trait_obj: Arc<dyn sovereign_mesh::worker_http::WorkerRunner> = subprocess;
+            let trait_obj: Arc<dyn sovereign_pods::worker_http::WorkerRunner> = subprocess;
             (trait_obj, Some(proxy))
         }
     };
 
-    if let Err(e) = sovereign_mesh::worker_daemon::run_worker_mode_with_signals(
+    if let Err(e) = sovereign_pods::worker_daemon::run_worker_mode_with_signals(
         blob,
         runner,
         None,

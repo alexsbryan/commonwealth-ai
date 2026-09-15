@@ -7,21 +7,21 @@
 //! the existing `sovereign_pipeline::pod::*` shell-outs and adds an
 //! `address()` discovery poll backed by `vastai show instance --raw`.
 //!
-//! Lives in `sovereign-cli` (not sovereign-mesh or sovereign-pipeline)
-//! because that's the only crate already depending on both: pipeline
-//! provides the vastai create/destroy helpers, mesh provides the
-//! `WorkerProvider` trait. Avoiding a dep cycle between those two
-//! crates is the load-bearing constraint here.
+//! Lives in the CLI crate rather than `sovereign-pods` or
+//! `sovereign-pipeline` because that is where the two meet: pipeline
+//! provides the vastai create/destroy helpers, pods provides the
+//! `WorkerProvider` trait. Keeping the `vastai` shell-outs out of
+//! sovereign-pods is the load-bearing constraint here.
 
 use std::path::{Path, PathBuf};
 
 use ed25519_dalek::SigningKey;
 use serde::Deserialize;
-use sovereign_mesh::worker_controller::{
+use sovereign_pipeline::pod;
+use sovereign_pods::worker_controller::{
     JobSpec, ProviderError, ProviderInstance, ProviderResult, PublicAddress, WorkerProvider,
 };
-use sovereign_mesh::worker_pod::WORKER_PORT;
-use sovereign_pipeline::pod;
+use sovereign_pods::worker_pod::WORKER_PORT;
 
 /// Path on disk for the owner's persistent Ed25519 signing key. Lives
 /// alongside the pipeline pod ledger so a single `chmod 700
@@ -180,9 +180,9 @@ impl WorkerProvider for VastWorkerProvider {
 /// only happen if the caller asked for more pods than offers were
 /// staged, which is a user-side bug.
 ///
-/// Lives in the CLI crate (not `sovereign-mesh`) for the same reason
+/// Lives in the CLI crate (not `sovereign-pods`) for the same reason
 /// the single-offer provider does: keeping `vastai` shell-outs out of
-/// the mesh crate avoids the dep cycle that would otherwise form.
+/// the pods crate avoids the dep cycle that would otherwise form.
 ///
 /// [`create`]: WorkerProvider::create
 pub struct MultiOfferVastWorkerProvider {

@@ -149,16 +149,10 @@ pub mod yield_backoff;
 // Ephemeral worker pods — owner-initiated TLS-pinned transport that
 // replaces the full-mesh-pod path. Pods become single-owner workers,
 // not gossip peers. Spec: sovereign/docs/EPHEMERAL_WORKER_PODS.md.
-pub use sovereign_pods::multi_pod_coordinator; // shim: moved by domains dm-pods-move-multi-pod
-pub use sovereign_pods::worker_controller; // shim: moved by domains dm-pods-move-controller
-pub use sovereign_pods::worker_daemon; // shim: moved by domains dm-pods-move-worker-daemon
-pub use sovereign_pods::worker_http; // shim: moved by domains dm-pods-move-worker-http
-pub use sovereign_pods::worker_inference_proxy; // shim: moved by domains dm-pods-move-worker-http
 pub use sovereign_pods::worker_pod; // shim: moved by domains dm-pods-move-worker-pod
-pub use sovereign_pods::worker_subprocess_runner; // shim: moved by domains dm-pods-move-subprocess-runner
-                                                  // Pinned-pod inference routing — lets ephemeral worker pods join the
-                                                  // mesh scheduler's inference pool as one more peer, scored by the
-                                                  // same load balancer. Spec: docs/PINNED_WORKER_AS_INFERENCE_PEER.md.
+                                    // Pinned-pod inference routing — lets ephemeral worker pods join the
+                                    // mesh scheduler's inference pool as one more peer, scored by the
+                                    // same load balancer. Spec: docs/PINNED_WORKER_AS_INFERENCE_PEER.md.
 pub mod pinned_pod_snapshot;
 pub mod pinned_transport;
 pub mod pinned_worker_source;

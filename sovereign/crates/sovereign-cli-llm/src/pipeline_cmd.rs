@@ -887,7 +887,7 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
     // before paying for the pod so a missing file aborts cheaply.
     use sha2::{Digest, Sha256};
     use std::collections::BTreeMap;
-    let mut upload_specs: BTreeMap<String, sovereign_mesh::worker_controller::UploadFile> =
+    let mut upload_specs: BTreeMap<String, sovereign_pods::worker_controller::UploadFile> =
         BTreeMap::new();
     for path in &uploads {
         let name = match path.file_name().and_then(|n| n.to_str()) {
@@ -917,9 +917,9 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
         // already staged in one R2 bucket".
         let upload_file = if let Some(base) = upload_from_base.as_ref() {
             let url = format!("{base}/{name}");
-            sovereign_mesh::worker_controller::UploadFile::fetch_url(url, sha)
+            sovereign_pods::worker_controller::UploadFile::fetch_url(url, sha)
         } else {
-            sovereign_mesh::worker_controller::UploadFile::local(path.clone(), sha)
+            sovereign_pods::worker_controller::UploadFile::local(path.clone(), sha)
         };
         upload_specs.insert(name, upload_file);
     }
@@ -936,7 +936,7 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
         sha.copy_from_slice(&sha_bytes);
         upload_specs.insert(
             name.clone(),
-            sovereign_mesh::worker_controller::UploadFile::fetch_url(url.clone(), sha),
+            sovereign_pods::worker_controller::UploadFile::fetch_url(url.clone(), sha),
         );
     }
 
@@ -973,16 +973,16 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
         label_value.clone(),
         pick.clone(),
     ));
-    let mut ctrl_config = sovereign_mesh::worker_controller::ControllerConfig::default();
+    let mut ctrl_config = sovereign_pods::worker_controller::ControllerConfig::default();
     ctrl_config.bootstrap_ttl_seconds = bootstrap_ttl_hours.saturating_mul(3600);
     let controller =
-        sovereign_mesh::worker_controller::WorkerController::new(provider, owner_key, ctrl_config);
+        sovereign_pods::worker_controller::WorkerController::new(provider, owner_key, ctrl_config);
 
     // ─── JobSpec ────────────────────────────────────────────────────
     // No units list yet — `pod up` boots the pod and leaves it ready
     // for follow-up dispatch. A future `pipeline pod dispatch <handle>
     // <manifest.json>` command will POST the units to the worker.
-    let spec = sovereign_mesh::worker_controller::JobSpec {
+    let spec = sovereign_pods::worker_controller::JobSpec {
         job_id: job_id.clone(),
         label: label_value.clone(),
         uploads: upload_specs,
@@ -1440,13 +1440,13 @@ async fn cmd_pod_pool(args: &[String]) -> i32 {
             return 1;
         }
     };
-    let mut units: Vec<sovereign_mesh::worker_http::WorkUnit> = Vec::new();
+    let mut units: Vec<sovereign_pods::worker_http::WorkUnit> = Vec::new();
     for (line_no, line) in manifest_text.lines().enumerate() {
         let trimmed = line.trim();
         if trimmed.is_empty() || trimmed.starts_with('#') {
             continue;
         }
-        match serde_json::from_str::<sovereign_mesh::worker_http::WorkUnit>(trimmed) {
+        match serde_json::from_str::<sovereign_pods::worker_http::WorkUnit>(trimmed) {
             Ok(u) => {
                 if u.unit_id == 0 {
                     eprintln!(
@@ -1526,7 +1526,7 @@ async fn cmd_pod_pool(args: &[String]) -> i32 {
     // ─── Hash uploads ───────────────────────────────────────────────
     use sha2::{Digest, Sha256};
     use std::collections::BTreeMap;
-    let mut upload_specs: BTreeMap<String, sovereign_mesh::worker_controller::UploadFile> =
+    let mut upload_specs: BTreeMap<String, sovereign_pods::worker_controller::UploadFile> =
         BTreeMap::new();
     for path in &uploads {
         let name = match path.file_name().and_then(|n| n.to_str()) {
@@ -1552,9 +1552,9 @@ async fn cmd_pod_pool(args: &[String]) -> i32 {
         sha.copy_from_slice(&h.finalize());
         let upload_file = if let Some(base) = upload_from_base.as_ref() {
             let url = format!("{base}/{name}");
-            sovereign_mesh::worker_controller::UploadFile::fetch_url(url, sha)
+            sovereign_pods::worker_controller::UploadFile::fetch_url(url, sha)
         } else {
-            sovereign_mesh::worker_controller::UploadFile::local(path.clone(), sha)
+            sovereign_pods::worker_controller::UploadFile::local(path.clone(), sha)
         };
         upload_specs.insert(name, upload_file);
     }
@@ -1570,7 +1570,7 @@ async fn cmd_pod_pool(args: &[String]) -> i32 {
         sha.copy_from_slice(&sha_bytes);
         upload_specs.insert(
             name.clone(),
-            sovereign_mesh::worker_controller::UploadFile::fetch_url(url.clone(), sha),
+            sovereign_pods::worker_controller::UploadFile::fetch_url(url.clone(), sha),
         );
     }
 
@@ -1609,17 +1609,17 @@ async fn cmd_pod_pool(args: &[String]) -> i32 {
             chosen,
         ),
     );
-    let mut ctrl_config = sovereign_mesh::worker_controller::ControllerConfig::default();
+    let mut ctrl_config = sovereign_pods::worker_controller::ControllerConfig::default();
     ctrl_config.bootstrap_ttl_seconds = bootstrap_ttl_hours.saturating_mul(3600);
-    let coord_config = sovereign_mesh::multi_pod_coordinator::CoordinatorConfig::default();
-    let coordinator = sovereign_mesh::multi_pod_coordinator::MultiPodCoordinator::new(
+    let coord_config = sovereign_pods::multi_pod_coordinator::CoordinatorConfig::default();
+    let coordinator = sovereign_pods::multi_pod_coordinator::MultiPodCoordinator::new(
         provider,
         owner_key,
         ctrl_config,
         coord_config,
     );
 
-    let spec = sovereign_mesh::worker_controller::JobSpec {
+    let spec = sovereign_pods::worker_controller::JobSpec {
         job_id: job_id.clone(),
         label: label_value.clone(),
         uploads: upload_specs,

@@ -68,6 +68,9 @@ sovereign-gliner = { workspace = true }
 sovereign-workflow = { workspace = true }
 sovereign-workflow-host = { workspace = true }
 sovereign-mesh = { workspace = true, features = ["treesitter"] }
+# The rented-pod modules lifted out of sovereign-mesh (domains REVIEW-audit-3);
+# reached directly rather than through sovereign-mesh's shim.
+sovereign-pods = { path = "../sovereign-pods" }
 # THE `Runtime` recipe (TOPOLOGY.md §10 phase 5c). `chat_cmd::bootstrap`
 # carried its own ~450-line copy of it until 2026-08-25; what remains here
 # is only what this host resolves — which daemon, which models, which data
