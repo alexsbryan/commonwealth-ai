@@ -634,7 +634,7 @@ mod tests {
         AppState::new(NodeId::from_u128(1), mesh)
     }
 
-    use sovereign_core::time::unix_now;
+    use sovereign_time::unix_now;
 
     fn nid(n: u128) -> NodeId {
         NodeId::from_u128(n)

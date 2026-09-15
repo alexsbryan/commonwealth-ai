@@ -1242,7 +1242,7 @@ impl AppStateInner {
     /// middleware's `TallyGuard`, which holds `Arc<AppStateInner>`,
     /// can open/close rows without reaching through a second Arc.
     pub fn tally_peer_request_begin(&self, node: NodeId) {
-        let now = sovereign_core::time::unix_now();
+        let now = sovereign_time::unix_now();
         let mut tally = self.peer_tally.write().unwrap_or_else(|e| e.into_inner());
         let row = tally.entry(node).or_default();
         row.active += 1;
@@ -1287,7 +1287,7 @@ impl AppStateInner {
             .unwrap_or_else(|e| e.into_inner());
         *slot = Some(RejectedNodeIdHeader {
             raw: raw.chars().take(64).collect(),
-            at_unix: sovereign_core::time::unix_now(),
+            at_unix: sovereign_time::unix_now(),
         });
     }
 

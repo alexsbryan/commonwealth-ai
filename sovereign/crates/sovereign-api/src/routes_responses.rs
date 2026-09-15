@@ -1543,7 +1543,7 @@ fn mk_response_id() -> String {
     format!("resp_{}", commonwealth_core::clock::unix_now_millis())
 }
 
-use sovereign_core::time::unix_now_u64 as now_unix_secs;
+use sovereign_time::unix_now_u64 as now_unix_secs;
 
 #[derive(Serialize)]
 struct AdapterError {

@@ -704,7 +704,7 @@ mod tests {
     async fn a_paused_host_refuses_peer_embeddings_exactly_as_it_refuses_peer_chat() {
         let state = test_app_state();
         // Paused far enough ahead that the window cannot lapse mid-test.
-        state.set_contribution_paused_until(sovereign_core::time::unix_now() + 3600);
+        state.set_contribution_paused_until(sovereign_time::unix_now() + 3600);
         let peer = commonwealth_core::ids::NodeId::from_u128(0xBEEF).to_hex();
 
         for path in ["/v1/chat/completions", "/v1/embeddings"] {
@@ -734,7 +734,7 @@ mod tests {
     #[tokio::test]
     async fn a_paused_host_still_serves_its_own_embeddings() {
         let state = test_app_state();
-        state.set_contribution_paused_until(sovereign_core::time::unix_now() + 3600);
+        state.set_contribution_paused_until(sovereign_time::unix_now() + 3600);
         let resp = mock_router(state)
             .oneshot(
                 Request::post("/v1/embeddings")

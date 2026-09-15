@@ -199,7 +199,7 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
                 .convergence_recorder()
                 .map(|r| r.snapshot())
                 .unwrap_or((None, None));
-            let now = sovereign_core::time::unix_now();
+            let now = sovereign_time::unix_now();
             ConvergenceStatus {
                 alarm_threshold_secs: CONVERGENCE_ALARM_THRESHOLD_SECS as u64,
                 outbound_publish: convergence_arm(outbound.map(|t| now - t)),
@@ -643,13 +643,13 @@ mod process_status_tests {
         // `never` on both arms rather than omitting the answer.
         let state = crate::state::test_app_state();
         let recorder = std::sync::Arc::new(crate::state::ConvergenceRecord::new());
-        recorder.record_outbound_publish_success(sovereign_core::time::unix_now());
+        recorder.record_outbound_publish_success(sovereign_time::unix_now());
         state.inner.install_convergence_recorder(recorder);
 
         // The live status route needs a running mesh; render the
         // section the same way status() does and check the wire.
         let (outbound, inbound) = state.inner.convergence_recorder().unwrap().snapshot();
-        let now = sovereign_core::time::unix_now();
+        let now = sovereign_time::unix_now();
         let section = ConvergenceStatus {
             alarm_threshold_secs: CONVERGENCE_ALARM_THRESHOLD_SECS as u64,
             outbound_publish: convergence_arm(outbound.map(|t| now - t)),

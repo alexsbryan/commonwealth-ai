@@ -12056,6 +12056,7 @@ dependencies = [
  "sovereign-grants",
  "sovereign-meshapp-registry",
  "sovereign-serving",
+ "sovereign-time",
  "sovereign-tools",
  "tar",
  "tempfile",

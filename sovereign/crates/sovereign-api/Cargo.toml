@@ -64,6 +64,9 @@ sovereign-atos = { path = "../sovereign-atos", optional = true }
 # atlas_status, notes::response_mine) are not treesitter-gated.
 sovereign-tools = { path = "../sovereign-tools" }
 sovereign-core  = { path = "../sovereign-core" }
+# The Tier-0 wall-clock leaf, named directly rather than reached through the
+# `sovereign_core::time` re-export (domains row dm-time-repoint-api).
+sovereign-time = { workspace = true }
 # Tool-descriptor vocabulary for the two injector middlewares. Layer 0, so the
 # injectors name what a tool IS without the layer-1 -> layer-2 reach they used
 # to make through `sovereign_core::types` (noun-convergence rung 2c, family A).
