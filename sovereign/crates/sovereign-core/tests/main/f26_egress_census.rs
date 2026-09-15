@@ -344,12 +344,7 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-mesh/src/gossip.rs", Class::Mesh, 1),
     ("sovereign/crates/sovereign-mesh/src/canonical_pull.rs", Class::Mesh, 1),
 
-    // ---- sovereign-pods: the rented-pod modules (Wave 1) ----
-    // Lifted out of sovereign-mesh across dm-pods-move-*. `Class::Mesh`
-    // is the class this file's enum doc gives "mesh / peer / pod
-    // traffic — the estate's own transport", so the classification
-    // does not change with the crate (the deep_research/port.rs
-    // precedent) and each count is the one its mesh row carried.
+    // ---- sovereign-pods: the rented-pod modules (Wave 1); Class::Mesh per the enum doc's "pod traffic" ----
     ("sovereign/crates/sovereign-pods/src/worker_http.rs", Class::Mesh, 6),
     ("sovereign/crates/sovereign-pods/src/worker_subprocess_runner.rs", Class::Mesh, 1),
     ("sovereign/crates/sovereign-pods/src/worker_inference_proxy.rs", Class::Mesh, 1),

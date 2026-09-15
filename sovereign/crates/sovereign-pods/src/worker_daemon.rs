@@ -86,10 +86,7 @@ impl WorkerRunner for EchoRunner {
             emit(CompletedUnit {
                 unit_id: u.unit_id,
                 payload: serde_json::json!({"echo": u.kind, "input": u.payload}),
-                completed_at_unix: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_secs())
-                    .unwrap_or(0),
+                completed_at_unix: sovereign_time::unix_now_u64(),
             });
         }
     }
