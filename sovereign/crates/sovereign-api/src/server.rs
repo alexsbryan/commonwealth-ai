@@ -59,7 +59,10 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
     // and 503 with structured body + Retry-After when gated. See
     // `crate::admission`.
     let admission = || {
-        axum::middleware::from_fn_with_state(state.clone(), crate::admission::peer_admission_layer)
+        axum::middleware::from_fn_with_state(
+            state.clone(),
+            crate::admission::peer_admission_layer::<AppState>,
+        )
     };
 
     // Per-principal equal share for CLIENT (non-peer) callers — the other
@@ -71,7 +74,10 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
     // peer gate, for the same reason: it is the surface that consumes the
     // decode permit. See `MESH_SCALE_100_USERS_1000_CORPORA.md` §9.3.
     let fair_share = || {
-        axum::middleware::from_fn_with_state(state.clone(), crate::admission::client_fairness_layer)
+        axum::middleware::from_fn_with_state(
+            state.clone(),
+            crate::admission::client_fairness_layer::<AppState>,
+        )
     };
 
     // Eagerly load the primary chat slot so the first turn after an idle
@@ -294,7 +300,10 @@ pub fn internal_router(state: AppState) -> Router {
     // searches from peers rather than starving local chat. See
     // `crate::admission`.
     let admission = || {
-        axum::middleware::from_fn_with_state(state.clone(), crate::admission::peer_admission_layer)
+        axum::middleware::from_fn_with_state(
+            state.clone(),
+            crate::admission::peer_admission_layer::<AppState>,
+        )
     };
 
     Router::new()

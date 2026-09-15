@@ -60,7 +60,7 @@
 //! - **The key is only as honest as the header.** A loopback caller can
 //!   rotate its bearer or its `X-Principal` and mint fresh principals. This
 //!   is a *fairness* key, not an *authorization* key — the same trust posture
-//!   `X-Node-Id` already has on the peer gate (`admission.rs:289`). It is
+//!   `X-Node-Id` already has on the peer gate (`sovereign-serving-host/src/admission.rs`, moved host-side by REVIEW-build-serving-move-admission). It is
 //!   sufficient for the cooperative-local case it is built for and it must
 //!   never be load-bearing for access control.
 

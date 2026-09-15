@@ -49,6 +49,12 @@ toml = { workspace = true }
 # slot-alias map in `ArcSwap`s so the routing read path stays lock-free, and
 # mints the pinned-pod synthetic node id with `sha2` (already a dep).
 arc-swap = { workspace = true }
+# `admission` (moved host-side by domains REVIEW-build-serving-move-admission)
+# is the HTTP surface: the two axum middlewares and the 503 renderer. `axum` was
+# a dev-dep until the module landed; `http-body` carries the `GuardedBody`
+# wrapper the fair-share slot rides for the response BODY's lifetime.
+axum = { workspace = true }
+http-body = "1"
 
 [dev-dependencies]
 # Implementing `InferenceProvider` in the tests needs the trait's async
@@ -56,8 +62,10 @@ arc-swap = { workspace = true }
 futures = { workspace = true }
 # The guest-port controls are async.
 tokio = { workspace = true }
-# `model_fetch`'s tests stand up an in-process axum server over a tempdir.
+# `model_fetch`'s tests stand up an in-process axum server over a tempdir, and
+# `admission`'s adapter controls drive a real Router through `oneshot`.
 axum = { workspace = true }
+tower = "0.5"
 tempfile = "3"
 # The pinned-pod snapshot/transport tests mint a bootstrap blob with a fixed
 # owner key (moved host-side by domains REVIEW-build-serving-move-peer).

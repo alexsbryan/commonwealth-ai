@@ -7,6 +7,7 @@
 //! and `sovereign-api`'s `admission` (`sovereign/SERVING_BOUNDARY.md` "The two
 //! tiers").
 
+pub mod admission;
 pub mod entry_endpoint;
 pub mod fim_adapter;
 pub mod guest_lender;

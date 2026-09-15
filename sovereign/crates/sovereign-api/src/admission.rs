@@ -1,225 +1,40 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Peer-request admission middleware.
+//! The daemon's side of admission — the state the decision reads, and the
+//! guards it hands back.
 //!
-//! The desktop's friend-and-family launch story leans on three
-//! invariants this module enforces at the HTTP boundary:
+//! The decision itself, the two axum middlewares and the 503 renderer live in
+//! `sovereign-serving-host::admission` (`sovereign/SERVING_BOUNDARY.md` "The
+//! five entries" (c)); this module re-exports them at their historical paths
+//! and implements the two ports over [`AppState`]:
 //!
-//! - Local requests (no `X-Node-Id` header) are always admitted —
-//!   the user's own chat must never 503 because *they* are using
-//!   their machine.
-//! - Peer requests (`X-Node-Id` present) are subject to three
-//!   gates, in order of explicitness:
-//!     1. **Pause** — operator hit "Pause for 15 min" in the tray.
-//!     2. **Foreground yield** — the local user is actively using
-//!        the GPU (a chat completion landed within the yield
-//!        window). Prevents the "press send and the GPU is pinned
-//!        by a peer's enrich job" failure mode.
-//!     3. **Ceiling** — we're already serving as much peer work as
-//!        the user has configured.
-//! - Every rejection returns a structured 503 body so the
-//!   requesting peer's load balancer can pick another peer without
-//!   parsing free-form error strings.
+//! - [`Admission`] — the peer ceiling (pause, foreground yield, the
+//!   reciprocity-scaled `SchedCore` cap) and the client fair share, dispatched
+//!   on the [`Principal`] arm. One decider, one key (ARCH principle 8).
+//! - [`AdmissionHost`] — the edge resolver (`crate::principal`, which stays
+//!   here until `REVIEW-mint-principal`), the peer tally row, the canonical
+//!   `X-Node-Id` parser and the malformed-header record.
 //!
-//! Wired into routes via per-route `.layer(...)`. Today applied to
-//! `POST /v1/chat/completions` (client port; peers reach it via the
-//! mesh load balancer) and `POST /internal/knowledge/search`
-//! (internal port; peer fan-out).
-//!
-//! Local requests pay one atomic load (the `X-Node-Id` header check)
-//! and skip the rest. The work-stealing model means this hot path
-//! must stay cheap.
+//! The RAII guards stay here because they hold `Arc<AppStateInner>`: the peer
+//! slot releases at headers time, the tally and the client share at the
+//! response BODY's end. Each is an [`AdmissionLease`] so the host's
+//! middlewares carry it as an opaque box.
 
 use std::sync::Arc;
 
-use axum::{
-    body::Body,
-    extract::State,
-    http::{header::RETRY_AFTER, HeaderMap, Request, StatusCode},
-    middleware::Next,
-    response::{IntoResponse, Response},
-    Json,
-};
+use axum::http::HeaderMap;
 use commonwealth_core::ids::NodeId;
-use serde::Serialize;
-
 use crate::state::{AppState, AppStateInner};
 
-/// Why a peer request was rejected. Serialised in the 503 body and
-/// in tracing spans so contention triage doesn't require log spelunking.
-#[derive(Debug, Clone, Copy, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum AdmissionReason {
-    /// Operator-initiated runtime pause is active.
-    Paused,
-    /// Foreground-yield window: local user has activity in flight,
-    /// peer work would contend with their chat.
-    YieldedToLocal,
-    /// At-or-above the configured ceiling for concurrent peer
-    /// requests.
-    CeilingExceeded,
-    /// This node's own slot refused BEFORE parking the caller:
-    /// predicted wait exceeded the queue bound. Distinct from
-    /// `CeilingExceeded`, which counts concurrent PEER requests —
-    /// this one is about how long the caller would have waited in
-    /// THIS node's queue, regardless of who sent the turn.
-    LocalQueueFull,
-    /// The calling principal already holds its equal share of the
-    /// host's concurrency while other principals are active. Distinct
-    /// from every reason above: it says nothing about how busy the
-    /// host is, only that THIS caller is ahead of its neighbours.
-    /// A host with idle capacity still returns this — that is the
-    /// point, and it is why it is not a shed
-    /// (`MESH_SCALE_100_USERS_1000_CORPORA.md` §7.1 R2).
-    PrincipalShareExceeded,
-}
+pub use sovereign_serving_host::admission::{
+    client_fair_concurrency_from_env, client_fairness_enabled_from_env, client_fairness_layer,
+    jitter_retry_after, jittered_retry_after_secs, local_queue_shed_response, peer_admission_layer,
+    shed_response, Admission, AdmissionHost, AdmissionLease, AdmissionPosture, AdmissionReason,
+    AdmissionRejection, AdmissionVerdict, GuardedBody, Principal, DEFAULT_CLIENT_FAIR_CONCURRENCY,
+    RETRY_AFTER_JITTER_SPREAD_SECS,
+};
 
-impl AdmissionReason {
-    /// The stable machine-readable string for this reason, used as the
-    /// OpenAI `error.code` and as the top-level `reason`. Kept in sync
-    /// with the `rename_all = "snake_case"` serde attribute above by
-    /// the `admission_reason_code_matches_serde` test — two spellings
-    /// of one name is the §10.6 smell, and this is the pair most
-    /// likely to drift.
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Paused => "paused",
-            Self::YieldedToLocal => "yielded_to_local",
-            Self::CeilingExceeded => "ceiling_exceeded",
-            Self::LocalQueueFull => "local_queue_full",
-            Self::PrincipalShareExceeded => "principal_share_exceeded",
-        }
-    }
-}
-
-/// How many seconds of spread a shed's `Retry-After` hint carries on
-/// top of its base value.
-///
-/// WHY THIS IS NOT ZERO. A constant hint is a synchronized-retry
-/// generator: every client shed inside the same busy window is told to
-/// come back at the same instant, so the load that produced the shed
-/// re-arrives as a single spike instead of a ramp — and the spike sheds
-/// the same population again, in lockstep, forever. This is the
-/// classic thundering-herd retry loop, and at 100 clients against one
-/// concurrent turn (`MESH_SCALE_100_USERS_1000_CORPORA.md` §7.4 item 2)
-/// it is the difference between a queue that drains and one that
-/// oscillates. Four seconds on a 2s base spreads the herd over 3× the
-/// base window while keeping the worst-case hint inside the range a
-/// client's own backoff would have chosen anyway.
-pub const RETRY_AFTER_JITTER_SPREAD_SECS: u64 = 4;
-
-/// The jitter function itself, pure and therefore testable: `base`
-/// plus `entropy mod spread`. Split out from the entropy SOURCE so the
-/// spread policy has exactly one implementation and one name (§10.6)
-/// no matter which shed path renders the hint.
-fn jitter_retry_after(base: u64, entropy: u64) -> u64 {
-    base.saturating_add(entropy % RETRY_AFTER_JITTER_SPREAD_SECS)
-}
-
-/// Production entry point: `base` seconds, jittered.
-///
-/// Entropy is a process-local counter mixed with the wall clock's
-/// nanosecond field. The counter guarantees that two sheds from the
-/// SAME process never land on the same offset back-to-back (which a
-/// coarse clock would otherwise allow); the nanoseconds guarantee that
-/// two processes shedding in the same instant do not share a phase.
-/// Neither alone is sufficient, which is why both are mixed.
-pub fn jittered_retry_after_secs(base: u64) -> u64 {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-    let counter = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| u64::from(d.subsec_nanos()))
-        .unwrap_or(0);
-    // splitmix64 finalizer — cheap avalanche so the low bits of the
-    // counter/nanos mix don't hand out a sawtooth.
-    let mut z = counter
-        .wrapping_mul(0x9E37_79B9_7F4A_7C15)
-        .wrapping_add(nanos);
-    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-    let entropy = z ^ (z >> 31);
-    jitter_retry_after(base, entropy)
-}
-
-/// 503 body the admission layer returns to a rejected caller.
-/// `retry_after_secs` mirrors the `Retry-After` header value.
-///
-/// `error` is the OpenAI error OBJECT, not a bare string: this route is
-/// advertised as OpenAI-compatible, so a shed serialised as a plain
-/// string put the one message that has to survive ("busy, come back in
-/// 30s") out of reach of every SDK on the route. Reuses [`ErrorDetail`]
-/// rather than minting a second error shape (§10.6).
-///
-/// `reason` and `retry_after_secs` stay TOP-LEVEL and unchanged — the
-/// peer load balancer and `deep_research`'s shed classifier key off
-/// them, the latter by substring — so widening `error` is additive.
-#[derive(Debug, Clone, Serialize)]
-pub struct AdmissionRejection {
-    /// OpenAI-shaped error object. `code` carries the same value as
-    /// `reason` so a client that only understands the OpenAI envelope
-    /// still gets the precise cause.
-    pub error: crate::openai_types::ErrorDetail,
-    pub reason: AdmissionReason,
-    pub retry_after_secs: u64,
-}
-
-impl AdmissionRejection {
-    /// Build a rejection from the human-readable cause. The OpenAI
-    /// `type` is the coarse bucket (`server_error`) and `code` is the
-    /// precise reason, which is the split the OpenAI error contract
-    /// asks for.
-    pub fn new(message: impl Into<String>, reason: AdmissionReason, retry_after_secs: u64) -> Self {
-        Self {
-            error: crate::openai_types::ErrorDetail {
-                message: message.into(),
-                error_type: "server_error".to_string(),
-                code: Some(reason.as_str().to_string()),
-            },
-            reason,
-            retry_after_secs,
-        }
-    }
-}
-
-/// The ONE place a shed becomes an HTTP response: 503 + `Retry-After`
-/// + the structured body. Both the peer-admission middleware below and
-/// the local queue-shed path in `routes_inference` render through here.
-///
-/// Why this is a function rather than two call sites that each build a
-/// response: a shed is backpressure, and a client that receives it as
-/// an untyped `backend_error` cannot tell "busy, come back in 35s" from
-/// "something crashed". That was note `bef03728`'s open gap, and the
-/// 2026-08-07 live fleet probe turned it into an observed failure —
-/// the caller got `{"type":"backend_error"}` carrying its retry hint
-/// only inside a prose message, with no `Retry-After` header.
-/// A local queue shed, rendered. Both chat entry points (streaming and
-/// non-streaming) call this so the body and header are built in exactly
-/// one place rather than once per route.
-pub fn local_queue_shed_response(
-    position: u32,
-    predicted_wait_ms: u64,
-    retry_after_secs: u64,
-) -> Response {
-    shed_response(AdmissionRejection::new(
-        format!("host busy: ~{predicted_wait_ms} ms predicted wait at queue position {position}"),
-        AdmissionReason::LocalQueueFull,
-        retry_after_secs,
-    ))
-}
-
-pub fn shed_response(rejection: AdmissionRejection) -> Response {
-    let retry_after = rejection.retry_after_secs;
-    (
-        StatusCode::SERVICE_UNAVAILABLE,
-        [(RETRY_AFTER, retry_after.to_string())],
-        Json(rejection),
-    )
-        .into_response()
-}
-
-/// RAII guard returned by `AppState::admit_peer_request`. Holds one slot in
-/// the peer fair scheduler for `node`; `release`s it on drop so callers can't
+/// RAII guard returned by the peer admission decision. Holds one slot in the
+/// peer fair scheduler for `node`; `release`s it on drop so callers can't
 /// forget. The drop happens at the end of the middleware's response future —
 /// including on unwind, which keeps the scheduler accurate when a downstream
 /// handler panics.
@@ -256,16 +71,16 @@ impl Drop for PeerInflightGuard {
     }
 }
 
-/// RAII open/close of the per-peer tally row (order
-/// `seat-resource-commons` UC-R1). Construction opens the row
-/// (`tally_peer_request_begin`); drop closes it
-/// (`tally_peer_request_end`). Panic-safe like [`PeerInflightGuard`]:
-/// if the downstream handler unwinds before a response exists, the
-/// guard drops on the middleware's stack frame and `active` is not
-/// leaked. When a response IS produced, the guard MOVES into the
-/// response body's [`TallyBody`], so the decrement fires when the
-/// BODY ends — the truthful in-flight window for streaming responses
-/// (the scheduler slot, by contrast, releases at headers time).
+impl AdmissionLease for PeerInflightGuard {}
+
+/// RAII open/close of the per-peer tally row (order `seat-resource-commons`
+/// UC-R1). Construction opens the row (`tally_peer_request_begin`); drop closes
+/// it (`tally_peer_request_end`). Panic-safe like [`PeerInflightGuard`]: if the
+/// downstream handler unwinds before a response exists, the guard drops on the
+/// middleware's stack frame and `active` is not leaked. When a response IS
+/// produced, the guard moves into the response body's wrapper, so the decrement
+/// fires when the BODY ends — the truthful in-flight window for streaming
+/// responses (the scheduler slot, by contrast, releases at headers time).
 #[must_use = "drop the guard when the peer request body ends — the tally active counter only decrements on drop"]
 pub struct TallyGuard {
     inner: Arc<AppStateInner>,
@@ -285,131 +100,20 @@ impl Drop for TallyGuard {
     }
 }
 
-/// Response-body wrapper that holds an RAII guard for the whole streaming
-/// lifetime of the body, so a counter opened at admit time closes when the
-/// body is consumed, dropped, or the client disconnects — not merely when the
-/// handler returned.
-///
-/// This is the one place the "serving right now" window is defined. Two
-/// guards ride it, for the same reason and by the same rule:
-///
-/// - [`TallyGuard`] — `/status`'s per-peer `active` counter (UC-R1).
-/// - [`ClientShareGuard`] — the per-principal fair-share slot. Holding it to
-///   headers time would be wrong on a streamed turn: headers leave as soon as
-///   the first token is ready, while the decode permit is still held, so a
-///   greedy principal would be handed its next share before the current turn
-///   had actually finished.
-///
-/// Generic rather than duplicated: the wrapper is pure plumbing, and two
-/// copies of it would be two implementations of one rule (§10.6).
-pub struct GuardedBody<G> {
-    inner: axum::body::Body,
-    _guard: G,
-}
+impl AdmissionLease for TallyGuard {}
 
-impl<G> GuardedBody<G> {
-    pub(crate) fn new(inner: axum::body::Body, guard: G) -> Self {
-        Self {
-            inner,
-            _guard: guard,
-        }
-    }
-}
-
-impl<G: Unpin> http_body::Body for GuardedBody<G> {
-    type Data = <axum::body::Body as http_body::Body>::Data;
-    type Error = <axum::body::Body as http_body::Body>::Error;
-
-    fn poll_frame(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Option<std::result::Result<http_body::Frame<Self::Data>, Self::Error>>>
-    {
-        std::pin::Pin::new(&mut self.inner).poll_frame(cx)
-    }
-
-    fn size_hint(&self) -> http_body::SizeHint {
-        self.inner.size_hint()
-    }
-}
-
-/// The per-peer tally's body wrapper — the original and still the name the
-/// peer admission path uses.
-pub type TallyBody = GuardedBody<TallyGuard>;
-
-// ── Client fair-share admission (order `serve50-identity`) ─────────────────
-
-/// Concurrency the host can carry before the inference slot queue starts
-/// shedding — the numerator
-/// [`serving_policy::fair_sched::fair_share_cap`] divides among active
-/// principals.
-///
-/// **Derived, not picked.** The slot queue sheds when the predicted wait
-/// exceeds `DEFAULT_MAX_QUEUE_WAIT_MS = 30_000`
-/// (`sovereign-inference/src/embedded/model_slot.rs:862`) and predicts
-/// `position × avg_turn_ms` against one decode permit. Sixteen is that bound
-/// at a ~1.9 s turn: the depth at which the host is fully committed but not
-/// yet refusing. Sizing it *there* is what keeps this cap from becoming a
-/// second shed rule — at or below this concurrency the slot queue serves
-/// everyone, so the only thing the cap changes is WHOSE turns fill it.
-///
-/// Two consequences worth holding:
-/// - Too high, and a greedy principal's share is too generous to matter.
-/// - Too low, and a lone caller would be throttled below what the host can
-///   actually serve — which is why the `active <= 1` branch of
-///   `fair_share_cap` bypasses this number entirely.
-pub const DEFAULT_CLIENT_FAIR_CONCURRENCY: u32 = 16;
-
-/// Read the fair-share budget from `SOVEREIGN_CLIENT_FAIR_CONCURRENCY`.
-/// A malformed or zero value is REPORTED and falls back to the default —
-/// never silently accepted, since a zero budget would floor every cap at 1
-/// and quietly turn a rationing rule into a serialization rule.
-pub fn client_fair_concurrency_from_env() -> u32 {
-    match std::env::var("SOVEREIGN_CLIENT_FAIR_CONCURRENCY") {
-        Err(_) => DEFAULT_CLIENT_FAIR_CONCURRENCY,
-        Ok(v) => match v.trim().parse::<u32>() {
-            Ok(n) if n > 0 => n,
-            _ => {
-                tracing::warn!(
-                    value = %v,
-                    default = DEFAULT_CLIENT_FAIR_CONCURRENCY,
-                    "SOVEREIGN_CLIENT_FAIR_CONCURRENCY is not a positive number — using the default"
-                );
-                DEFAULT_CLIENT_FAIR_CONCURRENCY
-            }
-        },
-    }
-}
-
-/// Read the kill switch from `SOVEREIGN_CLIENT_FAIRNESS`. Default **on**.
-/// `0`/`false`/`off`/`no` disable enforcement; the gate still resolves the
-/// principal and logs it, so the A/B is one env var on one binary rather than
-/// two builds. It restores the unfair BEHAVIOUR, not the old BINARY — the
-/// observe-only path still takes and releases the accounting slot and still
-/// wraps the response body, which is measurable under load
-/// (`MESH_SCALE_100_USERS_1000_CORPORA.md` §9.5).
-pub fn client_fairness_enabled_from_env() -> bool {
-    match std::env::var("SOVEREIGN_CLIENT_FAIRNESS") {
-        Err(_) => true,
-        Ok(v) => !matches!(
-            v.trim().to_ascii_lowercase().as_str(),
-            "0" | "false" | "off" | "no"
-        ),
-    }
-}
-
-/// RAII guard holding one principal's fair-share slot. Released on drop,
-/// which — because it rides [`GuardedBody`] — is when the response BODY ends,
-/// not when the handler returned.
+/// RAII guard holding one principal's fair-share slot. Released on drop, which
+/// — because it rides the host's [`GuardedBody`] — is when the response BODY
+/// ends, not when the handler returned.
 #[must_use = "drop the guard when the client turn's body ends — the principal's \
               share only frees on drop"]
 pub struct ClientShareGuard {
     inner: Arc<AppStateInner>,
-    key: crate::principal::PrincipalKey,
+    key: Principal,
 }
 
 impl ClientShareGuard {
-    fn new(inner: Arc<AppStateInner>, key: crate::principal::PrincipalKey) -> Self {
+    fn new(inner: Arc<AppStateInner>, key: Principal) -> Self {
         Self { inner, key }
     }
 }
@@ -432,75 +136,50 @@ impl Drop for ClientShareGuard {
     }
 }
 
-/// Axum middleware: per-principal fair share on the CLIENT surface.
+impl AdmissionLease for ClientShareGuard {}
+
+/// The client fair-share decision, over the daemon's `SchedCore<Principal>`.
 ///
 /// The §9.3 red in one sentence: ten callers with ten credentials were served
 /// strictly by arrival order, so the one keeping 32 requests in flight took
-/// 79.5% of the turns against a 10% population share. This layer is the
-/// missing consult — it resolves the principal ([`crate::principal`], the one
-/// resolver, called here and nowhere else) and asks the shared `SchedCore`
-/// whether that principal is already holding its equal share.
+/// 79.5% of the turns against a 10% population share. This is the missing
+/// consult — the fair share of a principal already ahead of its neighbours.
 ///
-/// **What this layer is not.** It is not a shed. It never inspects the queue,
-/// the host's load, or a predicted wait; those belong to the inference slot
-/// queue, which stays THE shed decider (§7.1 R2). It never queues either —
-/// `try_grant` leaves no waiter behind, so a refused caller cannot park and
-/// there is no second queue to double-count against. And it never ranks: the
-/// weight passed to the core is a constant `1.0`, because weight-ordering is
-/// condemned (`SCHEDULER_QUALITY.md` F6) and the fix §9.3 asks for is *equal*
-/// share, not *ranked* share.
-///
-/// **Peer traffic passes straight through.** A request carrying `X-Node-Id`
-/// is already rationed per node by [`peer_admission_layer`]. Gating it here
-/// too would be exactly the double-gate the order forbids, and would make the
-/// `distinct` arm of the §9.3 harness worse rather than leaving it untouched.
-pub async fn client_fairness_layer(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    req: Request<Body>,
-    next: Next,
-) -> Response {
-    // Peer requests are the peer gate's business. One decider each.
-    if headers.get("x-node-id").is_some() {
-        return next.run(req).await;
-    }
-
-    let peer_addr = req
-        .extensions()
-        .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
-        .map(|c| c.0);
-    // THE call site. Resolving anywhere else would be a second identity.
-    let resolved = crate::principal::resolve_principal(&headers, peer_addr);
-
+/// **What this is not.** It is not a shed: it never inspects the queue, the
+/// host's load, or a predicted wait; those belong to the inference slot queue,
+/// which stays THE shed decider (§7.1 R2). It never queues either — `try_grant`
+/// leaves no waiter behind. And it never ranks: the weight is a constant `1.0`,
+/// because weight-ordering is condemned (`SCHEDULER_QUALITY.md` F6) and the fix
+/// §9.3 asks for is *equal* share, not *ranked* share.
+fn admit_client(state: &AppState, who: &Principal) -> AdmissionVerdict {
     let enforcing = state.client_fairness_enabled();
     let budget = state.client_fair_concurrency();
 
     let (outcome, cap, active, inflight) = {
         let mut sched = state.lock_client_sched();
-        let active = sched.active_keys_including(&resolved.key);
+        let active = sched.active_keys_including(who);
         let cap = serving_policy::fair_sched::fair_share_cap(budget, active);
-        let inflight = sched.inflight_of(&resolved.key);
+        let inflight = sched.inflight_of(who);
         // Weight is a constant: see the "never ranks" note above.
         let outcome = if enforcing {
-            sched.try_grant(resolved.key.clone(), 1.0, cap)
+            sched.try_grant(who.clone(), 1.0, cap)
         } else {
             // Observe-only: still take the slot so the accounting (and the
             // `active` denominator) is identical to the enforcing path —
             // otherwise the A/B would compare two different measurements.
-            sched.try_grant(resolved.key.clone(), 1.0, u32::MAX)
+            sched.try_grant(who.clone(), 1.0, u32::MAX)
         };
         (outcome, cap, active, inflight)
     };
 
-    // Glassbox: EVERY admission decision names the principal, how it was
-    // identified, the share it was measured against, and what was decided.
-    // `target: "admission"` is a custom target — it is dark unless the
-    // tracing filter lists it (see `quality/env-flags.toml`).
+    // Glassbox: EVERY admission decision names the principal, the share it was
+    // measured against, and what was decided. `target: "admission"` is a custom
+    // target — it is dark unless the tracing filter lists it (see
+    // `quality/env-flags.toml`).
     let granted = matches!(outcome, serving_policy::fair_sched::TryGrant::Granted);
     tracing::debug!(
         target: "admission",
-        principal = %resolved.key,
-        identified_by = resolved.source.as_str(),
+        principal = %who,
         active_principals = active,
         fair_share_cap = cap,
         principal_inflight = inflight,
@@ -511,11 +190,10 @@ pub async fn client_fairness_layer(
     );
 
     if granted {
-        let guard = ClientShareGuard::new(Arc::clone(&state.inner), resolved.key);
-        let response = next.run(req).await;
-        // The share is held for the BODY's lifetime, not headers time — a
-        // streamed turn still owns the decode permit after its headers go out.
-        return response.map(|body| Body::new(GuardedBody::new(body, guard)));
+        return AdmissionVerdict::Admitted(Box::new(ClientShareGuard::new(
+            Arc::clone(&state.inner),
+            who.clone(),
+        )));
     }
 
     // Over its share. This is backpressure with a hint, rendered through the
@@ -524,13 +202,13 @@ pub async fn client_fairness_layer(
     let retry_after_secs = jittered_retry_after_secs(1);
     tracing::info!(
         target: "admission",
-        principal = %resolved.key,
+        principal = %who,
         fair_share_cap = cap,
         active_principals = active,
         retry_after_secs,
         "admission.client: 503 — principal is over its equal share"
     );
-    shed_response(AdmissionRejection::new(
+    AdmissionVerdict::Rejected(AdmissionRejection::new(
         format!(
             "over fair share: this caller holds {inflight} of {cap} concurrent turns \
              while {active} principals are active"
@@ -540,71 +218,68 @@ pub async fn client_fairness_layer(
     ))
 }
 
-/// Axum middleware fn. Apply via
-/// `axum::middleware::from_fn_with_state(state, peer_admission_layer)`.
-///
-/// On admit: forwards to the inner handler with the guard bound to
-/// the request's response future, so the inflight counter decrements
-/// at response completion.
-///
-/// On reject: returns 503 + `Retry-After` header + JSON body.
-pub async fn peer_admission_layer(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    req: Request<Body>,
-    next: Next,
-) -> Response {
-    let is_peer = headers.get("x-node-id").is_some();
-    if !is_peer {
-        return next.run(req).await;
+impl Admission for AppState {
+    fn admit(&self, who: &Principal, now_unix_ms: u64) -> AdmissionVerdict {
+        match who {
+            // A verified member is peer traffic: the ceiling, scaled by its
+            // reciprocity weight, under the pause and the foreground yield.
+            Principal::Member { node_id } => {
+                match self.admit_peer_request_at(*node_id, (now_unix_ms / 1000) as i64) {
+                    Ok(guard) => AdmissionVerdict::Admitted(Box::new(guard)),
+                    Err(rejection) => AdmissionVerdict::Rejected(rejection),
+                }
+            }
+            // Every other arm is a client: the fair share.
+            Principal::LocalOwner { .. }
+            | Principal::RemoteClient { .. }
+            | Principal::Guest { .. }
+            | Principal::Anonymous => admit_client(self, who),
+        }
     }
-    // Peer request: key the fair scheduler on the origin node. A present-but-
-    // unparseable id buckets under the zero node, so it's still gated and
-    // never silently bypasses the ceiling. The rejected raw value is
-    // recorded so /status can NAME it on the zero-bucket row (order
-    // commons-fluency fix 7) — an opaque `node-0000000000000000` row would
-    // default the absence instead of reporting it (ARCH §18.3).
-    let node = match crate::headers::parse_x_node_id(&headers) {
-        Some(node) => node,
-        None => {
-            let raw = headers
-                .get("x-node-id")
-                .or_else(|| headers.get("X-Node-Id"))
-                .and_then(|v| v.to_str().ok())
-                .unwrap_or("<unreadable header>");
-            state.inner.record_rejected_x_node_id(raw);
-            NodeId::from_u128(0)
+
+    fn posture(&self) -> AdmissionPosture {
+        let now = sovereign_time::unix_now();
+        if self.seconds_until_unpaused_at(now).is_some() {
+            AdmissionPosture::Paused
+        } else if self.yield_peers_to_foreground()
+            && self.seconds_until_foreground_idle_at(now).is_some()
+        {
+            AdmissionPosture::ForegroundYield
+        } else if self.peer_inflight_count() >= self.contribution_max_peer_inflight() {
+            AdmissionPosture::Ceiling
+        } else {
+            AdmissionPosture::Open
         }
-    };
-    match state.admit_peer_request(node) {
-        Ok(_guard) => {
-            // _guard binds the scheduler slot to this future's
-            // lifetime; the saturating decrement fires when the
-            // response future drops (including panic unwind).
-            let tally_guard = TallyGuard::new(Arc::clone(&state.inner), node);
-            let response = next.run(req).await;
-            drop(_guard);
-            // The scheduler slot releases at headers time (above); the
-            // TALLY's `active` counter instead follows the response
-            // BODY's lifetime via TallyBody, so /status answers "is
-            // this daemon serving the peer right now?" truthfully for
-            // streaming responses (UC-R1). If the handler panicked,
-            // `tally_guard` dropped on unwind and active is already
-            // back — it moves into the body only when a response
-            // exists. `Body::new` re-boxes the wrapper into the axum
-            // `Body` type the rest of the router expects.
-            response.map(|body| Body::new(TallyBody::new(body, tally_guard)))
+    }
+}
+
+impl AdmissionHost for AppState {
+    fn resolve(&self, headers: &HeaderMap, peer: Option<std::net::SocketAddr>) -> Principal {
+        // THE resolver, called here and nowhere else. Its `PrincipalKey` and
+        // this `Principal` partition the same three buckets, so the key change
+        // is behaviour-preserving; `DAEMON_CORE.md` §3.3 moves the resolver to
+        // the daemon's edge in `REVIEW-mint-principal`.
+        match crate::principal::resolve_principal(headers, peer).key {
+            crate::principal::PrincipalKey::Credential(fp) => {
+                Principal::RemoteClient { credential: fp }
+            }
+            crate::principal::PrincipalKey::Declared(name) => Principal::LocalOwner {
+                sub_identity: Some(name),
+            },
+            crate::principal::PrincipalKey::Anonymous => Principal::Anonymous,
         }
-        Err(rejection) => {
-            // Rejections are NOT tallied: a 503 means "not serving"
-            // and must not read as serving on /status.
-            tracing::info!(
-                reason = ?rejection.reason,
-                retry_after_secs = rejection.retry_after_secs,
-                "admission: 503 — peer request gated"
-            );
-            shed_response(rejection)
-        }
+    }
+
+    fn parse_node_id(&self, headers: &HeaderMap) -> Option<NodeId> {
+        crate::headers::parse_x_node_id(headers)
+    }
+
+    fn peer_tally(&self, node: &NodeId) -> Box<dyn AdmissionLease> {
+        Box::new(TallyGuard::new(Arc::clone(&self.inner), *node))
+    }
+
+    fn record_rejected_node_id(&self, raw: &str) {
+        self.inner.record_rejected_x_node_id(raw);
     }
 }
 
@@ -617,6 +292,9 @@ mod tests {
     use commonwealth_core::ids::{MeshId, NodeId};
     use commonwealth_core::mesh::Mesh;
     use tower::ServiceExt;
+
+    use axum::http::header::RETRY_AFTER;
+    use axum::response::Response;
 
     fn fresh_state() -> AppState {
         use std::collections::HashMap;
@@ -700,11 +378,10 @@ mod tests {
         assert!(s.admit_peer_request(nid(2)).is_ok());
     }
 
-    /// RED-FIRST (order mesh-scale-t0, item 2). Before the fix,
-    /// `admit_peer_request` returned a hardcoded `retry_after_secs: 2`
-    /// on every ceiling shed, so this collected `{2}` and the
-    /// distinct-value assertion failed. A single retry instant for the
-    /// whole shed population IS the thundering herd.
+    /// RED-FIRST (order mesh-scale-t0, item 2). Before the fix, the ceiling
+    /// shed returned a hardcoded `retry_after_secs: 2`, so this collected
+    /// `{2}` and the distinct-value assertion failed. A single retry instant
+    /// for the whole shed population IS the thundering herd.
     #[test]
     fn ceiling_shed_retry_after_is_jittered() {
         let s = fresh_state();
@@ -775,6 +452,33 @@ mod tests {
         assert!(s.admit_peer_request(nid(1)).is_ok());
     }
 
+    /// The published `posture()` names the gate that is refusing — one arm per
+    /// refusal `admit` can return, in the order it checks them. A posture with
+    /// no arm exercised is a query nobody can trust.
+    #[test]
+    fn posture_names_the_active_gate() {
+        let s = fresh_state();
+        assert_eq!(s.posture(), AdmissionPosture::Open);
+
+        // Ceiling: a zero budget sheds every peer, and nothing else is set.
+        let s = fresh_state();
+        s.set_contribution_max_peer_inflight(0);
+        assert_eq!(s.posture(), AdmissionPosture::Ceiling);
+
+        // Foreground yield outranks the ceiling.
+        let s = fresh_state();
+        s.set_yield_window_secs(60);
+        s.bump_foreground_active();
+        assert_eq!(s.posture(), AdmissionPosture::ForegroundYield);
+
+        // Pause outranks both.
+        let s = fresh_state();
+        s.set_yield_window_secs(60);
+        s.bump_foreground_active();
+        s.set_contribution_paused_until(unix_now() + 60);
+        assert_eq!(s.posture(), AdmissionPosture::Paused);
+    }
+
     // ── The advertised number matches the enforced decision ──────
     //
     // These four pin the availability composite. The defect they
@@ -789,7 +493,7 @@ mod tests {
         let s = fresh_state();
         s.set_yield_window_secs(60);
         s.bump_foreground_active();
-        // Same state that makes `admit_peer_request` refuse...
+        // Same state that makes the peer decision refuse...
         assert!(matches!(
             s.admit_peer_request(nid(1)).unwrap_err().reason,
             AdmissionReason::YieldedToLocal
@@ -934,7 +638,7 @@ mod tests {
 
     fn tally_test_router(state: AppState) -> Router {
         Router::new().route("/chat", post(|| async { "ok" })).layer(
-            axum::middleware::from_fn_with_state(state.clone(), peer_admission_layer),
+            axum::middleware::from_fn_with_state(state.clone(), peer_admission_layer::<AppState>),
         )
     }
 
@@ -1025,11 +729,11 @@ mod tests {
             .route("/chat", post(|| async { "ok" }))
             .layer(axum::middleware::from_fn_with_state(
                 state.clone(),
-                peer_admission_layer,
+                peer_admission_layer::<AppState>,
             ))
             .layer(axum::middleware::from_fn_with_state(
                 state,
-                client_fairness_layer,
+                client_fairness_layer::<AppState>,
             ))
     }
 
@@ -1073,7 +777,7 @@ mod tests {
         // And the client scheduler is untouched — nothing is in flight there.
         assert_eq!(
             s.lock_client_sched()
-                .active_keys_including(&crate::principal::PrincipalKey::Anonymous),
+                .active_keys_including(&Principal::Anonymous),
             1,
             "a peer turn must not appear as an active client principal — the only \
              active key here is the probe key itself"
@@ -1141,13 +845,13 @@ mod tests {
     // ── Client fair share (order `serve50-identity`) ────────────────
     //
     // These drive the LAYER, not the policy — the policy's own assertions
-    // live next to `fair_share_cap` in commonwealth-core. What is tested
-    // here is the wiring §9.3 measured as absent: that the principal on the
-    // wire reaches the scheduler and changes what the node does.
+    // live next to `fair_share_cap` in serving-policy. What is tested here is
+    // the wiring §9.3 measured as absent: that the principal on the wire
+    // reaches the scheduler and changes what the node does.
 
     fn fair_share_router(state: AppState) -> Router {
         Router::new().route("/chat", post(|| async { "ok" })).layer(
-            axum::middleware::from_fn_with_state(state.clone(), client_fairness_layer),
+            axum::middleware::from_fn_with_state(state.clone(), client_fairness_layer::<AppState>),
         )
     }
 
@@ -1247,16 +951,18 @@ mod tests {
         let other = turn_as(&router, "other").await; // a second active principal
         let mine = turn_as(&router, "mine").await;
         assert_eq!(mine.status(), axum::http::StatusCode::OK);
-        let key = crate::principal::PrincipalKey::Credential({
-            // Resolve through the ONE resolver rather than recomputing the
-            // fingerprint here — two implementations of a key is the smell.
-            let mut h = axum::http::HeaderMap::new();
-            h.insert("authorization", "Bearer tok-mine".parse().unwrap());
-            match crate::principal::resolve_principal(&h, None).key {
-                crate::principal::PrincipalKey::Credential(fp) => fp,
-                other => panic!("expected a credential key, got {other:?}"),
-            }
-        });
+        let key = Principal::RemoteClient {
+            credential: {
+                // Resolve through the ONE resolver rather than recomputing the
+                // fingerprint here — two implementations of a key is the smell.
+                let mut h = axum::http::HeaderMap::new();
+                h.insert("authorization", "Bearer tok-mine".parse().unwrap());
+                match <AppState as AdmissionHost>::resolve(&s, &h, None) {
+                    Principal::RemoteClient { credential } => credential,
+                    other => panic!("expected a credential principal, got {other:?}"),
+                }
+            },
+        };
         assert_eq!(
             s.client_inflight_of(&key),
             1,
@@ -1357,54 +1063,6 @@ mod tests {
             "omitting identity must not buy a second share"
         );
         drop((named, first, second));
-    }
-
-    #[test]
-    fn fair_concurrency_env_reports_a_bad_value_instead_of_accepting_it() {
-        // A zero budget would floor every cap at 1 and silently convert a
-        // rationing rule into a serialization rule — absence reported, never
-        // defaulted (§18.3).
-        let restore = std::env::var("SOVEREIGN_CLIENT_FAIR_CONCURRENCY").ok();
-        for bad in ["0", "banana", ""] {
-            std::env::set_var("SOVEREIGN_CLIENT_FAIR_CONCURRENCY", bad);
-            assert_eq!(
-                client_fair_concurrency_from_env(),
-                DEFAULT_CLIENT_FAIR_CONCURRENCY,
-                "{bad:?} must fall back to the default, loudly"
-            );
-        }
-        std::env::set_var("SOVEREIGN_CLIENT_FAIR_CONCURRENCY", "24");
-        assert_eq!(client_fair_concurrency_from_env(), 24);
-        std::env::remove_var("SOVEREIGN_CLIENT_FAIR_CONCURRENCY");
-        assert_eq!(
-            client_fair_concurrency_from_env(),
-            DEFAULT_CLIENT_FAIR_CONCURRENCY
-        );
-        if let Some(v) = restore {
-            std::env::set_var("SOVEREIGN_CLIENT_FAIR_CONCURRENCY", v);
-        }
-    }
-
-    #[test]
-    fn fairness_defaults_on_and_the_kill_switch_is_explicit() {
-        let restore = std::env::var("SOVEREIGN_CLIENT_FAIRNESS").ok();
-        std::env::remove_var("SOVEREIGN_CLIENT_FAIRNESS");
-        assert!(
-            client_fairness_enabled_from_env(),
-            "fairness ships on; the flag is a kill switch, not an opt-in"
-        );
-        for off in ["0", "false", "off", "NO", " off "] {
-            std::env::set_var("SOVEREIGN_CLIENT_FAIRNESS", off);
-            assert!(!client_fairness_enabled_from_env(), "{off:?} must disable");
-        }
-        for on in ["1", "true", "on", "anything-else"] {
-            std::env::set_var("SOVEREIGN_CLIENT_FAIRNESS", on);
-            assert!(client_fairness_enabled_from_env(), "{on:?} must stay on");
-        }
-        std::env::remove_var("SOVEREIGN_CLIENT_FAIRNESS");
-        if let Some(v) = restore {
-            std::env::set_var("SOVEREIGN_CLIENT_FAIRNESS", v);
-        }
     }
 
     /// covers: FE-99

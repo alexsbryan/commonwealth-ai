@@ -26,7 +26,8 @@ point. The scheduler half (the seven modules in the tier table below, 6,559 line
 imports zero `commonwealth_*`, zero `sovereign-inference`, zero `axum`. **That half is
 already a crate; it has not been given a manifest.** The
 knot is `peer_inference.rs` (5,399 lines, 38% of Serving's mesh lines) and, api-side,
-`admission` + `routes_inference` + `routes_responses`.
+`admission` (moved host-side by `REVIEW-build-serving-move-admission`) +
+`routes_inference` + `routes_responses`.
 
 The anticorruption layer `DOMAINS.md` §5 asks for **already exists and is already the
 only door**: `PeerEndpointSource` (`sovereign-serving-host/src/peer_inference.rs:337`, moved host-side
@@ -111,7 +112,7 @@ daemon-side half of the argument. Leading with what was wrong:
 | Crate | Lines | Role |
 |---|---:|---|
 | `sovereign-scheduler` | ~6,450 | **Arithmetic over the published language.** `scheduler_core`, `oicp_select`, `predicted_time`, `tier`, `decision_log`, `decision_replay`, `decision_trace`, `slot_aliases`, `yield_backoff`. The ranking decision reads no clock and does no I/O; the recorder sink, the local slot pick and the throughput stream observer move to the host (corrected above). |
-| `sovereign-serving-host` | ~11,350 | **The ports and the knot.** `peer_inference`, `inference_adapter`, `oicp_synthesis`, `guest_lender`, `pinned_worker_source`, `entry_endpoint`, `throughput_tracking`, plus `sovereign-api`'s `admission`. Opens connections, holds the HTTP surface, receives every candidate through a port. |
+| `sovereign-serving-host` | ~11,350 | **The ports and the knot.** `peer_inference`, `inference_adapter`, `oicp_synthesis`, `guest_lender`, `pinned_worker_source`, `entry_endpoint`, `throughput_tracking`, plus `admission` (moved out of `sovereign-api` by `REVIEW-build-serving-move-admission`). Opens connections, holds the HTTP surface, receives every candidate through a port. |
 | `serving-policy` | 1,241 | Already exists, already tier-0, ZERO in-repo deps. `fair_sched` left `commonwealth-core` 2026-09-03; two `[[forbid]]` rows pin it both ways (`quality/ARCH_LAYERS.toml:381-389`). **The precedent Phase C copies.** |
 | `sovereign-serving` | 720 → 0 | The peg: eleven exported types with zero external references, plus 771 lines of shard assignment that drag `corpus-engine`. Emptied by rung 9. |
 

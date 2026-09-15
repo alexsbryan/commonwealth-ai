@@ -12,6 +12,7 @@ use commonwealth_core::mesh::Mesh;
 use commonwealth_state::{ActivityEmitter, ContributionEmitter, MeshStore, PeerPreferenceStore};
 use corpus_engine::CorpusEngine;
 use serving_policy::fair_sched::{reciprocity_weight, SchedCore, TryGrant};
+use sovereign_serving_host::admission::Principal;
 use sovereign_grants::{EphemeralGrantStore, GuestGrantStore, VerifyReport, WorkQueueManager};
 use sovereign_meshapp_registry::proxy::AppPortMap;
 use sovereign_meshapp_registry::registry::AppRegistry;
@@ -724,10 +725,16 @@ pub struct AppStateInner {
     pub peer_sched: Mutex<SchedCore<NodeId>>,
 
     /// Fair admission for **client**-served inference — the same `SchedCore`
-    /// policy as `peer_sched`, keyed by [`crate::principal::PrincipalKey`]
+    /// policy as `peer_sched`, keyed by [`sovereign_contracts::principal::Principal`]
     /// instead of `NodeId`, so the population `MESH_SCALE_100_USERS_1000_CORPORA.md`
     /// §9.3 measured (ten local callers on one node) is rationed by *who is
     /// asking* rather than by arrival order.
+    ///
+    /// The key is the published `Principal`, not the wire-side `PrincipalKey`:
+    /// `admission` derives both its fairness and its peer keys from the one
+    /// identity type (`DAEMON_CORE.md` §3.3), so there is no second identity
+    /// scheme to drift (ARCH principle 8). The daemon's resolver maps the two
+    /// partitions one-to-one.
     ///
     /// Its global slot budget is deliberately `usize::MAX`: this gate must
     /// never refuse on depth. §7.1 R2's correction is explicit that a depth
@@ -736,7 +743,7 @@ pub struct AppStateInner {
     /// only rule this scheduler enforces is the per-principal equal share
     /// ([`serving_policy::fair_sched::fair_share_cap`]), and `try_grant`
     /// never leaves a waiter behind — so there is no second queue either.
-    pub client_sched: Mutex<SchedCore<crate::principal::PrincipalKey>>,
+    pub client_sched: Mutex<SchedCore<Principal>>,
 
     /// Concurrency budget divided among active principals by
     /// [`serving_policy::fair_sched::fair_share_cap`]. See
@@ -752,7 +759,7 @@ pub struct AppStateInner {
 
     /// Per-peer request tally (order `seat-resource-commons` UC-R1).
     /// Written by the admission middleware (begin on admit, end when
-    /// the response BODY ends — see `crate::admission::TallyBody`);
+    /// the response BODY ends — see `crate::admission::GuardedBody`);
     /// read by `/status` to answer "is this daemon serving the peer
     /// right now?" Keyed by the `X-Node-Id` header value (the only
     /// peer attribution available; see [`PeerTally`]).
@@ -909,7 +916,16 @@ impl AppStateInner {
     ///
     /// `window == 0` disables the feature; the `0` last-active sentinel means
     /// no foreground request has ever landed, and a fresh boot must not pause.
+    ///
+    /// The clock-reading wrapper; [`Self::foreground_yield_remaining_secs_at`]
+    /// is the decider, so the admission decision can take `now` as an argument
+    /// rather than read the clock (`SERVING_BOUNDARY.md` (c)).
     pub(crate) fn foreground_yield_remaining_secs(&self) -> Option<u64> {
+        self.foreground_yield_remaining_secs_at(sovereign_time::unix_now())
+    }
+
+    /// [`Self::foreground_yield_remaining_secs`] against a passed clock.
+    pub(crate) fn foreground_yield_remaining_secs_at(&self, now: i64) -> Option<u64> {
         let window = self
             .yield_window_secs
             .load(std::sync::atomic::Ordering::Relaxed);
@@ -929,10 +945,6 @@ impl AppStateInner {
         if last == 0 {
             return None;
         }
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(0);
         let elapsed = now.saturating_sub(last);
         if elapsed < 0 {
             return Some(window);
@@ -965,7 +977,7 @@ impl AppStateInner {
 
     /// Close a peer's tally row: `active` decrements (saturating — a
     /// poison-recovered or raced decrement must never go negative).
-    /// Called when the response BODY ends (see `admission::TallyBody`),
+    /// Called when the response BODY ends (see `admission::GuardedBody`),
     /// so `active` tracks the true streaming window, not headers time.
     pub fn tally_peer_request_end(&self, node: NodeId) {
         let mut tally = self.peer_tally.write().unwrap_or_else(|e| e.into_inner());
@@ -1921,6 +1933,12 @@ impl AppState {
         self.inner.foreground_yield_remaining_secs()
     }
 
+    /// [`Self::seconds_until_foreground_idle`] against a passed clock, so the
+    /// admission decision reads no clock of its own.
+    pub fn seconds_until_foreground_idle_at(&self, now: i64) -> Option<u64> {
+        self.inner.foreground_yield_remaining_secs_at(now)
+    }
+
     /// Replace the yield window at runtime. The daemon constructor
     /// calls this once with the configured value; the desktop's
     /// Settings tab calls it on user toggle. Setting `0` disables
@@ -1995,9 +2013,7 @@ impl AppState {
     /// Lock the client fairness scheduler, recovering from poison rather than
     /// cascading a panic into every future admission (same rule as
     /// [`Self::lock_peer_sched`]).
-    pub(crate) fn lock_client_sched(
-        &self,
-    ) -> std::sync::MutexGuard<'_, SchedCore<crate::principal::PrincipalKey>> {
+    pub(crate) fn lock_client_sched(&self) -> std::sync::MutexGuard<'_, SchedCore<Principal>> {
         self.inner
             .client_sched
             .lock()
@@ -2005,7 +2021,7 @@ impl AppState {
     }
 
     /// In-flight client turns currently attributed to `key`.
-    pub fn client_inflight_of(&self, key: &crate::principal::PrincipalKey) -> u32 {
+    pub fn client_inflight_of(&self, key: &Principal) -> u32 {
         self.lock_client_sched().inflight_of(key)
     }
 
@@ -2124,15 +2140,19 @@ impl AppState {
 
     /// Seconds until the active pause expires. `Some(0)` is never
     /// returned — `None` means "not currently paused."
+    ///
+    /// The clock-reading wrapper; [`Self::seconds_until_unpaused_at`] is the
+    /// decider.
     pub fn seconds_until_unpaused(&self) -> Option<u64> {
+        self.seconds_until_unpaused_at(sovereign_time::unix_now())
+    }
+
+    /// [`Self::seconds_until_unpaused`] against a passed clock.
+    pub fn seconds_until_unpaused_at(&self, now: i64) -> Option<u64> {
         let expiry = self.contribution_paused_until();
         if expiry == 0 {
             return None;
         }
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(0);
         let remaining = expiry.saturating_sub(now);
         if remaining <= 0 {
             None
@@ -2173,9 +2193,20 @@ impl AppState {
         &self,
         node: NodeId,
     ) -> Result<crate::admission::PeerInflightGuard, crate::admission::AdmissionRejection> {
+        self.admit_peer_request_at(node, sovereign_time::unix_now())
+    }
+
+    /// [`Self::admit_peer_request`] against a passed clock — the decider the
+    /// published `Admission::admit` calls, so the decision reads no clock of
+    /// its own (`SERVING_BOUNDARY.md` (c)).
+    pub fn admit_peer_request_at(
+        &self,
+        node: NodeId,
+        now_unix_secs: i64,
+    ) -> Result<crate::admission::PeerInflightGuard, crate::admission::AdmissionRejection> {
         use crate::admission::{AdmissionReason, AdmissionRejection, PeerInflightGuard};
 
-        if let Some(remaining) = self.seconds_until_unpaused() {
+        if let Some(remaining) = self.seconds_until_unpaused_at(now_unix_secs) {
             return Err(AdmissionRejection::new(
                 "contribution paused",
                 AdmissionReason::Paused,
@@ -2183,7 +2214,7 @@ impl AppState {
             ));
         }
         if self.yield_peers_to_foreground() {
-            if let Some(remaining) = self.seconds_until_foreground_idle() {
+            if let Some(remaining) = self.seconds_until_foreground_idle_at(now_unix_secs) {
                 return Err(AdmissionRejection::new(
                     "local user active",
                     AdmissionReason::YieldedToLocal,

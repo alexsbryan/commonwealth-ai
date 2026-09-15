@@ -702,7 +702,7 @@ reason = "must stay consumable without the agent runtime — it names NO soverei
 [[forbid]]
 from = "sovereign-api"
 to = "sovereign-*"
-except = ["sovereign-contracts", "sovereign-serving", "sovereign-grants", "sovereign-meshapp-registry", "sovereign-time"]
+except = ["sovereign-contracts", "sovereign-serving", "sovereign-serving-host", "sovereign-grants", "sovereign-meshapp-registry", "sovereign-time"]
 # `except` gained sovereign-{serving,grants,meshapp-registry} at the domains-1
 # move (2026-09-11): they were `commonwealth-{inference,knowledge,app}` and left
 # `commonwealth/crates/` in the same commit as this crate. They were ALWAYS in
@@ -715,6 +715,15 @@ except = ["sovereign-contracts", "sovereign-serving", "sovereign-grants", "sover
 # `[dependencies]` empty), and this list was not widened with it, so layer-gate
 # was red from that commit. Same shape as the three above: a contract-family
 # leaf always in the closure, never part of R6's measurement.
+# `except` gained sovereign-serving-host at REVIEW-build-serving-move-admission
+# (2026-09-15): the row MOVES `sovereign-api`'s admission module into
+# `sovereign-serving-host` (SERVING_BOUNDARY.md (c)) and the daemon keeps only
+# the port impl, so the mount in `server.rs` and the `Admission for AppState`
+# impl name the host. This is the R6 ledger gaining one entry, NOT a third
+# serving-package `[[exception]]` (that ledger is unchanged at two). The edge
+# burns down when the daemon's host modules move to `sovereign-daemon`
+# (DAEMON_CORE.md §4.1), which is where `sovereign-api`'s mounting of these
+# layers goes.
 
 reason = "cross-family reach — the mesh API should meet the runtime at the OICP/contracts seam (R6)"
 

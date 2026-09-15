@@ -162,7 +162,8 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
                         served_total: t.served_total,
                         last_request_at: t.last_request_at,
                         // The zero bucket is the malformed-header bucket
-                        // (admission.rs buckets parse failures there, fix 7):
+                        // (the admission layer in sovereign-serving-host buckets parse failures
+                        // there, fix 7):
                         // name the rejected value and the expected wire form
                         // instead of leaving an opaque zero row. Only this
                         // row carries the fields.

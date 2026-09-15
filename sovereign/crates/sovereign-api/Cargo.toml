@@ -12,6 +12,12 @@ commonwealth-core = { workspace = true }
 commonwealth-transport = { workspace = true, features = ["fanout"] }
 commonwealth-discovery = { workspace = true }
 sovereign-serving = { workspace = true }
+# The admission decision, its two axum middlewares and the 503 renderer moved
+# host-side at REVIEW-build-serving-move-admission (SERVING_BOUNDARY.md (c));
+# this crate keeps the `Admission for AppState` impl, the RAII guards and the
+# route mount, so it names the host. The edge is in the R6 `[[forbid]]` except
+# at quality/ARCH_LAYERS.toml:705, ledgered there with its burn-down.
+sovereign-serving-host = { path = "../sovereign-serving-host" }
 sovereign-grants = { workspace = true }
 # The ring rail, named DIRECTLY since cw-lift 1c. It used to be reached
 # through `commonwealth_knowledge::rail`, which was 1b's re-export facade;

@@ -7353,7 +7353,9 @@ work pins the GPU while the user is chatting. Components:
   principle 5). The comment is reworded and says why.
 
 - **W2 — peer-admission middleware**
-  (`sovereign-api/admission.rs`) — applied to client-port
+  (`sovereign-serving-host/admission.rs`, the decider and both middlewares;
+  `sovereign-api/admission.rs` keeps the `AppState` port impls and the guards —
+  REVIEW-build-serving-move-admission, 2026-09-15) — applied to client-port
   `/v1/chat/completions` + internal-port
   `/v1/knowledge/search`. Local requests admit unconditionally;
   peer requests are rejected with 503 + `Retry-After` when paused,
@@ -10145,3 +10147,30 @@ condition of this move.
 `quality/baselines/fan_in.tsv` was edited BY HAND, one line, for §10.1q's
 reason. The cap is `16`; the landed edge is `16` (`1693c48b6`). No other crate
 may ride it.
+
+### 10.1aa Approach band ACCEPTED — the admission split enters it (REVIEW-build-serving-move-admission, 2026-09-15)
+
+`REVIEW-build-serving-move-admission` MOVEs the admission decision out of
+`sovereign-api` into `sovereign-serving-host` (`SERVING_BOUNDARY.md` (c)). The
+original `sovereign-api/src/admission.rs` was 1,447 lines and baselined
+OVERSIZED; the split leaves two files, neither over the 1,200 ceiling —
+`sovereign-serving-host/src/admission.rs` (800: the `Admission`/`AdmissionHost`
+traits, the two axum middlewares and the 503 renderer) and
+`sovereign-api/src/admission.rs` (1,105: the daemon's port impls, the RAII
+guards and the AppState-coupled tests). Both land INSIDE ARCH §3.1's 800–1,200
+approach band, which is §10.1j's shape exactly: a file leaving the oversized
+list does not shrink the band, it ENTERS it.
+
+Measured per file against `HEAD` (not snapshotted from the tree, §10.1j): the
+band was 205 files / 200,798 lines at `8b5d082a4` (green — 129 under its
+200,927 baseline, an un-banked cut); this unit adds exactly **+2 files / +1,905
+lines** (800 + 1,105; the old path was oversized, so it contributed nothing to
+the band before). `quality/baselines/approach_band.txt` was edited BY HAND to
+207 / 202,703 for §10.1q's reason — `--update-baseline` would snapshot the
+whole tree and absorb unrelated growth (PROMPT §7). The +1,776 over the old
+baseline is this unit's +1,905 less that 129-line pre-existing cut, which this
+raise banks.
+
+No file was trimmed or padded to dodge the band; a split of an oversized file
+into two sub-1,200 modules cannot avoid it, and the two halves are the design
+`SERVING_BOUNDARY.md` (c) asks for.

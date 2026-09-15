@@ -1029,8 +1029,8 @@ note = "was compute; jobs — DAEMON_CORE.md §3.2, §4.3 (2026-09-14)"
 [[module]]
 path = "sovereign/crates/sovereign-api/src/admission.rs"
 context = "serving"
-lines = 1447
-note = ""
+lines = 1105
+note = "the daemon's side of admission since REVIEW-build-serving-move-admission (2026-09-15): the `Admission`/`AdmissionHost` impls over AppState, the RAII guards, and the re-exports of the host's surface. The decision, the two axum middlewares and the 503 renderer are `sovereign-serving-host/src/admission.rs`; SERVING_BOUNDARY.md (c)"
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/auto_recover.rs"
@@ -1413,8 +1413,20 @@ note = "the crate root; modules lifted out of sovereign-mesh across REVIEW-build
 [[module]]
 path = "sovereign/crates/sovereign-serving-host/src/lib.rs"
 context = "serving"
-lines = 20
+lines = 21
 note = "the host crate root; the host half arrives in rung domains-10 (2026-09-15)"
+
+[[module]]
+path = "sovereign/crates/sovereign-serving-host/src/admission.rs"
+context = "serving"
+lines = 800
+note = "the Admission decider and its two axum middlewares — moved out of sovereign-api by REVIEW-build-serving-move-admission (2026-09-15); `admit(&Principal, now_unix_ms)` is pure over the snapshot, the daemon implements `AdmissionHost` for the resolver/tally/parser; SERVING_BOUNDARY.md (c)"
+
+[[module]]
+path = "sovereign/crates/sovereign-serving-host/src/venue_host.rs"
+context = "serving"
+lines = 90
+note = "the host-side ports the router asks its host through (identity reader, ledger port, pinned-transport resolver), split out of peer_inference.rs and moved here by REVIEW-build-serving-move-peer; the coverage row was missing at HEAD and added by REVIEW-build-serving-move-admission (crate-lines --crate sovereign-serving-host exited 4 on it)"
 
 [[module]]
 path = "sovereign/crates/sovereign-serving-host/src/ledger.rs"
