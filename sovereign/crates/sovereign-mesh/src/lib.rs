@@ -48,7 +48,8 @@ pub mod features_http;
 pub mod fim_adapter;
 pub mod gossip;
 pub mod governance_http;
-pub mod guest_lender;
+pub use sovereign_serving_host::guest_lender; // shim: moved by domains REVIEW-build-serving-move-throughput-guest
+pub mod guest_source;
 pub mod guest_tunnel;
 pub mod http_response;
 pub mod inference_adapter;
@@ -129,11 +130,11 @@ pub use sovereign_scheduler::slot_aliases; // shim: moved by domains dm-sched-mo
 pub use sovereign_serving_host::source_content_validator; // shim: moved by domains dm-serving-move-leaves
 pub mod state;
 pub mod supervised_task;
-pub mod throughput_tracking;
 /// Capability bands — the tier floor of `SCHEDULER_QUALITY.md` §4.1:
 /// capability filters the candidate set, predicted cost ranks what
 /// survives.
-pub use sovereign_scheduler::tier; // shim: moved by domains dm-sched-move-tier
+pub use sovereign_scheduler::tier;
+pub use sovereign_serving_host::throughput_tracking; // shim: moved by domains REVIEW-build-serving-move-throughput-guest // shim: moved by domains dm-sched-move-tier
 pub mod tool_profile;
 pub mod turn_approval;
 pub mod turn_extras_http;

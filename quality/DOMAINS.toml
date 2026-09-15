@@ -443,10 +443,10 @@ lines = 1015
 note = "ring governance routes - the mesh's own; was fabric; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/guest_lender.rs"
-context = "serving"
-lines = 469
-note = "grant posture is a routing input; read only by peer_inference (:477-479, :2356, :3029). The port and its four published types moved to sovereign-serving-host (REVIEW-build-serving-guest-port); StoredGuestLink — the tunnel/link-file wiring — stays and moves with this file in REVIEW-build-serving-move-throughput-guest"
+path = "sovereign/crates/sovereign-mesh/src/guest_source.rs"
+context = "fabric"
+lines = 184
+note = "the mesh-side impls of the serving host's two guest ports — GuestLinkReader over sovereign_core::guest_link and GuestTunnelOpener over guest_tunnel — plus the factory the daemon installs; the reach that stays in Fabric (SERVING_BOUNDARY.md (a), REVIEW-build-serving-move-throughput-guest 2026-09-15)"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/guest_tunnel.rs"
@@ -541,7 +541,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/lib.rs"
 context = "host"
-lines = 173
+lines = 174
 note = ""
 
 [[module]]
@@ -827,10 +827,6 @@ lines = 346
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/throughput_tracking.rs"
-context = "serving"
-lines = 322
-note = ""
 
 [[module]]
 path = "sovereign/crates/sovereign-scheduler/src/tier.rs"
@@ -1411,7 +1407,7 @@ note = "the crate root; modules lifted out of sovereign-mesh across REVIEW-build
 [[module]]
 path = "sovereign/crates/sovereign-serving-host/src/lib.rs"
 context = "serving"
-lines = 14
+lines = 20
 note = "the host crate root; the host half arrives in rung domains-10 (2026-09-15)"
 
 [[module]]
@@ -1423,8 +1419,14 @@ note = "the contribution-ledger port — the host mints the InferenceReceived fa
 [[module]]
 path = "sovereign/crates/sovereign-serving-host/src/guest_lender.rs"
 context = "serving"
-lines = 215
-note = "the GuestLenderSource port and its four published types (GuestLender/GrantPosture/NoGuestLenders); moved out of sovereign-mesh by REVIEW-build-serving-guest-port (2026-09-15) — SERVING_BOUNDARY.md (a)"
+lines = 751
+note = "the GuestLenderSource port and its four published types (REVIEW-build-serving-guest-port) plus StoredGuestLink, the resolver moved in from sovereign-mesh by REVIEW-build-serving-move-throughput-guest (2026-09-15). The holder's link file and the Fabric tunnel arrive through the GuestLinkReader / GuestTunnelOpener ports — SERVING_BOUNDARY.md (a)"
+
+[[module]]
+path = "sovereign/crates/sovereign-serving-host/src/throughput_tracking.rs"
+context = "serving"
+lines = 323
+note = "the TTFT / token-rate stream observer; moved out of sovereign-mesh by REVIEW-build-serving-move-throughput-guest (2026-09-15) — its consumers are peer_inference/pinned_worker_source"
 
 [[module]]
 path = "sovereign/crates/sovereign-serving-host/src/recorder.rs"
@@ -11870,8 +11872,8 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-core/src/guest_link.rs"
 context = "unknown"
-lines = 219
-note = ""
+lines = 220
+note = "the holder's guest link file; the daemon reads it through sovereign-serving-host's GuestLinkReader port (REVIEW-build-serving-move-throughput-guest, 2026-09-15)"
 
 [[module]]
 path = "sovereign/crates/sovereign-core/src/health_monitor.rs"

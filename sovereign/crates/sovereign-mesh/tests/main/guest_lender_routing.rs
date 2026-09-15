@@ -28,7 +28,7 @@ use sovereign_core::guest_link::{save_in, GuestLink};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::CompletionRequest;
 use sovereign_mesh::daemon::InferenceVenue;
-use sovereign_mesh::guest_lender::StoredGuestLink;
+use sovereign_mesh::guest_source::stored_guest_source_in;
 use sovereign_mesh::peer_inference::{MeshInferenceProvider, VenueHost, VenueSource};
 
 use crate::common;
@@ -132,7 +132,7 @@ fn provider_with_link(root: &std::path::Path) -> MeshInferenceProvider {
         Arc::new(NoPeers) as Arc<dyn VenueSource>,
         Arc::new(NoPeers) as Arc<dyn VenueHost>,
     );
-    p.set_guest_source(Arc::new(StoredGuestLink::new_in(root.to_path_buf())));
+    p.set_guest_source(stored_guest_source_in(root.to_path_buf()));
     p
 }
 
@@ -198,7 +198,7 @@ async fn the_granted_ids_are_advertised_for_the_models_listing() {
     let dir = tempfile::tempdir().unwrap();
     store_link(dir.path(), &lender);
 
-    let src = StoredGuestLink::new_in(dir.path().to_path_buf());
+    let src = stored_guest_source_in(dir.path().to_path_buf());
     let (who, ids) = src
         .posture()
         .await
@@ -218,7 +218,7 @@ async fn a_node_without_a_link_advertises_nothing_extra() {
     use sovereign_mesh::guest_lender::GuestLenderSource;
     let dir = tempfile::tempdir().unwrap();
     assert_eq!(
-        StoredGuestLink::new_in(dir.path().to_path_buf())
+        stored_guest_source_in(dir.path().to_path_buf())
             .posture()
             .await,
         sovereign_mesh::guest_lender::GrantPosture::NoLink,
@@ -289,7 +289,7 @@ fn provider_with_link_and_answering_local(root: &std::path::Path) -> MeshInferen
         Arc::new(NoPeers) as Arc<dyn VenueSource>,
         Arc::new(NoPeers) as Arc<dyn VenueHost>,
     );
-    p.set_guest_source(Arc::new(StoredGuestLink::new_in(root.to_path_buf())));
+    p.set_guest_source(stored_guest_source_in(root.to_path_buf()));
     p
 }
 
@@ -423,7 +423,7 @@ async fn a_refused_grant_advertises_nothing() {
     let dir = tempfile::tempdir().unwrap();
     store_link(dir.path(), &lender);
 
-    let posture = StoredGuestLink::new_in(dir.path().to_path_buf())
+    let posture = stored_guest_source_in(dir.path().to_path_buf())
         .posture()
         .await;
     match posture {

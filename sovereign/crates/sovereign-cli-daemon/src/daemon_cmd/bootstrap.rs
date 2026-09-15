@@ -2325,9 +2325,7 @@ pub(super) async fn build_mesh_provider(
     // was dead until something happened to trigger a provider reload.
     // Observed live 2026-08-28: zero `guest-lender` lines in a daemon whose
     // `guest.json` was present and valid.
-    mesh_provider.set_guest_source(Arc::new(
-        sovereign_mesh::guest_lender::StoredGuestLink::new(),
-    ));
+    mesh_provider.set_guest_source(sovereign_mesh::guest_source::stored_guest_source());
     (daemon, mesh_provider)
 }
 

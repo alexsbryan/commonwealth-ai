@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Stream wrappers that observe TTFT + token-generation rate as a
 //! synthesis response flows back to the caller. Folded back into the
-//! per-(local|peer) `NodeObservations` EWMA so [`oicp::throughput_factor`]
+//! per-(local|peer) `NodeObservations` EWMA so [`oicp_types::throughput_factor`]
 //! sees real performance and not just the advertised benchmark.
 //!
-//! Lives alongside `peer_inference` so the routing path can wrap the
-//! returned stream with no extra crate boundary, but kept in its own
-//! file (ARCH §3.2) — throughput accounting is structurally separate
-//! from peer selection.
+//! Moved out of `sovereign-mesh` by domains
+//! REVIEW-build-serving-move-throughput-guest: its consumers are the host
+//! modules `peer_inference`/`pinned_worker_source`, so it travels with the
+//! knot (`sovereign/SERVING_BOUNDARY.md` "Corrected 2026-09-14"). Kept in its
+//! own file (ARCH §3.2) — throughput accounting is structurally separate from
+//! peer selection.
 
 use std::collections::HashMap;
 use std::pin::Pin;
@@ -16,7 +18,7 @@ use std::task::{Context, Poll};
 use std::time::Instant;
 
 use futures::Stream;
-use sovereign_core::oicp::{NodeObservations, THROUGHPUT_EWMA_ALPHA};
+use oicp_types::{NodeObservations, THROUGHPUT_EWMA_ALPHA};
 use tokio::sync::RwLock;
 
 /// Where a `ThroughputObservedStream` should write its measurements
@@ -26,7 +28,7 @@ use tokio::sync::RwLock;
 /// `MeshInferenceProvider::peer_observations` /
 /// `MeshInferenceProvider::local_observations`.
 #[derive(Clone)]
-pub(crate) enum ThroughputTarget {
+pub enum ThroughputTarget {
     Local(Arc<RwLock<NodeObservations>>),
     Peer {
         name: String,
@@ -39,16 +41,15 @@ pub(crate) enum ThroughputTarget {
 /// (errors, typed `Finish` frames — measure but don't tally).
 ///
 /// `Result<String, Error>` impls return `true` on `Ok` (the legacy
-/// chat-completion text-chunk shape). [`sovereign_core::types::
-/// StreamFrame`] impls return `true` on `Token` and `false` on
-/// `Finish`/`Error` (the typed Phase 1+ shape used by
-/// `complete_stream_with_finish`).
+/// chat-completion text-chunk shape). [`oicp_types::StreamFrame`] impls return
+/// `true` on `Token` and `false` on `Finish`/`Error` (the typed Phase 1+ shape
+/// used by `complete_stream_with_finish`).
 ///
 /// Without this predicate the typed shape would tally the terminal
 /// `Finish { reason: Length }` frame as a generated token, inflating
 /// throughput observations by one and miscounting TTFT on
 /// zero-token-then-Length-truncate (edge case but real).
-pub(crate) trait IsDataFrame {
+pub trait IsDataFrame {
     fn is_data_frame(&self) -> bool;
 }
 
@@ -58,9 +59,9 @@ impl<E> IsDataFrame for std::result::Result<String, E> {
     }
 }
 
-impl IsDataFrame for sovereign_core::types::StreamFrame {
+impl IsDataFrame for oicp_types::StreamFrame {
     fn is_data_frame(&self) -> bool {
-        matches!(self, sovereign_core::types::StreamFrame::Token(_))
+        matches!(self, oicp_types::StreamFrame::Token(_))
     }
 }
 
@@ -91,7 +92,7 @@ impl IsDataFrame for sovereign_core::types::StreamFrame {
 ///   non-async context. The spawned task uses the same EWMA α as
 ///   the latency probe to stay consistent with the rest of the
 ///   observation pipeline.
-pub(crate) struct ThroughputObservedStream<S: Stream + Send + Unpin + 'static>
+pub struct ThroughputObservedStream<S: Stream + Send + Unpin + 'static>
 where
     S::Item: IsDataFrame + Send,
 {
@@ -104,11 +105,11 @@ where
     /// The contribution-ledger port, when the host has one. On completion the
     /// wrapper mints the `InferenceReceived` fact from the terminal
     /// `RoutingOutcome` and hands it to this port
-    /// (`sovereign_serving_host::ledger`; `SERVING_BOUNDARY.md` (a) — Serving
+    /// (`crate::ledger`; `SERVING_BOUNDARY.md` (a) — Serving
     /// emits facts, Fabric prices them). `None` for a host with no ledger and
     /// for a pinned venue, whose synthetic node id is not a mesh member
     /// (spec §8).
-    ledger: Option<Arc<dyn sovereign_serving_host::ledger::LedgerEmitter>>,
+    ledger: Option<Arc<dyn crate::ledger::LedgerEmitter>>,
     /// P1 of `docs/specs/SCHEDULER_QUALITY.md`: the completion half of
     /// the decision→outcome join.
     ///
@@ -118,14 +119,14 @@ where
     /// fallback, peer) and on every exit (clean end, client abort,
     /// mid-stream death). Measuring those numbers a second time
     /// somewhere else would guarantee the two eventually disagree.
-    outcome: Option<crate::decision_log::OutcomeContext>,
+    outcome: Option<sovereign_scheduler::decision_log::OutcomeContext>,
 }
 
 impl<S: Stream + Send + Unpin + 'static> ThroughputObservedStream<S>
 where
     S::Item: IsDataFrame + Send,
 {
-    pub(crate) fn new(inner: S, target: ThroughputTarget) -> Self {
+    pub fn new(inner: S, target: ThroughputTarget) -> Self {
         Self {
             inner,
             dispatched_at: Instant::now(),
@@ -138,17 +139,17 @@ where
         }
     }
 
-    pub(crate) fn with_ledger(
-        mut self,
-        emitter: Arc<dyn sovereign_serving_host::ledger::LedgerEmitter>,
-    ) -> Self {
+    pub fn with_ledger(mut self, emitter: Arc<dyn crate::ledger::LedgerEmitter>) -> Self {
         self.ledger = Some(emitter);
         self
     }
 
     /// Attach the decision context so this stream's completion emits
     /// the outcome record that joins back to the routing decision.
-    pub(crate) fn with_outcome(mut self, outcome: crate::decision_log::OutcomeContext) -> Self {
+    pub fn with_outcome(
+        mut self,
+        outcome: sovereign_scheduler::decision_log::OutcomeContext,
+    ) -> Self {
         self.outcome = Some(outcome);
         self
     }
@@ -228,7 +229,7 @@ where
                     ttft_ms,
                     Some(total_ms),
                     observable.then_some(count),
-                    sovereign_serving_host::recorder::now_unix_ms(),
+                    crate::recorder::now_unix_ms(),
                 );
                 // Mint the ledger fact from the record just emitted —
                 // peer-routed streams that yielded any chunks count as a
@@ -238,7 +239,7 @@ where
                 // emit both halves explicitly. A local serve, a failure or
                 // a zero-token dispatch mints nothing (`emit_from_outcome`).
                 if let Some(emitter) = ledger.as_ref() {
-                    sovereign_serving_host::ledger::emit_from_outcome(emitter.as_ref(), &record);
+                    crate::ledger::emit_from_outcome(emitter.as_ref(), &record);
                 }
             }
 
@@ -265,7 +266,7 @@ where
 /// [`NodeObservations`]. α follows
 /// [`THROUGHPUT_EWMA_ALPHA`] so this stays in lock-step with the
 /// latency probe and other observation paths.
-pub(crate) fn apply_throughput_observation(
+pub fn apply_throughput_observation(
     obs: &mut NodeObservations,
     ttft_ms: Option<f64>,
     tg_tok_s: Option<f64>,

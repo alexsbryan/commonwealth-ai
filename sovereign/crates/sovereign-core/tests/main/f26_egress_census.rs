@@ -335,7 +335,12 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // What this row does NOT cover: widening a grant beyond
     // `/v1/chat/completions` + `/v1/models`, or letting a request parameter
     // choose the lender. Either is a re-classification, not a count bump.
-    ("sovereign/crates/sovereign-mesh/src/guest_lender.rs", Class::Mesh, 1),
+    //
+    // Re-keyed 2026-09-15: the resolver moved to `sovereign-serving-host`
+    // (domains REVIEW-build-serving-move-throughput-guest). The count is
+    // unchanged — the one `reqwest::Client` that fetches the lender's
+    // `/v1/models` is still the only construction site.
+    ("sovereign/crates/sovereign-serving-host/src/guest_lender.rs", Class::Mesh, 1),
     ("sovereign/crates/sovereign-mesh/src/join.rs", Class::Mesh, 2),
     ("sovereign/crates/sovereign-mesh/src/daemon.rs", Class::Mesh, 2),
     ("sovereign/crates/sovereign-mesh/src/auto_ingest.rs", Class::Mesh, 2),

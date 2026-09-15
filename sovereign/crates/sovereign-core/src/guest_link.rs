@@ -7,7 +7,8 @@
 //!
 //! - the **CLI**, to point `svrn chat` at the lender, and
 //! - the **daemon**, to resolve a granted model id to the lending node when a
-//!   turn runs locally (`sovereign_mesh::guest_lender`).
+//!   turn runs locally (`sovereign_serving_host::guest_lender`, reached
+//!   through that module's `GuestLinkReader` port).
 //!
 //! The daemon half is the reason for the move. `svrn chat ask` is a surface —
 //! the turn runs on the daemon — so a guest's CONVERSATION must stay on their
