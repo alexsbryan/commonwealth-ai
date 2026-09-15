@@ -133,7 +133,6 @@ class Outcome(enum.Enum):
     DONE = "done"
     OPERATOR_STOP = "operator-stop"
     NEEDS_HUMAN = "needs-human"
-    OPERATOR_REQUIRED = "operator-required"
     HALT = "halt"
 
 
@@ -368,7 +367,7 @@ class Campaign:
 
     def __init__(self, paths, *, session_run, notifier=notify, notify_enabled=True,
                  sleep=time.sleep, max_stall=3, max_iter=200, marker_timeout=7200,
-                 wait_poll=120, models=None, model="", review_model="", variant=""):
+                 wait_poll=120, model="", review_model="", variant=""):
         self.paths = paths
         self.session_run = session_run
         self.notifier = notifier
@@ -378,7 +377,6 @@ class Campaign:
         self.max_iter = max_iter
         self.marker_timeout = marker_timeout
         self.wait_poll = wait_poll
-        self.models = models or {}
         self.model = model
         self.review_model = review_model
         self.variant = variant
@@ -953,7 +951,7 @@ def cmd_run(args):
         return result
     print(f"campaign: {result.outcome.value} — {result.reason}")
     return {Outcome.DONE: 0, Outcome.OPERATOR_STOP: 0, Outcome.NEEDS_HUMAN: 2,
-            Outcome.OPERATOR_REQUIRED: 2, Outcome.HALT: 3}[result.outcome]
+            Outcome.HALT: 3}[result.outcome]
 
 
 def cmd_supervise(args):
