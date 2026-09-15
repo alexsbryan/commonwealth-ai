@@ -119,8 +119,10 @@ VERB, touches at most about ten files, lands in one commit, states a premise a
 worker can verify with grep, and names §5 checks. Order rows so every row's
 dependencies sit above it. Anything that needs judgment — a cycle, a
 back-edge, a port, a type name — becomes its own `REVIEW-build-` row; only
-mechanical work becomes a `dm-` row. Put a `REVIEW-audit-` row after every five
-or so build rows, and a `HUMAN-` row before anything that adds an
+mechanical work becomes a `dm-` row. Put a `REVIEW-audit-` row after every ten
+or so build rows, and one at a wave's close: a mid-wave audit names TESTALL,
+the wave-close audit names TESTALL and PREPUSH. A `HUMAN-` row goes before
+anything that adds an
 `[[exception]]`, widens an `except`, or changes behaviour. Commit
 `ralph/STATE.md` as `REVIEW-mint-<x>: <n> rows minted`, then mark the mint row
 `[x]`. If the pointed design is contradicted by the tree, §6.
