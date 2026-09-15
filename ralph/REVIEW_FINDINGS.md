@@ -60,9 +60,30 @@ Recorded, not changed:
   exercised by no control (the axis's controls use `run_lifts=False`), and no
   bar sets `timeout_s`, so the branch is dark today.
 
-## Pre-existing red gates (not rung 3; see ralph/NEEDS_HUMAN.md)
+## Pre-existing red gates — CLEARED by the supervisor resolution
 
-`TESTALL` and `PREPUSH` are red on this tree for reasons that predate rung 3
-and are already public on `origin/main`; none is touched by
-`origin/main..HEAD`. Evidence and the operator decision are in
-`ralph/NEEDS_HUMAN.md`.
+`TESTALL` and `PREPUSH` were red on this tree for reasons that predate rung 3
+and were already public on `origin/main`; none was touched by
+`origin/main..HEAD`. The resolution session cleared them, none by weakening a
+campaign bar:
+
+- **`arch-gate`** — the baselines were stale against `origin/main` (`AGENTS.md`
+  47,980 → 48,379 bytes; approach band 200,868 → 200,927 lines). Re-pinned at
+  `origin/main` (this branch changes no `.rs` and no `AGENTS.md` byte), ledgered
+  in `sovereign/SYSTEM_OVERVIEW.md` §10.1w.
+- **`env-gate`** — a duplicate `SOVEREIGN_SIDECAR_FEATURES` row, a merge of
+  `69ab4a68f`'s `cli-binaries` copy with `739735496`'s `dev-gates` one. The
+  stale `cli-binaries` copy removed; `docs/ENV_FLAGS.md` regenerated.
+- **`sovereign-lint-scoped`** — `scripts/sovereign-lint.sh` hardcoded
+  `corpus-engine/treesitter`, a hard cargo error once `sovereign-desktop` dropped
+  its corpus-engine dependency at svt-6. It now uses `resolve_features` from
+  `scripts/lib/cargo-scope.sh`, the shared decider (ARCH 8).
+- **`TESTALL`** — two stale/flaky tests against their deciders:
+  `ingest_failure_modes::a_stopped_ingest_is_listed_but_not_usable` cleared only
+  `indexes_built` and left the three sub-index flags true, an impossible state
+  `index::readiness::indexes_searchable` correctly calls searchable; it now
+  clears all four, matching `reset_for_resume`. `commonwealth-media`'s
+  `a_renewed_claim_outlives_its_original_ttl` raced a 40 ms TTL against a
+  `thread::sleep` floor; the margins widened, the assertion unchanged.
+  `quality/conformance/sovereign-core.toml` line pins refreshed to match
+  `quote_verification.rs`.
