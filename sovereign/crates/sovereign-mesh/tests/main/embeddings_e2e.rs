@@ -33,6 +33,7 @@ use sovereign_api::server::client_router;
 use sovereign_api::state::{AppState, LocalInferenceService};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
+use sovereign_mesh::slot_manifest::CoreSlotManifest;
 use sovereign_meshapp_registry::registry::AppRegistry;
 
 use crate::common;
@@ -73,8 +74,10 @@ fn build_app_state(with_embed: bool) -> AppState {
             .with_model_id("stub-embed")
             .with_embed_marker(|input| vec![input.len() as f32; 8]),
     );
-    let adapter: Arc<dyn LocalInferenceService> =
-        Arc::new(SovereignInferenceAdapter::new(provider));
+    let adapter: Arc<dyn LocalInferenceService> = Arc::new(SovereignInferenceAdapter::new(
+        provider,
+        Arc::new(CoreSlotManifest),
+    ));
     app_state.with_local_inference(adapter)
 }
 

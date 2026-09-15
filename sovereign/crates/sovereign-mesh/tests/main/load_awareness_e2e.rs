@@ -46,6 +46,7 @@ use sovereign_api::state::{AppState, LocalInferenceService};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_mesh::capabilities::build_local_capabilities;
 use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
+use sovereign_mesh::slot_manifest::CoreSlotManifest;
 use sovereign_meshapp_registry::registry::AppRegistry;
 
 use crate::common;
@@ -240,8 +241,10 @@ async fn desktop_topology_serving_a_peer_request_does_not_publish_in_flight() {
                 probe_observed.store(probe_publisher.load(Ordering::Relaxed), Ordering::Relaxed);
             }),
     );
-    let adapter: Arc<dyn LocalInferenceService> =
-        Arc::new(SovereignInferenceAdapter::new(provider));
+    let adapter: Arc<dyn LocalInferenceService> = Arc::new(SovereignInferenceAdapter::new(
+        provider,
+        Arc::new(CoreSlotManifest),
+    ));
 
     let mesh_store = Arc::new(MeshStore::in_memory().unwrap());
     let app_registry = Arc::new(AppRegistry::new());

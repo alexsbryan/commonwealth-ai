@@ -425,10 +425,10 @@ lines = 221
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/fim_adapter.rs"
+path = "sovereign/crates/sovereign-serving-host/src/fim_adapter.rs"
 context = "workbench"
 lines = 745
-note = ""
+note = "moved host-side by domains REVIEW-build-serving-move-adapter; the workbench tag is a registry finding (FIM inline completion is not serving arithmetic), recorded in the commit body, not changed here"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/gossip.rs"
@@ -461,22 +461,22 @@ lines = 120
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/inference_adapter.rs"
+path = "sovereign/crates/sovereign-serving-host/src/inference_adapter.rs"
 context = "serving"
-lines = 1599
-note = ""
+lines = 1578
+note = "moved host-side by domains REVIEW-build-serving-move-adapter; the manifest port impl (CoreSlotManifest) split back to sovereign-mesh/src/slot_manifest.rs"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/inference_adapter/adapter_translation_tests.rs"
+path = "sovereign/crates/sovereign-serving-host/src/inference_adapter/adapter_translation_tests.rs"
 context = "serving"
-lines = 531
-note = "inference_adapter's translation tests, split out (REVIEW-audit-6, ARCH §3.1)"
+lines = 530
+note = "inference_adapter's translation tests, split out (REVIEW-audit-6, ARCH §3.1); moved host-side by REVIEW-build-serving-move-adapter"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/inference_adapter/guard_tests.rs"
+path = "sovereign/crates/sovereign-serving-host/src/inference_adapter/guard_tests.rs"
 context = "serving"
 lines = 27
-note = "inference_adapter's guard tests, split out (REVIEW-audit-6, ARCH §3.1)"
+note = "inference_adapter's guard tests, split out (REVIEW-audit-6, ARCH §3.1); moved host-side by REVIEW-build-serving-move-adapter"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/ingest_executor.rs"
@@ -815,6 +815,12 @@ lines = 551
 note = "was understanding; sovereign-serving-host — SERVING_BOUNDARY.md corrections (2026-09-14)"
 
 [[module]]
+path = "sovereign/crates/sovereign-mesh/src/slot_manifest.rs"
+context = "host"
+lines = 35
+note = "the daemon's SlotManifest port impl over sovereign-core's bundled manifest, split out of inference_adapter when it moved host-side (REVIEW-build-serving-move-adapter)"
+
+[[module]]
 path = "sovereign/crates/sovereign-mesh/src/state.rs"
 context = "fabric"
 lines = 182
@@ -841,10 +847,10 @@ lines = 71
 note = "the Venue record and its port (REVIEW-build-venue, 2026-09-15)"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/tool_profile.rs"
+path = "sovereign/crates/sovereign-serving-host/src/tool_profile.rs"
 context = "host"
 lines = 585
-note = ""
+note = "moved host-side by domains REVIEW-build-serving-move-adapter; the tool-profile trim runs in the inference adapter"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/turn_approval.rs"

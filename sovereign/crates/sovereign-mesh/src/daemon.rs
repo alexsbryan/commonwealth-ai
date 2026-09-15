@@ -3076,9 +3076,11 @@ impl EmbeddedDaemon {
         // scheduler/llama-server path is empty in the embedded
         // topology.
         let app_state = if let Some(provider) = self.inference_provider.read().await.as_ref() {
-            let adapter: Arc<dyn LocalInferenceService> = Arc::new(
-                crate::inference_adapter::SovereignInferenceAdapter::new(provider.clone()),
-            );
+            let adapter: Arc<dyn LocalInferenceService> =
+                Arc::new(crate::inference_adapter::SovereignInferenceAdapter::new(
+                    provider.clone(),
+                    Arc::new(crate::slot_manifest::CoreSlotManifest),
+                ));
             info!("inference adapter: wired into /v1/chat/completions");
             // Worker side of distributed-inference auto-warm: this node can seed
             // its RPC tensor cache with a shard on request (`POST /internal/

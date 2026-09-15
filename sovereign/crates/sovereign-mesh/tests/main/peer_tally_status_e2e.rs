@@ -40,6 +40,7 @@ use sovereign_core::types::{
     CompletionRequest, CompletionResponse, ProviderCapabilities, Speed, StreamFrame,
 };
 use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
+use sovereign_mesh::slot_manifest::CoreSlotManifest;
 use sovereign_meshapp_registry::registry::AppRegistry;
 
 use crate::common;
@@ -135,7 +136,10 @@ fn build_state(peer_name: &str) -> (AppState, NodeId) {
         inner: fast,
         delay: Duration::from_millis(500),
     });
-    let adapter: Arc<dyn LocalInferenceService> = Arc::new(SovereignInferenceAdapter::new(slow));
+    let adapter: Arc<dyn LocalInferenceService> = Arc::new(SovereignInferenceAdapter::new(
+        slow,
+        Arc::new(CoreSlotManifest),
+    ));
     (app_state.with_local_inference(adapter), peer_id)
 }
 

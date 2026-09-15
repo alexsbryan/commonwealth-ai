@@ -39,6 +39,7 @@ use sovereign_api::server::client_router;
 use sovereign_api::state::{AppState, LocalInferenceService};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
+use sovereign_mesh::slot_manifest::CoreSlotManifest;
 use sovereign_meshapp_registry::registry::AppRegistry;
 
 use crate::common;
@@ -68,8 +69,10 @@ fn build_state(self_id: NodeId) -> AppState {
         AppState::new_with_platform_and_engine(self_id, mesh, mesh_store, app_registry, None);
     let provider: Arc<dyn InferenceProvider> =
         Arc::new(TestProvider::new().with_model_id("manifest-stub"));
-    let adapter: Arc<dyn LocalInferenceService> =
-        Arc::new(SovereignInferenceAdapter::new(provider));
+    let adapter: Arc<dyn LocalInferenceService> = Arc::new(SovereignInferenceAdapter::new(
+        provider,
+        Arc::new(CoreSlotManifest),
+    ));
     state.with_local_inference(adapter)
 }
 

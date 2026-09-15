@@ -70,12 +70,12 @@ use crate::decision_log::{
     self, DecisionBuilder, DecisionPath, DecisionSink, OutcomeContext, RequestFacts, ServedBy,
     Verdict,
 };
-use crate::inference_adapter::CoreSlotManifest;
 use crate::local_inflight::{LocalInflightGuard, LocalTotalGuard};
 use crate::oicp_synthesis::build_self_manifest;
 use crate::scheduler_core::{
     self, LocalCandidateView, RankInputs, RankObjective, RankResult, VenueManifestView, VenueView,
 };
+use crate::slot_manifest::CoreSlotManifest;
 use crate::throughput_tracking::{ThroughputObservedStream, ThroughputTarget};
 use crate::tier::TierFloor;
 pub use sovereign_scheduler::venue::{InferenceVenue, VenueSource};

@@ -34,8 +34,8 @@ use std::time::Instant;
 use futures::StreamExt;
 use oicp_types::openai_types::{self as wire};
 use oicp_types::{EditSlotStatus, FimCompletionRequest, FimStreamStart};
-use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::{
+use sovereign_contracts::traits::InferenceProvider;
+use sovereign_contracts::types::{
     CompletionRequest, EditSlotInfo, PromptShape, SamplingMode, StreamFrame,
 };
 use sovereign_inference::fim::{decide_mode, Feed, FimMode, FimStopTracker, StopOutcome};
@@ -405,8 +405,8 @@ pub(crate) async fn fim_completion_stream(
 mod tests {
     use super::*;
     use async_trait::async_trait;
-    use sovereign_core::error::Result as CoreResult;
-    use sovereign_core::types::{
+    use sovereign_contracts::error::Result as CoreResult;
+    use sovereign_contracts::types::{
         CompletionResponse, EditSlotInfo, FimLane, FimStyle, NextEditLane, ProviderCapabilities,
         StreamUsage,
     };
@@ -450,7 +450,7 @@ mod tests {
                 StreamFrame::Token("+ b;<|endo".to_string()),
                 StreamFrame::Token("ftext|>TRAILING GARBAGE".to_string()),
                 StreamFrame::Finish {
-                    reason: sovereign_core::types::FinishReason::Stop,
+                    reason: sovereign_contracts::types::FinishReason::Stop,
                     usage: Some(StreamUsage {
                         prompt_tokens: 12,
                         completion_tokens: 3,
@@ -467,8 +467,8 @@ mod tests {
             ProviderCapabilities {
                 max_context_tokens: 4096,
                 supports_structured_output: false,
-                relative_speed: sovereign_core::types::Speed::Fast,
-                relative_reasoning: sovereign_core::types::Depth::Shallow,
+                relative_speed: sovereign_contracts::types::Speed::Fast,
+                relative_reasoning: sovereign_contracts::types::Depth::Shallow,
             }
         }
         fn edit_slot_info(&self) -> Option<EditSlotInfo> {

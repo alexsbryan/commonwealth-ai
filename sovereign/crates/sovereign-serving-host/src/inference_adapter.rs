@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Adapter: `sovereign_core::traits::InferenceProvider` →
-//! `sovereign_core::traits::LocalInferenceService`.
+//! Adapter: `sovereign_contracts::traits::InferenceProvider` →
+//! `sovereign_contracts::traits::LocalInferenceService`.
 //!
 //! Why this exists: Commonwealth's HTTP handlers speak OpenAI-style
 //! `ChatCompletionRequest`/`Response`; Sovereign's runtime speaks
@@ -29,16 +29,18 @@ use oicp_types::{
     EditSlotStatus, FimCompletionRequest, FimStreamStart, LocalInferenceError, ProviderManifest,
     SlotDecodeEvidence,
 };
-use sovereign_core::error::Result as CoreResult;
-use sovereign_core::traits::{
+use sovereign_contracts::error::Result as CoreResult;
+use sovereign_contracts::traits::{
     ComputeChildStatus, InferenceProvider, LocalInferenceService, ResidentSlot, ServingLocus,
 };
-use sovereign_core::types::{
+use sovereign_contracts::types::{
     CompletionRequest, CompletionResponse, EditSlotInfo, FinishReason as CoreFinishReason,
     ProviderCapabilities, Speed, StreamFrame as CoreStreamFrame, StreamUsage as CoreStreamUsage,
 };
 
-/// Translate `sovereign_core` stream framing into the wire shape
+use crate::slot_select::SlotManifest;
+
+/// Translate `sovereign_contracts` stream framing into the wire shape
 /// `LocalInferenceService::chat_completion_stream` exposes. The two
 /// enums are identical by design (see `openai_types::StreamFrame`),
 /// so this is a pure per-variant copy with no data loss.
@@ -185,51 +187,23 @@ fn synthesize_tool_stream(resp: ChatCompletionResponse) -> Vec<wire::StreamFrame
     frames
 }
 
-/// Wraps a sovereign-core `InferenceProvider` so it can answer
+/// Wraps a `sovereign_contracts` `InferenceProvider` so it can answer
 /// Commonwealth-flavoured `/v1/chat/completions` requests from
 /// peers on the mesh. Held inside an `Arc` — cheap to clone,
 /// thread-safe.
 pub struct SovereignInferenceAdapter {
     provider: Arc<dyn InferenceProvider>,
-}
-
-/// The daemon's [`SlotManifest`](sovereign_serving_host::slot_select::SlotManifest)
-/// adapter over `sovereign-core`'s bundled manifest.
-///
-/// It lives here, not in `sovereign-serving-host`, because the host may not
-/// name `sovereign-core` (`sovereign/SERVING_BOUNDARY.md` rule 5; the
-/// serving package's two grandfathered exceptions are `sovereign-inference`
-/// and `commonwealth-core`, and a third means the boundary is drawn in the
-/// wrong place). The host names the port; this side supplies the manifest.
-///
-/// `pub(crate)` because `peer_inference` supplies the same adapter to the
-/// host's `oicp_synthesis::build_self_manifest` (moved by domains
-/// REVIEW-build-serving-move-synthesis): one manifest reader, one name.
-pub(crate) struct CoreSlotManifest;
-
-impl sovereign_serving_host::slot_select::SlotManifest for CoreSlotManifest {
-    fn capabilities_for_file(&self, file: &str) -> Option<oicp_types::CapabilityProfile> {
-        sovereign_core::models_manifest::DEFAULT_MANIFEST.capabilities_for_file(file)
-    }
-
-    fn info_for_file(
-        &self,
-        file: &str,
-    ) -> Option<sovereign_serving_host::slot_select::SlotManifestInfo> {
-        sovereign_core::models_manifest::DEFAULT_MANIFEST
-            .info_for_file(file)
-            .map(
-                |slot| sovereign_serving_host::slot_select::SlotManifestInfo {
-                    capabilities: slot.capabilities,
-                    size_gb: slot.size_gb,
-                },
-            )
-    }
+    /// The manifest reader the local slot pick and the self-manifest
+    /// advertisement read through. Supplied by the daemon, because the port's
+    /// implementation names `sovereign-core` and the host may not
+    /// (`sovereign/SERVING_BOUNDARY.md` "The two tiers"; a third
+    /// `[[exception]]` is the kill clause).
+    manifest: Arc<dyn SlotManifest>,
 }
 
 impl SovereignInferenceAdapter {
-    pub fn new(provider: Arc<dyn InferenceProvider>) -> Self {
-        Self { provider }
+    pub fn new(provider: Arc<dyn InferenceProvider>, manifest: Arc<dyn SlotManifest>) -> Self {
+        Self { provider, manifest }
     }
 
     /// Flatten an OpenAI-style message list into a single prompt.
@@ -319,7 +293,7 @@ impl SovereignInferenceAdapter {
     /// needing a live inference provider.
     fn forward_tools(
         request: &ChatCompletionRequest,
-    ) -> Option<Vec<sovereign_core::types::ToolSchema>> {
+    ) -> Option<Vec<sovereign_contracts::types::ToolSchema>> {
         let tools = request.tools.as_ref()?;
         if tools.is_empty() {
             return None;
@@ -328,7 +302,7 @@ impl SovereignInferenceAdapter {
         Some(
             tools
                 .iter()
-                .map(|t| sovereign_core::types::ToolSchema {
+                .map(|t| sovereign_contracts::types::ToolSchema {
                     name: t.function.name.clone(),
                     description: t.function.description.clone(),
                     parameters: t.function.parameters.clone(),
@@ -396,7 +370,7 @@ impl SovereignInferenceAdapter {
             // requests single-hop — it only picks Fast vs primary. A
             // latency-less envelope leaves the slot pick untouched.
             if let Some(class) = oicp.latency_class {
-                req = req.with_speed(sovereign_core::slot_policy::latency_to_speed(class));
+                req = req.with_speed(sovereign_contracts::slot_policy::latency_to_speed(class));
             }
             req = req.with_oicp(oicp.clone());
         }
@@ -467,7 +441,7 @@ impl SovereignInferenceAdapter {
         // actually sent.
         // debug!, not info!: per-request internal detail. Fired once per
         // request; the request is summarised at INFO by `inference.complete:
-        // done`. `RUST_LOG=sovereign_mesh=debug` to see it.
+        // done`. `RUST_LOG=sovereign_serving_host=debug` to see it.
         tracing::debug!(
             structured_output_pre = req.structured_output.is_some(),
             assistant_prefix = request.assistant_prefix.is_some(),
@@ -548,12 +522,12 @@ impl SovereignInferenceAdapter {
         // `enable_thinking: false` in `apply_chat_template_oaicompat`.
         req.enable_thinking = extract_enable_thinking(request.chat_template_kwargs.as_ref());
         let (speed, slot_picker) = if req.tools.is_some() {
-            (sovereign_core::types::Speed::Slow, "tools_bias_slow")
+            (sovereign_contracts::types::Speed::Slow, "tools_bias_slow")
         } else {
             (
-                sovereign_serving_host::slot_select::pick_slot_for_oicp(
+                crate::slot_select::pick_slot_for_oicp(
                     self.provider.as_ref(),
-                    &CoreSlotManifest,
+                    self.manifest.as_ref(),
                     &req,
                 ),
                 "oicp_select",
@@ -1060,9 +1034,9 @@ pub(crate) fn strip_tool_call_blocks(text: &str) -> String {
 /// Pure function; no I/O. Unit-tested without spinning up the mesh.
 pub(crate) fn guard_tools_on_fast(
     tools_present: bool,
-    picked_speed: sovereign_core::types::Speed,
+    picked_speed: sovereign_contracts::types::Speed,
 ) -> Result<(), String> {
-    if tools_present && picked_speed == sovereign_core::types::Speed::Fast {
+    if tools_present && picked_speed == sovereign_contracts::types::Speed::Fast {
         return Err(
             "fast slot does not support tool_calls; re-send with preferred_speed=Slow \
              (see sovereign atos probe-driver for a capability probe)"
@@ -1079,9 +1053,9 @@ pub(crate) fn guard_tools_on_fast(
 /// API layer's. Both chat entry points route through it, so a shed
 /// cannot reach the wire as backpressure on one path and as a crash on
 /// the other (ARCH_PRINCIPLES §10.6 — one decider, one name).
-fn map_provider_error(e: sovereign_core::Error) -> LocalInferenceError {
+fn map_provider_error(e: sovereign_contracts::Error) -> LocalInferenceError {
     match e {
-        sovereign_core::Error::QueueShed {
+        sovereign_contracts::Error::QueueShed {
             position,
             predicted_wait_ms,
             retry_after_secs,
@@ -1410,7 +1384,7 @@ impl LocalInferenceService for SovereignInferenceAdapter {
             .await
             .map_err(map_provider_error)?;
         tracing::info!("sovereign inference adapter: typed streaming started");
-        // Translate sovereign_core::types::StreamFrame →
+        // Translate sovereign_contracts::types::StreamFrame →
         // oicp_types::openai_types::StreamFrame. The two
         // shapes are identical by design (see openai_types.rs);
         // translation is a per-variant copy.
@@ -1421,7 +1395,7 @@ impl LocalInferenceService for SovereignInferenceAdapter {
     fn provider_manifest(&self) -> Option<ProviderManifest> {
         Some(crate::oicp_synthesis::build_self_manifest(
             self.provider.as_ref(),
-            &CoreSlotManifest,
+            self.manifest.as_ref(),
         ))
     }
 
@@ -1448,7 +1422,7 @@ impl LocalInferenceService for SovereignInferenceAdapter {
 /// ([`LocalInferenceService`]) extends this trait, so the routes reach the
 /// eleven shared methods — `embed`, `resident_slots`, `peer_manifests`, … —
 /// through the supertrait exactly as they reached them through the old
-/// `sovereign_core::traits` trait. Every method delegates rather than inheriting
+/// `sovereign_contracts::traits` trait. Every method delegates rather than inheriting
 /// a default, so the wrapper cannot silently diverge from the provider it
 /// fronts.
 #[async_trait]

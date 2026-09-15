@@ -7,7 +7,9 @@
 //! and `sovereign-api`'s `admission` (`sovereign/SERVING_BOUNDARY.md` "The two
 //! tiers").
 
+pub mod fim_adapter;
 pub mod guest_lender;
+pub mod inference_adapter;
 pub mod ledger;
 pub mod model_fetch;
 pub mod oicp_synthesis;
@@ -16,5 +18,6 @@ pub mod recorder;
 pub mod slot_select;
 pub mod source_content_validator;
 pub mod throughput_tracking;
+pub mod tool_profile;
 pub mod worker_eligibility;
 pub mod worker_state;

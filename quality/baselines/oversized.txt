@@ -145,7 +145,7 @@
 1650	sovereign/crates/sovereign-mesh/src/corpus_watch_http.rs
 5683	sovereign/crates/sovereign-mesh/src/daemon.rs
 1493	sovereign/crates/sovereign-mesh/src/gossip.rs
-2086	sovereign/crates/sovereign-mesh/src/inference_adapter.rs
+2086	sovereign/crates/sovereign-serving-host/src/inference_adapter.rs
 1614	sovereign/crates/sovereign-mesh/src/iroh_access.rs
 1825	sovereign/crates/sovereign-mesh/src/mesh_http.rs
 2394	sovereign/crates/sovereign-mesh/src/mesh_sim/mod.rs

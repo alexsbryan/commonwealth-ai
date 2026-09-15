@@ -37,6 +37,7 @@ use sovereign_api::server::{client_router, internal_router};
 use sovereign_api::state::{AppState, LocalInferenceService};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
+use sovereign_mesh::slot_manifest::CoreSlotManifest;
 use sovereign_meshapp_registry::registry::AppRegistry;
 
 use crate::common;
@@ -83,8 +84,10 @@ fn build_wired_app_state() -> (AppState, Arc<AtomicUsize>) {
             .with_stream_chunks(vec!["ok".to_string()])
             .with_embed_marker(|_| vec![0.0; 8]),
     );
-    let adapter: Arc<dyn LocalInferenceService> =
-        Arc::new(SovereignInferenceAdapter::new(provider));
+    let adapter: Arc<dyn LocalInferenceService> = Arc::new(SovereignInferenceAdapter::new(
+        provider,
+        Arc::new(CoreSlotManifest),
+    ));
     let app_state = app_state.with_local_inference(adapter);
 
     let counter = Arc::new(AtomicUsize::new(0));

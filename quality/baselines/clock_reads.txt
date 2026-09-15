@@ -68,7 +68,7 @@
 1	sovereign/crates/sovereign-inference/src/embedded/rpc_distribution.rs
 1	sovereign/crates/sovereign-inference/src/embedded/sampler.rs
 2	sovereign/crates/sovereign-mesh/src/daemon.rs
-1	sovereign/crates/sovereign-mesh/src/inference_adapter.rs
+1	sovereign/crates/sovereign-serving-host/src/inference_adapter.rs
 1	sovereign/crates/sovereign-mesh/src/pinned_pod_snapshot.rs
 3	sovereign/crates/sovereign-mesh/src/projects.rs
 1	sovereign/crates/sovereign-mesh/src/recipe_http.rs

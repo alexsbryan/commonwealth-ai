@@ -23,6 +23,7 @@ use sovereign_core::types::{
     CompletionRequest, CompletionResponse, Depth, FinishReason, ProviderCapabilities, Speed,
 };
 use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
+use sovereign_mesh::slot_manifest::CoreSlotManifest;
 
 /// Reports exactly the finish reason it was built with, so the test
 /// asserts on the ADAPTER's translation and nothing else.
@@ -69,7 +70,8 @@ impl InferenceProvider for Fixed {
 }
 
 async fn served_reason(provider_said: Option<FinishReason>) -> String {
-    let adapter = SovereignInferenceAdapter::new(Arc::new(Fixed(provider_said)));
+    let adapter =
+        SovereignInferenceAdapter::new(Arc::new(Fixed(provider_said)), Arc::new(CoreSlotManifest));
     let request: ChatCompletionRequest = serde_json::from_value(serde_json::json!({
         "model": "primary",
         "messages": [{"role": "user", "content": "count to a hundred"}],

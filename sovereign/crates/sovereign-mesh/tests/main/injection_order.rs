@@ -29,6 +29,7 @@ use commonwealth_state::MeshStore;
 use sovereign_api::state::{AppState, LocalInferenceService};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
+use sovereign_mesh::slot_manifest::CoreSlotManifest;
 use sovereign_meshapp_registry::registry::AppRegistry;
 use tracing_subscriber::fmt::MakeWriter;
 
@@ -112,8 +113,10 @@ fn with_local_inference_emits_error_when_arc_already_cloned() {
     let _kept = app_state.inner.clone();
 
     let provider: Arc<dyn InferenceProvider> = Arc::new(TestProvider::new());
-    let adapter: Arc<dyn LocalInferenceService> =
-        Arc::new(SovereignInferenceAdapter::new(provider));
+    let adapter: Arc<dyn LocalInferenceService> = Arc::new(SovereignInferenceAdapter::new(
+        provider,
+        Arc::new(CoreSlotManifest),
+    ));
     let app_state = app_state.with_local_inference(adapter);
 
     // The installer should have logged the documented error.
@@ -172,8 +175,10 @@ fn happy_path_does_not_emit_error_when_arc_uncloned() {
 
     let app_state = fresh_app_state();
     let provider: Arc<dyn InferenceProvider> = Arc::new(TestProvider::new());
-    let adapter: Arc<dyn LocalInferenceService> =
-        Arc::new(SovereignInferenceAdapter::new(provider));
+    let adapter: Arc<dyn LocalInferenceService> = Arc::new(SovereignInferenceAdapter::new(
+        provider,
+        Arc::new(CoreSlotManifest),
+    ));
     let app_state = app_state.with_local_inference(adapter);
 
     let hook: sovereign_api::state::MeshMutationHook =

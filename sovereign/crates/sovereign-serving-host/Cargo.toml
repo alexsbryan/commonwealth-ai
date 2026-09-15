@@ -41,6 +41,9 @@ thiserror = { workspace = true }
 futures = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
+# `tool_profile` parses `~/.svrnmesh/tool_profiles.toml` (moved host-side by
+# domains REVIEW-build-serving-move-adapter).
+toml = { workspace = true }
 
 [dev-dependencies]
 # Implementing `InferenceProvider` in the tests needs the trait's async
