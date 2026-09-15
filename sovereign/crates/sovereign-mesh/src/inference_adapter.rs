@@ -202,6 +202,20 @@ impl sovereign_serving_host::slot_select::SlotManifest for CoreSlotManifest {
     fn capabilities_for_file(&self, file: &str) -> Option<oicp_types::CapabilityProfile> {
         sovereign_core::models_manifest::DEFAULT_MANIFEST.capabilities_for_file(file)
     }
+
+    fn info_for_file(
+        &self,
+        file: &str,
+    ) -> Option<sovereign_serving_host::slot_select::SlotManifestInfo> {
+        sovereign_core::models_manifest::DEFAULT_MANIFEST
+            .info_for_file(file)
+            .map(
+                |slot| sovereign_serving_host::slot_select::SlotManifestInfo {
+                    capabilities: slot.capabilities,
+                    size_gb: slot.size_gb,
+                },
+            )
+    }
 }
 
 impl SovereignInferenceAdapter {

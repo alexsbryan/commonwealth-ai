@@ -17,18 +17,42 @@ use oicp_types::{
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_contracts::types::{CompletionRequest, Speed};
 
-/// The manifest lookup the local slot pick needs, as a port.
+/// The manifest facts the host reads for one loaded model file: its declared
+/// capability profile and its declared size in GB.
+///
+/// The host's projection of `sovereign_core::models_manifest::SlotInfo` — the
+/// same two fields, carried under a name the host owns. The manifest itself
+/// lives in `sovereign-core`, outside the serving package, so the facts
+/// arrive through [`SlotManifest`] rather than a type named here.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SlotManifestInfo {
+    /// The declared OICP capability profile; empty means "no annotation".
+    pub capabilities: CapabilityProfile,
+    /// The declared size in GB, `None` when the manifest carries none.
+    pub size_gb: Option<f32>,
+}
+
+/// The manifest lookup the host needs, as a port.
 ///
 /// `sovereign-serving-host` may not name `sovereign-core` (rule 5; the two
 /// grandfathered exceptions are `sovereign-inference` and `commonwealth-core`,
 /// and a third means the boundary is drawn in the wrong place — K4). The
-/// capability profile per loaded model file is the one thing the pick needs
-/// from the manifest, so it arrives through this trait: the daemon, which
-/// owns the manifest, implements it.
+/// declared facts per loaded model file are what the host reads from the
+/// manifest — the slot pick needs the capability profile, and advertising
+/// needs the size beside it — so they arrive through this trait: the daemon,
+/// which owns the manifest, implements it.
 pub trait SlotManifest: Send + Sync {
     /// The declared capability profile for a loaded model file, or `None`
     /// when the manifest has no entry for it (the BYOM case).
     fn capabilities_for_file(&self, file: &str) -> Option<CapabilityProfile>;
+
+    /// The declared capabilities and size for a loaded model file, or `None`
+    /// when the manifest has no entry for it.
+    ///
+    /// One walk returns both: the advertising path rides the size on a
+    /// `ProviderModel` so a peer can break a score tie, and re-scanning the
+    /// manifest for it would be a second lookup of the same row.
+    fn info_for_file(&self, file: &str) -> Option<SlotManifestInfo>;
 }
 
 /// Decide which `Speed` slot on the local provider should serve a
@@ -246,6 +270,15 @@ mod tests {
             profile.insert(Capability::General, 3);
             Some(profile)
         }
+
+        fn info_for_file(&self, _file: &str) -> Option<SlotManifestInfo> {
+            let mut profile = CapabilityProfile::new();
+            profile.insert(Capability::General, 3);
+            Some(SlotManifestInfo {
+                capabilities: profile,
+                size_gb: None,
+            })
+        }
     }
 
     fn provider() -> StubProvider {
@@ -326,5 +359,57 @@ mod tests {
             pick_slot_for_oicp(&provider(), &StubManifest, &req),
             Speed::Slow
         );
+    }
+}
+
+#[cfg(test)]
+mod manifest_port_tests {
+    use super::*;
+    use oicp_types::Capability;
+    use std::collections::HashMap;
+
+    /// The reader a daemon supplies: manifest facts keyed by model file.
+    struct StubManifestMap(HashMap<String, SlotManifestInfo>);
+
+    impl SlotManifest for StubManifestMap {
+        fn capabilities_for_file(&self, file: &str) -> Option<CapabilityProfile> {
+            self.0.get(file).map(|i| i.capabilities.clone())
+        }
+
+        fn info_for_file(&self, file: &str) -> Option<SlotManifestInfo> {
+            self.0.get(file).cloned()
+        }
+    }
+
+    fn entry(size_gb: f32) -> SlotManifestInfo {
+        let mut capabilities = CapabilityProfile::new();
+        capabilities.insert(Capability::General, 3);
+        SlotManifestInfo {
+            capabilities,
+            size_gb: Some(size_gb),
+        }
+    }
+
+    /// Positive control: an annotated file resolves both declared facts in
+    /// one lookup — the size rides beside the profile, not on a second walk.
+    #[test]
+    fn an_annotated_file_resolves_capabilities_and_size() {
+        let mut map = HashMap::new();
+        map.insert("Qwen3.5-9B.Q8_0.gguf".to_string(), entry(5.5));
+        let manifest = StubManifestMap(map);
+        let info = manifest
+            .info_for_file("Qwen3.5-9B.Q8_0.gguf")
+            .expect("annotated file resolves");
+        assert_eq!(info.size_gb, Some(5.5));
+        assert_eq!(info.capabilities.get(&Capability::General), Some(&3));
+    }
+
+    /// Negative control: a BYOM file the manifest does not carry is absent,
+    /// never a defaulted empty entry — absence is reported, not substituted.
+    #[test]
+    fn an_unannotated_file_is_absent() {
+        let manifest = StubManifestMap(HashMap::new());
+        assert!(manifest.info_for_file("byom-model.gguf").is_none());
+        assert!(manifest.capabilities_for_file("byom-model.gguf").is_none());
     }
 }
