@@ -1248,8 +1248,8 @@ tracking = "clears when the remote provider is reached through `oicp-client` ins
 package = "serving"
 from = "sovereign-serving-host"
 to = "commonwealth-core"
-reason = "quarantine state (`PeerHealthTracker`) and identity (`ids::NodeId`) are reached from the host's peer path; both belong on the host's own side of the seam rather than the mesh foundation."
-tracking = "clears when quarantine state is the host's own and identity is `kernel_types::NodeId`"
+reason = "quarantine state (`PeerHealthTracker`), identity (`ids::NodeId`) and the model wire types `model_fetch` reads (`commonwealth_core::model::*`) are reached from the host; each belongs on the host's own side of the seam rather than the mesh foundation."
+tracking = "clears when quarantine state is the host's own, identity is `kernel_types::NodeId`, and `model_fetch`'s model wire types have a leaf of their own (the third reason was unnamed until the move materialized, §10.1z 2026-09-15)"
 
 # Populated by the first layer-gate census, 2026-07-11. Removing an entry —
 # with its edge — is the win condition; see the remediation roadmap (R6).

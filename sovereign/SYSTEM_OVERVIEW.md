@@ -10119,3 +10119,29 @@ so the campaign would not stop twice for one decision (NEEDS_HUMAN item 3). That
 projection was withdrawn 2026-09-15 (row above), so the cap now holds one unit of
 unused headroom. No other crate may ride it; `cargo xtask layer-gate --tighten`
 returns the cap to 29.
+
+### 10.1z Fan-in ACCEPTED — `commonwealth-core` 15 → 16, the serving host's declared exception going live (2026-09-15)
+
+`dm-serving-move-leaves` (`1693c48b6`) moved `worker_eligibility`,
+`source_content_validator`, `prompt_compactor` and `model_fetch` into
+`sovereign-serving-host`, which gains the direct `commonwealth-core` edge the
+serving package already declares: `quality/ARCH_LAYERS.toml:1247-1252`,
+`package = "serving"`, `from = sovereign-serving-host`, `to = commonwealth-core`,
+counted by `sovereign/SERVING_BOUNDARY.md:122-127` as one of the package's
+exactly-two `[[exception]]` rows. The raise makes the declared exception live;
+it adds no third row, so K4 is not hit.
+
+| Dependent | Landed | Why it names `commonwealth-core` |
+|---|---|---|
+| `sovereign-serving-host` | `1693c48b6` | `worker_eligibility.rs:44` reads `commonwealth_core::ids::NodeId`, a re-export of `kernel_types::NodeId` (`commonwealth/crates/commonwealth-core/src/ids.rs:18`) that the exception's burn-down already named; `model_fetch.rs:25,52,86` reads `commonwealth_core::model::{ModelFileInfo, ModelFileListing, models_list_url, model_file_url}`, which no narrower crate owns |
+
+The ratchet's "depend on a narrower crate" has an answer for the first reason
+(rewrite to `kernel_types::NodeId`) and none for the second: `oicp-types` and
+`sovereign-contracts` do not re-export the model wire types. The exception's
+`tracking` sentence named two reasons and is corrected in the same commit to
+name the third — where those types belong is a finding for a later row, not a
+condition of this move.
+
+`quality/baselines/fan_in.tsv` was edited BY HAND, one line, for §10.1q's
+reason. The cap is `16`; the landed edge is `16` (`1693c48b6`). No other crate
+may ride it.
