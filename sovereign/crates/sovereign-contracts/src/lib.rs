@@ -54,6 +54,11 @@ pub mod observer;
 // `sovereign-cli-daemon` declares them, `sovereign-work-atlas` consumes one,
 // and `sovereign-mesh` supplies the mesh-backed adapter for each (cw-lift 3b).
 pub mod peer;
+/// Who is asking — the identity a request resolves to before admission, and
+/// the key of the daemon's one `principal -> Scope` table. Published language
+/// rather than the daemon's, because Serving's package and Answering both key
+/// on it and neither may name the daemon (`quality/DAEMON_CORE.md` §3.3).
+pub mod principal;
 pub mod rebrand;
 pub mod recipe;
 pub mod registry;
