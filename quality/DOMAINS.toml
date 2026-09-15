@@ -883,7 +883,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-pods/src/worker_daemon.rs"
 context = "compute"
-lines = 291
+lines = 288
 note = ""
 
 [[module]]
@@ -902,7 +902,7 @@ note = "pod-side surface, not a daemon handler - the *_http host rule does not a
 path = "sovereign/crates/sovereign-pods/src/worker_inference_proxy.rs"
 context = "compute"
 lines = 542
-note = "re-tagged serving->compute 2026-09-15 on consumer evidence: every production consumer is a pod module (worker_http.rs:214,817; worker_daemon.rs:159) plus the CLI host (sovereign-cli-daemon/src/daemon_cmd/worker.rs:82,120), and its only in-crate import is the pod's worker_http::WorkerState (:67). It is the pod's :9742 TLS tunnel (PINNED_WORKER_AS_INFERENCE_PEER.md:5), not an inference decider — ARCH 12: its uses are all pod-side, so the serving line was drawn wrong."
+note = "re-tagged serving->compute 2026-09-15 on consumer evidence: every production consumer is a pod module (worker_http.rs:214,817; worker_daemon.rs:156) plus the CLI host (sovereign-cli-daemon/src/daemon_cmd/worker.rs:82,120), and its only in-crate import is the pod's worker_http::WorkerState (:67). It is the pod's :9742 TLS tunnel (PINNED_WORKER_AS_INFERENCE_PEER.md:5), not an inference decider — ARCH 12: its uses are all pod-side, so the serving line was drawn wrong."
 
 [[module]]
 path = "sovereign/crates/sovereign-pods/src/worker_pod.rs"
