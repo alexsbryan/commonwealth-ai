@@ -631,8 +631,7 @@ async fn oicp_503_fails_over_to_next_peer() {
             pinned_transport: false,
         },
     ];
-    let wrapper =
-        mip_with_peers(local_byom(), peers);
+    let wrapper = mip_with_peers(local_byom(), peers);
     let request = CompletionRequest::new("Is free will compatible with determinism?")
         .with_speed(Speed::Slow)
         .with_oicp(
@@ -711,8 +710,7 @@ async fn peer_dies_mid_stream_does_not_duplicate() {
         gossip_last_seen_unix: 0,
         pinned_transport: false,
     }];
-    let wrapper =
-        mip_with_peers(local_byom(), peers);
+    let wrapper = mip_with_peers(local_byom(), peers);
     let request = CompletionRequest::new("Q")
         .with_speed(Speed::Slow)
         .with_oicp(
@@ -1227,8 +1225,7 @@ async fn an_unnamed_ranked_dispatch_sends_a_model_the_peer_can_resolve() {
         gossip_last_seen_unix: 0,
         pinned_transport: false,
     }];
-    let wrapper =
-        mip_with_peers(local_byom(), peers);
+    let wrapper = mip_with_peers(local_byom(), peers);
 
     // Normal latency + MeshAllowed, model_id LEFT UNSET — the exact
     // shape `build_completion_request` produces for an inbound chat

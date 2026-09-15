@@ -181,7 +181,9 @@ fn mesh_request() -> CompletionRequest {
 fn build(peers: Vec<InferenceVenue>) -> MeshInferenceProvider {
     MeshInferenceProvider::with_peer_source(
         weak_local(),
-        Arc::new(StubPeerSource { peers: peers.clone() }) as Arc<dyn VenueSource>,
+        Arc::new(StubPeerSource {
+            peers: peers.clone(),
+        }) as Arc<dyn VenueSource>,
         Arc::new(StubPeerSource { peers }) as Arc<dyn VenueHost>,
     )
 }

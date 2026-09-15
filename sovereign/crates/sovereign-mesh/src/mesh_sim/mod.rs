@@ -69,8 +69,7 @@ use crate::decision_log::{
 use crate::oicp_select::offload_eligible;
 use crate::predicted_time;
 use crate::scheduler_core::{
-    self, LocalCandidateView, VenueView, VenueManifestView, RankInputs, RankObjective,
-    RankResult,
+    self, LocalCandidateView, RankInputs, RankObjective, RankResult, VenueManifestView, VenueView,
 };
 use crate::throughput_tracking::apply_throughput_observation;
 use crate::tier::TierFloor;
