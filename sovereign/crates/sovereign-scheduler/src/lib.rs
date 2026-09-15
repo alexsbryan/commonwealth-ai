@@ -4,9 +4,10 @@
 //! The serving package's ranker: the ranking decision reads no clock and does
 //! no I/O. Receives the scheduler half of `sovereign-mesh` —
 //! `scheduler_core`, `oicp_select`, `predicted_time`, `tier`, `decision_log`,
-//! `decision_replay`, `decision_trace`, `throughput_tracking`, `slot_aliases`,
-//! `yield_backoff` — while the recorder sink and the local slot pick stay with
-//! `sovereign-serving-host` (`sovereign/SERVING_BOUNDARY.md` "The two tiers").
+//! `decision_replay`, `decision_trace`, `slot_aliases`,
+//! `yield_backoff` — while the recorder sink, the local slot pick and the
+//! throughput stream observer stay with `sovereign-serving-host`
+//! (`sovereign/SERVING_BOUNDARY.md` "The two tiers").
 
 pub mod slot_aliases;
 pub mod tier;

@@ -1047,7 +1047,9 @@ doc = "sovereign/SERVING_BOUNDARY.md"
 # that moves code into it, for the reason the `commonwealth` block above gives:
 # no gate here can tell "the files moved" from "the boundary holds". Unlike
 # commonwealth, this one is RED the day it is declared, and that is the point
-# (ARCH §18.1). The scheduler half (eight modules, 6,356 lines) is still inside
+# (ARCH §18.1). The scheduler half (seven modules, 6,559 lines; `throughput_tracking`
+# stays with the host half — it names `commonwealth-state`, SERVING_BOUNDARY.md
+# "Corrected 2026-09-14") is still inside
 # `sovereign-mesh`, and the peg `sovereign-serving` still names
 # `commonwealth-core`/`commonwealth-state`; rung domains-10 turns it green.
 #

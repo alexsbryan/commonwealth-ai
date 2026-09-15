@@ -22,10 +22,9 @@ a `commonwealth-*` dep acquired the day after; `layer-gate` cannot see it. So th
 declaration lands first and is **watched failing on the fused tree** (ARCH §18.1).
 
 Unlike `commonwealth`, this package is **red the day it is declared**, and that is the
-point. The scheduler half (the eight modules in the tier table below, 6,356 lines)
-imports zero `commonwealth_*`, zero `sovereign-inference`, zero `axum`, and carries one
-non-Serving `crate::` reference between them (`decision_replay.rs:75`, feature-gated, in
-a doc comment). **That half is already a crate; it has not been given a manifest.** The
+point. The scheduler half (the seven modules in the tier table below, 6,559 lines)
+imports zero `commonwealth_*`, zero `sovereign-inference`, zero `axum`. **That half is
+already a crate; it has not been given a manifest.** The
 knot is `peer_inference.rs` (5,399 lines, 38% of Serving's mesh lines) and, api-side,
 `admission` + `routes_inference` + `routes_responses`.
 
@@ -47,7 +46,10 @@ daemon-side half of the argument. Leading with what was wrong:
   reads), and `oicp_select`'s local slot pick. Drawn again by what each piece does:
   `sovereign-scheduler` holds the ranker, the decision and outcome record *types*, replay, and
   trackers that take `now` as an argument the way `finish_at` already does; the recording sink —
-  file, env, clock, ids — is `sovereign-serving-host`'s.
+  file, env, clock, ids — and the throughput stream observer (whose `LedgerEmission` names
+  `commonwealth-state`, so it cannot enter the scheduler's `commonwealth-*` forbid) are
+  `sovereign-serving-host`'s. `yield_backoff`'s own monotonic clock read is still owed a `now`
+  argument and rides a later row.
 - **`pick_slot_for_oicp` is host code living in the scheduler.** It picks the *local* slot
   through `sovereign-core`'s `DEFAULT_MANIFEST`, and its only production caller is the host's
   inference adapter. It moves to `sovereign-serving-host`; until it does,
@@ -100,8 +102,8 @@ daemon-side half of the argument. Leading with what was wrong:
 
 | Crate | Lines | Role |
 |---|---:|---|
-| `sovereign-scheduler` | ~6,800 | **Arithmetic over the published language.** `scheduler_core`, `oicp_select`, `predicted_time`, `tier`, `decision_log`, `decision_replay`, `decision_trace`, `throughput_tracking`, `slot_aliases`, `yield_backoff`. The ranking decision reads no clock and does no I/O; the recorder sink and the local slot pick move to the host (corrected above). |
-| `sovereign-serving-host` | ~11,000 | **The ports and the knot.** `peer_inference`, `inference_adapter`, `oicp_synthesis`, `guest_lender`, `pinned_worker_source`, `entry_endpoint`, plus `sovereign-api`'s `admission`. Opens connections, holds the HTTP surface, receives every candidate through a port. |
+| `sovereign-scheduler` | ~6,450 | **Arithmetic over the published language.** `scheduler_core`, `oicp_select`, `predicted_time`, `tier`, `decision_log`, `decision_replay`, `decision_trace`, `slot_aliases`, `yield_backoff`. The ranking decision reads no clock and does no I/O; the recorder sink, the local slot pick and the throughput stream observer move to the host (corrected above). |
+| `sovereign-serving-host` | ~11,350 | **The ports and the knot.** `peer_inference`, `inference_adapter`, `oicp_synthesis`, `guest_lender`, `pinned_worker_source`, `entry_endpoint`, `throughput_tracking`, plus `sovereign-api`'s `admission`. Opens connections, holds the HTTP surface, receives every candidate through a port. |
 | `serving-policy` | 1,241 | Already exists, already tier-0, ZERO in-repo deps. `fair_sched` left `commonwealth-core` 2026-09-03; two `[[forbid]]` rows pin it both ways (`quality/ARCH_LAYERS.toml:381-389`). **The precedent Phase C copies.** |
 | `sovereign-serving` | 720 → 0 | The peg: eleven exported types with zero external references, plus 771 lines of shard assignment that drag `corpus-engine`. Emptied by rung 9. |
 

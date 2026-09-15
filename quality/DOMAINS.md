@@ -356,7 +356,9 @@ floors as the baseline:
   tag leaves, and the host's 25,432 is a daemon-core campaign's to move.
 - §4 Serving measures **44,485 lines** module by module (38,665 if
   `frontdoor.rs`, which reshapes prompts for third-party harnesses, is Host).
-  The scheduler half (6,356) already imports nothing foreign; the knot is
+  The scheduler half (6,559, seven modules — `throughput_tracking` is host-tier,
+  not scheduler: it names `commonwealth-state`; SERVING_BOUNDARY.md "Corrected
+  2026-09-14") already imports nothing foreign; the knot is
   `peer_inference.rs` (5,399). The anticorruption layer §5 asks for exists at
   `sovereign-mesh/src/daemon.rs:2286-2345` reading nine fields; it is misnamed
   and lives in the host's god object. `sovereign-serving`, the peg, carries

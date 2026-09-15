@@ -10096,7 +10096,7 @@ commit, and §7's `quality/baselines/` prohibition now names that step as its
 only hand edit. Wave 1's remaining moves (`peer_inference.rs` 5,399 and the
 rest) would otherwise re-open this at every rung.
 
-### 10.1y Fan-in ACCEPTED — `sovereign-contracts` 28 → 30 (the serving package reaches its leaf, 2026-09-15)
+### 10.1y Fan-in ACCEPTED — `sovereign-contracts` 28 → 30, second unit withdrawn (the serving package reaches its leaf, 2026-09-15)
 
 Two crates enter the dependents of `sovereign-contracts`, and both are the
 serving package reaching a shared leaf the boundary already names:
@@ -10104,7 +10104,7 @@ serving package reaching a shared leaf the boundary already names:
 | Dependent | Landed | Why it names `sovereign-contracts` |
 |---|---|---|
 | `sovereign-serving-host` | `b761ac5fe` | `traits::InferenceProvider` — the local slot pick (`slot_select.rs`, moved out of `oicp_select.rs` by REVIEW-build-sched-split-pick-slot) takes `&dyn InferenceProvider`. `SERVING_BOUNDARY.md:51-54` says it moves to the host, and "The two tiers" (`:108-111`) names `sovereign-contracts` a shared leaf the package may reach |
-| `sovereign-scheduler` | projected, `REVIEW-build-sched-move` (`ralph/STATE.md:110`) | the same trait, at the eight modules' rewritten import path (`sovereign_core::traits::InferenceProvider` → `sovereign_contracts::traits::InferenceProvider`); the row adds the dep explicitly. Accepted now, per `ralph/NEEDS_HUMAN.md` item 3: the growth is the same decision one row later |
+| `sovereign-scheduler` | projected, `REVIEW-build-sched-move` (`ralph/STATE.md:110`) | the same trait, at the eight modules' rewritten import path (`sovereign_core::traits::InferenceProvider` → `sovereign_contracts::traits::InferenceProvider`); the row adds the dep explicitly. Accepted now, per `ralph/NEEDS_HUMAN.md` item 3: the growth is the same decision one row later. **Withdrawn 2026-09-15**: measured over the seven modules the row actually moves, there is no `sovereign_core::traits::` use at all — `b761ac5fe`'s pick_slot split already took the one `InferenceProvider` use to `sovereign-serving-host`, and `throughput_tracking.rs` (the only remaining `sovereign_core::*` user) stays in `sovereign-mesh`. The scheduler edge does not materialize |
 
 The ratchet's advice — "depend on a narrower crate instead" — has no answer:
 `InferenceProvider` has exactly one home (`sovereign-contracts/src/traits.rs:289`)
@@ -10114,8 +10114,9 @@ a package crate reaching it is the boundary working as drawn, not a god-crate
 accreting behaviour.
 
 `quality/baselines/fan_in.tsv` was edited BY HAND, one line, for §10.1q's
-reason. The cap is `30`, not `29`: 29 is the landed edge, 30 is the same edge
-from `sovereign-scheduler` at the immediately-next row, decided here so the
-campaign does not stop twice for one decision (NEEDS_HUMAN item 3). No other
-crate may ride the headroom — if `REVIEW-build-sched-move` is re-cut without
-the edge, `cargo xtask layer-gate --tighten` returns the cap to 29.
+reason. The cap is `30`; the landed edge is `29` (`b761ac5fe`, `sovereign-serving-host`),
+and `30` was accepted for the `sovereign-scheduler` edge projected one row later
+so the campaign would not stop twice for one decision (NEEDS_HUMAN item 3). That
+projection was withdrawn 2026-09-15 (row above), so the cap now holds one unit of
+unused headroom. No other crate may ride it; `cargo xtask layer-gate --tighten`
+returns the cap to 29.
