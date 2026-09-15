@@ -340,7 +340,11 @@ pub struct Runtime {
     pub sensitive_corpora: Option<Arc<dyn crate::traits::SensitiveCorpusOracle>>,
     /// Resolves the per-request principal from a conversation id so
     /// `build_context` can hide other principals' `Private` corpora on a
-    /// multi-user hub. `None` (desktop / CLI / tests) ⇒ no corpus is hidden.
+    /// multi-user hub. The field's `None` (desktop / CLI / tests: no resolver
+    /// wired) ⇒ no corpus is hidden, a declared single-user host. A wired
+    /// resolver that cannot name the caller resolves to
+    /// [`PrincipalScope::Unresolved`], which refuses — it does NOT fall back to
+    /// "nothing hidden".
     pub corpus_principal: Option<Arc<dyn crate::traits::PrincipalResolver>>,
     /// Per-folder metadata oracle. Folder-ingest v1 §6.3 — when
     /// retrieval pulls chunks from a watched-folder corpus, this
@@ -437,9 +441,11 @@ pub struct Runtime {
 ///   which is a separate change; naming the absence is what this one buys.
 /// - `sensitive_corpora: None` still means "no sensitivity gate applied, all
 ///   corpora eligible" — a privacy control whose absence is permissive, which
-///   §3.5 flags as §7 inverted. A host must now write the `None`, so the
-///   choice is at least visible at the call site. The semantics are unchanged
-///   and still wrong.
+///   §3.5 flags as §7 inverted. The daemon now RESOLVES it to its own
+///   `LocalCorpusManager` (`REVIEW-build-corpus-ceiling`), so the host that
+///   answers turns no longer takes the permissive default; the field semantics
+///   are unchanged, and a host that genuinely has no oracle still writes the
+///   `None` where the choice is visible.
 pub struct RuntimeParts {
     pub inference: Arc<dyn InferenceProvider>,
     pub router: Box<dyn Router>,
@@ -663,22 +669,10 @@ impl Runtime {
         }
     }
 
-    /// Resolve this turn's caller into the scope [`build_context`] consumes.
-    ///
-    /// The load-bearing distinction: `None` from a wired resolver is NOT the
-    /// single-user path. A host with no resolver is [`PrincipalScope::Unscoped`]
-    /// — every corpus visible, a declared single-user host. A resolver that
-    /// cannot name the conversation is [`PrincipalScope::Unresolved`], which
-    /// refuses. Both were one `None` before 2026-09-16, and it was permissive:
-    /// an unattributable caller read as "all corpora eligible".
+    /// Resolve this turn's caller into the scope [`build_context`] consumes;
+    /// [`PrincipalScope`] carries why an unattributable caller refuses.
     pub(crate) fn principal_scope(&self, conversation_id: &str) -> PrincipalScope {
-        match self.corpus_principal.as_ref() {
-            None => PrincipalScope::Unscoped,
-            Some(r) => match r.principal_for(conversation_id) {
-                Some(p) => PrincipalScope::Resolved(p),
-                None => PrincipalScope::Unresolved,
-            },
-        }
+        PrincipalScope::from_resolver(self.corpus_principal.as_deref(), conversation_id)
     }
 
     /// Merge this turn's fresh relational recall with the entries the
@@ -840,13 +834,8 @@ impl Runtime {
     pub async fn end_conversation(&self, conversation_id: &str) -> Result<()> {
         // Memory-extraction pass at conversation end — no retrieval, so no
         // principal scoping is needed.
-        let context = build_context(
-            self.store.as_ref(),
-            conversation_id,
-            "",
-            PrincipalScope::Unscoped,
-        )
-        .await?;
+        let scope = PrincipalScope::Unscoped;
+        let context = build_context(self.store.as_ref(), conversation_id, "", scope).await?;
         if context.conversation.messages.len() < 4 {
             return Ok(());
         }

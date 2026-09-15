@@ -390,8 +390,8 @@ pub fn commission(parts: RuntimeParts) -> Arc<Runtime> {
 /// classifier stack, the planner, and the enrichment lane.
 ///
 /// Optional slots are left at named absence. A host with one — the desktop's
-/// compaction worker, the server's principal resolver — writes it as a
-/// struct-update override on [`CommonParts::parts`].
+/// compaction worker, the daemon's and the server's principal resolvers —
+/// writes it as a struct-update override on [`CommonParts::parts`].
 pub async fn common_parts(inputs: RecipeInputs, progress: &dyn RecipeProgress) -> CommonParts {
     let RecipeInputs {
         inference,

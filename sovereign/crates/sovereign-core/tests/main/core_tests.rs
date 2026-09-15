@@ -572,6 +572,41 @@ async fn build_context_existing_conversation() {
     assert_eq!(ctx.conversation.messages[0].content, "hello");
 }
 
+/// The resolver → scope mapping is the branch that decides whether an
+/// unattributable caller refuses (ARCH 5 — a branch with no planted control is
+/// not a gate). Three arms, each with an input that would fail if the arms
+/// collapsed: no resolver is the declared single-user host (`Unscoped`), a
+/// resolver that names the caller is `Resolved`, and a resolver that cannot is
+/// `Unresolved` — never `Unscoped`.
+#[test]
+fn principal_scope_from_resolver_has_three_distinct_arms() {
+    struct Named;
+    impl PrincipalResolver for Named {
+        fn principal_for(&self, _conversation_id: &str) -> Option<String> {
+            Some("alice".to_string())
+        }
+    }
+    struct Anonymous;
+    impl PrincipalResolver for Anonymous {
+        fn principal_for(&self, _conversation_id: &str) -> Option<String> {
+            None
+        }
+    }
+
+    assert_eq!(
+        PrincipalScope::from_resolver(None, "c"),
+        PrincipalScope::Unscoped
+    );
+    assert_eq!(
+        PrincipalScope::from_resolver(Some(&Named), "c"),
+        PrincipalScope::Resolved("alice".to_string())
+    );
+    assert_eq!(
+        PrincipalScope::from_resolver(Some(&Anonymous), "c"),
+        PrincipalScope::Unresolved
+    );
+}
+
 #[test]
 fn format_history_empty() {
     let ctx = ConversationContext {

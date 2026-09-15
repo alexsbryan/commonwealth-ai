@@ -97,15 +97,23 @@ impl SensitiveCorpusOracle for NoSensitiveCorpora {
 /// the retrieval seam (`build_context`) can scope corpus visibility without
 /// the Runtime ever knowing what a "tenant" is. The server — which owns the
 /// tenant-prefix convention on conversation ids — provides the
-/// implementation; desktop / CLI / tests leave it unset, and then no corpus
-/// is ever hidden (single-user behaviour, unchanged).
+/// implementation; a single-user host (desktop / CLI / tests) wires NO
+/// resolver at all, and then no corpus is ever hidden.
 ///
 /// The returned string is compared against `CorpusVisibility::Private {
 /// owner }`: equality means "this principal owns it" (visible), inequality
 /// means "another principal's private corpus" (hidden).
+///
+/// A wired resolver that returns `None` has NOT named the caller. That is a
+/// different fact from "this host has no tenancy" — the host declared tenancy
+/// by wiring a resolver — and `build_context` resolves it to
+/// `PrincipalScope::Unresolved`, which refuses (ARCH principle 6: absence is
+/// reported, never defaulted). It is NOT the single-user path.
 pub trait PrincipalResolver: Send + Sync {
-    /// The principal that owns this conversation, or `None` when there is no
-    /// tenancy (single-user) — in which case no corpus is hidden.
+    /// The principal that owns this conversation, or `None` when a wired
+    /// resolver could not attribute it — `build_context` then refuses the
+    /// turn. A host with no tenancy wires no resolver rather than returning
+    /// `None` from one.
     fn principal_for(&self, conversation_id: &str) -> Option<String>;
 }
 

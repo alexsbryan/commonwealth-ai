@@ -2,7 +2,7 @@
 
 use crate::error::{Error, Result};
 use crate::slot_policy::Workload;
-use crate::traits::{InferenceProvider, StateStore};
+use crate::traits::{InferenceProvider, PrincipalResolver, StateStore};
 use crate::types::*;
 
 use crate::time::unix_now as now;
@@ -50,6 +50,19 @@ impl PrincipalScope {
     /// A resolver's answer for a conversation it named.
     pub fn resolved(p: impl Into<String>) -> Self {
         Self::Resolved(p.into())
+    }
+
+    /// Resolve a caller from the host's optional resolver. No resolver is
+    /// [`Self::Unscoped`] (a declared single-user host); a resolver that cannot
+    /// name the conversation is [`Self::Unresolved`], which refuses.
+    pub fn from_resolver(resolver: Option<&dyn PrincipalResolver>, conversation_id: &str) -> Self {
+        match resolver {
+            None => Self::Unscoped,
+            Some(r) => match r.principal_for(conversation_id) {
+                Some(p) => Self::Resolved(p),
+                None => Self::Unresolved,
+            },
+        }
     }
 }
 
