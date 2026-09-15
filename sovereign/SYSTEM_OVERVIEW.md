@@ -8144,9 +8144,9 @@ Per-host models live in `ralph/models.env` (KEY=value data, gitignored), read by
 both drivers with flags taking precedence; `scripts/ralph-models.sh` shows or
 sets it and kickstarts the loaded job (`python3 scripts/tests/ralph-models.py`).
 `scripts/ralph-watch.sh` is the watchdog a detached job cannot be: it notifies
-when a decision package sits unresolved or the job is stopped without DONE/STOP,
-re-nagging at most once per 30 min (`--install-launchd`; test:
-`python3 scripts/tests/ralph-watch.py`).
+when a decision package sits unresolved, the job is stopped without DONE/STOP,
+or free disk drops below 5 GB, re-nagging at most once per 30 min
+(`--install-launchd`; test: `python3 scripts/tests/ralph-watch.py`).
 
 ### 8.1 Where configuration and state live
 

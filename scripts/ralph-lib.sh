@@ -60,6 +60,10 @@ notify() { # title body
 halt() { # reason
   say "HALT: $1"
   printf '%s\n\nresolve by hand, then remove %s\n' "$1" "$STOP_FILE" > "$NEEDS_HUMAN"
+  if [ ! -s "$NEEDS_HUMAN" ]; then
+    say "HALT could not write $NEEDS_HUMAN (disk full?) — no decision package exists for the supervisor"
+    notify "halt-unwritable" "$1"
+  fi
   : > "$STOP_FILE"
   notify "HALT" "$1"
   exit 3

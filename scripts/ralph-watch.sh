@@ -13,6 +13,7 @@ INSTALL=0
 NAG_SECS="${RALPH_WATCH_NAG_SECS:-1800}"
 NOTIFY_CMD="${RALPH_WATCH_OSASCRIPT:-/usr/bin/osascript}"
 LAUNCHCTL="${RALPH_WATCH_LAUNCHCTL:-launchctl}"
+DF="${RALPH_WATCH_DF:-df}"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -84,6 +85,14 @@ else
   if [ "${state:-0}" -eq 0 ]; then
     condition="down"
     body="$(basename "$PWD")-$LABEL is not running and has no DONE/STOP"
+  else
+    # A full volume kills the loop mid-write and the halt cannot leave a
+    # package (2026-09-15); warn while the loop still has room to work.
+    avail_mb=$("$DF" -m /System/Volumes/Data 2>/dev/null | awk 'NR==2 {print $4}')
+    if [ -n "$avail_mb" ] && [ "$avail_mb" -lt "${RALPH_WATCH_MIN_FREE_MB:-5120}" ]; then
+      condition="disk-low"
+      body="$(basename "$PWD")-$LABEL: ${avail_mb}MB free on the data volume"
+    fi
   fi
 fi
 
@@ -97,6 +106,7 @@ if [ -n "$condition" ]; then
     case "$condition" in
       needs-human:*) notify "needs human" "$body" ;;
       down) notify "loop down" "$body" ;;
+      disk-low) notify "disk low" "$body" ;;
     esac
     printf '%s %s\n' "$condition" "$now" > "$STAMP"
   fi

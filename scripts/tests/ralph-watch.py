@@ -11,14 +11,19 @@ WATCH = Path(__file__).resolve().parents[1] / "ralph-watch.sh"
 
 
 class Watch(unittest.TestCase):
-    def run_watch(self, root, *, running=True):
+    def run_watch(self, root, *, running=True, df_mb=100_000):
         bin_dir = root / "bin"
         bin_dir.mkdir(exist_ok=True)
         stub = bin_dir / "launchctl"
         stub.write_text("#!/bin/sh\n" + ("echo 'state = running'\n" if running else "exit 1\n"))
         stub.chmod(0o755)
+        df = bin_dir / "df"
+        df.write_text("#!/bin/sh\n"
+                      "echo 'Filesystem 1M-blocks Used Available Capacity Mounted on'\n"
+                      f"echo '/dev/disk3s5 948000 756000 {df_mb} 86% /System/Volumes/Data'\n")
+        df.chmod(0o755)
         env = dict(os.environ, HOME=str(root), RALPH_WATCH_DRY="1",
-                   RALPH_WATCH_LAUNCHCTL=str(stub))
+                   RALPH_WATCH_LAUNCHCTL=str(stub), RALPH_WATCH_DF=str(df))
         return subprocess.run(
             ["bash", str(WATCH), "--workdir", str(root), "--label", "t"],
             env=env, text=True, capture_output=True, timeout=10)
@@ -56,6 +61,13 @@ class Watch(unittest.TestCase):
             states = list((root / ".svrnmesh/ralph").glob("**/watch.state"))
             self.assertEqual(len(states), 1)
             self.assertEqual(states[0].read_text(), "")
+
+    def test_low_disk_notifies_while_running(self):
+        with tempfile.TemporaryDirectory(prefix="ralph-watch-") as tmp:
+            root = Path(tmp)
+            (root / "ralph").mkdir()
+            r = self.run_watch(root, running=True, df_mb=100)
+            self.assertIn("disk low", r.stdout)
 
     def test_done_or_stop_is_not_a_down_nag(self):
         with tempfile.TemporaryDirectory(prefix="ralph-watch-") as tmp:
