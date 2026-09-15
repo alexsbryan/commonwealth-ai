@@ -149,7 +149,7 @@ pub mod yield_backoff;
 // Ephemeral worker pods — owner-initiated TLS-pinned transport that
 // replaces the full-mesh-pod path. Pods become single-owner workers,
 // not gossip peers. Spec: sovereign/docs/EPHEMERAL_WORKER_PODS.md.
-pub mod multi_pod_coordinator;
+pub use sovereign_pods::multi_pod_coordinator; // shim: moved by domains dm-pods-move-multi-pod
 pub use sovereign_pods::worker_controller; // shim: moved by domains dm-pods-move-controller
 pub use sovereign_pods::worker_daemon; // shim: moved by domains dm-pods-move-worker-daemon
 pub use sovereign_pods::worker_http; // shim: moved by domains dm-pods-move-worker-http
