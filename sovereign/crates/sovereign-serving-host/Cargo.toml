@@ -26,6 +26,21 @@ uuid = { workspace = true }
 # `guest_lender.rs` publishes the `GuestLenderSource` port as an async trait
 # (SERVING_BOUNDARY.md "The five entries" (a)).
 async-trait = { workspace = true }
+# The four leavers moved host-side by domains dm-serving-move-leaves.
+# `worker_eligibility` and `model_fetch` key on commonwealth's identity and
+# model wire types (the grandfathered `commonwealth-core` edge);
+# `source_content_validator` names `sovereign-inference` (the grandfathered
+# inference edge); `model_fetch` streams a peer file through reqwest and
+# hashes it on the fly.
+commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
+sovereign-inference = { workspace = true }
+reqwest = { workspace = true }
+urlencoding = "2"
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+futures = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
 
 [dev-dependencies]
 # Implementing `InferenceProvider` in the tests needs the trait's async
@@ -33,6 +48,9 @@ async-trait = { workspace = true }
 futures = { workspace = true }
 # The guest-port controls are async.
 tokio = { workspace = true }
+# `model_fetch`'s tests stand up an in-process axum server over a tempdir.
+axum = { workspace = true }
+tempfile = "3"
 
 [lints]
 workspace = true

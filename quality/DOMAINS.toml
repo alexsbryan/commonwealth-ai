@@ -611,7 +611,7 @@ lines = 587
 note = "app-registry explorer, not a membership/ring/rail route"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/model_fetch.rs"
+path = "sovereign/crates/sovereign-serving-host/src/model_fetch.rs"
 context = "serving"
 lines = 316
 note = ""
@@ -707,7 +707,7 @@ lines = 674
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/prompt_compactor.rs"
+path = "sovereign/crates/sovereign-serving-host/src/prompt_compactor.rs"
 context = "serving"
 lines = 519
 note = "its ONE import is oicp_types::openai_types (:48) - wire types the ranker should not own (repointed off sovereign_api by dm-wire-repoint-mesh, 2026-09-15)"
@@ -809,7 +809,7 @@ lines = 201
 note = "no imports at all - pure policy data"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/source_content_validator.rs"
+path = "sovereign/crates/sovereign-serving-host/src/source_content_validator.rs"
 context = "serving"
 lines = 551
 note = "was understanding; sovereign-serving-host — SERVING_BOUNDARY.md corrections (2026-09-14)"
@@ -917,7 +917,7 @@ lines = 288
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/worker_eligibility.rs"
+path = "sovereign/crates/sovereign-serving-host/src/worker_eligibility.rs"
 context = "serving"
 lines = 1195
 note = "was compute; sovereign-serving-host — SERVING_BOUNDARY.md corrections (2026-09-14)"

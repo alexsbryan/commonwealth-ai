@@ -87,7 +87,7 @@ pub mod mesh_http;
 #[cfg(feature = "mesh-sim")]
 pub mod mesh_sim;
 pub mod meshapp_http;
-pub mod model_fetch;
+pub use sovereign_serving_host::model_fetch; // shim: moved by domains dm-serving-move-leaves
 pub mod newsworthy_host;
 pub mod notes_http;
 pub(crate) use sovereign_scheduler::oicp_select; // shim: moved by domains REVIEW-build-sched-move
@@ -106,7 +106,7 @@ pub use sovereign_scheduler::predicted_time; // shim: moved by domains REVIEW-bu
 #[cfg(feature = "treesitter")]
 pub mod project_http;
 pub mod projects;
-pub mod prompt_compactor;
+pub use sovereign_serving_host::prompt_compactor; // shim: moved by domains dm-serving-move-leaves
 pub mod publish_http;
 pub mod rail_bind;
 pub mod rail_kv_pump;
@@ -126,7 +126,7 @@ pub mod rpc_warm_http;
 /// selector and the Tier-1 simulator (`SCHEDULER_QUALITY.md` §5).
 pub(crate) use sovereign_scheduler::scheduler_core; // shim: moved by domains REVIEW-build-sched-move
 pub use sovereign_scheduler::slot_aliases; // shim: moved by domains dm-sched-move-slot-aliases
-pub mod source_content_validator;
+pub use sovereign_serving_host::source_content_validator; // shim: moved by domains dm-serving-move-leaves
 pub mod state;
 pub mod supervised_task;
 pub mod throughput_tracking;
@@ -144,9 +144,9 @@ pub mod watched_folder_runtime;
 pub mod watched_folder_setup;
 pub mod work_atlas_broadcaster;
 pub mod work_donor;
-pub mod worker_eligibility;
-// Short-lived memory of peers that refused with `yielded_to_local`, so
-// the next turn does not re-dial into the same refusal.
+pub use sovereign_serving_host::worker_eligibility; // shim: moved by domains dm-serving-move-leaves
+                                                    // Short-lived memory of peers that refused with `yielded_to_local`, so
+                                                    // the next turn does not re-dial into the same refusal.
 pub use sovereign_scheduler::yield_backoff; // shim: moved by domains REVIEW-build-sched-move
                                             // Ephemeral worker pods — owner-initiated TLS-pinned transport that
                                             // replaces the full-mesh-pod path. Pods become single-owner workers,
