@@ -379,65 +379,107 @@ kill         = "if this rises above its floor while the structural bars improve,
 
 [[rung]]
 id = "domains-3-instrument"
+title = "the instrument — registry, census, controls, queue/plan"
+status = "done"
+sha = ["83967dafd", "0d7261da2"]
+demo = "D4"
 moves = ["dm-peer-outside-fabric", "dm-atom-outside", "dm-contexts-liftable", "dm-mesh-lines", "dm-misnamed-crates"]
 one_line = "quality/DOMAINS.toml + scripts/domains-census.py with a positive and a negative control per axis, floors minted; daemon-route-census HOSTS repaired — SCAFFOLDING, deletes nothing"
 
 [[rung]]
 id = "domains-4-adjudication"
+title = "the words, the Peer rows, the collision families (data)"
+status = "done"
+sha = ["4b58188e0"]
+demo = "none"
+note = "data only — the words and Peer dispositions; the moves ride later rungs"
 moves = []
 one_line = "Every Peer* type gets a disposition row (keep-Fabric / rename-to-word / delete / merge); the four context words are chosen against the converge evidence; §9's open items are classified — DATA only, zero code"
 
 [[rung]]
 id = "dm-mesh-serving"
+title = "serving leaves sovereign-mesh"
+status = "open"
+demo = "D1"
 moves = ["dm-queue", "dm-mesh-lines", "dm-misnamed-crates", "dm-contexts-liftable", "dm-peer-outside-fabric", "dm-shared-edges", "dm-word-owners"]
 one_line = "WAVE 1 sovereign-mesh — the serving cluster (20,488) leaves for sovereign-scheduler + sovereign-serving-host per SERVING_BOUNDARY.md; Peer->Venue rides the move; VenueSource is the port; serving-lift verdict 1 — unrepresentable: a routing decision that cannot be replayed outside the daemon"
 
 [[rung]]
 id = "dm-mesh-host"
+title = "the host cluster leaves for sovereign-daemon"
+status = "open"
+demo = "none"
 moves = ["dm-queue", "dm-mesh-lines", "dm-misnamed-crates"]
 one_line = "WAVE 1 — the host cluster (25,432: daemon.rs, the *_http.rs handlers, app-state builders) leaves for the host crate the cluster graph names; routes move as-is, daemon-core consolidates them where they land — unrepresentable: a daemon handler linked by a client that wants a roster"
 
 [[rung]]
 id = "dm-mesh-compute"
+title = "compute's home; Peer → Donor"
+status = "open"
+demo = "D2"
 moves = ["dm-queue", "dm-mesh-lines", "dm-misnamed-crates", "dm-peer-outside-fabric", "dm-shared-edges", "dm-word-owners"]
 one_line = "WAVE 1 — the compute cluster (9,740: work_donor, worker/pod modules, guest tunnel) leaves for its home; Peer->Donor rides the move; DonorReach is the port; cw-work-lift verdict unchanged"
 
 [[rung]]
 id = "dm-mesh-workbench"
+title = "workbench leaves for code-intel"
+status = "open"
+demo = "none"
 moves = ["dm-queue", "dm-mesh-lines", "dm-misnamed-crates", "dm-contexts-liftable"]
 one_line = "WAVE 1 — the workbench cluster (4,811: fim_adapter, lsp_tier, next-edit's mesh half) leaves for the code-intel package crate; the taxonomy does not enter oicp-types (nc-2b)"
 
 [[rung]]
 id = "dm-mesh-back-of-house"
+title = "back-of-house leaves, feature-gated"
+status = "open"
+demo = "none"
 moves = ["dm-queue", "dm-mesh-lines", "dm-misnamed-crates"]
 one_line = "WAVE 1 — mesh_sim/ and dst.rs (4,841) leave for sovereign-mesh-test-harness or a feature-gated back-of-house crate; nothing product-side depends on them after"
 
 [[rung]]
 id = "dm-mesh-ingest-understanding"
+title = "ingest and understanding leave"
+status = "open"
+demo = "none"
 moves = ["dm-queue", "dm-mesh-lines", "dm-misnamed-crates"]
 one_line = "WAVE 1 — the ingest (3,410) and understanding (2,316) glue leave for corpus-engine's clusters (to travel again in wave 3) or the host, by what each module imports"
 
 [[rung]]
 id = "dm-mesh-small"
+title = "answering, workspace, retrieval leave"
+status = "open"
+demo = "none"
 moves = ["dm-queue", "dm-mesh-lines", "dm-misnamed-crates"]
 one_line = "WAVE 1 — answering (747), workspace (233), retrieval (209) leave for sovereign-core, corpus-engine-notes, corpus-engine; one rung, three commits"
 
 [[rung]]
 id = "dm-mesh-closed"
+title = "sovereign-mesh reads 100% fabric"
+status = "open"
+demo = "D5"
 moves = ["dm-mesh-lines", "dm-misnamed-crates", "dm-queue"]
 one_line = "WAVE 1 verdict — sovereign-mesh reads 100% fabric and <= 20,000 lines (registry fabric total 16,028); lib.rs says what it holds; sovereign-mesh leaves dm-queue and the crates its clusters enlarged enter it"
 
 [[rung]]
 id = "dm-wave-2-sovereign-api"
+title = "sovereign-api dissolves"
+status = "open"
+demo = "D2"
 moves = ["dm-queue", "dm-misnamed-crates", "dm-contexts-liftable"]
 one_line = "WAVE 2 — sovereign-api (43,163) DISSOLVES: nine clusters to their homes in the plan's order (its serving cluster may need to travel WITH wave 1's — the cluster graph decides); its three [[exception]] rows retire to zero; rungs minted by `domains-census.py plan` when the loop reaches it"
 
 [[rung]]
 id = "dm-wave-3-corpus-engine"
+title = "corpus-engine's vocab door"
+status = "open"
+demo = "D3"
 moves = ["dm-queue", "dm-misnamed-crates", "dm-contexts-liftable", "dm-atom-outside"]
 one_line = "WAVE 3 — corpus-engine (172,204): Understanding leaves first through vocab's door (domains-8's spec, corrected in §10.5), then workbench, workspace, build-feedback (its §2 verdict on the way out); ingest + retrieval stay; rungs minted by the plan"
 
 [[rung]]
 id = "dm-wave-n"
+title = "waves until the queue reads 0"
+status = "open"
+demo = "D4"
 moves = ["dm-queue"]
 one_line = "WAVES 4+ — the loop: whatever `dm-queue` lists next (sovereign-core's research cluster, sovereign-tools, the destinations wave 1-3 enlarged), until dm-queue = 0 and the predicate exits 0"

@@ -152,9 +152,9 @@ question = "which engine answers this, and can I prove why?"
 # Its owner may move to Answering (beside `Scope`) when daemon-core Phase 5
 # lands one resolver; until then Admission is its only consumer.
 owns = ["Venue", "Slot", "Admission", "Replay", "Decision"]
-package = ""          # rung 9 declares [[package]] serving
+package = "serving"   # declared by dm-serving-package-rows 2026-09-15 (ARCH_LAYERS.toml:1044); boundary-gate is red until the extraction completes, so the predicate still fails
 crates = ["sovereign-scheduler", "sovereign-serving-host", "serving-policy", "sovereign-serving", "sovereign-compute"]   # the first two are CREATED by dm-mesh-serving (SERVING_BOUNDARY.md); sovereign-serving empties
-lift = ""             # rung 9 writes scripts/serving-lift.sh
+lift = ""             # scripts/serving-lift.sh exists; VERDICT 0 today (the closure cannot leave) — this flips when the package extracts
 applicable_as = "a router in front of N OpenAI-compatible endpoints with admission control and replayable decisions"
 roots = ["sovereign/crates/sovereign-serving", "serving-policy"]
 status = "kept"
@@ -821,6 +821,12 @@ lines = 399
 note = ""
 
 [[module]]
+path = "sovereign/crates/sovereign-scheduler/src/venue.rs"
+context = "serving"
+lines = 71
+note = "the Venue record and its port (REVIEW-build-venue, 2026-09-15)"
+
+[[module]]
 path = "sovereign/crates/sovereign-mesh/src/tool_profile.rs"
 context = "host"
 lines = 585
@@ -905,10 +911,10 @@ lines = 542
 note = "re-tagged serving->compute 2026-09-15 on consumer evidence: every production consumer is a pod module (worker_http.rs:214,817; worker_daemon.rs:156) plus the CLI host (sovereign-cli-daemon/src/daemon_cmd/worker.rs:82,120), and its only in-crate import is the pod's worker_http::WorkerState (:67). It is the pod's :9742 TLS tunnel (PINNED_WORKER_AS_INFERENCE_PEER.md:5), not an inference decider — ARCH 12: its uses are all pod-side, so the serving line was drawn wrong."
 
 [[module]]
-path = "sovereign/crates/sovereign-pods/src/worker_pod.rs"
+path = "sovereign/crates/sovereign-contracts/src/worker_pod.rs"
 context = "compute"
 lines = 763
-note = ""
+note = "the owner↔pod wire protocol (BootstrapBlob, worker token, seed-derived cert, token verifier); moved out of sovereign-pods to the shared contract leaf by REVIEW-build-serving-worker-port (2026-09-15) so sovereign-serving-host can name it without a third package [[exception]] (SERVING_BOUNDARY.md Grandfathered). Tag unchanged, path re-keyed."
 
 [[module]]
 path = "sovereign/crates/sovereign-pods/src/worker_subprocess_runner.rs"
