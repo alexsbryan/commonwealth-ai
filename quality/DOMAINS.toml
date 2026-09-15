@@ -463,8 +463,20 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/inference_adapter.rs"
 context = "serving"
-lines = 2155
+lines = 1599
 note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/inference_adapter/adapter_translation_tests.rs"
+context = "serving"
+lines = 531
+note = "inference_adapter's translation tests, split out (REVIEW-audit-6, ARCH §3.1)"
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/inference_adapter/guard_tests.rs"
+context = "serving"
+lines = 27
+note = "inference_adapter's guard tests, split out (REVIEW-audit-6, ARCH §3.1)"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/ingest_executor.rs"
@@ -1183,8 +1195,20 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_inference.rs"
 context = "host"
-lines = 2408
+lines = 1728
 note = "was serving; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/routes_inference/list_models_tests.rs"
+context = "host"
+lines = 520
+note = "routes_inference's /v1/models tests, split out (REVIEW-audit-6, ARCH §3.1)"
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/routes_inference/shed_rendering_tests.rs"
+context = "host"
+lines = 162
+note = "routes_inference's shed-rendering tests, split out (REVIEW-audit-6, ARCH §3.1)"
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_internal/atlas_status.rs"
