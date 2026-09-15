@@ -124,7 +124,7 @@ pub mod rpc_warm_http;
 /// The routing decision as a pure function — shared by the production
 /// selector and the Tier-1 simulator (`SCHEDULER_QUALITY.md` §5).
 pub(crate) mod scheduler_core;
-pub mod slot_aliases;
+pub use sovereign_scheduler::slot_aliases; // shim: moved by domains dm-sched-move-slot-aliases
 pub mod source_content_validator;
 pub mod state;
 pub mod supervised_task;
