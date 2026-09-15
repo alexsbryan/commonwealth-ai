@@ -403,6 +403,52 @@ from = "serving-policy"
 to = "commonwealth-*"
 reason = "same rule pointing the other way — the module came OUT of commonwealth-core precisely so its runtime-tier consumers would stop reaching into the mesh foundation for it"
 
+# The serving package's rules (SERVING_BOUNDARY.md "The rules", declared with
+# the [[package]] row below by rung domains-9). They are written as separate
+# rows, one per target, because each target carries a different reason and the
+# reason is the whole value of a forbid row — a single `sovereign-*` catch-all
+# would say "no" without saying why, and rule 1 does not mean "no sovereign
+# crate": the scheduler reaches `sovereign-contracts` (a shared leaf) for
+# `InferenceProvider` and `Speed`. `forbidden_by` returns the FIRST match, so
+# these sit together and name their crates explicitly rather than leaning on a
+# broader row above.
+#
+# Rule 1 — the scheduler may name `oicp-types` and nothing else in this repo: a
+# ranker that names the mesh foundation cannot rank a candidate that is not a
+# mesh member.
+[[forbid]]
+from = "sovereign-scheduler"
+to = "commonwealth-*"
+reason = "the ranker is arithmetic over the published language and must stay liftable without either family's foundation — naming commonwealth-* is the mesh leaking back into a decision that has to rank a candidate which is not a mesh member"
+
+# Rule 2 — not `sovereign-mesh`: the edge Phase C exists to delete. It is why a
+# CLI wanting a roster inherits llama-cpp.
+[[forbid]]
+from = "sovereign-scheduler"
+to = "sovereign-mesh"
+reason = "sovereign-mesh is the edge Phase C exists to delete; a ranker that names it is why a CLI wanting a roster inherits llama-cpp (DAEMON_CORE.md §4)"
+
+# Rule 3 — not `sovereign-inference`: ranking is not executing; only the host
+# connects.
+[[forbid]]
+from = "sovereign-scheduler"
+to = "sovereign-inference"
+reason = "ranking is not executing — only the host connects, so the ranker must never name the inference stack"
+
+# Rule 4 — not `sovereign-api`: wire types belong to `oicp-types` or the host,
+# never the ranker.
+[[forbid]]
+from = "sovereign-scheduler"
+to = "sovereign-api"
+reason = "the wire types the four serving modules import from sovereign-api belong to oicp-types or the host, never the ranker"
+
+# Rule 5 — the host may name inference; it may NOT name `sovereign-mesh`: it
+# receives candidates through a port, never an `EmbeddedDaemon`.
+[[forbid]]
+from = "sovereign-serving-host"
+to = "sovereign-mesh"
+reason = "the host receives candidates through a port, never an EmbeddedDaemon — a sovereign-mesh dep here is the kill clause, because it would rebuild the knot the package exists to cut"
+
 # oplog was minted 2026-09-04 by moving `corpus-engine/src/oplog.rs` out. The
 # rail in commonwealth-knowledge named five of its types and took a dep on
 # corpus-engine — a 578-crate closure — to reach seven references. The journal
@@ -994,6 +1040,39 @@ crates = [
     "commonwealth-rails",
 ]
 
+[[package]]
+name = "serving"
+doc = "sovereign/SERVING_BOUNDARY.md"
+# The serving package — declared 2026-09-14 by rung domains-9, BEFORE the work
+# that moves code into it, for the reason the `commonwealth` block above gives:
+# no gate here can tell "the files moved" from "the boundary holds". Unlike
+# commonwealth, this one is RED the day it is declared, and that is the point
+# (ARCH §18.1). The scheduler half (eight modules, 6,356 lines) is still inside
+# `sovereign-mesh`, and the peg `sovereign-serving` still names
+# `commonwealth-core`/`commonwealth-state`; rung domains-10 turns it green.
+#
+# THE TWO TIERS (SERVING_BOUNDARY.md "The two tiers"). `sovereign-scheduler` is
+# arithmetic over the published language — the ranking decision reads no clock
+# and does no I/O; `sovereign-serving-host` is the ports and the knot — it opens
+# connections and receives every candidate through a port. `serving-policy` is
+# the tier-0 leaf the admission decider already lives in (`fair_sched` left
+# commonwealth-core 2026-09-03) and it is the precedent this package copies; it
+# is a MEMBER here rather than a shared leaf, because a crate cannot be both.
+# The peg `sovereign-serving` empties to zero.
+#
+# The shared leaves the package reaches are the GLOBAL [[package_leaf]] set —
+# `oicp-types`, `kernel-types`, `sovereign-contracts`. "And nothing else in this
+# repo" is what the five [[forbid]] rows above make structural, per target.
+# `sovereign-compute` is Serving's local engine and is deliberately OUTSIDE this
+# closure (DOMAINS.md §11): one supervised child per slot behind the daemon's
+# provider facade, which a lift carries no need for.
+crates = [
+    "sovereign-scheduler",
+    "sovereign-serving-host",
+    "serving-policy",
+    "sovereign-serving",
+]
+
 # ── THE THIN-SURFACE RULE — can this client BECOME what it talks to? ─────────
 #
 # sv-surface's `sv-no-daemon-management` bar, operator 2026-09-11:
@@ -1148,6 +1227,27 @@ from = "corpus-mcp"
 to = "corpus-engine"
 reason = "the host reads indexes through corpus-engine (`CorpusIndex::search`, `open_index_for_corpus`), and corpus-engine cannot join a liftable package yet: it carries a `build.rs` (recipe vendoring), `include_str!`s tree-sitter queries from `queries/` outside its crate root, and an optional edge to `corpus-engine-scip`. Burn-down, in order: (1) the read-only index surface the host needs — open + hybrid search over LanceDB/Tantivy, `index/search.rs` has zero enrichment references across 1,245 lines — carved into a leaf the host and the engine both reach DOWN to; (2) the tree-sitter queries moved inside the crate or behind the code-intel seam; (3) the recipe vendoring build.rs replaced by the checked-in artifact. When (1) lands this row moves to the new leaf and the host's closure is clean."
 tracking = "enrichment-as-plugin follow-up (index-read leaf)"
+
+# ── Serving package exceptions (the burn-down list) ──────────────────────────
+# Declared 2026-09-14 with the [[package]] row above, per SERVING_BOUNDARY.md
+# "Grandfathered": EXACTLY TWO, and a third means the boundary is drawn in the
+# wrong place (the campaign's K4) — move the line, do not widen the ledger. Each
+# carries the `tracking` condition that retires it, and a stale one (the edge is
+# gone) fails the gate until it is deleted.
+
+[[exception]]
+package = "serving"
+from = "sovereign-serving-host"
+to = "sovereign-inference"
+reason = "the host is the ONE tier that connects: `RemoteApiProvider` (peer_inference.rs:64) is the remote provider the router reaches an endpoint through. Rule 5 permits the host to name inference; the package closure does not, so the edge is grandfathered rather than forbidden."
+tracking = "clears when the remote provider is reached through `oicp-client` instead of sovereign-inference"
+
+[[exception]]
+package = "serving"
+from = "sovereign-serving-host"
+to = "commonwealth-core"
+reason = "quarantine state (`PeerHealthTracker`) and identity (`ids::NodeId`) are reached from the host's peer path; both belong on the host's own side of the seam rather than the mesh foundation."
+tracking = "clears when quarantine state is the host's own and identity is `kernel_types::NodeId`"
 
 # Populated by the first layer-gate census, 2026-07-11. Removing an entry —
 # with its edge — is the win condition; see the remediation roadmap (R6).
