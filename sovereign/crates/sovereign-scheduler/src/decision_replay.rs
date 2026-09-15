@@ -73,7 +73,7 @@
 //! simulator's scoreboard) — never from anything a production capture
 //! cannot carry.
 
-use sovereign_core::oicp::{score_with_adjustments, BenchmarkResult, NodeObservations};
+use oicp_types::{score_with_adjustments, BenchmarkResult, NodeObservations};
 
 use crate::decision_log::{
     locality_from_label, CandidateInputs, CandidateKind, CandidateRecord, DecisionPath,
@@ -660,7 +660,7 @@ impl std::fmt::Display for ReplayReport {
 mod tests {
     use super::*;
     use crate::decision_log::{DecisionBuilder, LoadSource, RequestFacts, DECISION_LOG_SCHEMA};
-    use sovereign_core::oicp::{effective_affinity, NodeLocality};
+    use oicp_types::{effective_affinity, NodeLocality};
 
     fn facts() -> RequestFacts {
         RequestFacts {

@@ -9,5 +9,12 @@
 //! throughput stream observer stay with `sovereign-serving-host`
 //! (`sovereign/SERVING_BOUNDARY.md` "The two tiers").
 
+pub mod decision_log;
+pub mod decision_replay;
+pub mod decision_trace;
+pub mod oicp_select;
+pub mod predicted_time;
+pub mod scheduler_core;
 pub mod slot_aliases;
 pub mod tier;
+pub mod yield_backoff;

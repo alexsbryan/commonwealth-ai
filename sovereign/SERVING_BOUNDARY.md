@@ -169,7 +169,7 @@ pub trait GuestLenderSource: Send + Sync + std::fmt::Debug {
 **(b) The scheduler entry** — free-standing over an assembled snapshot, not the
 `route(&self, req, candidates)` the order sketched.
 ```rust
-// sovereign-mesh/src/scheduler_core.rs:339 — pub(crate) today, becomes pub.
+// sovereign-scheduler/src/scheduler_core.rs:339 — pub(crate) before the move, pub after.
 pub fn rank(rec: RoutingDecisionBuilder, inputs: RankInputs<'_>) -> RankResult;
 pub struct RankInputs<'a> {          // :267
     pub now_unix: u64,               // PASSED, so a sim runs on virtual time

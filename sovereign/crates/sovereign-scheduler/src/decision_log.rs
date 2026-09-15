@@ -54,8 +54,8 @@ use std::io::Write;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
+use oicp_types::{BenchmarkResult, NodeLocality, NodeObservations, ScoreBreakdown};
 use serde::{Deserialize, Serialize};
-use sovereign_core::oicp::{BenchmarkResult, NodeLocality, NodeObservations, ScoreBreakdown};
 
 /// Schema tag stamped on every record. Bump on any
 /// backwards-incompatible change to the shapes below — the replay

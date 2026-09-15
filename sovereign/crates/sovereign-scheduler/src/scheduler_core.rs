@@ -29,7 +29,7 @@
 //! never reaches out to refresh it, which is precisely why staleness
 //! (F1) is observable in simulation at all.
 
-use sovereign_core::oicp::{
+use oicp_types::{
     BenchmarkResult, InferenceRequirements, NodeLocality, NodeObservations, ProviderManifest,
 };
 
@@ -49,7 +49,7 @@ use crate::tier::TierFloor;
 /// The name the local node is recorded under in a decision record's
 /// candidate set. Peers are recorded under their mesh name, which is
 /// never this.
-pub(crate) const LOCAL_CANDIDATE_NAME: &str = "local";
+pub const LOCAL_CANDIDATE_NAME: &str = "local";
 
 /// Model id of the stand-in used when no loaded local model can serve
 /// the request at all. Named rather than anonymous so a record or a
@@ -75,7 +75,7 @@ pub(crate) const LOCAL_INSUFFICIENT_MODEL_ID: &str = "<local-insufficient>";
 /// [`crate::predicted_time`] for why closing that gap belongs to the
 /// §4.1 landing rather than to the arm.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub(crate) enum RankObjective {
+pub enum RankObjective {
     /// Production today, and arm 0 of the Tier-1 sim: the product of
     /// dimensionless multipliers, filtered by strictly-beats-local.
     #[default]
@@ -179,14 +179,14 @@ pub(crate) fn winners_over_local<T>(
 
 /// A request was just dispatched to this node: one more in flight,
 /// one more sample toward the cold-start ramp.
-pub(crate) fn observe_dispatch(obs: &mut NodeObservations) {
+pub fn observe_dispatch(obs: &mut NodeObservations) {
     obs.in_flight = obs.in_flight.saturating_add(1);
     obs.samples = obs.samples.saturating_add(1);
 }
 
 /// A dispatched request completed. Drifts the failure rate toward
 /// zero on every success.
-pub(crate) fn observe_success(obs: &mut NodeObservations) {
+pub fn observe_success(obs: &mut NodeObservations) {
     obs.in_flight = obs.in_flight.saturating_sub(1);
     obs.recent_failure_rate = (obs.recent_failure_rate * 0.9).max(0.0);
 }
@@ -194,7 +194,7 @@ pub(crate) fn observe_success(obs: &mut NodeObservations) {
 /// A dispatched request failed. Rolling-window failure rate: EMA
 /// toward 1.0 with alpha 0.1 — ten consecutive failures settle near
 /// 0.65.
-pub(crate) fn observe_failure(obs: &mut NodeObservations) {
+pub fn observe_failure(obs: &mut NodeObservations) {
     obs.in_flight = obs.in_flight.saturating_sub(1);
     obs.recent_failure_rate = (obs.recent_failure_rate * 0.9 + 0.1).min(1.0);
 }
@@ -204,7 +204,7 @@ pub(crate) fn observe_failure(obs: &mut NodeObservations) {
 /// The local side has no staleness by construction — the asymmetry
 /// between this struct and [`PeerCandidateView`] (which carries three
 /// separate age fields) *is* finding F1, stated in the type system.
-pub(crate) struct LocalCandidateView<'a> {
+pub struct LocalCandidateView<'a> {
     pub manifest: &'a ProviderManifest,
     pub observations: &'a NodeObservations,
     pub benchmark: Option<&'a BenchmarkResult>,
@@ -213,7 +213,7 @@ pub(crate) struct LocalCandidateView<'a> {
 /// A peer manifest as the decider currently holds it, with the two
 /// facts that make it more than a manifest: how long the round trip
 /// took (which sets the locality bonus) and how old the copy is.
-pub(crate) struct PeerManifestView {
+pub struct PeerManifestView {
     pub manifest: ProviderManifest,
     pub rtt_ms: u32,
     /// Seconds since the manifest was fetched. `0` for a live fetch.
@@ -229,7 +229,7 @@ pub(crate) struct PeerManifestView {
 /// obtained — the peer is recorded as excluded rather than silently
 /// dropped, because "the hub lost" and "the hub was never considered"
 /// are different failures.
-pub(crate) struct PeerCandidateView {
+pub struct PeerCandidateView {
     pub name: String,
     pub node_id_hex: String,
     /// From the decider's own `PeerHealthTracker`. Quarantined peers
@@ -261,7 +261,7 @@ pub(crate) struct PeerCandidateView {
 }
 
 /// The complete snapshot a single decision is taken against.
-pub(crate) struct RankInputs<'a> {
+pub struct RankInputs<'a> {
     /// Decision-time clock, in unix seconds. Passed rather than read
     /// so a simulated decider can run on virtual time.
     pub now_unix: u64,
@@ -299,7 +299,7 @@ pub(crate) struct RankInputs<'a> {
 /// peer's predicted time, which is the kind of bug that survives a test
 /// suite.
 #[derive(Debug, Clone)]
-pub(crate) struct RankedCandidate {
+pub struct RankedCandidate {
     /// Index into [`RankInputs::peers`], so the caller can re-pair this
     /// with whatever peer representation it owns without this module
     /// having to name it.
@@ -315,7 +315,7 @@ pub(crate) struct RankedCandidate {
 /// The decision, plus the record that explains it.
 ///
 /// `ranked` is best-first.
-pub(crate) struct RankResult {
+pub struct RankResult {
     pub ranked: Vec<RankedCandidate>,
     /// How many entries at the head of `ranked` the objective cannot
     /// tell apart ([`predicted_time::tie_band`]) — the draw set for
@@ -336,7 +336,7 @@ pub(crate) struct RankResult {
 /// Pure: no I/O, no clock read, no interior mutability. Given the
 /// same `rec` seed and the same inputs it returns the same decision,
 /// which is the property Tier-1 replay depends on.
-pub(crate) fn rank(mut rec: DecisionBuilder, inputs: RankInputs<'_>) -> RankResult {
+pub fn rank(mut rec: DecisionBuilder, inputs: RankInputs<'_>) -> RankResult {
     let RankInputs {
         now_unix,
         oicp_request_id,
@@ -494,7 +494,7 @@ pub(crate) fn rank(mut rec: DecisionBuilder, inputs: RankInputs<'_>) -> RankResu
             && !manifest
                 .features
                 .iter()
-                .any(|f| f.as_str() == sovereign_core::oicp::features::X_FORCED_CHOICE)
+                .any(|f| f.as_str() == oicp_types::features::X_FORCED_CHOICE)
         {
             tracing::debug!(
                 oicp_request_id = %oicp_request_id,
@@ -801,7 +801,7 @@ pub(crate) fn rank(mut rec: DecisionBuilder, inputs: RankInputs<'_>) -> RankResu
 mod tests {
     use super::*;
     use crate::decision_log::{DecisionPath, RequestFacts};
-    use sovereign_core::oicp::{
+    use oicp_types::{
         CapabilityClaim, CapabilityHint, LatencyClass, ModelStatus, ProviderModel, ShardingPrivacy,
         OICP_VERSION,
     };

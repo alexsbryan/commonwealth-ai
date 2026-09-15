@@ -82,7 +82,7 @@
 //! [`predict`] is total over its inputs and returns `Err` rather than
 //! a sentinel when a candidate cannot be predicted at all.
 
-use sovereign_core::oicp::{InferenceRequirements, ProviderManifest};
+use oicp_types::{InferenceRequirements, ProviderManifest};
 
 use crate::decision_log::{CandidateInputs, RequestFacts};
 
@@ -608,7 +608,7 @@ mod tests {
     /// advertises.
     #[test]
     fn load_debt_is_read_per_model_and_a_resident_model_owes_nothing() {
-        use sovereign_core::oicp::{
+        use oicp_types::{
             CapabilityClaim, CapabilityHint, LatencyClass, ModelStatus, ProviderModel, OICP_VERSION,
         };
         let model = |id: &str, loaded: bool, load_sec: Option<u32>| ProviderModel {
@@ -674,7 +674,7 @@ mod tests {
     #[test]
     fn a_record_without_load_fields_reads_as_resident() {
         use crate::decision_log::LoadSource;
-        let obs = sovereign_core::oicp::NodeObservations::default();
+        let obs = oicp_types::NodeObservations::default();
         let ci = CandidateInputs::from_observations(&obs, LoadSource::Local);
         assert_eq!(ci.model_loaded, None);
         assert_eq!(PredictInputs::from_candidate(&ci).pending_load_ms, 0);
@@ -839,7 +839,7 @@ mod tests {
     #[test]
     fn inputs_round_trip_through_a_recorded_candidate() {
         use crate::decision_log::LoadSource;
-        use sovereign_core::oicp::{BenchmarkResult, NodeObservations};
+        use oicp_types::{BenchmarkResult, NodeObservations};
 
         let obs = NodeObservations {
             in_flight: 3,
@@ -870,7 +870,7 @@ mod tests {
     #[test]
     fn a_local_candidate_record_with_no_rtt_predicts_zero_wire_cost() {
         use crate::decision_log::LoadSource;
-        let obs = sovereign_core::oicp::NodeObservations::default();
+        let obs = oicp_types::NodeObservations::default();
         let ci = CandidateInputs::from_observations(&obs, LoadSource::Local);
         assert_eq!(PredictInputs::from_candidate(&ci).rtt_ms, 0);
     }

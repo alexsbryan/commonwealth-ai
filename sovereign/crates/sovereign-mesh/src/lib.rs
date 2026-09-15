@@ -29,15 +29,15 @@ pub mod daemon_services;
 /// with its provenance and age) joined by `decision_id` to one record
 /// per completion (served-by / TTFT / total / tokens / shed). Pure
 /// instrumentation: it changes no routing decision.
-pub mod decision_log;
+pub use sovereign_scheduler::decision_log; // shim: moved by domains REVIEW-build-sched-move
 /// Decision replay — Phase 1 (S1). Re-runs the live scorer and the
 /// live ranking policy over a captured `decision_log` record and
 /// reports whether the record reproduces its own scores and verdict.
-pub mod decision_replay;
+pub use sovereign_scheduler::decision_replay; // shim: moved by domains REVIEW-build-sched-move
 /// Trace-replay fixtures — Phase 0 (P3/P4). Reads a `decision_log`
 /// JSONL stream plus an observation-state snapshot back into the
 /// episode the Tier-1 simulator replays.
-pub mod decision_trace;
+pub use sovereign_scheduler::decision_trace; // shim: moved by domains REVIEW-build-sched-move
 pub mod deep_link;
 pub mod documents_http;
 #[cfg(feature = "dst")]
@@ -89,7 +89,7 @@ pub mod meshapp_http;
 pub mod model_fetch;
 pub mod newsworthy_host;
 pub mod notes_http;
-pub(crate) mod oicp_select;
+pub(crate) use sovereign_scheduler::oicp_select; // shim: moved by domains REVIEW-build-sched-move
 pub mod oicp_synthesis;
 pub mod origin_fanout;
 /// The mesh implementations of `sovereign-contracts::peer`'s two ports — the
@@ -101,7 +101,7 @@ pub mod persist;
 /// rather than on a product of dimensionless multipliers
 /// (`SCHEDULER_QUALITY.md` §4.1). Public because it is scored from a
 /// capture as well as from the live path.
-pub mod predicted_time;
+pub use sovereign_scheduler::predicted_time; // shim: moved by domains REVIEW-build-sched-move
 #[cfg(feature = "treesitter")]
 pub mod project_http;
 pub mod projects;
@@ -123,7 +123,7 @@ pub mod roster_repair;
 pub mod rpc_warm_http;
 /// The routing decision as a pure function — shared by the production
 /// selector and the Tier-1 simulator (`SCHEDULER_QUALITY.md` §5).
-pub(crate) mod scheduler_core;
+pub(crate) use sovereign_scheduler::scheduler_core; // shim: moved by domains REVIEW-build-sched-move
 pub use sovereign_scheduler::slot_aliases; // shim: moved by domains dm-sched-move-slot-aliases
 pub mod source_content_validator;
 pub mod state;
@@ -145,10 +145,10 @@ pub mod work_donor;
 pub mod worker_eligibility;
 // Short-lived memory of peers that refused with `yielded_to_local`, so
 // the next turn does not re-dial into the same refusal.
-pub mod yield_backoff;
-// Ephemeral worker pods — owner-initiated TLS-pinned transport that
-// replaces the full-mesh-pod path. Pods become single-owner workers,
-// not gossip peers. Spec: sovereign/docs/EPHEMERAL_WORKER_PODS.md.
+pub use sovereign_scheduler::yield_backoff; // shim: moved by domains REVIEW-build-sched-move
+                                            // Ephemeral worker pods — owner-initiated TLS-pinned transport that
+                                            // replaces the full-mesh-pod path. Pods become single-owner workers,
+                                            // not gossip peers. Spec: sovereign/docs/EPHEMERAL_WORKER_PODS.md.
 pub use sovereign_pods::worker_pod; // shim: moved by domains dm-pods-move-worker-pod
                                     // Pinned-pod inference routing — lets ephemeral worker pods join the
                                     // mesh scheduler's inference pool as one more peer, scored by the

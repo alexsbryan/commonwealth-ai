@@ -300,7 +300,7 @@ mod tests {
         LocalObservationRecord, PeerObservationRecord, RequestFacts, ScoreRecord, ServedBy,
         Verdict,
     };
-    use sovereign_core::oicp::NodeObservations;
+    use oicp_types::NodeObservations;
 
     fn facts() -> RequestFacts {
         RequestFacts {

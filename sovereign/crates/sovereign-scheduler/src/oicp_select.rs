@@ -21,7 +21,7 @@
 //!
 //! Keeping the primitives in one place means the two sides can't
 //! drift out of agreement about what "best" means.
-use sovereign_core::oicp::{
+use oicp_types::{
     score_with_adjustments, BenchmarkResult, CapabilityHint, InferenceRequirements, LatencyClass,
     NodeLocality, NodeObservations, ScoreBreakdown, ShardingPrivacy,
 };
@@ -30,7 +30,7 @@ use sovereign_core::oicp::{
 // rationalization — this module used to carry its own copies, one of
 // three divergent implementations). Re-exported under the historical
 // local names so call sites and tests read unchanged.
-pub(crate) use sovereign_core::oicp::{
+pub use oicp_types::{
     best_claim_for_request as score_manifest_for_request, pick_better,
     ScoredClaim as ModelCandidate, SCORING_EPSILON as SCORE_TIE_EPSILON,
 };
@@ -66,7 +66,7 @@ pub(crate) fn candidates_equal(a: &ModelCandidate, b: &ModelCandidate) -> bool {
 /// with no envelope at all — see that function for why absence is not a
 /// refusal. Both bottom out in [`offload_verdict`], so they cannot drift
 /// out of agreement about what "offloadable" means.
-pub(crate) fn offload_eligible(req: &InferenceRequirements) -> bool {
+pub fn offload_eligible(req: &InferenceRequirements) -> bool {
     offload_verdict(req) == OffloadVerdict::Eligible
 }
 
@@ -80,7 +80,7 @@ pub(crate) fn offload_eligible(req: &InferenceRequirements) -> bool {
 /// it*. Reporting both as "not offload eligible" is the silent-substitution
 /// shape ARCH_PRINCIPLES §18.3 forbids.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum OffloadVerdict {
+pub enum OffloadVerdict {
     /// Every gate open.
     Eligible,
     /// §3.1 privacy contract: this work never leaves the node.
@@ -93,7 +93,7 @@ pub(crate) enum OffloadVerdict {
 
 impl OffloadVerdict {
     /// Stable gate name for the decision log and `tracing`.
-    pub(crate) fn gate(self) -> &'static str {
+    pub fn gate(self) -> &'static str {
         match self {
             OffloadVerdict::Eligible => "eligible",
             // Unchanged from before the budget gate existed: the decision
@@ -134,7 +134,7 @@ impl OffloadVerdict {
 /// `no_routing_signal` before a peer was ever scored. Written here rather
 /// than at either call site so they cannot diverge again;
 /// `both_routing_surfaces_agree_an_absent_envelope_permits_a_peer` pins it.
-pub(crate) fn offload_verdict_opt(req: Option<&InferenceRequirements>) -> OffloadVerdict {
+pub fn offload_verdict_opt(req: Option<&InferenceRequirements>) -> OffloadVerdict {
     match req {
         None => OffloadVerdict::Eligible,
         Some(req) => offload_verdict(req),
@@ -147,7 +147,7 @@ pub(crate) fn offload_verdict_opt(req: Option<&InferenceRequirements>) -> Offloa
 /// Order matters only for which reason is reported first; the gates are
 /// independent and any one of them closes the request. Privacy is checked
 /// first because it is the contract a reader is most likely to be auditing.
-pub(crate) fn offload_verdict(req: &InferenceRequirements) -> OffloadVerdict {
+pub fn offload_verdict(req: &InferenceRequirements) -> OffloadVerdict {
     if req.sharding() != ShardingPrivacy::MeshAllowed {
         return OffloadVerdict::LocalOnlyPrivacy;
     }
@@ -178,7 +178,7 @@ pub(crate) const NEAR_RTT_MS_THRESHOLD: u32 = 25;
 /// [`NodeLocality`] bucket. Pure function; the async HTTP probe
 /// that produces the `rtt_ms` value lives in the mesh host's
 /// `MeshInferenceProvider::get_peer_manifest`.
-pub(crate) fn classify_rtt_ms(rtt_ms: u32) -> NodeLocality {
+pub fn classify_rtt_ms(rtt_ms: u32) -> NodeLocality {
     if rtt_ms < LOCAL_RTT_MS_THRESHOLD {
         NodeLocality::Local
     } else if rtt_ms < NEAR_RTT_MS_THRESHOLD {
@@ -204,7 +204,7 @@ pub(crate) fn classify_rtt_ms(rtt_ms: u32) -> NodeLocality {
 /// signal on the Joiner side is the one disclosed behavior change
 /// of the 2026-06-10 rationalization: a peer advertising 0.2
 /// availability used to be scored as if idle.
-pub(crate) fn adjust_for_observations(
+pub fn adjust_for_observations(
     cand: ModelCandidate,
     obs: &NodeObservations,
     locality: NodeLocality,
@@ -232,7 +232,7 @@ pub(crate) fn adjust_for_observations(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sovereign_core::oicp::ProviderManifest;
+    use oicp_types::ProviderManifest;
 
     fn cand(score: f32, size_gb: Option<f32>, id: &str) -> ModelCandidate {
         ModelCandidate {
@@ -400,14 +400,14 @@ mod tests {
     fn manifest_with_claim(
         id: &str,
         size_gb: Option<f32>,
-        claim: sovereign_core::oicp::CapabilityClaim,
+        claim: oicp_types::CapabilityClaim,
     ) -> ProviderManifest {
-        ProviderManifest::new(vec![sovereign_core::oicp::ProviderModel {
+        ProviderManifest::new(vec![oicp_types::ProviderModel {
             id: id.into(),
             base_model: None,
             quantization: None,
             context_tokens: claim.max_context,
-            status: sovereign_core::oicp::ModelStatus {
+            status: oicp_types::ModelStatus {
                 available: true,
                 loaded: true,
                 estimated_tokens_per_sec: None,
@@ -422,7 +422,7 @@ mod tests {
 
     #[test]
     fn score_manifest_for_request_prefers_claim_path_when_claims_present() {
-        use sovereign_core::oicp::CapabilityClaim;
+        use oicp_types::CapabilityClaim;
         let qwen_coder = manifest_with_claim(
             "qwen-coder-32b",
             Some(16.1),
@@ -453,7 +453,7 @@ mod tests {
         let m = manifest_with_claim(
             "undersized",
             Some(1.0),
-            sovereign_core::oicp::CapabilityClaim::new(
+            oicp_types::CapabilityClaim::new(
                 CapabilityHint::general(),
                 LatencyClass::Normal,
                 100,
