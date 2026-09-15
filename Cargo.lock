@@ -12181,6 +12181,7 @@ dependencies = [
  "sovereign-mesh",
  "sovereign-pods",
  "sovereign-runtime-recipe",
+ "sovereign-scheduler",
  "sovereign-service",
  "sovereign-store",
  "sovereign-tdd",
