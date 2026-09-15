@@ -10,3 +10,4 @@
 pub mod guest_lender;
 pub mod recorder;
 pub mod slot_select;
+pub mod worker_state;

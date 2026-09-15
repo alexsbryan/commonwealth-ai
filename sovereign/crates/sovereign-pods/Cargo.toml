@@ -11,10 +11,15 @@ thiserror = { workspace = true }
 hex = "0.4"
 sha2 = { workspace = true }
 ed25519-dalek = { workspace = true }
-rcgen = "0.13"
 base64 = "0.22"
 rand = "0.9"
 sovereign-time = { workspace = true }
+# `worker_pod` moved to this shared leaf (domains REVIEW-build-serving-worker-port):
+# the owner↔pod wire protocol has two speakers in two contexts, and a package
+# `[[exception]]` for `sovereign-serving-host -> sovereign-pods` would be the
+# third — the kill clause (SERVING_BOUNDARY.md "Grandfathered"). `sovereign-pods`
+# re-exports the module at its historical path.
+sovereign-contracts = { workspace = true }
 axum = { workspace = true }
 tokio = { workspace = true }
 reqwest = { workspace = true, features = ["stream"] }

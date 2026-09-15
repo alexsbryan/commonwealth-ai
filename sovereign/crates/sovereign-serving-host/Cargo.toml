@@ -11,6 +11,10 @@ license.workspace = true
 # arithmetic over.
 sovereign-contracts = { workspace = true }
 oicp-types = { workspace = true }
+# `worker_state.rs` keys the pinned-worker reader on the neutral identity the
+# roster and the local reader both speak (a shared leaf, so the package
+# reaches it — `SERVING_BOUNDARY.md` "The two tiers").
+kernel-types = { workspace = true }
 tracing = { workspace = true }
 # The recording sink is the host's (SERVING_BOUNDARY.md "Corrected
 # 2026-09-14", bullet 1): it serialises the scheduler's record types, mints

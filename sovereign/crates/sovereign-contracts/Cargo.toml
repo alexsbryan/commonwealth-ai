@@ -45,6 +45,18 @@ regex = { workspace = true }
 # remote call rides on. Pure HTTP: it carries no part of the inference stack.
 reqwest = { workspace = true }
 
+# `worker_pod.rs` — the ephemeral worker pod's owner↔pod wire protocol, moved
+# down from `sovereign-pods` (Compute) by domains REVIEW-build-serving-worker-port
+# so the serving host can name it without a third package `[[exception]]`
+# (`sovereign-pods` is neither a package member nor a shared leaf). Same
+# versions `sovereign-pods` carries, so `lock-gate` sees no skew: `ring` (via
+# `rcgen`) is already in this crate's closure through `reqwest`'s rustls-tls.
+ed25519-dalek = { workspace = true }
+rcgen = "0.13"
+base64 = "0.22"
+rand = "0.9"
+hex = "0.4"
+
 # `run_lock`: flock(2) for the single-writer claim on a data root. A leaf
 # third-party crate, so it adds no workspace layer edge — and unix-gated,
 # because the lock has no enforcement to offer anywhere else

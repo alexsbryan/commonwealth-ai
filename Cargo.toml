@@ -121,8 +121,9 @@ members = [
     # facade & replica pool.
     "sovereign/crates/sovereign-compute",
     # Compute's remote isolation — leasing a rented machine and running work on
-    # it (DOMAINS.md §11.2). Receives the worker_pod / worker_http / controller
-    # / daemon / subprocess-runner / multi-pod-coordinator modules.
+    # it (DOMAINS.md §11.2). Receives the worker_http / controller / daemon /
+    # subprocess-runner / multi-pod-coordinator modules; `worker_pod`'s wire
+    # protocol lives in `sovereign-contracts` (REVIEW-build-serving-worker-port).
     "sovereign/crates/sovereign-pods",
     # The serving package's two crates (SERVING_BOUNDARY.md "The two tiers"),
     # created as stubs so the boundary has crates to name. The scheduler half

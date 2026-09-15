@@ -6,5 +6,5 @@ pub mod worker_controller;
 pub mod worker_daemon;
 pub mod worker_http;
 pub mod worker_inference_proxy;
-pub mod worker_pod;
+pub use sovereign_contracts::worker_pod; // shim: moved by domains REVIEW-build-serving-worker-port
 pub mod worker_subprocess_runner;

@@ -70,6 +70,13 @@ pub mod tool_manifest;
 pub mod tool_result_cache;
 pub mod traits;
 pub mod types;
+/// The ephemeral worker pod's owner↔pod wire protocol — bootstrap blob,
+/// worker token, seed-derived cert and the token verifier. A shared leaf
+/// rather than `sovereign-pods` (Compute's crate) because the protocol has
+/// two speakers in two contexts: the pod that decodes it and the serving host
+/// that mints it (`SERVING_BOUNDARY.md` "Grandfathered"; a third package
+/// exception is the kill clause).
+pub mod worker_pod;
 /// Which checkout this host's code tools operate on — one reading of the
 /// two configured sources (`TOPOLOGY.md` §10 phase 10).
 pub mod workspace;

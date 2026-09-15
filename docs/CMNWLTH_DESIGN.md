@@ -55,7 +55,7 @@ capabilities and interact through three shapes — calls, jobs, and sessions.**
 | Noun | Contract | Existing instance |
 |---|---|---|
 | **Ring** | A founded trust group: join key (BLAKE3, shared out of band) + Ed25519 proof-of-possession; membership converges by gossip; social trust, not cryptographic attestation. | `sovereign/crates/sovereign-mesh/src/join.rs`, `src/gossip.rs`, `commonwealth/crates/commonwealth-discovery/` |
-| **Member** | A node in the ring. Durable (a machine you own) or **ephemeral** (a rented machine with a TTL and a Provider that minted it). Ephemeral members bootstrap with seed-derived keys and a cert thumbprint known to the owner *before* boot — no TOFU window. | `sovereign-pods/src/worker_pod.rs` (`BootstrapBlob`), `worker_controller.rs` (`WorkerProvider`) |
+| **Member** | A node in the ring. Durable (a machine you own) or **ephemeral** (a rented machine with a TTL and a Provider that minted it). Ephemeral members bootstrap with seed-derived keys and a cert thumbprint known to the owner *before* boot — no TOFU window. | `sovereign-contracts/src/worker_pod.rs` (`BootstrapBlob`; the shared contract leaf since domains REVIEW-build-serving-worker-port), `sovereign-pods/src/worker_controller.rs` (`WorkerProvider`) |
 | **Grant** | TTL'd, allowlisted authorization for a member to participate in a named scope. Dual-enforced (at enrollment and at lease), dual-teardown, never a standing share. | `commonwealth/crates/commonwealth-knowledge/src/ingest_grant.rs` (`EphemeralGrantStore`, corpus-typed today) |
 
 ### Capability plane

@@ -1391,6 +1391,12 @@ lines = 330
 note = "the local slot pick; split out of oicp_select by REVIEW-build-sched-split-pick-slot (2026-09-15)"
 
 [[module]]
+path = "sovereign/crates/sovereign-serving-host/src/worker_state.rs"
+context = "serving"
+lines = 87
+note = "the WorkerState reader port — a pinned pod's bootstrap state by synthetic node id, the daemon implements it; the payload type is the shared leaf's sovereign-contracts::worker_pod (REVIEW-build-serving-worker-port, 2026-09-15)"
+
+[[module]]
 path = "sovereign/crates/sovereign-serving/src/plan.rs"
 context = "serving"
 lines = 250

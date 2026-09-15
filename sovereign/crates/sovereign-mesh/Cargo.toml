@@ -124,9 +124,12 @@ sovereign-core = { workspace = true }
 # `sovereign_core::time` re-export (domains row dm-time-repoint-mesh).
 sovereign-time = { workspace = true }
 # The rented-pod modules lifted out of this crate (domains dm-pods-move-*).
-# Every importer is repointed; the dependency remains for the `worker_pod`
-# shim in lib.rs, which this crate's pinned_* modules reach as
-# `crate::worker_pod`.
+# Every importer is repointed; the dependency remains for this crate's own
+# pod integration tests (`tests/main/worker_e2e.rs`,
+# `tests/main/local_pod_smoke.rs`), which drive `sovereign_pods::worker_*`
+# directly. The `worker_pod` wire protocol itself now lives in the shared
+# `sovereign-contracts` leaf (REVIEW-build-serving-worker-port), re-exported
+# by `sovereign-pods` and shimmed in lib.rs.
 sovereign-pods = { path = "../sovereign-pods" }
 # The ranker lifted out of this crate (domains dm-sched-move-tier). The
 # lib.rs shim re-exports it so the modules that still reach `crate::tier`
@@ -227,16 +230,12 @@ dirs = "6"
 # Streaming SHA-256 in `model_fetch` so the file is hashed
 # while the bytes pass through — no second pass over disk.
 sha2 = { workspace = true }
-# Ed25519 keypair derivation in `worker_pod.rs`. `pkcs8` lets us feed
-# the derived key directly to rcgen for self-signed cert generation;
-# `rand_core` exposes the RNG trait we need on the verify side.
+# Ed25519 identity keys: `ring_roster` and the join handshake in `src/`, plus
+# the pinned-pod integration tests (`tests/main/{join_handshake,local_pod_smoke,
+# worker_e2e}.rs`). The owner↔pod protocol that once carried its own copy here
+# is `sovereign-contracts::worker_pod` now (REVIEW-build-serving-worker-port);
+# `rcgen`/`base64`, which only that protocol used, went with it.
 ed25519-dalek = { workspace = true }
-# Self-signed TLS cert generation from a deterministic Ed25519 seed
-# (pod side) — version matches commonwealth-discovery to keep one
-# rcgen in the build graph.
-rcgen = "0.13"
-# Bootstrap blob is base64'd into Vast's `onstart` env var.
-base64 = "0.22"
 # HTTPS termination for the worker daemon — pod serves its
 # seed-derived self-signed cert on :9742. `axum-server` is the
 # cleanest path that pairs axum routers with rustls without
