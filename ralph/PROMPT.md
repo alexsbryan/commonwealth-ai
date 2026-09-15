@@ -50,16 +50,21 @@ What the id prefix tells you:
 3. Do the VERB. `MOVE` uses §3a and nothing else. Change nothing the row does
    not ask for — no renames inside a move, no logic edits, no nearby cleanup
    (ARCH principle 2).
-4. Run the row's checks. On a failure: read the log, fix, re-run. Two honest
+4. **Build hygiene.** Before the first check that builds, run CLEAN once
+   (§5): a clean canonical build, ~5 min. It resets the debug profile and pins
+   the feature soup for the unit — the accumulated target (100G, 503 crates
+   with duplicate rlibs, 2026-09-15) is what filled the disk and took the loop
+   down. Never build with bare `cargo`.
+5. Run the row's checks. On a failure: read the log, fix, re-run. Two honest
    attempts at the same failure and still red: §6.
-5. Commit: `git add` the paths you changed, by name — never `git add -A`, never
+6. Commit: `git add` the paths you changed, by name — never `git add -A`, never
    `target/` or `ralph/log*`. Message `<unit-id>: <one line>`; body = the
    `exit=` lines and anything the row says to paste.
-6. Mark the row `- [x] <unit-id> <short-hash> — depends [...] — ...`, keeping
+7. Mark the row `- [x] <unit-id> <short-hash> — depends [...] — ...`, keeping
    the unit id immediately after the checkbox; the dependency parser reads that
    position. Commit `ralph/STATE.md` alone as
-   `ralph: <unit-id> done`. In a POOL LANE, write `ralph/done/<unit-id>` and
-   commit that instead.
+   `ralph: <unit-id> done`. In a POOL LANE, write `ralph/lanes/<unit-id>.done`
+   and commit that instead.
 
 Commit as soon as a coherent piece compiles. You can be killed at any moment;
 a killed session with commits resumes, one holding an hour of uncommitted work
@@ -136,6 +141,7 @@ does not exist on a Linux host, you are outside it: stop (§6) before building.
 
 | name | command | passes when |
 |---|---|---|
+| CLEAN | `./scripts/with-cargo-lock.sh ./scripts/dev-build.sh --clean > target/ralph/build.log 2>&1; echo exit=$?; tail -5 target/ralph/build.log` | exit=0 (once per unit, before the first build) |
 | LINT | `./scripts/with-cargo-lock.sh ./scripts/sovereign-lint.sh --human > target/ralph/lint.log 2>&1; echo exit=$?; tail -5 target/ralph/lint.log` | exit=0 |
 | TEST(c) | `./scripts/with-cargo-lock.sh ./scripts/sovereign-test.sh --human --package c > target/ralph/test.log 2>&1; echo exit=$?; tail -8 target/ralph/test.log` | exit=0; exit=4 (zero tests) only for a crate created in this unit, said in the commit |
 | LAYER | `(cd corpus-engine && ../scripts/with-cargo-lock.sh cargo xtask layer-gate) > target/ralph/layer.log 2>&1; echo exit=$?; tail -5 target/ralph/layer.log` | exit=0 |

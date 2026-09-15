@@ -49,6 +49,16 @@ and `watch` and run the printed `launchctl bootstrap`.
 Markers: `ralph/DONE` (complete), `ralph/STOP` (empty = operator, non-empty =
 halt), `ralph/NEEDS_HUMAN.md` (the decision package).
 
+## Build hygiene
+
+A campaign that builds accumulates: measured 2026-09-15, this workspace's
+`target/` reached 100G — 47G incremental, 35G deps, and 503 crates holding more
+than one rlib from differing feature sets — and the disk ceiling took the loop
+down twice. So a unit opens with a clean canonical build
+(`scripts/dev-build.sh --clean`, ~5 min here) and every later build goes
+through that entry or the check scripts, never bare `cargo`: a `-p` build
+resolves features differently and rebuilds the dependents twice.
+
 ## Parallel lanes
 
 `pool` runs a ring's ready units concurrently, each in its own git worktree on

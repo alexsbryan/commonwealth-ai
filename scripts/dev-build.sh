@@ -27,6 +27,7 @@
 #
 # Usage:
 #   scripts/dev-build.sh                      # full workspace, debug
+#   scripts/dev-build.sh --clean              # clean the debug profile first
 #   scripts/dev-build.sh -p sovereign-cli-dev # one crate, same features
 #   scripts/dev-build.sh --release            # forwarded verbatim
 
@@ -66,6 +67,18 @@ if ! command -v clang >/dev/null 2>&1; then
         echo "  scripts/sovereign-test.sh."
     } >&2
     exit 2
+fi
+
+# ── --clean: the campaign's build-hygiene entry. ────────────────────────────
+#
+# Workers accumulate build assets across units: measured 2026-09-15, target/
+# was 100G (47G incremental, 35G deps) with 503 crates holding more than one
+# rlib from differing feature sets, and the disk ceiling took the loop down
+# twice. `cargo clean --profile dev` resets the debug profile (~5 min to
+# rebuild) while leaving target/ralph and other non-cargo trees alone.
+if [[ "${1:-}" == "--clean" ]]; then
+    shift
+    cargo clean --profile dev
 fi
 
 FEATURES="corpus-engine/treesitter,sovereign-cli/dev-tools"
