@@ -59,7 +59,7 @@
 //! `SimConfig::advertised_size_error` mis-states it per node, exactly
 //! as `advertised_rate_error` prices the rate card.
 
-use sovereign_core::oicp::{InferenceRequirements, LatencyClass};
+use oicp_types::{InferenceRequirements, LatencyClass};
 
 /// Advertised-weight ratio at which two models stop being treated as
 /// interchangeable.
@@ -232,7 +232,7 @@ pub fn bands_with_ratio(sizes: &[Option<f32>], ratio: f32) -> Vec<Option<u32>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sovereign_core::oicp::CapabilityHint;
+    use oicp_types::CapabilityHint;
 
     /// The fleet `scenario.rs` actually runs: one 35B hub, three 9B
     /// desktops, eight 4B laptops. If this partition ever changes, the

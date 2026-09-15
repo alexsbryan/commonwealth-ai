@@ -132,7 +132,7 @@ pub mod throughput_tracking;
 /// Capability bands — the tier floor of `SCHEDULER_QUALITY.md` §4.1:
 /// capability filters the candidate set, predicted cost ranks what
 /// survives.
-pub mod tier;
+pub use sovereign_scheduler::tier; // shim: moved by domains dm-sched-move-tier
 pub mod tool_profile;
 pub mod turn_approval;
 pub mod turn_extras_http;

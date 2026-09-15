@@ -123,6 +123,10 @@ sovereign-time = { workspace = true }
 # shim in lib.rs, which this crate's pinned_* modules reach as
 # `crate::worker_pod`.
 sovereign-pods = { path = "../sovereign-pods" }
+# The ranker lifted out of this crate (domains dm-sched-move-tier). The
+# lib.rs shim re-exports it so the modules that still reach `crate::tier`
+# keep resolving until the scheduler half moves whole.
+sovereign-scheduler = { path = "../sovereign-scheduler" }
 # RemoteApiProvider — synthesised at request time when routing to
 # a peer for federated inference.
 sovereign-inference = { workspace = true }

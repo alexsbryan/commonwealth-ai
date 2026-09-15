@@ -12645,6 +12645,7 @@ dependencies = [
  "sovereign-meshapp",
  "sovereign-meshapp-registry",
  "sovereign-pods",
+ "sovereign-scheduler",
  "sovereign-serving",
  "sovereign-store",
  "sovereign-time",
@@ -12822,6 +12823,9 @@ dependencies = [
 [[package]]
 name = "sovereign-scheduler"
 version = "0.7.0"
+dependencies = [
+ "oicp-types",
+]
 
 [[package]]
 name = "sovereign-server"

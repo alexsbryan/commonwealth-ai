@@ -7,3 +7,5 @@
 //! `decision_replay`, `decision_trace`, `throughput_tracking`, `slot_aliases`,
 //! `yield_backoff` — while the recorder sink and the local slot pick stay with
 //! `sovereign-serving-host` (`sovereign/SERVING_BOUNDARY.md` "The two tiers").
+
+pub mod tier;

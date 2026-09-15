@@ -5,6 +5,10 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+# The published language the ranker is arithmetic over. Rule 1
+# (ARCH_LAYERS.toml): the scheduler may name `oicp-types` and nothing else in
+# this repo. `TierFloor` reads the envelope's latency class off it.
+oicp-types = { workspace = true }
 
 [lints]
 workspace = true
