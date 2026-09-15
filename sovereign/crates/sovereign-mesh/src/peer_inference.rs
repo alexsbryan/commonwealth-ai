@@ -74,7 +74,7 @@ use crate::oicp_synthesis::build_self_manifest;
 use crate::scheduler_core::{
     self, LocalCandidateView, RankInputs, RankObjective, RankResult, VenueManifestView, VenueView,
 };
-use crate::throughput_tracking::{LedgerEmission, ThroughputObservedStream, ThroughputTarget};
+use crate::throughput_tracking::{ThroughputObservedStream, ThroughputTarget};
 use crate::tier::TierFloor;
 pub use sovereign_scheduler::venue::{InferenceVenue, VenueSource};
 
@@ -337,10 +337,10 @@ use crate::oicp_select::{classify_rtt_ms, ModelCandidate};
 /// - the local node id, Fabric's identity READER (`quality/DAEMON_CORE.md`
 ///   §4.2 "Identity is a reader" — join adoption swaps the id inside a running
 ///   daemon, so a cached value goes stale);
-/// - the contribution-ledger emission, which the host mints from
-///   `RoutingOutcome` (`SERVING_BOUNDARY.md` (a)). Until
-///   `REVIEW-build-serving-emitter-port` lands that mint, the production
-///   adapter still builds it here so no emission is silently dropped.
+/// - the contribution-ledger PORT (`sovereign_serving_host::ledger`), which
+///   the daemon implements over its `ContributionEmitter`. The host mints the
+///   fact from `RoutingOutcome` (`SERVING_BOUNDARY.md` (a)), so this trait no
+///   longer builds a pre-filled emission per request.
 ///
 /// `MeshInferenceProvider` holds one of these as a constructor argument.
 #[async_trait]
@@ -353,18 +353,60 @@ pub trait VenueHost: Send + Sync {
         None
     }
 
-    /// Build a `LedgerEmission` for a peer-routed stream completion.
+    /// The contribution-ledger port, or `None` when this host has none.
     /// Default returns `None` — test stubs without a wired
     /// `ContributionEmitter` skip the emission entirely.
-    #[doc(hidden)]
-    async fn ledger_emission_for(
+    async fn ledger_emitter(
         &self,
-        _peer_node_id: &commonwealth_core::ids::NodeId,
-        _model_id: &str,
-        _peer_name: &str,
-    ) -> Option<LedgerEmission> {
+    ) -> Option<Arc<dyn sovereign_serving_host::ledger::LedgerEmitter>> {
         None
     }
+}
+
+/// The daemon's implementation of the host's ledger port.
+///
+/// This is the only place the `commonwealth_state` emitter is named on the
+/// serving path (`quality/DAEMON_CORE.md` §4.2 "The facts rule" — no context
+/// outside Fabric names `ContributionEmitter`; Serving emits facts and Fabric
+/// prices them). The host mints the fact from `RoutingOutcome` and this
+/// records it.
+struct DaemonLedger {
+    emitter: commonwealth_state::ContributionEmitter,
+}
+
+impl sovereign_serving_host::ledger::LedgerEmitter for DaemonLedger {
+    fn record_inference_received(
+        &self,
+        from_node: &kernel_types::NodeId,
+        model_id: &str,
+        tokens_generated: u64,
+    ) {
+        self.emitter.record(
+            commonwealth_core::contributions::LedgerEventKind::InferenceReceived {
+                from_node: *from_node,
+                model_id: model_id.to_string(),
+                tokens_generated,
+            },
+        );
+    }
+}
+
+/// The ledger port to attach to a peer-routed stream: the host's, unless the
+/// venue is a pinned worker pod.
+///
+/// Pinned pods are not mesh members (spec §8 — no shared secret, no gossip, no
+/// node id), so a "received from self" fact about one is meaningless. The
+/// composite source used to suppress this by node id; the venue already
+/// carries the fact ([`InferenceVenue::pinned_transport`]), so the decision
+/// lives where the route is chosen.
+async fn ledger_emitter_for_venue(
+    host: &Arc<dyn VenueHost>,
+    venue: &InferenceVenue,
+) -> Option<Arc<dyn sovereign_serving_host::ledger::LedgerEmitter>> {
+    if venue.pinned_transport {
+        return None;
+    }
+    host.ledger_emitter().await
 }
 
 /// Resolve the TLS-pinned transport handle for a pinned venue, by `node_id`.
@@ -406,18 +448,13 @@ impl VenueHost for EmbeddedDaemon {
         EmbeddedDaemon::self_node_id(self).await
     }
 
-    async fn ledger_emission_for(
+    async fn ledger_emitter(
         &self,
-        peer_node_id: &commonwealth_core::ids::NodeId,
-        model_id: &str,
-        _peer_name: &str,
-    ) -> Option<LedgerEmission> {
+    ) -> Option<Arc<dyn sovereign_serving_host::ledger::LedgerEmitter>> {
         let app_state = self.app_state().await?;
-        Some(LedgerEmission {
-            from_node: *peer_node_id,
-            model_id: model_id.to_string(),
+        Some(Arc::new(DaemonLedger {
             emitter: app_state.inner.contribution_emitter.clone(),
-        })
+        }))
     }
 }
 
@@ -425,7 +462,7 @@ pub struct MeshInferenceProvider {
     local: Arc<dyn InferenceProvider>,
     mesh: Arc<dyn VenueSource>,
     /// The host side of the roster seam: Fabric's identity reader and the
-    /// contribution-ledger mint, neither of which is `VenueSource`'s
+    /// contribution-ledger port, neither of which is `VenueSource`'s
     /// (`SERVING_BOUNDARY.md` (a)).
     host: Arc<dyn VenueHost>,
     /// Resolves a pinned venue's TLS handle by `node_id`. Default: none.
@@ -1225,12 +1262,14 @@ impl MeshInferenceProvider {
             failovers,
         );
         match &result {
-            Ok(_) => ctx.complete(
-                None,
-                Some(started.elapsed().as_secs_f64() * 1000.0),
-                None,
-                recorder::now_unix_ms(),
-            ),
+            Ok(_) => {
+                ctx.complete(
+                    None,
+                    Some(started.elapsed().as_secs_f64() * 1000.0),
+                    None,
+                    recorder::now_unix_ms(),
+                );
+            }
             Err(e) => ctx.failed(e.to_string(), false, recorder::now_unix_ms()),
         }
         result
@@ -2771,10 +2810,6 @@ impl MeshInferenceProvider {
                         local_alternative = ?local_alt,
                         "mesh-inference: routing to peer by model name"
                     );
-                    let ledger = self
-                        .host
-                        .ledger_emission_for(&peer.node_id, &peer_cand.model_id, &peer.name)
-                        .await;
                     if soft {
                         // Shared-model primary: prefer the host, but fall back to
                         // the local model if every address fails — the cascade's
@@ -2784,7 +2819,6 @@ impl MeshInferenceProvider {
                             RouteDecision::Peer {
                                 peer,
                                 peer_cand,
-                                ledger,
                                 disposition: PeerFailureDisposition::Soft,
                                 pinned_model_id: Some(model_id.clone()),
                             },
@@ -2804,7 +2838,6 @@ impl MeshInferenceProvider {
                             RouteDecision::Peer {
                                 peer,
                                 peer_cand,
-                                ledger,
                                 disposition: PeerFailureDisposition::Soft,
                                 pinned_model_id: Some(model_id.clone()),
                             },
@@ -2817,7 +2850,6 @@ impl MeshInferenceProvider {
                         Ok(plan(vec![RouteDecision::Peer {
                             peer,
                             peer_cand,
-                            ledger,
                             pinned_model_id: Some(model_id.clone()),
                             disposition: PeerFailureDisposition::Hard { model_id },
                         }]))
@@ -2937,14 +2969,9 @@ impl MeshInferenceProvider {
         }
         let mut steps = Vec::with_capacity(ranked.len() + 1);
         for (peer, peer_cand) in ranked {
-            let ledger = self
-                .host
-                .ledger_emission_for(&peer.node_id, &peer_cand.model_id, &peer.name)
-                .await;
             steps.push(RouteDecision::Peer {
                 peer,
                 peer_cand,
-                ledger,
                 disposition: PeerFailureDisposition::Soft,
                 // Ranked/OICP: the peer picks from the envelope.
                 pinned_model_id: None,
@@ -3118,7 +3145,6 @@ enum RouteDecision {
     Peer {
         peer: InferenceVenue,
         peer_cand: ModelCandidate,
-        ledger: Option<LedgerEmission>,
         disposition: PeerFailureDisposition,
         /// Model id to PIN on the outgoing request, when this route
         /// came from resolving a NAME (an explicit `model_id`, or a
@@ -3539,7 +3565,6 @@ impl InferenceProvider for MeshInferenceProvider {
                 RouteDecision::Peer {
                     peer,
                     peer_cand,
-                    ledger,
                     disposition,
                     pinned_model_id,
                 } => {
@@ -3552,7 +3577,6 @@ impl InferenceProvider for MeshInferenceProvider {
                     // contribution for traffic that has never been booked,
                     // which is a ledger-visible change and belongs in its
                     // own commit with its own note.
-                    let _ = ledger;
 
                     // Raise the peer's observed in-flight count BEFORE
                     // handing off. `locate_named_model`'s load-balance rule
@@ -3684,12 +3708,14 @@ impl InferenceProvider for MeshInferenceProvider {
                         &failovers,
                     );
                     match &result {
-                        Ok(_) => ctx.complete(
-                            None,
-                            Some(started.elapsed().as_secs_f64() * 1000.0),
-                            None,
-                            recorder::now_unix_ms(),
-                        ),
+                        Ok(_) => {
+                            ctx.complete(
+                                None,
+                                Some(started.elapsed().as_secs_f64() * 1000.0),
+                                None,
+                                recorder::now_unix_ms(),
+                            );
+                        }
                         Err(e) => ctx.failed(e.to_string(), false, recorder::now_unix_ms()),
                     }
                     return result;
@@ -3846,7 +3872,6 @@ impl InferenceProvider for MeshInferenceProvider {
                 RouteDecision::Peer {
                     peer,
                     peer_cand,
-                    ledger,
                     disposition,
                     pinned_model_id,
                 } => {
@@ -3855,6 +3880,9 @@ impl InferenceProvider for MeshInferenceProvider {
                     let mut last_transport_err: Option<String> = None;
                     let node_id_hex = self.local_node_id_hex().await;
                     let transport = self.pinned_transports().resolve(&peer.node_id).await;
+                    // The ledger port this venue's completion may emit
+                    // through; `None` for a pinned pod (spec §8).
+                    let ledger_emitter = ledger_emitter_for_venue(&self.host, &peer).await;
                     for url in &peer.base_urls {
                         let rp = provider_for_peer(
                             &peer,
@@ -3884,8 +3912,8 @@ impl InferenceProvider for MeshInferenceProvider {
                                     attempt_index,
                                     &failovers,
                                 ));
-                                if let Some(em) = ledger.clone() {
-                                    wrapper = wrapper.with_ledger_emission(em);
+                                if let Some(em) = ledger_emitter.clone() {
+                                    wrapper = wrapper.with_ledger(em);
                                 }
                                 let observed: Pin<Box<dyn Stream<Item = StreamFrame> + Send>> =
                                     Box::pin(wrapper);
@@ -4374,6 +4402,58 @@ mod tests {
     /// `MeshInferenceProvider` from a stub source.
     #[async_trait]
     impl VenueHost for NoPeers {}
+
+    /// A host that wires a ledger port, so the pinned-venue suppression can be
+    /// asserted without a full dispatch.
+    struct LedgerHost;
+
+    #[async_trait]
+    impl VenueHost for LedgerHost {
+        async fn ledger_emitter(
+            &self,
+        ) -> Option<Arc<dyn sovereign_serving_host::ledger::LedgerEmitter>> {
+            Some(Arc::new(RecordingLedger))
+        }
+    }
+
+    struct RecordingLedger;
+
+    impl sovereign_serving_host::ledger::LedgerEmitter for RecordingLedger {
+        fn record_inference_received(
+            &self,
+            _from_node: &kernel_types::NodeId,
+            _model_id: &str,
+            _tokens_generated: u64,
+        ) {
+        }
+    }
+
+    /// A pinned venue is not a mesh member (spec §8): its completion must get
+    /// no ledger port at all, while a gossiped peer gets the host's — and a
+    /// host with no ledger answers `None` rather than a defaulting no-op. The
+    /// composite source used to make this call by node id; it lives here now.
+    #[tokio::test]
+    async fn a_pinned_venue_gets_no_ledger_emitter() {
+        let host: Arc<dyn VenueHost> = Arc::new(LedgerHost);
+        let mesh_peer = dead_peer();
+        let mut pinned = dead_peer();
+        pinned.pinned_transport = true;
+
+        assert!(
+            ledger_emitter_for_venue(&host, &mesh_peer).await.is_some(),
+            "a gossiped peer's completion emits through the host's port"
+        );
+        assert!(
+            ledger_emitter_for_venue(&host, &pinned).await.is_none(),
+            "a pinned pod is not a mesh member and must not emit"
+        );
+
+        let bare: Arc<dyn VenueHost> = Arc::new(NoPeers);
+        assert!(
+            ledger_emitter_for_venue(&bare, &mesh_peer).await.is_none(),
+            "a host with no ledger reports absence, never a defaulting emitter"
+        );
+    }
 
     fn late_loading_mip() -> (Arc<AtomicBool>, MeshInferenceProvider) {
         let serving = Arc::new(AtomicBool::new(false));
@@ -5520,15 +5600,9 @@ impl VenueHost for DeferredDaemon {
         EmbeddedDaemon::self_node_id(self.daemon.get()?).await
     }
 
-    async fn ledger_emission_for(
+    async fn ledger_emitter(
         &self,
-        peer_node_id: &commonwealth_core::ids::NodeId,
-        model_id: &str,
-        peer_name: &str,
-    ) -> Option<LedgerEmission> {
-        self.daemon
-            .get()?
-            .ledger_emission_for(peer_node_id, model_id, peer_name)
-            .await
+    ) -> Option<Arc<dyn sovereign_serving_host::ledger::LedgerEmitter>> {
+        self.daemon.get()?.ledger_emitter().await
     }
 }

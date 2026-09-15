@@ -838,32 +838,36 @@ pub struct OutcomeContext {
 }
 
 impl OutcomeContext {
-    /// Emit the terminal record for a request that produced timings.
-    /// `ts_unix_ms` is read by the host, not here.
+    /// Emit the terminal record for a request that produced timings, and
+    /// return it. `ts_unix_ms` is read by the host, not here.
+    ///
+    /// The record is returned so a host-side subscriber (the
+    /// `sovereign-serving-host` ledger port) can mint its fact from the SAME
+    /// value that was recorded rather than rebuild it — one construction of
+    /// the outcome, not two (ARCH §8).
     pub fn complete(
         &self,
         ttft_ms: Option<f64>,
         total_ms: Option<f64>,
         output_tokens: Option<u64>,
         ts_unix_ms: u64,
-    ) {
-        emit_outcome(
-            &self.sink,
-            RoutingOutcome {
-                schema: DECISION_LOG_SCHEMA.to_string(),
-                decision_id: self.decision_id.clone(),
-                oicp_request_id: self.oicp_request_id.clone(),
-                ts_unix_ms,
-                served_by: self.served_by.clone(),
-                attempt_index: self.attempt_index,
-                ttft_ms,
-                total_ms,
-                output_tokens,
-                shed: false,
-                error: None,
-                failovers: self.failovers.clone(),
-            },
-        );
+    ) -> RoutingOutcome {
+        let outcome = RoutingOutcome {
+            schema: DECISION_LOG_SCHEMA.to_string(),
+            decision_id: self.decision_id.clone(),
+            oicp_request_id: self.oicp_request_id.clone(),
+            ts_unix_ms,
+            served_by: self.served_by.clone(),
+            attempt_index: self.attempt_index,
+            ttft_ms,
+            total_ms,
+            output_tokens,
+            shed: false,
+            error: None,
+            failovers: self.failovers.clone(),
+        };
+        emit_outcome(&self.sink, outcome.clone());
+        outcome
     }
 
     /// Emit the terminal record for a request that never produced a

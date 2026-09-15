@@ -39,27 +39,34 @@ use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, Speed};
 use sovereign_mesh::daemon::InferenceVenue;
 use sovereign_mesh::peer_inference::{MeshInferenceProvider, VenueHost, VenueSource};
-use sovereign_mesh::throughput_tracking::LedgerEmission;
+use sovereign_serving_host::ledger::LedgerEmitter;
 
 use crate::common;
 use crate::common::TestProvider;
 
 // ── `VenueSource` stub with a real `ContributionEmitter` ──
 //
-// Wires a captured ContributionEmitter through `ledger_emission_for`
-// so the routing path attaches it to the stream wrapper. After the
-// stream drops, the emitter's MeshStore retains the event for the
-// assertion to read back.
-
-// ── `VenueSource` stub with a real `ContributionEmitter` ──
-//
-// Wires a captured ContributionEmitter through `ledger_emission_for`
-// so the routing path attaches it to the stream wrapper. After the
-// stream drops, the emitter's MeshStore retains the event for the
-// assertion to read back.
+// The daemon's side of the ledger port: the host mints the fact from
+// `RoutingOutcome` and hands it here, where it lands on a real
+// ContributionEmitter. After the stream drops, the emitter's MeshStore
+// retains the event for the assertion to read back.
 struct StubPeerSource {
     peers: Vec<InferenceVenue>,
     emitter: ContributionEmitter,
+}
+
+struct TestLedger {
+    emitter: ContributionEmitter,
+}
+
+impl LedgerEmitter for TestLedger {
+    fn record_inference_received(&self, from_node: &NodeId, model_id: &str, tokens_generated: u64) {
+        self.emitter.record(LedgerEventKind::InferenceReceived {
+            from_node: *from_node,
+            model_id: model_id.to_string(),
+            tokens_generated,
+        });
+    }
 }
 
 #[async_trait]
@@ -71,17 +78,10 @@ impl VenueSource for StubPeerSource {
 
 #[async_trait]
 impl VenueHost for StubPeerSource {
-    async fn ledger_emission_for(
-        &self,
-        peer_node_id: &NodeId,
-        model_id: &str,
-        _peer_name: &str,
-    ) -> Option<LedgerEmission> {
-        Some(LedgerEmission::new(
-            *peer_node_id,
-            model_id,
-            self.emitter.clone(),
-        ))
+    async fn ledger_emitter(&self) -> Option<Arc<dyn LedgerEmitter>> {
+        Some(Arc::new(TestLedger {
+            emitter: self.emitter.clone(),
+        }))
     }
 }
 
@@ -195,9 +195,9 @@ async fn peer_routed_stream_emits_inference_received_on_drop() {
     let peer_addr = spawn_mock_peer().await;
     let base_url = format!("http://{}/v1", peer_addr);
 
-    // 3. Build the stub peer source — one peer, with the emitter
-    //    plumbed through `ledger_emission_for` so the routing path
-    //    attaches a `LedgerEmission` to the returned stream.
+    // 3. Build the stub peer source — one peer, with the ledger port
+    //    wired so the routing path attaches it to the returned stream;
+    //    the fact is minted from the terminal `RoutingOutcome`.
     let peer_node_id = NodeId::from_u128(0xF0F0_F0F0_F0F0_F0F0);
     let peers = vec![InferenceVenue {
         node_id: peer_node_id,

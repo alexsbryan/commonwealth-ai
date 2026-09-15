@@ -1369,8 +1369,14 @@ note = "the crate root; modules lifted out of sovereign-mesh across REVIEW-build
 [[module]]
 path = "sovereign/crates/sovereign-serving-host/src/lib.rs"
 context = "serving"
-lines = 12
+lines = 14
 note = "the host crate root; the host half arrives in rung domains-10 (2026-09-15)"
+
+[[module]]
+path = "sovereign/crates/sovereign-serving-host/src/ledger.rs"
+context = "serving"
+lines = 168
+note = "the contribution-ledger port — the host mints the InferenceReceived fact from RoutingOutcome and the daemon implements LedgerEmitter over its ContributionEmitter (REVIEW-build-serving-emitter-port, 2026-09-15); DAEMON_CORE.md §4.2 'The facts rule'"
 
 [[module]]
 path = "sovereign/crates/sovereign-serving-host/src/guest_lender.rs"

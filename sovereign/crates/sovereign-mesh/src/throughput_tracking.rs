@@ -34,44 +34,6 @@ pub(crate) enum ThroughputTarget {
     },
 }
 
-/// Optional ledger-event emission attached to the stream wrapper.
-/// When `Some`, the stream's `Drop` impl fires an
-/// `InferenceReceived` event on completion with `tokens_generated`
-/// equal to the chunk count. Local-served streams set this to
-/// `None` — the dimensional ledger is intra-mesh-only per spec
-/// §10, and a "received from self" event is meaningless.
-///
-/// `pub` because the mesh host's `VenueSource`
-/// trait method `ledger_emission_for` returns `Option<LedgerEmission>`
-/// — implementors outside this module need to construct values of
-/// this type. Fields stay `pub(crate)` so the construction shape
-/// is still controlled.
-#[derive(Clone)]
-pub struct LedgerEmission {
-    pub(crate) from_node: commonwealth_core::ids::NodeId,
-    pub(crate) model_id: String,
-    pub(crate) emitter: commonwealth_state::ContributionEmitter,
-}
-
-impl LedgerEmission {
-    /// Construct a `LedgerEmission`. The production wiring goes
-    /// through `EmbeddedDaemon::ledger_emission_for`; tests outside
-    /// this crate use this constructor to plug a controlled
-    /// `ContributionEmitter` into a stub `VenueSource` and
-    /// observe `InferenceReceived` events end-to-end.
-    pub fn new(
-        from_node: commonwealth_core::ids::NodeId,
-        model_id: impl Into<String>,
-        emitter: commonwealth_state::ContributionEmitter,
-    ) -> Self {
-        Self {
-            from_node,
-            model_id: model_id.into(),
-            emitter,
-        }
-    }
-}
-
 /// Predicate that distinguishes "data" frames (count toward
 /// `chunk_count`, mark TTFT on the first one) from "terminal" frames
 /// (errors, typed `Finish` frames — measure but don't tally).
@@ -139,7 +101,14 @@ where
     chunk_count: u64,
     target: ThroughputTarget,
     completed: bool,
-    ledger_emission: Option<LedgerEmission>,
+    /// The contribution-ledger port, when the host has one. On completion the
+    /// wrapper mints the `InferenceReceived` fact from the terminal
+    /// `RoutingOutcome` and hands it to this port
+    /// (`sovereign_serving_host::ledger`; `SERVING_BOUNDARY.md` (a) — Serving
+    /// emits facts, Fabric prices them). `None` for a host with no ledger and
+    /// for a pinned venue, whose synthetic node id is not a mesh member
+    /// (spec §8).
+    ledger: Option<Arc<dyn sovereign_serving_host::ledger::LedgerEmitter>>,
     /// P1 of `docs/specs/SCHEDULER_QUALITY.md`: the completion half of
     /// the decision→outcome join.
     ///
@@ -164,13 +133,16 @@ where
             chunk_count: 0,
             target,
             completed: false,
-            ledger_emission: None,
+            ledger: None,
             outcome: None,
         }
     }
 
-    pub(crate) fn with_ledger_emission(mut self, emission: LedgerEmission) -> Self {
-        self.ledger_emission = Some(emission);
+    pub(crate) fn with_ledger(
+        mut self,
+        emitter: Arc<dyn sovereign_serving_host::ledger::LedgerEmitter>,
+    ) -> Self {
+        self.ledger = Some(emitter);
         self
     }
 
@@ -217,7 +189,7 @@ where
         let first_chunk = self.first_chunk_at;
         let count = self.chunk_count;
         let target = self.target.clone();
-        let emission = self.ledger_emission.clone();
+        let ledger = self.ledger.clone();
         let outcome = self.outcome.take();
 
         // Skip recording if no first token ever arrived AND no
@@ -252,12 +224,22 @@ where
             // early-returned would silently break calibration.
             if let Some(ctx) = outcome {
                 let total_ms = now.duration_since(dispatched).as_secs_f64() * 1000.0;
-                ctx.complete(
+                let record = ctx.complete(
                     ttft_ms,
                     Some(total_ms),
                     observable.then_some(count),
                     sovereign_serving_host::recorder::now_unix_ms(),
                 );
+                // Mint the ledger fact from the record just emitted —
+                // peer-routed streams that yielded any chunks count as a
+                // received inference. Spec §4.3 docs the symmetric pair
+                // (`InferenceServed` on peer, `InferenceReceived` here);
+                // the aggregator does NOT cross-pollinate, so we have to
+                // emit both halves explicitly. A local serve, a failure or
+                // a zero-token dispatch mints nothing (`emit_from_outcome`).
+                if let Some(emitter) = ledger.as_ref() {
+                    sovereign_serving_host::ledger::emit_from_outcome(emitter.as_ref(), &record);
+                }
             }
 
             if !observable {
@@ -273,24 +255,6 @@ where
                     let mut m = map.write().await;
                     let entry = m.entry(name).or_insert_with(NodeObservations::default);
                     apply_throughput_observation(entry, ttft_ms, tg_tok_s);
-                }
-            }
-
-            // Emit `InferenceReceived` on the completion path —
-            // peer-routed streams that yielded any chunks count as
-            // a received inference. Spec §4.3 docs the symmetric
-            // pair (`InferenceServed` on peer, `InferenceReceived`
-            // here); the aggregator does NOT cross-pollinate, so
-            // we have to emit both halves explicitly.
-            if let Some(em) = emission {
-                if count > 0 {
-                    em.emitter.record(
-                        commonwealth_core::contributions::LedgerEventKind::InferenceReceived {
-                            from_node: em.from_node,
-                            model_id: em.model_id,
-                            tokens_generated: count,
-                        },
-                    );
                 }
             }
         });

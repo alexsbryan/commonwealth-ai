@@ -40,7 +40,6 @@
 //! advertised affinity. See [`peer_inference.rs`] for where that
 //! carve-out lands.
 
-use std::collections::HashSet;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -52,7 +51,6 @@ use sovereign_scheduler::venue::{InferenceVenue, VenueSource};
 use crate::pinned_transport::{
     build_pinned_transport, synthetic_node_id_from_seed, PinnedTransport, TransportError,
 };
-use crate::throughput_tracking::LedgerEmission;
 use crate::worker_pod::BootstrapBlob;
 
 /// Operator-stamped capabilities for a pinned pod. Defaults are
@@ -192,13 +190,6 @@ impl PinnedWorkerEndpointSource {
         self.inner.read().await.len()
     }
 
-    /// Snapshot the synthetic node ids of every registered pod.
-    /// Used by [`CompositeEndpointSource`] to short-circuit ledger
-    /// emission for pinned pods.
-    pub async fn node_ids(&self) -> HashSet<NodeId> {
-        self.inner.read().await.iter().map(|p| p.node_id).collect()
-    }
-
     async fn endpoints(&self) -> Vec<InferenceVenue> {
         self.inner
             .read()
@@ -292,24 +283,10 @@ impl crate::peer_inference::VenueHost for CompositeEndpointSource {
         self.mesh_host.local_node_id().await
     }
 
-    /// Ledger emission for a pinned-pod-routed stream is structurally
-    /// disabled — see spec §8. We have to discriminate at the
-    /// composite layer because the mesh source can't tell whether a
-    /// given `node_id` corresponds to a real gossiped peer or a
-    /// pinned synthetic one (the source is stateless beyond its peer
-    /// list snapshot).
-    async fn ledger_emission_for(
+    async fn ledger_emitter(
         &self,
-        peer_node_id: &NodeId,
-        model_id: &str,
-        peer_name: &str,
-    ) -> Option<LedgerEmission> {
-        if self.pinned.node_ids().await.contains(peer_node_id) {
-            return None;
-        }
-        self.mesh_host
-            .ledger_emission_for(peer_node_id, model_id, peer_name)
-            .await
+    ) -> Option<Arc<dyn sovereign_serving_host::ledger::LedgerEmitter>> {
+        self.mesh_host.ledger_emitter().await
     }
 }
 
@@ -392,23 +369,16 @@ mod tests {
         assert!(!source.deregister(&id).await);
     }
 
-    /// Stub mesh source that yields a fixed peer list and emits ledger
-    /// for every request — used to verify the composite carves out
-    /// pinned ids. Construction takes a real in-memory `MeshStore`
-    /// because `ContributionEmitter` doesn't have a no-op default.
+    /// Stub mesh source that yields a fixed peer list. It carries no ledger:
+    /// the pinned-pod carve-out lives in `peer_inference`'s
+    /// `ledger_emitter_for_venue`, keyed on the venue's `pinned_transport`.
     struct StubMesh {
         peers: Vec<InferenceVenue>,
-        emitter: commonwealth_state::ContributionEmitter,
     }
 
     impl StubMesh {
         fn new(peers: Vec<InferenceVenue>) -> Self {
-            let store = commonwealth_state::MeshStore::in_memory().unwrap();
-            let emitter = commonwealth_state::ContributionEmitter::new(
-                store,
-                NodeId::from_u128(0xDEAD_BEEF_CAFE),
-            );
-            Self { peers, emitter }
+            Self { peers }
         }
     }
 
@@ -420,20 +390,7 @@ mod tests {
     }
 
     #[async_trait]
-    impl crate::peer_inference::VenueHost for StubMesh {
-        async fn ledger_emission_for(
-            &self,
-            peer_node_id: &NodeId,
-            model_id: &str,
-            _peer_name: &str,
-        ) -> Option<LedgerEmission> {
-            Some(LedgerEmission::new(
-                *peer_node_id,
-                model_id,
-                self.emitter.clone(),
-            ))
-        }
-    }
+    impl crate::peer_inference::VenueHost for StubMesh {}
 
     fn mesh_peer(node_id_seed: u128, name: &str) -> InferenceVenue {
         InferenceVenue {
@@ -478,32 +435,5 @@ mod tests {
         let pinned = Arc::new(PinnedWorkerEndpointSource::new());
         let composite = CompositeEndpointSource::new(mesh.clone(), mesh, pinned);
         assert_eq!(composite.candidates().await.len(), 1);
-    }
-
-    #[tokio::test]
-    async fn composite_suppresses_ledger_for_pinned_pods() {
-        let mesh = Arc::new(StubMesh::new(vec![mesh_peer(11, "mesh-real")]));
-        let pod = PinnedPod::from_blob(
-            &mint([8u8; 32], "pin-ledger"),
-            "h",
-            9742,
-            PodCapabilities::default(),
-        )
-        .unwrap();
-        let pinned_id = pod.node_id;
-        let pinned = Arc::new(PinnedWorkerEndpointSource::from_pods(vec![pod]));
-        let composite = CompositeEndpointSource::new(mesh.clone(), mesh, pinned);
-
-        // Mesh peer id passes through to the stub mesh (Some).
-        let mesh_emit = composite
-            .ledger_emission_for(&NodeId::from_u128(11), "model", "mesh-real")
-            .await;
-        assert!(mesh_emit.is_some());
-
-        // Pinned id is short-circuited at the composite (None).
-        let pinned_emit = composite
-            .ledger_emission_for(&pinned_id, "model", "pod-x")
-            .await;
-        assert!(pinned_emit.is_none(), "pinned pods must not emit ledger");
     }
 }
