@@ -2,6 +2,7 @@
 //! Compute's remote isolation: leasing a rented machine and running work on it
 
 pub mod worker_controller;
+pub mod worker_daemon;
 pub mod worker_http;
 pub mod worker_inference_proxy;
 pub mod worker_pod;
