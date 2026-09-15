@@ -741,7 +741,7 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // nothing about the build changes; what changes is that a reviewer reading
     // this row is no longer told these clients stay on the box.
     //
-    // Mesh is the right ceiling: `dynamic`'s resolver is `PeerEndpointSource`,
+    // Mesh is the right ceiling: `dynamic`'s resolver is `VenueSource`,
     // the mesh's own view, which can only ever name a peer of this node's
     // mesh — and an unresolvable binding is an `Err`, never a fallback to a
     // remembered address, so the site cannot reach a host the mesh has not

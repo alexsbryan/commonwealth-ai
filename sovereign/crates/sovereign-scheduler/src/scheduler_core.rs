@@ -202,7 +202,7 @@ pub fn observe_failure(obs: &mut NodeObservations) {
 /// What the decider knows about *itself* at decision time.
 ///
 /// The local side has no staleness by construction — the asymmetry
-/// between this struct and [`PeerCandidateView`] (which carries three
+/// between this struct and [`VenueView`] (which carries three
 /// separate age fields) *is* finding F1, stated in the type system.
 pub struct LocalCandidateView<'a> {
     pub manifest: &'a ProviderManifest,
@@ -213,7 +213,7 @@ pub struct LocalCandidateView<'a> {
 /// A peer manifest as the decider currently holds it, with the two
 /// facts that make it more than a manifest: how long the round trip
 /// took (which sets the locality bonus) and how old the copy is.
-pub struct PeerManifestView {
+pub struct VenueManifestView {
     pub manifest: ProviderManifest,
     pub rtt_ms: u32,
     /// Seconds since the manifest was fetched. `0` for a live fetch.
@@ -229,7 +229,7 @@ pub struct PeerManifestView {
 /// obtained — the peer is recorded as excluded rather than silently
 /// dropped, because "the hub lost" and "the hub was never considered"
 /// are different failures.
-pub struct PeerCandidateView {
+pub struct VenueView {
     pub name: String,
     pub node_id_hex: String,
     /// From the decider's own `PeerHealthTracker`. Quarantined peers
@@ -241,7 +241,7 @@ pub struct PeerCandidateView {
     /// going to refuse again — but books nothing against peer health.
     /// See [`crate::yield_backoff`].
     pub yield_backoff_secs: Option<u64>,
-    /// A pinned worker pod (`PeerInferenceEndpoint::transport`) has
+    /// A pinned worker pod (`InferenceVenue::pinned_transport`) has
     /// no users of its own, so its claim affinity is normalised.
     pub pinned_transport: bool,
     /// The peer's self-reported in-flight count as gossiped. `None`
@@ -257,7 +257,7 @@ pub struct PeerCandidateView {
     /// The decider's *own* observations of this peer — dispatch
     /// counts, failure rate, latency EWMAs.
     pub observations: NodeObservations,
-    pub manifest: Option<PeerManifestView>,
+    pub manifest: Option<VenueManifestView>,
 }
 
 /// The complete snapshot a single decision is taken against.
@@ -286,7 +286,7 @@ pub struct RankInputs<'a> {
     /// compiled, and no before/after would exist to price it.
     pub tier_floor: TierFloor,
     pub local: LocalCandidateView<'a>,
-    pub peers: &'a [PeerCandidateView],
+    pub peers: &'a [VenueView],
 }
 
 /// One peer that survived ranking, in rank order.
@@ -484,7 +484,7 @@ pub fn rank(mut rec: DecisionBuilder, inputs: RankInputs<'_>) -> RankResult {
             );
             continue;
         };
-        let PeerManifestView {
+        let VenueManifestView {
             manifest,
             rtt_ms,
             age_secs: manifest_age_secs,
@@ -861,8 +861,8 @@ mod tests {
         DecisionBuilder::new("d-req-1", "req-1", DecisionPath::RankedOicp, facts())
     }
 
-    fn peer(name: &str, affinity: f32, in_flight: Option<u32>) -> PeerCandidateView {
-        PeerCandidateView {
+    fn peer(name: &str, affinity: f32, in_flight: Option<u32>) -> VenueView {
+        VenueView {
             name: name.into(),
             node_id_hex: format!("{name}-hex"),
             quarantined: false,
@@ -876,7 +876,7 @@ mod tests {
                 samples: 100,
                 ..Default::default()
             },
-            manifest: Some(PeerManifestView {
+            manifest: Some(VenueManifestView {
                 manifest: manifest("peer-model", 20.0, affinity),
                 rtt_ms: 10,
                 age_secs: 0,
@@ -897,7 +897,7 @@ mod tests {
         )
     }
 
-    fn run(peers: &[PeerCandidateView]) -> RankResult {
+    fn run(peers: &[VenueView]) -> RankResult {
         let (m, obs) = weak_local();
         let req = requirements();
         rank(
@@ -1097,8 +1097,8 @@ mod tests {
             ..Default::default()
         };
         let req = requirements();
-        let peers = vec![PeerCandidateView {
-            manifest: Some(PeerManifestView {
+        let peers = vec![VenueView {
+            manifest: Some(VenueManifestView {
                 manifest: manifest("same-model", 20.0, 0.30),
                 // Same locality class as local so the bonus matches.
                 rtt_ms: 0,
@@ -1193,7 +1193,7 @@ mod tests {
     /// is not wired and `PredictedTime` fell through to the product.
     #[test]
     fn the_predicted_time_objective_declines_a_hop_the_product_takes() {
-        let peers = vec![PeerCandidateView {
+        let peers = vec![VenueView {
             benchmark: Some(benchmark("peer-model", 21.0, 2_000.0, 25.0)),
             ..peer("hub", 0.95, Some(12))
         }];
@@ -1254,7 +1254,7 @@ mod tests {
     /// would pass the test above for the wrong reason.
     #[test]
     fn the_predicted_time_objective_still_offloads_when_the_hop_pays() {
-        let peers = vec![PeerCandidateView {
+        let peers = vec![VenueView {
             benchmark: Some(benchmark("peer-model", 21.0, 2_000.0, 25.0)),
             ..peer("hub", 0.95, Some(0))
         }];
@@ -1288,7 +1288,7 @@ mod tests {
     /// `predicted_time::faster_than_local`: no comparison, no hop.
     #[test]
     fn a_request_with_no_token_shape_stays_local_under_predicted_time() {
-        let peers = vec![PeerCandidateView {
+        let peers = vec![VenueView {
             benchmark: Some(benchmark("peer-model", 21.0, 2_000.0, 25.0)),
             ..peer("hub", 0.95, Some(0))
         }];

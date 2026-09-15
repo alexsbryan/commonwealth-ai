@@ -69,7 +69,7 @@ use crate::decision_log::{
 use crate::oicp_select::offload_eligible;
 use crate::predicted_time;
 use crate::scheduler_core::{
-    self, LocalCandidateView, PeerCandidateView, PeerManifestView, RankInputs, RankObjective,
+    self, LocalCandidateView, VenueView, VenueManifestView, RankInputs, RankObjective,
     RankResult,
 };
 use crate::throughput_tracking::apply_throughput_observation;
@@ -1735,7 +1735,7 @@ impl Sim {
     /// The origin's view of itself.
     ///
     /// On arm 0 load is exact — a node knows its own queue with zero
-    /// delay, and that asymmetry against [`PeerCandidateView`]'s three
+    /// delay, and that asymmetry against [`VenueView`]'s three
     /// age fields is F1.
     ///
     /// On the F9 arms it is exact in the other direction: **zero**,
@@ -1827,7 +1827,7 @@ impl Sim {
     /// Assemble what `origin` currently believes about every peer —
     /// the *gather* half of the production selector, with HTTP
     /// replaced by a cache-age model.
-    fn build_peer_views(&mut self, origin: usize) -> Vec<PeerCandidateView> {
+    fn build_peer_views(&mut self, origin: usize) -> Vec<VenueView> {
         let now = self.now_ms;
         let ttl = self.cfg.manifest_ttl_ms;
         let fresh = self.arm.fresh_signals();
@@ -1867,7 +1867,7 @@ impl Sim {
                     None => (None, None, 0),
                 }
             };
-            views.push(PeerCandidateView {
+            views.push(VenueView {
                 name: self.nodes[peer].name.clone(),
                 node_id_hex: self.nodes[peer].node_id_hex.clone(),
                 quarantined: self.nodes[origin]
@@ -1893,7 +1893,7 @@ impl Sim {
                     self.nodes[peer].benchmark.clone()
                 },
                 observations: self.peer_view_observations(origin, peer),
-                manifest: Some(PeerManifestView {
+                manifest: Some(VenueManifestView {
                     manifest: self.nodes[peer].manifest.clone(),
                     rtt_ms: rtt,
                     age_secs: age_ms / 1000,

@@ -35,8 +35,8 @@ use sovereign_core::oicp::{
 };
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, Speed};
-use sovereign_mesh::daemon::PeerInferenceEndpoint;
-use sovereign_mesh::peer_inference::{MeshInferenceProvider, PeerEndpointSource};
+use sovereign_mesh::daemon::InferenceVenue;
+use sovereign_mesh::peer_inference::{MeshInferenceProvider, VenueHost, VenueSource};
 
 use crate::common;
 use crate::common::TestProvider;
@@ -44,15 +44,18 @@ use crate::common::TestProvider;
 // ─── harness ────────────────────────────────────────────────────
 
 struct StubPeerSource {
-    peers: Vec<PeerInferenceEndpoint>,
+    peers: Vec<InferenceVenue>,
 }
 
 #[async_trait]
-impl PeerEndpointSource for StubPeerSource {
-    async fn peer_inference_endpoints(&self) -> Vec<PeerInferenceEndpoint> {
+impl VenueSource for StubPeerSource {
+    async fn candidates(&self) -> Vec<InferenceVenue> {
         self.peers.clone()
     }
 }
+
+#[async_trait]
+impl VenueHost for StubPeerSource {}
 
 const PEER_TEXT: &str = "Answer from the peer slot.";
 
@@ -137,12 +140,12 @@ async fn spawn_slow_peer(hits: Arc<AtomicUsize>) -> SocketAddr {
 /// DISTINCT `node_id` per peer — `peer_cache` and the single-flight
 /// gate are both keyed by it, so reusing one id would make four peers
 /// share one cache entry and the test would measure nothing.
-fn peer_endpoint(idx: u128, addr: SocketAddr) -> PeerInferenceEndpoint {
+fn peer_endpoint(idx: u128, addr: SocketAddr) -> InferenceVenue {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_secs();
-    PeerInferenceEndpoint {
+    InferenceVenue {
         node_id: NodeId::from_u128((0x42 + idx) << 100),
         name: format!("peer-{idx}"),
         base_urls: vec![format!("http://{addr}/v1")],
@@ -151,7 +154,7 @@ fn peer_endpoint(idx: u128, addr: SocketAddr) -> PeerInferenceEndpoint {
         current_in_flight: Some(0),
         inference_availability: Some(0.95),
         gossip_last_seen_unix: now,
-        transport: None,
+        pinned_transport: false,
     }
 }
 
@@ -175,10 +178,11 @@ fn mesh_request() -> CompletionRequest {
         )
 }
 
-fn build(peers: Vec<PeerInferenceEndpoint>) -> MeshInferenceProvider {
+fn build(peers: Vec<InferenceVenue>) -> MeshInferenceProvider {
     MeshInferenceProvider::with_peer_source(
         weak_local(),
-        Arc::new(StubPeerSource { peers }) as Arc<dyn PeerEndpointSource>,
+        Arc::new(StubPeerSource { peers: peers.clone() }) as Arc<dyn VenueSource>,
+        Arc::new(StubPeerSource { peers }) as Arc<dyn VenueHost>,
     )
 }
 

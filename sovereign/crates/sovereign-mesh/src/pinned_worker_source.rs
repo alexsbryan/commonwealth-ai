@@ -6,7 +6,7 @@
 //! Two types live here:
 //!
 //! - [`PinnedWorkerEndpointSource`] — yields one
-//!   [`PeerInferenceEndpoint`] per registered pinned pod. The
+//!   [`InferenceVenue`] per registered pinned pod. The
 //!   endpoint's `transport` field carries the TLS-pinned reqwest
 //!   client + worker bearer; everything else mirrors the gossiped
 //!   mesh peer shape so the scheduler in `peer_inference.rs` doesn't
@@ -47,8 +47,8 @@ use async_trait::async_trait;
 use commonwealth_core::ids::NodeId;
 use tokio::sync::RwLock;
 
-use crate::daemon::PeerInferenceEndpoint;
-use crate::peer_inference::PeerEndpointSource;
+use sovereign_scheduler::venue::{InferenceVenue, VenueSource};
+
 use crate::pinned_transport::{
     build_pinned_transport, synthetic_node_id_from_seed, PinnedTransport, TransportError,
 };
@@ -88,7 +88,7 @@ impl Default for PodCapabilities {
 }
 
 /// One row in the source — everything needed to build a
-/// `PeerInferenceEndpoint` for a single pinned pod.
+/// `InferenceVenue` for a single pinned pod.
 #[derive(Clone)]
 pub struct PinnedPod {
     /// Synthetic NodeId derived from the bootstrap blob's seed.
@@ -105,7 +105,7 @@ pub struct PinnedPod {
     /// exactly one TLS-pinned address.
     pub base_url: String,
     /// TLS-pinned transport (client + bearer). Cloned onto every
-    /// `PeerInferenceEndpoint` we yield, so the cloning is cheap
+    /// `InferenceVenue` we yield, so the cloning is cheap
     /// (Arc-shared client).
     pub transport: PinnedTransport,
     /// Operator-stamped capabilities; populated when the pod is
@@ -199,12 +199,12 @@ impl PinnedWorkerEndpointSource {
         self.inner.read().await.iter().map(|p| p.node_id).collect()
     }
 
-    async fn endpoints(&self) -> Vec<PeerInferenceEndpoint> {
+    async fn endpoints(&self) -> Vec<InferenceVenue> {
         self.inner
             .read()
             .await
             .iter()
-            .map(|p| PeerInferenceEndpoint {
+            .map(|p| InferenceVenue {
                 node_id: p.node_id,
                 name: p.name.clone(),
                 base_urls: vec![p.base_url.clone()],
@@ -214,42 +214,39 @@ impl PinnedWorkerEndpointSource {
                 // Pinned pods don't gossip availability — neutral.
                 inference_availability: None,
                 gossip_last_seen_unix: 0,
-                transport: Some(p.transport.clone()),
+                // The TLS handle itself does NOT travel with the venue (the
+                // scheduler may not name `PinnedTransport`); this bool is the
+                // only transport fact the ranker reads. The router resolves
+                // the handle through `PinnedTransportResolver`.
+                pinned_transport: true,
             })
             .collect()
     }
 }
 
 #[async_trait]
-impl PeerEndpointSource for PinnedWorkerEndpointSource {
-    async fn peer_inference_endpoints(&self) -> Vec<PeerInferenceEndpoint> {
+impl VenueSource for PinnedWorkerEndpointSource {
+    async fn candidates(&self) -> Vec<InferenceVenue> {
         self.endpoints().await
     }
+}
 
-    /// Pinned-only sources don't know the host node's id — they're
-    /// composed alongside a mesh source that does. Returning `None`
-    /// is the default behaviour and is fine: the scheduler skips the
-    /// `X-Node-Id` affinity header on manifest fetches, which the pod
-    /// proxy ignores anyway (it just forwards to the child daemon).
-    async fn local_node_id(&self) -> Option<NodeId> {
-        None
-    }
-
-    /// Pinned pods are the owner's own paid compute, not a peer's
-    /// gifted compute — they don't participate in the mesh
-    /// contribution accounting. Always `None`. See spec §8.
-    async fn ledger_emission_for(
-        &self,
-        _peer_node_id: &NodeId,
-        _model_id: &str,
-        _peer_name: &str,
-    ) -> Option<LedgerEmission> {
-        None
+#[async_trait]
+impl crate::peer_inference::PinnedTransportResolver for PinnedWorkerEndpointSource {
+    /// A pinned pod's TLS handle, by its synthetic node id. This is what
+    /// `MeshInferenceProvider::set_pinned_transports` installs.
+    async fn resolve(&self, node_id: &NodeId) -> Option<PinnedTransport> {
+        self.inner
+            .read()
+            .await
+            .iter()
+            .find(|p| &p.node_id == node_id)
+            .map(|p| p.transport.clone())
     }
 }
 
 /// Concatenates a mesh source (typically `EmbeddedDaemon`) with one
-/// or more pinned sources. Hands a unified `PeerEndpointSource` to
+/// or more pinned sources. Hands a unified `VenueSource` to
 /// `MeshInferenceProvider::with_peer_source` so the scheduler scores
 /// pinned + gossiped peers in the same pool.
 ///
@@ -257,26 +254,42 @@ impl PeerEndpointSource for PinnedWorkerEndpointSource {
 /// doesn't care about order (it ranks by score), but a stable
 /// ordering makes routing-decision logs reproducible.
 pub struct CompositeEndpointSource {
-    mesh: Arc<dyn PeerEndpointSource>,
+    mesh: Arc<dyn VenueSource>,
+    /// The mesh source's host half (identity reader + ledger mint). Kept
+    /// beside `mesh` because `VenueSource` no longer carries those
+    /// (`SERVING_BOUNDARY.md` (a)); production passes the same
+    /// `EmbeddedDaemon` for both.
+    mesh_host: Arc<dyn crate::peer_inference::VenueHost>,
     pinned: Arc<PinnedWorkerEndpointSource>,
 }
 
 impl CompositeEndpointSource {
-    pub fn new(mesh: Arc<dyn PeerEndpointSource>, pinned: Arc<PinnedWorkerEndpointSource>) -> Self {
-        Self { mesh, pinned }
+    pub fn new(
+        mesh: Arc<dyn VenueSource>,
+        mesh_host: Arc<dyn crate::peer_inference::VenueHost>,
+        pinned: Arc<PinnedWorkerEndpointSource>,
+    ) -> Self {
+        Self {
+            mesh,
+            mesh_host,
+            pinned,
+        }
     }
 }
 
 #[async_trait]
-impl PeerEndpointSource for CompositeEndpointSource {
-    async fn peer_inference_endpoints(&self) -> Vec<PeerInferenceEndpoint> {
-        let mut out = self.mesh.peer_inference_endpoints().await;
-        out.extend(self.pinned.peer_inference_endpoints().await);
+impl VenueSource for CompositeEndpointSource {
+    async fn candidates(&self) -> Vec<InferenceVenue> {
+        let mut out = self.mesh.candidates().await;
+        out.extend(self.pinned.candidates().await);
         out
     }
+}
 
+#[async_trait]
+impl crate::peer_inference::VenueHost for CompositeEndpointSource {
     async fn local_node_id(&self) -> Option<NodeId> {
-        self.mesh.local_node_id().await
+        self.mesh_host.local_node_id().await
     }
 
     /// Ledger emission for a pinned-pod-routed stream is structurally
@@ -294,7 +307,7 @@ impl PeerEndpointSource for CompositeEndpointSource {
         if self.pinned.node_ids().await.contains(peer_node_id) {
             return None;
         }
-        self.mesh
+        self.mesh_host
             .ledger_emission_for(peer_node_id, model_id, peer_name)
             .await
     }
@@ -303,6 +316,7 @@ impl PeerEndpointSource for CompositeEndpointSource {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::peer_inference::VenueHost;
     use crate::worker_pod::{mint_bootstrap, BootstrapInputs};
     use ed25519_dalek::SigningKey;
     use std::collections::BTreeMap;
@@ -327,7 +341,7 @@ mod tests {
     #[tokio::test]
     async fn empty_pinned_source_yields_no_endpoints() {
         let source = PinnedWorkerEndpointSource::new();
-        assert_eq!(source.peer_inference_endpoints().await.len(), 0);
+        assert_eq!(source.candidates().await.len(), 0);
     }
 
     #[tokio::test]
@@ -337,12 +351,12 @@ mod tests {
             .expect("pod from blob");
         let expected_id = pod.node_id;
         let source = PinnedWorkerEndpointSource::from_pods(vec![pod]);
-        let endpoints = source.peer_inference_endpoints().await;
+        let endpoints = source.candidates().await;
         assert_eq!(endpoints.len(), 1);
         let ep = &endpoints[0];
         assert_eq!(ep.node_id, expected_id);
         assert_eq!(ep.base_urls, vec!["https://203.0.113.10:9742/v1"]);
-        assert!(ep.transport.is_some(), "transport must be populated");
+        assert!(ep.pinned_transport, "transport must be populated");
         assert!(ep.name.starts_with("pod-"));
     }
 
@@ -360,7 +374,7 @@ mod tests {
         source.register(pod2).await;
 
         assert_eq!(source.count().await, 1);
-        let endpoints = source.peer_inference_endpoints().await;
+        let endpoints = source.candidates().await;
         assert_eq!(endpoints[0].base_urls, vec!["https://host2:9742/v1"]);
     }
 
@@ -383,12 +397,12 @@ mod tests {
     /// pinned ids. Construction takes a real in-memory `MeshStore`
     /// because `ContributionEmitter` doesn't have a no-op default.
     struct StubMesh {
-        peers: Vec<PeerInferenceEndpoint>,
+        peers: Vec<InferenceVenue>,
         emitter: commonwealth_state::ContributionEmitter,
     }
 
     impl StubMesh {
-        fn new(peers: Vec<PeerInferenceEndpoint>) -> Self {
+        fn new(peers: Vec<InferenceVenue>) -> Self {
             let store = commonwealth_state::MeshStore::in_memory().unwrap();
             let emitter = commonwealth_state::ContributionEmitter::new(
                 store,
@@ -399,11 +413,14 @@ mod tests {
     }
 
     #[async_trait]
-    impl PeerEndpointSource for StubMesh {
-        async fn peer_inference_endpoints(&self) -> Vec<PeerInferenceEndpoint> {
+    impl VenueSource for StubMesh {
+        async fn candidates(&self) -> Vec<InferenceVenue> {
             self.peers.clone()
         }
+    }
 
+    #[async_trait]
+    impl crate::peer_inference::VenueHost for StubMesh {
         async fn ledger_emission_for(
             &self,
             peer_node_id: &NodeId,
@@ -418,8 +435,8 @@ mod tests {
         }
     }
 
-    fn mesh_peer(node_id_seed: u128, name: &str) -> PeerInferenceEndpoint {
-        PeerInferenceEndpoint {
+    fn mesh_peer(node_id_seed: u128, name: &str) -> InferenceVenue {
+        InferenceVenue {
             node_id: NodeId::from_u128(node_id_seed),
             name: name.into(),
             base_urls: vec!["http://10.0.0.1:9741/v1".into()],
@@ -428,7 +445,7 @@ mod tests {
             current_in_flight: None,
             inference_availability: None,
             gossip_last_seen_unix: 0,
-            transport: None,
+            pinned_transport: false,
         }
     }
 
@@ -447,8 +464,8 @@ mod tests {
             )
             .unwrap(),
         ]));
-        let composite = CompositeEndpointSource::new(mesh, pinned);
-        let endpoints = composite.peer_inference_endpoints().await;
+        let composite = CompositeEndpointSource::new(mesh.clone(), mesh, pinned);
+        let endpoints = composite.candidates().await;
         assert_eq!(endpoints.len(), 3);
         assert_eq!(endpoints[0].name, "mesh-a");
         assert_eq!(endpoints[1].name, "mesh-b");
@@ -459,8 +476,8 @@ mod tests {
     async fn composite_with_zero_pinned_matches_mesh() {
         let mesh = Arc::new(StubMesh::new(vec![mesh_peer(7, "solo")]));
         let pinned = Arc::new(PinnedWorkerEndpointSource::new());
-        let composite = CompositeEndpointSource::new(mesh.clone(), pinned);
-        assert_eq!(composite.peer_inference_endpoints().await.len(), 1);
+        let composite = CompositeEndpointSource::new(mesh.clone(), mesh, pinned);
+        assert_eq!(composite.candidates().await.len(), 1);
     }
 
     #[tokio::test]
@@ -475,7 +492,7 @@ mod tests {
         .unwrap();
         let pinned_id = pod.node_id;
         let pinned = Arc::new(PinnedWorkerEndpointSource::from_pods(vec![pod]));
-        let composite = CompositeEndpointSource::new(mesh, pinned);
+        let composite = CompositeEndpointSource::new(mesh.clone(), mesh, pinned);
 
         // Mesh peer id passes through to the stub mesh (Some).
         let mesh_emit = composite

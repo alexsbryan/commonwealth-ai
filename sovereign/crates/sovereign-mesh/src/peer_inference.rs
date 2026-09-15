@@ -65,18 +65,18 @@ use sovereign_inference::remote::RemoteApiProvider;
 use sovereign_serving_host::recorder;
 use tokio::sync::RwLock;
 
-use crate::daemon::{EmbeddedDaemon, PeerInferenceEndpoint};
+use crate::daemon::EmbeddedDaemon;
 use crate::decision_log::{
     self, DecisionBuilder, DecisionPath, DecisionSink, OutcomeContext, RequestFacts, ServedBy,
     Verdict,
 };
 use crate::oicp_synthesis::build_self_manifest;
 use crate::scheduler_core::{
-    self, LocalCandidateView, PeerCandidateView, PeerManifestView, RankInputs, RankObjective,
-    RankResult,
+    self, LocalCandidateView, RankInputs, RankObjective, RankResult, VenueManifestView, VenueView,
 };
 use crate::throughput_tracking::{LedgerEmission, ThroughputObservedStream, ThroughputTarget};
 use crate::tier::TierFloor;
+pub use sovereign_scheduler::venue::{InferenceVenue, VenueSource};
 
 /// How long to trust a fetched peer manifest before re-fetching.
 /// OICP capabilities don't change request-to-request — a model
@@ -271,7 +271,7 @@ struct ManifestRead {
 /// (`docs/specs/SCHEDULER_QUALITY.md` §5) has nothing to compare.
 struct RankedSelection {
     /// Peers that strictly beat local, best-first.
-    peers: Vec<(PeerInferenceEndpoint, ModelCandidate)>,
+    peers: Vec<(InferenceVenue, ModelCandidate)>,
     decision_id: String,
     oicp_request_id: String,
 }
@@ -328,38 +328,34 @@ struct CachedManifest {
 // here keeps the rest of this file unchanged.
 use crate::oicp_select::{classify_rtt_ms, ModelCandidate};
 
-/// Narrow trait the wrapper uses to discover routable peers. The
-/// production implementation is `EmbeddedDaemon` — but factoring
-/// the one call-site out behind a trait lets integration tests
-/// inject a synthetic peer list pointing at a mock HTTP server
-/// without needing to bring up a full daemon (gossip loop, mDNS,
-/// bound ports, etc.) just to exercise the routing path.
+/// The host-side companion to [`VenueSource`].
+///
+/// `VenueSource` (`sovereign_scheduler::venue`) carries only the candidate
+/// list. The two facts the old `PeerEndpointSource` also carried are host
+/// concerns and ride here instead:
+///
+/// - the local node id, Fabric's identity READER (`quality/DAEMON_CORE.md`
+///   §4.2 "Identity is a reader" — join adoption swaps the id inside a running
+///   daemon, so a cached value goes stale);
+/// - the contribution-ledger emission, which the host mints from
+///   `RoutingOutcome` (`SERVING_BOUNDARY.md` (a)). Until
+///   `REVIEW-build-serving-emitter-port` lands that mint, the production
+///   adapter still builds it here so no emission is silently dropped.
+///
+/// `MeshInferenceProvider` holds one of these as a constructor argument.
 #[async_trait]
-pub trait PeerEndpointSource: Send + Sync {
-    async fn peer_inference_endpoints(&self) -> Vec<PeerInferenceEndpoint>;
-
-    /// This node's id. Stamped onto outbound manifest fetches via
-    /// the `X-Node-Id` header so the peer can apply local-only
-    /// affinity preferences before serializing the manifest. The
-    /// default returns `None` — implementations that don't know
-    /// their id at peer-fetch time (test stubs that synthesize
-    /// peers from thin air) skip the header entirely; the manifest
-    /// endpoint then serves unmodified affinities, which is the
-    /// safe default.
+pub trait VenueHost: Send + Sync {
+    /// This node's id. Stamped onto outbound manifest fetches via the
+    /// `X-Node-Id` header so the peer can apply local-only affinity
+    /// preferences before serializing the manifest. `None` when the daemon has
+    /// not joined a mesh.
     async fn local_node_id(&self) -> Option<commonwealth_core::ids::NodeId> {
         None
     }
 
     /// Build a `LedgerEmission` for a peer-routed stream completion.
     /// Default returns `None` — test stubs without a wired
-    /// `ContributionEmitter` skip the emission entirely. Production
-    /// `EmbeddedDaemon` returns `Some(...)` once the daemon has
-    /// joined a mesh and the AppState is available.
-    ///
-    /// Kept on the trait (rather than reaching into the embedded
-    /// daemon directly from `MeshInferenceProvider`) so the same
-    /// `PeerEndpointSource` abstraction the test harness uses also
-    /// covers the new wiring — no test changes needed.
+    /// `ContributionEmitter` skip the emission entirely.
     #[doc(hidden)]
     async fn ledger_emission_for(
         &self,
@@ -371,12 +367,41 @@ pub trait PeerEndpointSource: Send + Sync {
     }
 }
 
+/// Resolve the TLS-pinned transport handle for a pinned venue, by `node_id`.
+///
+/// The scheduler may not name `PinnedTransport`, so the handle does not travel
+/// with [`InferenceVenue`]; the host's router holds this resolver instead and
+/// the pinned source supplies it. Default: no pinned transports.
 #[async_trait]
-impl PeerEndpointSource for EmbeddedDaemon {
-    async fn peer_inference_endpoints(&self) -> Vec<PeerInferenceEndpoint> {
+pub trait PinnedTransportResolver: Send + Sync {
+    async fn resolve(
+        &self,
+        node_id: &commonwealth_core::ids::NodeId,
+    ) -> Option<crate::pinned_transport::PinnedTransport>;
+}
+
+/// The default resolver: the mesh carries no pinned transports.
+pub struct NoPinnedTransports;
+
+#[async_trait]
+impl PinnedTransportResolver for NoPinnedTransports {
+    async fn resolve(
+        &self,
+        _node_id: &commonwealth_core::ids::NodeId,
+    ) -> Option<crate::pinned_transport::PinnedTransport> {
+        None
+    }
+}
+
+#[async_trait]
+impl VenueSource for EmbeddedDaemon {
+    async fn candidates(&self) -> Vec<InferenceVenue> {
         EmbeddedDaemon::peer_inference_endpoints(self).await
     }
+}
 
+#[async_trait]
+impl VenueHost for EmbeddedDaemon {
     async fn local_node_id(&self) -> Option<commonwealth_core::ids::NodeId> {
         EmbeddedDaemon::self_node_id(self).await
     }
@@ -398,7 +423,16 @@ impl PeerEndpointSource for EmbeddedDaemon {
 
 pub struct MeshInferenceProvider {
     local: Arc<dyn InferenceProvider>,
-    mesh: Arc<dyn PeerEndpointSource>,
+    mesh: Arc<dyn VenueSource>,
+    /// The host side of the roster seam: Fabric's identity reader and the
+    /// contribution-ledger mint, neither of which is `VenueSource`'s
+    /// (`SERVING_BOUNDARY.md` (a)).
+    host: Arc<dyn VenueHost>,
+    /// Resolves a pinned venue's TLS handle by `node_id`. Default: none.
+    /// Supplied by `PinnedWorkerEndpointSource` through
+    /// [`Self::set_pinned_transports`]. `RwLock<Arc<..>>` like `guest`, so the
+    /// setter can install it after construction and reads stay cheap.
+    pinned_transports: std::sync::RwLock<Arc<dyn PinnedTransportResolver>>,
     /// Our own manifest. Built at construction and refreshed on
     /// runtime slot mutation (`load_extra_slot` / `unload_extra_slot`)
     /// via `refresh_self_manifest`.
@@ -567,7 +601,7 @@ const SNAPSHOT_INTERVAL_SECS: u64 = 60;
 impl MeshInferenceProvider {
     /// Standard constructor — takes the live `EmbeddedDaemon` so
     /// production wiring is unchanged. Internally upcasts to
-    /// `Arc<dyn PeerEndpointSource>` via the blanket impl above;
+    /// `Arc<dyn VenueSource>` via the blanket impl above;
     /// callers don't have to think about the trait.
     ///
     /// Creates a private in-flight publisher — fine for tests and
@@ -577,7 +611,11 @@ impl MeshInferenceProvider {
     /// gossip emitter reads the same atomic the MIP guards write
     /// to.
     pub fn new(local: Arc<dyn InferenceProvider>, mesh: Arc<EmbeddedDaemon>) -> Self {
-        Self::with_peer_source(local, mesh as Arc<dyn PeerEndpointSource>)
+        Self::with_peer_source(
+            local,
+            Arc::clone(&mesh) as Arc<dyn VenueSource>,
+            mesh as Arc<dyn VenueHost>,
+        )
     }
 
     /// Install the source that answers "do I hold a live guest grant for this
@@ -666,12 +704,13 @@ impl MeshInferenceProvider {
     }
 
     /// Constructor exposed for tests and alternative wirings: pass
-    /// any `PeerEndpointSource` (typically a stub that returns a
+    /// any `VenueSource` (typically a stub that returns a
     /// fixed peer list pointing at a local mock server). Keeps the
     /// production `new` signature backwards-compatible.
     pub fn with_peer_source(
         local: Arc<dyn InferenceProvider>,
-        mesh: Arc<dyn PeerEndpointSource>,
+        mesh: Arc<dyn VenueSource>,
+        host: Arc<dyn VenueHost>,
     ) -> Self {
         let self_manifest = build_self_manifest(local.as_ref());
         tracing::info!(
@@ -694,6 +733,8 @@ impl MeshInferenceProvider {
         Self {
             local,
             mesh,
+            host,
+            pinned_transports: std::sync::RwLock::new(Arc::new(NoPinnedTransports)),
             self_manifest: arc_swap::ArcSwap::from_pointee(self_manifest),
             shared_model_id: arc_swap::ArcSwapOption::empty(),
             peer_cache: Arc::new(RwLock::new(std::collections::HashMap::new())),
@@ -775,12 +816,16 @@ impl MeshInferenceProvider {
         mesh: Arc<EmbeddedDaemon>,
         publisher: Arc<AtomicU32>,
     ) -> Self {
-        let mut me = Self::with_peer_source(local, mesh as Arc<dyn PeerEndpointSource>);
+        let mut me = Self::with_peer_source(
+            local,
+            Arc::clone(&mesh) as Arc<dyn VenueSource>,
+            mesh as Arc<dyn VenueHost>,
+        );
         me.in_flight_publisher = publisher;
         me
     }
 
-    /// Variant that accepts an arbitrary `PeerEndpointSource` AND an
+    /// Variant that accepts an arbitrary `VenueSource` AND an
     /// externally-owned in-flight publisher. The composite-source
     /// case — gossiped peers + pinned worker pods — uses this so the
     /// daemon's `AppState` shares an Arc with the MIP's guards while
@@ -788,12 +833,32 @@ impl MeshInferenceProvider {
     /// Spec: docs/PINNED_WORKER_AS_INFERENCE_PEER.md.
     pub fn with_peer_source_and_publisher(
         local: Arc<dyn InferenceProvider>,
-        mesh: Arc<dyn PeerEndpointSource>,
+        mesh: Arc<dyn VenueSource>,
+        host: Arc<dyn VenueHost>,
         publisher: Arc<AtomicU32>,
     ) -> Self {
-        let mut me = Self::with_peer_source(local, mesh);
+        let mut me = Self::with_peer_source(local, mesh, host);
         me.in_flight_publisher = publisher;
         me
+    }
+
+    /// Install the resolver for pinned venues' TLS handles. The scheduler may
+    /// not name `PinnedTransport`, so the handle is resolved host-side by
+    /// `node_id`; `PinnedWorkerEndpointSource` supplies this. Default: none.
+    pub fn set_pinned_transports(&self, resolver: Arc<dyn PinnedTransportResolver>) {
+        *self
+            .pinned_transports
+            .write()
+            .unwrap_or_else(|e| e.into_inner()) = resolver;
+    }
+
+    /// The installed pinned-transport resolver, cloned out. Callers hold the
+    /// `Arc`, not the guard — a `std::sync::RwLock` guard is not `Send`.
+    fn pinned_transports(&self) -> Arc<dyn PinnedTransportResolver> {
+        self.pinned_transports
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// Hand out a shared reference to the gossiped in-flight counter.
@@ -893,7 +958,7 @@ impl MeshInferenceProvider {
         // fleet, and a fleet description that omits the idle nodes
         // would misstate the composition the sim is meant to
         // reproduce.
-        let endpoints = self.mesh.peer_inference_endpoints().await;
+        let endpoints = self.mesh.candidates().await;
         let mut peers: Vec<PeerObservationRecord> = endpoints
             .into_iter()
             .map(|p| {
@@ -968,7 +1033,7 @@ impl MeshInferenceProvider {
     /// `parse_x_node_id` decodes. This used to be an open-coded
     /// `{b:02x}` fold at the manifest-fetch call site.
     async fn local_node_id_hex(&self) -> Option<String> {
-        self.mesh.local_node_id().await.map(|id| id.to_hex())
+        self.host.local_node_id().await.map(|id| id.to_hex())
     }
 
     /// Current wall-clock in unix seconds. Extracted so tests can
@@ -1197,7 +1262,7 @@ impl MeshInferenceProvider {
     /// [`crate::oicp_select::adjust_for_observations`] so LAN peers pick up their
     /// locality bonus in real deployments instead of defaulting
     /// to `Far`.
-    async fn get_peer_manifest(&self, peer: &PeerInferenceEndpoint) -> Option<ManifestRead> {
+    async fn get_peer_manifest(&self, peer: &InferenceVenue) -> Option<ManifestRead> {
         self.get_peer_manifest_inner(peer, false).await
     }
 
@@ -1212,13 +1277,13 @@ impl MeshInferenceProvider {
     /// reload, then served `Model not loaded` to every chat
     /// completion for the rest of the 60 s TTL until an operator
     /// did `daemon restart`.
-    async fn get_peer_manifest_fresh(&self, peer: &PeerInferenceEndpoint) -> Option<ManifestRead> {
+    async fn get_peer_manifest_fresh(&self, peer: &InferenceVenue) -> Option<ManifestRead> {
         self.get_peer_manifest_inner(peer, true).await
     }
 
     async fn get_peer_manifest_inner(
         &self,
-        peer: &PeerInferenceEndpoint,
+        peer: &InferenceVenue,
         bypass_cache: bool,
     ) -> Option<ManifestRead> {
         // `to_hex()`, not `to_string()`: `NodeId`'s `Display` is the
@@ -1319,8 +1384,10 @@ impl MeshInferenceProvider {
             // Pinned worker pods serve their TLS-pinned manifest on
             // the same `:9742` listener as inference — use the pod's
             // pinned client + worker bearer to reach it. The default
-            // mesh `self.http` would fail TLS verification.
-            let (client, bearer) = match &peer.transport {
+            // mesh `self.http` would fail TLS verification. The handle is
+            // resolved host-side by `node_id` (the scheduler may not carry it).
+            let transport = self.pinned_transports().resolve(&peer.node_id).await;
+            let (client, bearer) = match &transport {
                 Some(t) => (t.client.clone(), Some(t.bearer.clone())),
                 None => (self.http.clone(), None),
             };
@@ -1627,7 +1694,7 @@ impl MeshInferenceProvider {
         // (`SCHEDULER_QUALITY.md` §5) replaces exactly this half and
         // shares the other, so arm 0 of the sim runs the production
         // decision rather than a transcription of it.
-        let peers = self.mesh.peer_inference_endpoints().await;
+        let peers = self.mesh.candidates().await;
         let peer_obs_snapshot = self.peer_observations.read().await.clone();
         // Forced-choice sentinel (SLOT_POLICY §6): a request eliciting a
         // calibrated one-pass distribution can only be honoured by a peer
@@ -1656,7 +1723,7 @@ impl MeshInferenceProvider {
         for peer in &peers {
             fetches.push(self.peer_candidate_view(peer, &peer_obs_snapshot));
         }
-        let views: Vec<PeerCandidateView> = futures::stream::iter(fetches)
+        let views: Vec<VenueView> = futures::stream::iter(fetches)
             .buffered(MANIFEST_FETCH_CONCURRENCY)
             .collect()
             .await;
@@ -1729,10 +1796,10 @@ impl MeshInferenceProvider {
 
         // Re-pair the ranked indices with the endpoints we own. The
         // core deals in indices so it never has to name
-        // `PeerInferenceEndpoint`, which lives on the daemon side of
+        // `InferenceVenue`, which lives on the daemon side of
         // the crate and drags transport with it.
-        let mut owned: Vec<Option<PeerInferenceEndpoint>> = peers.into_iter().map(Some).collect();
-        let winners: Vec<(PeerInferenceEndpoint, ModelCandidate)> = ranked
+        let mut owned: Vec<Option<InferenceVenue>> = peers.into_iter().map(Some).collect();
+        let winners: Vec<(InferenceVenue, ModelCandidate)> = ranked
             .into_iter()
             .filter_map(|w| {
                 owned
@@ -2100,9 +2167,9 @@ impl MeshInferenceProvider {
     /// futures — see the lifetime note at the call site.
     async fn peer_candidate_view(
         &self,
-        peer: &PeerInferenceEndpoint,
+        peer: &InferenceVenue,
         peer_obs_snapshot: &std::collections::HashMap<String, NodeObservations>,
-    ) -> PeerCandidateView {
+    ) -> VenueView {
         // A quarantined peer is skipped *before* the manifest fetch —
         // the exclusion costs no network. The core records the reason.
         let quarantined = self.peer_health.is_quarantined(&peer.name);
@@ -2118,19 +2185,19 @@ impl MeshInferenceProvider {
         } else {
             self.get_peer_manifest(peer)
                 .await
-                .map(|m| PeerManifestView {
+                .map(|m| VenueManifestView {
                     manifest: m.manifest,
                     rtt_ms: m.rtt_ms,
                     age_secs: m.age_secs,
                     from_cache: m.from_cache,
                 })
         };
-        PeerCandidateView {
+        VenueView {
             name: peer.name.clone(),
             node_id_hex: peer.node_id.to_hex(),
             quarantined,
             yield_backoff_secs,
-            pinned_transport: peer.transport.is_some(),
+            pinned_transport: peer.pinned_transport,
             gossiped_in_flight: peer.current_in_flight,
             availability: peer.inference_availability,
             gossip_last_seen_unix: peer.gossip_last_seen_unix,
@@ -2148,10 +2215,10 @@ impl MeshInferenceProvider {
     /// Extracted for the same reason as `peer_candidate_view`.
     async fn model_candidate_for(
         &self,
-        peer: PeerInferenceEndpoint,
+        peer: InferenceVenue,
         model_id: &str,
         bypass_cache: bool,
-    ) -> Option<(PeerInferenceEndpoint, ModelCandidate, u32)> {
+    ) -> Option<(InferenceVenue, ModelCandidate, u32)> {
         if self.peer_health.is_quarantined(&peer.name) {
             tracing::debug!(
                 peer = %peer.name,
@@ -2189,7 +2256,7 @@ impl MeshInferenceProvider {
         // path would yield 0.0 for a pinned pod's claim affinity (if
         // the child's manifest didn't populate one) and the candidate
         // would silently drop out of the load-balance comparison.
-        let claim_affinity = if peer.transport.is_some() {
+        let claim_affinity = if peer.pinned_transport {
             1.0
         } else {
             model
@@ -2245,7 +2312,7 @@ impl MeshInferenceProvider {
     ///
     /// [`gather_peer_candidates`]: Self::gather_peer_candidates
     pub(crate) async fn reachable_peer_manifests(&self) -> Vec<(String, ProviderManifest)> {
-        let peers = self.mesh.peer_inference_endpoints().await;
+        let peers = self.mesh.candidates().await;
         let mut fetches = Vec::with_capacity(peers.len());
         for peer in peers {
             fetches.push(async move {
@@ -2267,8 +2334,8 @@ impl MeshInferenceProvider {
         &self,
         model_id: &str,
         bypass_cache: bool,
-    ) -> Vec<(PeerInferenceEndpoint, ModelCandidate, u32)> {
-        let peers = self.mesh.peer_inference_endpoints().await;
+    ) -> Vec<(InferenceVenue, ModelCandidate, u32)> {
+        let peers = self.mesh.candidates().await;
         // Same treatment as the ranking loop above: concurrent,
         // order-preserving (`buffered`), same 800ms per-peer timeout,
         // futures materialised into a Vec for the same lifetime reason.
@@ -2705,7 +2772,7 @@ impl MeshInferenceProvider {
                         "mesh-inference: routing to peer by model name"
                     );
                     let ledger = self
-                        .mesh
+                        .host
                         .ledger_emission_for(&peer.node_id, &peer_cand.model_id, &peer.name)
                         .await;
                     if soft {
@@ -2871,7 +2938,7 @@ impl MeshInferenceProvider {
         let mut steps = Vec::with_capacity(ranked.len() + 1);
         for (peer, peer_cand) in ranked {
             let ledger = self
-                .mesh
+                .host
                 .ledger_emission_for(&peer.node_id, &peer_cand.model_id, &peer.name)
                 .await;
             steps.push(RouteDecision::Peer {
@@ -3049,7 +3116,7 @@ enum RouteDecision {
     /// Serve via peer; iterate `peer.base_urls` and apply
     /// `disposition` if every URL fails.
     Peer {
-        peer: PeerInferenceEndpoint,
+        peer: InferenceVenue,
         peer_cand: ModelCandidate,
         ledger: Option<LedgerEmission>,
         disposition: PeerFailureDisposition,
@@ -3122,7 +3189,7 @@ enum NamedModelLocation {
     /// A peer's manifest advertises this model id. The third field
     /// says whether OURS does too — see [`LocalAlternative`], which
     /// decides what a peer failure is allowed to mean.
-    Peer(PeerInferenceEndpoint, ModelCandidate, LocalAlternative),
+    Peer(InferenceVenue, ModelCandidate, LocalAlternative),
     /// A guest link THIS node holds names this model id, so the completion
     /// goes to the lending node while the turn stays here.
     ///
@@ -3308,10 +3375,15 @@ fn pinned_request<'a>(
 
 /// Build the per-peer `RemoteApiProvider` for one routing attempt.
 ///
-/// Branches on `peer.transport`:
+/// Branches on the resolved `transport`:
 /// - `None` (default mesh peer): plain-HTTP client, no bearer.
 /// - `Some(t)` (pinned worker pod): TLS-pinned client + owner-signed
 ///   `WorkerToken` bearer. Spec: docs/PINNED_WORKER_AS_INFERENCE_PEER.md.
+///
+/// The handle is resolved by the caller through
+/// [`MeshInferenceProvider::pinned_transports`] — `InferenceVenue` carries
+/// only the `pinned_transport` bool, because the scheduler may not name
+/// `PinnedTransport`.
 ///
 /// One call site per branch — every place in this file that hits a
 /// peer over HTTP goes through here, so the pinned-pod carve-out
@@ -3340,8 +3412,9 @@ fn pinned_request<'a>(
 const LENDER_CONTEXT: u32 = 32_768;
 
 fn provider_for_peer(
-    peer: &PeerInferenceEndpoint,
+    peer: &InferenceVenue,
     url: &str,
+    transport: Option<&crate::pinned_transport::PinnedTransport>,
     local_node_id_hex: Option<&str>,
 ) -> RemoteApiProvider {
     const PEER_CONTEXT: u32 = 32_768;
@@ -3350,7 +3423,7 @@ fn provider_for_peer(
     // left this node. `with_placeholder_model_id` is what keeps it off
     // the wire: sent as `model`, it puts the receiving node on its
     // explicit-name path, resolves to nobody, and 503s.
-    let provider = match &peer.transport {
+    let provider = match transport {
         Some(t) => RemoteApiProvider::with_client_and_bearer(
             url,
             t.client.clone(),
@@ -3491,8 +3564,14 @@ impl InferenceProvider for MeshInferenceProvider {
                     let started = Instant::now();
                     let mut last_transport_err: Option<String> = None;
                     let node_id_hex = self.local_node_id_hex().await;
+                    let transport = self.pinned_transports().resolve(&peer.node_id).await;
                     for url in &peer.base_urls {
-                        let rp = provider_for_peer(&peer, url, node_id_hex.as_deref());
+                        let rp = provider_for_peer(
+                            &peer,
+                            url,
+                            transport.as_ref(),
+                            node_id_hex.as_deref(),
+                        );
                         match rp.complete(serve_request).await {
                             Ok(mut resp) => {
                                 // Prefer the peer's OICP-advertised model id
@@ -3775,8 +3854,14 @@ impl InferenceProvider for MeshInferenceProvider {
                     let serve_request = serve_request.as_ref();
                     let mut last_transport_err: Option<String> = None;
                     let node_id_hex = self.local_node_id_hex().await;
+                    let transport = self.pinned_transports().resolve(&peer.node_id).await;
                     for url in &peer.base_urls {
-                        let rp = provider_for_peer(&peer, url, node_id_hex.as_deref());
+                        let rp = provider_for_peer(
+                            &peer,
+                            url,
+                            transport.as_ref(),
+                            node_id_hex.as_deref(),
+                        );
                         match rp.complete_stream_with_finish(serve_request).await {
                             Ok(stream) => {
                                 let attribution =
@@ -4279,18 +4364,24 @@ mod tests {
     struct NoPeers;
 
     #[async_trait]
-    impl PeerEndpointSource for NoPeers {
-        async fn peer_inference_endpoints(&self) -> Vec<PeerInferenceEndpoint> {
+    impl VenueSource for NoPeers {
+        async fn candidates(&self) -> Vec<InferenceVenue> {
             Vec::new()
         }
     }
+
+    /// Test host half: no identity, no ledger. Passed wherever a test builds a
+    /// `MeshInferenceProvider` from a stub source.
+    #[async_trait]
+    impl VenueHost for NoPeers {}
 
     fn late_loading_mip() -> (Arc<AtomicBool>, MeshInferenceProvider) {
         let serving = Arc::new(AtomicBool::new(false));
         let local = Arc::new(LateLoadingProvider {
             serving: Arc::clone(&serving),
         });
-        let mip = MeshInferenceProvider::with_peer_source(local, Arc::new(NoPeers));
+        let mip =
+            MeshInferenceProvider::with_peer_source(local, Arc::new(NoPeers), Arc::new(NoPeers));
         (serving, mip)
     }
 
@@ -4556,21 +4647,24 @@ mod tests {
         }
     }
 
-    struct OnePeer(PeerInferenceEndpoint);
+    struct OnePeer(InferenceVenue);
 
     #[async_trait]
-    impl PeerEndpointSource for OnePeer {
-        async fn peer_inference_endpoints(&self) -> Vec<PeerInferenceEndpoint> {
+    impl VenueSource for OnePeer {
+        async fn candidates(&self) -> Vec<InferenceVenue> {
             vec![self.0.clone()]
         }
     }
+
+    #[async_trait]
+    impl VenueHost for OnePeer {}
 
     /// A peer at an address nothing listens on. Every attempt fails at
     /// connect, which is all these tests need — the fallback keys on
     /// whether WE hold the id, not on why the peer failed. (A shed is
     /// simply the failure that made this path reachable in practice.)
-    fn dead_peer() -> PeerInferenceEndpoint {
-        PeerInferenceEndpoint {
+    fn dead_peer() -> InferenceVenue {
+        InferenceVenue {
             node_id: commonwealth_core::ids::NodeId::from_u128(7),
             name: "DeadPeer".into(),
             base_urls: vec!["http://127.0.0.1:1/v1".into()],
@@ -4579,7 +4673,7 @@ mod tests {
             current_in_flight: None,
             inference_availability: None,
             gossip_last_seen_unix: 0,
-            transport: None,
+            pinned_transport: false,
         }
     }
 
@@ -4627,7 +4721,11 @@ mod tests {
             saw_model: Arc::new(std::sync::Mutex::new(None)),
         });
         let peer = dead_peer();
-        let mip = MeshInferenceProvider::with_peer_source(local, Arc::new(OnePeer(peer.clone())));
+        let mip = MeshInferenceProvider::with_peer_source(
+            local,
+            Arc::new(OnePeer(peer.clone())),
+            Arc::new(NoPeers),
+        );
         mip.peer_cache.write().await.insert(
             peer.node_id.to_hex(),
             CachedManifest {
@@ -4695,7 +4793,11 @@ mod tests {
     }
 
     fn forwarder(locus: ServingLocus) -> MeshInferenceProvider {
-        MeshInferenceProvider::with_peer_source(Arc::new(Forwarder(locus)), Arc::new(NoPeers))
+        MeshInferenceProvider::with_peer_source(
+            Arc::new(Forwarder(locus)),
+            Arc::new(NoPeers),
+            Arc::new(NoPeers),
+        )
     }
 
     /// A node that owns no weights forwards a name nobody advertises, instead
@@ -4738,6 +4840,7 @@ mod tests {
         let mip = MeshInferenceProvider::with_peer_source(
             Arc::new(Forwarder(locus)),
             Arc::new(OnePeer(peer.clone())),
+            Arc::new(NoPeers),
         );
         mip.peer_cache.write().await.insert(
             peer.node_id.to_hex(),
@@ -4898,7 +5001,8 @@ mod tests {
             served: Arc::new(AtomicU32::new(0)),
             saw_model: Arc::new(std::sync::Mutex::new(None)),
         });
-        let mip = MeshInferenceProvider::with_peer_source(local, Arc::new(NoPeers));
+        let mip =
+            MeshInferenceProvider::with_peer_source(local, Arc::new(NoPeers), Arc::new(NoPeers));
         match mip
             .locate_named_model("not-a-real-model", MeshRoutingConsent::Withheld)
             .await
@@ -5088,7 +5192,8 @@ mod tests {
     async fn a_local_queue_shed_reaches_the_caller_named_and_closes_the_join() {
         let local = Arc::new(ShedsLocally);
         let sink = Arc::new(decision_log::CaptureDecisionSink::new());
-        let mip = MeshInferenceProvider::with_peer_source(local, Arc::new(NoPeers));
+        let mip =
+            MeshInferenceProvider::with_peer_source(local, Arc::new(NoPeers), Arc::new(NoPeers));
         let mip = mip.with_decision_sink(sink.clone());
 
         let err = mip.complete(&named("shed-model")).await.expect_err(
@@ -5192,7 +5297,8 @@ mod tests {
             served: Arc::clone(&served),
             saw_model: Arc::clone(&saw),
         });
-        let mip = MeshInferenceProvider::with_peer_source(local, Arc::new(NoPeers));
+        let mip =
+            MeshInferenceProvider::with_peer_source(local, Arc::new(NoPeers), Arc::new(NoPeers));
         mip.set_shared_model_id(Some("shared-model".into()));
 
         let request = CompletionRequest::new("hi")
@@ -5305,7 +5411,8 @@ mod tests {
             served: Arc::clone(&served),
             saw_model: Arc::new(std::sync::Mutex::new(None)),
         });
-        let mip = MeshInferenceProvider::with_peer_source(local, Arc::new(NoPeers));
+        let mip =
+            MeshInferenceProvider::with_peer_source(local, Arc::new(NoPeers), Arc::new(NoPeers));
 
         let plan = mip
             .select_route(&bare())
@@ -5349,7 +5456,7 @@ mod tests {
 }
 
 /// A handle to a daemon this host will commission later in its boot, usable as
-/// a [`PeerEndpointSource`] in the meantime.
+/// a [`VenueSource`] in the meantime.
 ///
 /// Production wiring is genuinely cyclic and always was: the daemon serves
 /// peers through a [`MeshInferenceProvider`], and that provider routes through
@@ -5398,14 +5505,17 @@ impl DeferredDaemon {
 }
 
 #[async_trait]
-impl PeerEndpointSource for DeferredDaemon {
-    async fn peer_inference_endpoints(&self) -> Vec<PeerInferenceEndpoint> {
+impl VenueSource for DeferredDaemon {
+    async fn candidates(&self) -> Vec<InferenceVenue> {
         match self.daemon.get() {
             Some(d) => EmbeddedDaemon::peer_inference_endpoints(d).await,
             None => Vec::new(),
         }
     }
+}
 
+#[async_trait]
+impl VenueHost for DeferredDaemon {
     async fn local_node_id(&self) -> Option<commonwealth_core::ids::NodeId> {
         EmbeddedDaemon::self_node_id(self.daemon.get()?).await
     }

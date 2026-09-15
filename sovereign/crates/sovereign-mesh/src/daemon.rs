@@ -19,6 +19,10 @@ use corpus_engine::CorpusEngine;
 use sovereign_api::state::{AppState, LocalInferenceService};
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::{InferenceProvider, StateStore};
+// The candidate record moved to `sovereign-scheduler` (domains row
+// REVIEW-build-venue); re-exported here so `sovereign_mesh::daemon::InferenceVenue`
+// keeps resolving while the knot's modules are still in this crate.
+pub use sovereign_scheduler::venue::InferenceVenue;
 
 /// Short-lived TTL stamped into an ENCRYPTED mesh's invite link. The
 /// founder enforces it at the join handler, so a leaked link is useless
@@ -2273,7 +2277,7 @@ impl EmbeddedDaemon {
     /// Empty when the daemon is stopped, when we're solo, or when
     /// every peer is offline — callers should fall back to local
     /// inference in any of those cases.
-    pub async fn peer_inference_endpoints(&self) -> Vec<PeerInferenceEndpoint> {
+    pub async fn peer_inference_endpoints(&self) -> Vec<InferenceVenue> {
         let state = self.state.read().await;
         let app_state = match &*state {
             DaemonState::Running { app_state, .. } => app_state.clone(),
@@ -2319,7 +2323,7 @@ impl EmbeddedDaemon {
                 .into_iter()
                 .map(|ep| format!("{}/v1", ep.base_url))
                 .collect();
-            endpoints.push(PeerInferenceEndpoint {
+            endpoints.push(InferenceVenue {
                 node_id: m.node_id,
                 name: m.name.clone(),
                 base_urls,
@@ -2335,7 +2339,7 @@ impl EmbeddedDaemon {
                 // — TLS pinning is reserved for ephemeral worker pods,
                 // which surface through `PinnedWorkerEndpointSource` in
                 // a separate path.
-                transport: None,
+                pinned_transport: false,
             });
         }
         endpoints
@@ -4774,82 +4778,6 @@ fn servable_model_files(slot_paths: &[std::path::PathBuf]) -> Vec<std::path::Pat
         }
     }
     out
-}
-
-/// A peer's inference service, as seen by the local
-/// `MeshInferenceProvider`. One per online, non-self member at the
-/// moment `peer_inference_endpoints()` was called.
-#[derive(Debug, Clone)]
-pub struct PeerInferenceEndpoint {
-    pub node_id: NodeId,
-    pub name: String,
-    /// Candidate base URLs in try-order. Each is a
-    /// `http://<ip>:9741/v1` prefix ready to hand to
-    /// `RemoteApiProvider::new`. Multiple when the peer is
-    /// dual-homed (WiFi + Tailscale); the wrapper tries them in
-    /// order until one succeeds — same policy as gossip + fan-out.
-    pub base_urls: Vec<String>,
-    /// Peer's gossiped `system_ram_gb`. Used as a crude-but-
-    /// correct-direction signal in the v1 routing heuristic:
-    /// only route synthesis to a peer whose RAM exceeds ours, so
-    /// a big-box Founder+small-box Joiner pair does the right
-    /// thing without us implementing full OICP manifest scoring
-    /// up-front. Proper per-model OICP matching is the Stage 2.1
-    /// follow-up.
-    pub system_ram_gb: u32,
-    /// Peer's gossiped baseline-model benchmark. Feeds the
-    /// throughput-extrapolation path in [`oicp::throughput_factor`]
-    /// when we score the peer's manifest. `None` when the peer is
-    /// running an older daemon (no benchmark field) or hasn't
-    /// completed its startup probe yet — in either case the
-    /// scheduler falls back to observation-only throughput scoring,
-    /// which degrades to neutral 1.0 below the sample threshold.
-    pub benchmark: Option<sovereign_core::oicp::BenchmarkResult>,
-    /// Peer's gossiped self-reported concurrent inference count.
-    /// Authoritative: peers count requests they serve from their
-    /// own local user — traffic the founder never originated and
-    /// `peer_observations[name].in_flight` is structurally blind
-    /// to. Used by `select_peer` to override the founder-local view
-    /// when present. `None` for older peers (gossip field absent);
-    /// scoring falls back to `peer_observations` in that case.
-    /// See `sovereign/docs/MESH_LOAD_AWARENESS.md`.
-    pub current_in_flight: Option<u32>,
-    /// Peer's gossiped `inference_availability` (0.0–1.0; 1.0 =
-    /// fully idle, written by the peer's ActivityReporter).
-    /// Multiplied into the OICP score (clamped to ≥0.2 so a busy
-    /// peer stays routable) — adopted 2026-06-10; the signal was
-    /// previously gossiped but ignored by routing.
-    pub inference_availability: Option<f32>,
-    /// `MemberRecord::last_seen` for the gossip record the two load
-    /// signals above were read from (unix seconds; `0` = unknown).
-    ///
-    /// This is the **staleness** half of the two-field pair that P2
-    /// of `docs/specs/SCHEDULER_QUALITY.md` exists to measure. F1 is
-    /// that a decider sees its own load exactly and every peer's a
-    /// full anti-entropy round or more late; a load value without
-    /// its age cannot distinguish "the hub is idle" from "the hub
-    /// was idle thirty seconds ago." Nothing routes on this — the
-    /// scorer never reads it — but every decision record stamps
-    /// `now - last_seen` next to the value it scored, which turns
-    /// F1's dead time from a modelled 10–30s hypothesis into a
-    /// measured distribution, and gives the Tier-1 simulator its
-    /// most load-bearing parameter as data instead of a guess.
-    pub gossip_last_seen_unix: u64,
-    /// How to actually open a connection to this endpoint.
-    ///
-    /// `None` is the default mesh transport — plain HTTP to `base_urls`,
-    /// gossip-issued bearer (or no bearer). `Some(transport)` means
-    /// route through a TLS-pinned `reqwest::Client` carrying the
-    /// owner-signed `WorkerToken`, the way ephemeral worker pods are
-    /// authenticated. See `crate::pinned_transport`.
-    ///
-    /// The scoring, manifest fetch, throughput tracking, and fan-out
-    /// fallback paths in `peer_inference.rs` are oblivious to this
-    /// field — they only consume `node_id`, `name`, `base_urls`, and
-    /// the load signals. The hot-path call site that actually opens
-    /// the HTTP connection is the only place that branches on it.
-    /// Spec: `sovereign/docs/PINNED_WORKER_AS_INFERENCE_PEER.md`.
-    pub transport: Option<crate::pinned_transport::PinnedTransport>,
 }
 
 /// How RPC-worker discovery uses the iroh bridge for ggml's raw-TCP

@@ -41,8 +41,8 @@ use sovereign_core::oicp::{
 };
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, Speed};
-use sovereign_mesh::daemon::PeerInferenceEndpoint;
-use sovereign_mesh::peer_inference::{MeshInferenceProvider, PeerEndpointSource};
+use sovereign_mesh::daemon::InferenceVenue;
+use sovereign_mesh::peer_inference::{MeshInferenceProvider, VenueHost, VenueSource};
 
 use crate::common;
 use crate::common::TestProvider;
@@ -65,7 +65,7 @@ fn local_byom() -> Arc<dyn InferenceProvider> {
 // place of `EmbeddedDaemon::peer_inference_endpoints()`.
 
 struct StubPeerSource {
-    peers: Vec<PeerInferenceEndpoint>,
+    peers: Vec<InferenceVenue>,
 }
 
 /// The id this stub claims as its own. A real `EmbeddedDaemon`
@@ -75,11 +75,14 @@ struct StubPeerSource {
 const STUB_NODE_ID: u128 = 0x00C0_FFEE;
 
 #[async_trait]
-impl PeerEndpointSource for StubPeerSource {
-    async fn peer_inference_endpoints(&self) -> Vec<PeerInferenceEndpoint> {
+impl VenueSource for StubPeerSource {
+    async fn candidates(&self) -> Vec<InferenceVenue> {
         self.peers.clone()
     }
+}
 
+#[async_trait]
+impl VenueHost for StubPeerSource {
     /// Overridden deliberately. The trait's default is `None`, and a
     /// `None` here would make every routing test in this file forward
     /// UNSTAMPED — i.e. would keep asserting the pre-M5 behaviour
@@ -88,6 +91,16 @@ impl PeerEndpointSource for StubPeerSource {
     async fn local_node_id(&self) -> Option<NodeId> {
         Some(NodeId::from_u128(STUB_NODE_ID))
     }
+}
+
+/// One `MeshInferenceProvider` over a fixed peer list, wired to a stub host
+/// that claims [`STUB_NODE_ID`]. The source and host are the same object.
+fn mip_with_peers(
+    local: Arc<dyn InferenceProvider>,
+    peers: Vec<InferenceVenue>,
+) -> MeshInferenceProvider {
+    let src = Arc::new(StubPeerSource { peers });
+    MeshInferenceProvider::with_peer_source(local, src.clone(), src)
 }
 
 // ── Mock peer HTTP server (the "Founder" role) ──────────────
@@ -454,7 +467,7 @@ async fn joiner_streams_through_mesh_and_attributes_peer() {
     let base_url = format!("http://{}/v1", peer_addr);
 
     // 2. Build the stub peer source — one peer, the Founder.
-    let peers = vec![PeerInferenceEndpoint {
+    let peers = vec![InferenceVenue {
         node_id: NodeId::from_u128(42),
         name: "Founder".into(),
         base_urls: vec![base_url],
@@ -463,9 +476,9 @@ async fn joiner_streams_through_mesh_and_attributes_peer() {
         current_in_flight: None,
         inference_availability: None,
         gossip_last_seen_unix: 0,
-        transport: None,
+        pinned_transport: false,
     }];
-    let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource { peers });
+    let peer_source = Arc::new(StubPeerSource { peers });
 
     // 3. Build the local-side provider: a BYOM-class 3B that
     //    cannot satisfy DeepQuery's preferred profile at score
@@ -475,7 +488,7 @@ async fn joiner_streams_through_mesh_and_attributes_peer() {
     let local: Arc<dyn InferenceProvider> = local_byom();
 
     // 4. The wrapper under test.
-    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source);
+    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source.clone(), peer_source);
 
     // 5. Build a DeepQuery-shaped request — this is what
     //    `runtime::build_oicp` emits for Intent::DeepQuery.
@@ -595,7 +608,7 @@ async fn oicp_503_fails_over_to_next_peer() {
     let good_addr = spawn_mock_peer().await;
 
     let peers = vec![
-        PeerInferenceEndpoint {
+        InferenceVenue {
             node_id: NodeId::from_u128(1),
             name: "Busy".into(),
             base_urls: vec![format!("http://{busy_addr}/v1")],
@@ -604,9 +617,9 @@ async fn oicp_503_fails_over_to_next_peer() {
             current_in_flight: None,
             inference_availability: None,
             gossip_last_seen_unix: 0,
-            transport: None,
+            pinned_transport: false,
         },
-        PeerInferenceEndpoint {
+        InferenceVenue {
             node_id: NodeId::from_u128(2),
             name: "Good".into(),
             base_urls: vec![format!("http://{good_addr}/v1")],
@@ -615,11 +628,11 @@ async fn oicp_503_fails_over_to_next_peer() {
             current_in_flight: None,
             inference_availability: None,
             gossip_last_seen_unix: 0,
-            transport: None,
+            pinned_transport: false,
         },
     ];
     let wrapper =
-        MeshInferenceProvider::with_peer_source(local_byom(), Arc::new(StubPeerSource { peers }));
+        mip_with_peers(local_byom(), peers);
     let request = CompletionRequest::new("Is free will compatible with determinism?")
         .with_speed(Speed::Slow)
         .with_oicp(
@@ -687,7 +700,7 @@ async fn peer_dies_mid_stream_does_not_duplicate() {
         tokio::time::sleep(Duration::from_millis(20)).await;
         addr
     };
-    let peers = vec![PeerInferenceEndpoint {
+    let peers = vec![InferenceVenue {
         node_id: NodeId::from_u128(7),
         name: "Truncator".into(),
         base_urls: vec![format!("http://{peer_addr}/v1")],
@@ -696,10 +709,10 @@ async fn peer_dies_mid_stream_does_not_duplicate() {
         current_in_flight: None,
         inference_availability: None,
         gossip_last_seen_unix: 0,
-        transport: None,
+        pinned_transport: false,
     }];
     let wrapper =
-        MeshInferenceProvider::with_peer_source(local_byom(), Arc::new(StubPeerSource { peers }));
+        mip_with_peers(local_byom(), peers);
     let request = CompletionRequest::new("Q")
         .with_speed(Speed::Slow)
         .with_oicp(
@@ -736,7 +749,7 @@ async fn local_only_sharding_never_routes_to_peer() {
     let peer_addr = spawn_mock_peer().await;
     let base_url = format!("http://{}/v1", peer_addr);
 
-    let peers = vec![PeerInferenceEndpoint {
+    let peers = vec![InferenceVenue {
         node_id: NodeId::from_u128(42),
         name: "Founder".into(),
         base_urls: vec![base_url],
@@ -745,11 +758,11 @@ async fn local_only_sharding_never_routes_to_peer() {
         current_in_flight: None,
         inference_availability: None,
         gossip_last_seen_unix: 0,
-        transport: None,
+        pinned_transport: false,
     }];
-    let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource { peers });
+    let peer_source = Arc::new(StubPeerSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
-    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source);
+    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source.clone(), peer_source);
 
     let envelope = InferenceRequirements::new()
         .with_hint(CapabilityHint::general())
@@ -788,7 +801,7 @@ async fn mesh_allowed_normal_latency_routes_to_peer_without_speed_signal() {
     let peer_addr = spawn_mock_peer().await;
     let base_url = format!("http://{}/v1", peer_addr);
 
-    let peers = vec![PeerInferenceEndpoint {
+    let peers = vec![InferenceVenue {
         node_id: NodeId::from_u128(42),
         name: "Founder".into(),
         base_urls: vec![base_url],
@@ -797,11 +810,11 @@ async fn mesh_allowed_normal_latency_routes_to_peer_without_speed_signal() {
         current_in_flight: None,
         inference_availability: None,
         gossip_last_seen_unix: 0,
-        transport: None,
+        pinned_transport: false,
     }];
-    let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource { peers });
+    let peer_source = Arc::new(StubPeerSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
-    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source);
+    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source.clone(), peer_source);
 
     // Normal latency is an EXACT class match for the mock peer's
     // Normal-latency claims, so the peer scores at least as well as
@@ -842,7 +855,7 @@ async fn local_only_judge_shaped_request_stays_local() {
     let peer_addr = spawn_mock_peer().await;
     let base_url = format!("http://{}/v1", peer_addr);
 
-    let peers = vec![PeerInferenceEndpoint {
+    let peers = vec![InferenceVenue {
         node_id: NodeId::from_u128(42),
         name: "Founder".into(),
         base_urls: vec![base_url],
@@ -851,11 +864,11 @@ async fn local_only_judge_shaped_request_stays_local() {
         current_in_flight: None,
         inference_availability: None,
         gossip_last_seen_unix: 0,
-        transport: None,
+        pinned_transport: false,
     }];
-    let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource { peers });
+    let peer_source = Arc::new(StubPeerSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
-    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source);
+    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source.clone(), peer_source);
 
     let envelope = InferenceRequirements::new()
         .with_hint(CapabilityHint::general())
@@ -886,7 +899,7 @@ async fn latency_fast_never_routes_even_when_mesh_allowed() {
     let peer_addr = spawn_mock_peer().await;
     let base_url = format!("http://{}/v1", peer_addr);
 
-    let peers = vec![PeerInferenceEndpoint {
+    let peers = vec![InferenceVenue {
         node_id: NodeId::from_u128(42),
         name: "Founder".into(),
         base_urls: vec![base_url],
@@ -895,11 +908,11 @@ async fn latency_fast_never_routes_even_when_mesh_allowed() {
         current_in_flight: None,
         inference_availability: None,
         gossip_last_seen_unix: 0,
-        transport: None,
+        pinned_transport: false,
     }];
-    let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource { peers });
+    let peer_source = Arc::new(StubPeerSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
-    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source);
+    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source.clone(), peer_source);
 
     let envelope = InferenceRequirements::new()
         .with_hint(CapabilityHint::general())
@@ -931,7 +944,7 @@ async fn forced_choice_sentinel_excludes_peer_without_feature() {
     let peer_addr = spawn_mock_peer().await; // advertises NO features
     let base_url = format!("http://{}/v1", peer_addr);
 
-    let peers = vec![PeerInferenceEndpoint {
+    let peers = vec![InferenceVenue {
         node_id: NodeId::from_u128(42),
         name: "Founder".into(),
         base_urls: vec![base_url],
@@ -940,11 +953,11 @@ async fn forced_choice_sentinel_excludes_peer_without_feature() {
         current_in_flight: None,
         inference_availability: None,
         gossip_last_seen_unix: 0,
-        transport: None,
+        pinned_transport: false,
     }];
-    let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource { peers });
+    let peer_source = Arc::new(StubPeerSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
-    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source);
+    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source.clone(), peer_source);
 
     let envelope = InferenceRequirements::new()
         .with_hint(CapabilityHint::general())
@@ -980,7 +993,7 @@ async fn forced_choice_sentinel_routes_to_peer_advertising_feature() {
     let peer_addr = spawn_mock_peer_fc().await; // advertises x:forced_choice
     let base_url = format!("http://{}/v1", peer_addr);
 
-    let peers = vec![PeerInferenceEndpoint {
+    let peers = vec![InferenceVenue {
         node_id: NodeId::from_u128(42),
         name: "Founder".into(),
         base_urls: vec![base_url],
@@ -989,11 +1002,11 @@ async fn forced_choice_sentinel_routes_to_peer_advertising_feature() {
         current_in_flight: None,
         inference_availability: None,
         gossip_last_seen_unix: 0,
-        transport: None,
+        pinned_transport: false,
     }];
-    let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource { peers });
+    let peer_source = Arc::new(StubPeerSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
-    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source);
+    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source.clone(), peer_source);
 
     let envelope = InferenceRequirements::new()
         .with_hint(CapabilityHint::general())
@@ -1041,7 +1054,7 @@ async fn explicit_peer_model_id_routes_to_peer_without_oicp_envelope() {
     let peer_addr = spawn_mock_peer().await;
     let base_url = format!("http://{}/v1", peer_addr);
 
-    let peers = vec![PeerInferenceEndpoint {
+    let peers = vec![InferenceVenue {
         node_id: NodeId::from_u128(42),
         name: "Founder".into(),
         base_urls: vec![base_url],
@@ -1050,11 +1063,11 @@ async fn explicit_peer_model_id_routes_to_peer_without_oicp_envelope() {
         current_in_flight: None,
         inference_availability: None,
         gossip_last_seen_unix: 0,
-        transport: None,
+        pinned_transport: false,
     }];
-    let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource { peers });
+    let peer_source = Arc::new(StubPeerSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
-    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source);
+    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source.clone(), peer_source);
 
     // No OICP envelope, Speed::Fast (which would normally bail
     // peer routing). The model name is the routing signal.
@@ -1090,7 +1103,7 @@ async fn explicit_unknown_model_id_errors_instead_of_silent_substitution() {
     let peer_addr = spawn_mock_peer().await;
     let base_url = format!("http://{}/v1", peer_addr);
 
-    let peers = vec![PeerInferenceEndpoint {
+    let peers = vec![InferenceVenue {
         node_id: NodeId::from_u128(42),
         name: "Founder".into(),
         base_urls: vec![base_url],
@@ -1099,11 +1112,11 @@ async fn explicit_unknown_model_id_errors_instead_of_silent_substitution() {
         current_in_flight: None,
         inference_availability: None,
         gossip_last_seen_unix: 0,
-        transport: None,
+        pinned_transport: false,
     }];
-    let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource { peers });
+    let peer_source = Arc::new(StubPeerSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
-    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source);
+    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source.clone(), peer_source);
 
     let request = CompletionRequest::new("hi")
         .with_speed(Speed::Slow)
@@ -1136,7 +1149,7 @@ async fn empty_model_id_falls_through_to_oicp_path() {
     let peer_addr = spawn_mock_peer().await;
     let base_url = format!("http://{}/v1", peer_addr);
 
-    let peers = vec![PeerInferenceEndpoint {
+    let peers = vec![InferenceVenue {
         node_id: NodeId::from_u128(42),
         name: "Founder".into(),
         base_urls: vec![base_url],
@@ -1145,11 +1158,11 @@ async fn empty_model_id_falls_through_to_oicp_path() {
         current_in_flight: None,
         inference_availability: None,
         gossip_last_seen_unix: 0,
-        transport: None,
+        pinned_transport: false,
     }];
-    let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource { peers });
+    let peer_source = Arc::new(StubPeerSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
-    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source);
+    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source.clone(), peer_source);
 
     let envelope = InferenceRequirements::new()
         .with_hint(CapabilityHint::general())
@@ -1203,7 +1216,7 @@ async fn empty_model_id_falls_through_to_oicp_path() {
 #[tokio::test]
 async fn an_unnamed_ranked_dispatch_sends_a_model_the_peer_can_resolve() {
     let (peer_addr, bodies) = spawn_capturing_peer().await;
-    let peers = vec![PeerInferenceEndpoint {
+    let peers = vec![InferenceVenue {
         node_id: NodeId::from_u128(42),
         name: "Founder".into(),
         base_urls: vec![format!("http://{}/v1", peer_addr)],
@@ -1212,10 +1225,10 @@ async fn an_unnamed_ranked_dispatch_sends_a_model_the_peer_can_resolve() {
         current_in_flight: None,
         inference_availability: None,
         gossip_last_seen_unix: 0,
-        transport: None,
+        pinned_transport: false,
     }];
     let wrapper =
-        MeshInferenceProvider::with_peer_source(local_byom(), Arc::new(StubPeerSource { peers }));
+        mip_with_peers(local_byom(), peers);
 
     // Normal latency + MeshAllowed, model_id LEFT UNSET — the exact
     // shape `build_completion_request` produces for an inbound chat
@@ -1454,8 +1467,8 @@ async fn spawn_resolving_peer() -> (SocketAddr, PeerLedgerHandle) {
     (addr, ledger)
 }
 
-fn founder_endpoint(addr: SocketAddr) -> PeerInferenceEndpoint {
-    PeerInferenceEndpoint {
+fn founder_endpoint(addr: SocketAddr) -> InferenceVenue {
+    InferenceVenue {
         node_id: NodeId::from_u128(42),
         name: "Founder".into(),
         base_urls: vec![format!("http://{}/v1", addr)],
@@ -1464,7 +1477,7 @@ fn founder_endpoint(addr: SocketAddr) -> PeerInferenceEndpoint {
         current_in_flight: None,
         inference_availability: None,
         gossip_last_seen_unix: 0,
-        transport: None,
+        pinned_transport: false,
     }
 }
 
@@ -1476,12 +1489,7 @@ fn mesh_allowed_envelope() -> InferenceRequirements {
 }
 
 fn provider_with_resolving_peer(addr: SocketAddr) -> MeshInferenceProvider {
-    MeshInferenceProvider::with_peer_source(
-        local_byom(),
-        Arc::new(StubPeerSource {
-            peers: vec![founder_endpoint(addr)],
-        }),
-    )
+    mip_with_peers(local_byom(), vec![founder_endpoint(addr)])
 }
 
 async fn drain(
@@ -1707,8 +1715,8 @@ async fn a_shared_primary_reaches_the_peer_but_does_not_yet_pin_its_target() {
 // ═══════════════════════════════════════════════════════════════
 
 /// One peer, pointed at `addr`, named "Founder".
-fn founder_at(addr: SocketAddr) -> Vec<PeerInferenceEndpoint> {
-    vec![PeerInferenceEndpoint {
+fn founder_at(addr: SocketAddr) -> Vec<InferenceVenue> {
+    vec![InferenceVenue {
         node_id: NodeId::from_u128(42),
         name: "Founder".into(),
         base_urls: vec![format!("http://{addr}/v1")],
@@ -1717,7 +1725,7 @@ fn founder_at(addr: SocketAddr) -> Vec<PeerInferenceEndpoint> {
         current_in_flight: None,
         inference_availability: None,
         gossip_last_seen_unix: 0,
-        transport: None,
+        pinned_transport: false,
     }]
 }
 
@@ -1737,12 +1745,7 @@ fn mesh_allowed_request() -> CompletionRequest {
 #[tokio::test]
 async fn a_peer_routed_turn_identifies_this_node_to_the_peer() {
     let (peer_addr, node_ids) = spawn_node_id_capturing_peer().await;
-    let wrapper = MeshInferenceProvider::with_peer_source(
-        local_byom(),
-        Arc::new(StubPeerSource {
-            peers: founder_at(peer_addr),
-        }),
-    );
+    let wrapper = mip_with_peers(local_byom(), founder_at(peer_addr));
 
     let (stream, attribution) = wrapper
         .complete_stream_with_id(&mesh_allowed_request())
@@ -1777,12 +1780,7 @@ async fn a_peer_routed_turn_identifies_this_node_to_the_peer() {
 #[tokio::test]
 async fn repeated_sheds_never_quarantine_a_healthy_peer() {
     let peer_addr = spawn_failing_peer(true).await;
-    let wrapper = MeshInferenceProvider::with_peer_source(
-        local_byom(),
-        Arc::new(StubPeerSource {
-            peers: founder_at(peer_addr),
-        }),
-    );
+    let wrapper = mip_with_peers(local_byom(), founder_at(peer_addr));
 
     // Four — one past FAILURE_THRESHOLD, so a regression cannot pass
     // by arriving one short of the line. Each turn fails over to the
@@ -1826,12 +1824,7 @@ async fn repeated_sheds_never_quarantine_a_healthy_peer() {
 #[tokio::test]
 async fn a_yielding_peer_is_asked_once_not_once_per_turn() {
     let (peer_addr, hops) = spawn_counting_yielding_peer().await;
-    let wrapper = MeshInferenceProvider::with_peer_source(
-        local_byom(),
-        Arc::new(StubPeerSource {
-            peers: founder_at(peer_addr),
-        }),
-    );
+    let wrapper = mip_with_peers(local_byom(), founder_at(peer_addr));
 
     for _ in 0..4 {
         let _ = wrapper
@@ -1872,12 +1865,7 @@ async fn a_yielding_peer_is_asked_once_not_once_per_turn() {
 #[tokio::test]
 async fn repeated_faults_still_quarantine_a_broken_peer() {
     let peer_addr = spawn_failing_peer(false).await;
-    let wrapper = MeshInferenceProvider::with_peer_source(
-        local_byom(),
-        Arc::new(StubPeerSource {
-            peers: founder_at(peer_addr),
-        }),
-    );
+    let wrapper = mip_with_peers(local_byom(), founder_at(peer_addr));
 
     for _ in 0..4 {
         let _ = wrapper

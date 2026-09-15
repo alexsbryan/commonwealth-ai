@@ -223,7 +223,7 @@ pub struct NodeSection {
     /// there without erroring.
     ///
     /// The identity-keyed design was priced (order `tn-1-terminal-honesty`, D5)
-    /// and deferred: resolving through `PeerEndpointSource` per turn needs a
+    /// and deferred: resolving through `VenueSource` per turn needs a
     /// provider that wraps `SplitInferenceProvider`, and `InferenceProvider`
     /// has 27 methods of which 24 carry defaults — including `embed_batch`,
     /// whose default is the per-item loop `SplitInferenceProvider` overrides

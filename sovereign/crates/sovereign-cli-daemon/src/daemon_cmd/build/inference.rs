@@ -127,7 +127,7 @@ pub(crate) fn load_provider(
                 // only ingress there is.
                 EntryBinding::Node(hex) => {
                     let resolver = match sovereign_mesh::entry_endpoint::EntryNodeEndpoint::parse(
-                        mesh as Arc<dyn sovereign_mesh::peer_inference::PeerEndpointSource>,
+                        mesh as Arc<dyn sovereign_mesh::peer_inference::VenueSource>,
                         &hex,
                     ) {
                         Ok(r) => Arc::new(r),

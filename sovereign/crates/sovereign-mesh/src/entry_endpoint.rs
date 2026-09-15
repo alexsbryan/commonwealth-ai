@@ -52,7 +52,7 @@
 //!   nothing — which made the whole feature unreachable on the posture the
 //!   fleet actually runs.
 //!
-//! Resolving the identity through the same `PeerEndpointSource` every other
+//! Resolving the identity through the same `VenueSource` every other
 //! peer-bound traffic class uses fixes all three at once, because all three
 //! were the consequence of bypassing it.
 
@@ -62,20 +62,20 @@ use async_trait::async_trait;
 use commonwealth_core::ids::NodeId;
 use sovereign_inference::remote::EndpointResolver;
 
-use crate::peer_inference::PeerEndpointSource;
+use crate::peer_inference::VenueSource;
 
 /// A terminal's entry node, named by mesh identity and located on demand.
 pub struct EntryNodeEndpoint {
     /// The mesh view. `DeferredDaemon` in production, so this can be built
     /// before the daemon is commissioned — the terminal's provider is
     /// constructed during `load_provider`, which runs first.
-    source: Arc<dyn PeerEndpointSource>,
+    source: Arc<dyn VenueSource>,
     /// Who we are bound to. Never an address.
     node_id: NodeId,
 }
 
 impl std::fmt::Debug for EntryNodeEndpoint {
-    /// Hand-written because `PeerEndpointSource` is not `Debug` and should not
+    /// Hand-written because `VenueSource` is not `Debug` and should not
     /// become so to satisfy a derive — the mesh view is a capability, not a
     /// value, and printing it would print the whole daemon.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -87,7 +87,7 @@ impl std::fmt::Debug for EntryNodeEndpoint {
 
 impl EntryNodeEndpoint {
     /// Bind to `node_id`, resolving through `source` on every call.
-    pub fn new(source: Arc<dyn PeerEndpointSource>, node_id: NodeId) -> Self {
+    pub fn new(source: Arc<dyn VenueSource>, node_id: NodeId) -> Self {
         Self { source, node_id }
     }
 
@@ -98,7 +98,7 @@ impl EntryNodeEndpoint {
     /// Refusing here rather than storing the string and failing at the first
     /// turn is the point: a config that cannot name a node is broken at load,
     /// far from a user waiting on an answer.
-    pub fn parse(source: Arc<dyn PeerEndpointSource>, hex: &str) -> Result<Self, String> {
+    pub fn parse(source: Arc<dyn VenueSource>, hex: &str) -> Result<Self, String> {
         let node_id = NodeId::from_hex(hex).ok_or_else(|| {
             format!(
                 "'{hex}' is not a mesh node id (expected 32 hex characters). \
@@ -127,7 +127,7 @@ impl EndpointResolver for EntryNodeEndpoint {
     /// refuse the turn and say the entry node is unreachable. What matters is
     /// that none of them silently produces a DIFFERENT node's address.
     async fn base_url(&self) -> Option<String> {
-        let peers = self.source.peer_inference_endpoints().await;
+        let peers = self.source.candidates().await;
         let peer = peers.into_iter().find(|p| p.node_id == self.node_id)?;
         // `base_urls` is already in try-order — `IpTransport` ranks a
         // multi-homed peer's candidates (IPv4/Tailscale before IPv6 ULA), and
@@ -161,20 +161,20 @@ impl EndpointResolver for EntryNodeEndpoint {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::daemon::PeerInferenceEndpoint;
+    use crate::daemon::InferenceVenue;
 
     /// A mesh view with a fixed peer set.
-    struct Peers(Vec<PeerInferenceEndpoint>);
+    struct Peers(Vec<InferenceVenue>);
 
     #[async_trait]
-    impl PeerEndpointSource for Peers {
-        async fn peer_inference_endpoints(&self) -> Vec<PeerInferenceEndpoint> {
+    impl VenueSource for Peers {
+        async fn candidates(&self) -> Vec<InferenceVenue> {
             self.0.clone()
         }
     }
 
-    fn peer(node_id: NodeId, name: &str, urls: &[&str]) -> PeerInferenceEndpoint {
-        PeerInferenceEndpoint {
+    fn peer(node_id: NodeId, name: &str, urls: &[&str]) -> InferenceVenue {
+        InferenceVenue {
             node_id,
             name: name.to_string(),
             base_urls: urls.iter().map(|u| u.to_string()).collect(),
@@ -183,11 +183,11 @@ mod tests {
             current_in_flight: None,
             inference_availability: None,
             gossip_last_seen_unix: 0,
-            transport: None,
+            pinned_transport: false,
         }
     }
 
-    fn source(peers: Vec<PeerInferenceEndpoint>) -> Arc<dyn PeerEndpointSource> {
+    fn source(peers: Vec<InferenceVenue>) -> Arc<dyn VenueSource> {
         Arc::new(Peers(peers))
     }
 

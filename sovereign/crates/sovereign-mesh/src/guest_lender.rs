@@ -16,7 +16,7 @@
 //!
 //! # A lender is not a peer
 //!
-//! Deliberately NOT expressed as a [`PeerInferenceEndpoint`]. That type is
+//! Deliberately NOT expressed as a [`InferenceVenue`]. That type is
 //! peer-shaped — a required `NodeId` (a link carries an iroh endpoint pubkey,
 //! not a mesh node id), plus `system_ram_gb` / `benchmark` /
 //! `current_in_flight` / `gossip_last_seen_unix`, every one a gossip signal a
@@ -41,7 +41,7 @@
 //!    engage. A guest is not a node; stamping would run the lender's PEER
 //!    admission on a non-peer and mis-attribute the traffic in its tally.
 //!
-//! [`PeerInferenceEndpoint`]: crate::daemon::PeerInferenceEndpoint
+//! [`InferenceVenue`]: crate::daemon::InferenceVenue
 //!
 //! # The lender's `/v1/models` is the authority on scope, not the link
 //!
@@ -118,7 +118,7 @@ pub enum GrantPosture {
 /// "Do I hold a live grant for this model id?"
 ///
 /// A trait so the dispatch path can be tested without a lender, a tunnel, or
-/// a file on disk — mirroring `PeerEndpointSource`.
+/// a file on disk — mirroring `VenueSource`.
 #[async_trait]
 pub trait GuestLenderSource: Send + Sync + std::fmt::Debug {
     /// The lender to dispatch `model_id` to, or `None` to fall through to the

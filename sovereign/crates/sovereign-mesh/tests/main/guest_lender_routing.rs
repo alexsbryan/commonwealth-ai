@@ -27,9 +27,9 @@ use axum::{Json, Router};
 use sovereign_core::guest_link::{save_in, GuestLink};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::CompletionRequest;
-use sovereign_mesh::daemon::PeerInferenceEndpoint;
+use sovereign_mesh::daemon::InferenceVenue;
 use sovereign_mesh::guest_lender::StoredGuestLink;
-use sovereign_mesh::peer_inference::{MeshInferenceProvider, PeerEndpointSource};
+use sovereign_mesh::peer_inference::{MeshInferenceProvider, VenueHost, VenueSource};
 
 use crate::common;
 use crate::common::spawn_router;
@@ -57,11 +57,14 @@ const TOKEN: &str = "aa11bb22cc33dd44ee55ff66aa77bb88cc99dd00ee11ff22aa33bb44cc5
 struct NoPeers;
 
 #[async_trait]
-impl PeerEndpointSource for NoPeers {
-    async fn peer_inference_endpoints(&self) -> Vec<PeerInferenceEndpoint> {
+impl VenueSource for NoPeers {
+    async fn candidates(&self) -> Vec<InferenceVenue> {
         Vec::new()
     }
 }
+
+#[async_trait]
+impl VenueHost for NoPeers {}
 
 /// What the lender observed about the request it served.
 #[derive(Default)]
@@ -126,7 +129,8 @@ fn local_without_the_model() -> Arc<dyn InferenceProvider> {
 fn provider_with_link(root: &std::path::Path) -> MeshInferenceProvider {
     let p = MeshInferenceProvider::with_peer_source(
         local_without_the_model(),
-        Arc::new(NoPeers) as Arc<dyn PeerEndpointSource>,
+        Arc::new(NoPeers) as Arc<dyn VenueSource>,
+        Arc::new(NoPeers) as Arc<dyn VenueHost>,
     );
     p.set_guest_source(Arc::new(StoredGuestLink::new_in(root.to_path_buf())));
     p
@@ -282,7 +286,8 @@ fn local_that_answers() -> Arc<dyn InferenceProvider> {
 fn provider_with_link_and_answering_local(root: &std::path::Path) -> MeshInferenceProvider {
     let p = MeshInferenceProvider::with_peer_source(
         local_that_answers(),
-        Arc::new(NoPeers) as Arc<dyn PeerEndpointSource>,
+        Arc::new(NoPeers) as Arc<dyn VenueSource>,
+        Arc::new(NoPeers) as Arc<dyn VenueHost>,
     );
     p.set_guest_source(Arc::new(StoredGuestLink::new_in(root.to_path_buf())));
     p

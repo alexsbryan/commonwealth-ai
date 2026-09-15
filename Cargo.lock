@@ -12826,6 +12826,8 @@ dependencies = [
 name = "sovereign-scheduler"
 version = "0.7.0"
 dependencies = [
+ "async-trait",
+ "kernel-types",
  "oicp-types",
  "serde",
  "serde_json",

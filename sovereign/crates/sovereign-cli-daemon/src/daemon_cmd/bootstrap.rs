@@ -2298,18 +2298,25 @@ pub(super) async fn build_mesh_provider(
             }
         }
     }
-    let composite_source: Arc<dyn sovereign_mesh::peer_inference::PeerEndpointSource> = Arc::new(
+    let composite = Arc::new(
         sovereign_mesh::pinned_worker_source::CompositeEndpointSource::new(
-            Arc::clone(&daemon) as Arc<dyn sovereign_mesh::peer_inference::PeerEndpointSource>,
+            Arc::clone(&daemon) as Arc<dyn sovereign_mesh::peer_inference::VenueSource>,
+            Arc::clone(&daemon) as Arc<dyn sovereign_mesh::peer_inference::VenueHost>,
             Arc::clone(&pinned_source),
         ),
     );
     let mesh_provider = Arc::new(
         sovereign_mesh::peer_inference::MeshInferenceProvider::with_peer_source(
             Arc::clone(&provider),
-            composite_source,
+            Arc::clone(&composite) as Arc<dyn sovereign_mesh::peer_inference::VenueSource>,
+            Arc::clone(&composite) as Arc<dyn sovereign_mesh::peer_inference::VenueHost>,
         ),
     );
+    // The pinned pods' TLS handles do not travel with the venue (the scheduler
+    // may not name `PinnedTransport`); the router resolves them by `node_id`
+    // through this source.
+    mesh_provider.set_pinned_transports(Arc::clone(&pinned_source)
+        as Arc<dyn sovereign_mesh::peer_inference::PinnedTransportResolver>);
     // A guest link this node accepted lets a granted model id resolve to the
     // LENDING node while the turn stays here. Wired at the COLD-START
     // assembly point, which is the whole reason this function exists: the

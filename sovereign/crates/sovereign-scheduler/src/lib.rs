@@ -17,4 +17,5 @@ pub mod predicted_time;
 pub mod scheduler_core;
 pub mod slot_aliases;
 pub mod tier;
+pub mod venue;
 pub mod yield_backoff;

@@ -48,13 +48,13 @@ use sovereign_core::oicp::{
 };
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, Speed};
-use sovereign_mesh::daemon::PeerInferenceEndpoint;
+use sovereign_mesh::daemon::InferenceVenue;
 use sovereign_mesh::decision_log::{
     CandidateKind, CaptureDecisionSink, DecisionEvent, DecisionPath, DecisionSink, ExclusionReason,
     LoadSource, RoutingDecision, RoutingOutcome, ServedBy, Verdict,
 };
 use sovereign_mesh::decision_trace::SchedulerTrace;
-use sovereign_mesh::peer_inference::{MeshInferenceProvider, PeerEndpointSource};
+use sovereign_mesh::peer_inference::{MeshInferenceProvider, VenueHost, VenueSource};
 use sovereign_serving_host::recorder::TracingDecisionSink;
 
 use crate::common;
@@ -63,15 +63,18 @@ use crate::common::TestProvider;
 // ── Harness ─────────────────────────────────────────────────────
 
 struct StubPeerSource {
-    peers: Vec<PeerInferenceEndpoint>,
+    peers: Vec<InferenceVenue>,
 }
 
 #[async_trait]
-impl PeerEndpointSource for StubPeerSource {
-    async fn peer_inference_endpoints(&self) -> Vec<PeerInferenceEndpoint> {
+impl VenueSource for StubPeerSource {
+    async fn candidates(&self) -> Vec<InferenceVenue> {
         self.peers.clone()
     }
 }
+
+#[async_trait]
+impl VenueHost for StubPeerSource {}
 
 const PEER_TEXT: &str = "Answer from the peer slot.";
 
@@ -193,12 +196,12 @@ async fn spawn_peer(shedding: bool) -> SocketAddr {
 
 /// A peer endpoint whose gossip signals are all populated, so P2
 /// provenance has something real to record.
-fn peer_endpoint(name: &str, addr: SocketAddr, gossip_age_secs: u64) -> PeerInferenceEndpoint {
+fn peer_endpoint(name: &str, addr: SocketAddr, gossip_age_secs: u64) -> InferenceVenue {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_secs();
-    PeerInferenceEndpoint {
+    InferenceVenue {
         node_id: NodeId::from_u128(0x42 << 120),
         name: name.into(),
         base_urls: vec![format!("http://{addr}/v1")],
@@ -213,14 +216,14 @@ fn peer_endpoint(name: &str, addr: SocketAddr, gossip_age_secs: u64) -> PeerInfe
         current_in_flight: Some(3),
         inference_availability: Some(0.85),
         gossip_last_seen_unix: now.saturating_sub(gossip_age_secs),
-        transport: None,
+        pinned_transport: false,
     }
 }
 
 /// An endpoint pointing nowhere — its manifest fetch fails, which is
 /// the `ManifestUnavailable` exclusion.
-fn dead_peer_endpoint(name: &str) -> PeerInferenceEndpoint {
-    PeerInferenceEndpoint {
+fn dead_peer_endpoint(name: &str) -> InferenceVenue {
+    InferenceVenue {
         node_id: NodeId::from_u128(0x99 << 120),
         name: name.into(),
         // Reserved-for-documentation address: guaranteed unroutable,
@@ -232,7 +235,7 @@ fn dead_peer_endpoint(name: &str) -> PeerInferenceEndpoint {
         current_in_flight: None,
         inference_availability: None,
         gossip_last_seen_unix: 0,
-        transport: None,
+        pinned_transport: false,
     }
 }
 
@@ -258,12 +261,15 @@ fn mesh_request() -> CompletionRequest {
         )
 }
 
-fn build(peers: Vec<PeerInferenceEndpoint>) -> (MeshInferenceProvider, Arc<CaptureDecisionSink>) {
+fn build(peers: Vec<InferenceVenue>) -> (MeshInferenceProvider, Arc<CaptureDecisionSink>) {
     let capture = Arc::new(CaptureDecisionSink::new());
     let sink: Arc<dyn DecisionSink> = capture.clone();
     let provider = MeshInferenceProvider::with_peer_source(
         weak_local(),
-        Arc::new(StubPeerSource { peers }) as Arc<dyn PeerEndpointSource>,
+        Arc::new(StubPeerSource {
+            peers: peers.clone(),
+        }) as Arc<dyn VenueSource>,
+        Arc::new(StubPeerSource { peers }) as Arc<dyn VenueHost>,
     )
     .with_decision_sink(sink);
     (provider, capture)
@@ -628,7 +634,10 @@ async fn jsonl_capture_loads_back_as_a_replayable_trace() {
         weak_local(),
         Arc::new(StubPeerSource {
             peers: vec![peer_endpoint("hub", addr, 14)],
-        }) as Arc<dyn PeerEndpointSource>,
+        }) as Arc<dyn VenueSource>,
+        Arc::new(StubPeerSource {
+            peers: vec![peer_endpoint("hub", addr, 14)],
+        }) as Arc<dyn VenueHost>,
     )
     .with_decision_sink(sink);
 
@@ -705,7 +714,10 @@ async fn the_sink_does_not_change_the_routing_decision() {
         weak_local(),
         Arc::new(StubPeerSource {
             peers: vec![peer_endpoint("hub", addr, 11)],
-        }) as Arc<dyn PeerEndpointSource>,
+        }) as Arc<dyn VenueSource>,
+        Arc::new(StubPeerSource {
+            peers: vec![peer_endpoint("hub", addr, 11)],
+        }) as Arc<dyn VenueHost>,
     )
     .with_decision_sink(Arc::new(sovereign_mesh::decision_log::NullDecisionSink));
 
@@ -1000,7 +1012,10 @@ async fn the_local_candidate_is_scored_on_this_nodes_real_in_flight_count() {
             weak_local(),
             Arc::new(StubPeerSource {
                 peers: vec![peer_endpoint("hub", addr, 12)],
-            }) as Arc<dyn PeerEndpointSource>,
+            }) as Arc<dyn VenueSource>,
+            Arc::new(StubPeerSource {
+                peers: vec![peer_endpoint("hub", addr, 12)],
+            }) as Arc<dyn VenueHost>,
             Arc::clone(&publisher),
         )
         .with_decision_sink(sink);

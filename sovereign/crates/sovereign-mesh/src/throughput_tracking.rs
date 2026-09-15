@@ -41,7 +41,7 @@ pub(crate) enum ThroughputTarget {
 /// `None` — the dimensional ledger is intra-mesh-only per spec
 /// §10, and a "received from self" event is meaningless.
 ///
-/// `pub` because the mesh host's `PeerEndpointSource`
+/// `pub` because the mesh host's `VenueSource`
 /// trait method `ledger_emission_for` returns `Option<LedgerEmission>`
 /// — implementors outside this module need to construct values of
 /// this type. Fields stay `pub(crate)` so the construction shape
@@ -57,7 +57,7 @@ impl LedgerEmission {
     /// Construct a `LedgerEmission`. The production wiring goes
     /// through `EmbeddedDaemon::ledger_emission_for`; tests outside
     /// this crate use this constructor to plug a controlled
-    /// `ContributionEmitter` into a stub `PeerEndpointSource` and
+    /// `ContributionEmitter` into a stub `VenueSource` and
     /// observe `InferenceReceived` events end-to-end.
     pub fn new(
         from_node: commonwealth_core::ids::NodeId,

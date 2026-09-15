@@ -108,7 +108,9 @@ impl ProviderFactory for LlamaCppFactory {
             .daemon
             .get()
             .ok_or_else(|| "reload arrived before the daemon was commissioned".to_string())?;
-        let peer_source: Arc<dyn sovereign_mesh::peer_inference::PeerEndpointSource> =
+        let peer_source: Arc<dyn sovereign_mesh::peer_inference::VenueSource> =
+            Arc::clone(&self.daemon) as Arc<_>;
+        let peer_host: Arc<dyn sovereign_mesh::peer_inference::VenueHost> =
             Arc::clone(&self.daemon) as Arc<_>;
         let app_state_opt = daemon.app_state().await;
         let mesh_provider = if let Some(state) = app_state_opt.as_ref() {
@@ -117,6 +119,7 @@ impl ProviderFactory for LlamaCppFactory {
                     sovereign_mesh::peer_inference::MeshInferenceProvider::with_peer_source_and_publisher(
                         raw,
                         Arc::clone(&peer_source),
+                        Arc::clone(&peer_host),
                         publisher,
                     ),
                 ),
@@ -128,6 +131,7 @@ impl ProviderFactory for LlamaCppFactory {
                     sovereign_mesh::peer_inference::MeshInferenceProvider::with_peer_source(
                         raw,
                         Arc::clone(&peer_source),
+                        Arc::clone(&peer_host),
                     ),
                 ),
             }
@@ -136,6 +140,7 @@ impl ProviderFactory for LlamaCppFactory {
                 sovereign_mesh::peer_inference::MeshInferenceProvider::with_peer_source(
                     raw,
                     Arc::clone(&peer_source),
+                    Arc::clone(&peer_host),
                 ),
             )
         };

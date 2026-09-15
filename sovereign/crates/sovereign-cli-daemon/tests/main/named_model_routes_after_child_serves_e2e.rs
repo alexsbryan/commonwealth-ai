@@ -44,8 +44,8 @@ use sovereign_contracts::{
     CompletionRequest, CompletionResponse, Depth, InferenceProvider, ProviderCapabilities, Speed,
 };
 use sovereign_core::error::{Error, Result};
-use sovereign_mesh::daemon::PeerInferenceEndpoint;
-use sovereign_mesh::peer_inference::{MeshInferenceProvider, PeerEndpointSource};
+use sovereign_mesh::daemon::InferenceVenue;
+use sovereign_mesh::peer_inference::{MeshInferenceProvider, VenueHost, VenueSource};
 
 /// The daemon binary — its `--compute-child` arm runs the mock child.
 const BIN: &str = env!("CARGO_BIN_EXE_sovereign-cli-daemon");
@@ -112,11 +112,14 @@ impl InferenceProvider for InProcessFastOnly {
 struct NoPeers;
 
 #[async_trait::async_trait]
-impl PeerEndpointSource for NoPeers {
-    async fn peer_inference_endpoints(&self) -> Vec<PeerInferenceEndpoint> {
+impl VenueSource for NoPeers {
+    async fn candidates(&self) -> Vec<InferenceVenue> {
         Vec::new()
     }
 }
+
+#[async_trait::async_trait]
+impl VenueHost for NoPeers {}
 
 async fn wait_serving(slot: &DynamicChildSlot, timeout: Duration) -> bool {
     let start = Instant::now();
@@ -189,6 +192,7 @@ async fn a_named_request_for_the_distributed_primary_routes_once_the_child_serve
     // but has never spawned. This is the exact ordering that produced the bug.
     let mip = Arc::new(MeshInferenceProvider::with_peer_source(
         facade,
+        Arc::new(NoPeers),
         Arc::new(NoPeers),
     ));
 

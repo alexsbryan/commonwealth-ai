@@ -9,6 +9,11 @@ license.workspace = true
 # (ARCH_LAYERS.toml): the scheduler may name `oicp-types` and nothing else in
 # this repo. `TierFloor` reads the envelope's latency class off it.
 oicp-types = { workspace = true }
+# `venue.rs`: `InferenceVenue::node_id` is a `kernel_types::NodeId` (the
+# identity the roster and the local reader both speak), and the `VenueSource`
+# port is async.
+kernel-types = { workspace = true }
+async-trait = { workspace = true }
 # The scheduler half of sovereign-mesh moved in here (domains row
 # REVIEW-build-sched-move): the decision records and replay fixtures are
 # serde-serialised and the ranker logs through `tracing`. The recording sink —

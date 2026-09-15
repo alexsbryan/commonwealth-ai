@@ -18,7 +18,7 @@
 //!
 //! ## Why a struct (not a free `reqwest::Client`)
 //!
-//! `PeerInferenceEndpoint` is the only shape the mesh scheduler knows.
+//! `InferenceVenue` is the only shape the mesh scheduler knows.
 //! Adding `Option<PinnedTransport>` to it lets the existing
 //! `select_peer` / scoring / fan-out plumbing remain unchanged — the
 //! only hot-path change is "if `transport.is_some()`, build the
@@ -58,7 +58,7 @@ pub enum TransportError {
 
 /// How to actually open a connection to a pinned worker pod.
 ///
-/// `None` on `PeerInferenceEndpoint::transport` means the default
+/// `None` on `InferenceVenue::transport` means the default
 /// mesh transport (plain HTTP on `:9741`, gossip-issued bearer).
 /// `Some(handle)` means use the pinned client + worker token
 /// recorded here.

@@ -37,37 +37,40 @@ use sovereign_core::oicp::{
 };
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, Speed};
-use sovereign_mesh::daemon::PeerInferenceEndpoint;
-use sovereign_mesh::peer_inference::{MeshInferenceProvider, PeerEndpointSource};
+use sovereign_mesh::daemon::InferenceVenue;
+use sovereign_mesh::peer_inference::{MeshInferenceProvider, VenueHost, VenueSource};
 use sovereign_mesh::throughput_tracking::LedgerEmission;
 
 use crate::common;
 use crate::common::TestProvider;
 
-// ── `PeerEndpointSource` stub with a real `ContributionEmitter` ──
+// ── `VenueSource` stub with a real `ContributionEmitter` ──
 //
 // Wires a captured ContributionEmitter through `ledger_emission_for`
 // so the routing path attaches it to the stream wrapper. After the
 // stream drops, the emitter's MeshStore retains the event for the
 // assertion to read back.
 
-// ── `PeerEndpointSource` stub with a real `ContributionEmitter` ──
+// ── `VenueSource` stub with a real `ContributionEmitter` ──
 //
 // Wires a captured ContributionEmitter through `ledger_emission_for`
 // so the routing path attaches it to the stream wrapper. After the
 // stream drops, the emitter's MeshStore retains the event for the
 // assertion to read back.
 struct StubPeerSource {
-    peers: Vec<PeerInferenceEndpoint>,
+    peers: Vec<InferenceVenue>,
     emitter: ContributionEmitter,
 }
 
 #[async_trait]
-impl PeerEndpointSource for StubPeerSource {
-    async fn peer_inference_endpoints(&self) -> Vec<PeerInferenceEndpoint> {
+impl VenueSource for StubPeerSource {
+    async fn candidates(&self) -> Vec<InferenceVenue> {
         self.peers.clone()
     }
+}
 
+#[async_trait]
+impl VenueHost for StubPeerSource {
     async fn ledger_emission_for(
         &self,
         peer_node_id: &NodeId,
@@ -196,7 +199,7 @@ async fn peer_routed_stream_emits_inference_received_on_drop() {
     //    plumbed through `ledger_emission_for` so the routing path
     //    attaches a `LedgerEmission` to the returned stream.
     let peer_node_id = NodeId::from_u128(0xF0F0_F0F0_F0F0_F0F0);
-    let peers = vec![PeerInferenceEndpoint {
+    let peers = vec![InferenceVenue {
         node_id: peer_node_id,
         name: "Founder".into(),
         base_urls: vec![base_url],
@@ -205,9 +208,9 @@ async fn peer_routed_stream_emits_inference_received_on_drop() {
         current_in_flight: None,
         inference_availability: None,
         gossip_last_seen_unix: 0,
-        transport: None,
+        pinned_transport: false,
     }];
-    let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource {
+    let peer_source = Arc::new(StubPeerSource {
         peers,
         emitter: emitter.clone(),
     });
@@ -215,7 +218,7 @@ async fn peer_routed_stream_emits_inference_received_on_drop() {
     // 4. Local stub that loses OICP scoring → request routes to peer.
     let local: Arc<dyn InferenceProvider> =
         Arc::new(TestProvider::new().with_model_id("qwen2.5-3b-instruct-q4_k_m"));
-    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source);
+    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source.clone(), peer_source);
 
     // 5. DeepQuery-shaped request opted into mesh routing.
     let envelope = InferenceRequirements::new()
@@ -320,7 +323,7 @@ async fn peer_route_failure_without_chunks_does_not_emit_ledger_event() {
     let store = MeshStore::in_memory().unwrap();
     let emitter = ContributionEmitter::new(store, self_node);
 
-    let dead_peer = vec![PeerInferenceEndpoint {
+    let dead_peer = vec![InferenceVenue {
         node_id: NodeId::from_u128(0xDEAD_BEEF_DEAD_BEEF),
         name: "Ghost".into(),
         // Port 1 is a reserved low port and won't have a listener
@@ -332,15 +335,15 @@ async fn peer_route_failure_without_chunks_does_not_emit_ledger_event() {
         current_in_flight: None,
         inference_availability: None,
         gossip_last_seen_unix: 0,
-        transport: None,
+        pinned_transport: false,
     }];
-    let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource {
+    let peer_source = Arc::new(StubPeerSource {
         peers: dead_peer,
         emitter: emitter.clone(),
     });
     let local: Arc<dyn InferenceProvider> =
         Arc::new(TestProvider::new().with_model_id("qwen2.5-3b-instruct-q4_k_m"));
-    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source);
+    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source.clone(), peer_source);
 
     let envelope = InferenceRequirements::new()
         .with_hint(CapabilityHint::general())
