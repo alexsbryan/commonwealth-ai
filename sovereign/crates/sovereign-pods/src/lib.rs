@@ -4,3 +4,4 @@
 pub mod worker_http;
 pub mod worker_inference_proxy;
 pub mod worker_pod;
+pub mod worker_subprocess_runner;
