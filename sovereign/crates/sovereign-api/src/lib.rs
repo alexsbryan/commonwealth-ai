@@ -35,7 +35,7 @@ pub mod next_edit_syntax;
 pub use oicp_types::openai_types; // shim: moved by domains dm-wire-openai-types
 pub mod principal;
 pub mod reshaping;
-pub mod responses_types;
+pub use oicp_types::responses_types; // shim: moved by domains dm-wire-responses-types
 pub mod routes_apps;
 pub mod routes_completions;
 pub mod routes_edit_predictions;

@@ -43,6 +43,7 @@ pub mod origin;
 pub mod registry;
 pub mod requirements;
 pub mod response;
+pub mod responses_types;
 pub mod scoring;
 pub mod slot;
 pub mod tenant;
