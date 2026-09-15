@@ -8893,6 +8893,7 @@ dependencies = [
 name = "oicp-types"
 version = "0.1.0"
 dependencies = [
+ "futures",
  "kernel-types",
  "serde",
  "serde_json",

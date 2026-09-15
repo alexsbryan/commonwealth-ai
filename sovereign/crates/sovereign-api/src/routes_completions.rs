@@ -279,6 +279,8 @@ mod tests {
     use axum::body::Body;
     use axum::http::Request;
     use futures::Stream;
+    use sovereign_core::traits::InferenceProvider;
+    use sovereign_core::types::{CompletionRequest, CompletionResponse, ProviderCapabilities};
     use std::pin::Pin;
     use std::sync::{Arc, Mutex};
     use tower::ServiceExt;
@@ -293,6 +295,30 @@ mod tests {
     struct StubFim {
         frames: Vec<StreamFrame>,
         seen: Arc<Mutex<Option<FimCompletionRequest>>>,
+    }
+
+    #[async_trait]
+    impl InferenceProvider for StubFim {
+        async fn complete(
+            &self,
+            _r: &CompletionRequest,
+        ) -> sovereign_core::error::Result<CompletionResponse> {
+            unimplemented!("chat not used in these tests")
+        }
+        async fn complete_stream(
+            &self,
+            _r: &CompletionRequest,
+        ) -> sovereign_core::error::Result<
+            Pin<Box<dyn Stream<Item = sovereign_core::error::Result<String>> + Send>>,
+        > {
+            unimplemented!("chat not used in these tests")
+        }
+        async fn embed(&self, _i: &str) -> sovereign_core::error::Result<Vec<f32>> {
+            unimplemented!()
+        }
+        fn capabilities(&self) -> ProviderCapabilities {
+            unimplemented!()
+        }
     }
 
     #[async_trait]
@@ -315,9 +341,6 @@ mod tests {
         }
         fn provider_manifest(&self) -> Option<sovereign_serving::oicp::ProviderManifest> {
             None
-        }
-        async fn embed(&self, _i: &str) -> Result<Vec<f32>, String> {
-            unimplemented!()
         }
         async fn fim_completion_stream(
             &self,
@@ -347,6 +370,30 @@ mod tests {
 
     struct NoFim;
     #[async_trait]
+    impl InferenceProvider for NoFim {
+        async fn complete(
+            &self,
+            _r: &CompletionRequest,
+        ) -> sovereign_core::error::Result<CompletionResponse> {
+            unimplemented!()
+        }
+        async fn complete_stream(
+            &self,
+            _r: &CompletionRequest,
+        ) -> sovereign_core::error::Result<
+            Pin<Box<dyn Stream<Item = sovereign_core::error::Result<String>> + Send>>,
+        > {
+            unimplemented!()
+        }
+        async fn embed(&self, _i: &str) -> sovereign_core::error::Result<Vec<f32>> {
+            unimplemented!()
+        }
+        fn capabilities(&self) -> ProviderCapabilities {
+            unimplemented!()
+        }
+    }
+
+    #[async_trait]
     impl LocalInferenceService for NoFim {
         async fn chat_completion(
             &self,
@@ -366,9 +413,6 @@ mod tests {
         }
         fn provider_manifest(&self) -> Option<sovereign_serving::oicp::ProviderManifest> {
             None
-        }
-        async fn embed(&self, _i: &str) -> Result<Vec<f32>, String> {
-            unimplemented!()
         }
     }
 

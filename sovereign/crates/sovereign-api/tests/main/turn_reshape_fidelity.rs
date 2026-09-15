@@ -512,6 +512,8 @@ use http_body_util::BodyExt;
 use sovereign_api::openai_types::StreamFrame;
 use sovereign_api::openai_types::{ChatCompletionResponse, ChatMessage, ToolCall};
 use sovereign_api::state::{LocalInferenceError, LocalInferenceService};
+use sovereign_core::traits::InferenceProvider;
+use sovereign_core::types::{CompletionRequest, CompletionResponse, ProviderCapabilities};
 use std::pin::Pin;
 
 /// A response-side pass the gate governs, paired with the name the
@@ -546,6 +548,33 @@ const GATED_RESPONSE_PASSES: [ResponsePass; 2] = [
 struct RespondsWith(ChatCompletionResponse);
 
 #[async_trait::async_trait]
+impl InferenceProvider for RespondsWith {
+    async fn complete(
+        &self,
+        _r: &CompletionRequest,
+    ) -> sovereign_core::error::Result<CompletionResponse> {
+        unimplemented!("embedding is not on this path")
+    }
+
+    async fn complete_stream(
+        &self,
+        _r: &CompletionRequest,
+    ) -> sovereign_core::error::Result<
+        Pin<Box<dyn Stream<Item = sovereign_core::error::Result<String>> + Send>>,
+    > {
+        unimplemented!("streaming provider path is not used here")
+    }
+
+    async fn embed(&self, _i: &str) -> sovereign_core::error::Result<Vec<f32>> {
+        unimplemented!("embedding is not on this path")
+    }
+
+    fn capabilities(&self) -> ProviderCapabilities {
+        unimplemented!()
+    }
+}
+
+#[async_trait::async_trait]
 impl LocalInferenceService for RespondsWith {
     async fn chat_completion(
         &self,
@@ -563,10 +592,6 @@ impl LocalInferenceService for RespondsWith {
 
     fn provider_manifest(&self) -> Option<sovereign_serving::oicp::ProviderManifest> {
         None
-    }
-
-    async fn embed(&self, _i: &str) -> Result<Vec<f32>, String> {
-        unimplemented!("embedding is not on this path")
     }
 }
 

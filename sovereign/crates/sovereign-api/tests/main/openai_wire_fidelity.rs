@@ -25,6 +25,8 @@ use futures::Stream;
 use sovereign_api::openai_types::{ChatCompletionRequest, ChatCompletionResponse, StreamFrame};
 use sovereign_api::routes_inference::chat_completions;
 use sovereign_api::state::{AppState, LocalInferenceError, LocalInferenceService};
+use sovereign_core::traits::InferenceProvider;
+use sovereign_core::types::{CompletionRequest, CompletionResponse, ProviderCapabilities};
 
 /// Minimal single-member mesh, the shape `AppState::new` wants. Mirrors
 /// `tests/app_state_privacy.rs` — an integration test cannot reach the
@@ -100,6 +102,33 @@ impl CapturesRequest {
 }
 
 #[async_trait::async_trait]
+impl InferenceProvider for CapturesRequest {
+    async fn complete(
+        &self,
+        _r: &CompletionRequest,
+    ) -> sovereign_core::error::Result<CompletionResponse> {
+        unimplemented!("embedding is not on this path")
+    }
+
+    async fn complete_stream(
+        &self,
+        _r: &CompletionRequest,
+    ) -> sovereign_core::error::Result<
+        Pin<Box<dyn Stream<Item = sovereign_core::error::Result<String>> + Send>>,
+    > {
+        unimplemented!("streaming provider path is not used here")
+    }
+
+    async fn embed(&self, _i: &str) -> sovereign_core::error::Result<Vec<f32>> {
+        unimplemented!("embedding is not on this path")
+    }
+
+    fn capabilities(&self) -> ProviderCapabilities {
+        unimplemented!()
+    }
+}
+
+#[async_trait::async_trait]
 impl LocalInferenceService for CapturesRequest {
     async fn chat_completion(
         &self,
@@ -119,10 +148,6 @@ impl LocalInferenceService for CapturesRequest {
 
     fn provider_manifest(&self) -> Option<sovereign_serving::oicp::ProviderManifest> {
         None
-    }
-
-    async fn embed(&self, _i: &str) -> Result<Vec<f32>, String> {
-        unimplemented!("embedding is not on this path")
     }
 }
 

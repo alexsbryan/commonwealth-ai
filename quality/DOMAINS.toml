@@ -1127,6 +1127,12 @@ lines = 949
 note = "the OpenAI wire vocabulary; published language living in an application crate"
 
 [[module]]
+path = "oicp-types/src/inference_service.rs"
+context = "kernel"
+lines = 164
+note = "the local inference service wire vocabulary (FIM request/stream, edit-slot status, shed error); moved down by domains REVIEW-build-local-inference"
+
+[[module]]
 path = "sovereign/crates/sovereign-api/src/principal.rs"
 context = "serving"
 lines = 375

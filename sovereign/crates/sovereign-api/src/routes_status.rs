@@ -43,7 +43,7 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
     // residency via the `llama_addr:` store keys below, so this only
     // ADDS truth for the embedded/desktop path, never removes it.
     let resident: Vec<crate::state::ResidentSlot> = match &state.inner.local_inference {
-        Some(svc) => svc.resident_slots(),
+        Some(svc) => svc.resident_slots().into_iter().map(Into::into).collect(),
         None => Vec::new(),
     };
 
@@ -52,7 +52,7 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
     // `[compute]` pools are configured.
     let compute_children: Vec<crate::state::ComputeChildStatus> = match &state.inner.local_inference
     {
-        Some(svc) => svc.compute_children(),
+        Some(svc) => svc.compute_children().into_iter().map(Into::into).collect(),
         None => Vec::new(),
     };
 

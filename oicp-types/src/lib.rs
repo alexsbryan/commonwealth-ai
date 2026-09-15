@@ -32,6 +32,7 @@ pub mod error;
 // privacy true rather than intended — a `git grep` before the move found zero
 // consumers outside the module that travels with it.
 mod glob;
+pub mod inference_service;
 pub mod ingest;
 pub mod job;
 pub mod jsonrpc;
@@ -71,6 +72,9 @@ pub use tool::{Effect, Idempotency, Latency, Scope, ToolDescriptor, ToolExample}
 pub use capability::{
     infer_hint_from_profile, proficiency, Capability, CapabilityClaim, CapabilityHint,
     CapabilityProfile, InvalidCapabilityHint, LatencyClass, ProficiencyLevel,
+};
+pub use inference_service::{
+    EditSlotStatus, FimCompletionRequest, FimStreamStart, LocalInferenceError,
 };
 pub use ingest::{
     CorpusIngestProgress, CorpusInstallRequest, CorpusInstallResponse, CorpusProgressResponse,

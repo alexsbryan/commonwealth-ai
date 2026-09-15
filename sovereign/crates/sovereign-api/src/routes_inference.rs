@@ -990,7 +990,7 @@ async fn store_rows(state: &AppState) -> Vec<ModelObject> {
     // which the `llama_addr:` store key can't answer on the embedded
     // path — never removes the orchestrator signal.
     let resident: Vec<crate::state::ResidentSlot> = match &state.inner.local_inference {
-        Some(svc) => svc.resident_slots(),
+        Some(svc) => svc.resident_slots().into_iter().map(Into::into).collect(),
         None => Vec::new(),
     };
 
@@ -1734,6 +1734,8 @@ mod shed_rendering_tests {
     use crate::state::{test_app_state, LocalInferenceError, LocalInferenceService};
     use axum::http::header::RETRY_AFTER;
     use futures::Stream;
+    use sovereign_core::traits::InferenceProvider;
+    use sovereign_core::types::{CompletionRequest, CompletionResponse, ProviderCapabilities};
     use std::pin::Pin;
     use std::sync::Arc;
 
@@ -1748,6 +1750,30 @@ mod shed_rendering_tests {
                 predicted_wait_ms: 34_746,
                 retry_after_secs: 35,
             }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl InferenceProvider for AlwaysSheds {
+        async fn complete(
+            &self,
+            _r: &CompletionRequest,
+        ) -> sovereign_core::error::Result<CompletionResponse> {
+            unimplemented!("chat not used on the shed path")
+        }
+        async fn complete_stream(
+            &self,
+            _r: &CompletionRequest,
+        ) -> sovereign_core::error::Result<
+            Pin<Box<dyn Stream<Item = sovereign_core::error::Result<String>> + Send>>,
+        > {
+            unimplemented!("chat not used on the shed path")
+        }
+        async fn embed(&self, _i: &str) -> sovereign_core::error::Result<Vec<f32>> {
+            unimplemented!("embedding is not on the shed path")
+        }
+        fn capabilities(&self) -> ProviderCapabilities {
+            unimplemented!()
         }
     }
 
@@ -1767,9 +1793,6 @@ mod shed_rendering_tests {
         }
         fn provider_manifest(&self) -> Option<sovereign_serving::oicp::ProviderManifest> {
             None
-        }
-        async fn embed(&self, _i: &str) -> Result<Vec<f32>, String> {
-            unimplemented!("embedding is not on the shed path")
         }
     }
 
@@ -1896,6 +1919,8 @@ mod list_models_tests {
     use super::*;
     use crate::state::{test_app_state, LocalInferenceError, LocalInferenceService};
     use futures::Stream;
+    use sovereign_core::traits::InferenceProvider;
+    use sovereign_core::types::{CompletionRequest, CompletionResponse, ProviderCapabilities};
     use sovereign_serving::oicp::{ModelStatus, ProviderManifest, ProviderModel};
     use std::pin::Pin;
     use std::sync::Arc;
@@ -1922,6 +1947,40 @@ mod list_models_tests {
     /// A node whose manifest carries `local`, and whose one reachable peer
     /// carries `shared` (which it also holds, cold) plus `peer-only`.
     struct TwoNodeMesh;
+
+    #[async_trait::async_trait]
+    impl InferenceProvider for TwoNodeMesh {
+        async fn complete(
+            &self,
+            _r: &CompletionRequest,
+        ) -> sovereign_core::error::Result<CompletionResponse> {
+            unimplemented!("listing does not generate")
+        }
+        async fn complete_stream(
+            &self,
+            _r: &CompletionRequest,
+        ) -> sovereign_core::error::Result<
+            Pin<Box<dyn Stream<Item = sovereign_core::error::Result<String>> + Send>>,
+        > {
+            unimplemented!("listing does not generate")
+        }
+        async fn embed(&self, _i: &str) -> sovereign_core::error::Result<Vec<f32>> {
+            unimplemented!("listing does not embed")
+        }
+        fn capabilities(&self) -> ProviderCapabilities {
+            unimplemented!()
+        }
+        async fn peer_manifests(&self) -> Vec<(String, ProviderManifest)> {
+            vec![(
+                "RuggedFox".into(),
+                ProviderManifest::new(vec![
+                    // Same name, other machine, and WARM there.
+                    model("shared-primary", true),
+                    model("peer-only", true),
+                ]),
+            )]
+        }
+    }
 
     #[async_trait::async_trait]
     impl LocalInferenceService for TwoNodeMesh {
@@ -1952,25 +2011,12 @@ mod list_models_tests {
         ) -> Result<Pin<Box<dyn Stream<Item = StreamFrame> + Send>>, LocalInferenceError> {
             unimplemented!("listing does not generate")
         }
-        async fn embed(&self, _i: &str) -> Result<Vec<f32>, String> {
-            unimplemented!("listing does not embed")
-        }
         fn provider_manifest(&self) -> Option<ProviderManifest> {
             Some(ProviderManifest::new(vec![
                 model("local-fast", true),
                 // Held here, idle-unloaded. The lazy primary's steady state.
                 model("shared-primary", false),
             ]))
-        }
-        async fn peer_manifests(&self) -> Vec<(String, ProviderManifest)> {
-            vec![(
-                "RuggedFox".into(),
-                ProviderManifest::new(vec![
-                    // Same name, other machine, and WARM there.
-                    model("shared-primary", true),
-                    model("peer-only", true),
-                ]),
-            )]
         }
     }
 
@@ -2083,6 +2129,29 @@ mod list_models_tests {
     async fn a_held_but_unloaded_model_lists_as_cold_not_missing() {
         struct ColdOnly;
         #[async_trait::async_trait]
+        impl InferenceProvider for ColdOnly {
+            async fn complete(
+                &self,
+                _r: &CompletionRequest,
+            ) -> sovereign_core::error::Result<CompletionResponse> {
+                unimplemented!()
+            }
+            async fn complete_stream(
+                &self,
+                _r: &CompletionRequest,
+            ) -> sovereign_core::error::Result<
+                Pin<Box<dyn Stream<Item = sovereign_core::error::Result<String>> + Send>>,
+            > {
+                unimplemented!()
+            }
+            async fn embed(&self, _i: &str) -> sovereign_core::error::Result<Vec<f32>> {
+                unimplemented!()
+            }
+            fn capabilities(&self) -> ProviderCapabilities {
+                unimplemented!()
+            }
+        }
+        #[async_trait::async_trait]
         impl LocalInferenceService for ColdOnly {
             async fn chat_completion(
                 &self,
@@ -2095,9 +2164,6 @@ mod list_models_tests {
                 _r: ChatCompletionRequest,
             ) -> Result<Pin<Box<dyn Stream<Item = StreamFrame> + Send>>, LocalInferenceError>
             {
-                unimplemented!()
-            }
-            async fn embed(&self, _i: &str) -> Result<Vec<f32>, String> {
                 unimplemented!()
             }
             fn provider_manifest(&self) -> Option<ProviderManifest> {

@@ -151,7 +151,7 @@ pub async fn models_load(
     let ctx_size = req.context_size.unwrap_or(16_384);
     match service
         .load_extra_slot(req.slot_name.clone(), req.path.clone(), ctx_size)
-        .await
+        .map_err(|e| format!("{e}"))
     {
         Ok(model_id) => {
             // Reflect the new slot in the inference store so
@@ -256,7 +256,10 @@ pub async fn models_unload(
             "no local inference service is bound".to_string(),
         ));
     };
-    match service.unload_extra_slot(&req.slot_name).await {
+    match service
+        .unload_extra_slot(&req.slot_name)
+        .map_err(|e| format!("{e}"))
+    {
         Ok(Some(model_id)) => {
             deregister_extras_from_store(&state, &model_id);
             Ok(Json(UnloadModelResponse {
@@ -303,7 +306,7 @@ pub async fn inference_warmup(
     service
         .warmup_primary()
         .await
-        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e))?;
+        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("{e}")))?;
     let latency_ms = started.elapsed().as_millis() as u64;
     Ok(Json(WarmupResponse { latency_ms }))
 }
@@ -314,7 +317,7 @@ pub async fn models_inventory(State(state): State<AppState>) -> Json<InventoryRe
     let Some(service) = state.inner.local_inference.as_ref() else {
         return Json(InventoryResponse { extras: Vec::new() });
     };
-    let inventory = service.extras_inventory().await;
+    let inventory = service.extras_inventory();
     Json(InventoryResponse {
         extras: inventory
             .into_iter()
@@ -846,6 +849,68 @@ mod tests {
     }
 
     #[async_trait::async_trait]
+    impl sovereign_core::traits::InferenceProvider for StubLocalInference {
+        async fn complete(
+            &self,
+            _request: &sovereign_core::types::CompletionRequest,
+        ) -> sovereign_core::error::Result<sovereign_core::types::CompletionResponse> {
+            Err(sovereign_core::error::Error::Inference("stub".into()))
+        }
+
+        async fn complete_stream(
+            &self,
+            _request: &sovereign_core::types::CompletionRequest,
+        ) -> sovereign_core::error::Result<
+            std::pin::Pin<
+                Box<dyn futures::Stream<Item = sovereign_core::error::Result<String>> + Send>,
+            >,
+        > {
+            Err(sovereign_core::error::Error::Inference("stub".into()))
+        }
+
+        async fn embed(&self, _input: &str) -> sovereign_core::error::Result<Vec<f32>> {
+            Err(sovereign_core::error::Error::Inference("stub".into()))
+        }
+
+        fn capabilities(&self) -> sovereign_core::types::ProviderCapabilities {
+            unimplemented!()
+        }
+
+        fn load_extra_slot(
+            &self,
+            slot_name: String,
+            path: std::path::PathBuf,
+            context_size: u32,
+        ) -> sovereign_core::error::Result<String> {
+            self.load_calls
+                .lock()
+                .unwrap()
+                .push((slot_name.clone(), path.clone(), context_size));
+            self.load_response
+                .clone()
+                .map_err(sovereign_core::error::Error::Inference)
+        }
+
+        fn unload_extra_slot(
+            &self,
+            slot_name: &str,
+        ) -> sovereign_core::error::Result<Option<String>> {
+            self.unload_calls.lock().unwrap().push(slot_name.into());
+            // Stub returns Some(...) for any slot in inventory, None
+            // otherwise.
+            Ok(self
+                .inventory
+                .iter()
+                .find(|(name, _)| name == slot_name)
+                .map(|(_, mid)| mid.clone()))
+        }
+
+        fn extras_inventory(&self) -> Vec<(String, String)> {
+            self.inventory.clone()
+        }
+    }
+
+    #[async_trait::async_trait]
     impl crate::state::LocalInferenceService for StubLocalInference {
         async fn chat_completion(
             &self,
@@ -867,38 +932,6 @@ mod tests {
 
         fn provider_manifest(&self) -> Option<sovereign_serving::oicp::ProviderManifest> {
             None
-        }
-
-        async fn embed(&self, _input: &str) -> Result<Vec<f32>, String> {
-            Err("stub".into())
-        }
-
-        async fn load_extra_slot(
-            &self,
-            slot_name: String,
-            path: std::path::PathBuf,
-            context_size: u32,
-        ) -> Result<String, String> {
-            self.load_calls
-                .lock()
-                .unwrap()
-                .push((slot_name.clone(), path.clone(), context_size));
-            self.load_response.clone()
-        }
-
-        async fn unload_extra_slot(&self, slot_name: &str) -> Result<Option<String>, String> {
-            self.unload_calls.lock().unwrap().push(slot_name.into());
-            // Stub returns Some(...) for any slot in inventory, None
-            // otherwise.
-            Ok(self
-                .inventory
-                .iter()
-                .find(|(name, _)| name == slot_name)
-                .map(|(_, mid)| mid.clone()))
-        }
-
-        async fn extras_inventory(&self) -> Vec<(String, String)> {
-            self.inventory.clone()
         }
     }
 

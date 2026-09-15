@@ -868,6 +868,8 @@ mod tests {
 
     use crate::openai_types::{ChatChoice, ChatCompletionResponse, ChatMessage, StreamFrame};
     use crate::state::{test_app_state, EditSlotStatus, LocalInferenceService};
+    use sovereign_core::traits::InferenceProvider;
+    use sovereign_core::types::{CompletionRequest, CompletionResponse, ProviderCapabilities};
 
     async fn post_to(
         app: axum::Router,
@@ -908,6 +910,30 @@ mod tests {
     }
 
     #[async_trait]
+    impl InferenceProvider for StubChat {
+        async fn complete(
+            &self,
+            _r: &CompletionRequest,
+        ) -> sovereign_core::error::Result<CompletionResponse> {
+            unimplemented!("chat not used in these tests")
+        }
+        async fn complete_stream(
+            &self,
+            _r: &CompletionRequest,
+        ) -> sovereign_core::error::Result<
+            Pin<Box<dyn Stream<Item = sovereign_core::error::Result<String>> + Send>>,
+        > {
+            unimplemented!("chat not used in these tests")
+        }
+        async fn embed(&self, _i: &str) -> sovereign_core::error::Result<Vec<f32>> {
+            unimplemented!()
+        }
+        fn capabilities(&self) -> ProviderCapabilities {
+            unimplemented!()
+        }
+    }
+
+    #[async_trait]
     impl LocalInferenceService for StubChat {
         async fn chat_completion(
             &self,
@@ -937,9 +963,6 @@ mod tests {
         }
         fn provider_manifest(&self) -> Option<sovereign_serving::oicp::ProviderManifest> {
             None
-        }
-        async fn embed(&self, _i: &str) -> Result<Vec<f32>, String> {
-            unimplemented!()
         }
         fn edit_status(&self) -> Option<EditSlotStatus> {
             Some(EditSlotStatus {
@@ -1323,6 +1346,29 @@ mod tests {
     async fn a_consult_in_flight_holds_the_slot() {
         struct SlowChat;
         #[async_trait]
+        impl InferenceProvider for SlowChat {
+            async fn complete(
+                &self,
+                _r: &CompletionRequest,
+            ) -> sovereign_core::error::Result<CompletionResponse> {
+                unimplemented!()
+            }
+            async fn complete_stream(
+                &self,
+                _r: &CompletionRequest,
+            ) -> sovereign_core::error::Result<
+                Pin<Box<dyn Stream<Item = sovereign_core::error::Result<String>> + Send>>,
+            > {
+                unimplemented!()
+            }
+            async fn embed(&self, _i: &str) -> sovereign_core::error::Result<Vec<f32>> {
+                unimplemented!()
+            }
+            fn capabilities(&self) -> ProviderCapabilities {
+                unimplemented!()
+            }
+        }
+        #[async_trait]
         impl LocalInferenceService for SlowChat {
             async fn chat_completion(
                 &self,
@@ -1342,9 +1388,6 @@ mod tests {
             }
             fn provider_manifest(&self) -> Option<sovereign_serving::oicp::ProviderManifest> {
                 None
-            }
-            async fn embed(&self, _i: &str) -> Result<Vec<f32>, String> {
-                unimplemented!()
             }
             fn edit_status(&self) -> Option<EditSlotStatus> {
                 Some(EditSlotStatus {

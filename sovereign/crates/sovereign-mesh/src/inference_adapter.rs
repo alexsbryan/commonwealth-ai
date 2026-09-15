@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Adapter: `sovereign_core::traits::InferenceProvider` →
-//! `sovereign_api::state::LocalInferenceService`.
+//! `sovereign_core::traits::LocalInferenceService`.
 //!
 //! Why this exists: Commonwealth's HTTP handlers speak OpenAI-style
 //! `ChatCompletionRequest`/`Response`; Sovereign's runtime speaks
@@ -25,13 +25,18 @@ use oicp_types::openai_types::{
     self as wire, ChatChoice, ChatCompletionRequest, ChatCompletionResponse, ChatMessage,
     FunctionCall, Role, ToolCall, Usage,
 };
-use sovereign_api::state::{LocalInferenceError, LocalInferenceService};
-use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::{
-    CompletionRequest, FinishReason as CoreFinishReason, StreamFrame as CoreStreamFrame,
-    StreamUsage as CoreStreamUsage,
+use oicp_types::{
+    EditSlotStatus, FimCompletionRequest, FimStreamStart, LocalInferenceError, ProviderManifest,
+    SlotDecodeEvidence,
 };
-use sovereign_serving::oicp::ProviderManifest;
+use sovereign_core::error::Result as CoreResult;
+use sovereign_core::traits::{
+    ComputeChildStatus, InferenceProvider, LocalInferenceService, ResidentSlot, ServingLocus,
+};
+use sovereign_core::types::{
+    CompletionRequest, CompletionResponse, EditSlotInfo, FinishReason as CoreFinishReason,
+    ProviderCapabilities, Speed, StreamFrame as CoreStreamFrame, StreamUsage as CoreStreamUsage,
+};
 
 /// Translate `sovereign_core` stream framing into the wire shape
 /// `LocalInferenceService::chat_completion_stream` exposes. The two
@@ -1415,41 +1420,6 @@ impl LocalInferenceService for SovereignInferenceAdapter {
         ))
     }
 
-    /// Straight delegation. The provider installed here is the
-    /// `MeshInferenceProvider`, which is the only thing on this node that
-    /// knows which peers a named request can reach; every other provider
-    /// inherits the empty default and `/v1/models` correctly lists local
-    /// slots only.
-    async fn peer_manifests(&self) -> Vec<(String, ProviderManifest)> {
-        self.provider.peer_manifests().await
-    }
-
-    /// Straight delegation, same reasoning: the `MeshInferenceProvider` is
-    /// the only thing here that holds a guest link, and without this hop the
-    /// listing inherits the empty default while `locate_named_model` happily
-    /// routes the ids — the omission the listing contract forbids.
-    async fn lender_manifest(&self) -> Option<(String, Vec<String>)> {
-        self.provider.lender_manifest().await
-    }
-
-    async fn embed(&self, input: &str) -> Result<Vec<f32>, String> {
-        // Delegate to the underlying provider's EmbedSlot. The
-        // commonwealth-api handler wraps the returned vector in an
-        // OpenAI-shape `EmbeddingResponse`.
-        self.provider.embed(input).await.map_err(|e| format!("{e}"))
-    }
-
-    async fn embed_batch(&self, inputs: &[String]) -> Result<Vec<Vec<f32>>, String> {
-        // Delegate to the provider's batch path — a single multi-sequence
-        // decode on the embedded engine, or sharded across compute-child
-        // replicas by the routing facade. Beats the handler's per-input
-        // sequential loop for bulk `/v1/embeddings`.
-        self.provider
-            .embed_batch(inputs)
-            .await
-            .map_err(|e| format!("{e}"))
-    }
-
     // ── FIM inline completion (INLINE_COMPLETION.md) ─────────────
     //
     // Thin delegation to `fim_adapter` — all prompt assembly, slot
@@ -1458,100 +1428,165 @@ impl LocalInferenceService for SovereignInferenceAdapter {
 
     async fn fim_completion_stream(
         &self,
-        request: sovereign_api::state::FimCompletionRequest,
-    ) -> Result<sovereign_api::state::FimStreamStart, String> {
+        request: FimCompletionRequest,
+    ) -> Result<FimStreamStart, String> {
         crate::fim_adapter::fim_completion_stream(&self.provider, request).await
     }
 
-    fn edit_status(&self) -> Option<sovereign_api::state::EditSlotStatus> {
+    fn edit_status(&self) -> Option<EditSlotStatus> {
         crate::fim_adapter::edit_status(&self.provider)
     }
+}
 
-    // ── Runtime slot management ─────────────────────────────────
-    //
-    // These delegate to the InferenceProvider trait, which has
-    // default `Err(...)` implementations for non-embedded providers
-    // (remote API, mesh peer). Only `EmbeddedLlamaCpp` overrides
-    // them. The HTTP handler returns 501/400 when the underlying
-    // provider can't service the request.
+/// The adapter is an [`InferenceProvider`] in its own right, forwarding every
+/// method to the wrapped provider. The collapsed port
+/// ([`LocalInferenceService`]) extends this trait, so the routes reach the
+/// eleven shared methods — `embed`, `resident_slots`, `peer_manifests`, … —
+/// through the supertrait exactly as they reached them through the old
+/// `sovereign_core::traits` trait. Every method delegates rather than inheriting
+/// a default, so the wrapper cannot silently diverge from the provider it
+/// fronts.
+#[async_trait]
+impl InferenceProvider for SovereignInferenceAdapter {
+    async fn complete(&self, request: &CompletionRequest) -> CoreResult<CompletionResponse> {
+        self.provider.complete(request).await
+    }
 
-    async fn load_extra_slot(
+    async fn complete_stream(
+        &self,
+        request: &CompletionRequest,
+    ) -> CoreResult<Pin<Box<dyn Stream<Item = CoreResult<String>> + Send>>> {
+        self.provider.complete_stream(request).await
+    }
+
+    async fn complete_stream_with_id(
+        &self,
+        request: &CompletionRequest,
+    ) -> CoreResult<(
+        Pin<Box<dyn Stream<Item = CoreResult<String>> + Send>>,
+        String,
+    )> {
+        self.provider.complete_stream_with_id(request).await
+    }
+
+    async fn complete_stream_with_finish(
+        &self,
+        request: &CompletionRequest,
+    ) -> CoreResult<Pin<Box<dyn Stream<Item = CoreStreamFrame> + Send>>> {
+        self.provider.complete_stream_with_finish(request).await
+    }
+
+    async fn complete_stream_with_id_and_finish(
+        &self,
+        request: &CompletionRequest,
+    ) -> CoreResult<(Pin<Box<dyn Stream<Item = CoreStreamFrame> + Send>>, String)> {
+        self.provider
+            .complete_stream_with_id_and_finish(request)
+            .await
+    }
+
+    async fn embed(&self, text: &str) -> CoreResult<Vec<f32>> {
+        self.provider.embed(text).await
+    }
+
+    async fn embed_batch(&self, texts: &[String]) -> CoreResult<Vec<Vec<f32>>> {
+        self.provider.embed_batch(texts).await
+    }
+
+    async fn complete_batch(
+        &self,
+        requests: &[CompletionRequest],
+    ) -> CoreResult<Vec<CompletionResponse>> {
+        self.provider.complete_batch(requests).await
+    }
+
+    async fn embed_query(&self, query: &str) -> CoreResult<Vec<f32>> {
+        self.provider.embed_query(query).await
+    }
+
+    async fn rerank_batch(&self, query: &str, docs: &[String]) -> CoreResult<Vec<f32>> {
+        self.provider.rerank_batch(query, docs).await
+    }
+
+    fn model_id_for(&self, speed: Speed) -> String {
+        self.provider.model_id_for(speed)
+    }
+
+    fn embed_model_id(&self) -> String {
+        self.provider.embed_model_id()
+    }
+
+    fn serving_locus(&self) -> ServingLocus {
+        self.provider.serving_locus()
+    }
+
+    fn effective_context_size(&self) -> Option<u32> {
+        self.provider.effective_context_size()
+    }
+
+    fn n_ctx_train_for_primary(&self) -> Option<u32> {
+        self.provider.n_ctx_train_for_primary()
+    }
+
+    fn count_tokens(&self, text: &str) -> u32 {
+        self.provider.count_tokens(text)
+    }
+
+    fn code_model_id(&self) -> Option<String> {
+        self.provider.code_model_id()
+    }
+
+    fn edit_slot_info(&self) -> Option<EditSlotInfo> {
+        self.provider.edit_slot_info()
+    }
+
+    async fn warmup_primary(&self) -> CoreResult<()> {
+        self.provider.warmup_primary().await
+    }
+
+    fn capabilities(&self) -> ProviderCapabilities {
+        self.provider.capabilities()
+    }
+
+    fn load_extra_slot(
         &self,
         slot_name: String,
         path: std::path::PathBuf,
         context_size: u32,
-    ) -> Result<String, String> {
-        self.provider
-            .load_extra_slot(slot_name, path, context_size)
-            .map_err(|e| format!("{e}"))
+    ) -> CoreResult<String> {
+        self.provider.load_extra_slot(slot_name, path, context_size)
     }
 
-    async fn unload_extra_slot(&self, slot_name: &str) -> Result<Option<String>, String> {
-        self.provider
-            .unload_extra_slot(slot_name)
-            .map_err(|e| format!("{e}"))
+    fn unload_extra_slot(&self, slot_name: &str) -> CoreResult<Option<String>> {
+        self.provider.unload_extra_slot(slot_name)
     }
 
-    async fn extras_inventory(&self) -> Vec<(String, String)> {
+    fn extras_inventory(&self) -> Vec<(String, String)> {
         self.provider.extras_inventory()
     }
 
-    fn resident_slots(&self) -> Vec<sovereign_api::state::ResidentSlot> {
-        // Map the sovereign engine's residency report across the
-        // api-crate seam (commonwealth-api can't depend on
-        // sovereign-contracts, so the two ResidentSlot types are
-        // distinct-but-identical and copied field-for-field here).
-        self.provider
-            .resident_slots()
-            .into_iter()
-            .map(|s| sovereign_api::state::ResidentSlot {
-                role: s.role,
-                model_id: s.model_id,
-                resident: s.resident,
-                size_bytes: s.size_bytes,
-                transitioning: s.transitioning,
-                placement: s.placement.map(|p| sovereign_api::state::SlotPlacement {
-                    mode: p.mode,
-                    total_blocks: p.total_blocks,
-                    local_blocks: p.local_blocks,
-                    workers: p
-                        .workers
-                        .into_iter()
-                        .map(|w| sovereign_api::state::WorkerPlacement {
-                            endpoint: w.endpoint,
-                            blocks: w.blocks,
-                            holds_output: w.holds_output,
-                        })
-                        .collect(),
-                }),
-            })
-            .collect()
+    fn resident_slots(&self) -> Vec<ResidentSlot> {
+        self.provider.resident_slots()
     }
 
-    fn compute_children(&self) -> Vec<sovereign_api::state::ComputeChildStatus> {
-        // Map the compute-child statuses across the api-crate seam (same
-        // copied-type convention as `resident_slots` above).
-        self.provider
-            .compute_children()
-            .into_iter()
-            .map(|c| sovereign_api::state::ComputeChildStatus {
-                name: c.name,
-                role: c.role,
-                model_id: c.model_id,
-                lifecycle: c.lifecycle,
-                port: c.port,
-                restarts: c.restarts,
-                last_transition_reason: c.last_transition_reason,
-                last_exit: c.last_exit,
-            })
-            .collect()
+    fn decode_evidence(&self) -> Vec<SlotDecodeEvidence> {
+        self.provider.decode_evidence()
     }
 
-    async fn warmup_primary(&self) -> Result<(), String> {
-        self.provider
-            .warmup_primary()
-            .await
-            .map_err(|e| format!("{e}"))
+    async fn primary_slot_status(&self) -> Option<ResidentSlot> {
+        self.provider.primary_slot_status().await
+    }
+
+    fn compute_children(&self) -> Vec<ComputeChildStatus> {
+        self.provider.compute_children()
+    }
+
+    async fn peer_manifests(&self) -> Vec<(String, ProviderManifest)> {
+        self.provider.peer_manifests().await
+    }
+
+    async fn lender_manifest(&self) -> Option<(String, Vec<String>)> {
+        self.provider.lender_manifest().await
     }
 }
 
