@@ -154,27 +154,6 @@ impl InferenceStateStore {
             .and_then(|e| serde_json::from_slice(&e.value).ok())
     }
 
-    // ── Tier queue depths ──────────────────────────────────────────
-
-    /// Write per-node queue depths for tier routing decisions.
-    pub fn set_queue_depths(&self, depths: &crate::plan::TierQueueDepths) {
-        let key = format!("queue_depth:{}", node_id_hex(self.node_id));
-        if let Ok(bytes) = serde_json::to_vec(depths) {
-            let _ = self
-                .store
-                .set(APP_ID, &key, Bytes::from(bytes), self.node_id);
-        }
-    }
-
-    pub fn all_queue_depths(&self) -> Vec<crate::plan::TierQueueDepths> {
-        self.store
-            .scan(APP_ID, "queue_depth:")
-            .unwrap_or_default()
-            .into_iter()
-            .filter_map(|e| serde_json::from_slice(&e.value).ok())
-            .collect()
-    }
-
     // ── llama-server addresses ───────────────────────────────────────
 
     pub fn get_llama_address(&self, model_id: ModelId) -> Option<String> {

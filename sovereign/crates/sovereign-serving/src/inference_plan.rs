@@ -50,26 +50,6 @@ impl LayerRange {
     }
 }
 
-/// State machine for graceful model transitions.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ModelTransition {
-    pub outgoing: ShardPlan,
-    pub incoming: ShardPlan,
-    pub state: TransitionState,
-}
-
-/// Current phase of a model transition.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum TransitionState {
-    /// New model loading. Old model still serving.
-    Loading,
-    /// New model loaded. Draining old model.
-    Ready,
-    /// Old model unloaded. Transition complete.
-    Complete,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -106,30 +86,5 @@ mod tests {
         let back: ShardPlan = serde_json::from_str(&json).unwrap();
         assert_eq!(back.assignments.len(), 1);
         assert_eq!(back.assignments[0].layers.count(), 32);
-    }
-
-    /// Ported from `commonwealth_core::scheduler` when that fork was deleted
-    /// (2026-09-03). It was the ONE test the dead copy had and this live copy
-    /// did not — the same asymmetry `lib.rs:3-13` records for `model`,
-    /// `model_aliases` and `oicp_registry`: "core's 13 tests covered a copy
-    /// nobody ran and the copy everyone ran had one."
-    ///
-    /// It is a real gate, not a tautology: `TransitionState` rides
-    /// `InferencePlan` over the wire (`commonwealth-api`
-    /// `routes_internal/gossip.rs:206` takes `Json<InferencePlan>`), so a
-    /// serde asymmetry is a mesh wire break with nothing else red. Watched
-    /// failing on `#[serde(rename = "ready")]` over `Loading`, which makes two
-    /// variants share one wire token: `Ready` came back as `Loading`.
-    #[test]
-    fn transition_state_serde_roundtrip() {
-        for state in [
-            TransitionState::Loading,
-            TransitionState::Ready,
-            TransitionState::Complete,
-        ] {
-            let json = serde_json::to_string(&state).unwrap();
-            let back: TransitionState = serde_json::from_str(&json).unwrap();
-            assert_eq!(state, back);
-        }
     }
 }

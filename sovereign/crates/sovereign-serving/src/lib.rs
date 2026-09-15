@@ -25,9 +25,7 @@ pub mod scheduler;
 pub use commonwealth_core::{Error, Result};
 
 // Convenient re-exports for callers.
-pub use inference_plan::{
-    InferencePlan, LayerRange, ModelTransition, ShardAssignment, ShardPlan, TransitionState,
-};
+pub use inference_plan::{InferencePlan, LayerRange, ShardAssignment, ShardPlan};
 pub use model::{ModelArchitecture, ModelAvailability, ModelInfo};
 pub use model_aliases::{AliasResolution, ModelAliasConfig, ModelAliasTable};
 pub use oicp::{
@@ -35,8 +33,5 @@ pub use oicp::{
     KnowledgeResult, KnowledgeSearchRequest, KnowledgeSearchResponse, LatencyClass, MatchQuality,
     OicpResponseMeta, ProviderManifest, ProviderModel, ShardingPrivacy, OICP_VERSION,
 };
-pub use plan::{
-    LoadPolicy, MeshPlan, NodeRole, PlanTrigger, RequestRouter, RoutingCondition, RoutingRule,
-    SchedulingStrategy, Tier, TierQueueDepths, UnavailableReason,
-};
+pub use plan::MeshPlan;
 pub use store_adapter::{InferenceStateStore, INFERENCE_APP_ID};
