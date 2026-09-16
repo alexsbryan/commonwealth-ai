@@ -366,10 +366,7 @@ fn oicp_request() -> CompletionRequest {
 }
 
 fn now_unix_secs() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
+    sovereign_time::unix_now_u64()
 }
 
 /// Replay every decision in the capture and return the aggregate report.

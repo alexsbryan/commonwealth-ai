@@ -552,3 +552,96 @@ absent from the closure); TEST(sovereign-serving-host) exit=0 (226 pass);
 TEST(sovereign-mesh) exit=0 (831 pass); TEST(oicp-types) 189, TEST(sovereign-contracts)
 423, TEST(sovereign-inference) 439 — all 0 fail. `scripts/serving-lift.sh --sandbox`
 exit=0, VERDICT 0 (the embed above), on toolchain 1.95.0.
+
+## REVIEW-audit-8 — the serving knot, end to end
+
+Range audited: `git log 731f78548..HEAD` (the previous audit's hash) — the peg
+empty, the daemon repoint, the lift harness, the inference-edge drop, the
+leaf-embed injection seam, and the D1 demo. Checks: TESTALL exit=0 (13345 pass,
+0 fail); PREPUSH exit=0 (arch-gate, clock-gate, rustfmt cleared below; size-gate
+is the advisory `warn_gate`).
+
+The row's claims, verified:
+
+- **`boundary-gate` GREEN for `serving` with at most the two grandfathered
+  exceptions.** `cargo xtask boundary-gate`: "serving 3/3 crates present … ✓
+  every declared package reaches only itself + the shared leaves", exit 0. The
+  `sovereign-serving-host → sovereign-inference` exception was deleted by
+  `REVIEW-build-serving-drop-inference`; `quality/ARCH_LAYERS.toml:1238-1250`
+  carries the one remaining grandfathered row, and the gate reports no stale one.
+- **`crate-lines --crate sovereign-mesh` drops by the serving total.**
+  `[[module]]` rows: 74,504 lines at `be0cfbd9a` → 59,692 at HEAD (−14,812); the
+  serving-tagged total gone is 13,696. The extra −1,116 is the two other files
+  the same moves took — `fim_adapter.rs` (745, tagged `workbench`) and
+  `tool_profile.rs` (585, tagged `host`) — less `guest_source.rs` (184) and
+  `slot_manifest.rs` (35) added. `crate-lines --crate sovereign-mesh` now
+  reports **zero** serving-tagged rows (the O10 "no serving module remains").
+- **`misnamed` shows sovereign-mesh's Fabric share rising.** 13,319/74,504 =
+  17.9% at `be0cfbd9a` → 13,499/59,692 = 22.6% at HEAD.
+
+Findings, fixed:
+
+- **ARCH 3 (the doc lands with the code)** · `quality/DOMAINS.toml` · the audited
+  commits left 39 `[[module]]` line counts stale against the tree (`daemon.rs`
+  5611→5613, `peer_inference.rs` 5408→5493, `time.rs` 75→17 after the wave-0
+  re-export, the peg's `inference_plan.rs` 135→90, …). Re-measured with `wc -l`;
+  `crate-lines`/`misnamed` read these counts, so the instrument was reporting a
+  stale snapshot. Fixed in `a7dc45146`.
+- **ARCH 3/4 (a note citing a path that no longer owns the fact)** ·
+  `quality/DOMAINS.toml` · three live `[[module]]` notes named deleted or moved
+  homes: `daemon.rs`'s "holds PeerInferenceEndpoint (:4783)" (the type is now
+  `sovereign_scheduler::venue::InferenceVenue`, re-exported at `:25`; the
+  translation is `:2280-2345`), `routes_internal/gossip.rs`'s
+  `sovereign_serving::InferencePlan` (now
+  `commonwealth_state::inference_plan::InferencePlan`), and `state.rs`'s
+  `sovereign_serving (:21-23)` (now `sovereign_serving_host::admission`).
+  Repointed. Fixed in `a7dc45146`.
+- **ARCH 5 (a check whose bar is the machine, not the subject)** ·
+  `sovereign-compute/src/supervisor.rs:1327` ·
+  `brief_healthy_stretches_do_not_reset_the_breaker` drained on a 1500 ms
+  per-event deadline; under a full-workspace run's spawn/reap load the two crash
+  cycles took longer, the drain returned `[Starting, Healthy]`, and TESTALL went
+  red for a supervisor that was working correctly. It now uses the existing one
+  decider `drain_states_until`, stopping when the breaker trips (30 s is a
+  hang-detector), the shape its sibling took on 2026-08-14. Assertions unchanged.
+  Fixed in `e4b7a429b`.
+- **ARCH 3.1 (trim or split)** · `sovereign-serving-host/src/peer_inference.rs` ·
+  the builder `REVIEW-build-serving-repoint-daemon` added pushed the file past
+  arch-gate's 50-line slack (5399 → 5493). Split two ways: the `InferenceProvider
+  for InferenceRouter` impl (739 lines) to `peer_inference/provider_impl.rs`
+  behind `#[path]`, and the `InferenceRouterBuilder` to `router_builder.rs`
+  (re-exported at the old path). Parent now 4692. Fixed in `6e7ebd3ed` (provider
+  impl) and this commit (the builder + the `#[path]` wiring `6e7ebd3ed` omitted —
+  see the recorded-not-changed note).
+- **clock-gate** · `sovereign-serving-host/tests/main/serving_lift_harness.rs` ·
+  the harness hand-read `SystemTime::now()`; it now asks the decider,
+  `sovereign_time::unix_now_u64()`. Fixed in this commit.
+- **The row's VERB — delete any shim whose importers are all repointed.** Four
+  mesh shims deleted (`entry_endpoint`, `fim_adapter`, `source_content_validator`,
+  `tool_profile`); a word-boundary sweep of `sovereign_mesh::<m>` and
+  `crate::<m>` over the workspace gave 0/0 for each. Every remaining shim keeps a
+  live importer (`mesh_sim`'s `crate::{tier, oicp_select, throughput_tracking}`,
+  the daemon's `sovereign_mesh::worker_eligibility`, the mesh tests'
+  `sovereign_mesh::{peer_inference, inference_adapter, decision_*}`). Fixed in
+  `a7dc45146`.
+
+Recorded, not changed:
+
+- **`6e7ebd3ed` added `provider_impl.rs` without its `#[path]` declaration** ·
+  the commit staged the new file and the registry row (parent re-measured
+  5493 → 4692) but not `peer_inference.rs`, so the split was inert: the orphan
+  file is not compiled and the parent still measured 5493, which would have
+  re-reddened arch-gate. The working tree carried the coherent version, and this
+  audit's commit wires it (the `#[path] mod provider_impl;` line lands with the
+  builder split). It is recorded because it is the exact failure ARCH 5 names —
+  a green LINT/TEST on a change that did nothing.
+- **Frozen measurement coordinates** · `quality/DOMAINS.toml`'s `[[noun]]`
+  `file` fields, `[[collision]]` `definitions` and the `[[cluster]]` graph
+  `cite`/`file` rows still name the mesh paths, and `quality/DOMAINS.md:364`'s
+  "the peg `sovereign-serving` carries …" describes the crate at its 2026-09-11
+  draft. They are the measurement's own coordinates, not live pointers (the
+  audit-3/5/7 precedent); a re-key would falsify the record.
+- **`size-gate` (advisory)** · 46 keys grew, the campaign's own growth; the new
+  crates read "new and unbaselined". `warn_gate` by design (AGENTS.md), does not
+  block PREPUSH. Not re-pinned.
+
