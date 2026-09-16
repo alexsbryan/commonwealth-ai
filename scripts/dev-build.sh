@@ -82,7 +82,14 @@ fi
 # So the clean is CONDITIONAL: the debug profile is cleaned only when it has
 # grown past RALPH_CLEAN_MB (default 50G), which bounds the disk without
 # paying the rebuild on every unit. Force it with RALPH_CLEAN_MB=0.
-if [[ "${1:-}" == "--clean" ]]; then
+# `--gate-only` runs the same size gate and stops before the build: the unit
+# loop calls it as CLEAN (2026-09-16 speed order — the build that used to ride
+# CLEAN was a second full pass; LINT is the unit's first build now).
+gate_only=0
+for arg in "$@"; do
+    [[ "$arg" == "--gate-only" ]] && gate_only=1
+done
+if [[ "${1:-}" == "--clean" || "${1:-}" == "--gate-only" ]]; then
     shift
     size_mb=$(du -sm target/debug 2>/dev/null | cut -f1)
     limit_mb="${RALPH_CLEAN_MB:-51200}"
@@ -91,6 +98,10 @@ if [[ "${1:-}" == "--clean" ]]; then
         cargo clean --profile dev
     else
         echo "dev-build: debug target is $(( ${size_mb:-0} / 1024 ))G (under $((limit_mb / 1024))G) — keeping the cache" >&2
+    fi
+    if [[ "$gate_only" == "1" ]]; then
+        echo "dev-build: gate-only — skipping the build" >&2
+        exit 0
     fi
 fi
 

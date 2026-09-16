@@ -17,6 +17,8 @@ in the files the row points at. When a row and the tree disagree, you stop
    you do not edit `ralph/STATE.md` at all.
 4. If the loop told you the tree holds uncommitted work, it belongs to the
    `[~]` unit: read `git status` and `git diff`, keep what is right, continue.
+5. If the loop's note names your unit (`Your unit: <id>`), that is your unit —
+   open only that row in `ralph/STATE.md`; do not scan the queue.
 
 ## 2. Reading a row
 
@@ -50,9 +52,10 @@ What the id prefix tells you:
 3. Do the VERB. `MOVE` uses §3a and nothing else. Change nothing the row does
    not ask for — no renames inside a move, no logic edits, no nearby cleanup
    (ARCH principle 2).
-4. **Build hygiene.** Before the first check that builds, run CLEAN once
-   (§5). The script cleans the debug profile only when it has grown past its
-   threshold (50G), so a warm unit keeps its cache and its checks stay
+4. **Build hygiene.** Before the first check, run CLEAN once (§5) — it is the
+   disk gate and does not build; LINT is the unit's first build (2026-09-16
+   speed order). The gate cleans the debug profile only when it has grown past
+   its threshold (50G), so a warm unit keeps its cache and its checks stay
    incremental; a cold unit pays the rebuild. Never build with bare `cargo` —
    a `-p` build resolves features differently and rebuilds the dependents
    twice, and the accumulated target (100G, 503 crates with duplicate rlibs,
@@ -118,8 +121,12 @@ members`; add it to the `[[layer]]` the row names in
 grep`, `wc -l`, `sovereign tools call callers --symbol=<S>`). Append rows
 directly under the mint row, in §2's grammar. A row is atomic when it has one
 VERB, touches at most about ten files, lands in one commit, states a premise a
-worker can verify with grep, and names §5 checks. Order rows so every row's
-dependencies sit above it. Anything that needs judgment — a cycle, a
+worker can verify with grep, and names §5 checks. A mechanical MOVE row checks
+`LINT` (plus `LAYER` when a layer edge changes) and names no `TEST(...)` —
+tests ride the wave audit, whose range covers the batch (2026-09-16 speed
+order); `TEST` is for rows that change behaviour. Prefer rows at the ten-file
+end of the grammar: a bigger row amortizes the session, the build and the
+commit. Order rows so every row's dependencies sit above it. Anything that needs judgment — a cycle, a
 back-edge, a port, a type name — becomes its own `REVIEW-build-` row; only
 mechanical work becomes a `dm-` row. Put a `REVIEW-audit-` row after every ten
 or so build rows, and one at a wave's close: a mid-wave audit names TESTALL,
@@ -145,7 +152,7 @@ does not exist on a Linux host, you are outside it: stop (§6) before building.
 
 | name | command | passes when |
 |---|---|---|
-| CLEAN | `./scripts/with-cargo-lock.sh ./scripts/dev-build.sh --clean > target/ralph/build.log 2>&1; echo exit=$?; tail -5 target/ralph/build.log` | exit=0 (once per unit, before the first build) |
+| CLEAN | `./scripts/with-cargo-lock.sh ./scripts/dev-build.sh --clean --gate-only > target/ralph/build.log 2>&1; echo exit=$?; tail -5 target/ralph/build.log` | exit=0 (once per unit; disk gate only, it does not build) |
 | LINT | `./scripts/with-cargo-lock.sh ./scripts/sovereign-lint.sh --human > target/ralph/lint.log 2>&1; echo exit=$?; tail -5 target/ralph/lint.log` | exit=0 |
 | TEST(c) | `./scripts/with-cargo-lock.sh ./scripts/sovereign-test.sh --human --package c > target/ralph/test.log 2>&1; echo exit=$?; tail -8 target/ralph/test.log` | exit=0; exit=4 (zero tests) only for a crate created in this unit, said in the commit |
 | LAYER | `(cd corpus-engine && ../scripts/with-cargo-lock.sh cargo xtask layer-gate) > target/ralph/layer.log 2>&1; echo exit=$?; tail -5 target/ralph/layer.log` | exit=0 |

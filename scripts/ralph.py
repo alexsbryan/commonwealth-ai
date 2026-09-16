@@ -326,7 +326,7 @@ class Session:
     timeout, a STOP check, a heartbeat, and permission-reject detection."""
 
     def __init__(self, paths, *, timeout=3600, opencode=None, poll=30,
-                 notifier=notify, notify_enabled=True, cwd=None):
+                 notifier=notify, notify_enabled=True, cwd=None, env=None):
         self.paths = paths
         self.timeout = timeout
         self.opencode = opencode or os.environ.get("RALPH_OPENCODE_BIN", "opencode")
@@ -334,6 +334,7 @@ class Session:
         self.notifier = notifier
         self.notify_enabled = notify_enabled
         self.cwd = pathlib.Path(cwd) if cwd else paths.workdir
+        self.env = env or {}
 
     def heartbeat(self, context):
         try:
@@ -356,7 +357,8 @@ class Session:
         with open(log, "w") as fh:
             proc = subprocess.Popen(
                 [self.opencode, "run", *model_args, note + prompt_text],
-                cwd=workdir, stdout=fh, stderr=subprocess.STDOUT, start_new_session=True)
+                cwd=workdir, env={**os.environ, **self.env},
+                stdout=fh, stderr=subprocess.STDOUT, start_new_session=True)
         waited = 0
         while proc.poll() is None and waited < self.timeout:
             time.sleep(min(self.poll, max(1, self.timeout - waited)))
@@ -453,7 +455,10 @@ class Campaign:
             model_args = select_model_args(unit.id, self.model, self.review_model, self.variant)
             say(f"unit {unit.id} — {' '.join(model_args) or 'configured default'}")
             before = head_of(self.paths.workdir)
-            self.session_run(model_args, self._prompt_text(), self._log_path(iteration))
+            note = (f"Your unit: {unit.id} — its row in ralph/STATE.md is the [~] row, "
+                    "or the first ready [ ] row. Open only that row; do not scan the "
+                    "queue for another.\n\n")
+            self.session_run(model_args, note + self._prompt_text(), self._log_path(iteration))
             after = head_of(self.paths.workdir)
             if after != before:
                 stall = 0
@@ -713,7 +718,11 @@ class Pool:
                 f"ralph/lanes/{unit}.done and commit it — the pool merges your branch then.\n"
                 "Do NOT edit ralph/STATE.md; the pool marks the unit done after the merge.\n\n")
         model_args = select_model_args(unit, self.model, self.review_model, self.variant)
-        session = self.session_for(wt)
+        # One lock per lane: a lane builds in its own worktree/target, so the
+        # shared /tmp lock would only serialize lanes against each other and
+        # against other campaigns (2026-09-16 speed order).
+        lock_dir = f"/tmp/svrn-cargo-lock.{os.getuid()}.lane-{unit}"
+        session = self.session_for(wt, env={"SVRN_CARGO_LOCK_DIR": lock_dir})
         session.run(model_args, note + self._prompt_text(),
                     str(self.paths.workdir / "target" / "ralph" / f"lane-{unit}.out"))
 
@@ -933,9 +942,9 @@ def cmd_pool(args):
         ["git", "-C", str(paths.workdir), "rev-parse", "--abbrev-ref", "HEAD"],
         capture_output=True, text=True).stdout.strip()
 
-    def session_for(cwd):
+    def session_for(cwd, env=None):
         return Session(paths, timeout=args.session_timeout,
-                       notify_enabled=args.notify, cwd=cwd)
+                       notify_enabled=args.notify, cwd=cwd, env=env)
 
     pool = Pool(paths, session_for=session_for, notify_enabled=args.notify,
                 lanes=args.lanes, base_branch=base, conflicts=args.conflicts,
