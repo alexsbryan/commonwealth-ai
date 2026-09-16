@@ -929,7 +929,11 @@ pub async fn project_namespace(
     // sets are the same fold's second answer, and the store's own node id is
     // what keeps the reconciliation off rows this node has not put on the rail
     // yet. This module does no second pass — one call, one decision.
-    let mesh_roster = MeshRoster::from_app_state(app_state).await;
+    let mesh_roster = MeshRoster::from_membership(
+        &*app_state.inner.fabric.mesh.read().await,
+        app_state.self_node_id(),
+        app_state.self_node_pubkey(),
+    );
     match app_state.inner.fabric.mesh_store.apply_projection(
         &namespace,
         &projection,

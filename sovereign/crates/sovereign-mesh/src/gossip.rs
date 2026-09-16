@@ -1036,8 +1036,8 @@ pub enum GossipError {
 
 // ── Wire types ───────────────────────────────────────────────
 //
-// Mirror of `sovereign_api::routes_internal::{GossipRequest,
-// GossipResponse, MeshWire}`. Duplicated here (like `join::MeshWire`)
+// Mirrors the daemon's own `routes_internal::{GossipRequest,
+// GossipResponse}`. Duplicated here (like `join::MeshWire`)
 // because the server-side type isn't re-exported and projecting
 // HashMap<NodeId, MemberRecord> → Vec<MemberRecord> for serde is
 // the whole reason MeshWire exists.
@@ -1051,7 +1051,7 @@ use sovereign_api::routes_internal::{
 };
 
 /// The gossip round's wire shape. A THIRD mirror of
-/// `sovereign_api::routes_internal::MeshWire` (the others live in
+/// `commonwealth_core::mesh::MeshWire` (the others live in
 /// `join.rs` and in the api crate itself); they must agree field for field or
 /// the round-trip 422s.
 ///

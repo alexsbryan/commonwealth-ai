@@ -2,8 +2,8 @@
 //! Mesh state translation — converts Commonwealth's internal state
 //! into UI-friendly representations for Sovereign's frontend.
 
-use commonwealth_core::mesh::NodeStatus;
-use sovereign_api::state::AppState;
+use commonwealth_core::ids::NodeId;
+use commonwealth_core::mesh::{Mesh, NodeStatus};
 
 use sovereign_contracts::daemon_wire::*;
 
@@ -17,11 +17,13 @@ pub struct MeshState {
 }
 
 impl MeshState {
-    /// Build a UI-friendly mesh state from the Commonwealth AppState.
-    pub async fn from_app_state(app_state: &AppState) -> Self {
-        let mesh = app_state.inner.fabric.mesh.read().await;
-        let self_node_id = app_state.inner.fabric.identity.current();
-
+    /// Build a UI-friendly mesh state from the membership Fabric holds.
+    ///
+    /// Takes the roster and this node's id rather than the daemon host's
+    /// `AppState` (domains `REVIEW-build-mesh-api-decouple`): Fabric observes
+    /// membership through its own state, and `sovereign-mesh` may not name the
+    /// host. The caller reads its roster lock and identity reader once.
+    pub fn from_membership(mesh: &Mesh, self_node_id: NodeId) -> Self {
         // Members.
         let mut members: Vec<MeshMember> = mesh
             .members

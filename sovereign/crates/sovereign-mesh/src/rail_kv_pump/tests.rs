@@ -32,7 +32,12 @@ async fn every_declared_namespace_is_one_the_rail_and_the_store_agree_about() {
 
     // The charset check lives in `derive_roster`, so a namespace the rail
     // would refuse to open cannot be installed either.
-    crate::ring_roster::MeshRosterSource::install(&rail, &state).unwrap();
+    crate::ring_roster::MeshRosterSource::install(
+            &rail,
+            &state.inner.fabric.mesh,
+            &state.inner.fabric.identity,
+            state.self_node_pubkey(),
+        ).unwrap();
 
     let mut seen = std::collections::BTreeSet::new();
     for ns in DAEMON_OWN_NAMESPACES {
@@ -91,7 +96,12 @@ async fn a_node_in_no_mesh_keeps_its_writes_queued_until_membership_exists() {
             ..Default::default()
         },
     );
-    crate::ring_roster::MeshRosterSource::install(&rail, &state).unwrap();
+    crate::ring_roster::MeshRosterSource::install(
+            &rail,
+            &state.inner.fabric.mesh,
+            &state.inner.fabric.identity,
+            state.self_node_pubkey(),
+        ).unwrap();
 
     assert!(state
         .inner
@@ -177,7 +187,12 @@ async fn work_namespace_seals_and_keeps_live_leases() {
             ..Default::default()
         },
     );
-    crate::ring_roster::MeshRosterSource::install(&rail, &state).unwrap();
+    crate::ring_roster::MeshRosterSource::install(
+            &rail,
+            &state.inner.fabric.mesh,
+            &state.inner.fabric.identity,
+            state.self_node_pubkey(),
+        ).unwrap();
 
     // The roster in v0 is the operator's file, and it stays that way:
     // `work` is deliberately not in `DAEMON_OWN_NAMESPACES`, so nothing

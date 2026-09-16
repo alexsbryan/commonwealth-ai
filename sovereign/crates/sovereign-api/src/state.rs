@@ -260,60 +260,14 @@ impl RejectedNodeIdHeader {
     }
 }
 
-/// The notes-rail convergence stamps (order commons-fluency fix 9).
-/// Written by the daemon's outbound notes publish sink (a note accepted
-/// onto the mesh) and its inbound ingest poller (a peer batch applied);
-/// read by `/status` as the publish-path liveness signal. A `None`
-/// stamp means that path has never succeeded since boot — absence is
-/// reported, never defaulted (ARCH §18.3). One shared instance is
-/// carried into [`AppStateInner`] at construction ([`FabricSeed::convergence`])
-/// so the daemon-side writers and the `/status` reader cannot disagree.
-#[derive(Debug, Default)]
-pub struct ConvergenceRecord {
-    stamps: std::sync::Mutex<ConvergenceStamps>,
-}
-
-/// The two stamps behind [`ConvergenceRecord`].
-#[derive(Debug, Default, Clone)]
-struct ConvergenceStamps {
-    /// Unix seconds when the outbound publish sink last accepted a
-    /// note onto the mesh (set() Ok).
-    last_outbound_publish_at: Option<i64>,
-    /// Unix seconds when the inbound ingest poller last applied a
-    /// peer batch (ingest_remote_notes Ok with events).
-    last_inbound_ingest_at: Option<i64>,
-}
-
-impl ConvergenceRecord {
-    /// A fresh record: both paths never-succeeded since boot.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Stamp the outbound publish path as alive. Called by the notes
-    /// propagation sink's success arm (daemon bootstrap).
-    pub fn record_outbound_publish_success(&self, at_unix: i64) {
-        self.stamps
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .last_outbound_publish_at = Some(at_unix);
-    }
-
-    /// Stamp the inbound ingest path as alive. Called when the daemon's
-    /// ingest poller applies a peer batch.
-    pub fn record_inbound_ingest_success(&self, at_unix: i64) {
-        self.stamps
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .last_inbound_ingest_at = Some(at_unix);
-    }
-
-    /// Read both stamps for `/status`.
-    pub fn snapshot(&self) -> (Option<i64>, Option<i64>) {
-        let s = self.stamps.lock().unwrap_or_else(|e| e.into_inner());
-        (s.last_outbound_publish_at, s.last_inbound_ingest_at)
-    }
-}
+/// The notes-rail convergence recorder, re-exported at its historical path.
+///
+/// The definition moved to `sovereign_contracts::peer` (domains
+/// `REVIEW-build-mesh-api-decouple`) because `sovereign-mesh`'s `peer_adapter`
+/// names it and Fabric may not name the daemon host; this re-export keeps the
+/// in-crate callers unchanged. See
+/// [`ConvergenceRecord`](sovereign_core::peer::ConvergenceRecord).
+pub use sovereign_core::peer::ConvergenceRecord;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -1067,7 +1021,7 @@ impl AppState {
         ));
         let fabric = fabric::FabricPart {
             identity: IdentityReader::new(self_node_id),
-            mesh: RwLock::new(mesh),
+            mesh: Arc::new(RwLock::new(mesh)),
             self_node_pubkey: fabric_seed.self_node_pubkey,
             dial_info: fabric_seed.dial_info,
             self_dial_signer: fabric_seed.self_dial_signer,

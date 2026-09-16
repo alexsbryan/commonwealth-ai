@@ -137,6 +137,74 @@ pub trait Convergence: Send + Sync {
     fn snapshot(&self) -> (Option<i64>, Option<i64>);
 }
 
+/// The notes-rail convergence stamps, as one shared record.
+///
+/// The concrete [`Convergence`] the mesh adapter and `/status` both hold, so
+/// the writers and the reader cannot disagree. It lived in
+/// `sovereign-api`'s `state` until domains `REVIEW-build-mesh-api-decouple`
+/// moved it here: `sovereign-mesh`'s `peer_adapter` names it, and Fabric may
+/// not name the daemon host. `None` means that path has never succeeded since
+/// boot — absence is reported, never defaulted (ARCH 18.3).
+#[derive(Debug, Default)]
+pub struct ConvergenceRecord {
+    stamps: Mutex<ConvergenceStamps>,
+}
+
+/// The two stamps behind [`ConvergenceRecord`].
+#[derive(Debug, Default, Clone)]
+struct ConvergenceStamps {
+    /// Unix seconds when the outbound publish sink last accepted a note onto
+    /// the mesh.
+    last_outbound_publish_at: Option<i64>,
+    /// Unix seconds when the inbound ingest poller last applied a peer batch.
+    last_inbound_ingest_at: Option<i64>,
+}
+
+impl ConvergenceRecord {
+    /// A fresh record: both paths never-succeeded since boot.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Stamp the outbound publish path as alive. Called by the notes
+    /// propagation sink's success arm (daemon bootstrap).
+    pub fn record_outbound_publish_success(&self, at_unix: i64) {
+        self.stamps
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .last_outbound_publish_at = Some(at_unix);
+    }
+
+    /// Stamp the inbound ingest path as alive. Called when the daemon's ingest
+    /// poller applies a peer batch.
+    pub fn record_inbound_ingest_success(&self, at_unix: i64) {
+        self.stamps
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .last_inbound_ingest_at = Some(at_unix);
+    }
+
+    /// Read both stamps for `/status`.
+    pub fn snapshot(&self) -> (Option<i64>, Option<i64>) {
+        let s = self.stamps.lock().unwrap_or_else(|e| e.into_inner());
+        (s.last_outbound_publish_at, s.last_inbound_ingest_at)
+    }
+}
+
+impl Convergence for ConvergenceRecord {
+    fn record_outbound_publish_success(&self, at_unix: i64) {
+        ConvergenceRecord::record_outbound_publish_success(self, at_unix);
+    }
+
+    fn record_inbound_ingest_success(&self, at_unix: i64) {
+        ConvergenceRecord::record_inbound_ingest_success(self, at_unix);
+    }
+
+    fn snapshot(&self) -> (Option<i64>, Option<i64>) {
+        ConvergenceRecord::snapshot(self)
+    }
+}
+
 // ── The N=1 answers ──────────────────────────────────────────────────────────
 
 /// [`PeerStore`] for a mesh of one.

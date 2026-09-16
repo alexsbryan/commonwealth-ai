@@ -1689,7 +1689,10 @@ impl EmbeddedDaemon {
                 // mesh — manifesting as `local node not found in
                 // mesh` 500s and gossip log spam every 10s.
                 app_state.identity_reader().publish(adopted_node_id);
-                *mesh_state.write().await = MeshState::from_app_state(app_state).await;
+                *mesh_state.write().await = MeshState::from_membership(
+                    &*app_state.inner.fabric.mesh.read().await,
+                    app_state.inner.fabric.identity.current(),
+                );
             }
         }
 
@@ -1907,7 +1910,10 @@ impl EmbeddedDaemon {
                 mesh_state,
                 ..
             } => {
-                let fresh = MeshState::from_app_state(app_state).await;
+                let fresh = MeshState::from_membership(
+                    &*app_state.inner.fabric.mesh.read().await,
+                    app_state.inner.fabric.identity.current(),
+                );
                 // Gated heartbeat: log at info only when the member
                 // count actually changed, else debug. The UI polls
                 // every 5s; an unchanging mesh would spam the info
@@ -3176,7 +3182,12 @@ impl EmbeddedDaemon {
         // nothing between the rail's construction and this line could have
         // read the wrong roster.
         if let Some(rail) = app_state.ring_rail() {
-            if let Err(e) = crate::ring_roster::MeshRosterSource::install(&rail, &app_state) {
+            if let Err(e) = crate::ring_roster::MeshRosterSource::install(
+                &rail,
+                &app_state.inner.fabric.mesh,
+                &app_state.inner.fabric.identity,
+                app_state.self_node_pubkey(),
+            ) {
                 tracing::error!(error = %e, "ring rail: the daemon's own namespace could not register its roster source");
             }
         }
@@ -3297,7 +3308,10 @@ impl EmbeddedDaemon {
             internal_port,
         );
 
-        let mesh_state = Arc::new(RwLock::new(MeshState::from_app_state(&app_state).await));
+        let mesh_state = Arc::new(RwLock::new(MeshState::from_membership(
+            &*app_state.inner.fabric.mesh.read().await,
+            app_state.inner.fabric.identity.current(),
+        )));
 
         let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
 
@@ -4392,9 +4406,14 @@ impl EmbeddedDaemon {
             let paths_state = app_state.clone();
             let peer_paths: crate::iroh_watchdog::PeerPathsFn = Arc::new(move |ep| {
                 let app_state = paths_state.clone();
-                Box::pin(
-                    async move { crate::iroh_access::observe_peer_paths(&app_state, &ep).await },
-                )
+                Box::pin(async move {
+                    crate::iroh_access::observe_peer_paths(
+                        &app_state.inner.fabric.mesh,
+                        app_state.inner.fabric.identity.current(),
+                        &ep,
+                    )
+                    .await
+                })
                     as std::pin::Pin<
                         Box<
                             dyn std::future::Future<

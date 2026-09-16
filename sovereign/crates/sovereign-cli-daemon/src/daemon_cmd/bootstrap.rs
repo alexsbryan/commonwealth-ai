@@ -1309,7 +1309,11 @@ pub(super) fn reconcile_local_measurements(daemon: Arc<EmbeddedDaemon>) {
                 return;
             }
         };
-        let roster = sovereign_mesh::ring_roster::MeshRoster::from_app_state(&app_state).await;
+        let roster = sovereign_mesh::ring_roster::MeshRoster::from_membership(
+            &*app_state.inner.fabric.mesh.read().await,
+            app_state.self_node_id(),
+            app_state.self_node_pubkey(),
+        );
         let file = sovereign_core::mesh_measurements::load();
         sovereign_mesh::measurements_rail::republish(
             &journal,

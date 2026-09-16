@@ -107,6 +107,17 @@ pub use sovereign_contracts::in_flight;
 // that a contracts module is reachable at its `sovereign_core::` path.
 pub use sovereign_contracts::self_claims;
 
+// The peer ports and their shared recorder, at `sovereign_core::peer`. Added
+// 2026-09-16 for `sovereign-api`, whose `FabricPart` carries the
+// `ConvergenceRecord` `/status` reads (domains
+// `REVIEW-build-mesh-api-decouple`: the definition moved down so
+// `sovereign-mesh`'s `peer_adapter` can name it without naming the host).
+// Naming `sovereign-contracts` directly would grow that crate's fan-in and
+// `cargo xtask layer-gate` refuses it — the same refusal the `identity` block
+// above records — while this re-export costs no new edge, following the rule
+// that a contracts module is reachable at its `sovereign_core::` path.
+pub use sovereign_contracts::peer;
+
 // Re-export commonly used items at the crate root.
 //
 // `traits::*` / `types::*` are BOUNDED globs (quality program R1,

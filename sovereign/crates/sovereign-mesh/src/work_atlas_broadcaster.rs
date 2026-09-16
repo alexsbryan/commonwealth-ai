@@ -124,7 +124,12 @@ mod tests {
                 ..Default::default()
             },
         );
-        crate::ring_roster::MeshRosterSource::install(&rail, &state).unwrap();
+        crate::ring_roster::MeshRosterSource::install(
+            &rail,
+            &state.inner.fabric.mesh,
+            &state.inner.fabric.identity,
+            state.self_node_pubkey(),
+        ).unwrap();
         state
     }
 

@@ -689,7 +689,11 @@ async fn publish_measurement(
     // Derived here from membership this node already holds, and never accepted
     // over the wire — there is no roster route, and its absence is the safety
     // property (ARCH §7.1). See `crate::ring_roster`.
-    let roster = crate::ring_roster::MeshRoster::from_app_state(&app_state).await;
+    let roster = crate::ring_roster::MeshRoster::from_membership(
+        &*app_state.inner.fabric.mesh.read().await,
+        app_state.self_node_id(),
+        app_state.self_node_pubkey(),
+    );
     // Asked here, in the mesh's own words, because the rail's door would
     // answer the same condition with `svrn ring roster add … --self` — the
     // right instruction for a ring whose roster is written by hand, and one
@@ -766,7 +770,11 @@ async fn peer_measurements(
             return empty();
         }
     };
-    let roster = crate::ring_roster::MeshRoster::from_app_state(&app_state).await;
+    let roster = crate::ring_roster::MeshRoster::from_membership(
+        &*app_state.inner.fabric.mesh.read().await,
+        app_state.self_node_id(),
+        app_state.self_node_pubkey(),
+    );
     let admission = match journal.admit(roster.roster(), &commonwealth_rail::Ed25519Verifier) {
         Ok(a) => a,
         Err(e) => {

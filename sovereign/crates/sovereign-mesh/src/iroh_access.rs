@@ -230,14 +230,14 @@ fn env_kill_switch() -> bool {
 /// Members without a pubkey are not iroh-dialable and are left out entirely —
 /// counting them would make an IP-only peer look like a lost path.
 pub(crate) async fn observe_peer_paths(
-    app_state: &sovereign_api::state::AppState,
+    mesh: &tokio::sync::RwLock<commonwealth_core::mesh::Mesh>,
+    self_id: commonwealth_core::ids::NodeId,
     endpoint: &Endpoint,
 ) -> Vec<crate::iroh_watchdog::PeerPathObservation> {
-    let self_id = app_state.inner.fabric.identity.current();
     // Clone the members out before awaiting — the codebase's
     // clone-out-then-await rule; `peer_path_snapshot` awaits per peer.
     let members: Vec<commonwealth_core::mesh::MemberRecord> = {
-        let mesh = app_state.inner.fabric.mesh.read().await;
+        let mesh = mesh.read().await;
         mesh.members
             .values()
             .filter(|m| m.node_id != self_id && m.node_pubkey.is_some())

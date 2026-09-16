@@ -76,7 +76,8 @@ use std::sync::{Arc, Weak};
 use commonwealth_core::ids::{NodeId, NodePubkey};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_rail::{Person, RailError, RingRail, Roster, RosterSource};
-use sovereign_api::state::{AppState, AppStateInner};
+use sovereign_contracts::identity::IdentityReader;
+use tokio::sync::RwLock;
 
 /// A ring roster derived from mesh membership, plus the reverse lookup a
 /// caller needs to name a signer's node.
@@ -177,11 +178,14 @@ impl MeshRoster {
     /// (ARCH §10.6): the identity comes from what the daemon installed at
     /// startup and the membership from the live `Mesh`, and a caller that
     /// assembled those two itself would be free to assemble them differently.
-    pub async fn from_app_state(app_state: &sovereign_api::state::AppState) -> Self {
-        let self_id = app_state.self_node_id();
-        let self_pubkey = app_state.self_node_pubkey();
-        let mesh = app_state.inner.fabric.mesh.read().await;
-        Self::derive(&mesh, self_id, self_pubkey)
+    ///
+    /// Takes the roster, identity and pubkey rather than the daemon host's
+    /// `AppState` (domains `REVIEW-build-mesh-api-decouple`): Fabric observes
+    /// membership through its own state, and `sovereign-mesh` may not name the
+    /// host. This is [`MeshRoster::derive`] with the reads the caller already
+    /// holds.
+    pub fn from_membership(mesh: &Mesh, self_id: NodeId, self_pubkey: Option<NodePubkey>) -> Self {
+        Self::derive(mesh, self_id, self_pubkey)
     }
 
     /// The roster to hand [`admit`](commonwealth_rail::admit) or
@@ -262,25 +266,36 @@ pub const DAEMON_OWN_NAMESPACES: &[&str] = &[
     corpus_engine::update::newsworthy_watcher::APP_ID_TRACKED,
 ];
 
-/// [`MeshRoster::from_app_state`] as the rail sees it.
+/// [`MeshRoster::from_membership`] as the rail sees it.
 ///
-/// Holds the daemon's state WEAKLY: the rail lives inside `AppState`, so a
-/// strong reference here would be a cycle that keeps a test's state alive
-/// after the test, and a source that outlives the state it derives from has
-/// nothing true to say anyway — it reports that, rather than an empty ring.
+/// Holds the daemon's membership WEAKLY: the rail lives beside it, so a strong
+/// reference here would be a cycle that keeps a test's state alive after the
+/// test, and a source that outlives the membership it derives from has nothing
+/// true to say anyway — it reports that, rather than an empty ring. The
+/// identity and pubkey are cheap owned handles (`IdentityReader` is an `Arc`
+/// clone; the pubkey is a `Copy` value set at construction).
 pub struct MeshRosterSource {
-    inner: Weak<AppStateInner>,
+    mesh: Weak<RwLock<Mesh>>,
+    identity: IdentityReader,
+    self_pubkey: Option<NodePubkey>,
 }
 
 impl MeshRosterSource {
     /// Declare to `rail` that every namespace in [`DAEMON_OWN_NAMESPACES`]
-    /// derives its roster from `state`'s membership.
+    /// derives its roster from membership.
     ///
     /// The ONE place a namespace and its source meet, so the daemon and the
     /// tests that stand in for it cannot register different pairs.
-    pub fn install(rail: &RingRail, state: &AppState) -> Result<(), RailError> {
+    pub fn install(
+        rail: &RingRail,
+        mesh: &Arc<RwLock<Mesh>>,
+        identity: &IdentityReader,
+        self_pubkey: Option<NodePubkey>,
+    ) -> Result<(), RailError> {
         let source: Arc<dyn RosterSource> = Arc::new(Self {
-            inner: Arc::downgrade(&state.inner),
+            mesh: Arc::downgrade(mesh),
+            identity: identity.clone(),
+            self_pubkey,
         });
         for namespace in DAEMON_OWN_NAMESPACES {
             rail.derive_roster(namespace, Arc::clone(&source))?;
@@ -296,13 +311,16 @@ impl MeshRosterSource {
 impl RosterSource for MeshRosterSource {
     fn roster(&self) -> Pin<Box<dyn Future<Output = Result<Roster, RailError>> + Send + '_>> {
         Box::pin(async move {
-            let Some(inner) = self.inner.upgrade() else {
+            let Some(mesh) = self.mesh.upgrade() else {
                 return Err(RailError::Io(
                     "the mesh state this roster derives from is gone".into(),
                 ));
             };
-            let state = AppState { inner };
-            Ok(MeshRoster::from_app_state(&state).await.into_roster())
+            let mesh = mesh.read().await;
+            Ok(
+                MeshRoster::from_membership(&mesh, self.identity.current(), self.self_pubkey)
+                    .into_roster(),
+            )
         })
     }
 }

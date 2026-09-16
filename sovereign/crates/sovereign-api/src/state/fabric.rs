@@ -161,7 +161,7 @@ pub struct FabricPart {
     /// member record (it indexes by `self_node_id`) and `corpus_collaborate`
     /// would 500 with "local node not found in mesh".
     pub identity: IdentityReader,
-    pub mesh: RwLock<Mesh>,
+    pub mesh: Arc<RwLock<Mesh>>,
     /// This node's Ed25519 identity pubkey (see
     /// `commonwealth_core::ids::NodePubkey`). Set at construction by the
     /// embedded daemon from `<data_dir>/node_key`; `None` in tests and on

@@ -50,7 +50,7 @@ use sovereign_api::routes_internal::{
 
 /// Members transit as a flat Vec because `HashMap<NodeId, _>` doesn't
 /// round-trip through JSON (NodeId is an array, not a string key).
-/// See `sovereign_api::routes_internal::MeshWire`.
+/// See `commonwealth_core::mesh::MeshWire`.
 // The fourth declaration of this shape lived here. One projection now:
 // `commonwealth_core::mesh::MeshSnapshot`.
 use commonwealth_core::mesh::MeshWire;

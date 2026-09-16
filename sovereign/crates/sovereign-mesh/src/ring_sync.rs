@@ -39,7 +39,7 @@
 //! # …and it repeats, because one body is not the unit of convergence
 //!
 //! Both `ops` arrays are stopped at
-//! [`RING_SYNC_OPS_BUDGET_BYTES`](sovereign_api::routes_internal::RING_SYNC_OPS_BUDGET_BYTES),
+//! `RING_SYNC_OPS_BUDGET_BYTES`,
 //! and [`exchange`] repeats the pair until neither side moves. Nothing on the
 //! wire changed shape for that: the exchange was always idempotent, so a
 //! partial one is safe and the second half is just the next call.
@@ -594,7 +594,7 @@ mod tests {
     //! The loop itself, against a live listener.
     //!
     //! `exchange` needs a `reqwest` client and a real socket, so these bind
-    //! `sovereign_api::server::internal_router` on an ephemeral port — the
+    //! the daemon's internal router on an ephemeral port — the
     //! same shape `tests/main/gossip_integration.rs` uses for the gossip loop,
     //! and the only way to drive the production loop rather than a second
     //! spelling of it (ARCH §10.6).
@@ -848,7 +848,12 @@ mod tests {
                 },
             );
             if with_source {
-                MeshRosterSource::install(&rail, &state).unwrap();
+                MeshRosterSource::install(
+                    &rail,
+                    &state.inner.fabric.mesh,
+                    &state.inner.fabric.identity,
+                    state.self_node_pubkey(),
+                ).unwrap();
             }
             (state, journal, rail)
         };
@@ -1147,7 +1152,12 @@ mod tests {
                 ..Default::default()
             },
         );
-        crate::ring_roster::MeshRosterSource::install(&rail, &state).unwrap();
+        crate::ring_roster::MeshRosterSource::install(
+            &rail,
+            &state.inner.fabric.mesh,
+            &state.inner.fabric.identity,
+            state.self_node_pubkey(),
+        ).unwrap();
         (state, rail)
     }
 
@@ -1663,10 +1673,13 @@ mod tests {
         assert_eq!(b_journal.ingest_all(&seal).unwrap(), 1);
         let admitted = b_journal
             .admit(
-                &crate::ring_roster::MeshRoster::from_app_state(&b_state)
-                    .await
-                    .roster()
-                    .clone(),
+                &crate::ring_roster::MeshRoster::from_membership(
+                    &*b_state.inner.fabric.mesh.read().await,
+                    b_state.self_node_id(),
+                    b_state.self_node_pubkey(),
+                )
+                .roster()
+                .clone(),
                 &Ed25519Verifier,
             )
             .unwrap();
