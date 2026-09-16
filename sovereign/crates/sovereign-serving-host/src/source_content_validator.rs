@@ -71,7 +71,7 @@
 use std::collections::HashMap;
 
 use oicp_types::openai_types::ToolDefinition;
-use sovereign_inference::embedded::ParsedToolCall;
+use oicp_types::tool_calls::ParsedToolCall;
 
 /// One validation finding. Field names are flat to simplify log
 /// ingestion; nested fields would only matter once the response

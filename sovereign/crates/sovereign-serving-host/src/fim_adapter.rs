@@ -34,11 +34,11 @@ use std::time::Instant;
 use futures::StreamExt;
 use oicp_types::openai_types::{self as wire};
 use oicp_types::{EditSlotStatus, FimCompletionRequest, FimStreamStart};
+use sovereign_contracts::fim::{decide_mode, Feed, FimMode, FimStopTracker, StopOutcome};
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_contracts::types::{
     CompletionRequest, EditSlotInfo, PromptShape, SamplingMode, StreamFrame,
 };
-use sovereign_inference::fim::{decide_mode, Feed, FimMode, FimStopTracker, StopOutcome};
 
 use crate::inference_adapter::{translate_finish_reason, translate_stream_usage};
 
@@ -192,7 +192,7 @@ impl TrackState {
         model_id: &str,
         slot: &str,
         fim_style: &str,
-        mode: sovereign_inference::fim::FimMode,
+        mode: sovereign_contracts::fim::FimMode,
         prompt_chars: usize,
         finish_reason: &str,
     ) -> serde_json::Value {
@@ -247,7 +247,7 @@ pub(crate) async fn fim_completion_stream(
         // Detect a pre-assembled prompt BEFORE clamping (a tail-clamp
         // would decapitate the opening marker) — pass it through
         // verbatim; the client owns its structure, clamps and all.
-        let family_prefix_marker = sovereign_inference::fim::markers_for(lane.style).prefix;
+        let family_prefix_marker = sovereign_contracts::fim::markers_for(lane.style).prefix;
         let pre_assembled = request.prefix.starts_with(family_prefix_marker);
         let (prefix, suffix) = if pre_assembled {
             tracing::info!(
@@ -266,7 +266,7 @@ pub(crate) async fn fim_completion_stream(
         let fim_prompt = if pre_assembled {
             prefix.to_string()
         } else {
-            sovereign_inference::fim::build_fim_prompt(lane.style, prefix, suffix)
+            sovereign_contracts::fim::build_fim_prompt(lane.style, prefix, suffix)
         };
         // Single vs multi-line is decided HERE, not by the model (§3.3):
         // the text immediately before the cursor tells us which shape
@@ -275,7 +275,7 @@ pub(crate) async fn fim_completion_stream(
         // markers — decide from that, and feed the embedded suffix code
         // to the tracker's duplication probe.
         let (mode, probe_suffix) = if pre_assembled {
-            let markers = sovereign_inference::fim::markers_for(lane.style);
+            let markers = sovereign_contracts::fim::markers_for(lane.style);
             let body = prefix.strip_prefix(family_prefix_marker).unwrap_or(prefix);
             let mut parts = body.split(markers.suffix);
             let code_before = parts.next().unwrap_or(body);

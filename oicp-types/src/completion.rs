@@ -279,7 +279,8 @@ pub struct CompletionRequest {
     /// template wrapping — the fill-in-the-middle (FIM) inline-
     /// completion path uses this to feed the model's own
     /// `<|fim_prefix|>…<|fim_suffix|>…<|fim_middle|>` markers
-    /// (built by `sovereign_inference::fim::build_fim_prompt`).
+    /// (built by `sovereign_contracts::fim::build_fim_prompt`, re-exported as
+    /// `sovereign_inference::fim::build_fim_prompt`).
     /// See `sovereign/docs/INLINE_COMPLETION.md` §3.1.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prompt_shape: Option<PromptShape>,

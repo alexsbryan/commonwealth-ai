@@ -492,3 +492,63 @@ ever RUNS steps 5-8 — that is now `DEMO-d1-serving-lift`'s job, and it cannot
 happen until the burn-down row lands. The row is marked done on its verb; the
 lift's verdict-1 requirement was not weakened and no `[x]` was written on a check
 that fails.
+
+## REVIEW-build-serving-drop-inference — the inference edge leaves, and the embed it exposed
+
+VERB: drop `sovereign-serving-host`'s `sovereign-inference` edge, remove the
+grandfathered `[[exception]]` row, and make the lift measure on a toolchain that
+satisfies the declared MSRV.
+
+Landed:
+
+- **The host's four non-inference reaches, each repointed or moved by what it is
+  (ARCH 8 — a move, never a copy, re-exported at the old path so no caller changed).**
+  `sovereign_inference::remote::{RemoteApiProvider, EndpointResolver}` →
+  `oicp_client::` (the path swap the exception's `tracking` named);
+  `sovereign_inference::embedded::{ParsedToolCall,
+  escape_unescaped_control_chars_in_string_values, parse_tool_calls_with_errors}`
+  → `oicp-types/src/tool_calls.rs` (pure `serde_json` + `std`, the OpenAI wire
+  leaf); `sovereign_inference::fim::{decide_mode, Feed, FimMode, FimStopTracker,
+  StopOutcome, markers_for, build_fim_prompt}` → `sovereign-contracts/src/fim.rs`
+  (arithmetic over `FimStyle`, already there). The llama halves — grammar.rs's
+  GBNF and `detect_fim_style` — stay in `sovereign-inference`, re-exporting the
+  moved items at `sovereign_inference::{embedded,fim}::*`.
+- `sovereign-serving-host/Cargo.toml`: `sovereign-inference` out, `oicp-client` in.
+- `quality/ARCH_LAYERS.toml`: the `sovereign-serving-host → sovereign-inference`
+  `[[exception]]` row deleted (the edge is gone; a stale row fails the gate). One
+  serving exception left.
+- `scripts/serving-lift.sh`: an MSRV precondition before the build. The sandbox
+  inherits `rust-version = "1.95"` but not `rust-toolchain.toml`, so it built on
+  the host default 1.94.1 and step 2 wrote a MEASURED 0 from a toolchain the
+  instrument cannot measure. It now selects an installed toolchain satisfying the
+  MSRV (`1.95.0` here) or ABSTAINS (exit 3) naming both. Verified: the sandbox ran
+  on `1.95.0` and step 2 compiled.
+
+NEW FINDING, recorded not fixed — the lift still writes 0, for a cause the row did
+not name. With the inference edge gone, `cargo tree -p sovereign-serving-host -i
+llama-cpp-4|corpus-engine` is empty (the row's check) and the closure builds until
+`sovereign-contracts` — a SHARED LEAF, not a package member — fails on two
+`include_str!`s that ESCAPE its crate root:
+
+    sovereign/crates/sovereign-contracts/src/recipe/registry.rs:31
+      include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../../sovereign-recipes/registry.toml"))
+    sovereign/crates/sovereign-contracts/src/recipe/schema.rs:25
+      include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../../sovereign-recipes/schema/recipe_schema_descriptor.json"))
+
+The flat-copy sandbox (the lift's design; a layout-preserving one is the smell
+`studio/BOUNDARY.md` records) cannot resolve them, so step 2 fails with
+`couldn't read …/sovereign-recipes/registry.toml`. This is the embed
+`SERVING_BOUNDARY.md` "What a green gate does not prove" warned the lift would
+find; the embedder is the shared leaf, so fixing it is a design decision (where
+the two recipe artifacts live so a liftable leaf can embed them, without a second
+copy — ARCH 8), not a behaviour-preserving move. `DEMO-d1-serving-lift` cannot
+reach verdict 1 until it is decided. `quality/DOMAINS.toml`'s `serving.lift`
+comment and `SERVING_BOUNDARY.md` now name this cause.
+
+Checks: LINT exit=0 (workspace, `--all-targets`, 0 errors); LAYER exit=0; BOUNDARY
+exit=0 (serving green, one exception); `cargo tree -p sovereign-serving-host -i
+llama-cpp-4` and `-i corpus-engine` both print no reverse tree (the package is
+absent from the closure); TEST(sovereign-serving-host) exit=0 (226 pass);
+TEST(sovereign-mesh) exit=0 (831 pass); TEST(oicp-types) 189, TEST(sovereign-contracts)
+423, TEST(sovereign-inference) 439 — all 0 fail. `scripts/serving-lift.sh --sandbox`
+exit=0, VERDICT 0 (the embed above), on toolchain 1.95.0.

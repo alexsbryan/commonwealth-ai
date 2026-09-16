@@ -154,7 +154,7 @@ question = "which engine answers this, and can I prove why?"
 owns = ["Venue", "Slot", "Admission", "Replay", "Decision"]
 package = "serving"   # declared by dm-serving-package-rows 2026-09-15 (ARCH_LAYERS.toml:1044); boundary-gate is red until the extraction completes, so the predicate still fails
 crates = ["sovereign-scheduler", "sovereign-serving-host", "serving-policy", "sovereign-compute"]   # the first two are CREATED by dm-mesh-serving (SERVING_BOUNDARY.md); the peg sovereign-serving emptied to zero at REVIEW-build-serving-empty-peg (2026-09-15) and is deleted
-lift = ""             # scripts/serving-lift.sh exists; VERDICT 0 today — the package's closure carries `sovereign-serving-host -> sovereign-inference` (-> sovereign-core -> corpus-engine, whose build.rs:59 needs the sibling sovereign-recipes/ tree; and -> llama-cpp-4), so lift steps 2 and 4 cannot pass while the grandfathered exception stands; REVIEW-build-serving-drop-inference burns it down
+lift = ""             # scripts/serving-lift.sh exists; VERDICT 0 today. REVIEW-build-serving-drop-inference (2026-09-15) removed the grandfathered `sovereign-serving-host -> sovereign-inference` edge (the remote provider now reaches `oicp-client`, the tool-call parser `oicp-types`, the FIM text `sovereign-contracts`) and made the sandbox run on a toolchain satisfying the declared MSRV, so `cargo tree -i llama-cpp-4|corpus-engine` is empty and the closure now measures. It still writes 0 at step 2 for a separate, unlisted reason: the shared leaf `sovereign-contracts` `include_str!`s `sovereign-recipes/{registry.toml,schema/recipe_schema_descriptor.json}` from OUTSIDE its crate root, which the flat-copy sandbox cannot resolve
 applicable_as = "a router in front of N OpenAI-compatible endpoints with admission control and replayable decisions"
 roots = ["serving-policy"]
 status = "kept"
@@ -7785,6 +7785,12 @@ lines = 169
 note = ""
 
 [[module]]
+path = "oicp-types/src/tool_calls.rs"
+context = "kernel"
+lines = 598
+note = ""
+
+[[module]]
 path = "oicp-types/src/version.rs"
 context = "kernel"
 lines = 19
@@ -11433,6 +11439,12 @@ lines = 237
 note = ""
 
 [[module]]
+path = "sovereign/crates/sovereign-contracts/src/fim.rs"
+context = "kernel"
+lines = 842
+note = ""
+
+[[module]]
 path = "sovereign/crates/sovereign-contracts/src/frame.rs"
 context = "kernel"
 lines = 618
@@ -13625,7 +13637,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-inference/src/embedded/grammar.rs"
 context = "unknown"
-lines = 1288
+lines = 710
 note = ""
 
 [[module]]
@@ -13715,7 +13727,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-inference/src/fim.rs"
 context = "unknown"
-lines = 883
+lines = 62
 note = ""
 
 [[module]]

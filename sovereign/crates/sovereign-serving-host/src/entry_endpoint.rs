@@ -60,7 +60,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use commonwealth_core::ids::NodeId;
-use sovereign_inference::remote::EndpointResolver;
+use oicp_client::EndpointResolver;
 
 use sovereign_scheduler::venue::VenueSource;
 

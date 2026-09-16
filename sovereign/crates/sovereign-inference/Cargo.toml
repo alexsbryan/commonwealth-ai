@@ -22,6 +22,11 @@ sovereign-core = { workspace = true }
 # The pure-HTTP OICP client (RemoteApiProvider / SplitInferenceProvider) was
 # extracted here; re-exported at `sovereign_inference::remote::*`.
 oicp-client = { workspace = true }
+# The tool-call parser moved DOWN here (domains
+# REVIEW-build-serving-drop-inference): it is pure `serde_json` + `std`, and
+# the serving host must reach it without linking this crate, so `oicp-types`
+# is now the owner and `embedded/grammar.rs` re-exports it.
+oicp-types = { workspace = true }
 async-trait = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

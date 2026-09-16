@@ -37,6 +37,12 @@ pub mod engine_config;
 pub mod egress;
 pub mod embed_quirks;
 pub mod error;
+/// Fill-in-the-middle prompt and stop text — the marker table, the PSM prompt
+/// builder, the mode decision and the pure stream stop tracker. Moved down
+/// from `sovereign-inference` (domains `REVIEW-build-serving-drop-inference`)
+/// so the serving host reaches it without linking the inference stack; it is
+/// arithmetic over `types::FimStyle`, which already lives here.
+pub mod fim;
 pub mod frame;
 pub mod gguf_validator;
 pub mod health;

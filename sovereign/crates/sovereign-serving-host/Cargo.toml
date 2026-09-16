@@ -29,11 +29,18 @@ async-trait = { workspace = true }
 # The four leavers moved host-side by domains dm-serving-move-leaves.
 # `worker_eligibility` and `model_fetch` key on commonwealth's identity and
 # model wire types (the grandfathered `commonwealth-core` edge);
-# `source_content_validator` names `sovereign-inference` (the grandfathered
-# inference edge); `model_fetch` streams a peer file through reqwest and
-# hashes it on the fly.
+# `source_content_validator` names the tool-call parser, now reached from
+# `oicp-types` (domains REVIEW-build-serving-drop-inference);
+# `model_fetch` streams a peer file through reqwest and hashes it on the fly.
 commonwealth-core = { workspace = true }
-sovereign-inference = { workspace = true }
+# The remote provider the router reaches an endpoint through. Was
+# `sovereign_inference::remote::*`, which is itself nothing but
+# `pub use oicp_client::*` — the path swap domains
+# REVIEW-build-serving-drop-inference performed to drop this crate's
+# `sovereign-inference` edge (SERVING_BOUNDARY.md "Grandfathered": the
+# exception cleared when the remote provider was reached through
+# `oicp-client`).
+oicp-client = { workspace = true }
 reqwest = { workspace = true }
 urlencoding = "2"
 sha2 = { workspace = true }

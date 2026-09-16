@@ -280,6 +280,37 @@ esac
 say "toolchain in the sandbox: $(cd "$SANDBOX" && cargo --version 2>&1 | head -1)"
 say "sandbox: $SANDBOX  (repo is $REPO — nothing under it is on this path)"
 
+# ── The MSRV precondition, checked BEFORE the build ─────────────────────────
+# The sandbox inherits `[workspace.package] rust-version` from the copied root
+# manifest, and it does NOT carry rust-toolchain.toml (above), so it builds on
+# whatever toolchain is ambient OUTSIDE this repo. When that is older than the
+# declared MSRV, cargo refuses the build and step 2 would write a MEASURED 0 —
+# a failure the instrument cannot actually measure (measured 2026-09-15: the
+# sandbox host default 1.94.1 against a declared 1.95). So: run the sandbox on
+# an installed toolchain that satisfies the MSRV, or abstain by name.
+MSRV=$(python3 -c "import tomllib;print(tomllib.load(open('$REPO/Cargo.toml','rb'))['workspace']['package'].get('rust-version',''))" 2>/dev/null)
+SANDBOX_TOOLCHAIN=""
+if [ -n "$MSRV" ]; then
+  ambient=$(cd "$SANDBOX" && rustc --version 2>/dev/null | sed -E 's/^rustc ([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+  # version_lt A B — true when A is strictly older than B.
+  version_lt() { [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -1)" = "$1" ] && [ "$1" != "$2" ]; }
+  if [ -n "$ambient" ] && version_lt "$ambient" "$MSRV"; then
+    if command -v rustup >/dev/null 2>&1; then
+      while IFS= read -r tc; do
+        [ -n "$tc" ] || continue
+        v=$(rustup run "$tc" rustc --version 2>/dev/null | sed -E 's/^rustc ([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+        if [ -n "$v" ] && ! version_lt "$v" "$MSRV"; then SANDBOX_TOOLCHAIN="$tc"; break; fi
+      done <<EOF
+$(rustup toolchain list 2>/dev/null | awk '{print $1}')
+EOF
+    fi
+    [ -n "$SANDBOX_TOOLCHAIN" ] || \
+      abstain "the sandbox would build on rustc $ambient but the workspace declares rust-version = $MSRV, and no installed toolchain satisfies it — nothing was measured (install a rustc >= $MSRV, or run on a host whose default does)"
+    export RUSTUP_TOOLCHAIN="$SANDBOX_TOOLCHAIN"
+    say "MSRV $MSRV: sandbox runs on \`$SANDBOX_TOOLCHAIN\` (ambient rustc $ambient is older)"
+  fi
+fi
+
 # Resolution BEFORE the build, and its failure is an abstention rather than a
 # verdict: a registry that cannot be reached says nothing about whether this
 # closure lifts (ARCH §18.2). A build failure AFTER a clean resolve does.

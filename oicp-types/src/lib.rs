@@ -49,6 +49,12 @@ pub mod scoring;
 pub mod slot;
 pub mod tenant;
 pub mod tool;
+/// Tool-call extraction from free-form model output — the lenient parser the
+/// serving host and the embedded engine both need, pure `serde_json` + `std`.
+/// Moved down from `sovereign-inference` (domains
+/// `REVIEW-build-serving-drop-inference`) so the host reaches it without
+/// linking the inference stack.
+pub mod tool_calls;
 pub mod version;
 
 pub use completion::{

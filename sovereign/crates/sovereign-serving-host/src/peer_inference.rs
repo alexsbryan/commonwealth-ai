@@ -58,13 +58,13 @@ use std::time::{Duration, Instant};
 use crate::recorder;
 use async_trait::async_trait;
 use futures::{Stream, StreamExt};
+use oicp_client::RemoteApiProvider;
 use oicp_types::{ExtensionRegistry, ExtensionStats, NodeObservations, ProviderManifest};
 use sovereign_contracts::error::Result;
 use sovereign_contracts::traits::{InferenceProvider, ServingLocus};
 use sovereign_contracts::types::{
     CompletionRequest, CompletionResponse, ProviderCapabilities, Speed,
 };
-use sovereign_inference::remote::RemoteApiProvider;
 use tokio::sync::RwLock;
 
 use crate::local_inflight::{LocalInflightGuard, LocalTotalGuard};

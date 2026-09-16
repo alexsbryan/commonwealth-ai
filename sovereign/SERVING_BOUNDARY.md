@@ -121,10 +121,13 @@ daemon-side half of the argument. Leading with what was wrong:
 already holds the scorer (`ScoredClaim` :438, `pick_better` :458,
 `best_claim_for_request` :481, `SCORING_EPSILON` :431); `oicp_select.rs` is a shim over it.
 
-**Grandfathered `[[exception]]` rows — exactly two, each with a `tracking` burn-down.** A
+**Grandfathered `[[exception]]` rows — at most two, each with a `tracking` burn-down.** A
 third means the boundary is drawn in the wrong place (K4).
 `sovereign-serving-host → sovereign-inference` (`RemoteApiProvider`, `peer_inference.rs:64`)
-clears when the remote provider is reached through `oicp-client`;
+cleared when the remote provider is reached through `oicp-client` — RETIRED 2026-09-15 by
+`REVIEW-build-serving-drop-inference`: the provider now names `oicp-client` directly, the
+tool-call parser moved DOWN to `oicp-types::tool_calls` and the FIM prompt/stop text to
+`sovereign-contracts::fim`, and the host's `sovereign-inference` dep is gone (one row left).
 `sovereign-serving-host → commonwealth-core` (`PeerHealthTracker`, `ids::NodeId`) clears
 when quarantine state is the host's own and identity is `kernel_types::NodeId`.
 `sovereign-scheduler → sovereign-core` is **zero once `pick_slot_for_oicp` leaves** (corrected
@@ -289,7 +292,12 @@ Adjudicated 2026-09-14; rows, prices and evidence are the `[[collision]]` rows w
 A clean dependency closure is not a clean lift — the caveat `studio/BOUNDARY.md` earned
 by performing one: its gate was green while `sovereign-contracts` embedded a file from
 outside its crate root and the sandbox had to preserve the monorepo's directory shape to
-compile. The way to know Serving carries no such embed is to lift it. Nor does the gate
+compile. The way to know Serving carries no such embed is to lift it. **Serving carries
+one, measured 2026-09-15:** with the inference edge gone the lift's flat-copy sandbox
+still cannot compile `sovereign-contracts`, which `include_str!`s
+`sovereign-recipes/registry.toml` and `sovereign-recipes/schema/recipe_schema_descriptor.json`
+from outside its crate root (`recipe/registry.rs:31`, `recipe/schema.rs:25`) — the shared
+leaf is the embedder, not a package member. Nor does the gate
 prove the package **routes**: `boundary-gate` reads manifests and cannot tell a scheduler
 that ranks from one that returns the first candidate. Until `serving-lift.sh`'s later
 steps stop abstaining, green means "the edges are legal".

@@ -561,7 +561,7 @@ impl SovereignInferenceAdapter {
 /// envelope (caller falls back to the marker-based parser).
 pub(crate) fn parse_tool_envelope_direct(
     text: &str,
-) -> Vec<sovereign_inference::embedded::ParsedToolCall> {
+) -> Vec<oicp_types::tool_calls::ParsedToolCall> {
     // Strip a leading `<think>...</think>` block if present.
     // Qwen-family chat templates wrap the assistant turn opener in
     // `<think>` tags, so under JSON-schema grammar the model's bare
@@ -598,7 +598,7 @@ pub(crate) fn parse_tool_envelope_direct(
         // Fall back to escape-fixup once. Qwen-Coder sometimes
         // emits unescaped raw newlines inside string values.
         let fixed =
-            sovereign_inference::embedded::escape_unescaped_control_chars_in_string_values(trimmed);
+            oicp_types::tool_calls::escape_unescaped_control_chars_in_string_values(trimmed);
         parse_first_json_value(&fixed)
     });
     let Some(obj) = obj_opt else {
@@ -612,7 +612,7 @@ pub(crate) fn parse_tool_envelope_direct(
         Some(v) => v.to_string(),
         None => "{}".to_string(),
     };
-    vec![sovereign_inference::embedded::ParsedToolCall {
+    vec![oicp_types::tool_calls::ParsedToolCall {
         name: name.to_string(),
         arguments: args_str,
     }]
@@ -1191,10 +1191,10 @@ impl LocalInferenceService for SovereignInferenceAdapter {
                     tracing::debug!(
                         "inference_adapter:tool_parse_grammar_direct_empty_falling_back_to_marker"
                     );
-                    sovereign_inference::embedded::parse_tool_calls_with_errors(&text_for_parsing)
+                    oicp_types::tool_calls::parse_tool_calls_with_errors(&text_for_parsing)
                 }
             } else {
-                sovereign_inference::embedded::parse_tool_calls_with_errors(&text_for_parsing)
+                oicp_types::tool_calls::parse_tool_calls_with_errors(&text_for_parsing)
             }
         } else {
             (Vec::new(), Vec::new())

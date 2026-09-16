@@ -1237,17 +1237,18 @@ tracking = "enrichment-as-plugin follow-up (index-read leaf)"
 
 # ── Serving package exceptions (the burn-down list) ──────────────────────────
 # Declared 2026-09-14 with the [[package]] row above, per SERVING_BOUNDARY.md
-# "Grandfathered": EXACTLY TWO, and a third means the boundary is drawn in the
+# "Grandfathered": at most two, and a third means the boundary is drawn in the
 # wrong place (the campaign's K4) — move the line, do not widen the ledger. Each
 # carries the `tracking` condition that retires it, and a stale one (the edge is
 # gone) fails the gate until it is deleted.
-
-[[exception]]
-package = "serving"
-from = "sovereign-serving-host"
-to = "sovereign-inference"
-reason = "the host is the ONE tier that connects: `RemoteApiProvider` (peer_inference.rs:64) is the remote provider the router reaches an endpoint through. Rule 5 permits the host to name inference; the package closure does not, so the edge is grandfathered rather than forbidden."
-tracking = "clears when the remote provider is reached through `oicp-client` instead of sovereign-inference"
+#
+# ONE LEFT. The `sovereign-serving-host -> sovereign-inference` row was retired
+# 2026-09-15 by domains REVIEW-build-serving-drop-inference: the remote provider
+# is reached through `oicp-client` now (its `RemoteApiProvider`/`EndpointResolver`
+# are `pub use oicp_client::*`), the tool-call parser moved down to `oicp-types`,
+# the FIM prompt/stop text to `sovereign-contracts`, and the host's
+# `sovereign-inference` dep is gone — so the edge is gone and the row went with
+# it (removals are the celebration).
 
 [[exception]]
 package = "serving"
