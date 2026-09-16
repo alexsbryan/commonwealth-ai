@@ -115,6 +115,10 @@ members = [
     # desktop Tauri host and the `sovereign meshapp dev` CLI server.
     "sovereign/crates/sovereign-meshapp",
     "sovereign/crates/sovereign-mesh",
+    # The node's host crate (DAEMON_CORE.md §4.1), beside sovereign-mesh in the
+    # `mesh-api` layer. Created as a stub so the boundary has a crate to name;
+    # receives sovereign-mesh's host modules and sovereign-api's host cluster.
+    "sovereign/crates/sovereign-daemon",
     # Supervised compute-child process boundary (DISTRIBUTED_PILOT_READINESS.md
     # P1) — child-process supervisor (extracted from sovereign-desktop) + the
     # native lossless wire + child server/entrypoint + daemon-side provider

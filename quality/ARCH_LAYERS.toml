@@ -293,6 +293,10 @@ crates = [
 name = "mesh-api"
 crates = [
     "sovereign-api",
+    # The node's host crate (DAEMON_CORE.md §4.1): assembly, the surface
+    # shells, the edge and the adapters. A stub until the host modules move in;
+    # the two [[forbid]] rows below land with it.
+    "sovereign-daemon",
     "sovereign-mesh-test-harness",
     "sovereign-mesh",
 ]
@@ -723,6 +727,24 @@ except = ["sovereign-contracts", "sovereign-serving-host", "sovereign-grants", "
 # layers goes.
 
 reason = "cross-family reach — the mesh API should meet the runtime at the OICP/contracts seam (R6)"
+
+# The daemon crate's two rows, landing with the crate (DAEMON_CORE.md §4.1;
+# domains dm-daemon-crate). Layer ordering already forbids a lower tier
+# reaching tier 5; the rows are named because of two things no gate sees: a
+# struct in `sovereign-daemon` that carries every part and is handed to every
+# handler passes all of them while restoring `AppState` under a new name, and
+# a decider can land in the crate green. The harness row sits ABOVE its broad
+# `sovereign-mesh-test-harness -> sovereign-*` sibling so its specific reason
+# is the first match.
+[[forbid]]
+from = "sovereign-mesh"
+to = "sovereign-daemon"
+reason = "Fabric observes membership through readers, never the reverse (DAEMON_CORE.md §4.1) — a mesh dependency on the host crate rebuilds the orchestration Fabric's ownership removes"
+
+[[forbid]]
+from = "sovereign-mesh-test-harness"
+to = "sovereign-daemon"
+reason = "the harness simulates a node against the OICP/contracts seam, not the assembled host (DAEMON_CORE.md §4.1)"
 
 [[forbid]]
 from = "sovereign-mesh-test-harness"

@@ -12432,6 +12432,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "sovereign-daemon"
+version = "0.7.0"
+
+[[package]]
 name = "sovereign-desktop"
 version = "0.7.0"
 dependencies = [
