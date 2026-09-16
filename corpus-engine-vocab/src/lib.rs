@@ -21,6 +21,11 @@
 //! - [`stable_key`] — `StableAtomKey`, an atom's content-derived identity
 //!   (ARCH §7.5). It reads only atom fields, and an inherent `impl
 //!   AtomEnvelope` has to live where `AtomEnvelope` does.
+//! - [`reading_formatters`] — the one pure presentation projection over an
+//!   [`atoms::AtomEnvelope`] (`atom_surface_fields`), used by the glass-box
+//!   reading surface. Moved here from `sovereign-mesh` by domains
+//!   `dm-mesh-move-reading-formatters` (DC §4.3: "Understanding's read
+//!   model").
 //!
 //! Closure: `serde`, `serde_json`, `kernel-types`, `blake3` (the stable
 //! key's hash — changing it would re-key every curation overlay). No IO,
@@ -32,5 +37,6 @@ pub mod atoms;
 pub mod canonical;
 pub mod edges;
 pub mod ontology;
+pub mod reading_formatters;
 pub mod stable_key;
 pub mod taxonomy;

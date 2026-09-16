@@ -15,15 +15,13 @@
 //! spelling per closed set. What is left is the one projection that is
 //! genuinely presentation rather than atom knowledge.
 
-use corpus_engine::enrichment::atlas::AtomEnvelope;
+use crate::atoms::AtomEnvelope;
 
 /// Pull the human-readable fields for any atom type. Not every
 /// type has every field — for atoms without a clean canonical name
 /// we synthesize from the most descriptive available text so the
 /// panel still shows something sensible.
-pub(crate) fn atom_surface_fields(
-    atom: &AtomEnvelope,
-) -> (String, Vec<String>, String, Option<f32>) {
+pub fn atom_surface_fields(atom: &AtomEnvelope) -> (String, Vec<String>, String, Option<f32>) {
     match atom {
         AtomEnvelope::Entity(e) => (
             e.canonical_name.clone(),

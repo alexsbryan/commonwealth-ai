@@ -744,9 +744,9 @@ lines = 1011
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/reading_formatters.rs"
+path = "corpus-engine-vocab/src/reading_formatters.rs"
 context = "understanding"
-lines = 139
+lines = 137
 note = ""
 
 [[module]]

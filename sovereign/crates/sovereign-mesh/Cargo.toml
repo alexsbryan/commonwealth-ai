@@ -106,6 +106,10 @@ corpus-engine-notes = { workspace = true }
 # SCIP call graph + exporter dispatch. Carved out of corpus-engine
 # 2026-05-23 — reindexer.rs uses ScipGraph + scip_export directly.
 corpus-engine-scip = { workspace = true }
+# The atlas vocabulary leaf. Named directly rather than through corpus-engine's
+# re-export so `reading_formatters` resolves at its new home (domains row
+# dm-mesh-move-reading-formatters, DC §4.3).
+corpus-engine-vocab = { workspace = true }
 # The authoring harness's POLICY layer — the Pass/Fail ladder over
 # `corpus_engine::harness` stage outputs, plus the shared DRIVE
 # (`run_over_frozen_sample`) that `POST /internal/corpus/recipes/harness` and

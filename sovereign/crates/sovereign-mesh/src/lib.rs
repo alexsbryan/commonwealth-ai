@@ -106,7 +106,7 @@ pub mod projects;
 pub mod publish_http;
 pub mod rail_bind;
 pub mod rail_kv_pump;
-pub mod reading_formatters;
+pub use corpus_engine_vocab::reading_formatters; // shim: moved by domains dm-mesh-move-reading-formatters
 pub mod reading_http;
 pub mod recipe_http;
 pub mod recipe_project_http;
