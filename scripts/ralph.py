@@ -701,6 +701,15 @@ class Pool:
             queue = self._queue()
             if queue is not None and queue.status_of(review.id) is Status.DONE:
                 return None
+            # A worker that stops per PROMPT §6 leaves its package for the
+            # director; without this check the pool re-runs the row to the
+            # attempt limit (2026-09-16, REVIEW-build-mesh-api-decouple). The
+            # package is NOT rewritten — it is the worker's evidence.
+            pkg = self.paths.p(self.paths.needs_human)
+            if pkg.exists() and pkg.stat().st_size:
+                say(f"pool: review {review.id} left NEEDS_HUMAN.md — stopping for the director")
+                self.notifier("NEEDS_HUMAN", first_line(pkg), self.notify_enabled)
+                return 3
             marker = wait_for_marker(self.paths, self.marker_timeout)
             if marker == "wait":
                 return None          # handed off to a detached run; resume the loop
