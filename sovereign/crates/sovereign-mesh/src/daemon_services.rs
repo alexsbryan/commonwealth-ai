@@ -180,6 +180,13 @@ pub struct ServingCore {
     /// daemon holds it behind a lock only because `POST /v1/admin/reload`
     /// swaps it; a host installs it here, once, or not at all.
     pub inference_provider: Arc<dyn InferenceProvider>,
+    /// The node's in-flight gauge, created by the bootstrap *before* the
+    /// `InferenceRouter` and handed to both the router and `AppState` — one
+    /// atomic the provider's guards write and gossip reads
+    /// (`quality/DAEMON_CORE.md` §4.2 "Where an install slot breaks a cycle").
+    /// `None` when the provider is not a router (fixtures, a `NullProvider`);
+    /// the absence is what gossip publishes as `current_in_flight: None`.
+    pub in_flight_gauge: Option<sovereign_core::in_flight::LocalInFlightGauge>,
     /// The thing that ANSWERS — routing, retrieval, tools, synthesis.
     ///
     /// CORE, and the field `quality/TOPOLOGY.md` §3.5 turns on: "DAEMON — the
@@ -759,6 +766,7 @@ pub(crate) mod fixtures {
             core: ServingCore {
                 corpus_engine: engine(),
                 inference_provider,
+                in_flight_gauge: None,
                 state_store,
                 runtime: runtime(),
                 insights: None,

@@ -118,11 +118,12 @@ impl ProviderFactory for LlamaCppFactory {
             .host(Arc::clone(&peer_host))
             .manifest(Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest));
         // A reload must NOT mint a fresh publisher: live `LocalTotalGuard`s from
-        // the old router hold a clone of AppState's `Arc<AtomicU32>` and keep
-        // decrementing it as their requests drain. When the OnceLock is not yet
-        // set — cold-start's spawned task hasn't run — the builder mints a
-        // private one, and the spawned task installs the shared publisher when
-        // it next polls.
+        // the old router hold a clone of the node's `Arc<AtomicU32>` and keep
+        // decrementing it as their requests drain. The gauge exists from
+        // construction (the bootstrap created it before the cold-start router),
+        // so `AppState` already holds it and we hand the same `Arc` to the new
+        // router. A node with no gauge (no router ever built) leaves the
+        // builder to mint a private one.
         if let Some(publisher) = app_state_opt
             .as_ref()
             .and_then(|state| state.in_flight_publisher())

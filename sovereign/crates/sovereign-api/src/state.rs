@@ -950,12 +950,43 @@ impl AppState {
     /// that used to yield the `is_stub: "true"` placeholder. The
     /// `sovereign-mesh::EmbeddedDaemon` passes `Some(engine)` so
     /// the in-process daemon has something real to search.
+    ///
+    /// No in-flight gauge: a caller with a provider names one through
+    /// [`Self::new_with_platform_and_engine_and_gauge`], because the gauge
+    /// must be the same handle the provider increments (`quality/DAEMON_CORE.md`
+    /// §4.2 "Where an install slot breaks a cycle"). Tests and storage-only
+    /// nodes take the absent form.
     pub fn new_with_platform_and_engine(
         self_node_id: NodeId,
         mesh: Mesh,
         mesh_store: Arc<MeshStore>,
         app_registry: Arc<AppRegistry>,
         corpus_engine: Option<Arc<CorpusEngine>>,
+    ) -> Self {
+        Self::new_with_platform_and_engine_and_gauge(
+            self_node_id,
+            mesh,
+            mesh_store,
+            app_registry,
+            corpus_engine,
+            None,
+        )
+    }
+
+    /// [`Self::new_with_platform_and_engine`] with the node's in-flight gauge.
+    ///
+    /// The gauge is created before the provider and passed to both — the
+    /// provider's RAII guards write it, this part holds it, and gossip reads it
+    /// through [`Self::current_local_in_flight`]. A node that has no provider
+    /// passes `None`; the absence is what gossip publishes as "no signal",
+    /// never a zeroed default (ARCH 6).
+    pub fn new_with_platform_and_engine_and_gauge(
+        self_node_id: NodeId,
+        mesh: Mesh,
+        mesh_store: Arc<MeshStore>,
+        app_registry: Arc<AppRegistry>,
+        corpus_engine: Option<Arc<CorpusEngine>>,
+        in_flight_gauge: Option<sovereign_core::in_flight::LocalInFlightGauge>,
     ) -> Self {
         let inference_store = InferenceStateStore::new(Arc::clone(&mesh_store), self_node_id);
         let contribution_emitter = ContributionEmitter::new((*mesh_store).clone(), self_node_id);
@@ -1084,7 +1115,7 @@ impl AppState {
                     // mode is exactly what this prevents.
                     yield_peers_to_foreground: std::sync::atomic::AtomicBool::new(true),
                     peer_preferences,
-                    local_in_flight_publisher: std::sync::OnceLock::new(),
+                    local_in_flight_gauge: in_flight_gauge,
                 },
                 node: node::NodePart {
                     client_token: std::sync::RwLock::new(None),
@@ -1140,36 +1171,30 @@ impl AppState {
         }
     }
 
-    /// Install the local router's in-flight publisher. One-shot: if the
-    /// OnceLock is already set, the new `publisher` is dropped and
-    /// the existing Arc stays in place. This is the load-bearing
-    /// invariant the hot-reload path relies on — it must NOT clobber
-    /// the publisher the cold-start path installed, or live guards
-    /// from the old router would decrement an Arc nobody reads.
-    pub fn install_in_flight_publisher(&self, publisher: Arc<std::sync::atomic::AtomicU32>) {
-        let _ = self.inner.serving.local_in_flight_publisher.set(publisher);
-    }
-
-    /// Borrow the installed in-flight publisher Arc. Hot-reload path
+    /// Borrow the node's in-flight publisher Arc. The hot-reload path
     /// calls this to pass the same Arc into
-    /// `InferenceRouter::with_in_flight_publisher`. `None` when
-    /// the bootstrap hasn't run an install yet (test harnesses,
-    /// storage-only nodes).
+    /// `InferenceRouter`'s builder, so old router guards and new router
+    /// guards decrement one atomic. `None` on a node that has no gauge
+    /// (test harnesses, storage-only nodes), which is the same absence
+    /// [`Self::current_local_in_flight`] reports.
     pub fn in_flight_publisher(&self) -> Option<Arc<std::sync::atomic::AtomicU32>> {
-        self.inner.serving.local_in_flight_publisher.get().cloned()
+        self.inner
+            .serving
+            .local_in_flight_gauge
+            .as_ref()
+            .map(sovereign_core::in_flight::LocalInFlightGauge::arc)
     }
 
-    /// Read the current local in-flight count if a publisher has been
-    /// installed. `None` on nodes that never wired one through
-    /// (storage-only, test harnesses without `InferenceRouter`).
-    /// Gossip serialises this directly into
-    /// `NodeCapabilities.current_in_flight`.
+    /// Read the current local in-flight count if this node holds a gauge.
+    /// `None` on nodes that never constructed a provider (storage-only, test
+    /// harnesses without `InferenceRouter`). Gossip serialises this directly
+    /// into `NodeCapabilities.current_in_flight`.
     pub fn current_local_in_flight(&self) -> Option<u32> {
         self.inner
             .serving
-            .local_in_flight_publisher
-            .get()
-            .map(|p| p.load(std::sync::atomic::Ordering::Relaxed))
+            .local_in_flight_gauge
+            .as_ref()
+            .map(sovereign_core::in_flight::LocalInFlightGauge::current)
     }
 
     /// Spawn the coordinator's pull-based work-queue reaper. Must be called

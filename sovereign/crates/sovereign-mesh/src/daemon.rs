@@ -2960,12 +2960,15 @@ impl EmbeddedDaemon {
             ),
         };
         let app_registry = Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new());
-        let app_state = AppState::new_with_platform_and_engine(
+        let app_state = AppState::new_with_platform_and_engine_and_gauge(
             node_id,
             mesh,
             mesh_store,
             app_registry,
             corpus_engine.clone(),
+            self.services
+                .serving()
+                .and_then(|s| s.core.in_flight_gauge.clone()),
         );
 
         // Install the shared notes convergence recorder (fix 9) into

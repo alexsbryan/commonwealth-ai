@@ -843,7 +843,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     // no slot this bootstrap can forget. `DeferredDaemon` breaks the one
     // genuine cycle — the daemon serves peers through a provider that routes
     // to peers — and carries no capability of its own.
-    let (deferred_daemon, mesh_provider) =
+    let (deferred_daemon, mesh_provider, in_flight_gauge) =
         bootstrap::build_mesh_provider(Arc::clone(&provider), deferred_daemon).await;
     let routed_provider: Arc<dyn InferenceProvider> = mesh_provider.clone();
 
@@ -1164,6 +1164,11 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
                     // /internal/corpus/* surface both read.
                     corpus_engine: Arc::clone(&engine),
                     inference_provider: Arc::clone(&routed_provider),
+                    // The gauge the router above was built with, so AppState
+                    // holds the same counter the provider's guards write
+                    // (`quality/DAEMON_CORE.md` §4.2 "Where an install slot
+                    // breaks a cycle").
+                    in_flight_gauge: Some(in_flight_gauge),
                     // Phase 3: the headless daemon's own `sovereign.db`,
                     // opened at the top of this function. `reading_http` now
                     // resolves conversation titles on this variant too.

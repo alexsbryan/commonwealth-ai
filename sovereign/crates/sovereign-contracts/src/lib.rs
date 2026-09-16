@@ -53,6 +53,12 @@ pub mod health;
 /// that may not name each other (`sovereign-api` cannot name
 /// `sovereign-mesh`).
 pub mod identity;
+/// The node's in-flight request gauge — a signal object created before the
+/// provider that increments it, so the counter is never a slot filled later.
+/// Here because its two speakers may not name each other: `sovereign-mesh`
+/// carries it and `sovereign-api` holds it
+/// (`quality/DAEMON_CORE.md` §4.2 "Where an install slot breaks a cycle").
+pub mod in_flight;
 pub mod intent_policy;
 pub mod launch;
 pub mod lessons;

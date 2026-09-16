@@ -12,7 +12,7 @@
 //! directly rather than through delegating accessors.
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 use arc_swap::ArcSwap;
 use tokio::sync::RwLock;
@@ -22,6 +22,7 @@ use commonwealth_state::store_adapter::InferenceStateStore;
 use commonwealth_state::PeerPreferenceStore;
 use oicp_types::model_aliases::ModelAliasTable;
 use serving_policy::fair_sched::SchedCore;
+use sovereign_core::in_flight::LocalInFlightGauge;
 use sovereign_serving_host::admission::Principal;
 
 use super::{LocalInferenceService, PeerTally, RejectedNodeIdHeader, RpcShardWarmer};
@@ -210,27 +211,27 @@ pub struct ServingPart {
     /// fetch to apply per-requester affinity multipliers.
     pub peer_preferences: PeerPreferenceStore,
 
-    /// Shared in-flight counter for local-serve inference. Installed
-    /// once by the daemon bootstrap after `InferenceRouter::new`
-    /// returns. Read by the gossip emitter
+    /// Shared in-flight counter for local-serve inference. The node creates
+    /// the gauge *before* the provider that increments it and gives the same
+    /// handle to both — a signal object created first, never a slot filled
+    /// later (`quality/DAEMON_CORE.md` §4.2 "Where an install slot breaks a
+    /// cycle"). Read by the gossip emitter
     /// (`sovereign-mesh::capabilities::build_local_capabilities`) on
     /// every tick to populate
     /// [`commonwealth_core::capabilities::NodeCapabilities::current_in_flight`].
     ///
     /// Lifecycle:
-    /// * Cold start: the router creates its own private `Arc<AtomicU32>`,
-    ///   then the bootstrap calls
-    ///   [`crate::state::AppState::install_in_flight_publisher`] with that Arc.
-    ///   `OnceLock::set` succeeds on the first call.
-    /// * Hot reload (`replace_models_and_reload`): the new router is
-    ///   constructed via [`InferenceRouter::with_in_flight_publisher`]
-    ///   passing the *already-installed* Arc back in. The OnceLock
-    ///   is unchanged; old router guards and new router guards share the
-    ///   same atomic, so the counter stays accurate across the swap.
+    /// * Cold start: the bootstrap mints the gauge, passes its `Arc` into the
+    ///   `InferenceRouter` builder, and hands the gauge to this part at
+    ///   construction.
+    /// * Hot reload (`replace_models_and_reload`): the new router is built
+    ///   with the same `Arc` read back off this part, so old router guards and
+    ///   new router guards share one atomic and the count stays accurate
+    ///   across the swap.
     ///
-    /// Empty in tests and on storage-only nodes that never construct
-    /// a `InferenceRouter`; gossip then emits
-    /// `current_in_flight: None`, which is the legacy / "no signal"
-    /// behaviour every scoring path handles correctly.
-    pub local_in_flight_publisher: std::sync::OnceLock<Arc<std::sync::atomic::AtomicU32>>,
+    /// `None` in tests and on storage-only nodes that never construct an
+    /// `InferenceRouter`; gossip then emits `current_in_flight: None`, which
+    /// is the legacy / "no signal" behaviour every scoring path handles
+    /// correctly. Absence is reported, never zeroed into a default (ARCH 6).
+    pub local_in_flight_gauge: Option<LocalInFlightGauge>,
 }

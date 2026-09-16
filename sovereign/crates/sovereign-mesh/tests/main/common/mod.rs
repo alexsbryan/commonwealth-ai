@@ -615,6 +615,7 @@ pub fn desktop_services(parts: DesktopParts) -> sovereign_mesh::DaemonServices {
                 core: sovereign_mesh::ServingCore {
                     corpus_engine: parts.engine,
                     inference_provider: parts.provider,
+                    in_flight_gauge: None,
                     state_store: parts.store,
                     runtime: parts.runtime,
                     insights: parts.insights,

@@ -1198,7 +1198,7 @@ pub fn spawn_self_manifest_refresh(
     });
 }
 
-/// Spawn the deferred slot-alias push + in-flight-publisher install onto AppState.
+/// Spawn the deferred slot-alias push onto the mesh provider.
 pub(super) fn spawn_slot_alias_push(
     daemon: Arc<EmbeddedDaemon>,
     mesh_provider: Arc<sovereign_serving_host::peer_inference::InferenceRouter>,
@@ -1212,15 +1212,14 @@ pub(super) fn spawn_slot_alias_push(
     // spawned task because `daemon.app_state()` only returns
     // `Some` after `start()` transitions DaemonState to Running.
     //
-    // Same spawned task also installs the router's in-flight publisher Arc
-    // onto AppState — feeds the gossip-load-awareness path so peers
-    // see this node's true serving load instead of phantom-idle.
-    // See `sovereign/docs/MESH_LOAD_AWARENESS.md` for the design.
+    // The in-flight gauge needs no install here: the bootstrap minted it
+    // before the provider and handed the same handle to both, so
+    // `AppState` already holds the router's counter
+    // (`quality/DAEMON_CORE.md` §4.2 "Where an install slot breaks a cycle").
     let daemon_for_alias_push = Arc::clone(&daemon);
     let mesh_for_alias_push = mesh_provider.clone();
-    // Supervised one-shot: publisher install + alias push are
-    // idempotent, so a panic-restart just retries the wiring
-    // (DAEMON_RESILIENCE.md P0.4).
+    // Supervised one-shot: the alias push is idempotent, so a panic-restart
+    // just retries the wiring (DAEMON_RESILIENCE.md P0.4).
     crate::supervise::spawn_supervised("slot_alias_push", move || {
         let daemon_for_alias_push = Arc::clone(&daemon_for_alias_push);
         let mesh_for_alias_push = mesh_for_alias_push.clone();
@@ -1230,18 +1229,8 @@ pub(super) fn spawn_slot_alias_push(
             // hundred ms; cap at 30s so a stuck setup never hangs
             // this spawn.
             let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
-            let mut publisher_installed = false;
             loop {
                 if let Some(state) = daemon_for_alias_push.app_state().await {
-                    if !publisher_installed {
-                        state
-                            .install_in_flight_publisher(mesh_for_alias_push.in_flight_publisher());
-                        publisher_installed = true;
-                        tracing::info!(
-                            "daemon_cmd: installed in-flight publisher on AppState \
-                             — gossip will now advertise this node's actual load"
-                        );
-                    }
                     let snapshot = state.inner.serving.slot_aliases.load();
                     let map: std::collections::HashMap<String, String> = snapshot
                         .iter()
@@ -2201,6 +2190,7 @@ pub(super) async fn build_mesh_provider(
 ) -> (
     Arc<sovereign_mesh::DeferredDaemon>,
     Arc<sovereign_serving_host::peer_inference::InferenceRouter>,
+    sovereign_contracts::in_flight::LocalInFlightGauge,
 ) {
     // Wrap the raw `EmbeddedLlamaCpp` in `InferenceRouter`
     // before installing it as the daemon's serving provider.
@@ -2305,11 +2295,23 @@ pub(super) async fn build_mesh_provider(
             Arc::clone(&pinned_source),
         ),
     );
+    // The gauge exists BEFORE the provider: the node creates it here, hands
+    // the same `Arc` to the router's guards (`.in_flight`) and returns it so
+    // `ServingCore` can give it to `AppState`. There is no install afterwards
+    // — the counter is never a slot filled once the provider is built
+    // (`quality/DAEMON_CORE.md` §4.2 "Where an install slot breaks a cycle").
+    let in_flight_gauge = sovereign_contracts::in_flight::LocalInFlightGauge::new();
+    tracing::info!(
+        "daemon_cmd: minted the in-flight gauge before the router — gossip \
+         will advertise this node's actual load from the same counter the \
+         provider's guards write"
+    );
     let mesh_provider = Arc::new(
         sovereign_serving_host::peer_inference::InferenceRouter::builder(Arc::clone(&provider))
             .candidates(Arc::clone(&composite) as Arc<dyn sovereign_scheduler::venue::VenueSource>)
             .host(Arc::clone(&daemon) as Arc<dyn sovereign_serving_host::venue_host::VenueHost>)
             .manifest(Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest))
+            .in_flight(in_flight_gauge.arc())
             .build(),
     );
     // The pinned pods' TLS handles do not travel with the venue (the scheduler
@@ -2326,7 +2328,7 @@ pub(super) async fn build_mesh_provider(
     // Observed live 2026-08-28: zero `guest-lender` lines in a daemon whose
     // `guest.json` was present and valid.
     mesh_provider.set_guest_source(sovereign_mesh::guest_source::stored_guest_source());
-    (daemon, mesh_provider)
+    (daemon, mesh_provider, in_flight_gauge)
 }
 
 /// Swap the real `MeshBroadcaster` into the deferred handle (peer fan-out) and

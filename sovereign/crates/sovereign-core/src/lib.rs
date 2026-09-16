@@ -88,6 +88,16 @@ pub use sovereign_contracts::daemon_wire;
 // reachable at its `sovereign_core::` path.
 pub use sovereign_contracts::identity;
 
+// The in-flight gauge, at `sovereign_core::in_flight`. Added 2026-09-16 for
+// `sovereign-api`, whose `ServingPart` holds the gauge the daemon creates
+// before the provider (`quality/DAEMON_CORE.md` §4.2 "Where an install slot
+// breaks a cycle"). Naming `sovereign-contracts` directly would grow that
+// crate's fan-in and `cargo xtask layer-gate` refuses it — the same refusal
+// the `identity` block above records — while this re-export costs no new
+// edge, following the rule that a contracts module is reachable at its
+// `sovereign_core::` path.
+pub use sovereign_contracts::in_flight;
+
 // The self-claims port, at `sovereign_core::self_claims`. Added 2026-09-16 for
 // `sovereign-api`, whose `AppState` implements `SelfClaims`
 // (`quality/DAEMON_CORE.md` §4.2 "Gossip asks the node what to claim"). Naming

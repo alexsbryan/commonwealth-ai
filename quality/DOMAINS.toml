@@ -11481,6 +11481,12 @@ lines = 104
 note = "IdentityReader — this node's id as a watch, not a value (DC §4.2; REVIEW-build-appstate-identity)"
 
 [[module]]
+path = "sovereign/crates/sovereign-contracts/src/in_flight.rs"
+context = "kernel"
+lines = 96
+note = "LocalInFlightGauge — the node's in-flight counter, a signal object created before the provider that writes it (DC §4.2; REVIEW-build-appstate-inflight-gauge)"
+
+[[module]]
 path = "sovereign/crates/sovereign-contracts/src/intent_policy.rs"
 context = "kernel"
 lines = 693
