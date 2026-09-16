@@ -63,7 +63,7 @@ impl VenueHost for EmbeddedDaemon {
     async fn ledger_emitter(&self) -> Option<Arc<dyn LedgerEmitter>> {
         let app_state = self.app_state().await?;
         Some(Arc::new(DaemonLedger {
-            emitter: app_state.inner.contribution_emitter.clone(),
+            emitter: app_state.inner.fabric.contribution_emitter.clone(),
         }))
     }
 }

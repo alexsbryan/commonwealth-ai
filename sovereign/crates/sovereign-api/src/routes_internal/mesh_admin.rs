@@ -610,7 +610,7 @@ pub async fn join(
     State(state): State<AppState>,
     Json(req): Json<JoinRequest>,
 ) -> Result<Json<JoinResponse>, (StatusCode, Json<JoinRejection>)> {
-    let self_node_id = *state.inner.self_node_id_swap.load_full().as_ref();
+    let self_node_id = *state.inner.fabric.self_node_id_swap.load_full().as_ref();
 
     // Identity proof of possession — verified BEFORE taking the mesh
     // write lock. Only enforced when the joiner presents a pubkey:
@@ -646,7 +646,7 @@ pub async fn join(
         }
     }
 
-    let mut mesh = state.inner.mesh.write().await;
+    let mut mesh = state.inner.fabric.mesh.write().await;
 
     // Encrypted-mesh invites are short-lived: reject a join once the TTL has
     // passed. Plaintext meshes set no expiry, so this is a no-op for them.
@@ -697,7 +697,7 @@ pub async fn join(
             // 10s gossip-loop re-persist window. Hook is `None` in
             // tests and the standalone daemon, so this is a no-op
             // where persistence is managed elsewhere.
-            if let Some(hook) = state.inner.on_mesh_mutation.as_ref() {
+            if let Some(hook) = state.inner.fabric.on_mesh_mutation.as_ref() {
                 hook(&mesh, self_node_id);
             }
             Ok(Json(JoinResponse {
@@ -1413,6 +1413,7 @@ pub async fn contribution_recent(
     let limit = params.limit.unwrap_or(20).min(200);
     let entries = state
         .inner
+        .fabric
         .mesh_store
         .scan(commonwealth_state::CONTRIBUTIONS_APP_ID, "")
         .map_err(|e| {
@@ -1476,7 +1477,7 @@ pub async fn contribution_view(
         NodeId,
         commonwealth_core::capabilities::NodeCapabilities,
     > = {
-        let mesh_view = state.inner.mesh.read().await;
+        let mesh_view = state.inner.fabric.mesh.read().await;
         mesh_view
             .members
             .iter()
@@ -1484,7 +1485,7 @@ pub async fn contribution_view(
             .collect()
     };
     let map = commonwealth_state::current_contributions(
-        &state.inner.mesh_store,
+        &state.inner.fabric.mesh_store,
         &caps_map,
         commonwealth_core::contributions::DEFAULT_WINDOW_DAYS,
     )
@@ -1566,7 +1567,7 @@ pub async fn activity_summary(
         .window_days
         .unwrap_or(commonwealth_core::activity::DEFAULT_ACTIVITY_WINDOW_DAYS)
         .min(365);
-    let activity = commonwealth_state::current_activity(&state.inner.mesh_store, window_days)
+    let activity = commonwealth_state::current_activity(&state.inner.fabric.mesh_store, window_days)
         .map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -1578,12 +1579,12 @@ pub async fn activity_summary(
     // contribution events land on the self node's `NodeContributions`,
     // so the self entry is exactly "what I served to / received from
     // the mesh."
-    let self_id = state.inner.contribution_emitter.self_node_id();
+    let self_id = state.inner.fabric.contribution_emitter.self_node_id();
     let caps_map: std::collections::HashMap<
         NodeId,
         commonwealth_core::capabilities::NodeCapabilities,
     > = {
-        let mesh_view = state.inner.mesh.read().await;
+        let mesh_view = state.inner.fabric.mesh.read().await;
         mesh_view
             .members
             .iter()
@@ -1591,7 +1592,7 @@ pub async fn activity_summary(
             .collect()
     };
     let contrib = commonwealth_state::current_contributions(
-        &state.inner.mesh_store,
+        &state.inner.fabric.mesh_store,
         &caps_map,
         commonwealth_core::contributions::DEFAULT_WINDOW_DAYS,
     )
@@ -1639,6 +1640,7 @@ pub async fn activity_recent(
     let limit = params.limit.unwrap_or(20).min(200);
     let entries = state
         .inner
+        .fabric
         .mesh_store
         .scan(commonwealth_state::ACTIVITY_APP_ID, "")
         .map_err(|e| {

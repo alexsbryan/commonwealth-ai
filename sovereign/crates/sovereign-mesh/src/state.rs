@@ -19,8 +19,8 @@ pub struct MeshState {
 impl MeshState {
     /// Build a UI-friendly mesh state from the Commonwealth AppState.
     pub async fn from_app_state(app_state: &AppState) -> Self {
-        let mesh = app_state.inner.mesh.read().await;
-        let self_node_id = *app_state.inner.self_node_id_swap.load_full().as_ref();
+        let mesh = app_state.inner.fabric.mesh.read().await;
+        let self_node_id = *app_state.inner.fabric.self_node_id_swap.load_full().as_ref();
 
         // Members.
         let mut members: Vec<MeshMember> = mesh

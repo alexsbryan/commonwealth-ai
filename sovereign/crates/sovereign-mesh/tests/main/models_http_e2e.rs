@@ -177,7 +177,7 @@ async fn offline_peer_only_model_is_filtered_out_of_v1_models() {
     // Set up: the offline peer is NOT in the mesh's members, so
     // `live_nodes` will be `{self_id}` only.
     {
-        let mesh = state.inner.mesh.read().await;
+        let mesh = state.inner.fabric.mesh.read().await;
         assert!(
             !mesh.members.contains_key(&offline_peer_id),
             "test precondition: the offline peer must NOT be in the \
@@ -188,7 +188,7 @@ async fn offline_peer_only_model_is_filtered_out_of_v1_models() {
     // Construct a second store handle keyed to the offline peer so
     // any writes through it stamp `offline_peer_id` as the origin.
     let peer_store = commonwealth_state::store_adapter::InferenceStateStore::new(
-        Arc::clone(&state.inner.mesh_store),
+        Arc::clone(&state.inner.fabric.mesh_store),
         offline_peer_id,
     );
     peer_store.set_model_info(&empty_model_info(2, "ghost-model"));

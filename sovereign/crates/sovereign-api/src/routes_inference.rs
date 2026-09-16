@@ -979,7 +979,7 @@ async fn manifest_rows(state: &AppState) -> Option<Vec<ModelObject>> {
 async fn store_rows(state: &AppState) -> Vec<ModelObject> {
     let local_id = state.self_node_id();
     let live_nodes: HashSet<NodeId> = {
-        let mesh = state.inner.mesh.read().await;
+        let mesh = state.inner.fabric.mesh.read().await;
         std::iter::once(local_id)
             .chain(
                 mesh.members
@@ -1218,6 +1218,7 @@ async fn serve_local_non_stream(
                 let wall_seconds = started.elapsed().as_secs_f64();
                 state
                     .inner
+                    .fabric
                     .contribution_emitter
                     .record(LedgerEventKind::InferenceServed {
                         for_node,
@@ -1473,7 +1474,7 @@ async fn serve_local_stream(
     // dispatch. Local-origin streams (no `X-Node-Id`) skip the
     // emission, matching the non-streaming policy.
     let chunks_for_done = chunks_count;
-    let state_for_done = state.inner.contribution_emitter.clone();
+    let state_for_done = state.inner.fabric.contribution_emitter.clone();
     let activity_for_done = state.inner.node.activity_emitter.clone();
     let requester_for_done = requester;
     let model_for_done = model_id_for_ledger;

@@ -148,7 +148,7 @@ async fn wrong_mesh_id_rejects_with_401_and_no_mutation() {
     );
 
     // No mutation on auth failure.
-    let mesh = state.inner.mesh.read().await;
+    let mesh = state.inner.fabric.mesh.read().await;
     assert_eq!(
         mesh.members.len(),
         1,
@@ -216,7 +216,7 @@ async fn wrong_invite_key_hash_rejects_with_401_and_no_mutation() {
         resp.status()
     );
 
-    let mesh = state.inner.mesh.read().await;
+    let mesh = state.inner.fabric.mesh.read().await;
     assert_eq!(mesh.members.len(), 1);
     assert!(!mesh.members.contains_key(&intruder));
     drop(mesh);
@@ -260,7 +260,7 @@ async fn matching_credentials_accept_new_member_and_fire_hook() {
         .expect("internal/gossip reachable");
     assert_eq!(resp.status(), reqwest::StatusCode::OK);
 
-    let mesh = state.inner.mesh.read().await;
+    let mesh = state.inner.fabric.mesh.read().await;
     assert_eq!(
         mesh.members.len(),
         2,

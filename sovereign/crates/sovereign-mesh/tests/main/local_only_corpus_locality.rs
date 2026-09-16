@@ -187,7 +187,7 @@ async fn query_sharing_false_corpus_does_not_publish_to_hosted_corpora() {
     // Pre-condition: self's hosted_corpora is empty (the initial
     // MemberRecord ships with capabilities default-empty).
     {
-        let m = state.inner.mesh.read().await;
+        let m = state.inner.fabric.mesh.read().await;
         assert!(m
             .members
             .get(&self_id)
@@ -205,7 +205,7 @@ async fn query_sharing_false_corpus_does_not_publish_to_hosted_corpora() {
         .await
         .expect("gossip round succeeds with no peers");
 
-    let m = state.inner.mesh.read().await;
+    let m = state.inner.fabric.mesh.read().await;
     let corpora_ids: Vec<&str> = m
         .members
         .get(&self_id)

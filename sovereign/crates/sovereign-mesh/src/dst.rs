@@ -250,7 +250,7 @@ impl DstMesh {
     /// Write a mesh_store key on node `idx` (origin = that node).
     pub fn store_set(&self, idx: usize, app_id: &str, key: &str, value: &[u8]) {
         let node = &self.sim.nodes[idx];
-        let _ = node.state.inner.mesh_store.set(
+        let _ = node.state.inner.fabric.mesh_store.set(
             app_id,
             key,
             Bytes::copy_from_slice(value),
@@ -263,6 +263,7 @@ impl DstMesh {
         self.sim.nodes[idx]
             .state
             .inner
+            .fabric
             .mesh_store
             .get(app_id, key)
             .ok()
@@ -360,7 +361,7 @@ impl DstMesh {
             if self.down.contains(id) {
                 continue;
             }
-            let mesh = self.sim.nodes[idx].state.inner.mesh.read().await;
+            let mesh = self.sim.nodes[idx].state.inner.fabric.mesh.read().await;
             let mut v: Vec<(NodeId, bool)> = mesh
                 .members
                 .iter()
@@ -388,7 +389,7 @@ impl DstMesh {
             }
             let node = &self.sim.nodes[idx];
             let members = {
-                let mesh = node.state.inner.mesh.read().await;
+                let mesh = node.state.inner.fabric.mesh.read().await;
                 mesh.members
                     .iter()
                     .map(|(k, m)| {

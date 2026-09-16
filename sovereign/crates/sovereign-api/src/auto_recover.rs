@@ -249,15 +249,15 @@ pub async fn merge_from_fold_coverage(
         return RecoveryOutcome::AlreadyHasCanonical;
     }
 
-    let local_node_id = *state.inner.self_node_id_swap.load_full().as_ref();
+    let local_node_id = *state.inner.fabric.self_node_id_swap.load_full().as_ref();
     let peer_urls = crate::routes_internal::peer_control_urls(state, local_node_id).await;
 
     let shard_mgr = ShardManager::new(
         std::sync::Arc::clone(engine),
         engine.index_dir().to_path_buf(),
-        std::sync::Arc::clone(&state.inner.mesh_store),
+        std::sync::Arc::clone(&state.inner.fabric.mesh_store),
     )
-    .with_emitter(state.inner.contribution_emitter.clone());
+    .with_emitter(state.inner.fabric.contribution_emitter.clone());
 
     let plan = MergePlan {
         handoff_id,

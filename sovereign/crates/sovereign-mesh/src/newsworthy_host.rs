@@ -51,7 +51,7 @@ impl MeshNewsworthyHost {
     }
 
     fn mesh_store(&self) -> &Arc<MeshStore> {
-        &self.app_state.inner.mesh_store
+        &self.app_state.inner.fabric.mesh_store
     }
 
     fn self_node_id(&self) -> NodeId {
@@ -64,7 +64,7 @@ impl MeshNewsworthyHost {
     /// election, so we follow suit to keep behaviour consistent across
     /// daemons.
     async fn online_members(&self) -> Vec<NodeId> {
-        let mesh = self.app_state.inner.mesh.read().await;
+        let mesh = self.app_state.inner.fabric.mesh.read().await;
         mesh.members
             .iter()
             .filter(|(_, m)| m.status != NodeStatus::Offline)
@@ -121,7 +121,7 @@ impl MeshNewsworthyHost {
         // `target_corpus_id`. Snapshots are gossiped hourly, so a
         // freshly-installed peer may not show up for up to an hour —
         // acceptable for a daily watcher tick.
-        let events: Vec<LedgerEvent> = match self.app_state.inner.contribution_emitter.events() {
+        let events: Vec<LedgerEvent> = match self.app_state.inner.fabric.contribution_emitter.events() {
             Ok(ev) => ev,
             Err(e) => {
                 tracing::warn!(

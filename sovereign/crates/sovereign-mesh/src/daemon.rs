@@ -1098,7 +1098,7 @@ impl EmbeddedDaemon {
     /// already answered, and re-gossiping will not change it. Only genuine
     /// absence is worth a round-trip.
     async fn has_unconfirmed_online_peers(&self, app_state: &AppState) -> bool {
-        let mesh = app_state.inner.mesh.read().await;
+        let mesh = app_state.inner.fabric.mesh.read().await;
         let self_id = app_state.self_node_id();
         mesh.members.values().any(|m| {
             m.node_id != self_id
@@ -1302,7 +1302,7 @@ impl EmbeddedDaemon {
             // the next restart. Written after the state lock is dropped: the
             // mesh guard is async and must not be taken inside the match.
             if let (Some(exp), Some(app_state)) = (expires_at, app_state_for_ttl) {
-                app_state.inner.mesh.write().await.invite_expires_at = Some(exp);
+                app_state.inner.fabric.mesh.write().await.invite_expires_at = Some(exp);
             }
             let dial = match &endpoint {
                 Some(ep) => {
@@ -1348,7 +1348,7 @@ impl EmbeddedDaemon {
         // mesh.json that points at a daemon that never bound.
         if self.persistence_enabled() {
             if let DaemonState::Running { app_state, .. } = &*self.state.read().await {
-                let live = app_state.inner.mesh.read().await.clone();
+                let live = app_state.inner.fabric.mesh.read().await.clone();
                 // ESTABLISHING call: creating a mesh is one of exactly two acts
                 // that make a mesh this node's active one. `save` alone no
                 // longer moves the pointer — see `persist::save`.
@@ -1451,7 +1451,7 @@ impl EmbeddedDaemon {
                 let state = self.state.read().await;
                 match &*state {
                     DaemonState::Running { app_state, .. } => {
-                        Some(app_state.inner.mesh.read().await.name.clone())
+                        Some(app_state.inner.fabric.mesh.read().await.name.clone())
                     }
                     DaemonState::Stopped => None,
                 }
@@ -1675,7 +1675,7 @@ impl EmbeddedDaemon {
                 ..
             } = &*state
             {
-                *app_state.inner.mesh.write().await = handshake.mesh;
+                *app_state.inner.fabric.mesh.write().await = handshake.mesh;
                 // Swap our `self_node_id` from the placeholder we
                 // generated locally for mDNS to the founder-assigned
                 // ID. Without this, every component that indexes by
@@ -1695,7 +1695,7 @@ impl EmbeddedDaemon {
         // the link again every launch.
         if self.persistence_enabled() {
             if let DaemonState::Running { app_state, .. } = &*self.state.read().await {
-                let live = app_state.inner.mesh.read().await.clone();
+                let live = app_state.inner.fabric.mesh.read().await.clone();
                 // The other ESTABLISHING call. Joining a second mesh PARKS the
                 // first (P1) rather than leaving it, so the pointer move is the
                 // whole switch — it must be explicit here, not a side effect of
@@ -1889,7 +1889,7 @@ impl EmbeddedDaemon {
     ///
     /// Rebuilds the snapshot from the live `AppState` on every call
     /// rather than returning a cached value. The `/internal/join`
-    /// handler on the founder side mutates `app_state.inner.mesh`
+    /// handler on the founder side mutates `app_state.inner.fabric.mesh`
     /// directly — if this returned a stale snapshot (the original
     /// implementation did) the UI's poll never saw new members land
     /// until the daemon restarted, which looked exactly like the
@@ -1969,7 +1969,7 @@ impl EmbeddedDaemon {
         };
         drop(state);
         let (mesh_name, require_encryption) = {
-            let mesh = app_state.inner.mesh.read().await;
+            let mesh = app_state.inner.fabric.mesh.read().await;
             (mesh.name.clone(), mesh.require_encryption)
         };
         // Live-read the dial string on every call — the desktop's
@@ -1984,7 +1984,7 @@ impl EmbeddedDaemon {
         // what re-arms (see `rotate_invite`). Read from the mesh so a member
         // that did not personally mint the invite still renders the real TTL.
         let expires_at = if require_encryption {
-            app_state.inner.mesh.read().await.invite_expires_at
+            app_state.inner.fabric.mesh.read().await.invite_expires_at
         } else {
             None
         };
@@ -2016,9 +2016,9 @@ impl EmbeddedDaemon {
             _ => return Vec::new(),
         };
         drop(state);
-        let self_id = *app_state.inner.self_node_id_swap.load_full().as_ref();
+        let self_id = *app_state.inner.fabric.self_node_id_swap.load_full().as_ref();
         let members: Vec<commonwealth_core::mesh::MemberRecord> = {
-            let mesh = app_state.inner.mesh.read().await;
+            let mesh = app_state.inner.fabric.mesh.read().await;
             mesh.members
                 .values()
                 .filter(|m| m.node_id != self_id && m.node_pubkey.is_some())
@@ -2122,7 +2122,7 @@ impl EmbeddedDaemon {
         }
 
         let (mesh_name, expires_at, self_id) = {
-            let mut mesh = app_state.inner.mesh.write().await;
+            let mut mesh = app_state.inner.fabric.mesh.write().await;
 
             // A peer still on a pre-split build authorizes gossip on
             // `invite_key_hash` (the compat arm in `Mesh::gossip_authorized`),
@@ -2197,7 +2197,7 @@ impl EmbeddedDaemon {
         // Persist FROM the live mesh, so disk and memory agree and the next
         // gossip round has nothing to revert.
         if self.persistence_enabled() {
-            let mesh = app_state.inner.mesh.read().await;
+            let mesh = app_state.inner.fabric.mesh.read().await;
             if let Err(e) = persist::save(&self.data_dir, &mesh, self_id) {
                 warn!(error = %e, "rotate: mesh.json could not be written");
             }
@@ -2296,8 +2296,8 @@ impl EmbeddedDaemon {
         // the transport's construction at `start_daemon`.
         let transport = app_state.peer_transport();
         let members: Vec<commonwealth_core::mesh::MemberRecord> = {
-            let mesh = app_state.inner.mesh.read().await;
-            let self_id = *app_state.inner.self_node_id_swap.load_full().as_ref();
+            let mesh = app_state.inner.fabric.mesh.read().await;
+            let self_id = *app_state.inner.fabric.self_node_id_swap.load_full().as_ref();
             mesh.members
                 .values()
                 .filter(|m| m.node_id != self_id)
@@ -2428,7 +2428,7 @@ impl EmbeddedDaemon {
                 DaemonState::Stopped => return Vec::new(),
             }
         };
-        let mesh = app_state.inner.mesh.read().await;
+        let mesh = app_state.inner.fabric.mesh.read().await;
         mesh.members
             .values()
             .filter(|m| {
@@ -2497,8 +2497,8 @@ impl EmbeddedDaemon {
         };
         let transport = app_state.peer_transport();
         let members: Vec<commonwealth_core::mesh::MemberRecord> = {
-            let mesh = app_state.inner.mesh.read().await;
-            let self_id = *app_state.inner.self_node_id_swap.load_full().as_ref();
+            let mesh = app_state.inner.fabric.mesh.read().await;
+            let self_id = *app_state.inner.fabric.self_node_id_swap.load_full().as_ref();
             mesh.members
                 .values()
                 .filter(|m| m.node_id != self_id)
@@ -2782,7 +2782,7 @@ impl EmbeddedDaemon {
             }
         };
         let member = {
-            let mesh = app_state.inner.mesh.read().await;
+            let mesh = app_state.inner.fabric.mesh.read().await;
             mesh.members.get(&node).cloned()
         };
         let Some(member) = member else {
@@ -3890,7 +3890,7 @@ impl EmbeddedDaemon {
         // exit, the sender drops with it. Mirrors the gossip
         // loop's "live for the whole daemon" model without needing
         // to thread a new field into `DaemonState::Running`.
-        let snapshot_emitter = app_state.inner.contribution_emitter.clone();
+        let snapshot_emitter = app_state.inner.fabric.contribution_emitter.clone();
         let snapshot_engine = corpus_engine.clone();
         let (snapshot_shutdown_tx, snapshot_shutdown_rx) = tokio::sync::watch::channel(false);
         tokio::spawn(async move {
@@ -3950,7 +3950,7 @@ impl EmbeddedDaemon {
         // `corpus-engine/handoff:*` records that are written once and
         // never rewritten; a whole-store age sweep would delete those
         // and re-open completed ingest work. See `RetentionGc::app_scope`.
-        let gc_store = app_state.inner.mesh_store.clone();
+        let gc_store = app_state.inner.fabric.mesh_store.clone();
         match commonwealth_state::RetentionGc::for_namespace(
             gc_store,
             commonwealth_state::CONTRIBUTIONS_APP_ID,
@@ -4142,7 +4142,7 @@ impl EmbeddedDaemon {
             Arc::new(move |dialer: commonwealth_core::ids::NodePubkey| {
                 let app_state = app_state.clone();
                 Box::pin(async move {
-                    let mesh = app_state.inner.mesh.read().await;
+                    let mesh = app_state.inner.fabric.mesh.read().await;
                     mesh.members
                         .values()
                         .find(|m| m.removed_at.is_none() && m.node_pubkey == Some(dialer))

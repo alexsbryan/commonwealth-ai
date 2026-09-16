@@ -69,7 +69,7 @@ async fn valid_join_key_admits_new_member_and_fires_hook() {
     let addr = spawn_internal_router(founder_state.clone()).await;
 
     // Pre-condition: founder is alone, hook hasn't fired.
-    assert_eq!(founder_state.inner.mesh.read().await.members.len(), 1);
+    assert_eq!(founder_state.inner.fabric.mesh.read().await.members.len(), 1);
     assert_eq!(hook_counter.load(Ordering::Relaxed), 0);
 
     let joiner_addr: SocketAddr = "127.0.0.1:9876".parse().unwrap();
@@ -125,7 +125,7 @@ async fn valid_join_key_admits_new_member_and_fires_hook() {
     // The founder's live AppState mesh must now contain the joiner
     // — proves the handshake actually mutated state, not just
     // returned a synthesized response.
-    let live = founder_state.inner.mesh.read().await;
+    let live = founder_state.inner.fabric.mesh.read().await;
     assert_eq!(
         live.members.len(),
         2,
@@ -152,6 +152,7 @@ async fn valid_join_key_admits_new_member_and_fires_hook() {
     assert_eq!(
         founder_state
             .inner
+            .fabric
             .self_node_id_swap
             .load_full()
             .as_ref()
@@ -191,7 +192,7 @@ async fn join_with_pubkey_and_valid_proof_records_identity() {
 
     // The founder's live mesh records the joiner WITH its pubkey —
     // the identity that a future dial-by-key transport dials.
-    let live = founder_state.inner.mesh.read().await;
+    let live = founder_state.inner.fabric.mesh.read().await;
     let joiner = live
         .members
         .values()
@@ -238,7 +239,7 @@ async fn join_with_pubkey_but_bad_proof_is_rejected_401() {
         "unproven pubkey must be a loud 401, never a silent admit"
     );
     assert_eq!(
-        founder_state.inner.mesh.read().await.members.len(),
+        founder_state.inner.fabric.mesh.read().await.members.len(),
         1,
         "rejected join must not mutate the founder's mesh"
     );
@@ -276,7 +277,7 @@ async fn invalid_join_key_rejects_with_401_and_does_not_mutate() {
     // No mutation, no hook fire. The auth-failure path must short
     // -circuit before any Mesh write.
     assert_eq!(
-        founder_state.inner.mesh.read().await.members.len(),
+        founder_state.inner.fabric.mesh.read().await.members.len(),
         1,
         "rejected join must not mutate the founder's mesh"
     );
@@ -335,7 +336,7 @@ async fn joiner_can_adopt_founder_mesh_after_handshake() {
     // the wire), must match the wire shape. This is the
     // round-trip-equivalence check that catches drift between
     // `Mesh` and `MeshWire`.
-    let live = founder_state.inner.mesh.read().await;
+    let live = founder_state.inner.fabric.mesh.read().await;
     let mut live_names: Vec<&str> = live.members.values().map(|m| m.name.as_str()).collect();
     live_names.sort();
     assert_eq!(

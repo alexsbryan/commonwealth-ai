@@ -35,7 +35,7 @@ use super::{IngestPartitionRequest, IngestPartitionResponse};
 /// the mesh lock before resolving so the lock never spans an await.
 pub async fn peer_control_urls(state: &AppState, local_node_id: NodeId) -> Vec<(NodeId, String)> {
     let contacts: Vec<commonwealth_transport::PeerContact> = {
-        let mesh = state.inner.mesh.read().await;
+        let mesh = state.inner.fabric.mesh.read().await;
         mesh.members
             .values()
             .filter(|m| m.node_id != local_node_id)
@@ -114,9 +114,9 @@ pub async fn corpus_ingest_partition(
     let file_indices = req.file_indices.clone();
     let article_range = req.article_range;
     let handoff_id = req.handoff_id;
-    let local_node_id = *state.inner.self_node_id_swap.load_full().as_ref();
+    let local_node_id = *state.inner.fabric.self_node_id_swap.load_full().as_ref();
     let engine = _engine.clone();
-    let mesh_store = Arc::clone(&state.inner.mesh_store);
+    let mesh_store = Arc::clone(&state.inner.fabric.mesh_store);
     let state_clone = state.clone();
     // Snapshot peer base URLs now — we can't hold the mesh lock across an async task.
     let peer_urls: Vec<(NodeId, String)> = peer_control_urls(&state, local_node_id).await;
@@ -207,7 +207,7 @@ pub async fn corpus_ingest_partition(
                     engine.index_dir().to_path_buf(),
                     mesh_store,
                 )
-                .with_emitter(state_clone.inner.contribution_emitter.clone());
+                .with_emitter(state_clone.inner.fabric.contribution_emitter.clone());
                 match shard_mgr
                     .coordinate_merge(handoff_id, local_node_id, &peer_urls)
                     .await
@@ -494,6 +494,7 @@ pub fn find_local_handoff_for_corpus(
 ) -> Option<IngestionHandoff> {
     let entries = state
         .inner
+        .fabric
         .mesh_store
         .scan("corpus-engine", "handoff:")
         .ok()?;
@@ -540,8 +541,8 @@ pub fn spawn_queue_merge(state: AppState, handoff_id: commonwealth_core::ids::Ha
                 return;
             }
         };
-        let mesh_store = Arc::clone(&state.inner.mesh_store);
-        let local_node_id = *state.inner.self_node_id_swap.load_full().as_ref();
+        let mesh_store = Arc::clone(&state.inner.fabric.mesh_store);
+        let local_node_id = *state.inner.fabric.self_node_id_swap.load_full().as_ref();
         let peer_urls: Vec<(NodeId, String)> = peer_control_urls(&state, local_node_id).await;
 
         let shard_mgr = ShardManager::new(
@@ -549,7 +550,7 @@ pub fn spawn_queue_merge(state: AppState, handoff_id: commonwealth_core::ids::Ha
             engine.index_dir().to_path_buf(),
             mesh_store,
         )
-        .with_emitter(state.inner.contribution_emitter.clone())
+        .with_emitter(state.inner.fabric.contribution_emitter.clone())
         .with_work_queue(Arc::clone(&state.inner.ingest.work_queue));
 
         match shard_mgr
@@ -714,7 +715,7 @@ pub async fn corpus_partition_evict(
             Json(PartitionEvictResponse { evicted: false }),
         );
     };
-    let local_node_id = *state.inner.self_node_id_swap.load_full().as_ref();
+    let local_node_id = *state.inner.fabric.self_node_id_swap.load_full().as_ref();
     let evicted = sovereign_grants::shard_manager::evict_partition_dir(
         engine.index_dir(),
         &req.corpus_id,

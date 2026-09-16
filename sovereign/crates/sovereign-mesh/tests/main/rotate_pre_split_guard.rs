@@ -51,7 +51,7 @@ async fn daemon_with_online_peer(
         .expect("app_state after create_mesh");
     let peer_id = NodeId::from_u128(0x5150_6060_7070_8080);
     {
-        let mut mesh = state.inner.mesh.write().await;
+        let mut mesh = state.inner.fabric.mesh.write().await;
         mesh.members.insert(
             peer_id,
             MemberRecord {

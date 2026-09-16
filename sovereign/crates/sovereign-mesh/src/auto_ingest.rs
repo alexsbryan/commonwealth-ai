@@ -132,10 +132,10 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
             continue;
         }
 
-        let self_id = *state.inner.self_node_id_swap.load_full().as_ref();
+        let self_id = *state.inner.fabric.self_node_id_swap.load_full().as_ref();
 
         let current_peers: HashSet<NodeId> = {
-            let mesh = state.inner.mesh.read().await;
+            let mesh = state.inner.fabric.mesh.read().await;
             mesh.members
                 .values()
                 .filter(|m| m.node_id != self_id && m.status == NodeStatus::Online)
@@ -681,7 +681,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
 /// nor peer should run a separate spawn_local_ingest — the pull_loop
 /// (self or remote) is the single writer into `<corpus>-partition-<node>/`.
 async fn has_active_queue_handoff(state: &AppState, corpus_id: &str) -> bool {
-    let entries = match state.inner.mesh_store.scan("corpus-engine", "handoff:") {
+    let entries = match state.inner.fabric.mesh_store.scan("corpus-engine", "handoff:") {
         Ok(e) => e,
         Err(_) => return false,
     };
@@ -726,7 +726,7 @@ async fn publish_local_processed_shards(
                 continue;
             }
         };
-        if let Err(e) = state.inner.mesh_store.set(
+        if let Err(e) = state.inner.fabric.mesh_store.set(
             commonwealth_state::PROCESSED_SHARDS_APP_ID,
             &key,
             payload.into(),
@@ -806,7 +806,7 @@ async fn discover_and_spawn_pull_loops(state: AppState, self_id: NodeId, daemon_
         return;
     };
 
-    let entries = match state.inner.mesh_store.scan("corpus-engine", "handoff:") {
+    let entries = match state.inner.fabric.mesh_store.scan("corpus-engine", "handoff:") {
         Ok(e) => e,
         Err(e) => {
             tracing::debug!(error = %e, "pull_loops: mesh_store scan failed");
@@ -878,7 +878,7 @@ async fn discover_and_spawn_pull_loops(state: AppState, self_id: NodeId, daemon_
             continue;
         };
         let coordinator_contact = {
-            let mesh = state.inner.mesh.read().await;
+            let mesh = state.inner.fabric.mesh.read().await;
             mesh.members
                 .get(&coordinator_id)
                 .map(commonwealth_transport::peer_contact)
@@ -1018,7 +1018,7 @@ async fn pull_loop(
             // automatic — `merge_entry` accepts new versions — so the
             // delete is safe.
             let key = format!("handoff:{}", handoff_id);
-            if let Err(e) = state.inner.mesh_store.delete("corpus-engine", &key) {
+            if let Err(e) = state.inner.fabric.mesh_store.delete("corpus-engine", &key) {
                 tracing::warn!(
                     handoff = %handoff_id,
                     error = %e,
@@ -1382,7 +1382,7 @@ async fn find_best_peer_canonical(
     state: &sovereign_api::state::AppState,
     corpus_id: &str,
 ) -> Option<PeerCanonicalLead> {
-    let mesh = state.inner.mesh.read().await;
+    let mesh = state.inner.fabric.mesh.read().await;
     let self_id = state.self_node_id();
     let mut best: Option<PeerCanonicalLead> = None;
     for member in mesh.members.values() {

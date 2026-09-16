@@ -42,7 +42,7 @@ pub struct AppStatusResponse {
 
 /// `GET /v1/apps` — list all known apps.
 pub async fn list_apps(State(state): State<AppState>) -> impl IntoResponse {
-    let apps = state.inner.app_registry.list().await;
+    let apps = state.inner.fabric.app_registry.list().await;
     Json(AppListResponse { apps })
 }
 
@@ -59,7 +59,7 @@ pub async fn install_app(
         )
             .into_response();
     }
-    state.inner.app_registry.register(body.manifest).await;
+    state.inner.fabric.app_registry.register(body.manifest).await;
     (
         StatusCode::OK,
         Json(serde_json::json!({"status": "registered"})),
@@ -72,8 +72,8 @@ pub async fn app_status(
     State(state): State<AppState>,
     Path(app_id): Path<String>,
 ) -> impl IntoResponse {
-    let registered = state.inner.app_registry.get(&app_id).await.is_some();
-    let port = state.inner.app_port_map.get(&app_id).await;
+    let registered = state.inner.fabric.app_registry.get(&app_id).await.is_some();
+    let port = state.inner.fabric.app_port_map.get(&app_id).await;
     Json(AppStatusResponse {
         app_id,
         registered,
@@ -87,8 +87,8 @@ pub async fn uninstall_app(
     State(state): State<AppState>,
     Path(app_id): Path<String>,
 ) -> impl IntoResponse {
-    let removed = state.inner.app_registry.unregister(&app_id).await;
-    state.inner.app_port_map.remove(&app_id).await;
+    let removed = state.inner.fabric.app_registry.unregister(&app_id).await;
+    state.inner.fabric.app_port_map.remove(&app_id).await;
     if removed {
         (
             StatusCode::OK,
@@ -112,7 +112,7 @@ pub async fn proxy_app(
     headers: HeaderMap,
     body: Bytes,
 ) -> impl IntoResponse {
-    let port = match state.inner.app_port_map.get(&app_id).await {
+    let port = match state.inner.fabric.app_port_map.get(&app_id).await {
         Some(p) => p,
         None => {
             return (

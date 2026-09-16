@@ -225,9 +225,9 @@ pub async fn run_one_round(app_state: &AppState) -> RoundOutcome {
         }
     };
 
-    let self_id = *app_state.inner.self_node_id_swap.load_full().as_ref();
+    let self_id = *app_state.inner.fabric.self_node_id_swap.load_full().as_ref();
     let peers: Vec<commonwealth_transport::PeerContact> = {
-        let mesh = app_state.inner.mesh.read().await;
+        let mesh = app_state.inner.fabric.mesh.read().await;
         mesh.members
             .values()
             .filter(|m| m.node_id != self_id && m.status == NodeStatus::Online)
@@ -1183,6 +1183,7 @@ mod tests {
     fn value_at(state: &AppState, app_id: &str, key: &str) -> Option<Vec<u8>> {
         state
             .inner
+            .fabric
             .mesh_store
             .get(app_id, key)
             .unwrap()
@@ -1213,11 +1214,12 @@ mod tests {
 
         assert!(a_state
             .inner
+            .fabric
             .mesh_store
             .set(KV, "plan", bytes::Bytes::from_static(b"v1"), a_id)
             .unwrap());
         assert_eq!(
-            a_state.inner.mesh_store.outbox_len().unwrap(),
+            a_state.inner.fabric.mesh_store.outbox_len().unwrap(),
             1,
             "a local write queues for the rail"
         );
@@ -1226,7 +1228,7 @@ mod tests {
         assert_eq!(pumped.appended, 1, "{pumped:?}");
         assert_eq!(pumped.deferred + pumped.refused, 0, "{pumped:?}");
         assert_eq!(
-            a_state.inner.mesh_store.outbox_len().unwrap(),
+            a_state.inner.fabric.mesh_store.outbox_len().unwrap(),
             0,
             "an appended row is acked"
         );
@@ -1244,6 +1246,7 @@ mod tests {
         );
         let got = b_state
             .inner
+            .fabric
             .mesh_store
             .get(KV, "plan")
             .unwrap()
@@ -1306,7 +1309,7 @@ mod tests {
         );
 
         // The delete, through the store, through the pump, over the ring.
-        assert!(a_state.inner.mesh_store.delete(KV, "k").unwrap());
+        assert!(a_state.inner.fabric.mesh_store.delete(KV, "k").unwrap());
         let pumped = crate::rail_kv_pump::pump_once(&a_state).await;
         assert_eq!(pumped.appended, 1, "the tombstone is an act like any other");
         let out = exchange(&client, &b_url, &a_rail, &a_journal).await;
@@ -1371,6 +1374,7 @@ mod tests {
         for k in KEYS {
             assert!(a_state
                 .inner
+                .fabric
                 .mesh_store
                 .set(KV, k, bytes::Bytes::from(format!("live-{k}")), a_id)
                 .unwrap());
@@ -1408,6 +1412,7 @@ mod tests {
         // ── One more local write, and the seal fires on the same tick.
         assert!(a_state
             .inner
+            .fabric
             .mesh_store
             .set(KV, "k0", bytes::Bytes::from_static(b"newest"), a_id)
             .unwrap());
@@ -1497,6 +1502,7 @@ mod tests {
         for k in KEYS {
             assert!(a_state
                 .inner
+                .fabric
                 .mesh_store
                 .set(KV, k, bytes::Bytes::from(format!("live-{k}")), a_id)
                 .unwrap());
@@ -1523,7 +1529,7 @@ mod tests {
             a_journal.ingest_all(&filler(&ka, 3, &KEYS)).unwrap(),
             crate::rail_kv_pump::SEAL_AFTER_OWN_OPS
         );
-        assert!(a_state.inner.mesh_store.delete(KV, "gone").unwrap());
+        assert!(a_state.inner.fabric.mesh_store.delete(KV, "gone").unwrap());
         let pumped = crate::rail_kv_pump::pump_once(&a_state).await;
         assert_eq!(pumped.appended, 1, "the tombstone was appended: {pumped:?}");
         assert_eq!(pumped.sealed, 1, "{pumped:?}");
@@ -1595,6 +1601,7 @@ mod tests {
         for k in KEYS {
             assert!(a_state
                 .inner
+                .fabric
                 .mesh_store
                 .set(KV, k, bytes::Bytes::from(format!("live-{k}")), a_id)
                 .unwrap());
@@ -1613,7 +1620,7 @@ mod tests {
 
         // A deletes one key and seals.
         a_journal.ingest_all(&filler(&ka, 3, &KEYS)).unwrap();
-        assert!(a_state.inner.mesh_store.delete(KV, "gone").unwrap());
+        assert!(a_state.inner.fabric.mesh_store.delete(KV, "gone").unwrap());
         let pumped = crate::rail_kv_pump::pump_once(&a_state).await;
         assert_eq!((pumped.sealed, pumped.snapshot_rows), (1, 2), "{pumped:?}");
         let after = a_journal.read().unwrap().0;
@@ -1692,16 +1699,18 @@ mod tests {
 
         assert!(a_state
             .inner
+            .fabric
             .mesh_store
             .set(PRIVATE, "secret", bytes::Bytes::from_static(b"mine"), a_id)
             .unwrap());
         assert!(a_state
             .inner
+            .fabric
             .mesh_store
             .set(KV, "public", bytes::Bytes::from_static(b"shared"), a_id)
             .unwrap());
         assert_eq!(
-            a_state.inner.mesh_store.outbox_len().unwrap(),
+            a_state.inner.fabric.mesh_store.outbox_len().unwrap(),
             1,
             "only the public write queued"
         );
@@ -1943,6 +1952,7 @@ mod tests {
         // B's retention sweep, at the ONE cutoff the namespace's readers use.
         b_state
             .inner
+            .fabric
             .mesh_store
             .gc_app_before(LEDGER, floor)
             .unwrap();
@@ -2007,11 +2017,12 @@ mod tests {
 
         a_state
             .inner
+            .fabric
             .mesh_store
             .gc_app_before(LEDGER, floor)
             .unwrap();
         assert_eq!(
-            a_state.inner.mesh_store.outbox_len().unwrap(),
+            a_state.inner.fabric.mesh_store.outbox_len().unwrap(),
             0,
             "an expiry is not a delete: it publishes nothing, because every \
              node derives the same floor from the same `t`"

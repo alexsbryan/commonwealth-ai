@@ -167,6 +167,7 @@ async fn peer_request_emits_one_knowledge_query_served_per_contributing_corpus()
     // `for_node = requester`.
     let events = state
         .inner
+        .fabric
         .contribution_emitter
         .events()
         .expect("emitter.events() reads");
@@ -235,7 +236,7 @@ async fn local_origin_request_with_no_x_node_id_emits_nothing() {
         "the search still serves results; only the ledger emission is gated"
     );
 
-    let events = state.inner.contribution_emitter.events().unwrap();
+    let events = state.inner.fabric.contribution_emitter.events().unwrap();
     let served_count = events
         .iter()
         .filter(|e| matches!(e.kind, LedgerEventKind::KnowledgeQueryServed { .. }))
@@ -287,7 +288,7 @@ async fn unavailable_corpus_filter_emits_no_event_and_lists_unavailable() {
         "the route must report the unhosted corpus in `corpora_unavailable`; got {body}"
     );
 
-    let events = state.inner.contribution_emitter.events().unwrap();
+    let events = state.inner.fabric.contribution_emitter.events().unwrap();
     let served_count = events
         .iter()
         .filter(|e| matches!(e.kind, LedgerEventKind::KnowledgeQueryServed { .. }))

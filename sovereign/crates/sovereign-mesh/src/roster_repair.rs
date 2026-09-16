@@ -90,7 +90,7 @@ impl EmbeddedDaemon {
             .unwrap_or(0);
 
         let outcome = {
-            let mut mesh = app_state.inner.mesh.write().await;
+            let mut mesh = app_state.inner.fabric.mesh.write().await;
 
             let aliased: std::collections::HashSet<commonwealth_core::ids::NodeId> = mesh
                 .aliased_endpoint_keys()
@@ -141,7 +141,7 @@ impl EmbeddedDaemon {
         };
 
         if !outcome.already_retired && self.persistence_enabled() {
-            let mesh = app_state.inner.mesh.read().await;
+            let mesh = app_state.inner.fabric.mesh.read().await;
             if let Err(e) = persist::save(self.data_dir(), &mesh, self_id) {
                 warn!(error = %e, "forget-member: mesh.json could not be written");
             }

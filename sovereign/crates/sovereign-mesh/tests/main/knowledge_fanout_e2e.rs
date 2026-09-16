@@ -579,6 +579,7 @@ async fn fan_out_stamps_x_node_id_so_peer_emits_ledger() {
     // Pre-condition: A's ledger has no KnowledgeQueryServed.
     let pre_events = state_a
         .inner
+        .fabric
         .contribution_emitter
         .events()
         .expect("emitter.events() ok");
@@ -607,6 +608,7 @@ async fn fan_out_stamps_x_node_id_so_peer_emits_ledger() {
     // event stamped with `for_node = id_b` and `corpus_id = "sep"`.
     let post_events = state_a
         .inner
+        .fabric
         .contribution_emitter
         .events()
         .expect("emitter.events() ok");

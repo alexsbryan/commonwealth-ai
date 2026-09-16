@@ -94,7 +94,7 @@ impl SimulatedMesh {
     /// Update all nodes' mesh state to the current mesh_state.
     pub async fn sync_mesh_state(&self) {
         for node in &self.nodes {
-            *node.state.inner.mesh.write().await = self.mesh_state.clone();
+            *node.state.inner.fabric.mesh.write().await = self.mesh_state.clone();
         }
     }
 
@@ -127,6 +127,7 @@ impl SimulatedMesh {
         self.nodes[node_idx]
             .state
             .inner
+            .fabric
             .app_registry
             .register(manifest)
             .await;
@@ -138,6 +139,7 @@ impl SimulatedMesh {
         self.nodes[node_idx]
             .state
             .inner
+            .fabric
             .mesh_store
             .set(app_id, key, Bytes::copy_from_slice(value), origin)
             .expect("store_set failed");
@@ -148,6 +150,7 @@ impl SimulatedMesh {
         self.nodes[node_idx]
             .state
             .inner
+            .fabric
             .mesh_store
             .get(app_id, key)
             .expect("store_get failed")
@@ -169,6 +172,7 @@ impl SimulatedMesh {
             let all_match = self.nodes.iter().all(|node| {
                 node.state
                     .inner
+                    .fabric
                     .mesh_store
                     .get(app_id, key)
                     .ok()

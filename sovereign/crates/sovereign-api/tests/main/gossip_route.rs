@@ -190,7 +190,7 @@ async fn an_upgraded_caller_gets_no_raw_secret_back() {
          proved it holds one: {returned:?}"
     );
     assert_eq!(
-        state.inner.mesh.read().await.mesh_secret,
+        state.inner.fabric.mesh.read().await.mesh_secret,
         secret,
         "redacting the reply must not clobber the live secret"
     );
@@ -298,7 +298,7 @@ async fn gossip_merges_incoming_member_into_local_view() {
     assert_eq!(returned_members.len(), 2);
 
     // And the AppState itself was mutated.
-    let mesh = state.inner.mesh.read().await;
+    let mesh = state.inner.fabric.mesh.read().await;
     assert!(mesh.members.contains_key(&node_a));
     assert!(mesh.members.contains_key(&node_b));
 }
@@ -330,7 +330,7 @@ async fn gossip_rejects_wrong_mesh_id() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-    let mesh = state.inner.mesh.read().await;
+    let mesh = state.inner.fabric.mesh.read().await;
     assert_eq!(mesh.members.len(), 1, "reject must not mutate");
 }
 
@@ -395,7 +395,7 @@ async fn gossip_does_not_overwrite_self_record() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
 
-    let mesh = state.inner.mesh.read().await;
+    let mesh = state.inner.fabric.mesh.read().await;
     let my_record = mesh.members.get(&me).unwrap();
     assert_eq!(my_record.name, "Real-Me");
     assert_eq!(my_record.status, NodeStatus::Online);
@@ -459,7 +459,7 @@ async fn a_legacy_authorized_caller_cannot_read_our_mesh_secret() {
 
     // And our own secret is untouched — redaction is on the wire, not a mutation.
     assert_eq!(
-        state.inner.mesh.read().await.mesh_secret,
+        state.inner.fabric.mesh.read().await.mesh_secret,
         [42u8; 32],
         "redacting the reply must not clobber the live secret"
     );

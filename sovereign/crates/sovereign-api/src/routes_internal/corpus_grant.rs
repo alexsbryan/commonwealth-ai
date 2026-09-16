@@ -171,7 +171,7 @@ pub async fn corpus_grant_revoke(
     if let Some(handoff_id) = grant.handoff_id {
         state.inner.ingest.work_queue.retire(&handoff_id).await;
         let gossip_key = format!("handoff:{handoff_id}");
-        let _ = state.inner.mesh_store.delete("corpus-engine", &gossip_key);
+        let _ = state.inner.fabric.mesh_store.delete("corpus-engine", &gossip_key);
         tracing::info!(
             corpus = %grant.corpus_id,
             handoff = %handoff_id,

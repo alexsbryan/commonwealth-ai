@@ -183,8 +183,8 @@ pub fn spawn_gossip_loop(
             // — if peers start flapping Offline, this is why", and
             // raising fanout is NOT the indicated fix.
             let online_peers = {
-                let self_id = *app_state.inner.self_node_id_swap.load_full().as_ref();
-                let mesh = app_state.inner.mesh.read().await;
+                let self_id = *app_state.inner.fabric.self_node_id_swap.load_full().as_ref();
+                let mesh = app_state.inner.fabric.mesh.read().await;
                 mesh.members
                     .values()
                     .filter(|m| m.node_id != self_id && m.status == NodeStatus::Online)
@@ -222,8 +222,8 @@ pub fn spawn_gossip_loop(
                 );
             }
             if let Some(dir) = persist_dir.as_deref() {
-                let mesh = app_state.inner.mesh.read().await.clone();
-                let self_id = *app_state.inner.self_node_id_swap.load_full().as_ref();
+                let mesh = app_state.inner.fabric.mesh.read().await.clone();
+                let self_id = *app_state.inner.fabric.self_node_id_swap.load_full().as_ref();
                 if let Err(e) = crate::persist::save(dir, &mesh, self_id) {
                     // Don't spam — persistence failure is rarely
                     // fatal to the running session, but the operator
@@ -446,7 +446,7 @@ pub async fn run_one_round(
     app_state: &AppState,
     offline_threshold: Duration,
 ) -> Result<(), GossipError> {
-    let self_id = *app_state.inner.self_node_id_swap.load_full().as_ref();
+    let self_id = *app_state.inner.fabric.self_node_id_swap.load_full().as_ref();
     let now = app_state.clock().now_unix_secs();
     let threshold = offline_threshold.as_secs();
 
@@ -489,7 +489,7 @@ pub async fn run_one_round(
     // installed, one removed) — the every-10s heartbeat otherwise
     // logs at debug. Same gating policy as `mesh_state: rebuilt`.
     let candidates: Vec<(PeerContact, bool, u64)> = {
-        let mut mesh = app_state.inner.mesh.write().await;
+        let mut mesh = app_state.inner.fabric.mesh.write().await;
         let prior_corpora: std::collections::BTreeSet<String> = mesh
             .members
             .get(&self_id)
@@ -682,7 +682,7 @@ pub async fn run_one_round(
     // Step 3: snapshot our mesh once and POST it to each picked
     // peer. Using the same snapshot across the fan-out keeps rounds
     // cheap and means every peer sees the same view of us.
-    let my_snapshot = { app_state.inner.mesh.read().await.clone() };
+    let my_snapshot = { app_state.inner.fabric.mesh.read().await.clone() };
     let http = gossip_client().map_err(|e| GossipError::ClientBuild(e.to_string()))?;
 
     let transport = app_state.peer_transport();
@@ -779,7 +779,7 @@ pub async fn run_one_round(
                     // Liveness must never be a side effect of payload
                     // change. Talking to someone IS the evidence.
                     app_state.observe_peer_contact(peer_id, now);
-                    let mut mesh = app_state.inner.mesh.write().await;
+                    let mut mesh = app_state.inner.fabric.mesh.write().await;
                     let report = mesh.merge_from_authenticated(self_id, &their_view, &their_auth);
                     // A REFUSED merge on this path used to be completely
                     // silent: `added` and `updated` are both 0, so it fell
@@ -927,10 +927,10 @@ pub async fn announce_departure(app_state: &AppState) {
 }
 
 pub async fn announce_presence_change(app_state: &AppState, change: PresenceChange) {
-    let self_id = *app_state.inner.self_node_id_swap.load_full().as_ref();
+    let self_id = *app_state.inner.fabric.self_node_id_swap.load_full().as_ref();
     let now = app_state.clock().now_unix_secs();
     let (snapshot, targets) = {
-        let mut mesh = app_state.inner.mesh.write().await;
+        let mut mesh = app_state.inner.fabric.mesh.write().await;
         if let Some(me) = mesh.members.get_mut(&self_id) {
             if change == PresenceChange::Left {
                 me.removed_at = Some(now);

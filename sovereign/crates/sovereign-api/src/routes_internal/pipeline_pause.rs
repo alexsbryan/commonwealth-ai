@@ -17,7 +17,7 @@
 //! 2. The local daemon walks its own `/proc/` for matching driver
 //!    PIDs and SIGTERMs them.
 //! 3. With `fanout: true`, the local daemon enumerates online mesh
-//!    peers from `state.inner.mesh` (the same gossip-derived view
+//!    peers from `state.inner.fabric.mesh` (the same gossip-derived view
 //!    the inference load balancer uses) and forwards the same
 //!    request to each — with `fanout: false` so peers don't re-fan
 //!    and the message can't loop.
@@ -300,8 +300,8 @@ fn recipe_toml_id(text: &str) -> Option<String> {
 /// Concurrently POST `{fanout: false}` requests to every online peer
 /// known to the local daemon's mesh state and collect the results.
 async fn forward_to_peers(state: &AppState, req: &PipelinePauseRequest) -> Vec<NodePauseResult> {
-    let mesh = state.inner.mesh.read().await;
-    let self_id = *state.inner.self_node_id_swap.load_full().as_ref();
+    let mesh = state.inner.fabric.mesh.read().await;
+    let self_id = *state.inner.fabric.self_node_id_swap.load_full().as_ref();
     let peers: Vec<_> = mesh
         .members
         .values()

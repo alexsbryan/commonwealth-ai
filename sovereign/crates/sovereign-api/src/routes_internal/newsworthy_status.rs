@@ -157,6 +157,7 @@ async fn local_corpus_installed(state: &AppState) -> bool {
 fn read_last_tick(state: &AppState) -> Option<TickStatusSnapshot> {
     let entry = state
         .inner
+        .fabric
         .mesh_store
         .get(APP_ID_STATUS, STATUS_KEY_LAST_TICK)
         .ok()
@@ -170,7 +171,7 @@ fn read_last_tick(state: &AppState) -> Option<TickStatusSnapshot> {
 /// implementations must stay aligned; the watcher writes leadership
 /// decisions, this route reports them.
 async fn compute_leader(state: &AppState) -> (Option<String>, usize) {
-    let mesh = state.inner.mesh.read().await;
+    let mesh = state.inner.fabric.mesh.read().await;
     let online: Vec<NodeId> = mesh
         .members
         .iter()
@@ -199,6 +200,7 @@ async fn compute_leader(state: &AppState) -> (Option<String>, usize) {
 
     let events: Vec<LedgerEvent> = state
         .inner
+        .fabric
         .contribution_emitter
         .events()
         .unwrap_or_default();

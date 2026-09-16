@@ -60,7 +60,7 @@ fn unreachable_invite() -> deep_link::DeepLink {
 async fn add_peer(daemon: &EmbeddedDaemon, name: &str) {
     let state = daemon.app_state().await.expect("app_state");
     let peer_id = NodeId::from_u128(0x9911_2233_4455_6677);
-    let mut mesh = state.inner.mesh.write().await;
+    let mut mesh = state.inner.fabric.mesh.write().await;
     mesh.members.insert(
         peer_id,
         MemberRecord {

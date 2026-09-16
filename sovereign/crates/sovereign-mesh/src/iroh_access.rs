@@ -233,11 +233,11 @@ pub(crate) async fn observe_peer_paths(
     app_state: &sovereign_api::state::AppState,
     endpoint: &Endpoint,
 ) -> Vec<crate::iroh_watchdog::PeerPathObservation> {
-    let self_id = *app_state.inner.self_node_id_swap.load_full().as_ref();
+    let self_id = *app_state.inner.fabric.self_node_id_swap.load_full().as_ref();
     // Clone the members out before awaiting — the codebase's
     // clone-out-then-await rule; `peer_path_snapshot` awaits per peer.
     let members: Vec<commonwealth_core::mesh::MemberRecord> = {
-        let mesh = app_state.inner.mesh.read().await;
+        let mesh = app_state.inner.fabric.mesh.read().await;
         mesh.members
             .values()
             .filter(|m| m.node_id != self_id && m.node_pubkey.is_some())

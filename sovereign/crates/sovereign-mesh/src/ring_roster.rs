@@ -180,7 +180,7 @@ impl MeshRoster {
     pub async fn from_app_state(app_state: &sovereign_api::state::AppState) -> Self {
         let self_id = app_state.self_node_id();
         let self_pubkey = app_state.self_node_pubkey();
-        let mesh = app_state.inner.mesh.read().await;
+        let mesh = app_state.inner.fabric.mesh.read().await;
         Self::derive(&mesh, self_id, self_pubkey)
     }
 

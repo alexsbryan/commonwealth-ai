@@ -64,7 +64,7 @@ impl EmbeddedDaemon {
         let app_state = self.app_state().await.ok_or(MediaReachRefusal::NoMesh)?;
         let self_id = app_state.self_node_id();
         let roster = {
-            let mesh = app_state.inner.mesh.read().await;
+            let mesh = app_state.inner.fabric.mesh.read().await;
             commonwealth_media::roster_of(&mesh)
         };
         Ok(commonwealth_media::offers(
@@ -94,7 +94,7 @@ impl EmbeddedDaemon {
         // Cloned out before any await: nothing here holds the mesh lock
         // across a dial.
         let roster = {
-            let mesh = app_state.inner.mesh.read().await;
+            let mesh = app_state.inner.fabric.mesh.read().await;
             commonwealth_media::roster_of(&mesh)
         };
         let paths = self.peer_paths().await;

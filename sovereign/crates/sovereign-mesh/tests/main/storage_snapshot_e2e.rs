@@ -128,6 +128,7 @@ async fn first_tick_emits_only_mesh_shared_corpora_to_ledger() {
         .expect("app_state present after create_mesh");
     let events = app_state
         .inner
+        .fabric
         .contribution_emitter
         .events()
         .expect("contribution_emitter.events() reads from in-memory store");
@@ -194,6 +195,7 @@ async fn snapshot_emits_nothing_when_no_corpus_engine_attached() {
         .expect("app_state present after create_mesh");
     let events = app_state
         .inner
+        .fabric
         .contribution_emitter
         .events()
         .expect("emitter.events() ok");

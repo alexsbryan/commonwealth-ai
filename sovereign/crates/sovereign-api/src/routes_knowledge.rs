@@ -96,7 +96,7 @@ pub async fn knowledge_search(
         }
     }
 
-    let self_id = *state.inner.self_node_id_swap.load_full().as_ref();
+    let self_id = *state.inner.fabric.self_node_id_swap.load_full().as_ref();
 
     // Step 1: figure out what corpora are locally installed, keyed
     // by id. This drives the "search here vs. fan out" split.
@@ -124,7 +124,7 @@ pub async fn knowledge_search(
     // side. If they're missing from the roster entirely, gossip
     // hasn't converged yet.
     let (peer_offerings, target_corpora_if_unconstrained, peer_roster) = {
-        let mesh = state.inner.mesh.read().await;
+        let mesh = state.inner.fabric.mesh.read().await;
         let mut offerings: Vec<PeerOffering> = Vec::new();
         let mut union: HashSet<String> = local_corpora.clone();
         let mut roster: Vec<(String, String, Vec<String>)> = Vec::new();
@@ -327,7 +327,7 @@ pub async fn knowledge_search(
         // the fan-out core's cap is left off so a peer with several
         // addresses keeps the time to try them, as before the extraction.
         let rows = crate::fanout::fan_out(
-            state.inner.fanout_inflight.clone(),
+            state.inner.fabric.fanout_inflight.clone(),
             targets,
             None,
             move |t, corpora| {

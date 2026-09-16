@@ -243,7 +243,7 @@ pub async fn capabilities(
             // Enrich provider name with the mesh name so peer
             // MeshAwareSelector can tell "this is mac-peer's
             // Sovereign" vs a generic provider.
-            let mesh = state.inner.mesh.read().await;
+            let mesh = state.inner.fabric.mesh.read().await;
             if manifest.provider.is_none() {
                 manifest.provider = Some(ProviderInfo {
                     name: Some(mesh.name.clone()),
@@ -257,7 +257,7 @@ pub async fn capabilities(
         }
     }
 
-    let mesh = state.inner.mesh.read().await;
+    let mesh = state.inner.fabric.mesh.read().await;
     let models = state.inner.serving.inference_store.list_models();
     let plan = state
         .inner

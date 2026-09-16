@@ -1556,7 +1556,7 @@ mod tests {
             .app_state()
             .await
             .expect("daemon is running after create");
-        let mesh = app.inner.mesh.read().await;
+        let mesh = app.inner.fabric.mesh.read().await;
         mesh.invite_key_hash
     }
 
@@ -1580,7 +1580,7 @@ mod tests {
     /// handler itself just returned. That is a verbatim echo of the value
     /// under test, so they pass cleanly on the exact failure they exist to
     /// catch. The state that actually gates admission is
-    /// `AppState.inner.mesh.invite_key_hash`, and nothing reads it.
+    /// `AppState.inner.fabric.mesh.invite_key_hash`, and nothing reads it.
     ///
     /// The defect this was written against: rotation wrote the new hash to
     /// disk and refreshed the cached plaintext, but never wrote the live

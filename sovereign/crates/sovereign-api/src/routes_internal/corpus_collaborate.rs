@@ -119,8 +119,8 @@ pub async fn corpus_collaborate(
     }
 
     // Build local node view.
-    let mesh = state.inner.mesh.read().await;
-    let self_id = *state.inner.self_node_id_swap.load_full().as_ref();
+    let mesh = state.inner.fabric.mesh.read().await;
+    let self_id = *state.inner.fabric.self_node_id_swap.load_full().as_ref();
     let local_member = mesh.members.get(&self_id).cloned().ok_or_else(|| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -284,7 +284,7 @@ pub async fn corpus_collaborate(
                     .into_iter()
                     .collect();
                 let peer_processed = commonwealth_state::union_processed_shards(
-                    &state.inner.mesh_store,
+                    &state.inner.fabric.mesh_store,
                     req.corpus_id.as_str(),
                 );
                 processed.extend(peer_processed);
@@ -612,7 +612,7 @@ pub async fn corpus_collaborate(
                 ));
             }
         };
-        let _ = state.inner.mesh_store.set(
+        let _ = state.inner.fabric.mesh_store.set(
             "corpus-engine",
             &gossip_key,
             bytes::Bytes::from(handoff_bytes),
@@ -822,7 +822,7 @@ pub async fn corpus_collaborate(
     // hook), which stitches remote shards in and renames to canonical.
     {
         let transport = state.peer_transport();
-        let mesh = state.inner.mesh.read().await;
+        let mesh = state.inner.fabric.mesh.read().await;
         if let Some(local_partition) = handoff.partitions.iter().find(|p| p.node_id == self_id) {
             tracing::info!(
                 corpus = %handoff.corpus_id,
@@ -999,8 +999,8 @@ pub async fn corpus_eligible_peers(
 
     let local_embed_model = state.inner.serving.inference_store.get_local_embed_model();
 
-    let mesh = state.inner.mesh.read().await;
-    let self_id = *state.inner.self_node_id_swap.load_full().as_ref();
+    let mesh = state.inner.fabric.mesh.read().await;
+    let self_id = *state.inner.fabric.self_node_id_swap.load_full().as_ref();
     let mut peers: Vec<EligiblePeerDto> = Vec::new();
     for m in mesh.members.values() {
         if m.node_id == self_id {

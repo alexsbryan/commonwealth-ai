@@ -2510,7 +2510,7 @@ pub(super) fn setup_watchers_and_work_atlas(
 
     // ── Work atlas wiring (Phase 2) ────────────────────────────────────
     // Single shared `Arc<MeshStore>`: handed into the EmbeddedDaemon
-    // via `set_mesh_store` so `AppState.inner.mesh_store` IS this
+    // via `set_mesh_store` so `AppState.inner.fabric.mesh_store` IS this
     // instance, and also handed into the `WorkAtlasStore` so claims
     // and observations land in the same store gossip publishes from.
     // In-memory is intentional — matches the daemon's existing

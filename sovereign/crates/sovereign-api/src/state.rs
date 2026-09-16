@@ -28,6 +28,7 @@ pub use oicp_types::{EditSlotStatus, FimCompletionRequest, FimStreamStart, Local
 pub use sovereign_core::traits::LocalInferenceService;
 
 pub mod answering;
+pub mod fabric;
 pub mod ingest;
 pub mod node;
 pub mod serving;
@@ -349,18 +350,14 @@ fn effective_peer_cap(ceiling: usize, weight: f64) -> u32 {
 }
 
 pub struct AppStateInner {
-    /// Internal storage. Use [`AppStateInner::self_node_id`] to read
-    /// (returns `NodeId` by value) — direct field access is hidden
-    /// behind a method so callers always go through the load.
-    ///
-    /// Backed by `ArcSwap` so the `join_mesh` adoption flow can swap
-    /// the placeholder ID for the founder-assigned ID atomically
-    /// after the handshake completes. Without that swap, gossip
-    /// would never find our own member record (it indexes by
-    /// `self_node_id`), `corpus_collaborate` would 500 with "local
-    /// node not found in mesh", and partitions would never dispatch.
-    pub self_node_id_swap: ArcSwap<NodeId>,
-    pub mesh: RwLock<Mesh>,
+    /// Fabric's part: the node id with its public key, the dial-info provider
+    /// and dial signer, the roster, the ring rail and its write nudge, the
+    /// replicated KV, transport, clock, gossip's liveness maps, the mutation
+    /// persistence hook, the convergence recorder, the fan-out gauge, the
+    /// mesh-app registry and port map, the contribution emitter and the
+    /// RPC-over-iroh flag. Held as a part so route shells read it directly
+    /// (DC §4.2).
+    pub fabric: fabric::FabricPart,
     /// Serving's part: the model, pipeline and slot aliases, the servable
     /// model files, the local inference handle and RPC shard warmer, the
     /// inference store, the peer and client admission schedulers with their
@@ -369,182 +366,22 @@ pub struct AppStateInner {
     /// composite, the in-flight gauge and the venue preferences. Held as a
     /// part so route shells read it directly (DC §4.2).
     pub serving: serving::ServingPart,
-    /// This node's Ed25519 identity pubkey (see
-    /// `commonwealth_core::ids::NodePubkey`). Installed by the
-    /// embedded daemon at startup from `<data_dir>/node_key`; `None`
-    /// in tests and on daemons that don't manage an identity key.
-    /// Gossip stamps it into our own `MemberRecord` every round so
-    /// in-place upgrades publish the key without a rejoin.
-    pub self_node_pubkey: std::sync::RwLock<Option<commonwealth_core::ids::NodePubkey>>,
-    /// Provider yielding this node's CURRENT iroh dial info (relay URL
-    /// + direct addrs), pulled fresh each gossip round and stamped into
-    /// our own `MemberRecord` (Track W2). Type-erased so this crate
-    /// needs no iroh dependency; installed by the daemon, which owns the
-    /// iroh endpoint. `None` when iroh access is off. A pull-provider,
-    /// not a stored snapshot, because the relay and hole-punched addrs
-    /// appear and change over the endpoint's lifetime.
-    #[allow(clippy::type_complexity)]
-    pub self_iroh_dialinfo: std::sync::RwLock<
-        Option<std::sync::Arc<dyn Fn() -> commonwealth_core::mesh::IrohDialInfo + Send + Sync>>,
-    >,
-    /// Closure that signs this node's dial info (relay_url + direct addrs)
-    /// for the gossip self-stamp — `(version, relay, addrs) -> hex sig`.
-    /// The daemon installs it from the node `SigningKey`, so `AppState`
-    /// never holds raw key material and `commonwealth-api` needs no crypto
-    /// dependency. `None` until the daemon binds iroh. See [`crate::state::AppState::sign_dial_info`].
-    #[allow(clippy::type_complexity)]
-    pub self_dial_signer: std::sync::RwLock<
-        Option<
-            std::sync::Arc<
-                dyn Fn(u64, Option<String>, Vec<std::net::SocketAddr>) -> String + Send + Sync,
-            >,
-        >,
-    >,
-    /// The ring rail's storage: where each ring namespace's journal lives,
-    /// and how this node signs the ops it writes. `None` until the daemon
-    /// installs it — a daemon with no data directory has nowhere to put a
-    /// ledger, and the rail then REFUSES rather than inventing a location or
-    /// answering from an empty in-memory one (ARCH §18.3).
-    ///
-    /// The signer is a closure-shaped seam for the same reason
-    /// [`AppStateInner::self_dial_signer`] is: `AppState` never holds raw key
-    /// material and this crate needs no crypto dependency.
-    pub ring_rail: std::sync::RwLock<Option<Arc<commonwealth_rail::RingRail>>>,
-    /// "A local write is queued; run the ring round now rather than at the
-    /// next sixty-second tick."
-    ///
-    /// ONE `Notify` per daemon, held here rather than passed around, because
-    /// three unrelated places raise or wait on it — the KV pump after an
-    /// append, `ring_sync`'s loop as its early wake-up, and the work atlas's
-    /// broadcaster when a claim is written for a peer to see. A second
-    /// `Notify` would be a second answer to "what wakes replication" (ARCH
-    /// §10.6), and threading one through three constructors is how the second
-    /// one gets minted.
-    ///
-    /// Always present: a nudge nobody is waiting on stores one permit and
-    /// costs nothing, so there is no `Option` and no "the daemon has not
-    /// installed it yet" branch to get wrong.
-    pub ring_write_nudge: Arc<tokio::sync::Notify>,
     /// The node's part: the client token, guest grants, start instant, the
     /// corpus-engine handle, the foreground-yield signal (last active, window,
     /// in-flight), the storage budget and usage, and the activity emitter.
     /// Held as a part so route shells read it directly (DC §4.2).
     pub node: node::NodePart,
-    /// How this daemon reaches mesh peers — the PeerTransport seam.
-    /// Every route handler that dials a peer resolves URLs through
-    /// this instead of formatting `http://{ip}:{port}` inline, so a
-    /// future transport (dial-by-key iroh) slots in without touching
-    /// call sites. Defaults to `IpTransport::default()` (client port
-    /// 9741); the embedded daemon re-installs one configured with
-    /// its resolved client port via
-    /// [`AppState::install_peer_transport`] at startup. Set-once-
-    /// read-many: a plain `std::sync::RwLock` read per resolution.
-    pub peer_transport: std::sync::RwLock<Arc<dyn commonwealth_transport::PeerTransport>>,
-    /// Wall-clock source. Defaults to [`commonwealth_core::SystemClock`]; the
-    /// test harness installs a per-node [`commonwealth_core::TestClock`] to
-    /// drive skew scenarios deterministically. Read per timestamp (RwLock read
-    /// + Arc clone), same set-once-read-many pattern as `peer_transport`.
-    pub clock: std::sync::RwLock<Arc<dyn commonwealth_core::Clock>>,
-    /// Local-observation liveness map: `node_id -> local-clock seconds at which
-    /// we last observed this peer's gossiped record advance (or reached it
-    /// directly). Offline-decay measures staleness against THIS, never the
-    /// peer's own gossiped `last_seen` — so a clock-skewed peer can't flap
-    /// Offline (the "~9 min flap"). Ephemeral; rebuilt after restart as gossip
-    /// re-observes peers.
-    pub peer_last_contact: std::sync::RwLock<std::collections::HashMap<NodeId, u64>>,
-    /// Selection-fairness map: `node_id -> local-clock seconds at which we last
-    /// SPENT A ROUND'S SLOT on this peer, whether or not the dial worked.
-    ///
-    /// A SEPARATE CLOCK FROM `peer_last_contact` BECAUSE THEY ANSWER DIFFERENT
-    /// QUESTIONS, and one field answering both is what starved a live peer.
-    /// `peer_last_contact` is LIVENESS EVIDENCE and must stay success-only —
-    /// the comment on its stamp site in `gossip::run_one_round` records the
-    /// 2026-07-29 false-Offline that cost a distributed 122B its remote shard.
-    /// But `select_round_peers` orders by most-stale-first, so using evidence
-    /// as the ordering key means a peer that never answers never advances and
-    /// therefore holds its slot for ever.
-    ///
-    /// MEASURED on RuggedFox 2026-09-09, `FANOUT = 2`: 74 gossip dials to each
-    /// of the same two unreachable peers in twenty minutes, and ZERO to the
-    /// other five members — one of whose daemons was up throughout.
-    /// `select_round_peers`' own bound ("a peer waits at most
-    /// `ceil(n / FANOUT)` rounds, because every round it goes unpicked it
-    /// moves up the order") holds only if being PICKED advances your key. For
-    /// a peer that does not answer, it did not.
-    ///
-    /// Ephemeral like `peer_last_contact`; rebuilt after restart.
-    pub peer_last_attempt: std::sync::RwLock<std::collections::HashMap<NodeId, u64>>,
-    /// Which peers we have CONFIRMED are running a post-credential-split
-    /// build, by having merged a gossip payload from them that carried a
-    /// `mesh_secret`.
-    ///
-    /// Absence is not "pre-split", it is "unknown", and both are treated as
-    /// unsafe by `EmbeddedDaemon::rotate_invite` — the fail-safe direction.
-    /// A peer we have not gossiped with since boot could be either, and
-    /// rotating on that assumption is what partitions a mesh. One gossip
-    /// round per peer clears it, so the conservative window is short.
-    ///
-    /// Deliberately NOT on `MemberRecord`: this is our own local observation
-    /// of a peer's payload, not a claim the peer makes about itself and not
-    /// something another node may assert on its behalf (ARCH §18.1 — never
-    /// let the subject supply the field a guard reads).
-    pub peer_post_split: std::sync::RwLock<std::collections::HashMap<NodeId, bool>>,
     /// Answering's part: the ATOS middleware registry, session store and repo
     /// root. Held as a part so route shells read it directly (DC §4.2).
     pub answering: answering::AnsweringPart,
-    /// True when this node's iroh acceptor routes the RPC ALPN to a local
-    /// ggml rpc-server — i.e. a cross-network host can genuinely reach our
-    /// RPC worker through the mesh tunnel. Drives the additive
-    /// `rpc_worker.iroh` flag on `/status`. Set by the daemon when it
-    /// installs iroh access; stays false on plaintext meshes or when the
-    /// iroh kill-switch is on, so we never advertise a path that isn't
-    /// actually accepting.
-    pub rpc_iroh_accept: std::sync::atomic::AtomicBool,
-    /// Distributed KV store for mesh apps.
-    pub mesh_store: Arc<MeshStore>,
-    /// Registry of known mesh apps (gossiped).
-    pub app_registry: Arc<AppRegistry>,
-    /// Map of locally running app ports for the proxy layer.
-    pub app_port_map: AppPortMap,
-    /// Concurrent **outbound** peer knowledge fan-out requests in flight from
-    /// this node (one per peer a knowledge search is currently querying). The
-    /// glassbox companion to the inbound `peer_sched` admission gauge: it makes
-    /// `BoundedFanOut` a live runtime signal, not just a source-unit-tested
-    /// property of `select_fanout_corpora`. 0 when no fan-out is in progress.
-    /// Maintained by `commonwealth_transport::fanout`'s guard, which holds
-    /// this same `Arc` — the counter is shared, not owned, so the fan-out
-    /// serves a process with no `AppState` at all. Read via
-    /// [`AppState::fanout_inflight_count`].
-    pub fanout_inflight: commonwealth_transport::fanout::InflightGauge,
     /// Collaborative ingest's part: the active-ingest set, progress, the work
     /// queue and grants, pull loops and verify reports, the quiesce and
     /// throttle dials, and the newsworthy tick handle. Held as a part so route
     /// shells read it directly (DC §4.2).
     pub ingest: ingest::IngestPart,
-    /// Optional callback fired after any `Mesh` mutation by the
-    /// route handlers. Set by the embedded daemon to the
-    /// `persist::save` function so `/internal/join` accepts survive
-    /// a founder restart immediately (not just on the next gossip
-    /// tick). `None` in tests and in the standalone Commonwealth
-    /// daemon, where persistence is managed elsewhere.
-    pub on_mesh_mutation: Option<MeshMutationHook>,
     /// Workbench's part: the next-edit model lane's one-in-flight budget.
     /// Held as a part so route shells read it directly (DC §4.2).
     pub workbench: workbench::WorkbenchPart,
-    /// The notes-rail convergence recorder (order commons-fluency
-    /// fix 9). `None` until the daemon installs the shared instance at
-    /// boot (`set_convergence_recorder` → AppState construction); the
-    /// daemon-side publish sink and ingest poller stamp it, `/status`
-    /// reads it. Written once at boot, read on every status poll.
-    pub convergence: std::sync::RwLock<Option<std::sync::Arc<ConvergenceRecord>>>,
-
-    /// Dimensional contribution emitter. Each route handler records
-    /// `LedgerEvent`s through this on completion (per write site
-    /// listed in the Mesh Health design). Cheap to clone; emission
-    /// is `tokio::spawn`-friendly. The emitter holds its own handle
-    /// to `MeshStore` so it survives `AppState` clones and can be
-    /// passed into spawned tasks without lifetime gymnastics.
-    pub contribution_emitter: ContributionEmitter,
 }
 
 impl AppStateInner {
@@ -699,7 +536,11 @@ impl AppStateInner {
         &self,
         rec: std::sync::Arc<ConvergenceRecord>,
     ) -> std::sync::Arc<ConvergenceRecord> {
-        let mut slot = self.convergence.write().unwrap_or_else(|e| e.into_inner());
+        let mut slot = self
+            .fabric
+            .convergence
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
         match slot.as_ref() {
             Some(already) => already.clone(),
             None => {
@@ -713,7 +554,8 @@ impl AppStateInner {
     /// `None` only before boot installs it — a pre-install status
     /// poll reads no convergence, honestly.
     pub fn convergence_recorder(&self) -> Option<std::sync::Arc<ConvergenceRecord>> {
-        self.convergence
+        self.fabric
+            .convergence
             .read()
             .unwrap_or_else(|e| e.into_inner())
             .clone()
@@ -761,6 +603,7 @@ impl AppState {
     pub fn self_node_pubkey(&self) -> Option<commonwealth_core::ids::NodePubkey> {
         *self
             .inner
+            .fabric
             .self_node_pubkey
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -771,6 +614,7 @@ impl AppState {
     pub fn install_self_node_pubkey(&self, pubkey: commonwealth_core::ids::NodePubkey) {
         *self
             .inner
+            .fabric
             .self_node_pubkey
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(pubkey);
@@ -780,6 +624,7 @@ impl AppState {
     /// (iroh access enabled). Pulled live from the endpoint each call.
     pub fn self_iroh_dialinfo(&self) -> Option<commonwealth_core::mesh::IrohDialInfo> {
         self.inner
+            .fabric
             .self_iroh_dialinfo
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -798,6 +643,7 @@ impl AppState {
     ) {
         *self
             .inner
+            .fabric
             .self_dial_signer
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(signer);
@@ -813,6 +659,7 @@ impl AppState {
     ) -> Option<String> {
         let signer = self
             .inner
+            .fabric
             .self_dial_signer
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -827,6 +674,7 @@ impl AppState {
     /// The ring rail's storage, or `None` if the daemon never installed one.
     pub fn ring_rail(&self) -> Option<Arc<commonwealth_rail::RingRail>> {
         self.inner
+            .fabric
             .ring_rail
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -840,7 +688,7 @@ impl AppState {
     /// ring-sync loop beside its interval. One accessor, one `Notify` (ARCH
     /// §7.5).
     pub fn ring_write_nudge(&self) -> Arc<tokio::sync::Notify> {
-        Arc::clone(&self.inner.ring_write_nudge)
+        Arc::clone(&self.inner.fabric.ring_write_nudge)
     }
 
     /// Install the ring rail's storage. The daemon calls this at startup with
@@ -848,6 +696,7 @@ impl AppState {
     pub fn install_ring_rail(&self, rail: Arc<commonwealth_rail::RingRail>) {
         *self
             .inner
+            .fabric
             .ring_rail
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(rail);
@@ -863,6 +712,7 @@ impl AppState {
     ) {
         *self
             .inner
+            .fabric
             .self_iroh_dialinfo
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(provider);
@@ -896,10 +746,11 @@ impl AppState {
     }
 
     /// Record whether the iroh acceptor routes the RPC ALPN to a local
-    /// ggml rpc-server (see `AppStateInner::rpc_iroh_accept`). Called by
+    /// ggml rpc-server (see [`fabric::FabricPart::rpc_iroh_accept`]). Called by
     /// the daemon's iroh install; re-runnable (watchdog endpoint swaps).
     pub fn set_rpc_iroh_accept(&self, on: bool) {
         self.inner
+            .fabric
             .rpc_iroh_accept
             .store(on, std::sync::atomic::Ordering::Relaxed);
     }
@@ -907,6 +758,7 @@ impl AppState {
     /// Whether `/status` may honestly advertise `rpc_worker.iroh: true`.
     pub fn rpc_iroh_accept(&self) -> bool {
         self.inner
+            .fabric
             .rpc_iroh_accept
             .load(std::sync::atomic::Ordering::Relaxed)
     }
@@ -916,6 +768,7 @@ impl AppState {
     /// the daemon may re-install at startup.
     pub fn peer_transport(&self) -> Arc<dyn commonwealth_transport::PeerTransport> {
         self.inner
+            .fabric
             .peer_transport
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -933,6 +786,7 @@ impl AppState {
     ) {
         *self
             .inner
+            .fabric
             .peer_transport
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = transport;
@@ -942,6 +796,7 @@ impl AppState {
     /// read + Arc clone); call per timestamp, don't cache across awaits.
     pub fn clock(&self) -> Arc<dyn commonwealth_core::Clock> {
         self.inner
+            .fabric
             .clock
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -953,6 +808,7 @@ impl AppState {
     pub fn install_clock(&self, clock: Arc<dyn commonwealth_core::Clock>) {
         *self
             .inner
+            .fabric
             .clock
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = clock;
@@ -964,6 +820,7 @@ impl AppState {
     /// OUR clock, so a peer's skewed `last_seen` can't drive offline-decay.
     pub fn observe_peer_contact(&self, peer: NodeId, now_secs: u64) {
         self.inner
+            .fabric
             .peer_last_contact
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -978,6 +835,7 @@ impl AppState {
     /// `peer_last_attempt` for why the two clocks are separate.
     pub fn note_peer_attempt(&self, peer: NodeId, now_secs: u64) {
         self.inner
+            .fabric
             .peer_last_attempt
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -993,6 +851,7 @@ impl AppState {
     pub fn peer_attempt_or_init(&self, peer: NodeId, now_secs: u64) -> u64 {
         *self
             .inner
+            .fabric
             .peer_last_attempt
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -1008,6 +867,7 @@ impl AppState {
     pub fn peer_contact_or_init(&self, peer: NodeId, now_secs: u64) -> u64 {
         *self
             .inner
+            .fabric
             .peer_last_contact
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -1024,6 +884,7 @@ impl AppState {
     /// rotation for the rest of the daemon's life.
     pub fn observe_peer_split_generation(&self, peer: NodeId, post_split: bool) {
         self.inner
+            .fabric
             .peer_post_split
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -1032,7 +893,7 @@ impl AppState {
 
     /// Whether we have positively confirmed `peer` is post-credential-split.
     ///
-    /// Unknown answers `false` — see [`AppStateInner::peer_post_split`]. A
+    /// Unknown answers `false` — see [`fabric::FabricPart::peer_post_split`]. A
     /// caller using this to decide whether a destructive action is safe gets
     /// the conservative answer until a gossip round proves otherwise.
     pub fn peer_confirmed_post_split(&self, peer: NodeId) -> bool {
@@ -1054,6 +915,7 @@ impl AppState {
     /// seconds". Same map, two questions, one decider each (ARCH §10.6).
     pub fn peer_split_generation(&self, peer: NodeId) -> Option<bool> {
         self.inner
+            .fabric
             .peer_post_split
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -1150,11 +1012,33 @@ impl AppState {
             (*mesh_store).clone(),
             self_node_id,
         ));
+        let fabric = fabric::FabricPart {
+            self_node_id_swap: ArcSwap::from_pointee(self_node_id),
+            mesh: RwLock::new(mesh),
+            self_node_pubkey: std::sync::RwLock::new(None),
+            self_iroh_dialinfo: std::sync::RwLock::new(None),
+            self_dial_signer: std::sync::RwLock::new(None),
+            ring_rail: std::sync::RwLock::new(None),
+            ring_write_nudge: Arc::new(tokio::sync::Notify::new()),
+            peer_transport: std::sync::RwLock::new(Arc::new(
+                commonwealth_transport::IpTransport::default(),
+            )),
+            clock: std::sync::RwLock::new(Arc::new(commonwealth_core::SystemClock)),
+            peer_last_contact: std::sync::RwLock::new(std::collections::HashMap::new()),
+            peer_last_attempt: std::sync::RwLock::new(std::collections::HashMap::new()),
+            peer_post_split: std::sync::RwLock::new(std::collections::HashMap::new()),
+            rpc_iroh_accept: std::sync::atomic::AtomicBool::new(false),
+            mesh_store,
+            app_registry,
+            app_port_map: AppPortMap::new(),
+            fanout_inflight: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            on_mesh_mutation: None,
+            convergence: std::sync::RwLock::new(None),
+            contribution_emitter,
+        };
         Self {
             inner: Arc::new(AppStateInner {
-                rpc_iroh_accept: std::sync::atomic::AtomicBool::new(false),
-                self_node_id_swap: ArcSwap::from_pointee(self_node_id),
-                mesh: RwLock::new(mesh),
+                fabric,
                 serving: serving::ServingPart {
                     inference_store,
                     model_aliases: ModelAliasTable::default_table(),
@@ -1201,11 +1085,6 @@ impl AppState {
                     peer_preferences,
                     local_in_flight_publisher: std::sync::OnceLock::new(),
                 },
-                self_node_pubkey: std::sync::RwLock::new(None),
-                self_iroh_dialinfo: std::sync::RwLock::new(None),
-                self_dial_signer: std::sync::RwLock::new(None),
-                ring_rail: std::sync::RwLock::new(None),
-                ring_write_nudge: Arc::new(tokio::sync::Notify::new()),
                 node: node::NodePart {
                     client_token: std::sync::RwLock::new(None),
                     corpus_engine,
@@ -1230,23 +1109,12 @@ impl AppState {
                     storage_used_bytes: std::sync::atomic::AtomicU64::new(0),
                     activity_emitter,
                 },
-                peer_transport: std::sync::RwLock::new(Arc::new(
-                    commonwealth_transport::IpTransport::default(),
-                )),
-                clock: std::sync::RwLock::new(Arc::new(commonwealth_core::SystemClock)),
-                peer_last_contact: std::sync::RwLock::new(std::collections::HashMap::new()),
-                peer_last_attempt: std::sync::RwLock::new(std::collections::HashMap::new()),
-                peer_post_split: std::sync::RwLock::new(std::collections::HashMap::new()),
                 answering: answering::AnsweringPart {
                     middleware_registry: Arc::new(middleware_registry),
                     #[cfg(feature = "atos")]
                     session_store,
                     repo_root: std::env::current_dir().ok(),
                 },
-                mesh_store,
-                app_registry,
-                app_port_map: AppPortMap::new(),
-                fanout_inflight: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
                 ingest: ingest::IngestPart {
                     active_ingests: RwLock::new(HashSet::new()),
                     corpus_progress: RwLock::new(HashMap::new()),
@@ -1264,12 +1132,9 @@ impl AppState {
                     // the pre-throttle build.
                     ingest_throttle_milli: std::sync::atomic::AtomicU32::new(1000),
                 },
-                on_mesh_mutation: None,
                 workbench: workbench::WorkbenchPart {
                     next_edit_model_slot: std::sync::Arc::new(tokio::sync::Semaphore::new(1)),
                 },
-                convergence: std::sync::RwLock::new(None),
-                contribution_emitter,
             }),
         }
     }
@@ -1332,7 +1197,7 @@ impl AppState {
     /// swaps this when adopting a founder-assigned ID, and the field
     /// access path would always see the placeholder.
     pub fn self_node_id(&self) -> NodeId {
-        **self.inner.self_node_id_swap.load()
+        **self.inner.fabric.self_node_id_swap.load()
     }
 
     /// Replace this node's `self_node_id` (atomic). Called by
@@ -1340,7 +1205,7 @@ impl AppState {
     /// handshake. Cheap pointer swap; concurrent readers see either
     /// the old or new value but never garbage.
     pub fn set_self_node_id(&self, new_id: NodeId) {
-        self.inner.self_node_id_swap.store(Arc::new(new_id));
+        self.inner.fabric.self_node_id_swap.store(Arc::new(new_id));
     }
 
     /// Install the in-process inference service. Same Arc-get_mut
@@ -1422,7 +1287,7 @@ impl AppState {
     pub fn with_mesh_mutation_hook(mut self, hook: MeshMutationHook) -> Self {
         match Arc::get_mut(&mut self.inner) {
             Some(inner) => {
-                inner.on_mesh_mutation = Some(hook);
+                inner.fabric.on_mesh_mutation = Some(hook);
             }
             None => {
                 tracing::error!(
@@ -1716,6 +1581,7 @@ impl AppState {
     /// (the `fanout_inflight` gauge). Drives the `BoundedFanOut` glassbox check.
     pub fn fanout_inflight_count(&self) -> usize {
         self.inner
+            .fabric
             .fanout_inflight
             .load(std::sync::atomic::Ordering::Relaxed)
     }
@@ -1803,14 +1669,14 @@ impl AppState {
     /// everyone to neutral mid-contention.
     pub async fn refresh_reciprocity_weights(&self, k: f64) {
         let caps: HashMap<NodeId, commonwealth_core::capabilities::NodeCapabilities> = {
-            let view = self.inner.mesh.read().await;
+            let view = self.inner.fabric.mesh.read().await;
             view.members
                 .iter()
                 .map(|(id, m)| (*id, m.capabilities.clone()))
                 .collect()
         };
         let contributions = match commonwealth_state::current_contributions(
-            &self.inner.mesh_store,
+            &self.inner.fabric.mesh_store,
             &caps,
             commonwealth_core::contributions::DEFAULT_WINDOW_DAYS,
         ) {

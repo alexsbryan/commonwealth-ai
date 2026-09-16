@@ -136,6 +136,7 @@ mod tests {
 
         assert!(state
             .inner
+            .fabric
             .mesh_store
             .set(
                 PUBLIC,
@@ -145,7 +146,7 @@ mod tests {
             )
             .unwrap());
         assert_eq!(
-            state.inner.mesh_store.outbox_len().unwrap(),
+            state.inner.fabric.mesh_store.outbox_len().unwrap(),
             1,
             "the store queued the write in its own transaction"
         );
@@ -156,7 +157,7 @@ mod tests {
             .await;
 
         assert_eq!(
-            state.inner.mesh_store.outbox_len().unwrap(),
+            state.inner.fabric.mesh_store.outbox_len().unwrap(),
             0,
             "the claim is on the journal, not still queued"
         );
@@ -189,6 +190,7 @@ mod tests {
 
         assert!(state
             .inner
+            .fabric
             .mesh_store
             .set(
                 PRIVATE,
@@ -197,7 +199,7 @@ mod tests {
                 id
             )
             .unwrap());
-        assert_eq!(state.inner.mesh_store.outbox_len().unwrap(), 0);
+        assert_eq!(state.inner.fabric.mesh_store.outbox_len().unwrap(), 0);
 
         let nudge = state.ring_write_nudge();
         MeshBroadcaster::new(state.clone())
@@ -223,6 +225,7 @@ mod tests {
         assert!(
             state
                 .inner
+                .fabric
                 .mesh_store
                 .get(PRIVATE, "claim:secret")
                 .unwrap()

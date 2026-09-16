@@ -497,7 +497,7 @@ async fn host_transport_bases(state: &AppState, host_node_id: Option<&str>) -> V
     let Some(id) = host_node_id.and_then(|h| commonwealth_core::ids::NodeId::from_hex(h)) else {
         return Vec::new();
     };
-    let member = { state.inner.mesh.read().await.members.get(&id).cloned() };
+    let member = { state.inner.fabric.mesh.read().await.members.get(&id).cloned() };
     let Some(member) = member else {
         tracing::debug!(
             host = %id,

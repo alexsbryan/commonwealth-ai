@@ -116,7 +116,7 @@ async fn join_with_valid_key_admits_new_member() {
     assert!(json.get("mesh").is_some());
 
     // Founder's mesh state should now reflect the new member.
-    let mesh = state.inner.mesh.read().await;
+    let mesh = state.inner.fabric.mesh.read().await;
     assert_eq!(
         mesh.members.len(),
         2,
@@ -149,7 +149,7 @@ async fn join_with_wrong_key_returns_401_and_does_not_mutate_mesh() {
     assert!(json["reason"].as_str().is_some());
 
     // Mesh should still have exactly the founder.
-    let mesh = state.inner.mesh.read().await;
+    let mesh = state.inner.fabric.mesh.read().await;
     assert_eq!(mesh.members.len(), 1, "rejected join must not add member");
 }
 
@@ -182,7 +182,7 @@ async fn join_with_expired_invite_is_rejected() {
     let (state, join_key) = mesh_with_known_key();
     // The expiry lives on the MESH now, not on this node's AppState: any member
     // can admit, so an expiry only one node knows about is not a gate.
-    state.inner.mesh.write().await.invite_expires_at = Some(1); // far in the past
+    state.inner.fabric.mesh.write().await.invite_expires_at = Some(1); // far in the past
     let app = internal_router(state.clone());
 
     let response = app
@@ -203,7 +203,7 @@ async fn join_with_expired_invite_is_rejected() {
         json["reason"]
     );
     assert_eq!(
-        state.inner.mesh.read().await.members.len(),
+        state.inner.fabric.mesh.read().await.members.len(),
         1,
         "expired join must not add a member"
     );
@@ -214,7 +214,7 @@ async fn join_with_unexpired_invite_is_accepted() {
     // A TTL in the future admits normally — the check only fences off
     // expired links, not live ones.
     let (state, join_key) = mesh_with_known_key();
-    state.inner.mesh.write().await.invite_expires_at = Some(u64::MAX);
+    state.inner.fabric.mesh.write().await.invite_expires_at = Some(u64::MAX);
     let app = internal_router(state.clone());
 
     let response = app
@@ -227,5 +227,5 @@ async fn join_with_unexpired_invite_is_accepted() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    assert_eq!(state.inner.mesh.read().await.members.len(), 2);
+    assert_eq!(state.inner.fabric.mesh.read().await.members.len(), 2);
 }

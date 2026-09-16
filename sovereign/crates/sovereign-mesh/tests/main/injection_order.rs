@@ -159,7 +159,7 @@ fn with_mesh_mutation_hook_emits_error_when_arc_already_cloned() {
     );
 
     assert!(
-        app_state.inner.on_mesh_mutation.is_none(),
+        app_state.inner.fabric.on_mesh_mutation.is_none(),
         "with_mesh_mutation_hook must NOT have installed the hook when Arc was cloned"
     );
 }
@@ -196,7 +196,7 @@ fn happy_path_does_not_emit_error_when_arc_uncloned() {
         "happy path: local_inference installed"
     );
     assert!(
-        app_state.inner.on_mesh_mutation.is_some(),
+        app_state.inner.fabric.on_mesh_mutation.is_some(),
         "happy path: mesh mutation hook installed"
     );
 }

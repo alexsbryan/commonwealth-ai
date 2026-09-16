@@ -35,14 +35,14 @@ pub async fn gossip(
     Json(req): Json<GossipRequest>,
 ) -> Result<Json<GossipResponse>, (StatusCode, Json<GossipRejection>)> {
     let incoming = req.mesh.into_mesh();
-    let self_node_id = *state.inner.self_node_id_swap.load_full().as_ref();
+    let self_node_id = *state.inner.fabric.self_node_id_swap.load_full().as_ref();
     let now_secs = state.clock().now_unix_secs();
     let auth = commonwealth_core::mesh::GossipAuth {
         sender: req.from,
         proof: req.mesh_proof.clone(),
         now_secs,
     };
-    let mut mesh = state.inner.mesh.write().await;
+    let mut mesh = state.inner.fabric.mesh.write().await;
     let report = mesh.merge_from_authenticated(self_node_id, &incoming, &auth);
 
     if report.rejected() {
@@ -88,7 +88,7 @@ pub async fn gossip(
         // forget a newly-admitted joiner. Only fire on actual
         // deltas — no point re-writing mesh.json for a last_seen
         // bump that changed nothing structural.
-        if let Some(hook) = state.inner.on_mesh_mutation.as_ref() {
+        if let Some(hook) = state.inner.fabric.on_mesh_mutation.as_ref() {
             hook(&mesh, self_node_id);
         }
     }

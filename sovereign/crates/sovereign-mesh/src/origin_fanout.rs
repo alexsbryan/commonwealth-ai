@@ -65,7 +65,7 @@ impl EmbeddedDaemon {
         // Cloned out before any await: nothing here holds the mesh lock
         // across a dial.
         let roster = {
-            let mesh = app_state.inner.mesh.read().await;
+            let mesh = app_state.inner.fabric.mesh.read().await;
             commonwealth_media::roster_of(&mesh)
         };
         commonwealth_media::fanout::fanout(
@@ -73,7 +73,7 @@ impl EmbeddedDaemon {
             &roster,
             req,
             app_state.peer_transport(),
-            app_state.inner.fanout_inflight.clone(),
+            app_state.inner.fabric.fanout_inflight.clone(),
         )
         .await
     }

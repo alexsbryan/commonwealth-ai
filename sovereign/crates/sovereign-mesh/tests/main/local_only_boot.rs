@@ -283,7 +283,7 @@ async fn a_local_only_daemon_spawns_no_network_service() {
 
     let state = daemon.app_state().await.expect("running daemon has state");
     assert_eq!(
-        state.inner.mesh.read().await.members.len(),
+        state.inner.fabric.mesh.read().await.members.len(),
         1,
         "the mesh-of-one is still minted — the profile skips the network, not the model"
     );

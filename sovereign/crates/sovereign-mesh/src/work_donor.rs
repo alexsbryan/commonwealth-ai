@@ -969,7 +969,7 @@ async fn run_unit(
                         wall_seconds,
                         "work donor: crediting this node's contribution ledger"
                     );
-                    app_state.inner.contribution_emitter.record(credit);
+                    app_state.inner.fabric.contribution_emitter.record(credit);
                 }
                 None => debug!(
                     target: TRACE_TARGET,

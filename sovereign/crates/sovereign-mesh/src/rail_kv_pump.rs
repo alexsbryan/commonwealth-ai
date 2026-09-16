@@ -236,7 +236,7 @@ pub async fn pump_once(app_state: &AppState) -> PumpOutcome {
     let Some(rail) = app_state.ring_rail() else {
         return out;
     };
-    let store = Arc::clone(&app_state.inner.mesh_store);
+    let store = Arc::clone(&app_state.inner.fabric.mesh_store);
     let queued = match store.outbox_take(OUTBOX_DRAIN_LIMIT) {
         Ok(rows) => rows,
         Err(e) => {
@@ -584,7 +584,7 @@ async fn snapshot(
     }
 
     let self_id = app_state.self_node_id();
-    let rows = match app_state.inner.mesh_store.scan(namespace, "") {
+    let rows = match app_state.inner.fabric.mesh_store.scan(namespace, "") {
         Ok(r) => r,
         Err(e) => {
             warn!(namespace, error = %e,
@@ -930,7 +930,7 @@ pub async fn project_namespace(
     // what keeps the reconciliation off rows this node has not put on the rail
     // yet. This module does no second pass — one call, one decision.
     let mesh_roster = MeshRoster::from_app_state(app_state).await;
-    match app_state.inner.mesh_store.apply_projection(
+    match app_state.inner.fabric.mesh_store.apply_projection(
         &namespace,
         &projection,
         |actor| mesh_roster.node_id_of(actor),

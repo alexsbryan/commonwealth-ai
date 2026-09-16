@@ -85,6 +85,7 @@ async fn a_node_in_no_mesh_keeps_its_writes_queued_until_membership_exists() {
 
     assert!(state
         .inner
+        .fabric
         .mesh_store
         .set(KV, "plan", bytes::Bytes::from_static(b"v1"), me)
         .unwrap());
@@ -96,7 +97,7 @@ async fn a_node_in_no_mesh_keeps_its_writes_queued_until_membership_exists() {
         "{out:?}"
     );
     assert_eq!(
-        state.inner.mesh_store.outbox_len().unwrap(),
+        state.inner.fabric.mesh_store.outbox_len().unwrap(),
         1,
         "a deferred write stays queued"
     );
@@ -104,6 +105,7 @@ async fn a_node_in_no_mesh_keeps_its_writes_queued_until_membership_exists() {
     // Membership arrives, and the same row goes out.
     state
         .inner
+        .fabric
         .mesh
         .write()
         .await
@@ -115,7 +117,7 @@ async fn a_node_in_no_mesh_keeps_its_writes_queued_until_membership_exists() {
         (1, 0, 0),
         "{out:?}"
     );
-    assert_eq!(state.inner.mesh_store.outbox_len().unwrap(), 0);
+    assert_eq!(state.inner.fabric.mesh_store.outbox_len().unwrap(), 0);
 }
 
 /// **A seal on `work` must not delete the queue it is sealing.**

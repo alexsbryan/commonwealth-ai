@@ -143,7 +143,7 @@ async fn gossip_round_publishes_live_hosted_corpora() {
     // Sanity pre-condition: before the round, `hosted_corpora` is empty
     // (matching every constructor in the Commonwealth tree today).
     {
-        let m = state.inner.mesh.read().await;
+        let m = state.inner.fabric.mesh.read().await;
         assert!(m
             .members
             .get(&self_id)
@@ -160,7 +160,7 @@ async fn gossip_round_publishes_live_hosted_corpora() {
         .await
         .expect("gossip round must succeed even with no peers");
 
-    let m = state.inner.mesh.read().await;
+    let m = state.inner.fabric.mesh.read().await;
     let caps = &m.members.get(&self_id).unwrap().capabilities;
     assert_eq!(
         caps.hosted_corpora.len(),

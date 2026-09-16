@@ -11,7 +11,7 @@ use crate::state::AppState;
 
 /// GET /status — mesh and node status summary.
 pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
-    let mesh = state.inner.mesh.read().await;
+    let mesh = state.inner.fabric.mesh.read().await;
     let plan = state
         .inner
         .serving
@@ -129,7 +129,7 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
     Json(StatusResponse {
         node_id: format!(
             "{}",
-            state.inner.self_node_id_swap.load_full().as_ref().clone()
+            state.inner.fabric.self_node_id_swap.load_full().as_ref().clone()
         ),
         mesh: MeshStatus {
             name: mesh.name.clone(),

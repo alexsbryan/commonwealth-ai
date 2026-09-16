@@ -170,7 +170,7 @@ async fn gossip_round_trips_over_iroh_dialed_by_pubkey() {
 
     // And the founder's live AppState actually merged it — this was
     // a real anti-entropy round, not an echo.
-    let live = founder_state.inner.mesh.read().await;
+    let live = founder_state.inner.fabric.mesh.read().await;
     let merged = live
         .members
         .values()

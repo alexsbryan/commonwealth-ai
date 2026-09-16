@@ -67,7 +67,7 @@ async fn try_resume_brings_back_persisted_mesh_and_serves_internal_http() {
             .app_state()
             .await
             .expect("app_state after create_mesh");
-        let mesh = state.inner.mesh.read().await;
+        let mesh = state.inner.fabric.mesh.read().await;
         let invite = daemon.current_invite().await;
         let snap = (mesh.name.clone(), mesh.members.len(), invite);
         drop(mesh);
@@ -94,7 +94,7 @@ async fn try_resume_brings_back_persisted_mesh_and_serves_internal_http() {
         .app_state()
         .await
         .expect("app_state present after try_resume");
-    let mesh = state.inner.mesh.read().await;
+    let mesh = state.inner.fabric.mesh.read().await;
     assert_eq!(
         mesh.name, mesh_name,
         "resumed mesh name must match pre-restart value"
