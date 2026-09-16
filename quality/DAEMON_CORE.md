@@ -380,9 +380,9 @@ This corrects SERVING_BOUNDARY entry (a), which called `local_node_id` a process
 store and recomputes availability on its own — Fabric reaching into Serving and the node for its
 own advertisement, the `fabric -> host` backflow in the cluster graph. It inverts into one port
 Fabric declares and the daemon implements, answering what this node claims right now:
-availability, in-flight, storage remaining, loaded models, hosted corpora. Working name
-`SelfClaims`, which `converge noun` finds undefined. Fabric publishes the claims and does not know
-who computed them.
+availability, in-flight, storage remaining, embed model. Hosted corpora is not part of this port:
+it comes from the `CorpusEngine` handle Fabric already names, not node state; `loaded_models` is an
+honest empty; the port is `SelfClaims`. Fabric publishes the claims and does not know who computed them.
 
 *The facts rule.* No context outside Fabric names `ContributionEmitter` or `ActivityEmitter`. Each
 context emits its own outcome — Serving's `RoutingOutcome`, a unit's completion, an ingest's
@@ -588,7 +588,7 @@ Named so the next reader does not take them as measured.
   rule is a claim, not a measurement.
 - Which callers other than the owner can start a turn on the daemon (§3.3):
   the size of the unwired-ceiling exposure.
-- `SelfClaims`' exact inputs. §4.2's five come from reading gossip and the
-  capabilities builder, not from a port drafted against them.
+- `SelfClaims`' exact inputs — RESOLVED 2026-09-16: four answers (availability,
+  in-flight, storage remaining, embed model); hosted corpora is not part of it.
 - How `EmbeddedDaemon`'s lines split between Fabric and the daemon; §4.1's
   69,000 counts all of `daemon`.

@@ -157,3 +157,36 @@ left unedited because `HUMAN-design-review` approved it.
 
 **Landed in.** this commit — the re-scoped `REVIEW-build-appstate-self-claims`
 row in `ralph/STATE.md` and this entry. `git revert <sha>` reverts it alone.
+
+## 2026-09-16 · REVIEW-build-appstate-self-claims · REVIEW-AFTER resolved — the DC records the redraw, no follow-up row
+
+**Fork.** The redraw left DC §4.2 claiming five answers (availability, in-flight,
+storage remaining, loaded models, hosted corpora) while the shipped port answers
+four (`self_claims.rs:31-44`). Amend the DC to record the redraw, or mint a
+follow-up row moving `CorpusShardInfo` to `oicp-types` so hosted corpora folds
+into the port?
+
+**Choice.** Amend the DC; no follow-up row. The port's job — kill the
+`fabric -> host` backflow — is done by the four answers. Hosted corpora is
+engine-sourced (DC §4.2's own table lists the engine as a shared Fabric
+dependency, `:365`) and never touched `AppState`, so folding it back buys no
+boundary and costs a 14-site move across four crates (commonwealth-core,
+sovereign-mesh, sovereign-tools, sovereign-api tests). `loaded_models` is an
+honest empty (`capabilities.rs:188`), so §4.2 needed a precision edit regardless
+of where `CorpusShardInfo` lives — a move alone cannot make the text true. The
+move's trigger stays in the redraw entry's falsifier: a second consumer through
+the port, or a kernel rung that wants wire types in `oicp-types`.
+
+**Evidence.** `self_claims.rs:31-44` (four fields, no corpora);
+`capabilities.rs:184-194` (`hosted_corpora` from the engine, `loaded_models:
+Vec::new()`); DC §4.2 table `:365`; the type is pure serde wire
+(`knowledge.rs:20-25`, `:64-116`); 14 call sites (`callers`); `sovereign-mesh`
+already names `corpus-engine` (`Cargo.toml:104`).
+
+**Falsified by.** A second consumer that needs hosted corpora through the port;
+or the engine handle ceasing to be a legitimate Fabric dependency; or DC §6/§7
+being revised to require all five inputs (the redraw entry's own falsifier).
+
+**Landed in.** this commit — DC §4.2 (`:383-385`) and §7 (`:591-592`), no code
+change, the edit line-count-neutral so the `:570-572` / `:591-592` citations
+hold. Resolved in the morning review the redraw entry asked for.
