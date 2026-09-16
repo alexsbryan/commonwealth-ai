@@ -137,7 +137,7 @@ O10 = `.sovereign/features/domains-10-serving-extract/order.md`
 
 ## Wave 1 — sovereign-mesh: small leavers
 
-- [ ] dm-mesh-move-turn-approval — depends [REVIEW-audit-2] — MOVE sovereign/crates/sovereign-mesh/src/turn_approval.rs -> sovereign-core (measured: no `crate::` references; if it names a crate sovereign-core does not depend on, §6) — read: DC §4.3 table — check: LINT; LAYER; TEST(sovereign-core); TEST(sovereign-mesh)
+- [x] dm-mesh-move-turn-approval 634688bfc — depends [REVIEW-audit-2] — MOVE sovereign/crates/sovereign-mesh/src/turn_approval.rs -> sovereign-core (measured: no `crate::` references; if it names a crate sovereign-core does not depend on, §6) — read: DC §4.3 table — check: LINT; LAYER; TEST(sovereign-core); TEST(sovereign-mesh)
 - [ ] dm-mesh-move-reading-formatters — depends [REVIEW-audit-2] — MOVE sovereign/crates/sovereign-mesh/src/reading_formatters.rs -> corpus-engine-vocab; the row also allows rewriting `corpus_engine::enrichment::atlas::AtomEnvelope` to `crate::atoms::AtomEnvelope` (AtomEnvelope is defined in corpus-engine-vocab/src/atoms.rs); vocab may name only kernel-types — read: DC §4.3 table — check: LINT; LAYER; TEST(corpus-engine-vocab); TEST(sovereign-mesh)
 - [ ] REVIEW-build-research-run-dir — depends [REVIEW-audit-2] — MOVE sovereign-mesh's research_run_dir into sovereign-core's deep_research; it calls `crate::research_http::is_live`, which stays with the host, so pass that in instead of importing it — read: DC §4.3 table — check: LINT; LAYER; TEST(sovereign-core); TEST(sovereign-mesh)
 
