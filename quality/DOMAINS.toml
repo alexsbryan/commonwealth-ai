@@ -11619,6 +11619,12 @@ lines = 275
 note = ""
 
 [[module]]
+path = "sovereign/crates/sovereign-contracts/src/self_claims.rs"
+context = "kernel"
+lines = 183
+note = "SelfClaims + LocalClaims — what this node claims about itself, the port Fabric publishes from (DC §4.2; REVIEW-build-appstate-self-claims)"
+
+[[module]]
 path = "sovereign/crates/sovereign-contracts/src/setup_config.rs"
 context = "kernel"
 lines = 3445

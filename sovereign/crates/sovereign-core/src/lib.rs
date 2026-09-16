@@ -88,6 +88,15 @@ pub use sovereign_contracts::daemon_wire;
 // reachable at its `sovereign_core::` path.
 pub use sovereign_contracts::identity;
 
+// The self-claims port, at `sovereign_core::self_claims`. Added 2026-09-16 for
+// `sovereign-api`, whose `AppState` implements `SelfClaims`
+// (`quality/DAEMON_CORE.md` §4.2 "Gossip asks the node what to claim"). Naming
+// `sovereign-contracts` directly would grow that crate's fan-in and
+// `cargo xtask layer-gate` refuses it — the same refusal the `identity` block
+// above records — while this re-export costs no new edge, following the rule
+// that a contracts module is reachable at its `sovereign_core::` path.
+pub use sovereign_contracts::self_claims;
+
 // Re-export commonly used items at the crate root.
 //
 // `traits::*` / `types::*` are BOUNDED globs (quality program R1,

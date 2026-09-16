@@ -109,9 +109,7 @@ async fn build_local_capabilities_publishes_in_flight_through_appstate() {
     let caps = build_local_capabilities(
         None, // no CorpusEngine — irrelevant for this assertion
         100,  // reported_at
-        1.0,  // inference_availability
-        None, // embed_model
-        Some(&state),
+        &state,
     )
     .await;
 
@@ -124,7 +122,7 @@ async fn build_local_capabilities_publishes_in_flight_through_appstate() {
     // Drain back to zero and rebuild — the next gossip tick must
     // see the drop, not a stale snapshot.
     publisher.store(0, Ordering::Relaxed);
-    let caps_after = build_local_capabilities(None, 101, 1.0, None, Some(&state)).await;
+    let caps_after = build_local_capabilities(None, 101, &state).await;
     assert_eq!(
         caps_after.current_in_flight,
         Some(0),
@@ -143,7 +141,7 @@ async fn capabilities_payload_survives_serde_roundtrip() {
     state.install_in_flight_publisher(Arc::clone(&publisher));
     publisher.store(11, Ordering::Relaxed);
 
-    let caps = build_local_capabilities(None, 200, 1.0, None, Some(&state)).await;
+    let caps = build_local_capabilities(None, 200, &state).await;
     let json = serde_json::to_string(&caps).expect("serialize");
     assert!(
         json.contains("\"current_in_flight\":11"),
@@ -162,7 +160,7 @@ async fn no_publisher_yields_none_in_gossip_payload() {
     // None`. Older peers without the field deserialize that as
     // None too, so scoring falls back to the founder's local view.
     let state = AppState::new(NodeId::from_u128(4), empty_mesh());
-    let caps = build_local_capabilities(None, 300, 1.0, None, Some(&state)).await;
+    let caps = build_local_capabilities(None, 300, &state).await;
     assert_eq!(
         caps.current_in_flight, None,
         "no publisher → None in gossip (legacy-compatible)"
@@ -171,6 +169,36 @@ async fn no_publisher_yields_none_in_gossip_payload() {
     assert!(
         !json.contains("current_in_flight"),
         "None must be skipped on the wire for byte-economy: {json}"
+    );
+}
+
+/// The storage half of the `SelfClaims` port on the real `AppState`
+/// implementation: Fabric hands the measured usage back, the node remembers it,
+/// and the remaining budget it answers clamps the published free storage. The
+/// trait's own tests use a fake; this is the positive control for the wiring.
+#[tokio::test]
+async fn self_claims_publishes_storage_remaining_from_the_budget() {
+    let state = AppState::new(NodeId::from_u128(5), empty_mesh());
+    let ten_gib = 10 * 1_073_741_824_u64;
+    state
+        .set_storage_budget_bytes(Some(ten_gib))
+        .expect("10 GiB is a legal budget");
+
+    // No engine → the measured usage is 0, so the whole budget remains.
+    let claims = sovereign_core::self_claims::SelfClaims::claims(&state).await;
+    assert_eq!(
+        claims.storage_remaining,
+        Some(ten_gib),
+        "an unset engine usage must leave the whole budget remaining"
+    );
+
+    // And the builder clamps the published free storage to that remaining
+    // budget — the behaviour the port replaced a direct `AppState` read for.
+    let caps = build_local_capabilities(None, 500, &state).await;
+    assert!(
+        caps.hardware.free_storage_gb <= 10,
+        "budget remaining of 10 GiB must clamp published free_storage_gb, got {}",
+        caps.hardware.free_storage_gb
     );
 }
 

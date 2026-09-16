@@ -1939,6 +1939,39 @@ impl AppState {
     }
 }
 
+/// The node's answer to Fabric's `SelfClaims` port (`quality/DAEMON_CORE.md`
+/// §4.2 "Gossip asks the node what to claim"). Fabric publishes these claims
+/// and does not know who computed them; the daemon computes them from Serving's
+/// availability composite, the inference store, the in-flight gauge and the
+/// node's storage budget.
+///
+/// The port lives in `sovereign-contracts` and reaches this crate through
+/// `sovereign_core::self_claims` on the `identity` precedent, so implementing
+/// it costs no new edge (`ralph/DECISIONS.md` 2026-09-16).
+#[async_trait]
+impl sovereign_core::self_claims::SelfClaims for AppState {
+    async fn claims(&self) -> sovereign_core::self_claims::LocalClaims {
+        // Recompute availability from BOTH its inputs at the moment of
+        // publication. The yield-to-local-user half is time-derived and has no
+        // transition event to hook, so a node refusing every peer request would
+        // otherwise advertise a stale `1.0` (note 3234d770). This is the
+        // recompute `gossip::run_one_round` used to call one line before it
+        // built the capabilities; it now rides the port so Fabric stops
+        // reaching into Serving for its own advertisement.
+        let availability = self.recompute_local_availability().await;
+        sovereign_core::self_claims::LocalClaims {
+            availability,
+            in_flight: self.current_local_in_flight(),
+            storage_remaining: self.storage_remaining_bytes(),
+            embed_model: self.inner.serving.inference_store.get_local_embed_model(),
+        }
+    }
+
+    fn record_storage_used(&self, used: u64) {
+        self.set_storage_used_bytes(used);
+    }
+}
+
 #[cfg(test)]
 pub fn test_app_state() -> AppState {
     use commonwealth_core::ids::MeshId;

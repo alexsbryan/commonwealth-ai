@@ -40,10 +40,9 @@ use commonwealth_core::capabilities::{
     AnchorProfile, AvailableResources, HardwareProfile, NodeCapabilities,
 };
 use commonwealth_core::knowledge::{ChunkRange as CoreChunkRange, CorpusShardInfo};
-use commonwealth_core::oicp::EmbedModelInfo;
 use commonwealth_discovery::hardware;
 use corpus_engine::engine::CorpusEngine;
-use sovereign_api::state::AppState;
+use sovereign_contracts::self_claims::SelfClaims;
 
 /// Build a fresh `NodeCapabilities` describing this node right now.
 ///
@@ -55,18 +54,17 @@ use sovereign_api::state::AppState;
 /// hardware profile is still populated so peers at least know our
 /// shape before we publish our corpus inventory.
 ///
-/// `app_state` is optional too. When present (the production path),
-/// the storage budget — if any — is read off it and used to clamp
-/// `free_storage_gb`, and the freshly-summed corpus usage is written
-/// back into the AppState atomic so `GET /internal/storage/budget`
-/// can serve it. When `None` (older callers / tests that haven't
-/// been updated), the no-clamp behaviour matches the original.
+/// `claims_source` is the node's `SelfClaims` port (`DAEMON_CORE.md` §4.2):
+/// availability, in-flight, storage remaining and embed model all arrive
+/// through it, and the freshly-summed corpus usage is handed back through it so
+/// `GET /internal/storage/budget` can serve it. Fabric no longer reads those
+/// four off `AppState` and the inference store directly — the `fabric -> host`
+/// backflow the port inverts. Hosted corpora stays here, computed from the
+/// `engine` handle Fabric legitimately names (ralph/DECISIONS.md 2026-09-16).
 pub async fn build_local_capabilities(
     engine: Option<&Arc<CorpusEngine>>,
     now_secs: u64,
-    inference_availability: f32,
-    embed_model: Option<EmbedModelInfo>,
-    app_state: Option<&AppState>,
+    claims_source: &dyn SelfClaims,
 ) -> NodeCapabilities {
     let mut hardware = hardware::detect_hardware();
     // Advertise the ggml device total VRAM (authoritative, backend-agnostic)
@@ -123,17 +121,18 @@ pub async fn build_local_capabilities(
         _ => Vec::new(),
     };
 
+    // Hand Fabric's measured usage back to the node, then ask it what it
+    // claims. The write-back must precede `claims()` so `storage_remaining`
+    // reflects this round's sum — the ordering the trait documents.
+    claims_source.record_storage_used(storage_used_bytes);
+    let claims = claims_source.claims().await;
+
     // Apply the storage-budget clamp before live_available_resources
     // so both the static `HardwareProfile.free_storage_gb` and the
     // live `AvailableResources.free_storage_gb` see the same ceiling.
     // Schedulers read both depending on path; clamping just one would
     // leak unbounded capacity through whichever channel was missed.
-    let budget_remaining = if let Some(state) = app_state {
-        state.set_storage_used_bytes(storage_used_bytes);
-        state.storage_remaining_bytes()
-    } else {
-        None
-    };
+    let budget_remaining = claims.storage_remaining;
     let actual_free_gb = hardware.free_storage_gb;
     if let Some(remaining) = budget_remaining {
         let remaining_gb = (remaining / 1_073_741_824) as u32;
@@ -184,7 +183,7 @@ pub async fn build_local_capabilities(
         // the honest answer here.
         hosted_corpora,
         reported_at: now_secs,
-        inference_availability,
+        inference_availability: claims.availability,
         inference_capable: false,
         loaded_models: Vec::new(),
         origins: Vec::new(),
@@ -192,7 +191,7 @@ pub async fn build_local_capabilities(
         // exact match against this field. `None` means "don't include
         // me in distribution" — safe default for nodes that haven't
         // bootstrapped an embed slot yet.
-        embed_model,
+        embed_model: claims.embed_model,
         // ALWAYS `None`, and not because this builder declines to set
         // it. There is no startup probe and no `with_benchmark`
         // setter; this comment used to describe both as though they
@@ -235,7 +234,7 @@ pub async fn build_local_capabilities(
         // for why this field exists and why gossiping it is the only
         // way the founder learns mac-peer is busy serving local
         // traffic the founder never dispatched.
-        current_in_flight: app_state.and_then(|s| s.current_local_in_flight()),
+        current_in_flight: claims.in_flight,
         anchor,
     }
 }
@@ -368,6 +367,25 @@ fn live_available_resources(
 mod tests {
     use super::*;
 
+    /// A minimal `SelfClaims` for tests that only exercise the builder's other
+    /// arms: no engine, no gauge, no budget — every optional answer is absent,
+    /// which is the honest shape for a node that wired none of them.
+    struct StubClaims;
+
+    #[async_trait::async_trait]
+    impl SelfClaims for StubClaims {
+        async fn claims(&self) -> sovereign_contracts::self_claims::LocalClaims {
+            sovereign_contracts::self_claims::LocalClaims {
+                availability: 1.0,
+                in_flight: None,
+                storage_remaining: None,
+                embed_model: None,
+            }
+        }
+
+        fn record_storage_used(&self, _used: u64) {}
+    }
+
     #[test]
     fn live_available_resources_clamps_free_storage_when_budget_lower() {
         let hw = HardwareProfile {
@@ -454,7 +472,7 @@ mod tests {
     /// you have silently converted a measurement into an extrapolation.
     #[tokio::test]
     async fn gossip_never_advertises_a_benchmark() {
-        let caps = build_local_capabilities(None, 0, 1.0, None, None).await;
+        let caps = build_local_capabilities(None, 0, &StubClaims).await;
         assert!(
             caps.benchmark.is_none(),
             "build_local_capabilities set NodeCapabilities.benchmark. That arms the \

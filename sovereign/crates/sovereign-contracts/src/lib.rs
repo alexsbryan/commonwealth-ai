@@ -77,6 +77,12 @@ pub mod rebrand;
 pub mod recipe;
 pub mod registry;
 pub mod run_lock;
+/// What this node claims about itself — the port Fabric publishes from. A
+/// consumer in `sovereign-mesh` (Fabric) and an implementation in
+/// `sovereign-api` (the daemon) may not name each other, so the port lives
+/// here beside `identity` (`quality/DAEMON_CORE.md` §4.2 "Gossip asks the node
+/// what to claim").
+pub mod self_claims;
 pub mod setup_config;
 /// `[iroh]` / `[iroh.transport]`, beside `setup_config` because that file is
 /// past its ceiling and this block grows with every origin kind. Re-exported
