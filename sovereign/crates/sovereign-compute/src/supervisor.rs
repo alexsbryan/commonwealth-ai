@@ -1316,7 +1316,20 @@ mod tests {
             tokio::spawn(async move { sup.run().await })
         };
 
-        let observed = drain_states(&mut states, 40, Duration::from_millis(1500)).await;
+        // The question is decided the moment the breaker trips, so the drain
+        // stops on that answer, not on a stopwatch — the sibling
+        // `a_proven_healthy_generation_resets_the_breaker` was moved to this
+        // shape on 2026-08-14 (see [`drain_states_until`]). A deadline here
+        // encodes "the host is fast enough": under a full-workspace run's
+        // spawn/reap load the two crash cycles took longer than 1500ms, the
+        // drain returned `[Starting, Healthy]`, and an audit's TESTALL went red
+        // for a supervisor that was working correctly. 30s is a hang-detector,
+        // not a bar; the warm path returns in ~0.5s.
+        let observed = drain_states_until(&mut states, 40, Duration::from_secs(30), |seen| {
+            seen.iter()
+                .any(|s| matches!(s, SupervisorState::Failed { .. }))
+        })
+        .await;
         assert!(
             observed
                 .iter()
