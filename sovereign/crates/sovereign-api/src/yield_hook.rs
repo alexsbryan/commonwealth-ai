@@ -34,7 +34,7 @@ use crate::state::AppStateInner;
 /// `chat_completions` writes — single source of truth.
 pub struct AppStateYieldHook {
     /// `Arc<AppStateInner>` rather than `Arc<AppState>` because the
-    /// engine lives behind `AppStateInner.corpus_engine`, and the
+    /// engine lives behind `AppStateInner.node.corpus_engine`, and the
     /// outer `AppState::Clone` indirection is just a wrapper. We
     /// need exactly the inner state's atomics.
     inner: Arc<AppStateInner>,

@@ -645,3 +645,87 @@ Recorded, not changed:
   crates read "new and unbaselined". `warn_gate` by design (AGENTS.md), does not
   block PREPUSH. Not re-pinned.
 
+## REVIEW-audit-9 — the AppState dissolution
+
+Range audited: `git log 77f178453..HEAD` (the previous audit's hash) — the six
+AppState owner-group moves, the identity reader, the `SelfClaims` port, the
+in-flight gauge and the three install-slot replacements. Checks: TESTALL exit=0
+(13355 pass, 0 fail); PREPUSH exit=0 (arch-gate cleared below; `size-gate` is
+the advisory `warn_gate`).
+
+The row's three claims, verified:
+
+- **No flat owner field remains on `AppStateInner` (63 → 0).** The struct is six
+  part fields — `fabric`, `serving`, `node`, `answering`, `ingest`, `workbench`
+  (`state.rs:362-395`) — and nothing else.
+- **No `install_*`/`with_*` write into a part after construction.**
+  `git grep -nE '\.install_[a-z_]+\('` over the workspace finds only unrelated
+  installers (recipes, scaffolds, log backends); `OnceLock` is gone from
+  `state.rs` and `state/`; and `(app_state|state).inner.(fabric|serving|node|
+  answering|ingest|workbench).[a-z_]+ =` matches nothing outside one test
+  comment. The readers (`ClockReader`, `PeerTransportReader`, `DialInfoReader`,
+  `SlotAliasesReader`, `ServableModelFilesReader`) are created first and
+  published through; `LocalInFlightGauge` is created before the provider.
+- **Each new port has a planted positive and a planted negative (ARCH 5).**
+  `IdentityReader` — `a_published_id_is_read_back` vs
+  `a_handle_taken_before_the_swap_observes_it` and `two_readers_do_not_share_a_cell`
+  (`sovereign-contracts/src/identity.rs:74,86,97`); `SelfClaims` —
+  `claims_round_trip_through_the_trait_object` and
+  `record_storage_used_is_observed_by_the_next_claims` vs
+  `no_budget_answers_none_not_a_default` and `two_implementations_do_not_share_usage`
+  (`sovereign-contracts/src/self_claims.rs:128,140,158,170`); the gauge —
+  `clone_shares_the_counter` and `fresh_gauge_reads_zero` vs
+  `two_gauges_are_independent` (`sovereign-contracts/src/in_flight.rs:70,81,93`).
+
+Findings, fixed:
+
+- **TESTALL red — `conformance_tags_are_fresh`** · `quality/conformance/
+  sovereign-api.toml`, `sovereign-mesh.toml` · `dm-appstate-serving` shifted
+  three test lines: `admission.rs` 755→762 and 1077→1084, `routes_status.rs`
+  676→684, `daemon.rs` 5285→5291. Regenerated. Fixed in this commit.
+- **ARCH 6 (a count that would silently understate) · ARCH 3 (the doc lands with
+  the code)** · `quality/DOMAINS.toml` · the range left seven `.rs` files with no
+  `[[module]]` row — the six `state/*.rs` parts and `sovereign-daemon/src/lib.rs`
+  — so `crate-lines`/`misnamed`/`queue` exited 4 on a coverage hole. Rows added
+  (the daemon row carries its own note that the `host` context does not name the
+  crate yet, so the home list stays the mint's call). Fixed in this commit.
+- **ARCH 3 (the doc lands with the code)** · `quality/DOMAINS.toml` · 42
+  `[[module]]` line counts were stale against the tree — 41 of them files this
+  range changed (`state.rs` 2486→2146, `daemon.rs` 5613→5619, `ring_sync.rs`
+  2031→2072, `gossip.rs` 1493→1478, …), plus `sovereign-serving-host/src/lib.rs`
+  31→32 left by audit-8. Re-measured with `wc -l`; the instrument had been
+  reporting a stale snapshot. Fixed in this commit.
+- **ARCH 3/4 (a pointer to a path that no longer owns the fact)** ·
+  `sovereign/SYSTEM_OVERVIEW.md:7366,7388,7421` named
+  `AppStateInner.{peer_sched,client_sched,convergence}`; the fields are
+  `serving.peer_sched`, `serving.client_sched`, `fabric.convergence` now. `:7388`
+  also spelled the client scheduler's key `PrincipalKey` (the wire-side resolver
+  key) where the code keys `SchedCore<Principal>` (`state/serving.rs:204-217`).
+  `sovereign-api/src/yield_hook.rs:37` named `AppStateInner.corpus_engine`; it is
+  `node.corpus_engine`. Repointed. Fixed in this commit.
+- **ARCH 3.1 (trim or split) — arch-gate red** · `sovereign-api/src/
+  routes_internal/mesh_admin.rs` · the AppState repoint's longer
+  `state.inner.<part>` paths made rustfmt reflow the file 1598→1661, +63 past the
+  50-line slack. Split the 522-line test module to
+  `routes_internal/mesh_admin/tests.rs` via `#[path]` (module path unchanged) and
+  the 406-line contribution/activity routes to
+  `routes_internal/mesh_admin/contribution.rs`, re-exported at `mesh_admin::*` so
+  every importer is unchanged. Parent 1661→740, under the 800 approach-band line
+  as well as the slack; arch-gate green. Fixed in this commit.
+
+Recorded, not changed:
+
+- **The shims stay (the row's VERB does not fire).** The range moved fields, not
+  modules, so no importer was repointed; every `sovereign_mesh::<m>` shim in
+  `sovereign-mesh/src/lib.rs` keeps the live importers audit-8 verified.
+- **Frozen measurement coordinates** · `quality/DOMAINS.toml`'s `[[noun]]` `file`
+  fields (`state.rs:494`), `[[collision]]` `definitions` and the `[[cluster]]`
+  graph `cite`/`file` rows still name the pre-dissolution field paths; they are
+  the 2026-09-14 measurement's own coordinates, not live pointers (the
+  audit-3/5/7/8 precedent). A re-key would falsify the record.
+  `quality/TOPOLOGY.md:56,623` names `commonwealth-api::AppStateInner` in a dated
+  census — the peer workspace's old name, also a frozen record.
+- **`size-gate` (advisory)** · 49 keys grew, the campaign's own growth; the new
+  crates read "new and unbaselined". `warn_gate` by design (AGENTS.md), does not
+  block PREPUSH. Not re-pinned.
+

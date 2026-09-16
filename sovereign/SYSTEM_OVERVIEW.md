@@ -7363,7 +7363,7 @@ work pins the GPU while the user is chatting. Components:
   peer requests are rejected with 503 + `Retry-After` when paused,
   yielding to a recent local foreground request, or refused by the
   fair scheduler. The flat ceiling became a **`serving_policy::fair_sched::SchedCore<NodeId>`**
-  (`AppStateInner.peer_sched`): a runtime-mutable global ceiling
+  (`AppStateInner.serving.peer_sched`): a runtime-mutable global ceiling
   (`set_slots`, `0` = reject all) **plus a per-node concurrency cap**
   so one peer can't hog the pool, **reciprocity-scaled** — a
   contributor's effective cap rises toward the ceiling, read from a
@@ -7385,7 +7385,7 @@ work pins the GPU while the user is chatting. Components:
   disjoint by construction — the client layer returns early when
   `X-Node-Id` is present — so a request meets exactly one of them and
   is never double-gated. It keys the same policy core as
-  **`SchedCore<PrincipalKey>`** (`AppStateInner.client_sched`), where
+  **`SchedCore<Principal>`** (`AppStateInner.serving.client_sched`), where
   the principal comes from `sovereign-api/principal.rs`: the ONE
   resolver, called from this layer and nowhere else — presented
   `Authorization: Bearer` → `Credential(<fingerprint>)` (a
@@ -7418,7 +7418,7 @@ work pins the GPU while the user is chatting. Components:
   the publish path alive?" (§9.5). The daemon boot creates ONE shared
   `ConvergenceRecord` (named on the daemon's
   `DaemonServices::Headless` rails and installed into
-  `AppStateInner.convergence` at AppState construction in
+  `AppStateInner.fabric.convergence` at AppState construction in
   `sovereign-mesh::start_daemon`), the notes publish sink stamps
   `last_outbound_publish_at` on every successful `set()`, and the
   notes ingest poller stamps `last_inbound_ingest_at` on every

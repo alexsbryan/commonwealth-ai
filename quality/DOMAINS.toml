@@ -319,7 +319,7 @@ note = "daemon handler; the read model it serves is Understanding's"
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/auto_ingest.rs"
 context = "host"
-lines = 1459
+lines = 1476
 note = "was ingest; jobs — DAEMON_CORE.md §3.2, §4.3 (2026-09-14)"
 
 [[module]]
@@ -337,7 +337,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/capabilities.rs"
 context = "fabric"
-lines = 467
+lines = 485
 note = ""
 
 [[module]]
@@ -361,13 +361,13 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/daemon.rs"
 context = "host"
-lines = 5613
+lines = 5619
 note = "composition root; the MemberRecord -> InferenceVenue translation (:2280-2345); re-exports the scheduler's InferenceVenue (:25)"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/daemon_services.rs"
 context = "host"
-lines = 1076
+lines = 1084
 note = ""
 
 [[module]]
@@ -403,7 +403,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/dst.rs"
 context = "back-of-house"
-lines = 1022
+lines = 1026
 note = "cfg(feature=\"dst\") fabric fault-injection harness; never in a production build"
 
 [[module]]
@@ -433,7 +433,7 @@ note = "moved host-side by domains REVIEW-build-serving-move-adapter; the workbe
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/gossip.rs"
 context = "fabric"
-lines = 1493
+lines = 1478
 note = ""
 
 [[module]]
@@ -542,7 +542,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/lib.rs"
 context = "host"
-lines = 167
+lines = 168
 note = ""
 
 [[module]]
@@ -626,7 +626,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/newsworthy_host.rs"
 context = "host"
-lines = 639
+lines = 647
 note = "was understanding; adapter — DAEMON_CORE.md §4.3 (2026-09-14)"
 
 [[module]]
@@ -794,7 +794,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/ring_sync.rs"
 context = "fabric"
-lines = 2031
+lines = 2072
 note = ""
 
 [[module]]
@@ -806,7 +806,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/rpc_warm_http.rs"
 context = "host"
-lines = 1214
+lines = 1224
 note = "*_http but the decision is Serving's - distributed-inference auto-warm orchestration; was serving; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
@@ -911,7 +911,7 @@ note = "was ingest; jobs — DAEMON_CORE.md §3.2, §4.3 (2026-09-14)"
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/work_atlas_broadcaster.rs"
 context = "host"
-lines = 233
+lines = 246
 note = "was workspace; adapter — DAEMON_CORE.md §4.3 (2026-09-14)"
 
 [[module]]
@@ -1025,7 +1025,7 @@ note = "reads decision_log::{DecisionEvent,RoutingDecision,RoutingOutcome,Served
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/rail_kv_pump/tests.rs"
 context = "fabric"
-lines = 273
+lines = 295
 note = ""
 
 [[module]]
@@ -1043,7 +1043,7 @@ note = "was compute; jobs — DAEMON_CORE.md §3.2, §4.3 (2026-09-14)"
 [[module]]
 path = "sovereign/crates/sovereign-api/src/admission.rs"
 context = "serving"
-lines = 1105
+lines = 1112
 note = "the daemon's side of admission since REVIEW-build-serving-move-admission (2026-09-15): the `Admission`/`AdmissionHost` impls over AppState, the RAII guards, and the re-exports of the host's surface. The decision, the two axum middlewares and the 503 renderer are `sovereign-serving-host/src/admission.rs`; SERVING_BOUNDARY.md (c)"
 
 [[module]]
@@ -1193,37 +1193,37 @@ note = "Responses-API wire vocabulary, same argument as openai_types"
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_apps.rs"
 context = "host"
-lines = 165
+lines = 170
 note = ""
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_completions.rs"
 context = "host"
-lines = 599
+lines = 602
 note = "was serving; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_edit_predictions.rs"
 context = "workbench"
-lines = 1455
+lines = 1459
 note = ""
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_inference.rs"
 context = "host"
-lines = 1728
+lines = 1747
 note = "was serving; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_inference/list_models_tests.rs"
 context = "host"
-lines = 515
+lines = 517
 note = "routes_inference's /v1/models tests, split out (REVIEW-audit-6, ARCH §3.1)"
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_inference/shed_rendering_tests.rs"
 context = "host"
-lines = 162
+lines = 164
 note = "routes_inference's shed-rendering tests, split out (REVIEW-audit-6, ARCH §3.1)"
 
 [[module]]
@@ -1235,25 +1235,25 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_internal/corpus_collaborate.rs"
 context = "host"
-lines = 1048
+lines = 1052
 note = ""
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_internal/corpus_grant.rs"
 context = "host"
-lines = 192
+lines = 202
 note = ""
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_internal/corpus_ingest.rs"
 context = "host"
-lines = 1496
+lines = 1528
 note = ""
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_internal/corpus_queue.rs"
 context = "host"
-lines = 843
+lines = 858
 note = ""
 
 [[module]]
@@ -1277,7 +1277,7 @@ note = "the mesh's own; also the ONE non-harness consumer of commonwealth_state:
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_internal/guest_grant.rs"
 context = "host"
-lines = 252
+lines = 254
 note = ""
 
 [[module]]
@@ -1289,8 +1289,20 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_internal/mesh_admin.rs"
 context = "host"
-lines = 1631
-note = "membership routes - the mesh's own; was fabric; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
+lines = 740
+note = "membership routes - the mesh's own; was fabric; route shell — DAEMON_CORE.md §4 placement test (2026-09-14). Its tests and contribution routes split to routes_internal/mesh_admin/ at REVIEW-audit-9 (arch-gate slack + approach band)"
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/routes_internal/mesh_admin/contribution.rs"
+context = "host"
+lines = 415
+note = "the contribution controls and activity surfaces, split out at REVIEW-audit-9 and re-exported at mesh_admin::* so every importer is unchanged"
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/routes_internal/mesh_admin/tests.rs"
+context = "host"
+lines = 525
+note = "the mesh_admin route tests, split out via #[path] at REVIEW-audit-9 when the AppState repoint's longer state.inner.<part> paths pushed the parent past arch-gate's slack; the module path is unchanged"
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_internal/mod.rs"
@@ -1307,13 +1319,13 @@ note = "was serving; route shell — DAEMON_CORE.md §4 placement test (2026-09-
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_internal/newsworthy_status.rs"
 context = "host"
-lines = 236
+lines = 238
 note = ""
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_internal/peer_preference.rs"
 context = "host"
-lines = 403
+lines = 409
 note = "operator routing policy - DOMAINS 3 names PeerPreference as one of the seven Peer meanings; was serving; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
@@ -1337,13 +1349,13 @@ note = "was serving; route shell — DAEMON_CORE.md §4 placement test (2026-09-
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_knowledge.rs"
 context = "host"
-lines = 590
+lines = 591
 note = "was retrieval; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_oicp.rs"
 context = "host"
-lines = 637
+lines = 647
 note = "was serving; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
@@ -1373,20 +1385,56 @@ note = "was serving; route shell — DAEMON_CORE.md §4 placement test (2026-09-
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_status.rs"
 context = "host"
-lines = 747
+lines = 755
 note = ""
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/server.rs"
 context = "host"
-lines = 1268
+lines = 1266
 note = ""
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/state.rs"
 context = "host"
-lines = 2486
-note = "the api-side god object; every Serving module here reaches it. Names commonwealth_core::mesh::Mesh (:11), commonwealth_state (:12-13), corpus_engine::CorpusEngine (:14), serving_policy::fair_sched (:16), sovereign_grants (:17), sovereign_serving_host::admission (:20)"
+lines = 2146
+note = "the api-side god object, dissolving: the flat owner fields are six parts now (DC §4.2). Names commonwealth_core::mesh::Mesh (:10), commonwealth_state (:11-12), corpus_engine::CorpusEngine (:13), serving_policy::fair_sched (:15), sovereign_grants (:17), sovereign_serving_host::admission (:20)"
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/state/answering.rs"
+context = "host"
+lines = 28
+note = "Answering's part (DC §4.2); scaffolding on AppStateInner until the ATOS inversion moves it to sovereign-core's pipeline (REVIEW-mint-daemon-move)"
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/state/fabric.rs"
+context = "host"
+lines = 315
+note = "Fabric's part (DC §4.2) with its construction seed and the readers published after construction; scaffolding until REVIEW-mint-daemon-move relocates it to sovereign-mesh"
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/state/ingest.rs"
+context = "host"
+lines = 83
+note = "Collaborative ingest's part (DC §4.2); scaffolding until REVIEW-mint-daemon-move relocates it to sovereign-daemon's jobs"
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/state/node.rs"
+context = "host"
+lines = 116
+note = "The node's part (DC §4.2) with its construction seed; scaffolding until REVIEW-mint-daemon-move relocates it to sovereign-daemon"
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/state/serving.rs"
+context = "host"
+lines = 305
+note = "Serving's part (DC §4.2) with its construction seed and readers; scaffolding until REVIEW-mint-daemon-move relocates it to sovereign-serving-host"
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/state/workbench.rs"
+context = "host"
+lines = 26
+note = "Workbench's part (DC §4.2); scaffolding until the next-edit crate exists and REVIEW-mint-daemon-move relocates it"
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/turn_fidelity.rs"
@@ -1397,7 +1445,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-api/src/yield_hook.rs"
 context = "host"
-lines = 366
+lines = 369
 note = ""
 
 [[module]]
@@ -1417,7 +1465,7 @@ note = "the crate root; modules lifted out of sovereign-mesh across REVIEW-build
 [[module]]
 path = "sovereign/crates/sovereign-serving-host/src/lib.rs"
 context = "serving"
-lines = 31
+lines = 32
 note = "the host crate root; the host half arrives in rung domains-10 (2026-09-15)"
 
 [[module]]
@@ -3197,7 +3245,7 @@ status = "kept"
 [[module]]
 context = "research"
 path = "sovereign/crates/sovereign-core/src/deep_research/mod.rs"
-lines = 4831
+lines = 4832
 note = "the controller — drives the R11-thin state machine; every step writes its versioned ICD artifact (FR-2), the charter is frozen at launch (FR-3), abort is an input to every state"
 
 [[module]]
@@ -7295,7 +7343,7 @@ note = ""
 [[module]]
 path = "corpus-engine-vocab/src/lib.rs"
 context = "unknown"
-lines = 36
+lines = 42
 note = ""
 
 [[module]]
@@ -8369,7 +8417,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs"
 context = "host"
-lines = 2862
+lines = 2864
 note = ""
 
 [[module]]
@@ -8411,7 +8459,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/mod.rs"
 context = "host"
-lines = 1625
+lines = 1630
 note = ""
 
 [[module]]
@@ -8429,7 +8477,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/provider.rs"
 context = "host"
-lines = 163
+lines = 164
 note = ""
 
 [[module]]
@@ -11513,7 +11561,7 @@ note = "LocalInferenceService split out of traits.rs (REVIEW-audit-6); re-export
 [[module]]
 path = "sovereign/crates/sovereign-contracts/src/lib.rs"
 context = "kernel"
-lines = 140
+lines = 159
 note = ""
 
 [[module]]
@@ -11799,6 +11847,12 @@ lines = 125
 note = ""
 
 [[module]]
+path = "sovereign/crates/sovereign-daemon/src/lib.rs"
+context = "host"
+lines = 30
+note = "the node's host crate root (DAEMON_CORE.md §4.1); a stub until the host modules move in (REVIEW-mint-daemon-move). The `host` context's crates list does not name it yet, so its lines count against the crate in `misnamed`/`queue` — the home list is the mint's call"
+
+[[module]]
 path = "sovereign/crates/sovereign-core/src/approval_desk.rs"
 context = "unknown"
 lines = 432
@@ -11903,7 +11957,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-core/src/lib.rs"
 context = "unknown"
-lines = 97
+lines = 127
 note = ""
 
 [[module]]
@@ -13907,7 +13961,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-mesh-test-harness/src/simulated_mesh.rs"
 context = "back-of-house"
-lines = 260
+lines = 264
 note = ""
 
 [[module]]
