@@ -258,3 +258,46 @@ being revised to require all five inputs (the redraw entry's own falsifier).
 **Landed in.** this commit — DC §4.2 (`:383-385`) and §7 (`:591-592`), no code
 change, the edit line-count-neutral so the `:570-572` / `:591-592` citations
 hold. Resolved in the morning review the redraw entry asked for.
+
+## 2026-09-16 · REVIEW-build-mesh-api-decouple · the three loops are Fabric's; the wire types get a leaf
+
+**Fork.** The worker resolved 13 of 27 non-`host`→`host` sites (`468be9869`)
+and stopped: the remaining 14 are in `gossip.rs`, `ring_sync.rs` and
+`rail_kv_pump.rs`, which read `AppState` (17 things in `run_one_round`) and the
+`routes_internal`/`server` wire types. Are the loops fabric (Fabric's state must
+reach them) or host (the daemon's background tasks)? And where do the wire types
+live?
+
+**Choice.**
+
+1. The loops are **fabric**. DC §4.2:347 assigns the roster, identity, clock,
+   transport, dial info and the three liveness maps to Fabric, and DC §4.1's
+   host "decides nothing a context owns" — a module that is none of
+   assembly/surface/edge/adapter holds a decision, and `run_one_round` holds
+   Fabric's. Their `AppState`/`FabricSeed` reads defer to
+   `REVIEW-build-daemon-parts`, which already relocates `state/fabric.rs` (315)
+   → sovereign-mesh and repoints its consumers (DC §4.2's six-owner table).
+2. The wire types get a **new leaf**, `sovereign-peer-wire` (layer `mesh-api`):
+   they carry `commonwealth_rail::{Digest, Op, SignedOp}` / `Mesh` /
+   `MemberRecord`, so no existing leaf can host them, and the loops (fabric) may
+   not name the daemon that `dm-daemon-api-http-b2` moves the routes to.
+   `REVIEW-build-peer-wire` creates it and repoints both sides.
+3. The ~1,480-line `ring_sync` test module moves to `tests/main/` (with
+   `exchange` made `pub`) rather than a host shim in mesh's `lib.rs`; the same
+   rows carry it.
+
+**Evidence.** ralph/NEEDS_HUMAN.md (the worker's package);
+`git grep -n 'sovereign_api::' sovereign/crates/sovereign-mesh/src` after
+`468be9869`; DAEMON_CORE.md:262-290 (§4.1, "its background tasks and their
+shutdown" / "decides nothing a context owns") and :347, :378-385 (§4.2);
+DT module tags (gossip.rs 1,478 + ring_sync.rs 2,072 + rail_kv_pump.rs 1,011 =
+fabric); ARCH_LAYERS.toml `mesh-api` (sovereign-api, sovereign-daemon,
+sovereign-mesh — a leaf there is nameable by both).
+
+**Falsified by.** A measurement showing the loops' liveness decisions are the
+daemon's (DC §4.1 amended to put them in the host); or a later row moving
+Fabric's state to the daemon instead of mesh.
+
+**Landed in.** this commit — `ralph/STATE.md` (the row re-scoped and marked
+`[x]`; `REVIEW-build-peer-wire` minted; `REVIEW-build-daemon-parts` re-scoped)
+and this entry. `git revert <sha>` reverts it alone.
