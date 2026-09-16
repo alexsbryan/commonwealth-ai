@@ -194,8 +194,8 @@ fn register_extras_in_store(
     path: &std::path::Path,
     model_id_str: &str,
 ) {
-    use sovereign_serving::model::{ModelArchitecture, ModelInfo};
-    use sovereign_serving::oicp::CapabilityProfile;
+    use commonwealth_core::model::{ModelArchitecture, ModelInfo};
+    use oicp_types::CapabilityProfile;
 
     let id = compute_extras_model_id(slot_name, path);
     let file_name = path
@@ -930,7 +930,7 @@ mod tests {
             Err("stub".into())
         }
 
-        fn provider_manifest(&self) -> Option<sovereign_serving::oicp::ProviderManifest> {
+        fn provider_manifest(&self) -> Option<oicp_types::ProviderManifest> {
             None
         }
     }

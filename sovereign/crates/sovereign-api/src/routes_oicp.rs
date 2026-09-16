@@ -4,8 +4,8 @@ use axum::http::HeaderMap;
 use axum::Json;
 
 use commonwealth_core::ids::NodeId;
-use sovereign_serving::oicp::features::{self, EMBEDDED_FEATURES};
-use sovereign_serving::oicp::{
+use oicp_types::features::{self, EMBEDDED_FEATURES};
+use oicp_types::{
     Capability, CapabilityClaim, CapabilityHint, CapabilityProfile, CorpusDescriptor,
     FederationManifest, IngestEndpoints, KnowledgeManifest, LatencyClass, ModelStatus,
     PeerDescriptor, ProviderInfo, ProviderManifest, ProviderModel, ProviderType, OICP_VERSION,
@@ -100,7 +100,7 @@ pub(crate) fn synthesize_default_claims(
 // REVIEW-build-serving-move-synthesis): the serving host's gossip manifest
 // (`oicp_synthesis::build_self_manifest`) reads the identical set, and the
 // host may not name `sovereign-api` (SERVING_BOUNDARY.md rule 4). Imported
-// above through the `sovereign_serving::oicp::features` re-export — one
+// above through the `oicp_types::features` re-export — one
 // source of truth for "what the embedded path can do" (SLOT_POLICY §6).
 
 /// Conservative feature set for the standalone-Commonwealth orchestrator
@@ -411,7 +411,7 @@ fn fmt_requester(id: &NodeId) -> String {
 mod tests {
     use super::*;
     use commonwealth_state::{PeerPreference, PeerPreferenceStore};
-    use sovereign_serving::oicp::{
+    use oicp_types::{
         CapabilityClaim, CapabilityHint, LatencyClass, ModelStatus, ProviderManifest, ProviderModel,
     };
 

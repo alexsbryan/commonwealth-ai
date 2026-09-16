@@ -961,7 +961,7 @@ mod tests {
         > {
             unimplemented!("streaming not used by the model lane")
         }
-        fn provider_manifest(&self) -> Option<sovereign_serving::oicp::ProviderManifest> {
+        fn provider_manifest(&self) -> Option<oicp_types::ProviderManifest> {
             None
         }
         fn edit_status(&self) -> Option<EditSlotStatus> {
@@ -1386,7 +1386,7 @@ mod tests {
             > {
                 unimplemented!()
             }
-            fn provider_manifest(&self) -> Option<sovereign_serving::oicp::ProviderManifest> {
+            fn provider_manifest(&self) -> Option<oicp_types::ProviderManifest> {
                 None
             }
             fn edit_status(&self) -> Option<EditSlotStatus> {

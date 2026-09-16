@@ -1087,7 +1087,7 @@ mod tests {
     /// one of `DAEMON_OWN_NAMESPACES` — a namespace not on that list has no
     /// derived roster and would be refused at the door for that reason alone,
     /// which is a different test.
-    const KV: &str = sovereign_serving::INFERENCE_APP_ID;
+    const KV: &str = commonwealth_state::store_adapter::INFERENCE_APP_ID;
 
     /// One mesh both nodes see. Each member carries the pubkey of the key its
     /// node signs with, because that equality is the whole bridge between a

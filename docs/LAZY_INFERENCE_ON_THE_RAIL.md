@@ -15,7 +15,7 @@ proves nothing else.
 
 `INFERENCE_APP_ID` already exists and is already on the ring.
 
-- `sovereign/crates/sovereign-serving/src/store_adapter.rs:31` —
+- `commonwealth/crates/commonwealth-state/src/store_adapter.rs:31` —
   `pub const INFERENCE_APP_ID: &str = "inference"`. `InferenceStateStore` is a
   thin `MeshStore` wrapper over `get(APP_ID, key)` / `set(APP_ID, key, bytes,
   node_id)`, with a `node_id_hex` helper already there for per-node keys

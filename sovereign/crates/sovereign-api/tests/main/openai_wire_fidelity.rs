@@ -146,7 +146,7 @@ impl LocalInferenceService for CapturesRequest {
         Err(LocalInferenceError::Other("captured".into()))
     }
 
-    fn provider_manifest(&self) -> Option<sovereign_serving::oicp::ProviderManifest> {
+    fn provider_manifest(&self) -> Option<oicp_types::ProviderManifest> {
         None
     }
 }

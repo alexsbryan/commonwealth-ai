@@ -339,7 +339,7 @@ mod tests {
         > {
             unimplemented!("chat not used in these tests")
         }
-        fn provider_manifest(&self) -> Option<sovereign_serving::oicp::ProviderManifest> {
+        fn provider_manifest(&self) -> Option<oicp_types::ProviderManifest> {
             None
         }
         async fn fim_completion_stream(
@@ -411,7 +411,7 @@ mod tests {
         > {
             unimplemented!()
         }
-        fn provider_manifest(&self) -> Option<sovereign_serving::oicp::ProviderManifest> {
+        fn provider_manifest(&self) -> Option<oicp_types::ProviderManifest> {
             None
         }
     }

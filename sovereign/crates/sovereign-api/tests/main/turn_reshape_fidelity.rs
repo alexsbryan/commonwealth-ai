@@ -590,7 +590,7 @@ impl LocalInferenceService for RespondsWith {
         Err(LocalInferenceError::Other("not the streaming path".into()))
     }
 
-    fn provider_manifest(&self) -> Option<sovereign_serving::oicp::ProviderManifest> {
+    fn provider_manifest(&self) -> Option<oicp_types::ProviderManifest> {
         None
     }
 }

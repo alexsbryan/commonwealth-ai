@@ -17,9 +17,9 @@
 use std::time::Duration;
 
 use async_trait::async_trait;
+use oicp_types::{LandscapeDigestRequest, LandscapeDigestResponse};
 use sovereign_core::traits::LandscapeDigestProvider;
 use sovereign_core::types::{ConversationContext, LandscapeDigest};
-use sovereign_serving::oicp::{LandscapeDigestRequest, LandscapeDigestResponse};
 
 const CLIENT_TIMEOUT: Duration = Duration::from_secs(6);
 
@@ -151,8 +151,8 @@ impl LandscapeDigestProvider for MeshLandscapeDigestClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use oicp_types::{LandscapeDigestEntry, LandscapeDigestResponse};
     use sovereign_core::types::{Conversation, ConversationId, Message, MessageId, Role};
-    use sovereign_serving::oicp::{LandscapeDigestEntry, LandscapeDigestResponse};
 
     /// Spin up a hand-rolled axum server that returns a fixed
     /// `LandscapeDigestResponse` and verify the client maps it into

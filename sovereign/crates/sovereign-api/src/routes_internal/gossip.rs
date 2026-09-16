@@ -12,7 +12,7 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 
 use commonwealth_core::mesh::GossipAuthArm;
-use sovereign_serving::inference_plan::InferencePlan;
+use commonwealth_state::inference_plan::InferencePlan;
 
 use crate::state::AppState;
 

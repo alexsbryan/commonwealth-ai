@@ -12,7 +12,7 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
 
-use sovereign_serving::oicp::{KnowledgeResult, KnowledgeSearchRequest, KnowledgeSearchResponse};
+use oicp_types::{KnowledgeResult, KnowledgeSearchRequest, KnowledgeSearchResponse};
 
 use crate::state::AppState;
 

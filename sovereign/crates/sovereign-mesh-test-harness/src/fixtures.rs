@@ -3,8 +3,8 @@ use std::collections::HashMap;
 
 use commonwealth_core::capabilities::ComputeType;
 use commonwealth_core::ids::ModelId;
-use sovereign_serving::model::{ModelArchitecture, ModelInfo};
-use sovereign_serving::oicp::{Capability, CapabilityProfile};
+use commonwealth_core::model::{ModelArchitecture, ModelInfo};
+use oicp_types::{Capability, CapabilityProfile};
 
 use crate::simulated_mesh::SimulatedMesh;
 use crate::simulated_node::SimulatedNodeBuilder;

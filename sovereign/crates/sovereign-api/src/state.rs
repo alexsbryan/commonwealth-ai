@@ -16,8 +16,8 @@ use sovereign_serving_host::admission::Principal;
 use sovereign_grants::{EphemeralGrantStore, GuestGrantStore, VerifyReport, WorkQueueManager};
 use sovereign_meshapp_registry::proxy::AppPortMap;
 use sovereign_meshapp_registry::registry::AppRegistry;
-use sovereign_serving::model_aliases::ModelAliasTable;
-use sovereign_serving::store_adapter::InferenceStateStore;
+use oicp_types::model_aliases::ModelAliasTable;
+use commonwealth_state::store_adapter::InferenceStateStore;
 
 // Moved to the leaves by domains `REVIEW-build-local-inference`: the wire types
 // are protocol vocabulary (`oicp-types`) and the OpenAI-shaped port is a
@@ -1759,7 +1759,7 @@ impl AppState {
     }
 
     /// Register a model as available on the mesh.
-    pub fn register_model(&self, model: sovereign_serving::model::ModelInfo) {
+    pub fn register_model(&self, model: commonwealth_core::model::ModelInfo) {
         self.inner.inference_store.set_model_info(&model);
     }
 

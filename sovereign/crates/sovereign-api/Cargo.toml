@@ -11,7 +11,6 @@ kernel-types = { workspace = true }
 commonwealth-core = { workspace = true }
 commonwealth-transport = { workspace = true, features = ["fanout"] }
 commonwealth-discovery = { workspace = true }
-sovereign-serving = { workspace = true }
 # The admission decision, its two axum middlewares and the 503 renderer moved
 # host-side at REVIEW-build-serving-move-admission (SERVING_BOUNDARY.md (c));
 # this crate keeps the `Admission for AppState` impl, the RAII guards and the

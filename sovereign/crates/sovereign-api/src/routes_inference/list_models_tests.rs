@@ -32,9 +32,9 @@
 use super::*;
 use crate::state::{test_app_state, LocalInferenceError, LocalInferenceService};
 use futures::Stream;
+use oicp_types::{ModelStatus, ProviderManifest, ProviderModel};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, CompletionResponse, ProviderCapabilities};
-use sovereign_serving::oicp::{ModelStatus, ProviderManifest, ProviderModel};
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -170,14 +170,14 @@ async fn every_listed_id_is_advertised_by_some_manifest() {
 #[tokio::test]
 async fn a_store_entry_no_manifest_carries_is_not_listed() {
     let state = test_app_state().with_local_inference(Arc::new(TwoNodeMesh));
-    state.register_model(sovereign_serving::ModelInfo {
+    state.register_model(commonwealth_core::model::ModelInfo {
         id: commonwealth_core::ModelId::from_u128(7),
         name: "ghost-from-gossip".into(),
         repo: String::new(),
         file: "ghost.gguf".into(),
         size_bytes: 1,
         total_layers: 0,
-        architecture: sovereign_serving::model::ModelArchitecture::Other,
+        architecture: commonwealth_core::model::ModelArchitecture::Other,
         available_on: std::collections::HashMap::new(),
         oicp_capabilities: Default::default(),
         quantization: String::new(),
@@ -294,14 +294,14 @@ async fn a_held_but_unloaded_model_lists_as_cold_not_missing() {
 #[tokio::test]
 async fn no_local_inference_falls_back_to_the_store() {
     let state = test_app_state();
-    state.register_model(sovereign_serving::ModelInfo {
+    state.register_model(commonwealth_core::model::ModelInfo {
         id: commonwealth_core::ModelId::from_u128(9),
         name: "orchestrated".into(),
         repo: String::new(),
         file: "o.gguf".into(),
         size_bytes: 1,
         total_layers: 0,
-        architecture: sovereign_serving::model::ModelArchitecture::Other,
+        architecture: commonwealth_core::model::ModelArchitecture::Other,
         available_on: std::collections::HashMap::new(),
         oicp_capabilities: Default::default(),
         quantization: String::new(),

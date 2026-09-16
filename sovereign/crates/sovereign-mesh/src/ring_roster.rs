@@ -254,7 +254,7 @@ pub const DAEMON_OWN_NAMESPACES: &[&str] = &[
     sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID,
     // The five KV namespaces gossip Step 4 replicated, plus the tracked-article
     // watcher's. Each is a `MeshStore` app_id with a real cross-peer consumer.
-    sovereign_serving::INFERENCE_APP_ID,
+    commonwealth_state::store_adapter::INFERENCE_APP_ID,
     commonwealth_state::CONTRIBUTIONS_APP_ID,
     commonwealth_state::PROCESSED_SHARDS_APP_ID,
     corpus_engine_notes::NOTES_APP_ID,

@@ -22,9 +22,7 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::post;
 use axum::{Json, Router};
-use sovereign_serving::oicp::{
-    LandscapeDigestEntry, LandscapeDigestRequest, LandscapeDigestResponse,
-};
+use oicp_types::{LandscapeDigestEntry, LandscapeDigestRequest, LandscapeDigestResponse};
 
 use sovereign_tools::knowledge_view::KnowledgeViewManager;
 

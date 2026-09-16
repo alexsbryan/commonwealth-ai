@@ -817,7 +817,7 @@ mod tests {
             .await
             .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(json["oicp_version"], sovereign_serving::oicp::OICP_VERSION);
+        assert_eq!(json["oicp_version"], oicp_types::OICP_VERSION);
         assert_eq!(json["provider"]["type"], "mesh");
     }
 
@@ -1222,8 +1222,8 @@ mod tests {
         let state = test_app_state();
 
         // Register a model.
-        use sovereign_serving::model::{ModelArchitecture, ModelInfo};
-        use sovereign_serving::oicp::{Capability, CapabilityProfile};
+        use commonwealth_core::model::{ModelArchitecture, ModelInfo};
+        use oicp_types::{Capability, CapabilityProfile};
         use std::collections::HashMap;
 
         let mut caps = CapabilityProfile::default();

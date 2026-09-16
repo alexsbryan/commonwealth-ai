@@ -408,7 +408,7 @@ Read from [`ARCH_LAYERS.toml`](./ARCH_LAYERS.toml) — the same file `cargo xtas
 |---:|---|---|
 | 0 | **contract** | `oicp-types` · `kernel-types` · `sovereign-contracts` · `oicp-client` · `sovereign-turn-client` · `sovereign-service` · `arch-layers` · `sovereign-time` · `serving-policy` · `oplog` |
 | 1 | **knowledge** | `corpus-engine` · `corpus-engine-*` |
-| 2 | **mesh-foundation** | `commonwealth-core` · `commonwealth-state` · `commonwealth-transport` · `commonwealth-discovery` · `sovereign-serving` · `sovereign-grants` · `sovereign-meshapp-registry` · `commonwealth-rail-core` · `commonwealth-rail` · `commonwealth-work` · `commonwealth-media` · `commonwealth-rails` |
+| 2 | **mesh-foundation** | `commonwealth-core` · `commonwealth-state` · `commonwealth-transport` · `commonwealth-discovery` · `sovereign-grants` · `sovereign-meshapp-registry` · `commonwealth-rail-core` · `commonwealth-rail` · `commonwealth-work` · `commonwealth-media` · `commonwealth-rails` |
 | 3 | **runtime** | `sovereign-core` · `sovereign-inference` · `sovereign-store` · `sovereign-workflow` · `sovereign-tools-base` · `sovereign-recipe-author` · `sovereign-compute` · `sovereign-gliner` |
 | 4 | **capabilities** | `sovereign-tools` · `sovereign-enrichment-catalog` · `sovereign-enrichment-build` · `sovereign-runtime-recipe` · `sovereign-work-atlas` · `sovereign-workflow-host` · `sovereign-atos` · `sovereign-eval` · `sovereign-meshapp` · `sovereign-authoring-harness` · `sovereign-agent-tools` · `sovereign-tdd` |
 | 5 | **mesh-api** | `sovereign-api` · `sovereign-mesh-test-harness` · `sovereign-mesh` |

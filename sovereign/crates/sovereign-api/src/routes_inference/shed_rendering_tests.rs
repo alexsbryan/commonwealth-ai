@@ -69,7 +69,7 @@ impl LocalInferenceService for AlwaysSheds {
     ) -> Result<Pin<Box<dyn Stream<Item = StreamFrame> + Send>>, LocalInferenceError> {
         Err(Self::shed())
     }
-    fn provider_manifest(&self) -> Option<sovereign_serving::oicp::ProviderManifest> {
+    fn provider_manifest(&self) -> Option<oicp_types::ProviderManifest> {
         None
     }
 }

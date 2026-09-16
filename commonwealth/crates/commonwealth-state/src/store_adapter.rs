@@ -13,12 +13,12 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::MeshStore;
 use bytes::Bytes;
 use commonwealth_core::ids::{ModelId, NodeId};
-use commonwealth_state::MeshStore;
 
 use crate::inference_plan::InferencePlan;
-use crate::model::ModelInfo;
+use commonwealth_core::model::ModelInfo;
 
 /// The mesh-store namespace this adapter keeps the inference plan and the
 /// model catalogue in — and, since cw-lift 4, the ring namespace it replicates
@@ -178,14 +178,13 @@ impl InferenceStateStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{ModelArchitecture, ModelInfo};
-    use crate::oicp::{Capability, CapabilityProfile};
     use commonwealth_core::ids::{ModelId, NodeId};
+    use commonwealth_core::model::{ModelArchitecture, ModelInfo};
+    use oicp_types::{Capability, CapabilityProfile};
     use std::collections::HashMap;
 
     fn make_store() -> InferenceStateStore {
-        let mesh_store =
-            Arc::new(commonwealth_state::MeshStore::in_memory().expect("in-memory store"));
+        let mesh_store = Arc::new(crate::MeshStore::in_memory().expect("in-memory store"));
         InferenceStateStore::new(mesh_store, NodeId::from_u128(1))
     }
 

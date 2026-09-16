@@ -30,7 +30,7 @@ use axum::routing::post;
 use axum::{Json, Router};
 use sovereign_core::traits::{MeshKnowledgeSource, UnavailabilityReason};
 use sovereign_mesh::knowledge_client::MeshKnowledgeClient;
-use sovereign_serving::oicp::{KnowledgeResult, KnowledgeSearchResponse};
+use oicp_types::{KnowledgeResult, KnowledgeSearchResponse};
 
 /// The five peer-only corpora from the §9.6 run, in the order the daemon
 /// logged them.

@@ -302,7 +302,7 @@ None of them is mesh substrate. The first four (`domains-1`) went to
 | Was | Is | What it actually holds |
 |---|---|---|
 | `commonwealth-api` | `sovereign-api` | HTTP servers (client 9741 + internal 9742). A TEMPORARY home — its contents are four contexts fused (Host, Serving, Workbench's next-edit, Fabric's internal routes) and its end state is dissolution |
-| `commonwealth-inference` | `sovereign-serving` | `RequestRouter`, `RoutingRule`, `LoadPolicy`, `InferencePlan`, `MeshPlan` — the SERVING context, named at last. The peg the scheduler in `sovereign-mesh` lands on later |
+| `commonwealth-inference` | `sovereign-serving` | `RequestRouter`, `RoutingRule`, `LoadPolicy`, `InferencePlan`, `MeshPlan` — the SERVING context, named at last. The peg the scheduler in `sovereign-mesh` lands on later. Emptied to zero and deleted 2026-09-15 (`REVIEW-build-serving-empty-peg`): `inference_plan`/`store_adapter` went to `commonwealth-state`, the re-exports to `oicp-types`/`commonwealth-core` |
 | `commonwealth-knowledge` | `sovereign-grants` | No knowledge at all: `GuestGrant`, `GuestGrantStore`, `EphemeralGrantStore` and **`Scope`** — the per-turn authorization value `TOPOLOGY.md` §3.5 is built around, which lived in a crate named for knowledge. Imperfect: its shard manager and work queue do not belong under this name either and were left rather than split in a move |
 | `commonwealth-app` | `sovereign-meshapp-registry` | Mesh-app manifest, registry, port map, proxy. Open question flagged, not settled: `sovereign-meshapp` (5,656 lines of DTOs) is a second crate about mesh apps |
 

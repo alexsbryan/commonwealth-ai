@@ -4588,8 +4588,8 @@ fn takeover_serve_at(pid_path: &Path) {
 /// accumulate duplicate entries keyed on different random IDs.
 fn register_local_model_slots(app_state: &AppState, cfg: &SetupConfig, node_id: NodeId) {
     use commonwealth_core::ids::ModelId;
-    use sovereign_serving::model::{ModelArchitecture, ModelInfo};
-    use sovereign_serving::oicp::CapabilityProfile;
+    use commonwealth_core::model::{ModelArchitecture, ModelInfo};
+    use oicp_types::CapabilityProfile;
     use std::collections::HashMap;
     use std::hash::{DefaultHasher, Hash, Hasher};
 

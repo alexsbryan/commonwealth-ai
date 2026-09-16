@@ -153,10 +153,10 @@ question = "which engine answers this, and can I prove why?"
 # lands one resolver; until then Admission is its only consumer.
 owns = ["Venue", "Slot", "Admission", "Replay", "Decision"]
 package = "serving"   # declared by dm-serving-package-rows 2026-09-15 (ARCH_LAYERS.toml:1044); boundary-gate is red until the extraction completes, so the predicate still fails
-crates = ["sovereign-scheduler", "sovereign-serving-host", "serving-policy", "sovereign-serving", "sovereign-compute"]   # the first two are CREATED by dm-mesh-serving (SERVING_BOUNDARY.md); sovereign-serving empties
+crates = ["sovereign-scheduler", "sovereign-serving-host", "serving-policy", "sovereign-compute"]   # the first two are CREATED by dm-mesh-serving (SERVING_BOUNDARY.md); the peg sovereign-serving emptied to zero at REVIEW-build-serving-empty-peg (2026-09-15) and is deleted
 lift = ""             # scripts/serving-lift.sh exists; VERDICT 0 today (the closure cannot leave) — this flips when the package extracts
 applicable_as = "a router in front of N OpenAI-compatible endpoints with admission control and replayable decisions"
-roots = ["sovereign/crates/sovereign-serving", "serving-policy"]
+roots = ["serving-policy"]
 status = "kept"
 
 [[context]]
@@ -483,6 +483,7 @@ path = "sovereign/crates/sovereign-mesh/src/ingest_executor.rs"
 context = "host"
 lines = 736
 note = "was ingest; jobs — DAEMON_CORE.md §3.2, §4.3 (2026-09-14)"
+
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/insight_http.rs"
@@ -825,6 +826,7 @@ path = "sovereign/crates/sovereign-mesh/src/state.rs"
 context = "fabric"
 lines = 182
 note = ""
+
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/supervised_task.rs"
@@ -1392,17 +1394,7 @@ context = "host"
 lines = 26
 note = "data directory (2 .txt), not a Rust module; declared so the tag table has no holes"
 
-[[module]]
-path = "sovereign/crates/sovereign-serving/src/inference_plan.rs"
-context = "serving"
-lines = 135
-note = ""
 
-[[module]]
-path = "sovereign/crates/sovereign-serving/src/lib.rs"
-context = "serving"
-lines = 42
-note = "re-exports commonwealth_core::{model,oicp}; the third import path to oicp-types"
 
 [[module]]
 path = "sovereign/crates/sovereign-scheduler/src/lib.rs"
@@ -1464,59 +1456,8 @@ context = "serving"
 lines = 87
 note = "the WorkerState reader port — a pinned pod's bootstrap state by synthetic node id, the daemon implements it; the payload type is the shared leaf's sovereign-contracts::worker_pod (REVIEW-build-serving-worker-port, 2026-09-15)"
 
-[[module]]
-path = "sovereign/crates/sovereign-serving/src/plan.rs"
-context = "serving"
-lines = 250
-note = "DEAD - every noun it exports has zero external references"
 
-[[module]]
-path = "sovereign/crates/sovereign-serving/src/store_adapter.rs"
-context = "serving"
-lines = 274
-note = ""
 
-[[peg]]
-crate = "sovereign-serving"
-lines = 1491
-dependents = ["sovereign-mesh", "sovereign-api", "sovereign-mesh-test-harness"]
-dead = [
-    "RequestRouter",
-    "RoutingRule",
-    "RoutingCondition",
-    "LoadPolicy",
-    "SchedulingStrategy",
-    "NodeRole",
-    "PlanTrigger",
-    "UnavailableReason",
-    "Tier",
-    "TierQueueDepths",
-    "ModelTransition",
-    "TransitionState",
-]
-dead_note = "zero references anywhere outside the crate. TierQueueDepths has two internal callers (store_adapter.rs:160, :169) and nothing else. This is the peg SYSTEM_OVERVIEW.md ~line 300 says the scheduler lands on later; nothing has ever called it."
-live = [
-    "InferenceStateStore - 5 refs: sovereign-api/src/state.rs:23, :640, :1695; sovereign-mesh/tests/main/models_http_e2e.rs:189",
-    "InferencePlan - 9 refs: sovereign-api/src/routes_internal/gossip.rs:15, :180; rest in sovereign-mesh-test-harness",
-    # MeshPlan REMOVED from live 2026-09-14 (rung 4): its 6 refs are one import plus three uncalled fns; deleting the routing family takes 4 of its 7 fields, and it dies with 4 store_adapter methods + 3 harness helpers, all zero-caller (registry [[collision]] family routing-model).
-    "ShardPlan - 12 real refs, all sovereign-mesh-test-harness/tests/integration.rs; 3 further hits are unrelated fixture strings in corpus-engine/tests/main/watcher_e2e.rs:64-66 and sovereign-tools/tests/main/e2e_code_intel.rs:267-327",
-    "ShardAssignment - 7 refs, all sovereign-mesh-test-harness",
-    "LayerRange - 7 refs, all sovereign-mesh-test-harness",
-]
-evict = "sovereign/crates/sovereign-grants/src/knowledge_assignment.rs"   # moved out of the peg 2026-09-15 by REVIEW-build-knowledge-assignment; was sovereign-serving/src/scheduler/knowledge_assignment.rs
-evict_lines = 771
-evict_share = "771 of 1,491 - 52pc of the crate"
-evict_drags = "corpus-engine (LanceDB, Tantivy, rusqlite). A [[package]] id = \"serving\" that includes sovereign-serving as it stands inherits that closure and fails the lift for the same reason corpus-mcp needs three [[exception]] rows (quality/ARCH_LAYERS.toml:1110-1129). MOVED to sovereign-grants (tier 2, already depends on corpus-engine) rather than Retrieval/Understanding: the planner names commonwealth-core (mesh-foundation, tier 2), so corpus-engine (knowledge, tier 1) cannot host it — same tier reasoning as the auto_recover cluster below."
-collisions = [
-    "Tier x3: sovereign/crates/sovereign-serving/src/plan.rs:142, sovereign/crates/sovereign-core/src/role.rs:79, commonwealth/crates/commonwealth-media/src/apps.rs:57 - and none of the three is the scheduler's, whose tier concept is TierFloor at sovereign/crates/sovereign-mesh/src/tier.rs:112",
-    "routing model x2 (incompatible): RequestRouter/RoutingRule/RoutingCondition at sovereign/crates/sovereign-serving/src/plan.rs:135,150,158 is a static declarative rule table; RoutingDecision/DecisionPath at sovereign/crates/sovereign-mesh/src/decision_log.rs:216,245 plus RankObjective at sovereign/crates/sovereign-mesh/src/scheduler_core.rs:78 is per-request predicted-cost ranking (SCHEDULER_QUALITY.md 4.1). They cannot both be the decider",
-    "load x3: LoadPolicy at sovereign/crates/sovereign-serving/src/plan.rs:122 (policy), LoadSource at sovereign/crates/sovereign-mesh/src/decision_log.rs:364 (measurement provenance), LoadDebt at sovereign/crates/sovereign-mesh/src/predicted_time.rs:106 (queue debt)",
-    "candidate x8: ModelCandidate (an as-rename, see below), PeerCandidateView/LocalCandidateView/RankedCandidate at sovereign/crates/sovereign-mesh/src/scheduler_core.rs:232,207,302, CandidateRecord/CandidateInputs/CandidateKind/ExcludedCandidate at sovereign/crates/sovereign-mesh/src/decision_log.rs:290,383,283,498",
-    "as-rename of the published language: sovereign/crates/sovereign-mesh/src/oicp_select.rs:32 imports best_claim_for_request as score_manifest_for_request, ScoredClaim as ModelCandidate, SCORING_EPSILON as SCORE_TIE_EPSILON - so grep SCORING_EPSILON misses the scheduler entirely (ARCH 8, one decider one name, defeated by as)",
-    "oicp x3 import paths, one crate: sovereign_core::oicp at sovereign/crates/sovereign-core/src/lib.rs:25, commonwealth_core::oicp at commonwealth/crates/commonwealth-core/src/lib.rs:129, sovereign_serving::oicp at sovereign/crates/sovereign-serving/src/lib.rs:16 - all three are oicp_types. ProviderManifest arrives by path 1 in peer_inference.rs:61 and by path 3 in inference_adapter.rs:34, inside one crate",
-    "admission x3 unrelated deciders: sovereign/crates/sovereign-api/src/admission.rs (HTTP peer/client fair-share shedding), sovereign_core::runtime::admission (turn token; sovereign/crates/sovereign-core/src/runtime/turn_lease.rs:27, streaming.rs:986), sovereign_core::runtime::grounding::native_grounding::admission::admit (evidence; handlers/knowledge_query.rs:730). DOMAINS 4 claims admission as a word Serving owns exclusively - it does not",
-    "decision_log x2, and the OTHER one owns the wire id: sovereign/crates/sovereign-mesh/src/decision_log.rs (routing records) vs studio/crates/sovereign-recipe-author/src/decision_log.rs (DecisionLogTool, DecisionKind), registered as the tool id \"decision_log\" at sovereign/crates/sovereign-contracts/src/intent_policy.rs:367 and :479",
-]
 
 [[seam]]
 name = "member_to_candidate"
@@ -6961,6 +6902,12 @@ context = "fabric"
 lines = 218
 note = ""
 
+
+[[module]]
+path = "commonwealth/crates/commonwealth-state/src/inference_plan.rs"
+context = "fabric"
+lines = 135
+note = "the mesh's inference sharding plan; moved here from the peg sovereign-serving by REVIEW-build-serving-empty-peg (2026-09-15) — the peg's only consumers (sovereign-api, sovereign-mesh, the harness) already reach commonwealth-state, so the move adds no edge"
 [[module]]
 path = "commonwealth/crates/commonwealth-state/src/lib.rs"
 context = "fabric"
@@ -6997,6 +6944,12 @@ context = "fabric"
 lines = 1499
 note = ""
 
+
+[[module]]
+path = "commonwealth/crates/commonwealth-state/src/store_adapter.rs"
+context = "fabric"
+lines = 274
+note = "the MeshStore adapter for inference state; moved here from the peg sovereign-serving by REVIEW-build-serving-empty-peg (2026-09-15) — commonwealth-state owns MeshStore and the namespace it writes to"
 [[module]]
 path = "commonwealth/crates/commonwealth-transport/src/fanout.rs"
 context = "fabric"

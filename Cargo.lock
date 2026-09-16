@@ -1995,6 +1995,7 @@ dependencies = [
  "bytes",
  "commonwealth-core",
  "commonwealth-rail-core",
+ "oicp-types",
  "rusqlite",
  "serde",
  "serde_json",
@@ -12056,7 +12057,6 @@ dependencies = [
  "sovereign-core",
  "sovereign-grants",
  "sovereign-meshapp-registry",
- "sovereign-serving",
  "sovereign-serving-host",
  "sovereign-time",
  "sovereign-tools",
@@ -12652,7 +12652,6 @@ dependencies = [
  "sovereign-meshapp-registry",
  "sovereign-pods",
  "sovereign-scheduler",
- "sovereign-serving",
  "sovereign-serving-host",
  "sovereign-store",
  "sovereign-time",
@@ -12685,11 +12684,11 @@ dependencies = [
  "commonwealth-state",
  "commonwealth-transport",
  "http-body-util",
+ "oicp-types",
  "serde",
  "serde_json",
  "sovereign-api",
  "sovereign-meshapp-registry",
- "sovereign-serving",
  "tokio",
  "tower",
  "tracing",
@@ -12886,25 +12885,6 @@ dependencies = [
  "dirs 5.0.1",
  "libc",
  "sovereign-contracts",
-]
-
-[[package]]
-name = "sovereign-serving"
-version = "0.7.0"
-dependencies = [
- "anyhow",
- "axum",
- "bytes",
- "chrono",
- "commonwealth-core",
- "commonwealth-state",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
- "tokio-stream",
- "tokio-util",
- "tracing",
 ]
 
 [[package]]

@@ -11,7 +11,7 @@ use commonwealth_core::activity::{ActivityEventKind, ServedFor};
 use commonwealth_core::contributions::LedgerEventKind;
 use commonwealth_core::ids::{ModelId, NodeId};
 use commonwealth_core::mesh::NodeStatus;
-use sovereign_serving::oicp::{self, CapabilityClaim, InferenceRequirements, ShardingPrivacy};
+use oicp_types::{CapabilityClaim, InferenceRequirements, ShardingPrivacy};
 use std::collections::HashSet;
 use std::time::Instant;
 
@@ -427,7 +427,7 @@ fn route_with_oicp(state: &AppState, req: &InferenceRequirements) -> Option<Mode
             continue;
         };
         for claim in synthesize_claims_for_model_info(model_info) {
-            let score = oicp::score_claim_for_request(&claim, req);
+            let score = oicp_types::score_claim_for_request(&claim, req);
             tracing::debug!(
                 model = %model_info.name,
                 hint = %claim.hint,
@@ -473,7 +473,7 @@ fn route_with_oicp(state: &AppState, req: &InferenceRequirements) -> Option<Mode
 /// hand-maintained mirror, and single-claim: a small model could
 /// never match a latency_class=Fast request here.)
 fn synthesize_claims_for_model_info(
-    model_info: &sovereign_serving::ModelInfo,
+    model_info: &commonwealth_core::model::ModelInfo,
 ) -> Vec<CapabilityClaim> {
     crate::routes_oicp::synthesize_default_claims(
         &model_info.name,
@@ -830,7 +830,7 @@ async fn manifest_rows(state: &AppState) -> Option<Vec<ModelObject>> {
 
     // (holder display name, model). Local first so it wins the
     // first-writer fields (claims, alias target) on a tie.
-    let mut holders: Vec<(String, sovereign_serving::oicp::ProviderModel)> = local
+    let mut holders: Vec<(String, oicp_types::ProviderModel)> = local
         .models
         .into_iter()
         .map(|m| (LOCAL_HOLDER.to_string(), m))
@@ -863,7 +863,7 @@ async fn manifest_rows(state: &AppState) -> Option<Vec<ModelObject>> {
         for id in ids {
             holders.push((
                 lender.clone(),
-                sovereign_serving::oicp::ProviderModel {
+                oicp_types::ProviderModel {
                     id,
                     base_model: None,
                     quantization: None,
@@ -872,7 +872,7 @@ async fn manifest_rows(state: &AppState) -> Option<Vec<ModelObject>> {
                     // dispatched, and nothing about whether the lender has
                     // the weights warm. Claiming `loaded` would upgrade the
                     // row to Resident on a guess.
-                    status: sovereign_serving::oicp::ModelStatus {
+                    status: oicp_types::ModelStatus {
                         available: true,
                         loaded: false,
                         estimated_tokens_per_sec: None,

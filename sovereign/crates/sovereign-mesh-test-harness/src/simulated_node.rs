@@ -4,8 +4,8 @@ use std::net::SocketAddr;
 use commonwealth_core::capabilities::*;
 use commonwealth_core::ids::{ModelId, NodeId};
 use commonwealth_core::mesh::*;
-use sovereign_serving::inference_plan::InferencePlan;
-use sovereign_serving::model::ModelInfo;
+use commonwealth_state::inference_plan::InferencePlan;
+use commonwealth_core::model::ModelInfo;
 
 use sovereign_api::server::{client_router, internal_router};
 use sovereign_api::state::AppState;

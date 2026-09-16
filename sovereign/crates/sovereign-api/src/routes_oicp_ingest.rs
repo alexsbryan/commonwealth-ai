@@ -17,7 +17,7 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
 
-use sovereign_serving::oicp::{
+use oicp_types::{
     CorpusIngestProgress, CorpusInstallRequest, CorpusInstallResponse, CorpusProgressResponse,
     IngestPhase, RecipeStageReport, RecipeTestReport, RecipeTestRequest,
 };
@@ -252,7 +252,7 @@ fn map_test_report(r: &corpus_engine::testing::TestReport) -> RecipeTestReport {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sovereign_serving::oicp::features;
+    use oicp_types::features;
 
     // A `map_progress` smoke: the fine engine phases fold onto the coarse
     // protocol ladder, and `detail` preserves the true phase.

@@ -91,10 +91,6 @@ sovereign-meshapp-registry = { path = "../../../sovereign/crates/sovereign-mesha
 # Optional: only the `dst` feature (the CI fault-injection gate) pulls it in,
 # so default builds don't drag the test harness into the dependency graph.
 sovereign-mesh-test-harness = { path = "../sovereign-mesh-test-harness", optional = true }
-# KnowledgeSearchRequest / KnowledgeSearchResponse live in oicp-types,
-# re-exported via sovereign-serving::oicp — we POST/parse those
-# bodies from the mesh knowledge client.
-sovereign-serving = { path = "../../../sovereign/crates/sovereign-serving" }
 # The serving package's host half (SERVING_BOUNDARY.md "The two tiers"). Named
 # for the local slot pick, which is host code that left `oicp_select` (domains
 # row REVIEW-build-sched-split-pick-slot): `SovereignInferenceAdapter` calls it

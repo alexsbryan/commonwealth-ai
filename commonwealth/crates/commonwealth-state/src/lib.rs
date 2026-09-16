@@ -109,11 +109,19 @@ mod backend;
 pub mod contributions;
 pub mod error;
 pub mod gc;
+/// The mesh's inference sharding plan — one shard plan per loaded model,
+/// reached by `POST /internal/scheduling/plan`. Moved here from the peg
+/// `sovereign-serving` by domains `REVIEW-build-serving-empty-peg`.
+pub mod inference_plan;
 pub mod peer_preferences;
 pub mod processed_shards;
 pub mod rail_kv;
 pub mod retention;
 pub mod store;
+/// MeshStore adapter for inference state — the plan, the model catalogue and
+/// the llama-server addresses, replicated over the ring namespace. Moved here
+/// from the peg `sovereign-serving` by domains `REVIEW-build-serving-empty-peg`.
+pub mod store_adapter;
 
 pub use activity::{current_activity, served_for, ActivityEmitter, ACTIVITY_APP_ID};
 pub use contributions::{current_contributions, ContributionEmitter, CONTRIBUTIONS_APP_ID};

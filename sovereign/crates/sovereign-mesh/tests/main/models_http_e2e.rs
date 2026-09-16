@@ -54,7 +54,7 @@ use commonwealth_state::MeshStore;
 use sovereign_api::server::client_router;
 use sovereign_api::state::AppState;
 use sovereign_meshapp_registry::registry::AppRegistry;
-use sovereign_serving::model::{ModelArchitecture, ModelInfo};
+use commonwealth_core::model::{ModelArchitecture, ModelInfo};
 
 use crate::common;
 use crate::common::{member, spawn_router};
@@ -186,7 +186,7 @@ async fn offline_peer_only_model_is_filtered_out_of_v1_models() {
 
     // Construct a second store handle keyed to the offline peer so
     // any writes through it stamp `offline_peer_id` as the origin.
-    let peer_store = sovereign_serving::InferenceStateStore::new(
+    let peer_store = commonwealth_state::store_adapter::InferenceStateStore::new(
         Arc::clone(&state.inner.mesh_store),
         offline_peer_id,
     );

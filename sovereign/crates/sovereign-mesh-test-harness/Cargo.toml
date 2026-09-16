@@ -9,7 +9,7 @@ publish = false
 [dependencies]
 commonwealth-core = { workspace = true }
 commonwealth-discovery = { workspace = true }
-sovereign-serving = { workspace = true }
+oicp-types = { workspace = true }
 sovereign-api = { workspace = true }
 sovereign-meshapp-registry = { workspace = true }
 commonwealth-state = { workspace = true }

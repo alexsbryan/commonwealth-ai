@@ -25,7 +25,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use sovereign_serving::oicp::EmbedModelInfo;
+use oicp_types::EmbedModelInfo;
 
 mod atlas_status;
 mod corpus_collaborate;

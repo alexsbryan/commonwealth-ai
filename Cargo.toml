@@ -164,7 +164,6 @@ members = [
     # IP overlay today; iroh slots in behind the same trait later.
     "commonwealth/crates/commonwealth-transport",
     "commonwealth/crates/commonwealth-discovery",
-    "sovereign/crates/sovereign-serving",
     "sovereign/crates/sovereign-api",
     "sovereign/crates/sovereign-grants",
     # The ring rail, split in two on 2026-09-04 (cw-lift 1b). `-rail-core` is
@@ -320,7 +319,6 @@ sovereign-tdd = { path = "sovereign/crates/sovereign-tdd" }
 commonwealth-core = { path = "commonwealth/crates/commonwealth-core" }
 commonwealth-transport = { path = "commonwealth/crates/commonwealth-transport" }
 commonwealth-discovery = { path = "commonwealth/crates/commonwealth-discovery" }
-sovereign-serving = { path = "sovereign/crates/sovereign-serving" }
 sovereign-api = { path = "sovereign/crates/sovereign-api" }
 sovereign-grants = { path = "sovereign/crates/sovereign-grants" }
 commonwealth-rail-core = { path = "commonwealth/crates/commonwealth-rail-core" }

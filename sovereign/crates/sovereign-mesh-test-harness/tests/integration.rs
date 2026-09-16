@@ -4,8 +4,8 @@ use std::time::Duration;
 use commonwealth_core::capabilities::*;
 use commonwealth_core::ids::*;
 use commonwealth_core::mesh::*;
-use sovereign_serving::inference_plan::*;
-use sovereign_serving::oicp::*;
+use commonwealth_state::inference_plan::*;
+use oicp_types::*;
 
 use commonwealth_discovery::membership;
 
