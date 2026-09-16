@@ -687,9 +687,17 @@ class Pool:
         session = self.session_for(self.paths.workdir)
         model_args = select_model_args(review.id, self.model, self.review_model, self.variant)
         log = str(self.paths.workdir / "target" / "ralph" / f"review-{review.id}.out")
+        # The session must be told which row it owns: without the note it
+        # follows PROMPT §1 and picks the first ready row, which for domains is
+        # a minted dm- row above the review — the 2026-09-16 halt
+        # (REVIEW-mint-mesh-rest, 3 attempts, worked other rows and never
+        # marked itself [x]).
+        note = (f"Your unit: {review.id} — the pool selected it as the ready review "
+                "row. Open only that row in ralph/STATE.md; do not scan the queue for "
+                "another.\n\n")
         for attempt in range(1, self.max_review_attempts + 1):
             say(f"pool: serial review {review.id} (main tree) attempt {attempt}")
-            session.run(model_args, self._prompt_text(), log)
+            session.run(model_args, note + self._prompt_text(), log)
             queue = self._queue()
             if queue is not None and queue.status_of(review.id) is Status.DONE:
                 return None
