@@ -4716,7 +4716,8 @@ How this node reaches a peer is decided in exactly one place:
 *(PeerContact, TrafficClass) → ordered base URLs*; call sites keep
 their own reqwest clients/timeouts and append route paths. The live
 instance hangs off commonwealth-api's `AppState`
-(`peer_transport()` / `install_peer_transport`).
+(`peer_transport()`; the bootstrap and the iroh watchdog publish
+through `peer_transport_reader()`).
 
 - **`IpTransport`** (production): today's tailnet/LAN overlay. Owns
   the Tailscale CGNAT/ULA address ranking

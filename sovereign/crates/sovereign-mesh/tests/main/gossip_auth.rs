@@ -65,15 +65,26 @@ fn build_founder(
         members,
         peers: vec![],
     };
-    let state = AppState::new(founder_id, mesh);
-
     let counter = Arc::new(AtomicUsize::new(0));
     let counter_clone = Arc::clone(&counter);
     let hook: sovereign_api::state::MeshMutationHook =
         Arc::new(move |_mesh: &Mesh, _self_id: NodeId| {
             counter_clone.fetch_add(1, Ordering::Relaxed);
         });
-    let state = state.with_mesh_mutation_hook(hook);
+    // The mutation hook is a construction argument now (DC §4.2 "Construction
+    // is staged"), not a post-construction install.
+    let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric(
+        founder_id,
+        mesh,
+        Arc::new(commonwealth_state::MeshStore::in_memory().unwrap()),
+        Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new()),
+        None,
+        None,
+        sovereign_api::state::FabricSeed {
+            mesh_mutation_hook: Some(hook),
+            ..Default::default()
+        },
+    );
 
     (state, founder_id, counter)
 }

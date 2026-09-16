@@ -196,7 +196,7 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
             peak_rss_mb: peak_rss_mb(),
         },
         convergence: {
-            // One shared instance (install_convergence_recorder): the
+            // One shared instance (constructed into Fabric's part): the
             // stamps ARE the daemon's sink/poller writes, so this
             // section can never disagree with the sink's own view.
             let (outbound, inbound) = state
@@ -643,13 +643,17 @@ mod process_status_tests {
 
     #[test]
     fn status_json_carries_the_convergence_section() {
-        // Fix 9: a fresh AppState (no recorder installed — pre-boot
-        // state) must still serialize the section, honestly reading
-        // `never` on both arms rather than omitting the answer.
-        let state = crate::state::test_app_state();
+        // Fix 9: a fresh AppState (no recorder — pre-boot state) must still
+        // serialize the section, honestly reading `never` on both arms rather
+        // than omitting the answer. The recorder is a construction argument
+        // now (DC §4.2 "Construction is staged"), so the state is built with
+        // one.
         let recorder = std::sync::Arc::new(crate::state::ConvergenceRecord::new());
         recorder.record_outbound_publish_success(sovereign_time::unix_now());
-        state.inner.install_convergence_recorder(recorder);
+        let state = crate::state::test_app_state_with_seed(crate::state::FabricSeed {
+            convergence: Some(std::sync::Arc::clone(&recorder)),
+            ..Default::default()
+        });
 
         // The live status route needs a running mesh; render the
         // section the same way status() does and check the wire.

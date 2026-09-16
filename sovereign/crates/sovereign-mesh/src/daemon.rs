@@ -401,10 +401,11 @@ enum DaemonState {
 
 /// (Re)install a built `MeshIrohAccess` into `app_state`: publish this node's
 /// dial info for the gossip self-stamp (W2), and — when any traffic class routes
-/// over iroh — (re)install the `RoutedTransport` that dials from this endpoint
-/// (W3). Both installs are RwLock-based and re-runnable at runtime, which is what
-/// lets the reachability watchdog swap in a fresh endpoint without a daemon
-/// restart. Called by `start_daemon` and by the watchdog's rebuild closure.
+/// over iroh — publish the `RoutedTransport` that dials from this endpoint
+/// (W3). Both publish through the readers the node was constructed with, which
+/// is what lets the reachability watchdog swap in a fresh endpoint without a
+/// daemon restart. Called by `start_daemon` and by the watchdog's rebuild
+/// closure.
 pub(crate) fn install_iroh_access(
     app_state: &AppState,
     access: &crate::iroh_access::MeshIrohAccess,
@@ -413,7 +414,9 @@ pub(crate) fn install_iroh_access(
     ip_transport: &Arc<dyn commonwealth_transport::PeerTransport>,
     require_encryption: bool,
 ) {
-    app_state.install_self_iroh_dialinfo(access.dial_info_provider());
+    app_state
+        .dial_info_reader()
+        .publish(access.dial_info_provider());
     app_state.set_rpc_iroh_accept(access.rpc_route_active());
     if !iroh_routed_classes.is_empty() {
         let iroh_t: Arc<dyn commonwealth_transport::PeerTransport> =
@@ -422,7 +425,7 @@ pub(crate) fn install_iroh_access(
         for class in iroh_routed_classes {
             per_class.insert(*class, iroh_t.clone());
         }
-        app_state.install_peer_transport(Arc::new(
+        app_state.peer_transport_reader().publish(Arc::new(
             commonwealth_transport::RoutedTransport::with_required(
                 per_class,
                 ip_transport.clone(),
@@ -2960,7 +2963,105 @@ impl EmbeddedDaemon {
             ),
         };
         let app_registry = Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new());
-        let app_state = AppState::new_with_platform_and_engine_and_gauge(
+
+        // ── Fabric's values exist before its part is built ────────
+        //
+        // DC §4.2 "Construction is staged, and parts are total": a part is
+        // constructed after everything it holds exists, and nothing is
+        // installed into it afterwards. Each value below used to arrive
+        // through an `install_*` call on the freshly-built `AppState`;
+        // gathering them first removes the slot a reader could find unfilled.
+        //
+        // The shared notes convergence recorder (fix 9): the bootstrap hands
+        // the SAME `Arc<ConvergenceRecord>` to the publish sink + ingest
+        // poller, so `/status`'s convergence section reads the writers'
+        // stamps, never a parallel copy.
+        let convergence_recorder = self
+            .services
+            .rails()
+            .map(|r| r.convergence_recorder.inner());
+        // Route every peer dial through an `IpTransport` configured with OUR
+        // resolved client port (the `AppState::new*` default assumes 9741) —
+        // this is where the uniform-port assumption for the
+        // Inference/StatusProbe port rewrite is anchored. Bound to a variable
+        // because W3 may PUBLISH a `RoutedTransport` over iroh later in this
+        // fn (after the iroh endpoint binds), reusing THIS `IpTransport` as
+        // the fallback default.
+        let ip_transport: Arc<dyn commonwealth_transport::PeerTransport> =
+            Arc::new(commonwealth_transport::IpTransport::new(client_port));
+        // This install's identity key and everything derived from it (key
+        // beside node_id at `<data_dir>/node_key`; same unconditional
+        // load-or-generate posture as the stable NodeId). Gossip stamps the
+        // pubkey into our MemberRecord every round, which is also the
+        // in-place upgrade path for meshes created before identity keys
+        // existed.
+        let identity_key =
+            commonwealth_transport::identity::load_or_generate_node_key(&self.data_dir);
+        let self_node_pubkey = Some(commonwealth_transport::identity::node_pubkey(&identity_key));
+        // The dial-info signer (WS-D anti-downgrade): the gossip self-stamp
+        // uses it to sign our reachability so only we can change our own dial
+        // info. The key stays captured in the closure — AppState never holds
+        // raw key material.
+        let signing_key = identity_key.clone();
+        let self_dial_signer: Option<Arc<sovereign_api::state::DialSigner>> = Some(Arc::new(
+            move |version, relay: Option<String>, addrs: Vec<std::net::SocketAddr>| {
+                commonwealth_transport::identity::sign_dial_info(
+                    &signing_key,
+                    version,
+                    relay.as_deref(),
+                    &addrs,
+                )
+            },
+        ));
+        // The ring rail's storage. One journal directory per ring namespace
+        // under the data dir, signed with this same identity key —
+        // `RingSigner` is implemented for `SigningKey`, so the key stays here
+        // and `AppState` holds a trait object rather than key material,
+        // exactly as the dial signer above does.
+        //
+        // Present unconditionally: a rail with no storage REFUSES (503)
+        // instead of answering an empty ledger, so leaving it out on some
+        // paths would make "this daemon cannot keep a ledger" and "your ring
+        // is empty" the same observation.
+        let ring_rail = Some(Arc::new(commonwealth_rail::RingRail::new(
+            &self.data_dir,
+            Arc::new(identity_key.clone()),
+        )));
+        // The persistence hook fires on every `Mesh` mutation from a route
+        // handler (`/internal/join`, `/internal/gossip`). It closes the race
+        // window where the founder accepts a new member but crashes before
+        // the next 10s gossip-loop re-persist fires, forgetting the joiner on
+        // restart. A construction argument now, so the `Arc::get_mut`
+        // silent-no-op that used to swallow it is gone.
+        let mesh_mutation_hook: Option<sovereign_api::state::MeshMutationHook> =
+            if self.persistence_enabled() {
+                let data_dir = self.data_dir.clone();
+                Some(Arc::new(
+                    move |mesh: &commonwealth_core::mesh::Mesh, self_id: NodeId| {
+                        if let Err(e) = persist::save(&data_dir, mesh, self_id) {
+                            tracing::warn!(
+                                error = %e,
+                                "mesh_mutation_hook: persist failed"
+                            );
+                        }
+                    },
+                ))
+            } else {
+                None
+            };
+        let fabric_seed = sovereign_api::state::FabricSeed {
+            convergence: convergence_recorder,
+            self_node_pubkey,
+            self_dial_signer,
+            ring_rail,
+            mesh_mutation_hook,
+            // The reader the iroh install publishes through later; seeded with
+            // the client-port-correct `IpTransport` so the uniform-port
+            // assumption holds until iroh binds.
+            peer_transport: sovereign_api::state::PeerTransportReader::new(ip_transport.clone()),
+            ..Default::default()
+        };
+        let app_state = AppState::new_with_platform_and_engine_and_gauge_and_fabric(
             node_id,
             mesh,
             mesh_store,
@@ -2969,78 +3070,8 @@ impl EmbeddedDaemon {
             self.services
                 .serving()
                 .and_then(|s| s.core.in_flight_gauge.clone()),
+            fabric_seed,
         );
-
-        // Install the shared notes convergence recorder (fix 9) into
-        // the freshly-built AppState — same injection discipline as
-        // `mesh_store` above: the bootstrap hands the SAME
-        // `Arc<ConvergenceRecord>` to the publish sink + ingest
-        // poller, so `/status`'s convergence section reads the
-        // writers' stamps, never a parallel copy.
-        if let Some(recorder) = self.services.rails().map(|r| &r.convergence_recorder) {
-            app_state
-                .inner
-                .install_convergence_recorder(recorder.inner());
-        }
-
-        // Route every peer dial through an `IpTransport` configured
-        // with OUR resolved client port (the `AppState::new*` default
-        // assumes 9741) — this is where the uniform-port assumption
-        // for the Inference/StatusProbe port rewrite is anchored.
-        // RwLock-based installer, so it is exempt from the
-        // `Arc::get_mut` ordering constraint documented below.
-        //
-        // Bound to a variable because W3 may RE-install a
-        // `RoutedTransport` over iroh later in this fn (after the iroh
-        // endpoint binds), reusing THIS `IpTransport` as the fallback
-        // default. Until then — and in every non-iroh deployment — this
-        // is the one and only install, byte-identical to before.
-        let ip_transport: Arc<dyn commonwealth_transport::PeerTransport> =
-            Arc::new(commonwealth_transport::IpTransport::new(client_port));
-        app_state.install_peer_transport(ip_transport.clone());
-
-        // Publish this install's identity pubkey (key beside node_id
-        // at `<data_dir>/node_key`; same unconditional
-        // load-or-generate posture as the stable NodeId). Gossip
-        // stamps it into our MemberRecord every round, which is also
-        // the in-place upgrade path for meshes created before
-        // identity keys existed.
-        {
-            let identity_key =
-                commonwealth_transport::identity::load_or_generate_node_key(&self.data_dir);
-            app_state.install_self_node_pubkey(commonwealth_transport::identity::node_pubkey(
-                &identity_key,
-            ));
-            // Install the dial-info signer (WS-D anti-downgrade): the
-            // gossip self-stamp uses it to sign our reachability so only
-            // we can change our own dial info. The key stays captured in
-            // the closure — AppState never holds raw key material.
-            let signing_key = identity_key.clone();
-            app_state.install_self_dial_signer(Arc::new(
-                move |version, relay: Option<String>, addrs: Vec<std::net::SocketAddr>| {
-                    commonwealth_transport::identity::sign_dial_info(
-                        &signing_key,
-                        version,
-                        relay.as_deref(),
-                        &addrs,
-                    )
-                },
-            ));
-            // The ring rail's storage. One journal directory per ring
-            // namespace under the data dir, signed with this same identity
-            // key — `RingSigner` is implemented for `SigningKey`, so the key
-            // stays here and `AppState` holds a trait object rather than key
-            // material, exactly as the dial signer above does.
-            //
-            // Installed unconditionally: a rail with no storage REFUSES
-            // (503) instead of answering an empty ledger, so leaving it out
-            // on some paths would make "this daemon cannot keep a ledger"
-            // and "your ring is empty" the same observation.
-            app_state.install_ring_rail(Arc::new(commonwealth_rail::RingRail::new(
-                &self.data_dir,
-                Arc::new(identity_key.clone()),
-            )));
-        }
 
         // ── Order is load-bearing ─────────────────────────────────
         //
@@ -3060,16 +3091,15 @@ impl EmbeddedDaemon {
         // (`AppStateYieldHook::new(app_state.inner.clone())`) and
         // the embed-info publication (`app_state.inner.serving.inference_store
         // .set_local_embed_model(...)`) both bump the Arc strong
-        // count, so we must run ALL `with_*` installers BEFORE any
-        // of those.
+        // count, so we must run the remaining `with_*` installers
+        // BEFORE any of those.
         //
         // Inverting this order silently breaks
         // `/v1/chat/completions` — the orchestrator path is taken
-        // and every request 503s with `model_not_ready` — and
-        // breaks mesh persistence on join (falls back to the 10s
-        // gossip-loop cadence). See `with_local_inference` and
-        // `with_mesh_mutation_hook` in
-        // commonwealth-api/src/state.rs.
+        // and every request 503s with `model_not_ready`. See
+        // `with_local_inference` in commonwealth-api/src/state.rs.
+        // (Fabric's values no longer ride this block: they are
+        // constructor arguments now, DC §4.2.)
 
         // If Sovereign installed an InferenceProvider, wrap it in
         // the OpenAI-flavour adapter so this node's
@@ -3098,29 +3128,6 @@ impl EmbeddedDaemon {
             app_state
         };
 
-        // Install the persistence hook that fires on every Mesh
-        // mutation from a route handler (`/internal/join`,
-        // `/internal/gossip`). This closes the race window where
-        // the founder accepts a new member but crashes before the
-        // next 10s gossip-loop re-persist fires, forgetting the
-        // joiner on restart.
-        let app_state = if self.persistence_enabled() {
-            let data_dir = self.data_dir.clone();
-            let hook: sovereign_api::state::MeshMutationHook = Arc::new(
-                move |mesh: &commonwealth_core::mesh::Mesh, self_id: NodeId| {
-                    if let Err(e) = persist::save(&data_dir, mesh, self_id) {
-                        tracing::warn!(
-                            error = %e,
-                            "mesh_mutation_hook: persist failed"
-                        );
-                    }
-                },
-            );
-            app_state.with_mesh_mutation_hook(hook)
-        } else {
-            app_state
-        };
-
         // ── End of Arc::get_mut-sensitive block ───────────────────
         // Everything below is free to clone `app_state.inner`.
 
@@ -3129,9 +3136,9 @@ impl EmbeddedDaemon {
         // that or the append route refuses this node's own key there. The
         // source holds the state WEAKLY, and a Weak is a share as far as
         // `Arc::get_mut` is concerned — which is why it is installed HERE,
-        // below the block, and not beside the rail. The rail's lookup is at
-        // read time, so nothing between the rail's install and this line
-        // could have read the wrong roster.
+        // below the block, and not at the rail's construction. The rail's
+        // lookup is at read time, so nothing between the rail's construction
+        // and this line could have read the wrong roster.
         if let Some(rail) = app_state.ring_rail() {
             if let Err(e) = crate::ring_roster::MeshRosterSource::install(&rail, &app_state) {
                 tracing::error!(error = %e, "ring rail: the daemon's own namespace could not register its roster source");

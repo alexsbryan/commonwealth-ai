@@ -333,9 +333,9 @@ name, and a decider can land in the crate green.
 
 `AppState` (63 public fields, 88 public methods) is passed whole to every handler and into five
 non-host clusters. It is built before most of what it holds exists: its identity key, dial
-signer, ring rail, transport, client token, convergence recorder and in-flight gauge arrive
-afterwards through `install_*` and `with_*` calls, so a reader of any of them handles a slot the
-daemon may not have filled. The design item framed it as one port trait per consuming context.
+signer, ring rail, transport, client token, convergence recorder and in-flight gauge arrived
+afterwards through `install_*`/`with_*` calls; Fabric's eight and the gauge are construction
+arguments now. The design item framed it as one port trait per consuming context.
 That is seven mirrors of one god object, and it leaves every field where it is. Assigned instead
 by what each field *is*, the 63 fall to six owners:
 

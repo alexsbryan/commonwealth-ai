@@ -63,8 +63,8 @@ use tempfile::TempDir;
 
 use crate::common::corpus_at;
 use crate::fold_ingest_cross_node_merge_e2e::{
-    actor, key, leader_node, node_state, peer_node, probe_canonical, ring, terminal_handoff,
-    terminal_handoff_ops, write_donor_partition, LEADER_ONLY_TERM,
+    actor, key, leader_node, node_state_with_seed, peer_node, probe_canonical, ring,
+    terminal_handoff, terminal_handoff_ops, write_donor_partition, LEADER_ONLY_TERM,
 };
 
 /// The instant the in-memory readings ask the fold about. Same as the sibling
@@ -90,12 +90,26 @@ async fn dead_peer_addr() -> std::net::SocketAddr {
 /// journal and nowhere this node can reach, which is exactly the shape the
 /// coverage guard is for: the fold says two, the disk can supply one.
 async fn leader_alone(corpus: &str) -> (TempDir, std::path::PathBuf, AppState) {
+    leader_alone_with_seed(corpus, sovereign_api::state::FabricSeed::default()).await
+}
+
+/// [`leader_alone`] with Fabric's construction seed, for the one test that
+/// needs a rail on the node — a construction argument now (DC §4.2).
+async fn leader_alone_with_seed(
+    corpus: &str,
+    seed: sovereign_api::state::FabricSeed,
+) -> (TempDir, std::path::PathBuf, AppState) {
     let home = TempDir::new().expect("leader tempdir");
     let dir = home.path().join("indexes");
     std::fs::create_dir_all(&dir).expect("index dir");
     write_donor_partition(&dir, leader_node(), corpus, 0, LEADER_ONLY_TERM).await;
     let addr = dead_peer_addr().await;
-    let state = node_state(leader_node(), &dir, &[(peer_node(), &addr.to_string())]);
+    let state = node_state_with_seed(
+        leader_node(),
+        &dir,
+        &[(peer_node(), &addr.to_string())],
+        seed,
+    );
     (home, dir, state)
 }
 
@@ -331,7 +345,12 @@ impl tracing_subscriber::fmt::MakeWriter<'_> for BufWriter {
 /// `key(1)` because `fold_coverage_for` compares the handoff's submitter
 /// against `rail.signer().actor()`: this node has to BE the leader for the
 /// arm under test to be reached at all.
-fn install_fold(state: &AppState, rail_dir: &std::path::Path, corpus: &str) {
+/// Build the fixture rail — the signer is `key(1)` because `fold_coverage_for`
+/// compares the handoff's submitter against `rail.signer().actor()`: this node
+/// has to BE the leader for the arm under test to be reached at all — and
+/// return it as a construction seed, since the rail is a construction argument
+/// now (DC §4.2 "Construction is staged, and parts are total").
+fn fold_seed(rail_dir: &std::path::Path, corpus: &str) -> sovereign_api::state::FabricSeed {
     let signer: SigningKey = key(1);
     let rail = Arc::new(RingRail::new(rail_dir, Arc::new(signer)));
     let journal = rail.journal(WORK_NAMESPACE).expect("the work journal");
@@ -344,7 +363,10 @@ fn install_fold(state: &AppState, rail_dir: &std::path::Path, corpus: &str) {
         "every fixture op must land on the journal, or the loop folds a \
          different handoff than the one this test is about",
     );
-    state.install_ring_rail(rail);
+    sovereign_api::state::FabricSeed {
+        ring_rail: Some(rail),
+        ..Default::default()
+    }
 }
 
 /// Poll `f` until it is true or `budget` elapses. Returns whether it became
@@ -400,9 +422,9 @@ async fn the_folds_refusal_is_final_and_the_disk_path_never_runs() {
     // A port nothing serves, for the loop's own `corpus_collaborate` POST.
     let daemon_port = dead_peer_addr().await.port();
 
-    let (_home, dir, state) = leader_alone(CORPUS).await;
     let rail_home = TempDir::new().expect("rail tempdir");
-    install_fold(&state, rail_home.path(), CORPUS);
+    let seed = fold_seed(rail_home.path(), CORPUS);
+    let (_home, dir, state) = leader_alone_with_seed(CORPUS, seed).await;
 
     let buf = Arc::new(Mutex::new(Vec::new()));
     let subscriber = tracing_subscriber::fmt()

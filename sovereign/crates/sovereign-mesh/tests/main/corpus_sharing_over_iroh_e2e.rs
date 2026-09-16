@@ -221,7 +221,9 @@ async fn install_iroh_route(state: &AppState, class: TrafficClass, seed: u8) {
     let mut per_class = HashMap::new();
     per_class.insert(class, iroh_t);
     let ip: Arc<dyn PeerTransport> = Arc::new(IpTransport::new(9741));
-    state.install_peer_transport(Arc::new(RoutedTransport::new(per_class, ip)));
+    state
+        .peer_transport_reader()
+        .publish(Arc::new(RoutedTransport::new(per_class, ip)));
 }
 
 #[tokio::test]

@@ -127,8 +127,8 @@ impl PeerStore for MeshPeerStore {
 
 /// [`Convergence`] backed by the [`ConvergenceRecord`] that `/status` reads.
 ///
-/// The record is installed onto `AppState` at daemon start
-/// (`install_convergence_recorder`), so the writers reached through this port
+/// The record is carried onto `AppState` at construction
+/// (`FabricSeed::convergence`), so the writers reached through this port
 /// and the `/status` reader are the same instance by construction.
 #[derive(Debug, Clone)]
 pub struct MeshConvergence {
@@ -224,8 +224,8 @@ mod tests {
         assert_eq!(c.snapshot(), (Some(1_700_000_000), Some(1_700_000_042)));
     }
 
-    /// The installed record and the port write to the same place — the
-    /// property `install_convergence_recorder`'s "ONE instance" comment
+    /// The constructed record and the port write to the same place — the
+    /// property `FabricSeed::convergence`'s "ONE instance" comment
     /// claims and nothing asserted.
     #[test]
     fn mesh_convergence_port_and_installed_record_are_one_instance() {

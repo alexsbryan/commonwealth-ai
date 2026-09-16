@@ -106,14 +106,16 @@ fn node(
     key: &SigningKey,
     n: usize,
 ) -> (AppState, std::sync::Arc<RingJournal>) {
-    let state = bare_state();
     let rail = Arc::new(RingRail::new(dir, Arc::new(key.clone())));
     let journal = rail.journal(NS).unwrap();
     if n > 0 {
         journal.set_roster(&solo_roster(key)).unwrap();
         assert_eq!(seed(&journal, key, n), n, "the fixture must land in full");
     }
-    state.install_ring_rail(rail);
+    let state = bare_state_with_seed(sovereign_api::state::FabricSeed {
+        ring_rail: Some(rail),
+        ..Default::default()
+    });
     (state, journal)
 }
 

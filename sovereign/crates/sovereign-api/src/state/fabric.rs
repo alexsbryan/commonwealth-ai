@@ -13,16 +13,141 @@
 
 use std::sync::Arc;
 
+use arc_swap::ArcSwap;
 use tokio::sync::RwLock;
 
 use commonwealth_core::ids::NodeId;
-use commonwealth_core::mesh::Mesh;
+use commonwealth_core::mesh::{IrohDialInfo, Mesh};
+use commonwealth_core::Clock;
 use commonwealth_state::{ContributionEmitter, MeshStore};
+use commonwealth_transport::PeerTransport;
 use sovereign_core::identity::IdentityReader;
 use sovereign_meshapp_registry::proxy::AppPortMap;
 use sovereign_meshapp_registry::registry::AppRegistry;
 
 use super::{ConvergenceRecord, MeshMutationHook};
+
+/// Signs this node's dial info — `(version, relay, addrs) -> hex sig`. The
+/// daemon builds it from the node `SigningKey`; `AppState` never holds raw key
+/// material.
+pub type DialSigner =
+    dyn Fn(u64, Option<String>, Vec<std::net::SocketAddr>) -> String + Send + Sync;
+
+/// The provider that yields this node's CURRENT iroh dial info (relay URL +
+/// direct addrs), pulled fresh each gossip round. Type-erased so this crate
+/// needs no iroh dependency; the daemon owns the endpoint.
+pub type DialInfoProvider = dyn Fn() -> IrohDialInfo + Send + Sync;
+
+/// The node's wall-clock source, published as a **reader** rather than installed
+/// into the part afterwards: the daemon seeds it with [`commonwealth_core::SystemClock`]
+/// at construction and the deterministic test harness swaps a per-node
+/// `TestClock` (and skews it) during life. A reader, not a value, so a consumer
+/// observes the swap (DC §4.2 "Construction is staged, and parts are total").
+#[derive(Clone)]
+pub struct ClockReader(Arc<ArcSwap<Arc<dyn Clock>>>);
+
+impl ClockReader {
+    /// Seed the reader with the clock the node starts life with.
+    pub fn new(clock: Arc<dyn Clock>) -> Self {
+        Self(Arc::new(ArcSwap::from_pointee(clock)))
+    }
+
+    /// The clock right now.
+    pub fn current(&self) -> Arc<dyn Clock> {
+        Arc::clone(&self.0.load())
+    }
+
+    /// Publish a new clock (the harness's per-node `TestClock`).
+    pub fn publish(&self, clock: Arc<dyn Clock>) {
+        self.0.store(Arc::new(clock));
+    }
+}
+
+impl Default for ClockReader {
+    fn default() -> Self {
+        Self::new(Arc::new(commonwealth_core::SystemClock))
+    }
+}
+
+/// How this node reaches mesh peers, published as a **reader**: the bootstrap
+/// seeds it with an `IpTransport` at construction and the iroh reachability
+/// watchdog swaps in a `RoutedTransport` (and a fresh endpoint) during life
+/// without a restart (DC §4.2 "Construction is staged, and parts are total").
+#[derive(Clone)]
+pub struct PeerTransportReader(Arc<ArcSwap<Arc<dyn PeerTransport>>>);
+
+impl PeerTransportReader {
+    /// Seed the reader with the transport the node starts life with.
+    pub fn new(transport: Arc<dyn PeerTransport>) -> Self {
+        Self(Arc::new(ArcSwap::from_pointee(transport)))
+    }
+
+    /// The transport right now.
+    pub fn current(&self) -> Arc<dyn PeerTransport> {
+        Arc::clone(&self.0.load())
+    }
+
+    /// Publish a new transport (the iroh routed transport, or a fresh endpoint).
+    pub fn publish(&self, transport: Arc<dyn PeerTransport>) {
+        self.0.store(Arc::new(transport));
+    }
+}
+
+impl Default for PeerTransportReader {
+    fn default() -> Self {
+        Self::new(Arc::new(commonwealth_transport::IpTransport::default()))
+    }
+}
+
+/// This node's live iroh dial info, published as a **reader**: the endpoint
+/// binds after the node is constructed, and the reachability watchdog swaps in
+/// a fresh endpoint during life (DC §4.2 "Construction is staged, and parts are
+/// total"). `None` until iroh binds — absence reported, never invented.
+#[derive(Clone, Default)]
+pub struct DialInfoReader(Arc<ArcSwap<Option<Arc<DialInfoProvider>>>>);
+
+impl DialInfoReader {
+    /// This node's dial info right now, or `None` when iroh is off.
+    pub fn current(&self) -> Option<IrohDialInfo> {
+        let guard = self.0.load();
+        let provider = (**guard).as_ref()?;
+        Some(provider())
+    }
+
+    /// Publish the provider that reads from the live endpoint.
+    pub fn publish(&self, provider: Arc<DialInfoProvider>) {
+        self.0.store(Arc::new(Some(provider)));
+    }
+}
+
+/// Everything Fabric's part is constructed with (DC §4.2 "Construction is
+/// staged, and parts are total"): the values that exist before the part is
+/// built. The daemon gathers them and passes them to `AppState::new…`; a test
+/// takes `Default`. The three readers are created first and shared, so an owner
+/// may publish through its own handle while the part reads — the in-flight
+/// gauge's shape (`sovereign-contracts/src/in_flight.rs`).
+#[derive(Default)]
+pub struct FabricSeed {
+    /// The shared notes-rail convergence recorder. One instance, so the
+    /// daemon-side writers and `/status`'s reader cannot disagree.
+    pub convergence: Option<Arc<ConvergenceRecord>>,
+    /// This node's Ed25519 identity pubkey, from `<data_dir>/node_key`.
+    pub self_node_pubkey: Option<commonwealth_core::ids::NodePubkey>,
+    /// The dial-info signing closure, built from the node `SigningKey`.
+    pub self_dial_signer: Option<Arc<DialSigner>>,
+    /// The ring rail's storage, built from the data dir and identity key.
+    pub ring_rail: Option<Arc<commonwealth_rail::RingRail>>,
+    /// The mutation persistence hook, installed at construction rather than
+    /// through the `Arc::get_mut` installer that could silently no-op.
+    pub mesh_mutation_hook: Option<MeshMutationHook>,
+    /// The node's clock, created first and shared with the harness.
+    pub clock: ClockReader,
+    /// The node's peer transport, created first and shared with the watchdog.
+    pub peer_transport: PeerTransportReader,
+    /// The node's live iroh dial info, created first and shared with the
+    /// endpoint owner.
+    pub dial_info: DialInfoReader,
+}
 
 /// Fabric's twenty fields, held as `AppStateInner::fabric`.
 pub struct FabricPart {
@@ -38,47 +163,37 @@ pub struct FabricPart {
     pub identity: IdentityReader,
     pub mesh: RwLock<Mesh>,
     /// This node's Ed25519 identity pubkey (see
-    /// `commonwealth_core::ids::NodePubkey`). Installed by the
-    /// embedded daemon at startup from `<data_dir>/node_key`; `None`
-    /// in tests and on daemons that don't manage an identity key.
-    /// Gossip stamps it into our own `MemberRecord` every round so
-    /// in-place upgrades publish the key without a rejoin.
-    pub self_node_pubkey: std::sync::RwLock<Option<commonwealth_core::ids::NodePubkey>>,
+    /// `commonwealth_core::ids::NodePubkey`). Set at construction by the
+    /// embedded daemon from `<data_dir>/node_key`; `None` in tests and on
+    /// daemons that don't manage an identity key. Gossip stamps it into our own
+    /// `MemberRecord` every round so in-place upgrades publish the key without a
+    /// rejoin.
+    pub self_node_pubkey: Option<commonwealth_core::ids::NodePubkey>,
     /// Provider yielding this node's CURRENT iroh dial info (relay URL
     /// + direct addrs), pulled fresh each gossip round and stamped into
-    /// our own `MemberRecord` (Track W2). Type-erased so this crate
-    /// needs no iroh dependency; installed by the daemon, which owns the
-    /// iroh endpoint. `None` when iroh access is off. A pull-provider,
-    /// not a stored snapshot, because the relay and hole-punched addrs
-    /// appear and change over the endpoint's lifetime.
-    #[allow(clippy::type_complexity)]
-    pub self_iroh_dialinfo: std::sync::RwLock<
-        Option<std::sync::Arc<dyn Fn() -> commonwealth_core::mesh::IrohDialInfo + Send + Sync>>,
-    >,
+    /// our own `MemberRecord` (Track W2). A reader created before the
+    /// part and published by the daemon that owns the endpoint: the relay
+    /// and hole-punched addrs appear and change over the endpoint's
+    /// lifetime, and the reachability watchdog swaps in a fresh one. `None`
+    /// when iroh access is off.
+    pub dial_info: DialInfoReader,
     /// Closure that signs this node's dial info (relay_url + direct addrs)
     /// for the gossip self-stamp — `(version, relay, addrs) -> hex sig`.
-    /// The daemon installs it from the node `SigningKey`, so `AppState`
+    /// Set at construction from the node `SigningKey`, so `AppState`
     /// never holds raw key material and `commonwealth-api` needs no crypto
-    /// dependency. `None` until the daemon binds iroh. See
+    /// dependency. `None` when the daemon has no identity key. See
     /// [`crate::state::AppState::sign_dial_info`].
-    #[allow(clippy::type_complexity)]
-    pub self_dial_signer: std::sync::RwLock<
-        Option<
-            std::sync::Arc<
-                dyn Fn(u64, Option<String>, Vec<std::net::SocketAddr>) -> String + Send + Sync,
-            >,
-        >,
-    >,
+    pub self_dial_signer: Option<Arc<DialSigner>>,
     /// The ring rail's storage: where each ring namespace's journal lives,
-    /// and how this node signs the ops it writes. `None` until the daemon
-    /// installs it — a daemon with no data directory has nowhere to put a
-    /// ledger, and the rail then REFUSES rather than inventing a location or
-    /// answering from an empty in-memory one (ARCH §18.3).
+    /// and how this node signs the ops it writes. Set at construction; a
+    /// daemon with no data directory has nowhere to put a ledger, and the
+    /// rail then REFUSES rather than inventing a location or answering from
+    /// an empty in-memory one (ARCH §18.3).
     ///
     /// The signer is a closure-shaped seam for the same reason
     /// [`Self::self_dial_signer`] is: `AppState` never holds raw key
     /// material and this crate needs no crypto dependency.
-    pub ring_rail: std::sync::RwLock<Option<Arc<commonwealth_rail::RingRail>>>,
+    pub ring_rail: Option<Arc<commonwealth_rail::RingRail>>,
     /// "A local write is queued; run the ring round now rather than at the
     /// next sixty-second tick."
     ///
@@ -98,17 +213,17 @@ pub struct FabricPart {
     /// Every route handler that dials a peer resolves URLs through
     /// this instead of formatting `http://{ip}:{port}` inline, so a
     /// future transport (dial-by-key iroh) slots in without touching
-    /// call sites. Defaults to `IpTransport::default()` (client port
-    /// 9741); the embedded daemon re-installs one configured with
-    /// its resolved client port via
-    /// [`crate::state::AppState::install_peer_transport`] at startup. Set-once-
-    /// read-many: a plain `std::sync::RwLock` read per resolution.
-    pub peer_transport: std::sync::RwLock<Arc<dyn commonwealth_transport::PeerTransport>>,
-    /// Wall-clock source. Defaults to [`commonwealth_core::SystemClock`]; the
-    /// test harness installs a per-node [`commonwealth_core::TestClock`] to
-    /// drive skew scenarios deterministically. Read per timestamp (RwLock read
-    /// + Arc clone), same set-once-read-many pattern as `peer_transport`.
-    pub clock: std::sync::RwLock<Arc<dyn commonwealth_core::Clock>>,
+    /// call sites. Seeded with `IpTransport::default()` (client port
+    /// 9741); the embedded daemon seeds one configured with its resolved
+    /// client port, and the iroh watchdog publishes a `RoutedTransport`
+    /// through the same reader. A reader created before the part, not a
+    /// slot filled later.
+    pub peer_transport: PeerTransportReader,
+    /// Wall-clock source. Seeded with [`commonwealth_core::SystemClock`]; the
+    /// test harness publishes a per-node [`commonwealth_core::TestClock`]
+    /// through the reader to drive skew scenarios deterministically. A reader
+    /// created before the part, not a slot filled later.
+    pub clock: ClockReader,
     /// Local-observation liveness map: `node_id -> local-clock seconds at which
     /// we last observed this peer's gossiped record advance (or reached it
     /// directly). Offline-decay measures staleness against THIS, never the
@@ -185,11 +300,10 @@ pub struct FabricPart {
     /// daemon, where persistence is managed elsewhere.
     pub on_mesh_mutation: Option<MeshMutationHook>,
     /// The notes-rail convergence recorder (order commons-fluency
-    /// fix 9). `None` until the daemon installs the shared instance at
-    /// boot (`set_convergence_recorder` → AppState construction); the
-    /// daemon-side publish sink and ingest poller stamp it, `/status`
-    /// reads it. Written once at boot, read on every status poll.
-    pub convergence: std::sync::RwLock<Option<std::sync::Arc<ConvergenceRecord>>>,
+    /// fix 9). One shared instance set at construction so the
+    /// daemon-side publish sink and ingest poller stamp the same record
+    /// `/status` reads. `None` when the boot has no rails.
+    pub convergence: Option<Arc<ConvergenceRecord>>,
 
     /// Dimensional contribution emitter. Each route handler records
     /// `LedgerEvent`s through this on completion (per write site

@@ -78,10 +78,20 @@ async fn a_node_in_no_mesh_keeps_its_writes_queued_until_membership_exists() {
     let me = NodeId::from_u128(7);
     let dir = tempfile::tempdir().unwrap();
     // A mesh with nobody in it: this node cannot place its own key.
-    let state = AppState::new(me, mesh_of(vec![]));
     let rail = Arc::new(RingRail::new(dir.path(), Arc::new(key.clone())));
+    let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric(
+        me,
+        mesh_of(vec![]),
+        Arc::new(commonwealth_state::MeshStore::in_memory().unwrap()),
+        Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new()),
+        None,
+        None,
+        sovereign_api::state::FabricSeed {
+            ring_rail: Some(rail.clone()),
+            ..Default::default()
+        },
+    );
     crate::ring_roster::MeshRosterSource::install(&rail, &state).unwrap();
-    state.install_ring_rail(rail.clone());
 
     assert!(state
         .inner
@@ -154,10 +164,20 @@ async fn work_namespace_seals_and_keeps_live_leases() {
     let submitter = SigningKey::from_bytes(&[4u8; 32]);
     let me = NodeId::from_u128(9);
     let dir = tempfile::tempdir().unwrap();
-    let state = AppState::new(me, mesh_of(vec![member(me, "me", Some(pubkey_of(&donor)))]));
     let rail = Arc::new(RingRail::new(dir.path(), Arc::new(donor.clone())));
+    let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric(
+        me,
+        mesh_of(vec![member(me, "me", Some(pubkey_of(&donor)))]),
+        Arc::new(commonwealth_state::MeshStore::in_memory().unwrap()),
+        Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new()),
+        None,
+        None,
+        sovereign_api::state::FabricSeed {
+            ring_rail: Some(rail.clone()),
+            ..Default::default()
+        },
+    );
     crate::ring_roster::MeshRosterSource::install(&rail, &state).unwrap();
-    state.install_ring_rail(rail.clone());
 
     // The roster in v0 is the operator's file, and it stays that way:
     // `work` is deliberately not in `DAEMON_OWN_NAMESPACES`, so nothing

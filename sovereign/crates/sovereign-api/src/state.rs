@@ -35,6 +35,11 @@ pub mod node;
 pub mod serving;
 pub mod workbench;
 
+// Fabric's construction seed and its readers, re-exported so the daemon and the
+// test harnesses name them at `sovereign_api::state::*` (the same surface the
+// constructors take).
+pub use fabric::{ClockReader, DialInfoReader, DialSigner, FabricSeed, PeerTransportReader};
+
 /// One inference slot's *actual* in-memory residency, as reported by
 /// the embedded engine — the daemon-facing mirror of
 /// `sovereign_core::traits::ResidentSlot`. Kept as its own type here
@@ -256,8 +261,8 @@ impl RejectedNodeIdHeader {
 /// read by `/status` as the publish-path liveness signal. A `None`
 /// stamp means that path has never succeeded since boot — absence is
 /// reported, never defaulted (ARCH §18.3). One shared instance is
-/// installed into [`AppStateInner`] (`install_convergence_recorder`) so
-/// the daemon-side writers and the `/status` reader cannot disagree.
+/// carried into [`AppStateInner`] at construction ([`FabricSeed::convergence`])
+/// so the daemon-side writers and the `/status` reader cannot disagree.
 #[derive(Debug, Default)]
 pub struct ConvergenceRecord {
     stamps: std::sync::Mutex<ConvergenceStamps>,
@@ -528,38 +533,12 @@ impl AppStateInner {
             .clone()
     }
 
-    /// Install the shared convergence recorder so the daemon's
-    /// sink/poller writers and `/status`'s reader share ONE instance
-    /// (fix 9 — one decider, one name). Set-once: a second install
-    /// keeps the first, because boot order owns the stamps and a
-    /// late install would silently discard the sink's early writes.
-    pub fn install_convergence_recorder(
-        &self,
-        rec: std::sync::Arc<ConvergenceRecord>,
-    ) -> std::sync::Arc<ConvergenceRecord> {
-        let mut slot = self
-            .fabric
-            .convergence
-            .write()
-            .unwrap_or_else(|e| e.into_inner());
-        match slot.as_ref() {
-            Some(already) => already.clone(),
-            None => {
-                *slot = Some(rec.clone());
-                rec
-            }
-        }
-    }
-
-    /// The installed recorder, for `/status`'s convergence section.
-    /// `None` only before boot installs it — a pre-install status
-    /// poll reads no convergence, honestly.
+    /// The convergence recorder the daemon's sink/poller writers stamp and
+    /// `/status` reads — ONE instance, set at construction (fix 9 — one
+    /// decider, one name). `None` when the boot had no rails; a status poll
+    /// then reads no convergence, honestly.
     pub fn convergence_recorder(&self) -> Option<std::sync::Arc<ConvergenceRecord>> {
-        self.fabric
-            .convergence
-            .read()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone()
+        self.fabric.convergence.clone()
     }
 }
 
@@ -600,71 +579,35 @@ impl AppState {
             .store(Arc::new(files));
     }
 
-    /// This node's identity pubkey, if one was installed.
+    /// This node's identity pubkey, if the node has one.
     pub fn self_node_pubkey(&self) -> Option<commonwealth_core::ids::NodePubkey> {
-        *self
-            .inner
-            .fabric
-            .self_node_pubkey
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
+        self.inner.fabric.self_node_pubkey
     }
 
-    /// Install this node's identity pubkey. The embedded daemon
-    /// calls this at startup after `load_or_generate_node_key`.
-    pub fn install_self_node_pubkey(&self, pubkey: commonwealth_core::ids::NodePubkey) {
-        *self
-            .inner
-            .fabric
-            .self_node_pubkey
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(pubkey);
-    }
-
-    /// This node's current iroh dial info, if a provider is installed
-    /// (iroh access enabled). Pulled live from the endpoint each call.
+    /// This node's current iroh dial info, if iroh access is on. Pulled live
+    /// from the endpoint each call through the reader.
     pub fn self_iroh_dialinfo(&self) -> Option<commonwealth_core::mesh::IrohDialInfo> {
-        self.inner
-            .fabric
-            .self_iroh_dialinfo
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .as_ref()
-            .map(|provider| provider())
+        self.inner.fabric.dial_info.current()
     }
 
-    /// Install the dial-info signing closure (daemon builds it from the
-    /// node SigningKey after binding iroh).
-    #[allow(clippy::type_complexity)]
-    pub fn install_self_dial_signer(
-        &self,
-        signer: std::sync::Arc<
-            dyn Fn(u64, Option<String>, Vec<std::net::SocketAddr>) -> String + Send + Sync,
-        >,
-    ) {
-        *self
-            .inner
-            .fabric
-            .self_dial_signer
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(signer);
+    /// Fabric's dial-info reader — the owner's write handle. The endpoint owner
+    /// (the daemon, and the reachability watchdog on an endpoint rebuild)
+    /// publishes through it while the part reads. A reader created first, not a
+    /// slot filled later (DC §4.2 "Construction is staged, and parts are
+    /// total").
+    pub fn dial_info_reader(&self) -> fabric::DialInfoReader {
+        self.inner.fabric.dial_info.clone()
     }
 
-    /// Sign this node's dial info (hex), or `None` if no signer is
-    /// installed (iroh disabled / pre-identity build).
+    /// Sign this node's dial info (hex), or `None` if the node has no identity
+    /// key (iroh disabled / pre-identity build).
     pub fn sign_dial_info(
         &self,
         version: u64,
         relay_url: Option<&str>,
         direct_addrs: &[std::net::SocketAddr],
     ) -> Option<String> {
-        let signer = self
-            .inner
-            .fabric
-            .self_dial_signer
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone()?;
+        let signer = self.inner.fabric.self_dial_signer.clone()?;
         Some(signer(
             version,
             relay_url.map(|s| s.to_string()),
@@ -672,14 +615,9 @@ impl AppState {
         ))
     }
 
-    /// The ring rail's storage, or `None` if the daemon never installed one.
+    /// The ring rail's storage, or `None` if the daemon has none.
     pub fn ring_rail(&self) -> Option<Arc<commonwealth_rail::RingRail>> {
-        self.inner
-            .fabric
-            .ring_rail
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone()
+        self.inner.fabric.ring_rail.clone()
     }
 
     /// The wake-up that makes a local store write travel now.
@@ -690,33 +628,6 @@ impl AppState {
     /// §7.5).
     pub fn ring_write_nudge(&self) -> Arc<tokio::sync::Notify> {
         Arc::clone(&self.inner.fabric.ring_write_nudge)
-    }
-
-    /// Install the ring rail's storage. The daemon calls this at startup with
-    /// its data directory and a signer built from the node `SigningKey`.
-    pub fn install_ring_rail(&self, rail: Arc<commonwealth_rail::RingRail>) {
-        *self
-            .inner
-            .fabric
-            .ring_rail
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(rail);
-    }
-
-    /// Install the provider yielding this node's live iroh dial info.
-    /// The daemon calls this after binding its iroh endpoint (W2), so
-    /// gossip can stamp relay_url + iroh_direct_addrs into our own
-    /// `MemberRecord` every round.
-    pub fn install_self_iroh_dialinfo(
-        &self,
-        provider: std::sync::Arc<dyn Fn() -> commonwealth_core::mesh::IrohDialInfo + Send + Sync>,
-    ) {
-        *self
-            .inner
-            .fabric
-            .self_iroh_dialinfo
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(provider);
     }
 
     /// Install the client-API bearer token. The embedded daemon calls
@@ -764,55 +675,31 @@ impl AppState {
             .load(std::sync::atomic::Ordering::Relaxed)
     }
 
-    /// Snapshot of the active [`PeerTransport`]. Cheap (one RwLock
-    /// read + Arc clone); call per dial, don't cache across awaits —
-    /// the daemon may re-install at startup.
+    /// Snapshot of the active [`PeerTransport`]. Cheap (one atomic load
+    /// + Arc clone); call per dial, don't cache across awaits — the
+    /// watchdog may publish a new one.
     pub fn peer_transport(&self) -> Arc<dyn commonwealth_transport::PeerTransport> {
-        self.inner
-            .fabric
-            .peer_transport
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone()
+        self.inner.fabric.peer_transport.current()
     }
 
-    /// Replace the peer transport. The embedded daemon calls this
-    /// once at startup with an `IpTransport` configured for its
-    /// resolved client port (the `AppState::new*` default assumes
-    /// 9741). Same install-at-boot pattern as
-    /// [`AppState::install_slot_aliases`].
-    pub fn install_peer_transport(
-        &self,
-        transport: Arc<dyn commonwealth_transport::PeerTransport>,
-    ) {
-        *self
-            .inner
-            .fabric
-            .peer_transport
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = transport;
+    /// Fabric's peer-transport reader — the owner's write handle. The bootstrap
+    /// seeds it at construction and the iroh watchdog publishes through it while
+    /// the part reads (DC §4.2 "Construction is staged, and parts are total").
+    pub fn peer_transport_reader(&self) -> fabric::PeerTransportReader {
+        self.inner.fabric.peer_transport.clone()
     }
 
-    /// Snapshot of the active [`commonwealth_core::Clock`]. Cheap (one RwLock
-    /// read + Arc clone); call per timestamp, don't cache across awaits.
+    /// Snapshot of the active [`commonwealth_core::Clock`]. Cheap (one atomic
+    /// load + Arc clone); call per timestamp, don't cache across awaits.
     pub fn clock(&self) -> Arc<dyn commonwealth_core::Clock> {
-        self.inner
-            .fabric
-            .clock
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone()
+        self.inner.fabric.clock.current()
     }
 
-    /// Replace the clock. The test harness calls this with a per-node
-    /// `TestClock` to drive skew; production leaves the `SystemClock` default.
-    pub fn install_clock(&self, clock: Arc<dyn commonwealth_core::Clock>) {
-        *self
-            .inner
-            .fabric
-            .clock
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = clock;
+    /// Fabric's clock reader — the owner's write handle. The harness publishes a
+    /// per-node `TestClock` through it to drive skew; production leaves the
+    /// `SystemClock` the seed supplied.
+    pub fn clock_reader(&self) -> fabric::ClockReader {
+        self.inner.fabric.clock.clone()
     }
 
     /// Record that we just observed `peer`'s liveness — its gossiped record
@@ -988,6 +875,33 @@ impl AppState {
         corpus_engine: Option<Arc<CorpusEngine>>,
         in_flight_gauge: Option<sovereign_core::in_flight::LocalInFlightGauge>,
     ) -> Self {
+        Self::new_with_platform_and_engine_and_gauge_and_fabric(
+            self_node_id,
+            mesh,
+            mesh_store,
+            app_registry,
+            corpus_engine,
+            in_flight_gauge,
+            fabric::FabricSeed::default(),
+        )
+    }
+
+    /// [`Self::new_with_platform_and_engine_and_gauge`] with Fabric's part.
+    ///
+    /// DC §4.2 "Construction is staged, and parts are total": Fabric's values
+    /// exist before the part is built, so the daemon gathers them into a
+    /// [`fabric::FabricSeed`] and passes it here rather than installing them
+    /// afterwards. Tests take [`fabric::FabricSeed::default`] through the
+    /// shorter constructors.
+    pub fn new_with_platform_and_engine_and_gauge_and_fabric(
+        self_node_id: NodeId,
+        mesh: Mesh,
+        mesh_store: Arc<MeshStore>,
+        app_registry: Arc<AppRegistry>,
+        corpus_engine: Option<Arc<CorpusEngine>>,
+        in_flight_gauge: Option<sovereign_core::in_flight::LocalInFlightGauge>,
+        fabric_seed: fabric::FabricSeed,
+    ) -> Self {
         let inference_store = InferenceStateStore::new(Arc::clone(&mesh_store), self_node_id);
         let contribution_emitter = ContributionEmitter::new((*mesh_store).clone(), self_node_id);
         let activity_emitter = ActivityEmitter::new((*mesh_store).clone(), self_node_id);
@@ -1047,15 +961,13 @@ impl AppState {
         let fabric = fabric::FabricPart {
             identity: IdentityReader::new(self_node_id),
             mesh: RwLock::new(mesh),
-            self_node_pubkey: std::sync::RwLock::new(None),
-            self_iroh_dialinfo: std::sync::RwLock::new(None),
-            self_dial_signer: std::sync::RwLock::new(None),
-            ring_rail: std::sync::RwLock::new(None),
+            self_node_pubkey: fabric_seed.self_node_pubkey,
+            dial_info: fabric_seed.dial_info,
+            self_dial_signer: fabric_seed.self_dial_signer,
+            ring_rail: fabric_seed.ring_rail,
             ring_write_nudge: Arc::new(tokio::sync::Notify::new()),
-            peer_transport: std::sync::RwLock::new(Arc::new(
-                commonwealth_transport::IpTransport::default(),
-            )),
-            clock: std::sync::RwLock::new(Arc::new(commonwealth_core::SystemClock)),
+            peer_transport: fabric_seed.peer_transport,
+            clock: fabric_seed.clock,
             peer_last_contact: std::sync::RwLock::new(std::collections::HashMap::new()),
             peer_last_attempt: std::sync::RwLock::new(std::collections::HashMap::new()),
             peer_post_split: std::sync::RwLock::new(std::collections::HashMap::new()),
@@ -1064,8 +976,8 @@ impl AppState {
             app_registry,
             app_port_map: AppPortMap::new(),
             fanout_inflight: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
-            on_mesh_mutation: None,
-            convergence: std::sync::RwLock::new(None),
+            on_mesh_mutation: fabric_seed.mesh_mutation_hook,
+            convergence: fabric_seed.convergence,
             contribution_emitter,
         };
         Self {
@@ -1258,7 +1170,7 @@ impl AppState {
         }
     }
 
-    /// contract as `with_mesh_mutation_hook` — call before cloning
+    /// contract as `with_rpc_shard_warmer` — call before cloning
     /// AppState into the HTTP servers.
     pub fn with_local_inference(
         mut self,
@@ -1298,33 +1210,6 @@ impl AppState {
                     "with_rpc_shard_warmer called on shared AppState — auto-warm \
                      orchestration disabled; a distributed primary load will fall \
                      back to local-only. Move the installer above any inner.clone()."
-                );
-            }
-        }
-        self
-    }
-
-    /// Install the mutation hook on an Arc not yet cloned. Called
-    /// by `sovereign-mesh::EmbeddedDaemon` right after constructing
-    /// its `AppState`, before handing the `Clone`d state to the HTTP
-    /// servers. If the Arc has already been cloned (should not
-    /// happen in normal use), this is a no-op with a warning so the
-    /// daemon keeps running rather than panicking.
-    pub fn with_mesh_mutation_hook(mut self, hook: MeshMutationHook) -> Self {
-        match Arc::get_mut(&mut self.inner) {
-            Some(inner) => {
-                inner.fabric.on_mesh_mutation = Some(hook);
-            }
-            None => {
-                tracing::error!(
-                    strong_count = Arc::strong_count(&self.inner),
-                    "with_mesh_mutation_hook called on shared AppState — \
-                     persistence hook NOT installed; on-join persistence \
-                     falls back to 10s gossip-loop cadence. \
-                     Likely cause: another caller cloned AppState.inner \
-                     (e.g. AppStateYieldHook::new) before this point. \
-                     Move the with_* installer above any inner.clone() in \
-                     EmbeddedDaemon::start_daemon."
                 );
             }
         }
@@ -2016,6 +1901,36 @@ pub fn test_app_state() -> AppState {
     AppState::new(NodeId::from_u128(1), mesh)
 }
 
+/// [`test_app_state`] with Fabric's construction seed — the shape a test that
+/// needs a recorder, rail, hook or clock uses now that those are constructor
+/// arguments rather than installs (DC §4.2 "Construction is staged, and parts
+/// are total").
+pub fn test_app_state_with_seed(seed: fabric::FabricSeed) -> AppState {
+    use commonwealth_core::ids::MeshId;
+    use commonwealth_core::mesh::Mesh;
+    use std::collections::HashMap;
+    let mesh = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
+        id: MeshId::from_u128(1),
+        name: "Test Mesh".into(),
+        invite_key_hash: [0u8; 32],
+        invite_version: 0,
+        require_encryption: false,
+        members: HashMap::new(),
+        peers: vec![],
+    };
+    AppState::new_with_platform_and_engine_and_gauge_and_fabric(
+        NodeId::from_u128(1),
+        mesh,
+        Arc::new(MeshStore::in_memory().expect("in-memory MeshStore")),
+        Arc::new(AppRegistry::new()),
+        None,
+        None,
+        seed,
+    )
+}
+
 #[cfg(test)]
 mod installer_guard_tests {
     use super::test_app_state;
@@ -2047,7 +1962,7 @@ mod installer_guard_tests {
 #[cfg(test)]
 mod fair_admission_tests {
     use super::effective_peer_cap;
-    use crate::state::test_app_state;
+    use crate::state::{fabric, test_app_state, test_app_state_with_seed};
 
     #[test]
     fn unlimited_ceiling_means_no_per_node_cap() {
@@ -2102,18 +2017,15 @@ mod fair_admission_tests {
     }
 
     #[test]
-    fn convergence_record_round_trips_and_installs_set_once() {
-        // Fix 9: the record is None until boot installs it; the SAME
-        // Arc the daemon stamps is the one /status reads (ptr_eq), and a
-        // second install keeps the first (boot order owns the stamps).
-        let state = test_app_state();
-        assert!(state.inner.convergence_recorder().is_none());
-
+    fn convergence_record_is_the_one_the_node_was_constructed_with() {
+        // Fix 9: the SAME Arc the daemon stamps is the one /status reads
+        // (ptr_eq). The recorder is a construction argument now, so there is
+        // no install step that could discard the sink's early writes.
         let rec = std::sync::Arc::new(crate::state::ConvergenceRecord::new());
-        let installed = state
-            .inner
-            .install_convergence_recorder(std::sync::Arc::clone(&rec));
-        assert!(std::sync::Arc::ptr_eq(&installed, &rec));
+        let state = test_app_state_with_seed(fabric::FabricSeed {
+            convergence: Some(std::sync::Arc::clone(&rec)),
+            ..Default::default()
+        });
         assert!(std::sync::Arc::ptr_eq(
             &state.inner.convergence_recorder().unwrap(),
             &rec
@@ -2131,11 +2043,5 @@ mod fair_admission_tests {
             state.inner.convergence_recorder().unwrap().snapshot(),
             (Some(1000), Some(2000))
         );
-
-        // A late second install must NOT replace the first — the sink
-        // already stamped it.
-        let late = std::sync::Arc::new(crate::state::ConvergenceRecord::new());
-        let kept = state.inner.install_convergence_recorder(late);
-        assert!(std::sync::Arc::ptr_eq(&kept, &rec), "set-once install");
     }
 }

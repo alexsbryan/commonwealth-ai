@@ -111,10 +111,20 @@ mod tests {
     /// three calls `ring_sync`'s tests make and the daemon makes.
     fn node(dir: &std::path::Path, key: &SigningKey, id: NodeId) -> AppState {
         use crate::ring_roster::tests::{member, mesh_of, pubkey_of};
-        let state = AppState::new(id, mesh_of(vec![member(id, "a", Some(pubkey_of(key)))]));
         let rail = Arc::new(RingRail::new(dir, Arc::new(key.clone())));
+        let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric(
+            id,
+            mesh_of(vec![member(id, "a", Some(pubkey_of(key)))]),
+            Arc::new(commonwealth_state::MeshStore::in_memory().unwrap()),
+            Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new()),
+            None,
+            None,
+            sovereign_api::state::FabricSeed {
+                ring_rail: Some(rail.clone()),
+                ..Default::default()
+            },
+        );
         crate::ring_roster::MeshRosterSource::install(&rail, &state).unwrap();
-        state.install_ring_rail(rail);
         state
     }
 

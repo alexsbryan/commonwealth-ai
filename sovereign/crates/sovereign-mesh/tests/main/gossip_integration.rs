@@ -215,7 +215,7 @@ async fn gossip_decays_peer_after_local_contact_goes_stale() {
     };
     let state = Arc::new(AppState::new(me, mesh));
     let clock = commonwealth_core::TestClock::new(1_000);
-    state.install_clock(Arc::new(clock.clone()));
+    state.clock_reader().publish(Arc::new(clock.clone()));
 
     // Round 1: ghost is lazy-init'd to now (grace window) — NOT decayed yet.
     gossip::run_one_round(&state, Duration::from_secs(60))
@@ -284,7 +284,9 @@ async fn gossip_skewed_last_seen_does_not_false_decay() {
         peers: vec![],
     };
     let state = Arc::new(AppState::new(me, mesh));
-    state.install_clock(Arc::new(commonwealth_core::TestClock::new(1_000)));
+    state
+        .clock_reader()
+        .publish(Arc::new(commonwealth_core::TestClock::new(1_000)));
 
     // We observed the peer locally at now (1_000) — a recent exchange — even
     // though its self-stamped last_seen is ancient (skewed clock).
@@ -348,7 +350,9 @@ async fn answering_peer_whose_record_is_frozen_must_not_decay() {
         peers: vec![],
     };
     let state_b = Arc::new(AppState::new(b_id, mesh_b));
-    state_b.install_clock(Arc::new(commonwealth_core::TestClock::new(1_000)));
+    state_b
+        .clock_reader()
+        .publish(Arc::new(commonwealth_core::TestClock::new(1_000)));
     let addr_b = spawn_internal_router((*state_b).clone()).await;
 
     let mesh_a = Mesh {
@@ -372,7 +376,7 @@ async fn answering_peer_whose_record_is_frozen_must_not_decay() {
     };
     let state_a = Arc::new(AppState::new(a_id, mesh_a));
     let clock_a = commonwealth_core::TestClock::new(1_000);
-    state_a.install_clock(Arc::new(clock_a.clone()));
+    state_a.clock_reader().publish(Arc::new(clock_a.clone()));
 
     // Round 1 at t=1000: A reaches B and converges.
     gossip::run_one_round(&state_a, Duration::from_secs(60))

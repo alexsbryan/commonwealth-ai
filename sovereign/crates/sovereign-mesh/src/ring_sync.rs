@@ -617,7 +617,7 @@ mod tests {
     /// serialised body, ~873 B/op on the wire.
     const FIXTURE_BODY_BYTES: usize = 594;
 
-    fn bare_state() -> AppState {
+    fn bare_state_with_seed(seed: sovereign_api::state::FabricSeed) -> AppState {
         let mesh = Mesh {
             mesh_secret: [0u8; 32],
             invite_expires_at: None,
@@ -629,7 +629,15 @@ mod tests {
             members: HashMap::new(),
             peers: vec![],
         };
-        AppState::new(NodeId::from_u128(1), mesh)
+        AppState::new_with_platform_and_engine_and_gauge_and_fabric(
+            NodeId::from_u128(1),
+            mesh,
+            Arc::new(commonwealth_state::MeshStore::in_memory().unwrap()),
+            Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new()),
+            None,
+            None,
+            seed,
+        )
     }
 
     fn body_of_size(target: usize) -> Payload {
@@ -692,14 +700,16 @@ mod tests {
         key: &SigningKey,
         n: usize,
     ) -> (AppState, Arc<RingJournal>, Arc<RingRail>) {
-        let state = bare_state();
         let rail = Arc::new(RingRail::new(dir, Arc::new(key.clone())));
         let journal = rail.journal(NS).unwrap();
         journal.set_roster(&solo_roster(key)).unwrap();
         if n > 0 {
             assert_eq!(journal.ingest_all(&ops(key, n)).unwrap(), n);
         }
-        state.install_ring_rail(rail.clone());
+        let state = bare_state_with_seed(sovereign_api::state::FabricSeed {
+            ring_rail: Some(rail.clone()),
+            ..Default::default()
+        });
         (state, journal, rail)
     }
 
@@ -822,14 +832,24 @@ mod tests {
 
         // A node on the daemon's namespace: no roster file, ever.
         let node_on_own = |dir: &std::path::Path, with_source: bool| {
-            let state = AppState::new(me, mesh_of(vec![member(me, "me", Some(pubkey_of(&key)))]));
             let rail = Arc::new(RingRail::new(dir, Arc::new(key.clone())));
             let journal = rail.journal(OWN).unwrap();
             assert_eq!(journal.ingest_all(&ops_in(OWN, &key, 3)).unwrap(), 3);
+            let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric(
+                me,
+                mesh_of(vec![member(me, "me", Some(pubkey_of(&key)))]),
+                Arc::new(commonwealth_state::MeshStore::in_memory().unwrap()),
+                Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new()),
+                None,
+                None,
+                sovereign_api::state::FabricSeed {
+                    ring_rail: Some(rail.clone()),
+                    ..Default::default()
+                },
+            );
             if with_source {
                 MeshRosterSource::install(&rail, &state).unwrap();
             }
-            state.install_ring_rail(rail.clone());
             (state, journal, rail)
         };
         let sealed_peer = |dir: &std::path::Path| {
@@ -1114,10 +1134,20 @@ mod tests {
         self_id: NodeId,
         mesh: commonwealth_core::mesh::Mesh,
     ) -> (AppState, Arc<RingRail>) {
-        let state = AppState::new(self_id, mesh);
         let rail = Arc::new(RingRail::new(dir, Arc::new(key.clone())));
+        let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric(
+            self_id,
+            mesh,
+            Arc::new(commonwealth_state::MeshStore::in_memory().unwrap()),
+            Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new()),
+            None,
+            None,
+            sovereign_api::state::FabricSeed {
+                ring_rail: Some(rail.clone()),
+                ..Default::default()
+            },
+        );
         crate::ring_roster::MeshRosterSource::install(&rail, &state).unwrap();
-        state.install_ring_rail(rail.clone());
         (state, rail)
     }
 

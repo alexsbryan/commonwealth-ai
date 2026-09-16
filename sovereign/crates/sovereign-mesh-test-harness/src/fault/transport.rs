@@ -2,10 +2,10 @@
 //! [`FaultTransport`] — a [`PeerTransport`] that resolves peer endpoints from
 //! an explicit routing table and applies the shared [`FaultPolicy`].
 //!
-//! Installed per node via `AppState::install_peer_transport`, it is the single
-//! choke point for *all* peer dialing (gossip + knowledge fan-out both resolve
-//! through `AppState::peer_transport()`). It owns its own `node_id -> addr`
-//! table, so simulated member records need no real addresses.
+//! Published per node through `AppState::peer_transport_reader`, it is the
+//! single choke point for *all* peer dialing (gossip + knowledge fan-out both
+//! resolve through `AppState::peer_transport()`). It owns its own
+//! `node_id -> addr` table, so simulated member records need no real addresses.
 
 use std::collections::HashMap;
 use std::net::SocketAddr;

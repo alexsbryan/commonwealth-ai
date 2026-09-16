@@ -52,6 +52,13 @@ const GUEST_TOKEN: &str = "9c1f7b2ea4d68053aa11ff7c3e5b90d4c7a2f16b8e04d93b5c7a1
 const NS: &str = "house-expenses";
 
 fn bare_state() -> AppState {
+    bare_state_with_seed(sovereign_api::state::FabricSeed::default())
+}
+
+/// [`bare_state`] with Fabric's construction seed — the rail is a construction
+/// argument now, not a post-construction install (DC §4.2 "Construction is
+/// staged, and parts are total").
+fn bare_state_with_seed(seed: sovereign_api::state::FabricSeed) -> AppState {
     let node = NodeId::from_u128(1);
     let mesh = Mesh {
         mesh_secret: [0u8; 32],
@@ -64,7 +71,15 @@ fn bare_state() -> AppState {
         members: HashMap::new(),
         peers: vec![],
     };
-    let state = AppState::new(node, mesh);
+    let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric(
+        node,
+        mesh,
+        Arc::new(commonwealth_state::MeshStore::in_memory().unwrap()),
+        Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new()),
+        None,
+        None,
+        seed,
+    );
     state.install_client_token(Some(Arc::<str>::from(TOKEN)));
     state
 }
@@ -72,7 +87,6 @@ fn bare_state() -> AppState {
 /// A daemon with ring storage under `root`, signing as `key`, and a roster
 /// that says that key is Alex.
 fn state_with_rail(root: &std::path::Path, key: &SigningKey) -> AppState {
-    let state = bare_state();
     let rail = Arc::new(RingRail::new(root, Arc::new(key.clone())));
     let mut members = std::collections::BTreeMap::new();
     members.insert(Person::from("alex"), vec![key.actor()]);
@@ -84,8 +98,10 @@ fn state_with_rail(root: &std::path::Path, key: &SigningKey) -> AppState {
         .unwrap()
         .set_roster(&Roster::new(members))
         .unwrap();
-    state.install_ring_rail(rail);
-    state
+    bare_state_with_seed(sovereign_api::state::FabricSeed {
+        ring_rail: Some(rail),
+        ..Default::default()
+    })
 }
 
 fn with_guest(state: AppState, scopes: Vec<Scope>) -> AppState {
@@ -553,10 +569,12 @@ async fn two_nodes_converge_through_the_sync_route() {
         Roster::new(m)
     };
     let build = |dir: &std::path::Path, key: &SigningKey| {
-        let state = bare_state();
         let rail = Arc::new(RingRail::new(dir, Arc::new(key.clone())));
         rail.journal(NS).unwrap().set_roster(&roster).unwrap();
-        state.install_ring_rail(rail.clone());
+        let state = bare_state_with_seed(sovereign_api::state::FabricSeed {
+            ring_rail: Some(rail.clone()),
+            ..Default::default()
+        });
         (state, rail)
     };
     let (state_a, rail_a) = build(dir_a.path(), &key_a);

@@ -411,6 +411,23 @@ pub(crate) fn node_state(
     index_dir: &std::path::Path,
     others: &[(NodeId, &str)],
 ) -> AppState {
+    node_state_with_seed(
+        self_id,
+        index_dir,
+        others,
+        sovereign_api::state::FabricSeed::default(),
+    )
+}
+
+/// [`node_state`] with Fabric's construction seed — a rail is a construction
+/// argument now, not a post-construction install (DC §4.2 "Construction is
+/// staged, and parts are total").
+pub(crate) fn node_state_with_seed(
+    self_id: NodeId,
+    index_dir: &std::path::Path,
+    others: &[(NodeId, &str)],
+    seed: sovereign_api::state::FabricSeed,
+) -> AppState {
     let mut members = HashMap::new();
     members.insert(
         self_id,
@@ -433,12 +450,14 @@ pub(crate) fn node_state(
         members,
         peers: vec![],
     };
-    AppState::new_with_platform_and_engine(
+    AppState::new_with_platform_and_engine_and_gauge_and_fabric(
         self_id,
         mesh,
         Arc::new(MeshStore::in_memory().expect("in-memory mesh store")),
         Arc::new(AppRegistry::new()),
         Some(engine_at(index_dir, self_id)),
+        None,
+        seed,
     )
 }
 

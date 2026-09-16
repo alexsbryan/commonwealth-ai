@@ -1,20 +1,25 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Defensive test for the silent-no-op failure mode of
-//! `AppState::with_local_inference` and `with_mesh_mutation_hook`.
+//! `AppState::with_local_inference`.
 //!
-//! These installers mutate `AppStateInner` through `Arc::get_mut`.
+//! That installer mutates `AppStateInner` through `Arc::get_mut`.
 //! That call returns `None` the moment any other code has cloned
 //! `app_state.inner` — the installer then becomes a tracing::error!
 //! and a quiet return, NOT a panic or an error result.
 //!
 //! Why a test is needed: production already pinned the bug class
 //! (the doc-comment at `daemon.rs:1199-1217` and the `error!`
-//! messages on the installers describe it). The only thing missing
+//! messages on the installer describe it). The only thing missing
 //! is a regression target that *fires* when a future refactor
-//! re-orders `Arc::clone` ahead of one of these installers. The
+//! re-orders `Arc::clone` ahead of the installer. The
 //! existing daemon_wiring tests pin the happy path (with_*
 //! installed, route returns 200); they cannot catch the silent
 //! no-op because in their setup the Arc is never pre-cloned.
+//!
+//! The mesh-mutation hook that used to be the sister case is a
+//! constructor argument now (`FabricSeed::mesh_mutation_hook`, DC §4.2
+//! "Construction is staged"), so its half of the hazard is gone
+//! structurally (ARCH 10); this file pins that.
 //!
 //! Approach: install a `tracing` subscriber that captures emitted
 //! events into a buffer, simulate the bad ordering (clone inner,
@@ -135,55 +140,72 @@ fn with_local_inference_emits_error_when_arc_already_cloned() {
 }
 
 #[test]
-fn with_mesh_mutation_hook_emits_error_when_arc_already_cloned() {
-    // Sister assertion — the second installer with the same Arc
-    // contract. A bug that re-orders ONE of them but not the other
-    // would slip past a test that only covers `with_local_inference`.
+fn mesh_mutation_hook_is_present_at_construction() {
+    // Sister assertion — the second value that used to ride the same
+    // `Arc::get_mut` contract. It is a constructor argument now, so a future
+    // refactor cannot re-order a clone ahead of it: the hook is present the
+    // moment the state exists (ARCH 10 — structural, not remembered).
     let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
     let _guard = capture_subscriber(Arc::clone(&buf));
 
-    let app_state = fresh_app_state();
-    let _kept = app_state.inner.clone();
-
     let hook: sovereign_api::state::MeshMutationHook =
         Arc::new(|_mesh: &Mesh, _self_id: NodeId| {
-            // Body intentionally empty — the test isn't about firing
-            // the hook, only about catching the install-time no-op.
+            // Body intentionally empty — the test isn't about firing the
+            // hook, only about it surviving construction.
         });
-    let app_state = app_state.with_mesh_mutation_hook(hook);
-
-    let out = captured(&buf);
-    assert!(
-        out.contains("with_mesh_mutation_hook called on shared AppState"),
-        "expected the silent-no-op error in captured tracing; got:\n{out}"
+    let app_state = AppState::new_with_platform_and_engine_and_gauge_and_fabric(
+        NodeId::from_u128(0xDEAD_BEEF_CAFE_F00D),
+        empty_mesh(),
+        Arc::new(MeshStore::in_memory().unwrap()),
+        Arc::new(AppRegistry::new()),
+        None,
+        None,
+        sovereign_api::state::FabricSeed {
+            mesh_mutation_hook: Some(hook),
+            ..Default::default()
+        },
     );
 
     assert!(
-        app_state.inner.fabric.on_mesh_mutation.is_none(),
-        "with_mesh_mutation_hook must NOT have installed the hook when Arc was cloned"
+        app_state.inner.fabric.on_mesh_mutation.is_some(),
+        "a hook passed at construction must be present"
+    );
+    let out = captured(&buf);
+    assert!(
+        !out.contains("called on shared AppState"),
+        "construction must not emit the silent-no-op error; got:\n{out}"
     );
 }
 
 #[test]
 fn happy_path_does_not_emit_error_when_arc_uncloned() {
-    // Negative control: when the Arc has strong_count == 1, both
-    // installers succeed silently. Without this we can't tell if
-    // the substring match above is firing on real evidence vs
-    // some other log line that happens to mention "shared AppState".
+    // Negative control: when the Arc has strong_count == 1,
+    // `with_local_inference` succeeds silently. Without this we can't tell if
+    // the substring match above is firing on real evidence vs some other log
+    // line that happens to mention "shared AppState".
     let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
     let _guard = capture_subscriber(Arc::clone(&buf));
 
-    let app_state = fresh_app_state();
+    let hook: sovereign_api::state::MeshMutationHook =
+        Arc::new(|_mesh: &Mesh, _self_id: NodeId| {});
+    let app_state = AppState::new_with_platform_and_engine_and_gauge_and_fabric(
+        NodeId::from_u128(0xDEAD_BEEF_CAFE_F00D),
+        empty_mesh(),
+        Arc::new(MeshStore::in_memory().unwrap()),
+        Arc::new(AppRegistry::new()),
+        None,
+        None,
+        sovereign_api::state::FabricSeed {
+            mesh_mutation_hook: Some(hook),
+            ..Default::default()
+        },
+    );
     let provider: Arc<dyn InferenceProvider> = Arc::new(TestProvider::new());
     let adapter: Arc<dyn LocalInferenceService> = Arc::new(SovereignInferenceAdapter::new(
         provider,
         Arc::new(CoreSlotManifest),
     ));
     let app_state = app_state.with_local_inference(adapter);
-
-    let hook: sovereign_api::state::MeshMutationHook =
-        Arc::new(|_mesh: &Mesh, _self_id: NodeId| {});
-    let app_state = app_state.with_mesh_mutation_hook(hook);
 
     let out = captured(&buf);
     assert!(
@@ -197,6 +219,6 @@ fn happy_path_does_not_emit_error_when_arc_uncloned() {
     );
     assert!(
         app_state.inner.fabric.on_mesh_mutation.is_some(),
-        "happy path: mesh mutation hook installed"
+        "happy path: mesh mutation hook present"
     );
 }

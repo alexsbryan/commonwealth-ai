@@ -15,11 +15,11 @@
 //!    a `/v1/chat/completions` request must serve through the local
 //!    path and NOT return a 503 `model_not_ready` — that error is the
 //!    canary for a regression that reverses the wiring order.
-//! 2. **`with_mesh_mutation_hook` fires.** A `/internal/gossip` POST
-//!    that adds a member must invoke the installed hook. If the Arc
-//!    has already been cloned by the time the hook installs, the
-//!    `Arc::get_mut` call silently no-ops and persistence falls back
-//!    to the gossip-loop cadence.
+//! 2. **The mesh-mutation hook fires.** A `/internal/gossip` POST
+//!    that adds a member must invoke the hook the node was constructed
+//!    with (`FabricSeed::mesh_mutation_hook`); the `Arc::get_mut`
+//!    silent-no-op that used to be its failure mode is gone, because the
+//!    hook no longer arrives through an installer.
 //!
 //! The stub `InferenceProvider` returns a tiny canned response so
 //! the test stays GPU-/model-/network-free per ARCH §12.4.
@@ -44,8 +44,8 @@ use crate::common;
 use crate::common::{member_with_last_seen, spawn_router, TestProvider};
 
 /// Build an `AppState` the same way `EmbeddedDaemon::start_daemon`
-/// does — with the `with_local_inference` + `with_mesh_mutation_hook`
-/// installers applied *before* any `app_state.inner.clone()` would
+/// does — the mutation hook at construction, the `with_local_inference`
+/// installer applied *before* any `app_state.inner.clone()` would
 /// occur. Returns the wired `AppState` plus the atomic the hook
 /// will increment on every mutation.
 fn build_wired_app_state() -> (AppState, Arc<AtomicUsize>) {
@@ -69,12 +69,32 @@ fn build_wired_app_state() -> (AppState, Arc<AtomicUsize>) {
 
     let mesh_store = Arc::new(MeshStore::in_memory().unwrap());
     let app_registry = Arc::new(AppRegistry::new());
-    let app_state =
-        AppState::new_with_platform_and_engine(self_id, mesh, mesh_store, app_registry, None);
+
+    let counter = Arc::new(AtomicUsize::new(0));
+    let counter_clone = Arc::clone(&counter);
+    let hook: sovereign_api::state::MeshMutationHook =
+        Arc::new(move |_mesh: &Mesh, _self_id: NodeId| {
+            counter_clone.fetch_add(1, Ordering::Relaxed);
+        });
+    // The mutation hook is a construction argument now (DC §4.2 "Construction
+    // is staged"), so the `Arc::get_mut` ordering hazard cannot silently drop
+    // it; only `with_local_inference` still rides that block.
+    let app_state = AppState::new_with_platform_and_engine_and_gauge_and_fabric(
+        self_id,
+        mesh,
+        mesh_store,
+        app_registry,
+        None,
+        None,
+        sovereign_api::state::FabricSeed {
+            mesh_mutation_hook: Some(hook),
+            ..Default::default()
+        },
+    );
 
     // ── Order matches `daemon.rs:1199-1217` exactly ───────────────
-    // Both installers go through `Arc::get_mut`; cloning
-    // `app_state.inner` before them would silently no-op.
+    // `with_local_inference` goes through `Arc::get_mut`; cloning
+    // `app_state.inner` before it would silently no-op.
     // Provider emits "ok" on both complete + complete_stream so
     // the wiring test can hit either route shape.
     let provider: Arc<dyn InferenceProvider> = Arc::new(
@@ -89,14 +109,6 @@ fn build_wired_app_state() -> (AppState, Arc<AtomicUsize>) {
         Arc::new(CoreSlotManifest),
     ));
     let app_state = app_state.with_local_inference(adapter);
-
-    let counter = Arc::new(AtomicUsize::new(0));
-    let counter_clone = Arc::clone(&counter);
-    let hook: sovereign_api::state::MeshMutationHook =
-        Arc::new(move |_mesh: &Mesh, _self_id: NodeId| {
-            counter_clone.fetch_add(1, Ordering::Relaxed);
-        });
-    let app_state = app_state.with_mesh_mutation_hook(hook);
 
     (app_state, counter)
 }
@@ -152,13 +164,11 @@ async fn with_local_inference_routes_chat_completions_to_adapter() {
 }
 
 #[tokio::test]
-async fn with_mesh_mutation_hook_fires_on_gossip_delta() {
-    // Pins the second half of the order invariant: a real
-    // `/internal/gossip` POST that adds a member must invoke the
-    // installed hook. Regression target: any reorder that clones
-    // `app_state.inner` before `with_mesh_mutation_hook` runs would
-    // silently drop the hook and persistence on join would fall
-    // back to the 10-second gossip-loop cadence.
+async fn mesh_mutation_hook_fires_on_gossip_delta() {
+    // Pins the second half of the wiring: a real `/internal/gossip` POST that
+    // adds a member must invoke the hook the node was constructed with. The
+    // hook is a `FabricSeed` argument now, so there is no reorder that could
+    // silently drop it.
     let (state, counter) = build_wired_app_state();
     let addr = spawn_internal(state.clone()).await;
 
@@ -206,7 +216,6 @@ async fn with_mesh_mutation_hook_fires_on_gossip_delta() {
         counter.load(Ordering::Relaxed),
         1,
         "mutation hook must fire exactly once for one structural delta; \
-         zero here means with_mesh_mutation_hook silently no-op'd \
-         (Arc was already cloned before the installer ran)"
+         zero here means the construction hook was not wired"
     );
 }

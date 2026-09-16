@@ -50,7 +50,6 @@ fn build_founder() -> (AppState, NodeId, String, Arc<AtomicUsize>) {
     let founder_addr: SocketAddr = "127.0.0.1:9742".parse().unwrap();
     let (mesh, join_key) =
         membership::init_mesh_with_node_id("Test Mesh", "Founder", vec![founder_addr], founder_id);
-    let state = AppState::new(founder_id, mesh);
 
     let counter = Arc::new(AtomicUsize::new(0));
     let counter_clone = Arc::clone(&counter);
@@ -58,7 +57,20 @@ fn build_founder() -> (AppState, NodeId, String, Arc<AtomicUsize>) {
         Arc::new(move |_mesh: &Mesh, _self_id: NodeId| {
             counter_clone.fetch_add(1, Ordering::Relaxed);
         });
-    let state = state.with_mesh_mutation_hook(hook);
+    // The mutation hook is a construction argument now (DC §4.2 "Construction
+    // is staged"), not a post-construction install.
+    let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric(
+        founder_id,
+        mesh,
+        Arc::new(commonwealth_state::MeshStore::in_memory().unwrap()),
+        Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new()),
+        None,
+        None,
+        sovereign_api::state::FabricSeed {
+            mesh_mutation_hook: Some(hook),
+            ..Default::default()
+        },
+    );
 
     (state, founder_id, join_key, counter)
 }
@@ -137,11 +149,9 @@ async fn valid_join_key_admits_new_member_and_fires_hook() {
     assert!(live.members.values().any(|m| m.name == "Joiner"));
     drop(live);
 
-    // The mesh-mutation hook fired exactly once for the admission.
-    // Regression target: if `with_mesh_mutation_hook` ever gets
-    // re-ordered after an `Arc::clone(&app_state.inner)`, this
-    // counter stays at zero and on-join persistence falls back to
-    // the 10-second gossip-loop cadence (silent failure today).
+    // The mesh-mutation hook fired exactly once for the admission. The hook is
+    // a construction argument now, so the ordering hazard that used to drop it
+    // is gone; this pins that it still fires.
     assert_eq!(
         hook_counter.load(Ordering::Relaxed),
         1,

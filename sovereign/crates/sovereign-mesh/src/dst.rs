@@ -109,7 +109,7 @@ impl DstMesh {
             // Per-node clock: a clone sharing the base (zero skew here; a skew
             // scenario calls `with_offset`). Routing every gossip `now` through
             // this is what makes injected time observable.
-            node.state.install_clock(Arc::new(clock.clone()));
+            node.state.clock_reader().publish(Arc::new(clock.clone()));
 
             let transport = Arc::new(FaultTransport::new(self_id, policy.clone()));
             for (j, &peer_id) in node_ids.iter().enumerate() {
@@ -125,7 +125,9 @@ impl DstMesh {
                 transport.set_proxy(peer_id, proxy.listen_addr);
                 proxies.push(proxy);
             }
-            node.state.install_peer_transport(transport.clone());
+            node.state
+                .peer_transport_reader()
+                .publish(transport.clone());
             transports.push(transport);
         }
 
@@ -185,7 +187,8 @@ impl DstMesh {
     pub fn skew_node(&self, idx: usize, offset_secs: i64) {
         self.sim.nodes[idx]
             .state
-            .install_clock(Arc::new(self.clock.with_offset(offset_secs)));
+            .clock_reader()
+            .publish(Arc::new(self.clock.with_offset(offset_secs)));
     }
 
     /// Install a slow-peer wire fault on the (observer → target) edge: throttle
