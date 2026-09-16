@@ -25,6 +25,7 @@ pub mod launch;
 pub mod notes;
 pub mod port;
 pub mod render;
+pub mod research_run_dir;
 pub mod search;
 pub mod state;
 pub mod synthesize;

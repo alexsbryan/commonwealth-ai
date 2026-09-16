@@ -577,7 +577,7 @@ async fn abort(_: LocalOnly, AxPath(job_id): AxPath<String>) -> Result<Response,
 /// GET `/v1/research/runs` — prior runs under the base, newest first
 /// (`dr-<unix>` sorts chronologically).
 async fn runs(_: LocalOnly, Extension(launcher): Launcher) -> Response {
-    let out = list_runs(&launcher.runs_base());
+    let out = list_runs(&launcher.runs_base(), is_live);
     tracing::debug!(runs = out.len(), "research_http: shelf served");
     Json(out).into_response()
 }

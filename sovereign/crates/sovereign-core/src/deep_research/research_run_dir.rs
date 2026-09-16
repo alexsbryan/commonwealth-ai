@@ -24,46 +24,46 @@
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
-use crate::research_http::is_live;
 use sovereign_contracts::daemon_wire::{
     ResearchAlignment, ResearchBudget, ResearchCitation, ResearchClaim, ResearchConsent,
     ResearchConstitution, ResearchCorroboration, ResearchGap, ResearchReframe, ResearchReport,
     ResearchResidueRow, ResearchRoundRow, ResearchRunSummary,
 };
-use sovereign_core::deep_research::containment::missing_claim_figures;
-use sovereign_core::deep_research::icd::{
+
+use crate::deep_research::containment::missing_claim_figures;
+use crate::deep_research::icd::{
     BudgetLedger, Charter, EvidenceWindow, GapList, Manifest, Verdict, VerdictSet,
 };
 
 /// Everything the live view shows, read from the run dir. `None` before
 /// the charter exists (the loop writes it first).
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct DrLiveSnapshot {
-    pub(crate) round: Option<u32>,
-    pub(crate) max_rounds: Option<u32>,
-    pub(crate) stage: String,
-    pub(crate) gaps: Vec<ResearchGap>,
-    pub(crate) budget: ResearchBudget,
-    pub(crate) consent: Option<ResearchConsent>,
+pub struct DrLiveSnapshot {
+    pub round: Option<u32>,
+    pub max_rounds: Option<u32>,
+    pub stage: String,
+    pub gaps: Vec<ResearchGap>,
+    pub budget: ResearchBudget,
+    pub consent: Option<ResearchConsent>,
 }
 
 /// Re-reads the artifacts on every call (a handful of small JSON files);
 /// the caller decides whether the snapshot CHANGED before appending.
-pub(crate) struct RunDirPoller {
+pub struct RunDirPoller {
     run_dir: PathBuf,
 }
 
 impl RunDirPoller {
-    pub(crate) fn new(run_dir: PathBuf) -> Self {
+    pub fn new(run_dir: PathBuf) -> Self {
         Self { run_dir }
     }
 
-    pub(crate) fn report_md(&self) -> Option<PathBuf> {
+    pub fn report_md(&self) -> Option<PathBuf> {
         let p = self.run_dir.join("report.md");
         p.is_file().then_some(p)
     }
 
-    pub(crate) fn snapshot(&self) -> Option<DrLiveSnapshot> {
+    pub fn snapshot(&self) -> Option<DrLiveSnapshot> {
         let dir = &self.run_dir;
         // "No charter yet" is the ordinary pre-launch answer, so it is a
         // `None`. A charter that EXISTS and does not parse is a different
@@ -154,8 +154,11 @@ impl RunDirPoller {
     }
 }
 
-/// The shelf: every `dr-*` dir under the base, newest first.
-pub(crate) fn list_runs(base: &Path) -> Vec<ResearchRunSummary> {
+/// The shelf: every `dr-*` dir under the base, newest first. `is_live`
+/// decides which runs are still being driven — the job table is the host's
+/// (it knows what this process is running), so it arrives as a predicate
+/// rather than an import.
+pub fn list_runs(base: &Path, is_live: impl Fn(&str) -> bool) -> Vec<ResearchRunSummary> {
     let mut out = Vec::new();
     if let Ok(rd) = std::fs::read_dir(base) {
         for e in rd.flatten() {
@@ -196,7 +199,7 @@ pub(crate) fn list_runs(base: &Path) -> Vec<ResearchRunSummary> {
 
 /// Assemble the report from a run dir's artifacts. `None` when there is
 /// no `report.md` — the run did not reach a report.
-pub(crate) fn build_report(run_dir: &Path) -> Option<ResearchReport> {
+pub fn build_report(run_dir: &Path) -> Option<ResearchReport> {
     let report_md = std::fs::read_to_string(run_dir.join("report.md")).ok()?;
     let charter = std::fs::read(run_dir.join("charter.json"))
         .ok()
@@ -385,14 +388,14 @@ fn constitution_check(run_dir: &Path, verdict_set: Option<&VerdictSet>) -> Resea
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde::Serialize;
-    use sovereign_contracts::egress::ConsentGrant;
-    use sovereign_contracts::types::Custody;
-    use sovereign_core::deep_research::icd::{
+    use crate::deep_research::icd::{
         BudgetAllowance, CharterValues, ContainmentConfig, CorroborationRecord, CustodyPolicy,
         EmptyWindow, EvidenceWindow as Ew, FinalClaim, Gap, TriageConfig, UrlConstraintPolicy,
         WindowChunk,
     };
+    use serde::Serialize;
+    use sovereign_contracts::egress::ConsentGrant;
+    use sovereign_contracts::types::Custody;
 
     fn write_json(dir: &Path, name: &str, value: &impl Serialize) {
         std::fs::write(dir.join(name), serde_json::to_vec(value).unwrap()).unwrap();
@@ -411,9 +414,8 @@ mod tests {
                 code_set_k: 3,
                 eps_quota: 0.1,
                 content_coverage_floor:
-                    sovereign_core::deep_research::acquisition::DEFAULT_CONTENT_COVERAGE_FLOOR,
-                prose_line_floor:
-                    sovereign_core::deep_research::acquisition::DEFAULT_PROSE_LINE_FLOOR,
+                    crate::deep_research::acquisition::DEFAULT_CONTENT_COVERAGE_FLOOR,
+                prose_line_floor: crate::deep_research::acquisition::DEFAULT_PROSE_LINE_FLOOR,
             },
             budget: BudgetAllowance {
                 web_search_queries: 4,
@@ -583,7 +585,7 @@ mod tests {
         assert_eq!(poller.snapshot().unwrap().stage, "done");
         assert!(poller.report_md().is_some());
         // And the shelf reads the same dir as a report-bearing run.
-        let shelf = list_runs(dir.path().parent().unwrap());
+        let shelf = list_runs(dir.path().parent().unwrap(), |_| false);
         // The tempdir's own name is not `dr-*`, so the shelf cannot see
         // it; the report builder can.
         assert!(shelf.iter().all(|r| r.run_id.starts_with("dr-")));

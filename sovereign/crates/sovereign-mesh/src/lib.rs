@@ -113,7 +113,7 @@ pub mod recipe_project_http;
 #[cfg(feature = "treesitter")]
 pub mod reindexer;
 pub mod research_http;
-pub mod research_run_dir;
+pub use sovereign_core::deep_research::research_run_dir; // shim: moved by domains REVIEW-build-research-run-dir
 pub mod ring_roster;
 pub mod ring_sync;
 pub mod roster_repair;

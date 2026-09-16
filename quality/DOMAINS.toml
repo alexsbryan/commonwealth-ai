@@ -780,9 +780,9 @@ lines = 651
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/research_run_dir.rs"
+path = "sovereign/crates/sovereign-core/src/deep_research/research_run_dir.rs"
 context = "research"
-lines = 706
+lines = 708
 note = "was understanding; reads the research loop's own run artifacts — DAEMON_CORE.md §4.3 (2026-09-14)"
 
 [[module]]
