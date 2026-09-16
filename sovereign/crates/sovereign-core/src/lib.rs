@@ -78,6 +78,16 @@ pub use sovereign_contracts::{
 // states, that a contracts module is reachable at its `sovereign_core::` path.
 pub use sovereign_contracts::daemon_wire;
 
+// Fabric's identity, at `sovereign_core::identity`. Added 2026-09-16 for
+// `sovereign-api`, whose `FabricPart` must NAME `IdentityReader`
+// (`quality/DAEMON_CORE.md` §4.2 "Identity is a reader, not a value"). Naming
+// `sovereign-contracts` directly grew that crate's fan-in 30 → 31 and
+// `cargo xtask layer-gate` refused it — the same refusal the `daemon_wire`
+// block above records. This re-export costs no new edge (sovereign-api already
+// depends on this crate) and follows the rule above: a contracts module is
+// reachable at its `sovereign_core::` path.
+pub use sovereign_contracts::identity;
+
 // Re-export commonly used items at the crate root.
 //
 // `traits::*` / `types::*` are BOUNDED globs (quality program R1,

@@ -18,7 +18,7 @@ use tokio::sync::RwLock;
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::Mesh;
 use commonwealth_state::{ContributionEmitter, MeshStore};
-use sovereign_contracts::identity::IdentityReader;
+use sovereign_core::identity::IdentityReader;
 use sovereign_meshapp_registry::proxy::AppPortMap;
 use sovereign_meshapp_registry::registry::AppRegistry;
 
@@ -27,7 +27,8 @@ use super::{ConvergenceRecord, MeshMutationHook};
 /// Fabric's twenty fields, held as `AppStateInner::fabric`.
 pub struct FabricPart {
     /// This node's identity, published as a **watch** rather than copied as a
-    /// value (`sovereign_contracts::identity::IdentityReader`; DC §4.2
+    /// value (`sovereign_core::identity::IdentityReader`, a re-export of the
+    /// contract type; DC §4.2
     /// "Identity is a reader, not a value"). `join_mesh` swaps the placeholder
     /// id for the founder-assigned one atomically after the handshake, and a
     /// consumer that holds this handle observes the swap — one that copied a

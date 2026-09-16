@@ -13,7 +13,7 @@ use commonwealth_state::{ActivityEmitter, ContributionEmitter, MeshStore, PeerPr
 use corpus_engine::CorpusEngine;
 use oicp_types::model_aliases::ModelAliasTable;
 use serving_policy::fair_sched::{reciprocity_weight, SchedCore, TryGrant};
-use sovereign_contracts::identity::IdentityReader;
+use sovereign_core::identity::IdentityReader;
 use sovereign_grants::{EphemeralGrantStore, GuestGrantStore, WorkQueueManager};
 use sovereign_meshapp_registry::proxy::AppPortMap;
 use sovereign_meshapp_registry::registry::AppRegistry;

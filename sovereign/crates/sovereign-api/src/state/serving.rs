@@ -127,7 +127,7 @@ pub struct ServingPart {
     pub peer_sched: Mutex<SchedCore<NodeId>>,
 
     /// Fair admission for **client**-served inference — the same `SchedCore`
-    /// policy as `peer_sched`, keyed by [`sovereign_contracts::principal::Principal`]
+    /// policy as `peer_sched`, keyed by [`sovereign_serving_host::admission::Principal`]
     /// instead of `NodeId`, so the population `MESH_SCALE_100_USERS_1000_CORPORA.md`
     /// §9.3 measured (ten local callers on one node) is rationed by *who is
     /// asking* rather than by arrival order.

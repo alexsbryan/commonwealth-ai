@@ -54,3 +54,34 @@ commit; the operator may prefer per-row re-scoping.
 
 **Landed in.** this commit — the supervisor records its range in
 `ralph/.director-commits` (`git revert <sha>` reverts the single commit).
+
+## 2026-09-16 · REVIEW-build-appstate-identity · the identity reader's edge, and the re-export that avoids a baseline raise
+
+**Fork.** The worker's `IdentityReader` (sovereign-contracts) made `sovereign-api`
+depend on the leaf directly, and `layer-gate` refused the fan-in growth 30 → 31.
+Accept the growth (a hand-edited `fan_in.tsv` line + a §10.1 ledger entry, the
+`66b6578d4` / `b3edcc335` method) or reach the reader through an existing
+dependency's re-export?
+
+**Choice.** The re-export. `sovereign-core` already carries the precedent — its
+`daemon_wire` block (`sovereign-core/src/lib.rs:74-81`) exists for exactly this
+refusal ("so that a contracts module is reachable at its `sovereign_core::`
+path"), and `sovereign-api` already depends on `sovereign-core`, so the reader
+costs no new edge. `sovereign-api/Cargo.toml` drops the direct
+`sovereign-contracts` dep; `sovereign_core::identity` re-exports
+`sovereign_contracts::identity`; the three import sites follow, and the rustdoc
+link in `state/serving.rs:130` repoints to the Principal precedent it names.
+Principle 11: the inventory (the existing re-export pattern) outranks the plan
+(a new edge), and the ratchet keeps its meaning.
+
+**Evidence.** ralph/NEEDS_HUMAN.md; `quality/baselines/fan_in.tsv:11` stays `30`;
+`cargo xtask layer-gate` exit=0 (fan-in within caps); LINT exit=0;
+TEST(sovereign-api) 564 pass.
+
+**Falsified by.** A sovereign-api use of `sovereign_contracts::` outside the
+identity module that the dep removal breaks (LINT would fail), or a layer-gate
+violation from the `sovereign-core` path.
+
+**Landed in.** this commit. The director session died mid-edit (an opencode
+server error, `err_3a891645`); the operator finished and verified its delta, so
+the decision is the director's and the verification is the operator's.
