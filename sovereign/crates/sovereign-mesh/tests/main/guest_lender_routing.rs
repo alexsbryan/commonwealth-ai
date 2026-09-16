@@ -7,7 +7,7 @@
 //! listener at all. The fix is that the guest's OWN daemon holds the link and
 //! only the completion crosses.
 //!
-//! These drive a real `MeshInferenceProvider` against a real HTTP lender, and
+//! These drive a real `InferenceRouter` against a real HTTP lender, and
 //! pin the two things that must differ from the peer route. Both are live
 //! defects if `provider_for_peer` is copied:
 //!
@@ -29,7 +29,7 @@ use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::CompletionRequest;
 use sovereign_mesh::daemon::InferenceVenue;
 use sovereign_mesh::guest_source::stored_guest_source_in;
-use sovereign_mesh::peer_inference::{MeshInferenceProvider, VenueHost, VenueSource};
+use sovereign_mesh::peer_inference::{InferenceRouter, VenueHost, VenueSource};
 
 use crate::common;
 use crate::common::spawn_router;
@@ -126,8 +126,8 @@ fn local_without_the_model() -> Arc<dyn InferenceProvider> {
     Arc::new(common::TestProvider::new().with_model_id("something-else"))
 }
 
-fn provider_with_link(root: &std::path::Path) -> MeshInferenceProvider {
-    let p = MeshInferenceProvider::with_peer_source(
+fn provider_with_link(root: &std::path::Path) -> InferenceRouter {
+    let p = InferenceRouter::with_peer_source(
         local_without_the_model(),
         Arc::new(NoPeers) as Arc<dyn VenueSource>,
         Arc::new(NoPeers) as Arc<dyn VenueHost>,
@@ -284,8 +284,8 @@ fn local_that_answers() -> Arc<dyn InferenceProvider> {
     )
 }
 
-fn provider_with_link_and_answering_local(root: &std::path::Path) -> MeshInferenceProvider {
-    let p = MeshInferenceProvider::with_peer_source(
+fn provider_with_link_and_answering_local(root: &std::path::Path) -> InferenceRouter {
+    let p = InferenceRouter::with_peer_source(
         local_that_answers(),
         Arc::new(NoPeers) as Arc<dyn VenueSource>,
         Arc::new(NoPeers) as Arc<dyn VenueHost>,

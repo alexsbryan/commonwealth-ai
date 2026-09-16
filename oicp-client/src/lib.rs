@@ -1116,7 +1116,7 @@ impl InferenceProvider for RemoteApiProvider {
     /// terminal [`StreamFrame::Finish`] frame so peer-routed mesh
     /// streams surface real Length truncation instead of the trait
     /// default's synthetic `Stop`. Pairs with
-    /// `MeshInferenceProvider::complete_stream_with_id_and_finish`,
+    /// `InferenceRouter::complete_stream_with_id_and_finish`,
     /// which is what carries the typed frame all the way to the
     /// runtime's cutoff-chip wiring.
     ///

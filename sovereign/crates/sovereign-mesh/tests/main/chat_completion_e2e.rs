@@ -3,7 +3,7 @@
 //!
 //! Exercises the full Joiner-side path without needing a real
 //! `EmbeddedDaemon`:
-//!   1. `MeshInferenceProvider::complete_stream_with_id` selects a
+//!   1. `InferenceRouter::complete_stream_with_id` selects a
 //!      peer based on OICP scoring + the 60s manifest cache.
 //!   2. It calls `GET /oicp/v1/capabilities` on the peer to fetch
 //!      the manifest.
@@ -42,7 +42,7 @@ use sovereign_core::oicp::{
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, Speed};
 use sovereign_mesh::daemon::InferenceVenue;
-use sovereign_mesh::peer_inference::{MeshInferenceProvider, VenueHost, VenueSource};
+use sovereign_mesh::peer_inference::{InferenceRouter, VenueHost, VenueSource};
 
 use crate::common;
 use crate::common::TestProvider;
@@ -61,7 +61,7 @@ fn local_byom() -> Arc<dyn InferenceProvider> {
 
 // ── Peer endpoint source stub ───────────────────────────────
 //
-// Provides a fixed peer list that `MeshInferenceProvider` uses in
+// Provides a fixed peer list that `InferenceRouter` uses in
 // place of `EmbeddedDaemon::peer_inference_endpoints()`.
 
 struct StubPeerSource {
@@ -93,14 +93,14 @@ impl VenueHost for StubPeerSource {
     }
 }
 
-/// One `MeshInferenceProvider` over a fixed peer list, wired to a stub host
+/// One `InferenceRouter` over a fixed peer list, wired to a stub host
 /// that claims [`STUB_NODE_ID`]. The source and host are the same object.
 fn mip_with_peers(
     local: Arc<dyn InferenceProvider>,
     peers: Vec<InferenceVenue>,
-) -> MeshInferenceProvider {
+) -> InferenceRouter {
     let src = Arc::new(StubPeerSource { peers });
-    MeshInferenceProvider::with_peer_source(
+    InferenceRouter::with_peer_source(
         local,
         src.clone(),
         src,
@@ -113,7 +113,7 @@ fn mip_with_peers(
 // Serves:
 //   * GET /oicp/v1/capabilities  → JSON ProviderManifest (9B + 27B)
 //   * POST /v1/chat/completions  → SSE stream of canned deltas
-// Nothing else. This is the minimum surface `MeshInferenceProvider`
+// Nothing else. This is the minimum surface `InferenceRouter`
 // consults when routing a single streaming completion.
 
 const PEER_RESPONSE_TEXT: &str = "Hello from Founder's 9B slot.";
@@ -493,7 +493,7 @@ async fn joiner_streams_through_mesh_and_attributes_peer() {
     let local: Arc<dyn InferenceProvider> = local_byom();
 
     // 4. The wrapper under test.
-    let wrapper = MeshInferenceProvider::with_peer_source(
+    let wrapper = InferenceRouter::with_peer_source(
         local,
         peer_source.clone(),
         peer_source,
@@ -770,7 +770,7 @@ async fn local_only_sharding_never_routes_to_peer() {
     }];
     let peer_source = Arc::new(StubPeerSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
-    let wrapper = MeshInferenceProvider::with_peer_source(
+    let wrapper = InferenceRouter::with_peer_source(
         local,
         peer_source.clone(),
         peer_source,
@@ -827,7 +827,7 @@ async fn mesh_allowed_normal_latency_routes_to_peer_without_speed_signal() {
     }];
     let peer_source = Arc::new(StubPeerSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
-    let wrapper = MeshInferenceProvider::with_peer_source(
+    let wrapper = InferenceRouter::with_peer_source(
         local,
         peer_source.clone(),
         peer_source,
@@ -886,7 +886,7 @@ async fn local_only_judge_shaped_request_stays_local() {
     }];
     let peer_source = Arc::new(StubPeerSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
-    let wrapper = MeshInferenceProvider::with_peer_source(
+    let wrapper = InferenceRouter::with_peer_source(
         local,
         peer_source.clone(),
         peer_source,
@@ -935,7 +935,7 @@ async fn latency_fast_never_routes_even_when_mesh_allowed() {
     }];
     let peer_source = Arc::new(StubPeerSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
-    let wrapper = MeshInferenceProvider::with_peer_source(
+    let wrapper = InferenceRouter::with_peer_source(
         local,
         peer_source.clone(),
         peer_source,
@@ -985,7 +985,7 @@ async fn forced_choice_sentinel_excludes_peer_without_feature() {
     }];
     let peer_source = Arc::new(StubPeerSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
-    let wrapper = MeshInferenceProvider::with_peer_source(
+    let wrapper = InferenceRouter::with_peer_source(
         local,
         peer_source.clone(),
         peer_source,
@@ -1039,7 +1039,7 @@ async fn forced_choice_sentinel_routes_to_peer_advertising_feature() {
     }];
     let peer_source = Arc::new(StubPeerSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
-    let wrapper = MeshInferenceProvider::with_peer_source(
+    let wrapper = InferenceRouter::with_peer_source(
         local,
         peer_source.clone(),
         peer_source,
@@ -1105,7 +1105,7 @@ async fn explicit_peer_model_id_routes_to_peer_without_oicp_envelope() {
     }];
     let peer_source = Arc::new(StubPeerSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
-    let wrapper = MeshInferenceProvider::with_peer_source(
+    let wrapper = InferenceRouter::with_peer_source(
         local,
         peer_source.clone(),
         peer_source,
@@ -1159,7 +1159,7 @@ async fn explicit_unknown_model_id_errors_instead_of_silent_substitution() {
     }];
     let peer_source = Arc::new(StubPeerSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
-    let wrapper = MeshInferenceProvider::with_peer_source(
+    let wrapper = InferenceRouter::with_peer_source(
         local,
         peer_source.clone(),
         peer_source,
@@ -1210,7 +1210,7 @@ async fn empty_model_id_falls_through_to_oicp_path() {
     }];
     let peer_source = Arc::new(StubPeerSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
-    let wrapper = MeshInferenceProvider::with_peer_source(
+    let wrapper = InferenceRouter::with_peer_source(
         local,
         peer_source.clone(),
         peer_source,
@@ -1540,7 +1540,7 @@ fn mesh_allowed_envelope() -> InferenceRequirements {
         .with_sharding(sovereign_core::oicp::ShardingPrivacy::MeshAllowed)
 }
 
-fn provider_with_resolving_peer(addr: SocketAddr) -> MeshInferenceProvider {
+fn provider_with_resolving_peer(addr: SocketAddr) -> InferenceRouter {
     mip_with_peers(local_byom(), vec![founder_endpoint(addr)])
 }
 

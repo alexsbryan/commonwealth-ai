@@ -12,7 +12,7 @@
 //!
 //! Two callers, one body:
 //!
-//!   - **Production** — `MeshInferenceProvider::select_peers_ranked`
+//!   - **Production** — `InferenceRouter::select_peers_ranked`
 //!     gathers the snapshot (manifest fetches, quarantine state, the
 //!     gossiped endpoint fields) and calls [`rank`].
 //!   - **Tier 1** — the mesh simulator builds the same snapshot from a

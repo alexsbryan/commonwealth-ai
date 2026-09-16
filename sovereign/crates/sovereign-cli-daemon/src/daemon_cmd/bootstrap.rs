@@ -1129,8 +1129,9 @@ const MANIFEST_RECONCILE: std::time::Duration = std::time::Duration::from_secs(6
 
 /// Keep the mesh self-manifest in step with the distributed primary's lifecycle.
 ///
-/// `build_self_manifest` is a SNAPSHOT of the local provider, taken once in
-/// `MeshInferenceProvider::with_peer_source`. At that moment the distributed
+/// `build_self_manifest` is a SNAPSHOT of the local provider, taken once when
+/// the [`InferenceRouter`](sovereign_serving_host::peer_inference::InferenceRouter)
+/// is built. At that moment the distributed
 /// slot has never spawned (`DynamicChildSlot::new` deliberately does not spawn),
 /// so `is_serving()` is false, the Slow tier answers with the small FAST model,
 /// and the heavyweight primary is absent from the manifest entirely. Minutes
@@ -1148,7 +1149,7 @@ const MANIFEST_RECONCILE: std::time::Duration = std::time::Duration::from_secs(6
 /// on every empty-worker tick and every warm refusal, so that window is not
 /// hypothetical.
 pub fn spawn_self_manifest_refresh(
-    mesh_provider: Arc<sovereign_mesh::peer_inference::MeshInferenceProvider>,
+    mesh_provider: Arc<sovereign_serving_host::peer_inference::InferenceRouter>,
     distributed_slot: Option<Arc<sovereign_compute::manager::DynamicChildSlot>>,
 ) {
     let Some(slot) = distributed_slot else {
@@ -1200,7 +1201,7 @@ pub fn spawn_self_manifest_refresh(
 /// Spawn the deferred slot-alias push + in-flight-publisher install onto AppState.
 pub(super) fn spawn_slot_alias_push(
     daemon: Arc<EmbeddedDaemon>,
-    mesh_provider: Arc<sovereign_mesh::peer_inference::MeshInferenceProvider>,
+    mesh_provider: Arc<sovereign_serving_host::peer_inference::InferenceRouter>,
 ) {
     // Push slot aliases from AppState into the mesh provider once
     // the daemon's setup phase has registered model slots. Without
@@ -1211,7 +1212,7 @@ pub(super) fn spawn_slot_alias_push(
     // spawned task because `daemon.app_state()` only returns
     // `Some` after `start()` transitions DaemonState to Running.
     //
-    // Same spawned task also installs MIP's in-flight publisher Arc
+    // Same spawned task also installs the router's in-flight publisher Arc
     // onto AppState — feeds the gossip-load-awareness path so peers
     // see this node's true serving load instead of phantom-idle.
     // See `sovereign/docs/MESH_LOAD_AWARENESS.md` for the design.
@@ -2199,9 +2200,9 @@ pub(super) async fn build_mesh_provider(
     daemon: Arc<sovereign_mesh::DeferredDaemon>,
 ) -> (
     Arc<sovereign_mesh::DeferredDaemon>,
-    Arc<sovereign_mesh::peer_inference::MeshInferenceProvider>,
+    Arc<sovereign_serving_host::peer_inference::InferenceRouter>,
 ) {
-    // Wrap the raw `EmbeddedLlamaCpp` in `MeshInferenceProvider`
+    // Wrap the raw `EmbeddedLlamaCpp` in `InferenceRouter`
     // before installing it as the daemon's serving provider.
     //
     // Without this wrapper the daemon's HTTP `/v1/chat/completions`
@@ -2237,7 +2238,7 @@ pub(super) async fn build_mesh_provider(
     // and the composite degrades to mesh-only.
     // Spec: docs/PINNED_WORKER_AS_INFERENCE_PEER.md.
     let pinned_source =
-        Arc::new(sovereign_mesh::pinned_worker_source::PinnedWorkerEndpointSource::new());
+        Arc::new(sovereign_serving_host::pinned_worker_source::PinnedWorkerEndpointSource::new());
     if let Some(dir) = sovereign_mesh::pinned_pod_snapshot::default_snapshot_dir() {
         let snapshots = sovereign_mesh::pinned_pod_snapshot::load_all_snapshots(&dir);
         let now_unix = std::time::SystemTime::now()
@@ -2299,25 +2300,23 @@ pub(super) async fn build_mesh_provider(
         }
     }
     let composite = Arc::new(
-        sovereign_mesh::pinned_worker_source::CompositeEndpointSource::new(
-            Arc::clone(&daemon) as Arc<dyn sovereign_mesh::peer_inference::VenueSource>,
-            Arc::clone(&daemon) as Arc<dyn sovereign_mesh::peer_inference::VenueHost>,
+        sovereign_serving_host::pinned_worker_source::CompositeVenueSource::new(
+            Arc::clone(&daemon) as Arc<dyn sovereign_scheduler::venue::VenueSource>,
             Arc::clone(&pinned_source),
         ),
     );
     let mesh_provider = Arc::new(
-        sovereign_mesh::peer_inference::MeshInferenceProvider::with_peer_source(
-            Arc::clone(&provider),
-            Arc::clone(&composite) as Arc<dyn sovereign_mesh::peer_inference::VenueSource>,
-            Arc::clone(&composite) as Arc<dyn sovereign_mesh::peer_inference::VenueHost>,
-            Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest),
-        ),
+        sovereign_serving_host::peer_inference::InferenceRouter::builder(Arc::clone(&provider))
+            .candidates(Arc::clone(&composite) as Arc<dyn sovereign_scheduler::venue::VenueSource>)
+            .host(Arc::clone(&daemon) as Arc<dyn sovereign_serving_host::venue_host::VenueHost>)
+            .manifest(Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest))
+            .build(),
     );
     // The pinned pods' TLS handles do not travel with the venue (the scheduler
     // may not name `PinnedTransport`); the router resolves them by `node_id`
     // through this source.
     mesh_provider.set_pinned_transports(Arc::clone(&pinned_source)
-        as Arc<dyn sovereign_mesh::peer_inference::PinnedTransportResolver>);
+        as Arc<dyn sovereign_serving_host::venue_host::PinnedTransportResolver>);
     // A guest link this node accepted lets a granted model id resolve to the
     // LENDING node while the turn stays here. Wired at the COLD-START
     // assembly point, which is the whole reason this function exists: the

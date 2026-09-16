@@ -1901,7 +1901,7 @@ privacy = "mesh_allowed"
 // `conv_frame::fold` folds dropped chat history into the conversation
 // frame that the prompt then re-injects. The privacy contract: that
 // fold call MUST use `Speed::Fast` because
-// `MeshInferenceProvider` only forwards `Speed::Slow` over the mesh
+// `InferenceRouter` only forwards `Speed::Slow` over the mesh
 // — Fast stays local. If a future refactor accidentally bumps this
 // to `Speed::Slow` (e.g. "the summary needs more model power"),
 // local-only chat content would leak to whichever mesh peer the

@@ -45,6 +45,11 @@ sovereign-pods = { path = "../sovereign-pods" }
 # the daemon's slot-alias resolution reaches it directly rather than through
 # sovereign-mesh's shim (domains REVIEW-build-sched-repoint-daemon).
 sovereign-scheduler = { path = "../sovereign-scheduler" }
+# The serving host lifted out of sovereign-mesh (domains
+# REVIEW-build-serving-move-*); the daemon reaches the router and the ports
+# directly rather than through sovereign-mesh's shim (domains
+# REVIEW-build-serving-repoint-daemon).
+sovereign-serving-host = { path = "../sovereign-serving-host" }
 # THE `Runtime` recipe (TOPOLOGY.md §10 phase 5c) — the router classifier
 # stack, the turn tool registry and the enrichment lane. This is what lets
 # `sovereign daemon run` be the process that assembles a Runtime rather

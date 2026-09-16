@@ -9,7 +9,7 @@
 //! model on a mesh — got a refusal from a cluster that was working.
 //!
 //! Cause: `build_self_manifest` is a SNAPSHOT of the local provider, taken once
-//! when `MeshInferenceProvider` is constructed. At that moment the distributed
+//! when `InferenceRouter` is constructed. At that moment the distributed
 //! slot has deliberately not spawned, so the facade's `is_serving()` gate is
 //! false, the Slow tier answers with the small fast model, and the heavyweight
 //! model is absent from the manifest entirely. Minutes later the discovery tick
@@ -45,7 +45,7 @@ use sovereign_contracts::{
 };
 use sovereign_core::error::{Error, Result};
 use sovereign_mesh::daemon::InferenceVenue;
-use sovereign_mesh::peer_inference::{MeshInferenceProvider, VenueHost, VenueSource};
+use sovereign_serving_host::peer_inference::{InferenceRouter, VenueHost, VenueSource};
 
 /// The daemon binary — its `--compute-child` arm runs the mock child.
 const BIN: &str = env!("CARGO_BIN_EXE_sovereign-cli-daemon");
@@ -143,7 +143,7 @@ fn named(model: &str) -> CompletionRequest {
 /// Poll a named request until it stops being refused — the refresh is driven by
 /// an async task reacting to a lifecycle transition, so it is eventually, not
 /// instantly, consistent.
-async fn wait_named_routes(mip: &MeshInferenceProvider, model: &str, timeout: Duration) -> bool {
+async fn wait_named_routes(mip: &InferenceRouter, model: &str, timeout: Duration) -> bool {
     let start = Instant::now();
     while start.elapsed() < timeout {
         if mip.complete(&named(model)).await.is_ok() {
@@ -154,7 +154,7 @@ async fn wait_named_routes(mip: &MeshInferenceProvider, model: &str, timeout: Du
     false
 }
 
-async fn wait_named_refused(mip: &MeshInferenceProvider, model: &str, timeout: Duration) -> bool {
+async fn wait_named_refused(mip: &InferenceRouter, model: &str, timeout: Duration) -> bool {
     let start = Instant::now();
     while start.elapsed() < timeout {
         if mip.complete(&named(model)).await.is_err() {
@@ -190,7 +190,7 @@ async fn a_named_request_for_the_distributed_primary_routes_once_the_child_serve
 
     // The mesh wrapper takes its manifest snapshot HERE — while the slot exists
     // but has never spawned. This is the exact ordering that produced the bug.
-    let mip = Arc::new(MeshInferenceProvider::with_peer_source(
+    let mip = Arc::new(InferenceRouter::with_peer_source(
         facade,
         Arc::new(NoPeers),
         Arc::new(NoPeers),

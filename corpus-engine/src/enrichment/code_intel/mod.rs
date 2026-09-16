@@ -189,7 +189,7 @@ pub struct SymbolMeta {
     /// Display name, e.g. `select_route`.
     pub name: String,
     /// Fully-qualified SCIP descriptor, e.g.
-    /// `sovereign_serving_host::peer_inference::MeshInferenceProvider::select_route`.
+    /// `sovereign_serving_host::peer_inference::InferenceRouter::select_route`.
     pub qualified_name: String,
     /// Source file (corpus-relative), e.g.
     /// `crates/sovereign-serving-host/src/peer_inference.rs`.

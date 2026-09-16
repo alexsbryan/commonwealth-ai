@@ -41,7 +41,7 @@
 //!
 //! [`DecisionSink`] is the seam. Tests install [`CaptureDecisionSink`]
 //! and assert on the records directly, which is why the sink is a
-//! constructor-injected field on `MeshInferenceProvider` rather than a
+//! constructor-injected field on `InferenceRouter` rather than a
 //! process-global. Production installs the recording sink — file, env,
 //! clock and ids — which is `sovereign-serving-host`'s
 //! (`sovereign/SERVING_BOUNDARY.md` "Corrected 2026-09-14", bullet 1):
@@ -603,7 +603,7 @@ pub struct RoutingOutcome {
 // Sink
 // ---------------------------------------------------------------
 
-/// Where decision records go. Injected into `MeshInferenceProvider`
+/// Where decision records go. Injected into `InferenceRouter`
 /// so tests can capture records without racing on a process-global.
 ///
 /// `Debug` is a supertrait so the contexts that carry a sink around

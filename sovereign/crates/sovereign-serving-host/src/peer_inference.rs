@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `MeshInferenceProvider` — the Joiner-side wrapper that routes
+//! `InferenceRouter` — the Joiner-side wrapper that routes
 //! synthesis to the best-scoring mesh peer for a given OICP request,
 //! with automatic fallback to local on any remote error.
 //!
@@ -340,7 +340,7 @@ use sovereign_scheduler::oicp_select::{classify_rtt_ms, ModelCandidate};
 pub(crate) use crate::venue_host::ledger_emitter_for_venue;
 pub use crate::venue_host::{NoPinnedTransports, PinnedTransportResolver, VenueHost};
 
-pub struct MeshInferenceProvider {
+pub struct InferenceRouter {
     local: Arc<dyn InferenceProvider>,
     mesh: Arc<dyn VenueSource>,
     /// The host side of the roster seam: Fabric's identity reader and the
@@ -446,7 +446,7 @@ pub struct MeshInferenceProvider {
     yield_backoff: Arc<sovereign_scheduler::yield_backoff::YieldBackoff>,
     /// Per-model in-flight counter for explicit-model-id requests
     /// served by the local slot. Drives load-aware routing in
-    /// [`MeshInferenceProvider::locate_named_model`]: when a request
+    /// [`InferenceRouter::locate_named_model`]: when a request
     /// asks for a model that both we and a peer advertise, the peer
     /// gets the request iff its in-flight is strictly lower than
     /// ours. Without this, the laptop's single primary slot would
@@ -523,7 +523,78 @@ pub struct MeshInferenceProvider {
 /// already carry.
 const SNAPSHOT_INTERVAL_SECS: u64 = 60;
 
-impl MeshInferenceProvider {
+/// Builder for [`InferenceRouter`].
+///
+/// Collapses the two historical constructors — `with_peer_source` (a private
+/// in-flight publisher) and `with_peer_source_and_publisher` (an
+/// externally-owned one) — into one shape (`sovereign/SERVING_BOUNDARY.md`
+/// (e); `quality/DOMAINS.toml` `family = "serving-public-interface"`). The
+/// pair existed only because a hot reload must not mint a fresh publisher:
+/// live `LocalTotalGuard`s from the old router hold a clone of the shared
+/// `Arc<AtomicU32>` and keep decrementing it as their requests drain, so
+/// `in_flight` is an explicit, optional builder argument.
+pub struct InferenceRouterBuilder {
+    local: Arc<dyn InferenceProvider>,
+    candidates: Option<Arc<dyn VenueSource>>,
+    host: Option<Arc<dyn VenueHost>>,
+    manifest: Option<Arc<dyn SlotManifest>>,
+    in_flight: Option<Arc<AtomicU32>>,
+}
+
+impl InferenceRouterBuilder {
+    /// The routable venues. Required.
+    pub fn candidates(mut self, candidates: Arc<dyn VenueSource>) -> Self {
+        self.candidates = Some(candidates);
+        self
+    }
+
+    /// Fabric's identity reader and the contribution-ledger port. Required.
+    pub fn host(mut self, host: Arc<dyn VenueHost>) -> Self {
+        self.host = Some(host);
+        self
+    }
+
+    /// The declared slot facts the self-manifest advertises. Required.
+    pub fn manifest(mut self, manifest: Arc<dyn SlotManifest>) -> Self {
+        self.manifest = Some(manifest);
+        self
+    }
+
+    /// The shared in-flight publisher. Optional: absent, the router mints a
+    /// private one — fine for tests and for any caller that does not share
+    /// counter state with the gossip emitter.
+    pub fn in_flight(mut self, publisher: Arc<AtomicU32>) -> Self {
+        self.in_flight = Some(publisher);
+        self
+    }
+
+    pub fn build(self) -> InferenceRouter {
+        InferenceRouter::assemble(
+            self.local,
+            self.candidates
+                .expect("InferenceRouter::builder: .candidates(..) is required"),
+            self.host
+                .expect("InferenceRouter::builder: .host(..) is required"),
+            self.manifest
+                .expect("InferenceRouter::builder: .manifest(..) is required"),
+            self.in_flight
+                .unwrap_or_else(|| Arc::new(AtomicU32::new(0))),
+        )
+    }
+}
+
+impl InferenceRouter {
+    /// Start building a router over `local`.
+    pub fn builder(local: Arc<dyn InferenceProvider>) -> InferenceRouterBuilder {
+        InferenceRouterBuilder {
+            local,
+            candidates: None,
+            host: None,
+            manifest: None,
+            in_flight: None,
+        }
+    }
+
     /// Standard constructor — takes the mesh view as the two host ports and
     /// the daemon's manifest reader, so callers don't have to think about the
     /// trait objects.
@@ -531,8 +602,8 @@ impl MeshInferenceProvider {
     /// Creates a private in-flight publisher — fine for tests and
     /// for the rare daemon path that doesn't share counter state
     /// with an outer `AppState`. Production code should prefer
-    /// [`MeshInferenceProvider::with_in_flight_publisher`] so the
-    /// gossip emitter reads the same atomic the MIP guards write
+    /// [`InferenceRouter::with_in_flight_publisher`] so the
+    /// gossip emitter reads the same atomic the router's guards write
     /// to.
     pub fn new(
         local: Arc<dyn InferenceProvider>,
@@ -541,6 +612,23 @@ impl MeshInferenceProvider {
         manifest: Arc<dyn SlotManifest>,
     ) -> Self {
         Self::with_peer_source(local, mesh, host, manifest)
+    }
+
+    /// Convenience over [`Self::builder`] for tests and alternative wirings:
+    /// pass any `VenueSource` (typically a stub that returns a fixed peer list
+    /// pointing at a local mock server). Creates a private in-flight
+    /// publisher.
+    pub fn with_peer_source(
+        local: Arc<dyn InferenceProvider>,
+        mesh: Arc<dyn VenueSource>,
+        host: Arc<dyn VenueHost>,
+        manifest: Arc<dyn SlotManifest>,
+    ) -> Self {
+        Self::builder(local)
+            .candidates(mesh)
+            .host(host)
+            .manifest(manifest)
+            .build()
     }
 
     /// Install the source that answers "do I hold a live guest grant for this
@@ -628,15 +716,16 @@ impl MeshInferenceProvider {
         true
     }
 
-    /// Constructor exposed for tests and alternative wirings: pass
-    /// any `VenueSource` (typically a stub that returns a
-    /// fixed peer list pointing at a local mock server). Keeps the
-    /// production `new` signature backwards-compatible.
-    pub fn with_peer_source(
+    /// The single construction path every constructor and the builder funnel
+    /// through. Private so there is one place that assembles a router
+    /// (ARCH 8); [`builder`](Self::builder) is the public entry, and the
+    /// named constructors below are thin conveniences over it.
+    fn assemble(
         local: Arc<dyn InferenceProvider>,
         mesh: Arc<dyn VenueSource>,
         host: Arc<dyn VenueHost>,
         manifest: Arc<dyn SlotManifest>,
+        publisher: Arc<AtomicU32>,
     ) -> Self {
         let self_manifest = build_self_manifest(local.as_ref(), manifest.as_ref());
         tracing::info!(
@@ -678,7 +767,7 @@ impl MeshInferenceProvider {
                 std::collections::HashMap::new(),
             )),
             slot_aliases: arc_swap::ArcSwap::from_pointee(std::collections::HashMap::new()),
-            in_flight_publisher: Arc::new(AtomicU32::new(0)),
+            in_flight_publisher: publisher,
             decision_sink: Arc::new(recorder::TracingDecisionSink::from_env()),
             last_snapshot_unix: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         }
@@ -731,13 +820,13 @@ impl MeshInferenceProvider {
     /// Production constructor variant that accepts an externally-owned
     /// in-flight publisher Arc. Daemon bootstrap passes the same Arc
     /// it holds on `AppState`, so the gossip emitter (reading via
-    /// AppState) sees the same atomic this MIP's guards write to.
+    /// AppState) sees the same atomic this router's guards write to.
     ///
     /// Functionally identical to [`new`] except for the publisher
-    /// source. Survives hot-reload: the new MIP receives the same
-    /// Arc, so live guards from the previous MIP that haven't
+    /// source. Survives hot-reload: the new router receives the same
+    /// Arc, so live guards from the previous router that haven't
     /// dropped yet continue to update the shared counter exactly as
-    /// the new MIP's guards do.
+    /// the new router's guards do.
     pub fn with_in_flight_publisher(
         local: Arc<dyn InferenceProvider>,
         mesh: Arc<dyn VenueSource>,
@@ -745,15 +834,18 @@ impl MeshInferenceProvider {
         manifest: Arc<dyn SlotManifest>,
         publisher: Arc<AtomicU32>,
     ) -> Self {
-        let mut me = Self::with_peer_source(local, mesh, host, manifest);
-        me.in_flight_publisher = publisher;
-        me
+        Self::builder(local)
+            .candidates(mesh)
+            .host(host)
+            .manifest(manifest)
+            .in_flight(publisher)
+            .build()
     }
 
     /// Variant that accepts an arbitrary `VenueSource` AND an
     /// externally-owned in-flight publisher. The composite-source
     /// case — gossiped peers + pinned worker pods — uses this so the
-    /// daemon's `AppState` shares an Arc with the MIP's guards while
+    /// daemon's `AppState` shares an Arc with the router's guards while
     /// still routing through a non-`EmbeddedDaemon` source.
     /// Spec: docs/PINNED_WORKER_AS_INFERENCE_PEER.md.
     pub fn with_peer_source_and_publisher(
@@ -763,9 +855,7 @@ impl MeshInferenceProvider {
         manifest: Arc<dyn SlotManifest>,
         publisher: Arc<AtomicU32>,
     ) -> Self {
-        let mut me = Self::with_peer_source(local, mesh, host, manifest);
-        me.in_flight_publisher = publisher;
-        me
+        Self::with_in_flight_publisher(local, mesh, host, manifest, publisher)
     }
 
     /// Install the resolver for pinned venues' TLS handles. The scheduler may
@@ -3034,7 +3124,7 @@ impl MeshRoutingConsent {
     }
 }
 
-/// Returned by [`MeshInferenceProvider::locate_named_model`]; see
+/// Returned by [`InferenceRouter::locate_named_model`]; see
 /// that method for the contract this enum encodes.
 #[derive(Debug)]
 enum NamedModelLocation {
@@ -3237,7 +3327,7 @@ fn pinned_request<'a>(
 ///   `WorkerToken` bearer. Spec: docs/PINNED_WORKER_AS_INFERENCE_PEER.md.
 ///
 /// The handle is resolved by the caller through
-/// [`MeshInferenceProvider::pinned_transports`] — `InferenceVenue` carries
+/// [`InferenceRouter::pinned_transports`] — `InferenceVenue` carries
 /// only the `pinned_transport` bool, because the scheduler may not name
 /// `PinnedTransport`.
 ///
@@ -3306,7 +3396,7 @@ fn provider_for_peer(
 }
 
 #[async_trait]
-impl InferenceProvider for MeshInferenceProvider {
+impl InferenceProvider for InferenceRouter {
     /// Non-streaming completion, driven by the SAME `select_route`
     /// cascade the two streaming entry points use.
     ///
@@ -3993,7 +4083,7 @@ impl InferenceProvider for MeshInferenceProvider {
     /// Delegate so the runtime budget calc sees the real BPE count
     /// (when local is `EmbeddedLlamaCpp`). Mesh-forwarded chat
     /// requests still budget against the *local* slot's ctx —
-    /// `MeshInferenceProvider` doesn't know what tokenizer the peer
+    /// `InferenceRouter` doesn't know what tokenizer the peer
     /// will use, and the runtime decides compaction before routing.
     fn count_tokens(&self, text: &str) -> u32 {
         self.local.count_tokens(text)
@@ -4011,13 +4101,13 @@ impl InferenceProvider for MeshInferenceProvider {
     // 2026-05-20 when `POST /internal/models/load` could not hot-load
     // Gemma into a daemon whose primary slot was Qwen3.6 — the load
     // adapter calls `self.provider.load_extra_slot`, which on the
-    // MeshInferenceProvider path always hit the default.
+    // InferenceRouter path always hit the default.
     //
     // After a successful mutation we ALSO rebuild `self_manifest` so
     // mesh routing (`locate_named_model`) sees the new slot
     // immediately. Without the refresh, a hot-loaded slot serves chat
     // completions on a routing-by-model-id call only when the caller
-    // bypasses MeshInferenceProvider's locator — which is not the
+    // bypasses InferenceRouter's locator — which is not the
     // case for `/v1/chat/completions`. Confirmed 2026-05-20: bench
     // could load gemma-* into a Qwen-primary daemon but every
     // request 503'd with "no node in this mesh advertises model".
@@ -4229,7 +4319,7 @@ mod tests {
     }
 
     /// Test host half: no identity, no ledger. Passed wherever a test builds a
-    /// `MeshInferenceProvider` from a stub source.
+    /// `InferenceRouter` from a stub source.
     #[async_trait]
     impl VenueHost for NoPeers {}
 
@@ -4299,12 +4389,12 @@ mod tests {
         );
     }
 
-    fn late_loading_mip() -> (Arc<AtomicBool>, MeshInferenceProvider) {
+    fn late_loading_mip() -> (Arc<AtomicBool>, InferenceRouter) {
         let serving = Arc::new(AtomicBool::new(false));
         let local = Arc::new(LateLoadingProvider {
             serving: Arc::clone(&serving),
         });
-        let mip = MeshInferenceProvider::with_peer_source(
+        let mip = InferenceRouter::with_peer_source(
             local,
             Arc::new(NoPeers),
             Arc::new(NoPeers),
@@ -4313,7 +4403,7 @@ mod tests {
         (serving, mip)
     }
 
-    fn advertises(mip: &MeshInferenceProvider, id: &str) -> bool {
+    fn advertises(mip: &InferenceRouter, id: &str) -> bool {
         mip.self_manifest.load().models.iter().any(|m| m.id == id)
     }
 
@@ -4450,17 +4540,17 @@ mod tests {
 
     #[test]
     fn published_counter_is_shared_across_clones() {
-        // Acceptance test for the AppState ↔ MIP wire: the gossip
-        // emitter reads via a clone of the same Arc the MIP's
+        // Acceptance test for the AppState ↔ router wire: the gossip
+        // emitter reads via a clone of the same Arc the router's
         // guards write to. Writes on one Arc must be visible
         // through the clone.
-        let mip_side = Arc::new(AtomicU32::new(0));
-        let app_state_side = Arc::clone(&mip_side);
-        mip_side.fetch_add(5, Ordering::Relaxed);
+        let router_side = Arc::new(AtomicU32::new(0));
+        let app_state_side = Arc::clone(&router_side);
+        router_side.fetch_add(5, Ordering::Relaxed);
         assert_eq!(
             app_state_side.load(Ordering::Relaxed),
             5,
-            "AppState reader must see MIP's writes when sharing the same Arc"
+            "AppState reader must see the router's writes when sharing the same Arc"
         );
     }
 
@@ -4631,7 +4721,7 @@ mod tests {
         }
     }
 
-    /// MIP whose local side advertises `local_id` and whose single
+    /// Router whose local side advertises `local_id` and whose single
     /// unreachable peer advertises `peer_id`. The peer manifest is
     /// pre-seeded so nothing is fetched, and `busy_local` raises our
     /// own in-flight count for `local_id` — which is the ONLY way the
@@ -4641,7 +4731,7 @@ mod tests {
         local_id: &'static str,
         peer_id: &str,
         busy_local: bool,
-    ) -> (MeshInferenceProvider, Arc<AtomicU32>) {
+    ) -> (InferenceRouter, Arc<AtomicU32>) {
         let served = Arc::new(AtomicU32::new(0));
         let local = Arc::new(ServesOne {
             id: local_id,
@@ -4649,7 +4739,7 @@ mod tests {
             saw_model: Arc::new(std::sync::Mutex::new(None)),
         });
         let peer = dead_peer();
-        let mip = MeshInferenceProvider::with_peer_source(
+        let mip = InferenceRouter::with_peer_source(
             local,
             Arc::new(OnePeer(peer.clone())),
             Arc::new(NoPeers),
@@ -4721,8 +4811,8 @@ mod tests {
         }
     }
 
-    fn forwarder(locus: ServingLocus) -> MeshInferenceProvider {
-        MeshInferenceProvider::with_peer_source(
+    fn forwarder(locus: ServingLocus) -> InferenceRouter {
+        InferenceRouter::with_peer_source(
             Arc::new(Forwarder(locus)),
             Arc::new(NoPeers),
             Arc::new(NoPeers),
@@ -4765,9 +4855,9 @@ mod tests {
     ///
     /// `rtt_ms: 1` is the point: this peer is as Near as a peer gets, which is
     /// precisely the configuration that beat the bound node on RuggedFox.
-    async fn terminal_with_an_advertising_peer(locus: ServingLocus) -> MeshInferenceProvider {
+    async fn terminal_with_an_advertising_peer(locus: ServingLocus) -> InferenceRouter {
         let peer = dead_peer();
-        let mip = MeshInferenceProvider::with_peer_source(
+        let mip = InferenceRouter::with_peer_source(
             Arc::new(Forwarder(locus)),
             Arc::new(OnePeer(peer.clone())),
             Arc::new(NoPeers),
@@ -4932,7 +5022,7 @@ mod tests {
             served: Arc::new(AtomicU32::new(0)),
             saw_model: Arc::new(std::sync::Mutex::new(None)),
         });
-        let mip = MeshInferenceProvider::with_peer_source(
+        let mip = InferenceRouter::with_peer_source(
             local,
             Arc::new(NoPeers),
             Arc::new(NoPeers),
@@ -5127,7 +5217,7 @@ mod tests {
     async fn a_local_queue_shed_reaches_the_caller_named_and_closes_the_join() {
         let local = Arc::new(ShedsLocally);
         let sink = Arc::new(decision_log::CaptureDecisionSink::new());
-        let mip = MeshInferenceProvider::with_peer_source(
+        let mip = InferenceRouter::with_peer_source(
             local,
             Arc::new(NoPeers),
             Arc::new(NoPeers),
@@ -5236,7 +5326,7 @@ mod tests {
             served: Arc::clone(&served),
             saw_model: Arc::clone(&saw),
         });
-        let mip = MeshInferenceProvider::with_peer_source(
+        let mip = InferenceRouter::with_peer_source(
             local,
             Arc::new(NoPeers),
             Arc::new(NoPeers),
@@ -5354,7 +5444,7 @@ mod tests {
             served: Arc::clone(&served),
             saw_model: Arc::new(std::sync::Mutex::new(None)),
         });
-        let mip = MeshInferenceProvider::with_peer_source(
+        let mip = InferenceRouter::with_peer_source(
             local,
             Arc::new(NoPeers),
             Arc::new(NoPeers),

@@ -17,7 +17,7 @@ impl Runtime {
     /// Why intent defaults matter: without them, a user asking
     /// "is free will compatible with determinism?" with no active
     /// skill would send a bare `CompletionRequest` with no OICP,
-    /// and the mesh `MeshInferenceProvider` would have nothing to
+    /// and the mesh `InferenceRouter` would have nothing to
     /// match against. DeepQuery carries a real capability signal
     /// ("reasoning-heavy") that the OICP layer should see.
     ///

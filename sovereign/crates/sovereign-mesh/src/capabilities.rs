@@ -228,7 +228,7 @@ pub async fn build_local_capabilities(
         // change.
         benchmark: None,
         // Current local in-flight count for load-aware scheduling.
-        // Read directly from the MIP-shared atomic via AppState:
+        // Read directly from the router-shared atomic via AppState:
         // lock-free, fresh as of *this gossip tick*. `None` when the
         // bootstrap hasn't installed a publisher yet (storage-only
         // nodes, tests). See `sovereign/docs/MESH_LOAD_AWARENESS.md`

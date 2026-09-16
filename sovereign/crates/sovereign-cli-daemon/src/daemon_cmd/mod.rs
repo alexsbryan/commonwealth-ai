@@ -1491,7 +1491,7 @@ async fn shutdown_daemon(
     // inside `__cxa_finalize_ranges → ggml_metal_device_free`. The
     // assertion checks Metal resource-set drain; our llama contexts
     // are owned by `Arc<EmbeddedLlamaCpp>` references scattered
-    // across AppState, MeshInferenceProvider, the inference adapter,
+    // across AppState, InferenceRouter, the inference adapter,
     // and several background tasks. Drop ordering is non-trivial,
     // and even one straggling reference (e.g., a slot guard held
     // briefly by a closing in-flight request) leaves a non-empty

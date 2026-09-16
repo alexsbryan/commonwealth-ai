@@ -480,7 +480,7 @@ pub async fn bootstrap_with_progress(
     //
     // What used to stand here was the split that in-process hosting needed: a
     // `raw_inference` for peers POSTing `/v1/chat/completions` at our own
-    // `:9741`, and a `MeshInferenceProvider` wrapper routing THIS user's
+    // `:9741`, and a `InferenceRouter` wrapper routing THIS user's
     // Slow-slot work to a beefier peer. Both belonged to the daemon this
     // process was; it is no longer one, and peer routing is served by the
     // daemon at the other end (svt-3).

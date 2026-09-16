@@ -313,7 +313,7 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // on their own daemon and only the completion crosses. ONE site — the
     // client that fetches the lender's `/v1/models` under the bearer, which
     // is the authority on what the grant buys. The dispatch itself constructs
-    // nothing: it reuses `MeshInferenceProvider::http`.
+    // nothing: it reuses `InferenceRouter::http`.
     //
     // Mesh, and the judgement is worth stating because a lender is NOT a mesh
     // member and the class name reads as if it should be. Three checks:

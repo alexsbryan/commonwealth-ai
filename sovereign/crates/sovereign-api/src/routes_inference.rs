@@ -152,7 +152,7 @@ pub async fn chat_completions(
     // slot advertise the alias in their OICP manifest, so leaving the
     // alias in the request lets the load-balancer pick whichever node
     // is less busy. The alias is resolved to the local GGUF later,
-    // inside `MeshInferenceProvider::complete`, but only on the branch
+    // inside `InferenceRouter::complete`, but only on the branch
     // that actually serves locally. Resolving here (before routing)
     // pinned every call to whichever node had that specific GGUF id,
     // and the moment one peer swapped quants every cross-mesh request
@@ -735,7 +735,7 @@ pub async fn embeddings(
 ///
 /// **The contract is dispatchability**, and it is testable: every id
 /// returned here resolves through the same name resolution
-/// `/v1/chat/completions` runs (`MeshInferenceProvider::locate_named_model`).
+/// `/v1/chat/completions` runs (`InferenceRouter::locate_named_model`).
 /// `models_endpoint_lists_only_dispatchable_names` is the gate.
 ///
 /// ## Why this reads manifests and not the store

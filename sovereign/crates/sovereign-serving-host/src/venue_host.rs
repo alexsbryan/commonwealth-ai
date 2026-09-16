@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The host-side ports `MeshInferenceProvider` asks its host through: the
+//! The host-side ports `InferenceRouter` asks its host through: the
 //! identity reader, the contribution-ledger port and the pinned-transport
 //! resolver.
 //!
@@ -26,7 +26,7 @@ use sovereign_scheduler::venue::InferenceVenue;
 
 /// The host-side companion to [`VenueSource`](sovereign_scheduler::venue::VenueSource).
 ///
-/// `MeshInferenceProvider` holds one of these as a constructor argument.
+/// `InferenceRouter` holds one of these as a constructor argument.
 #[async_trait]
 pub trait VenueHost: Send + Sync {
     /// This node's id. Stamped onto outbound manifest fetches via the

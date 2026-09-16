@@ -5,7 +5,7 @@
 //! Why this is its own module: building the manifest is a separate
 //! concern from adapting wire requests to the core types. Both
 //! `inference_adapter` (peer-facing manifest at
-//! `/oicp/v1/capabilities`) and `peer_inference::MeshInferenceProvider`
+//! `/oicp/v1/capabilities`) and `peer_inference::InferenceRouter`
 //! (local-side self-scoring) consume the same builder so the two
 //! views can't drift.
 
@@ -68,7 +68,7 @@ fn status_for(slots: &[ResidentSlot], backing_model_id: &str) -> ModelStatus {
 /// Resolve a single human-readable model name from a provider,
 /// preferring the Slow (synthesis) slot. Used by both the adapter
 /// (so peer-side manifest and response `model` fields agree) and
-/// by `MeshInferenceProvider` (so local-side scoring uses the same
+/// by `InferenceRouter` (so local-side scoring uses the same
 /// identity the peer would see).
 pub fn resolve_primary_model_name(provider: &dyn InferenceProvider) -> String {
     let slow = provider.model_id_for(Speed::Slow);
@@ -87,7 +87,7 @@ pub fn resolve_primary_model_name(provider: &dyn InferenceProvider) -> String {
 /// capability profile + size_gb declared for it in
 /// `sovereign/models.toml`. Shared between the server adapter (what
 /// peers fetch at `/oicp/v1/capabilities`) and the client-side
-/// `MeshInferenceProvider` (what local scores itself against) so
+/// `InferenceRouter` (what local scores itself against) so
 /// the two never disagree about our own declared capabilities.
 ///
 /// Why both slots: on a Founder running the `high` profile, Fast

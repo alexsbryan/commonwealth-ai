@@ -126,16 +126,21 @@ pub(crate) fn load_provider(
                 // including the iroh one, which on an encrypted mesh is the
                 // only ingress there is.
                 EntryBinding::Node(hex) => {
-                    let resolver = match sovereign_mesh::entry_endpoint::EntryNodeEndpoint::parse(
-                        mesh as Arc<dyn sovereign_mesh::peer_inference::VenueSource>,
-                        &hex,
-                    ) {
-                        Ok(r) => Arc::new(r),
-                        Err(e) => {
-                            eprintln!("error: [node] entry_node is unusable — {e}");
-                            return Err(());
-                        }
-                    };
+                    // The terminal resolves its entry node through the roster
+                    // port; the daemon's `DeferredDaemon` is that source until
+                    // it is bound.
+                    let mesh_port: Arc<dyn sovereign_scheduler::venue::VenueSource> =
+                        Arc::clone(&mesh) as Arc<_>;
+                    let resolver =
+                        match sovereign_serving_host::entry_endpoint::EntryNodeEndpoint::parse(
+                            mesh_port, &hex,
+                        ) {
+                            Ok(r) => Arc::new(r),
+                            Err(e) => {
+                                eprintln!("error: [node] entry_node is unusable — {e}");
+                                return Err(());
+                            }
+                        };
                     // THIS node's identity, stamped on every request the
                     // terminal sends its entry node. Without it the entry node
                     // admits a terminal's turns as its own local traffic:

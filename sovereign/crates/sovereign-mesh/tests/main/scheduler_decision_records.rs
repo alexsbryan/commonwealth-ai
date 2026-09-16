@@ -5,7 +5,7 @@
 //! The unit tests inside `decision_log` / `decision_trace` pin the
 //! record *shapes*. What they cannot show is the thing the whole
 //! phase exists for: that a real request through the real
-//! `MeshInferenceProvider` produces a decision and an outcome that
+//! `InferenceRouter` produces a decision and an outcome that
 //! **join**, carrying inputs that match what the scorer actually saw.
 //! So these tests drive the production code paths —
 //! `complete_stream_with_id`, `complete`, the manifest fetch, the
@@ -54,7 +54,7 @@ use sovereign_mesh::decision_log::{
     LoadSource, RoutingDecision, RoutingOutcome, ServedBy, Verdict,
 };
 use sovereign_mesh::decision_trace::SchedulerTrace;
-use sovereign_mesh::peer_inference::{MeshInferenceProvider, VenueHost, VenueSource};
+use sovereign_mesh::peer_inference::{InferenceRouter, VenueHost, VenueSource};
 use sovereign_serving_host::recorder::TracingDecisionSink;
 
 use crate::common;
@@ -261,10 +261,10 @@ fn mesh_request() -> CompletionRequest {
         )
 }
 
-fn build(peers: Vec<InferenceVenue>) -> (MeshInferenceProvider, Arc<CaptureDecisionSink>) {
+fn build(peers: Vec<InferenceVenue>) -> (InferenceRouter, Arc<CaptureDecisionSink>) {
     let capture = Arc::new(CaptureDecisionSink::new());
     let sink: Arc<dyn DecisionSink> = capture.clone();
-    let provider = MeshInferenceProvider::with_peer_source(
+    let provider = InferenceRouter::with_peer_source(
         weak_local(),
         Arc::new(StubPeerSource {
             peers: peers.clone(),
@@ -631,7 +631,7 @@ async fn jsonl_capture_loads_back_as_a_replayable_trace() {
     let path = dir.join("decisions.jsonl");
 
     let sink: Arc<dyn DecisionSink> = Arc::new(TracingDecisionSink::to_path(&path).unwrap());
-    let provider = MeshInferenceProvider::with_peer_source(
+    let provider = InferenceRouter::with_peer_source(
         weak_local(),
         Arc::new(StubPeerSource {
             peers: vec![peer_endpoint("hub", addr, 14)],
@@ -712,7 +712,7 @@ async fn the_sink_does_not_change_the_routing_decision() {
     let addr = spawn_peer(false).await;
 
     let (with_capture, _) = build(vec![peer_endpoint("hub", addr, 11)]);
-    let silent = MeshInferenceProvider::with_peer_source(
+    let silent = InferenceRouter::with_peer_source(
         weak_local(),
         Arc::new(StubPeerSource {
             peers: vec![peer_endpoint("hub", addr, 11)],
@@ -991,7 +991,7 @@ async fn hard_named_target_still_fails_loudly_rather_than_falling_through() {
 ///
 /// The fix reads `in_flight_publisher` — the RAII-maintained total
 /// this node already gossips — at the gather point. This test drives
-/// the real `MeshInferenceProvider` twice against the same mock peer,
+/// the real `InferenceRouter` twice against the same mock peer,
 /// changing nothing but that counter, and asserts the recorded
 /// `ScoreBreakdown` moved. It fails on the pre-fix code with
 /// `load_penalty` pinned at 1.0 in both runs, which is the whole
@@ -1011,7 +1011,7 @@ async fn the_local_candidate_is_scored_on_this_nodes_real_in_flight_count() {
         let capture = Arc::new(CaptureDecisionSink::new());
         let sink: Arc<dyn DecisionSink> = capture.clone();
         let publisher = Arc::new(AtomicU32::new(0));
-        let provider = MeshInferenceProvider::with_peer_source_and_publisher(
+        let provider = InferenceRouter::with_peer_source_and_publisher(
             weak_local(),
             Arc::new(StubPeerSource {
                 peers: vec![peer_endpoint("hub", addr, 12)],

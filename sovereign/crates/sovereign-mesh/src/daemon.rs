@@ -1116,7 +1116,7 @@ impl EmbeddedDaemon {
     /// This daemon's `NodeId`, if known. Returns `None` before the
     /// daemon has finished its create_mesh / join_mesh handshake;
     /// callers that depend on the value (e.g.
-    /// `MeshInferenceProvider::get_peer_manifest` stamping
+    /// `InferenceRouter::get_peer_manifest` stamping
     /// `X-Node-Id` for peer-preference matching) skip the
     /// dependent behaviour gracefully when this is `None`.
     pub async fn self_node_id(&self) -> Option<NodeId> {

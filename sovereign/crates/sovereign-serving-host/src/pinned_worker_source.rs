@@ -12,9 +12,9 @@
 //!   mesh peer shape so the scheduler in `peer_inference.rs` doesn't
 //!   need to know the difference.
 //!
-//! - [`CompositeEndpointSource`] — concatenates a mesh source (the
+//! - [`CompositeVenueSource`] — concatenates a mesh source (the
 //!   live `EmbeddedDaemon`) with one or more pinned sources. The
-//!   `MeshInferenceProvider` is constructed against the composite so
+//!   `InferenceRouter` is constructed against the composite so
 //!   `select_peer` ranks pinned pods alongside gossiped peers under
 //!   the same OICP scoring.
 //!
@@ -225,7 +225,7 @@ impl VenueSource for PinnedWorkerEndpointSource {
 #[async_trait]
 impl crate::venue_host::PinnedTransportResolver for PinnedWorkerEndpointSource {
     /// A pinned pod's TLS handle, by its synthetic node id. This is what
-    /// `MeshInferenceProvider::set_pinned_transports` installs.
+    /// `InferenceRouter::set_pinned_transports` installs.
     async fn resolve(&self, node_id: &NodeId) -> Option<PinnedTransport> {
         self.inner
             .read()
@@ -238,38 +238,25 @@ impl crate::venue_host::PinnedTransportResolver for PinnedWorkerEndpointSource {
 
 /// Concatenates a mesh source (typically `EmbeddedDaemon`) with one
 /// or more pinned sources. Hands a unified `VenueSource` to
-/// `MeshInferenceProvider::with_peer_source` so the scheduler scores
+/// `InferenceRouter::builder(...).candidates(..)` so the scheduler scores
 /// pinned + gossiped peers in the same pool.
 ///
 /// Ordering: mesh-source endpoints first, then pinned. The scheduler
 /// doesn't care about order (it ranks by score), but a stable
 /// ordering makes routing-decision logs reproducible.
-pub struct CompositeEndpointSource {
+pub struct CompositeVenueSource {
     mesh: Arc<dyn VenueSource>,
-    /// The mesh source's host half (identity reader + ledger mint). Kept
-    /// beside `mesh` because `VenueSource` no longer carries those
-    /// (`SERVING_BOUNDARY.md` (a)); production passes the same
-    /// `EmbeddedDaemon` for both.
-    mesh_host: Arc<dyn crate::venue_host::VenueHost>,
     pinned: Arc<PinnedWorkerEndpointSource>,
 }
 
-impl CompositeEndpointSource {
-    pub fn new(
-        mesh: Arc<dyn VenueSource>,
-        mesh_host: Arc<dyn crate::venue_host::VenueHost>,
-        pinned: Arc<PinnedWorkerEndpointSource>,
-    ) -> Self {
-        Self {
-            mesh,
-            mesh_host,
-            pinned,
-        }
+impl CompositeVenueSource {
+    pub fn new(mesh: Arc<dyn VenueSource>, pinned: Arc<PinnedWorkerEndpointSource>) -> Self {
+        Self { mesh, pinned }
     }
 }
 
 #[async_trait]
-impl VenueSource for CompositeEndpointSource {
+impl VenueSource for CompositeVenueSource {
     async fn candidates(&self) -> Vec<InferenceVenue> {
         let mut out = self.mesh.candidates().await;
         out.extend(self.pinned.candidates().await);
@@ -277,21 +264,9 @@ impl VenueSource for CompositeEndpointSource {
     }
 }
 
-#[async_trait]
-impl crate::venue_host::VenueHost for CompositeEndpointSource {
-    async fn local_node_id(&self) -> Option<NodeId> {
-        self.mesh_host.local_node_id().await
-    }
-
-    async fn ledger_emitter(&self) -> Option<Arc<dyn crate::ledger::LedgerEmitter>> {
-        self.mesh_host.ledger_emitter().await
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::venue_host::VenueHost;
     use ed25519_dalek::SigningKey;
     use sovereign_contracts::worker_pod::{mint_bootstrap, BootstrapInputs};
     use std::collections::BTreeMap;
@@ -387,9 +362,6 @@ mod tests {
         }
     }
 
-    #[async_trait]
-    impl crate::venue_host::VenueHost for StubMesh {}
-
     fn mesh_peer(node_id_seed: u128, name: &str) -> InferenceVenue {
         InferenceVenue {
             node_id: NodeId::from_u128(node_id_seed),
@@ -419,7 +391,7 @@ mod tests {
             )
             .unwrap(),
         ]));
-        let composite = CompositeEndpointSource::new(mesh.clone(), mesh, pinned);
+        let composite = CompositeVenueSource::new(mesh.clone(), pinned);
         let endpoints = composite.candidates().await;
         assert_eq!(endpoints.len(), 3);
         assert_eq!(endpoints[0].name, "mesh-a");
@@ -431,7 +403,7 @@ mod tests {
     async fn composite_with_zero_pinned_matches_mesh() {
         let mesh = Arc::new(StubMesh::new(vec![mesh_peer(7, "solo")]));
         let pinned = Arc::new(PinnedWorkerEndpointSource::new());
-        let composite = CompositeEndpointSource::new(mesh.clone(), mesh, pinned);
+        let composite = CompositeVenueSource::new(mesh.clone(), pinned);
         assert_eq!(composite.candidates().await.len(), 1);
     }
 }

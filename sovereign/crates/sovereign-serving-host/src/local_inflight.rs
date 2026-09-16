@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The local in-flight accounting guards `MeshInferenceProvider` hands into
+//! The local in-flight accounting guards `InferenceRouter` hands into
 //! its stream wrappers. Split out of `peer_inference.rs` (ARCH §3.1).
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;

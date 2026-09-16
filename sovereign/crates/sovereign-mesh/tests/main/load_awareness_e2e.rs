@@ -9,7 +9,7 @@
 //!    can't accidentally swap out the Arc that live
 //!    `LocalTotalGuard`s reference.
 //! 2. `AppState::current_local_in_flight` reads the same atomic
-//!    that the MIP-side handle writes to. Bump on the MIP-side
+//!    that the router-side handle writes to. Bump on the router-side
 //!    handle, observe through `AppState`.
 //! 3. `build_local_capabilities` pulls
 //!    `current_local_in_flight` into the gossiped
@@ -24,7 +24,7 @@
 //!    (`peer_inference.rs::enter_local_total`, four call sites) sits
 //!    in the *outbound* joiner path, while an inbound peer request is
 //!    served at Priority 0 straight off `AppState::local_inference`
-//!    (`routes_inference.rs:171`) with no `MeshInferenceProvider` in
+//!    (`routes_inference.rs:171`) with no `InferenceRouter` in
 //!    front of it. A node saturated by peer work would then advertise
 //!    near-zero load, read as idle to every decider, and win more of
 //!    it — priced by `Arm::OutboundOnlyLoad` at +126% mean latency on
@@ -103,7 +103,7 @@ async fn build_local_capabilities_publishes_in_flight_through_appstate() {
     state.install_in_flight_publisher(Arc::clone(&publisher));
 
     // Bump the publisher — simulates a `LocalTotalGuard` being
-    // alive on the MIP side.
+    // alive on the router side.
     publisher.store(5, Ordering::Relaxed);
 
     let caps = build_local_capabilities(
@@ -118,7 +118,7 @@ async fn build_local_capabilities_publishes_in_flight_through_appstate() {
     assert_eq!(
         caps.current_in_flight,
         Some(5),
-        "gossip payload must reflect the live MIP-side publisher value"
+        "gossip payload must reflect the live router-side publisher value"
     );
 
     // Drain back to zero and rebuild — the next gossip tick must
@@ -157,7 +157,7 @@ async fn capabilities_payload_survives_serde_roundtrip() {
 
 #[tokio::test]
 async fn no_publisher_yields_none_in_gossip_payload() {
-    // Storage-only nodes and test harnesses that don't wire a MIP
+    // Storage-only nodes and test harnesses that don't wire a router
     // must produce the legacy "no signal" shape: `current_in_flight:
     // None`. Older peers without the field deserialize that as
     // None too, so scoring falls back to the founder's local view.
@@ -178,15 +178,15 @@ async fn no_publisher_yields_none_in_gossip_payload() {
 /// topology, where it is currently a known gap.
 ///
 /// `local_inference` here is `SovereignInferenceAdapter(engine)` with no
-/// `MeshInferenceProvider` in the stack. That is exactly what the desktop
+/// `InferenceRouter` in the stack. That is exactly what the desktop
 /// installs (`sovereign-desktop/src-tauri/src/state.rs:952` hands the mesh
 /// `raw_inference`), and it is deliberate — the comment at `state.rs:941-953`
 /// says a peer POSTing to `:9741` must be served "without re-entering the
 /// mesh-routing wrapper and ping-ponging the request back out".
 ///
 /// The consequence, which this test pins so it cannot regress silently: every
-/// writer of the published counter is an `enter_local_total` inside the MIP
-/// (`peer_inference.rs:1888`), so with no MIP in the path, peer-served work
+/// writer of the published counter is an `enter_local_total` inside the router
+/// (`peer_inference.rs:1888`), so with no router in the path, peer-served work
 /// moves nothing. On desktop it is worse than a stale number — nothing calls
 /// `install_in_flight_publisher` at all, so `current_in_flight` is omitted
 /// from gossip entirely (`Option::is_none` + `skip_serializing_if`,
@@ -194,7 +194,7 @@ async fn no_publisher_yields_none_in_gossip_payload() {
 /// node falls back to its own dispatch count, reading a pinned machine as idle.
 ///
 /// This is asserted as **current behaviour, not desired behaviour**. The CLI
-/// daemon puts the MIP in the inbound path and does move the counter; the two
+/// daemon puts the router in the inbound path and does move the counter; the two
 /// surfaces disagree, and reconciling them is open work (SCHEDULER_QUALITY.md
 /// F2). When that lands, this test should flip to `>= 1` rather than be deleted
 /// — the sampling harness is the part worth keeping.
@@ -290,7 +290,7 @@ async fn desktop_topology_serving_a_peer_request_does_not_publish_in_flight() {
     assert_eq!(
         during, 0,
         "CURRENT behaviour, pinned so the gap cannot close or widen silently: \
-         with no MeshInferenceProvider in the inbound path there is no \
+         with no InferenceRouter in the inbound path there is no \
          `enter_local_total` to bump, so peer-served work is invisible to \
          gossip. If this now reads {during}, the desktop topology gained a \
          load-publishing path — that is the fix SCHEDULER_QUALITY.md F2 wants, \

@@ -38,7 +38,7 @@
 //! DepEdge#from.                                         field
 //! runtime/streaming/run_synthesis_stream().             free function
 //! impl#[Runtime]handle_message().                       inherent method
-//! impl#[MeshInferenceProvider][InferenceProvider]f().   trait impl method
+//! impl#[InferenceRouter][InferenceProvider]f().         trait impl method
 //! traits/InferenceProvider#complete().                  trait method decl
 //! workflow_cmd/HELP.                                    term (const / static)
 //! ids/define_id!                                        macro
@@ -274,7 +274,7 @@ mod tests {
             DescriptorKind::Method
         );
         assert_eq!(
-            kind("peer_inference/impl#[MeshInferenceProvider][InferenceProvider]complete_stream_with_id()."),
+            kind("peer_inference/impl#[InferenceRouter][InferenceProvider]complete_stream_with_id()."),
             DescriptorKind::TraitImplMethod
         );
         assert_eq!(
@@ -304,7 +304,7 @@ mod tests {
         let via_trait =
             "rust-analyzer cargo sovereign-contracts 0.5.0 traits/InferenceProvider#complete_stream_with_id_and_finish().";
         let concrete =
-            "rust-analyzer cargo sovereign-mesh 0.5.0 peer_inference/impl#[MeshInferenceProvider][InferenceProvider]complete_stream_with_id_and_finish().";
+            "rust-analyzer cargo sovereign-mesh 0.5.0 peer_inference/impl#[InferenceRouter][InferenceProvider]complete_stream_with_id_and_finish().";
         assert_eq!(dispatch_hint(via_trait), DispatchHint::ThroughTrait);
         assert_eq!(dispatch_hint(concrete), DispatchHint::Direct);
         assert_eq!(

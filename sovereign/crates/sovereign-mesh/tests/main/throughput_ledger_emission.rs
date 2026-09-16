@@ -38,7 +38,7 @@ use sovereign_core::oicp::{
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, Speed};
 use sovereign_mesh::daemon::InferenceVenue;
-use sovereign_mesh::peer_inference::{MeshInferenceProvider, VenueHost, VenueSource};
+use sovereign_mesh::peer_inference::{InferenceRouter, VenueHost, VenueSource};
 use sovereign_serving_host::ledger::LedgerEmitter;
 
 use crate::common;
@@ -218,7 +218,7 @@ async fn peer_routed_stream_emits_inference_received_on_drop() {
     // 4. Local stub that loses OICP scoring → request routes to peer.
     let local: Arc<dyn InferenceProvider> =
         Arc::new(TestProvider::new().with_model_id("qwen2.5-3b-instruct-q4_k_m"));
-    let wrapper = MeshInferenceProvider::with_peer_source(
+    let wrapper = InferenceRouter::with_peer_source(
         local,
         peer_source.clone(),
         peer_source,
@@ -348,7 +348,7 @@ async fn peer_route_failure_without_chunks_does_not_emit_ledger_event() {
     });
     let local: Arc<dyn InferenceProvider> =
         Arc::new(TestProvider::new().with_model_id("qwen2.5-3b-instruct-q4_k_m"));
-    let wrapper = MeshInferenceProvider::with_peer_source(
+    let wrapper = InferenceRouter::with_peer_source(
         local,
         peer_source.clone(),
         peer_source,

@@ -13,7 +13,7 @@ use sovereign_inference::embedded::EmbeddedLlamaCpp;
 use sovereign_mesh::admin_http::ProviderFactory;
 
 /// Rebuilds the embedded llama.cpp provider from a fresh `SetupConfig`,
-/// wrapped in the same `MeshInferenceProvider` used at cold start so
+/// wrapped in the same `InferenceRouter` used at cold start so
 /// hot-reloads preserve mesh-aware model routing.
 ///
 /// Hot-swapped into `EmbeddedDaemon::inference_provider` by the admin
@@ -25,7 +25,7 @@ pub(super) struct LlamaCppFactory {
     /// Same `EmbeddedDaemon` the cold-start path wraps the raw
     /// llama.cpp provider against. Held here so a hot-reload
     /// (operator changing the primary GGUF path while the daemon is
-    /// running) produces a `MeshInferenceProvider` view of the new
+    /// running) produces a `InferenceRouter` view of the new
     /// raw provider — without this, reload would drop the wrapper
     /// and `/v1/chat/completions` would silently start substituting
     /// for peer-only model names again.
@@ -90,12 +90,12 @@ impl ProviderFactory for LlamaCppFactory {
         // for why a bare `EmbeddedLlamaCpp` here would re-introduce
         // the silent-substitution bug.
         //
-        // Hot-reload load-awareness invariant: the new MIP must
-        // share the SAME `Arc<AtomicU32>` publisher as the old MIP
+        // Hot-reload load-awareness invariant: the new router must
+        // share the SAME `Arc<AtomicU32>` publisher as the old router
         // (held by AppState's OnceLock). Live `LocalTotalGuard`s
-        // from the old MIP have already captured a clone of that
+        // from the old router have already captured a clone of that
         // Arc and will continue to decrement it as their requests
-        // drain. If we let the new MIP create a fresh publisher,
+        // drain. If we let the new router create a fresh publisher,
         // the old guards would write to an Arc nobody reads, and
         // gossip would see a counter that snaps to zero on reload
         // and stays there until new traffic flows. See
@@ -108,45 +108,28 @@ impl ProviderFactory for LlamaCppFactory {
             .daemon
             .get()
             .ok_or_else(|| "reload arrived before the daemon was commissioned".to_string())?;
-        let peer_source: Arc<dyn sovereign_mesh::peer_inference::VenueSource> =
+        let peer_source: Arc<dyn sovereign_scheduler::venue::VenueSource> =
             Arc::clone(&self.daemon) as Arc<_>;
-        let peer_host: Arc<dyn sovereign_mesh::peer_inference::VenueHost> =
+        let peer_host: Arc<dyn sovereign_serving_host::venue_host::VenueHost> =
             Arc::clone(&self.daemon) as Arc<_>;
         let app_state_opt = daemon.app_state().await;
-        let mesh_provider = if let Some(state) = app_state_opt.as_ref() {
-            match state.in_flight_publisher() {
-                Some(publisher) => Arc::new(
-                    sovereign_mesh::peer_inference::MeshInferenceProvider::with_peer_source_and_publisher(
-                        raw,
-                        Arc::clone(&peer_source),
-                        Arc::clone(&peer_host),
-                        Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest),
-                        publisher,
-                    ),
-                ),
-                // OnceLock not yet set means cold-start's spawned
-                // task hasn't run; reload still installs the new
-                // MIP, and the spawned task will install its
-                // publisher when it next polls.
-                None => Arc::new(
-                    sovereign_mesh::peer_inference::MeshInferenceProvider::with_peer_source(
-                        raw,
-                        Arc::clone(&peer_source),
-                        Arc::clone(&peer_host),
-                        Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest),
-                    ),
-                ),
-            }
-        } else {
-            Arc::new(
-                sovereign_mesh::peer_inference::MeshInferenceProvider::with_peer_source(
-                    raw,
-                    Arc::clone(&peer_source),
-                    Arc::clone(&peer_host),
-                    Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest),
-                ),
-            )
-        };
+        let mut builder = sovereign_serving_host::peer_inference::InferenceRouter::builder(raw)
+            .candidates(Arc::clone(&peer_source))
+            .host(Arc::clone(&peer_host))
+            .manifest(Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest));
+        // A reload must NOT mint a fresh publisher: live `LocalTotalGuard`s from
+        // the old router hold a clone of AppState's `Arc<AtomicU32>` and keep
+        // decrementing it as their requests drain. When the OnceLock is not yet
+        // set — cold-start's spawned task hasn't run — the builder mints a
+        // private one, and the spawned task installs the shared publisher when
+        // it next polls.
+        if let Some(publisher) = app_state_opt
+            .as_ref()
+            .and_then(|state| state.in_flight_publisher())
+        {
+            builder = builder.in_flight(publisher);
+        }
+        let mesh_provider = Arc::new(builder.build());
         // Push current slot aliases into the freshly-built mesh
         // provider so a reload preserves the deferred-resolution
         // wiring. Mirrors the cold-start spawned task in

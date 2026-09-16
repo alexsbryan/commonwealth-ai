@@ -400,7 +400,7 @@ stays inside its owner and is published as a reader: the roster and node id at a
 aliases and servable files on a models reload, the provider on `replace_models_and_reload`.
 
 Where an install slot breaks a cycle today, the cycle is the finding. The in-flight gauge is the
-worked case: `MeshInferenceProvider` creates it, the bootstrap installs it into `AppState` so
+worked case: `InferenceRouter` creates it, the bootstrap installs it into `AppState` so
 gossip can read it, and a reload hands the same `Arc` back to the new provider so the count
 survives. The gauge wants to exist before the provider, so the node creates it and gives it to
 both — a signal object created first, never a slot filled later.

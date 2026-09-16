@@ -177,7 +177,7 @@ pub(crate) const NEAR_RTT_MS_THRESHOLD: u32 = 25;
 /// Classify a measured round-trip time into a
 /// [`NodeLocality`] bucket. Pure function; the async HTTP probe
 /// that produces the `rtt_ms` value lives in the mesh host's
-/// `MeshInferenceProvider::get_peer_manifest`.
+/// `InferenceRouter::get_peer_manifest`.
 pub fn classify_rtt_ms(rtt_ms: u32) -> NodeLocality {
     if rtt_ms < LOCAL_RTT_MS_THRESHOLD {
         NodeLocality::Local

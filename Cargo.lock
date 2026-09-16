@@ -12185,6 +12185,7 @@ dependencies = [
  "sovereign-runtime-recipe",
  "sovereign-scheduler",
  "sovereign-service",
+ "sovereign-serving-host",
  "sovereign-store",
  "sovereign-tdd",
  "sovereign-tools",

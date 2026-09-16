@@ -25,8 +25,8 @@ use tokio::sync::RwLock;
 /// when it terminates: either onto the local-side single
 /// `NodeObservations` slot, or onto the per-peer map keyed by name.
 /// Mirrors the dual storage already present on the mesh host's
-/// `MeshInferenceProvider::peer_observations` /
-/// `MeshInferenceProvider::local_observations`.
+/// `InferenceRouter::peer_observations` /
+/// `InferenceRouter::local_observations`.
 #[derive(Clone)]
 pub enum ThroughputTarget {
     Local(Arc<RwLock<NodeObservations>>),

@@ -5,7 +5,7 @@
 //! commissioned.
 //!
 //! The ports themselves now live in `sovereign_serving_host::venue_host`
-//! (`MeshInferenceProvider` holds them, and it moved host-side by domains
+//! (`InferenceRouter` holds them, and it moved host-side by domains
 //! `REVIEW-build-serving-move-peer`). What stays here is the half that names
 //! `commonwealth_core` / `commonwealth_state` / `EmbeddedDaemon`, which the
 //! serving package may not (`sovereign/SERVING_BOUNDARY.md` rule 5): the
@@ -72,7 +72,7 @@ impl VenueHost for EmbeddedDaemon {
 /// a [`VenueSource`] in the meantime.
 ///
 /// Production wiring is genuinely cyclic and always was: the daemon serves
-/// peers through a [`MeshInferenceProvider`](sovereign_serving_host::peer_inference::MeshInferenceProvider),
+/// peers through a [`InferenceRouter`](sovereign_serving_host::peer_inference::InferenceRouter),
 /// and that provider routes through the daemon. One of the two has to exist
 /// first. Before 2026-08-24 the cycle was broken by leaving the daemon's
 /// provider slot empty and punching it in afterwards, which is what made "no

@@ -370,7 +370,7 @@ pub enum Arm {
     /// **This is not a hypothetical, and as of 2026-07-28 it is no
     /// longer even an accident.** No node on this mesh has ever
     /// advertised a rate card. Both producers — `run_baseline_benchmark`
-    /// and `MeshInferenceProvider::set_local_benchmark`, each with zero
+    /// and `InferenceRouter::set_local_benchmark`, each with zero
     /// callers — were deleted rather than left as an invitation to wire
     /// them up, and the local `benchmark` field went with them. The
     /// gossip builder likewise hardcodes `benchmark: None`
@@ -1519,7 +1519,7 @@ impl Sim {
     fn on_arrival(&mut self, arrival: &Arrival) {
         let origin = arrival.origin;
         // The OICP envelope carries the request's size in production —
-        // `MeshInferenceProvider::request_facts` reads both counts
+        // `InferenceRouter::request_facts` reads both counts
         // straight off it — and both are hard feasibility gates in the
         // scorer (`scoring.rs:590`). Setting them here is a fidelity
         // fix that stands on its own: without it the gates never bind
@@ -1745,7 +1745,7 @@ impl Sim {
     fn local_view_observations(&self, origin: usize) -> NodeObservations {
         let node = &self.nodes[origin];
         if self.arm.blind_local_load() {
-            // Exactly the struct `MeshInferenceProvider` constructs at
+            // Exactly the struct `InferenceRouter` constructs at
             // `peer_inference.rs:559` and then never mutates on the
             // dispatch path: seeded above the cold-start threshold,
             // zero in flight, zero failures. The two throughput EWMAs
@@ -2186,7 +2186,7 @@ fn views_index_to_node(origin: usize, view_idx: usize) -> usize {
     }
 }
 
-/// Mirrors `MeshInferenceProvider::request_facts` — same `{:?}`
+/// Mirrors `InferenceRouter::request_facts` — same `{:?}`
 /// rendering, so a sim record and a production record describe a
 /// request the same way and the two streams stay comparable.
 fn request_facts(req: &InferenceRequirements, arrival: &Arrival) -> RequestFacts {
