@@ -17,6 +17,8 @@
 //! What gets vendored:
 //!   - every `sovereign-recipes/<id>/recipe.toml` → `OUT_DIR/recipes/<id>/recipe.toml`
 //!   - `sovereign-recipes/registry.toml`          → `OUT_DIR/registry_snapshot.toml`
+//!   - `sovereign-recipes/schema/recipe_schema_descriptor.json`
+//!                                                → `OUT_DIR/recipe_schema_descriptor.json`
 //!   - the Vital-Articles data lists              → `OUT_DIR/<asset>`
 //!
 //! Standalone clones (corpus-engine built without the sibling repo
@@ -84,6 +86,7 @@ fn main() {
     println!("cargo:rerun-if-changed={}", templates_root.display());
     generate_template_registry(&templates_root, &out_dir);
     vendor_registry(&recipes_root, &out_dir);
+    vendor_descriptor(&recipes_root, &out_dir);
     vendor_data_assets(&recipes_root, &out_dir);
 
     println!("cargo:rerun-if-changed=build.rs");
@@ -194,6 +197,22 @@ fn generate_template_registry(templates_root: &Path, out_dir: &Path) {
 fn vendor_registry(recipes_root: &Path, out_dir: &Path) {
     let src = recipes_root.join("registry.toml");
     let dest = out_dir.join("registry_snapshot.toml");
+    std::fs::copy(&src, &dest)
+        .unwrap_or_else(|e| panic!("copy {} -> {}: {e}", src.display(), dest.display()));
+    println!("cargo:rerun-if-changed={}", src.display());
+}
+
+/// Copy the generated recipe variant-catalog descriptor into `OUT_DIR`.
+///
+/// The descriptor is produced by `tests/main/recipe_schema.rs` from the recipe
+/// AST; vendoring it here (beside the registry snapshot) is what lets
+/// `src/recipe_schema.rs` embed it with `env!("OUT_DIR")` rather than climbing
+/// three levels out of the crate root to the `sovereign-recipes/` tree.
+fn vendor_descriptor(recipes_root: &Path, out_dir: &Path) {
+    let src = recipes_root
+        .join("schema")
+        .join("recipe_schema_descriptor.json");
+    let dest = out_dir.join("recipe_schema_descriptor.json");
     std::fs::copy(&src, &dest)
         .unwrap_or_else(|e| panic!("copy {} -> {}: {e}", src.display(), dest.display()));
     println!("cargo:rerun-if-changed={}", src.display());

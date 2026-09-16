@@ -292,12 +292,14 @@ Adjudicated 2026-09-14; rows, prices and evidence are the `[[collision]]` rows w
 A clean dependency closure is not a clean lift — the caveat `studio/BOUNDARY.md` earned
 by performing one: its gate was green while `sovereign-contracts` embedded a file from
 outside its crate root and the sandbox had to preserve the monorepo's directory shape to
-compile. The way to know Serving carries no such embed is to lift it. **Serving carries
-one, measured 2026-09-15:** with the inference edge gone the lift's flat-copy sandbox
-still cannot compile `sovereign-contracts`, which `include_str!`s
+compile. The way to know Serving carries no such embed is to lift it. **Serving carried
+one, measured 2026-09-15 and removed 2026-09-16:** `sovereign-contracts` `include_str!`d
 `sovereign-recipes/registry.toml` and `sovereign-recipes/schema/recipe_schema_descriptor.json`
-from outside its crate root (`recipe/registry.rs:31`, `recipe/schema.rs:25`) — the shared
-leaf is the embedder, not a package member. Nor does the gate
+from outside its crate root (`recipe/registry.rs:31`, `recipe/schema.rs:25`), so the
+flat-copy sandbox could not compile the shared leaf — the embedder was a leaf, not a
+package member. The two artifacts are now vendored by `corpus-engine`'s `build.rs` into
+`OUT_DIR` and injected at the call site (`REVIEW-build-serving-leaf-embed`); the leaf
+keeps the parser and the view types, and the package's tools take the values. Nor does the gate
 prove the package **routes**: `boundary-gate` reads manifests and cannot tell a scheduler
 that ranks from one that returns the first candidate. Until `serving-lift.sh`'s later
 steps stop abstaining, green means "the edges are legal".

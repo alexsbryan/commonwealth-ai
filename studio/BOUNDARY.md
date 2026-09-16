@@ -48,11 +48,13 @@ rather than by convention.
    the DAG; widening one of them widens the whole package's contract surface, so
    the gate pins them by hand.
 3. **No `build.rs` in any package or leaf crate**, and **no `include_str!` /
-   `include_bytes!` that escapes the crate root** — the one exception is the
-   checked-in `sovereign-recipes/` tree, which `sovereign-contracts` vendors as a
-   typed `const`. A build script or an escaping embed is a source-tree reach-in no
-   package boundary survives (it was killing the recipe-schema `syn` walk that
-   B:P0 removed).
+   `include_bytes!` that escapes the crate root**. A build script or an escaping
+   embed is a source-tree reach-in no package boundary survives (it was killing
+   the recipe-schema `syn` walk that B:P0 removed). The checked-in
+   `sovereign-recipes/` tree is no longer an exception: `sovereign-contracts`
+   used to embed it as a typed `const`, which is exactly what made a flat-copy
+   lift of the package unresolvable. The artifact is now injected from
+   `corpus-engine` at the call site.
 
    **And no RUNTIME reach-out past the crate root** (rule 3c, 2026-09-04). A
    path derived from `CARGO_MANIFEST_DIR` that then climbs out with `.parent()`

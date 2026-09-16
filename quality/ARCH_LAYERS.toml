@@ -328,20 +328,21 @@ crates = [
 # two readings binds new code: the seam is permitted, a second sovereign
 # dependency is not.
 #
-# What crosses today, census 2026-08-20. Four TYPES stopped crossing when the
+# What crosses today, census 2026-08-20, minus the descriptor const (removed
+# 2026-09-16: corpus-engine now embeds it from its own `OUT_DIR`, so the
+# re-export through the leaf is gone). Four TYPES stopped crossing when the
 # section detectors moved to `corpus-engine-sections`
 # (`nc-boundary --edge corpus-engine:sovereign`: 4 → 0). The crate dependency
-# SURVIVES, on three modules that carry no types at all — which is why the type
+# SURVIVES, on two modules that carry no types at all — which is why the type
 # census never showed them (`nc-boundary.py` selects `qualified_name LIKE '%#'`,
 # so free functions and consts are invisible to it):
 #   rebrand::svrnmesh_root                          4 sites (+2 in examples)
 #   recipe::url_template::render_template           1 site
-#   recipe::schema::RECIPE_SCHEMA_DESCRIPTOR_JSON   1 site (re-exported)
 # These stay deliberately. `svrnmesh_root` is the workspace path SSOT — 220 call
 # sites over 15 crates, and clippy `disallowed_methods = "deny"` makes
 # hand-rolling the path a build error, so it must remain ONE accessor (ARCH
-# §10.6); relocating it is its own rung. The other two are agreements the engine
-# and the recipe package must hold bit-for-bit, with no home below.
+# §10.6); relocating it is its own rung. `render_template` is an agreement the
+# engine and the recipe package must hold bit-for-bit, with no home below.
 [[forbid]]
 from = "corpus-engine*"
 to = "sovereign-*"

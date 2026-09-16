@@ -50,7 +50,7 @@ async fn full_author_loop_exercises_all_tools() {
 
     // Step 1: browse the registry. With a fresh HOME, only bundled
     // recipes show; that's enough for the LLM to pick a shape.
-    let browse = RegistryBrowseTool;
+    let browse = RegistryBrowseTool::new(corpus_engine::registry::BUNDLED_REGISTRY_TOML);
     let listed = browse
         .execute(&serde_json::json!({}), &ctx())
         .await
@@ -225,7 +225,9 @@ fn tool_descriptors_carry_recipe_authoring_permission() {
         Box::new(sovereign_tools::RecipeTestTool::new(Arc::new(
             CorpusEngineRecipeTester::new(),
         ))),
-        Box::new(RegistryBrowseTool),
+        Box::new(RegistryBrowseTool::new(
+            corpus_engine::registry::BUNDLED_REGISTRY_TOML,
+        )),
         Box::new(sovereign_tools::CheckpointTool::new()),
         Box::new(sovereign_tools::DecisionLogTool::new()),
         Box::new(sovereign_tools::CapabilityRequestTool::new()),

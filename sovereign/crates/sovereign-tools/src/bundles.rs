@@ -569,6 +569,13 @@ impl ToolBundle for DocumentOperations {
 pub struct RecipeAuthoringTools {
     notes: Option<Arc<dyn sovereign_contracts::recipe::notes::RecipeNotes>>,
     features: Option<Arc<sovereign_recipe_author::recipe_project_store::RecipeProjectStore>>,
+    /// The injected recipe variant-catalog descriptor. `sovereign-tools` is the
+    /// only crate holding both the grammar (via `sovereign-recipe-author`) and
+    /// the descriptor (via `corpus-engine`), so the seam is implemented HERE:
+    /// the package tools take the value and never read the repo.
+    descriptor_json: &'static str,
+    /// The injected bundled registry snapshot, same seam as `descriptor_json`.
+    registry_toml: &'static str,
 }
 
 impl Default for RecipeAuthoringTools {
@@ -583,6 +590,8 @@ impl RecipeAuthoringTools {
         Self {
             notes: None,
             features: None,
+            descriptor_json: corpus_engine::recipe_schema::RECIPE_SCHEMA_DESCRIPTOR_JSON,
+            registry_toml: corpus_engine::registry::BUNDLED_REGISTRY_TOML,
         }
     }
 
@@ -625,9 +634,10 @@ impl ToolBundle for RecipeAuthoringTools {
         r = r.record(reg.register_reporting(Box::new(RecipeReadTool::new())));
         r = r.record(reg.register_reporting(Box::new(RecipeWriteTool::new())));
         r = r.record(
-            reg.register_reporting(Box::new(RecipeWriteStructuredTool::new(Arc::new(
-                CorpusEngineRecipeTester::new(),
-            )))),
+            reg.register_reporting(Box::new(RecipeWriteStructuredTool::new(
+                Arc::new(CorpusEngineRecipeTester::new()),
+                self.descriptor_json,
+            ))),
         );
         r = r.record(
             reg.register_reporting(Box::new(RecipeValidateTool::new(Arc::new(
@@ -639,7 +649,7 @@ impl ToolBundle for RecipeAuthoringTools {
                 CorpusEngineRecipeTester::new(),
             )))),
         );
-        r = r.record(reg.register_reporting(Box::new(RegistryBrowseTool)));
+        r = r.record(reg.register_reporting(Box::new(RegistryBrowseTool::new(self.registry_toml))));
         r = r.record(reg.register_reporting(Box::new(ProbeUrlTool::new())));
 
         match &self.notes {

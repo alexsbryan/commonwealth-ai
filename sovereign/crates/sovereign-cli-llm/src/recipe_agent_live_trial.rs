@@ -1353,16 +1353,19 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
     let mut registry = ToolRegistry::new();
     registry.register(Box::new(RecipeReadTool::new()));
     registry.register(Box::new(RecipeWriteTool::new()));
-    registry.register(Box::new(RecipeWriteStructuredTool::new(Arc::new(
-        CorpusEngineRecipeTester::new(),
-    ))));
+    registry.register(Box::new(RecipeWriteStructuredTool::new(
+        Arc::new(CorpusEngineRecipeTester::new()),
+        corpus_engine::recipe_schema::RECIPE_SCHEMA_DESCRIPTOR_JSON,
+    )));
     registry.register(Box::new(RecipeValidateTool::new(Arc::new(
         CorpusEngineRecipeTester::new(),
     ))));
     registry.register(Box::new(RecipeTestTool::new(Arc::new(
         CorpusEngineRecipeTester::new(),
     ))));
-    registry.register(Box::new(RegistryBrowseTool));
+    registry.register(Box::new(RegistryBrowseTool::new(
+        corpus_engine::registry::BUNDLED_REGISTRY_TOML,
+    )));
     registry.register(Box::new(DecisionLogTool::with_notes(Arc::clone(&notes))));
     registry.register(Box::new(CheckpointTool::with_stores(
         Arc::clone(&notes),

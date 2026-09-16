@@ -2,12 +2,18 @@
 //! `RegistryBrowseTool` — list recipes the agent can read for
 //! shape examples, including the user's locally-published ones.
 //!
-//! Lightweight, read-only, no network — reads the checked-in registry
-//! catalog (`sovereign_contracts::recipe::registry::merged_catalog`)
-//! which replicates the engine's bundled-snapshot + local-registry
-//! merge without a corpus-engine dependency. Returns one row per recipe
-//! with `is_local` so the LLM can prefer locally-authored examples
-//! (likely the most relevant) over the upstream catalog.
+//! Lightweight, read-only, no network — merges the bundled registry catalog
+//! (`sovereign_contracts::recipe::registry::merged_catalog`) with the user's
+//! `~/.svrnmesh/recipes/registry.toml`, replicating the engine's
+//! bundled-snapshot + local-registry merge without a corpus-engine dependency.
+//! Returns one row per recipe with `is_local` so the LLM can prefer
+//! locally-authored examples (likely the most relevant) over the upstream
+//! catalog.
+//!
+//! The bundled TOML is INJECTED at construction (the monolith supplies
+//! `corpus_engine::registry::BUNDLED_REGISTRY_TOML`): this crate may not name
+//! `corpus-engine`, and the shared leaf may not embed the artifact because that
+//! `include_str!` escapes its crate root.
 
 use async_trait::async_trait;
 
@@ -16,7 +22,19 @@ use sovereign_contracts::recipe::registry::merged_catalog;
 use sovereign_contracts::traits::Tool;
 use sovereign_contracts::types::*;
 
-pub struct RegistryBrowseTool;
+pub struct RegistryBrowseTool {
+    /// The bundled `sovereign-recipes/registry.toml` snapshot, injected by the
+    /// monolith. The user's local registry is still read from `HOME`.
+    bundled_registry_toml: &'static str,
+}
+
+impl RegistryBrowseTool {
+    pub fn new(bundled_registry_toml: &'static str) -> Self {
+        Self {
+            bundled_registry_toml,
+        }
+    }
+}
 
 #[async_trait]
 impl Tool for RegistryBrowseTool {
@@ -84,7 +102,7 @@ impl Tool for RegistryBrowseTool {
         // registry.toml`, local entries winning by id (same precedence as the
         // engine's `RecipeRegistry::list_entries`). No network refresh.
         let mut rows = Vec::new();
-        for row in merged_catalog() {
+        for row in merged_catalog(self.bundled_registry_toml) {
             let entry = &row.entry;
             if let Some(needle) = &filter {
                 let id = entry.id.to_lowercase();
@@ -118,15 +136,37 @@ mod tests {
 
     use super::*;
 
+    /// A minimal bundled snapshot, injected the way the monolith injects the
+    /// real one. The tool's merge/filter logic is what these tests exercise;
+    /// the REAL catalog's non-emptiness is asserted by
+    /// `sovereign-tools/tests/recipe_author_loop.rs`, which has the real bytes.
+    const BUNDLED: &str = r#"
+[[recipes]]
+id = "wikipedia"
+name = "Wikipedia (English)"
+description = "The encyclopedia."
+license = "CC-BY-SA-4.0"
+
+[[recipes]]
+id = "sec-filings-company"
+name = "SEC filings"
+description = "Company filings."
+license = "Public domain"
+"#;
+
+    fn tool() -> RegistryBrowseTool {
+        RegistryBrowseTool::new(BUNDLED)
+    }
+
     #[tokio::test]
-    async fn lists_bundled_recipes() {
+    async fn lists_injected_registry() {
         // Use a fresh HOME so no local registry leaks in. HOME is
         // process-global — hold the crate-wide lock for the test's
         // lifetime (see `recipe_author::home_test_lock`).
         let _guard = crate::home_test_lock();
         let home = tempfile::tempdir().unwrap();
         std::env::set_var("HOME", home.path());
-        let out = RegistryBrowseTool
+        let out = tool()
             .execute(&serde_json::json!({}), &ToolContext::default())
             .await
             .unwrap();
@@ -149,7 +189,7 @@ mod tests {
         let _guard = crate::home_test_lock();
         let home = tempfile::tempdir().unwrap();
         std::env::set_var("HOME", home.path());
-        let out = RegistryBrowseTool
+        let out = tool()
             .execute(
                 &serde_json::json!({"filter": "wikipedia"}),
                 &ToolContext::default(),
@@ -159,6 +199,7 @@ mod tests {
         match out {
             StepOutput::Json(v) => {
                 let recipes = v["recipes"].as_array().unwrap();
+                assert_eq!(recipes.len(), 1, "only wikipedia matches");
                 assert!(recipes.iter().all(|r| r["id"]
                     .as_str()
                     .unwrap()

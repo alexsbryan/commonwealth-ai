@@ -216,14 +216,13 @@ fn governed_crates(map: &arch_layers::LayerMap) -> Vec<(&str, &str)> {
 }
 
 /// Rule 3b — `include_str!` / `include_bytes!` literals that escape the crate
-/// root (climb two+ levels), unless they target the checked-in
-/// `sovereign-recipes/` tree. Grep-level and windowed, recursing `src/`.
+/// root (climb two+ levels). Grep-level and windowed, recursing `src/`.
 ///
-/// The `sovereign-recipes/` carve-out is the one recorded exception, and it is
-/// worth knowing that it is not free: when the studio closure was actually
-/// lifted to a sandbox (2026-07-21) it built in 36 seconds with zero source
-/// edits, but had to preserve the monorepo's directory shape to compile —
-/// because of exactly this embed. A green gate is not a proven lift.
+/// There is NO carve-out. A `sovereign-recipes/` exception used to exist for the
+/// shared leaf `sovereign-contracts`; the leaf no longer embeds the tree (the
+/// artifact is injected from `corpus-engine` instead), and the exception was the
+/// mechanism that let an unliftable embed sit under a green gate. Removing it is
+/// the structural fix (ARCH §10 — make it structural, not remembered).
 fn include_escapes(dir: &Path, crate_name: &str, scope: &str, fails: &mut Vec<String>) {
     let mut files = Vec::new();
     rs_files(&dir.join("src"), &mut files);
@@ -259,10 +258,10 @@ impl IncludeEscape {
     /// reader has to go look up is a violation that gets grandfathered.
     fn describe(&self) -> String {
         format!(
-            "embeds a file outside the crate root and outside `sovereign-recipes/` at \
-             COMPILE TIME (`{}`) — a third party who lifts this package has none of that \
-             tree, and the embed makes the monorepo's directory shape a build requirement. \
-             Move the data inside the crate, or into the carved-out recipes tree",
+            "embeds a file outside the crate root at COMPILE TIME (`{}`) — a third \
+             party who lifts this package has none of that tree, and the embed makes \
+             the monorepo's directory shape a build requirement. Move the data inside \
+             the crate, or inject it at the call site",
             self.evidence
         )
     }
@@ -280,10 +279,11 @@ impl IncludeEscape {
 /// line satisfied both halves and the rule never saw them. It was green by
 /// accident — and would have stayed green with the carve-out deleted, which
 /// is the tell: a check with no failing input you can name is not a check
-/// (ARCH §18.1).
+/// (ARCH §18.1). The embeds and the carve-out are both gone now; the window
+/// stays.
 ///
-/// The window is the STATEMENT rather than a fixed lookahead, so one embed's
-/// carve-out cannot excuse the embed underneath it.
+/// The window is the STATEMENT rather than a fixed lookahead, so one embed
+/// cannot hide the next.
 fn scan_include_escapes(text: &str) -> Vec<IncludeEscape> {
     /// How far a macro invocation may run before this rule stops looking for
     /// the `;` that ends it. The shipped shapes use four lines.
@@ -310,11 +310,6 @@ fn scan_include_escapes(text: &str) -> Vec<IncludeEscape> {
         let window = &lines[i..hi];
         examined_through = Some(hi.saturating_sub(1));
 
-        // The carve-out is read over the SAME window as the escape. Reading
-        // them on different lines is exactly how the per-line version passed.
-        if window.iter().any(|l| l.contains("sovereign-recipes")) {
-            continue;
-        }
         if let Some(hop) = window.iter().find(|l| l.contains("../..")) {
             out.push(IncludeEscape {
                 line: i + 1,
@@ -643,7 +638,7 @@ crates = ["pkg-a", "pkg-b"]
     #[test]
     fn include_scan_sees_an_embed_that_wraps_over_three_lines() {
         // sovereign-contracts/src/recipe/registry.rs's exact shape, with the
-        // recorded carve-out swapped out so the escape is the only variable.
+        // path swapped so the escape is the only variable.
         let wrapped = r#"
 pub const OTHER_TOML: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -655,6 +650,23 @@ pub const OTHER_TOML: &str = include_str!(concat!(
         assert!(hits[0].evidence.contains("elsewhere/registry.toml"));
     }
 
+    /// The `sovereign-recipes/` carve-out is GONE: the exact embed the leaf
+    /// used to carry now reports as an escape. This is the check that would
+    /// have failed had the carve-out stayed (ARCH §18.1 — a gate you have not
+    /// watched fail is not a gate).
+    #[test]
+    fn include_scan_no_longer_carves_out_sovereign_recipes() {
+        let recipe_embed = r#"
+pub const RECIPE_REGISTRY_TOML: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../../sovereign-recipes/registry.toml"
+));
+"#;
+        let hits = scan_include_escapes(recipe_embed);
+        assert_eq!(hits.len(), 1, "a sovereign-recipes embed must now be seen");
+        assert!(hits[0].evidence.contains("sovereign-recipes/registry.toml"));
+    }
+
     #[test]
     fn include_scan_still_sees_a_single_line_embed() {
         let inline = r#"const X: &str = include_str!("../../elsewhere/x.json");"#;
@@ -663,20 +675,10 @@ pub const OTHER_TOML: &str = include_str!(concat!(
         assert_eq!(scan_include_escapes(bytes).len(), 1);
     }
 
-    /// Rule 3b's negative controls — the recorded carve-out, and the embeds
-    /// that lift fine because they never leave the crate.
+    /// Rule 3b's negative controls — the embeds that lift fine because they
+    /// never leave the crate.
     #[test]
-    fn include_scan_leaves_the_carve_out_and_what_stays_inside() {
-        // The real registry.rs. The carve-out sits on a DIFFERENT line from
-        // the macro, which is why the window has to be the whole statement.
-        let carved = r#"
-pub const RECIPE_REGISTRY_TOML: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../../../sovereign-recipes/registry.toml"
-));
-"#;
-        assert!(scan_include_escapes(carved).is_empty());
-
+    fn include_scan_leaves_what_stays_inside() {
         // Inside the crate, and one level up from a file in `src/` is still
         // the crate root — only a two+ level climb leaves.
         let local = r#"const X: &str = include_str!("fixtures/x.json");"#;
@@ -685,28 +687,25 @@ pub const RECIPE_REGISTRY_TOML: &str = include_str!(concat!(
         assert!(scan_include_escapes(crate_root).is_empty());
     }
 
-    /// The window is a statement and not a fixed lookahead, so a carve-out
-    /// cannot excuse the embed above or below it. A `[i, i+8]` window would
-    /// have let the second statement here hide the first.
+    /// The window is a statement and not a fixed lookahead, so the embed above
+    /// cannot hide the one below. A `[i, i+8]` window would have let the second
+    /// statement go unreported.
     #[test]
-    fn include_scan_does_not_let_a_carve_out_cover_its_neighbour() {
+    fn include_scan_reports_each_escaping_statement() {
         let two = r#"
-pub const ESCAPES: &str = include_str!(concat!(
+pub const FIRST: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../../elsewhere/a.toml"
 ));
-pub const CARVED: &str = include_str!(concat!(
+pub const SECOND: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../../sovereign-recipes/b.toml"
 ));
 "#;
         let hits = scan_include_escapes(two);
-        assert_eq!(
-            hits.len(),
-            1,
-            "the first embed escapes; only the second is carved out"
-        );
+        assert_eq!(hits.len(), 2, "both embeds escape");
         assert!(hits[0].evidence.contains("elsewhere/a.toml"));
+        assert!(hits[1].evidence.contains("sovereign-recipes/b.toml"));
     }
 
     /// Rule 3c's positive controls — the three shapes that actually shipped,
@@ -793,8 +792,8 @@ fn head() -> String {
     /// `[[exception]]` rows; without it the gate would demand four.
     #[test]
     fn runtime_scan_leaves_what_actually_lifts() {
-        // sovereign-contracts/src/recipe/registry.rs — a COMPILE-TIME embed.
-        // It climbs, and it is rule 3b's, carve-out included.
+        // A COMPILE-TIME embed. It climbs, and it is rule 3b's business —
+        // rule 3c does not double-report it.
         let embed = r#"
 pub const RECIPE_REGISTRY_TOML: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),

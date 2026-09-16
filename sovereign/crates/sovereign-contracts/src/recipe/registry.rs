@@ -4,33 +4,19 @@
 //!
 //! `RegistryBrowseTool` lists recipes so the authoring agent can pattern off an
 //! existing one. It did this through `corpus_engine::RecipeRegistry` — a runtime
-//! dependency the extractable authoring package cannot carry. The catalog is
-//! static checked-in data, so the tool needs no injected seam: it parses the
-//! bundled TOML embedded here and merges the user's locally-published registry.
+//! dependency the extractable authoring package cannot carry.
 //!
-//! The raw TOML is embedded in this crate (the shared contract, stable relative
-//! to the repo root) so a consumer references a typed const rather than counting
-//! `../` across a crate boundary — the same convention as
-//! [`crate::recipe::schema::RECIPE_SCHEMA_DESCRIPTOR_JSON`]. `corpus-engine`
-//! keeps its own build.rs-vendored copy for the richer `RecipeRegistry`
-//! (network refresh, TOML fetch); both derive from the one source file and
-//! cannot drift.
+//! The bundled catalog is INJECTED: this leaf keeps the parser and the view
+//! types, and the caller supplies the bundled TOML (the monolith reads it from
+//! `corpus_engine::registry::BUNDLED_REGISTRY_TOML`). The artifact used to be
+//! embedded here with an `include_str!` that climbed three levels out of the
+//! crate root; a flat-copy lift of the package cannot resolve that, so the
+//! data arrives as a value instead.
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use serde::Deserialize;
-
-/// The canonical corpus catalog, embedded as raw TOML.
-///
-/// Anchored at `CARGO_MANIFEST_DIR` (this crate lives at
-/// `sovereign/crates/sovereign-contracts`, three `..` from the repo root; the
-/// crate does not move relative to the root). The single repo-relative
-/// reference to the artifact lives here, once.
-pub const RECIPE_REGISTRY_TOML: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../../../sovereign-recipes/registry.toml"
-));
 
 /// The subset of a registry entry the browse tool renders. Unlisted fields in
 /// the TOML (`toml_url`, `sha256`, `prebuilt`, …) are ignored by serde.
@@ -103,8 +89,10 @@ pub struct CatalogRow {
 /// id), then bundled entries whose id was not already seen. `is_local` mirrors
 /// `RecipeRegistry::is_local_entry`. `live` (network refresh) is never consulted
 /// — the browse tool never refreshes.
-pub fn merged_catalog() -> Vec<CatalogRow> {
-    let bundled = parse_registry(RECIPE_REGISTRY_TOML);
+///
+/// `bundled_toml` is the injected `sovereign-recipes/registry.toml` snapshot.
+pub fn merged_catalog(bundled_toml: &str) -> Vec<CatalogRow> {
+    let bundled = parse_registry(bundled_toml);
     let local = default_local_registry_path()
         .filter(|p| p.is_file())
         .and_then(|p| std::fs::read_to_string(p).ok())

@@ -30,7 +30,9 @@ corpus-engine-sections = { workspace = true }
 corpus-engine-vocab = { workspace = true }
 
 # What is LEFT of the sovereign edge after that move, and why it is left.
-# Census 2026-08-20 — three modules, no types, seven call sites:
+# Census 2026-08-20, minus the descriptor const (removed 2026-09-16: it now
+# embeds from corpus-engine's own OUT_DIR, so it no longer re-exports through
+# the leaf) — two modules, no types, five call sites:
 #   rebrand::svrnmesh_root              (registry.rs, meta_atlas/{builder,bridge/edges}.rs
 #                                        + 2 examples) — the workspace path SSOT.
 #                                        220 call sites over 15 crates; clippy's
@@ -39,7 +41,6 @@ corpus-engine-vocab = { workspace = true }
 #                                        this must stay ONE accessor (ARCH §10.6).
 #                                        Relocating it is its own rung.
 #   recipe::url_template::render_template   (acquirers/http_api/template.rs)
-#   recipe::schema::RECIPE_SCHEMA_DESCRIPTOR_JSON  (recipe_schema.rs, re-exported)
 # Unlike the detectors, these are not corpus-engine vocabulary parked upstairs:
 # they are things the engine and the recipe package must agree on bit-for-bit,
 # with no natural home below. `nc-boundary.py` never saw them — it counts TYPES,

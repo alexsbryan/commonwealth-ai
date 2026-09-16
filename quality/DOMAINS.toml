@@ -154,7 +154,7 @@ question = "which engine answers this, and can I prove why?"
 owns = ["Venue", "Slot", "Admission", "Replay", "Decision"]
 package = "serving"   # declared by dm-serving-package-rows 2026-09-15 (ARCH_LAYERS.toml:1044); boundary-gate is red until the extraction completes, so the predicate still fails
 crates = ["sovereign-scheduler", "sovereign-serving-host", "serving-policy", "sovereign-compute"]   # the first two are CREATED by dm-mesh-serving (SERVING_BOUNDARY.md); the peg sovereign-serving emptied to zero at REVIEW-build-serving-empty-peg (2026-09-15) and is deleted
-lift = ""             # scripts/serving-lift.sh exists; VERDICT 0 today. REVIEW-build-serving-drop-inference (2026-09-15) removed the grandfathered `sovereign-serving-host -> sovereign-inference` edge (the remote provider now reaches `oicp-client`, the tool-call parser `oicp-types`, the FIM text `sovereign-contracts`) and made the sandbox run on a toolchain satisfying the declared MSRV, so `cargo tree -i llama-cpp-4|corpus-engine` is empty and the closure now measures. It still writes 0 at step 2 for a separate, unlisted reason: the shared leaf `sovereign-contracts` `include_str!`s `sovereign-recipes/{registry.toml,schema/recipe_schema_descriptor.json}` from OUTSIDE its crate root, which the flat-copy sandbox cannot resolve
+lift = ""             # scripts/serving-lift.sh --sandbox writes VERDICT 1 (2026-09-16). REVIEW-build-serving-drop-inference (2026-09-15) removed the grandfathered `sovereign-serving-host -> sovereign-inference` edge and made the sandbox run on a toolchain satisfying the declared MSRV; REVIEW-build-serving-leaf-embed (2026-09-16) then removed the shared leaf's `include_str!`s of `sovereign-recipes/{registry.toml,schema/recipe_schema_descriptor.json}` — corpus-engine vendors both into its own `OUT_DIR` and the monolith injects them at the call site, so the flat-copy sandbox resolves the closure and steps 5-8 run
 applicable_as = "a router in front of N OpenAI-compatible endpoints with admission control and replayable decisions"
 roots = ["serving-policy"]
 status = "kept"
@@ -3754,7 +3754,7 @@ note = "recipe TOML parsing"
 [[module]]
 path = "corpus-engine/src/recipe_schema.rs"
 context = "ingest"
-lines = 19
+lines = 22
 files = 1
 note = "recipe schema"
 
@@ -3768,7 +3768,7 @@ note = "recipe templates"
 [[module]]
 path = "corpus-engine/src/registry.rs"
 context = "ingest"
-lines = 980
+lines = 984
 files = 1
 note = "DEVIATION from registry roots (retrieval): RecipeRegistry, imports only crate::recipe::Recipe + crate::types (registry.rs:25-27), zero index refs. Proposed correction to DOMAINS.toml retrieval.roots"
 
@@ -7391,7 +7391,7 @@ note = ""
 [[module]]
 path = "corpus-engine/xtask/src/boundary_gate.rs"
 context = "back-of-house"
-lines = 862
+lines = 861
 note = ""
 
 [[module]]
@@ -10553,7 +10553,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-cli-llm/src/recipe_agent_live_trial.rs"
 context = "host"
-lines = 1845
+lines = 1848
 note = ""
 
 [[module]]
@@ -11555,7 +11555,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-contracts/src/recipe/mod.rs"
 context = "kernel"
-lines = 27
+lines = 26
 note = ""
 
 [[module]]
@@ -11573,13 +11573,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-contracts/src/recipe/registry.rs"
 context = "kernel"
-lines = 125
-note = ""
-
-[[module]]
-path = "sovereign/crates/sovereign-contracts/src/recipe/schema.rs"
-context = "kernel"
-lines = 27
+lines = 113
 note = ""
 
 [[module]]
@@ -11639,7 +11633,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-contracts/src/tool_manifest/mod.rs"
 context = "kernel"
-lines = 742
+lines = 741
 note = ""
 
 [[module]]
@@ -14543,7 +14537,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-tools/src/bundles.rs"
 context = "unknown"
-lines = 701
+lines = 711
 note = ""
 
 [[module]]
@@ -15761,13 +15755,13 @@ note = ""
 [[module]]
 path = "studio/crates/sovereign-recipe-author/src/recipe_schema.rs"
 context = "unknown"
-lines = 892
+lines = 631
 note = ""
 
 [[module]]
 path = "studio/crates/sovereign-recipe-author/src/registry_browse.rs"
 context = "unknown"
-lines = 176
+lines = 217
 note = ""
 
 [[module]]
@@ -15809,7 +15803,7 @@ note = ""
 [[module]]
 path = "studio/crates/sovereign-recipe-author/src/write_structured.rs"
 context = "unknown"
-lines = 313
+lines = 325
 note = ""
 
 [[module]]
