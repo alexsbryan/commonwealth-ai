@@ -29,6 +29,7 @@ pub use oicp_types::{EditSlotStatus, FimCompletionRequest, FimStreamStart, Local
 pub use sovereign_core::traits::LocalInferenceService;
 
 pub mod answering;
+pub mod workbench;
 
 /// One inference slot's *actual* in-memory residency, as reported by
 /// the embedded engine — the daemon-facing mirror of
@@ -624,19 +625,9 @@ pub struct AppStateInner {
     /// Commonwealth daemon — that path routes via the orchestrator
     /// to spawned `llama-server` processes instead.
     pub local_inference: Option<std::sync::Arc<dyn LocalInferenceService>>,
-    /// One-in-flight budget for the next-edit model lane
-    /// (`sovereign/docs/NEXT_EDIT.md` §4): a consult that finds the
-    /// slot busy is dropped immediately (`dropped: "busy"`), never
-    /// queued — ghost text and chat always win the slot.
-    ///
-    /// `Arc` so the permit can be acquired *owned* and moved into the
-    /// task that actually runs the inference. Dropping a completion
-    /// future does NOT stop the generation behind it — the engine
-    /// dispatches through `spawn_blocking`, and dropping a
-    /// `JoinHandle` detaches rather than cancels — so a permit tied
-    /// to the route's timeout would release while llama.cpp still
-    /// held the slot, and this budget would stop bounding anything.
-    pub next_edit_model_slot: std::sync::Arc<tokio::sync::Semaphore>,
+    /// Workbench's part: the next-edit model lane's one-in-flight budget.
+    /// Held as a part so route shells read it directly (DC §4.2).
+    pub workbench: workbench::WorkbenchPart,
     /// Worker-side auto-warm hook for distributed inference. Installed by the
     /// daemon alongside `local_inference`; drives `POST /internal/rpc-warm`.
     /// `None` on a node that isn't an inference worker. See [`RpcShardWarmer`].
@@ -1512,7 +1503,9 @@ impl AppState {
                 activity_inference_availability: RwLock::new(1.0_f32),
                 on_mesh_mutation: None,
                 local_inference: None,
-                next_edit_model_slot: std::sync::Arc::new(tokio::sync::Semaphore::new(1)),
+                workbench: workbench::WorkbenchPart {
+                    next_edit_model_slot: std::sync::Arc::new(tokio::sync::Semaphore::new(1)),
+                },
                 rpc_shard_warmer: None,
                 work_queue: Arc::new(WorkQueueManager::new()),
                 grant_store: Arc::new(EphemeralGrantStore::new()),

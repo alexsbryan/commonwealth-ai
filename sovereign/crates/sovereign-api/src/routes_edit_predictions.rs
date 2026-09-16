@@ -427,7 +427,7 @@ pub async fn edit_predictions(
         None
     };
     let service = state.inner.local_inference.clone();
-    let sem = state.inner.next_edit_model_slot.clone();
+    let sem = state.inner.workbench.next_edit_model_slot.clone();
     let req_path = wire.path.clone();
     let req_language = wire.language.clone();
 
