@@ -10,9 +10,10 @@
 //! - [`Admission`] — the peer ceiling (pause, foreground yield, the
 //!   reciprocity-scaled `SchedCore` cap) and the client fair share, dispatched
 //!   on the [`Principal`] arm. One decider, one key (ARCH principle 8).
-//! - [`AdmissionHost`] — the edge resolver (`crate::principal`, which stays
-//!   here until `REVIEW-mint-principal`), the peer tally row, the canonical
-//!   `X-Node-Id` parser and the malformed-header record.
+//! - [`AdmissionHost`] — the edge resolver
+//!   ([`crate::principal::AppState::resolve`], the one resolution over all five
+//!   `Principal` arms), the peer tally row, the canonical `X-Node-Id` parser
+//!   and the malformed-header record.
 //!
 //! The RAII guards stay here because they hold `Arc<AppStateInner>`: the peer
 //! slot releases at headers time, the tally and the client share at the
@@ -21,6 +22,7 @@
 
 use std::sync::Arc;
 
+use crate::client_auth::ClientAuthPolicy;
 use crate::state::{AppState, AppStateInner};
 use axum::http::HeaderMap;
 use commonwealth_core::ids::NodeId;
@@ -262,10 +264,14 @@ impl Admission for AppState {
 
 impl AdmissionHost for AppState {
     fn resolve(&self, headers: &HeaderMap, peer: Option<std::net::SocketAddr>) -> Principal {
-        // THE resolver, called here and nowhere else. It produces the
-        // published `Principal` directly (`DAEMON_CORE.md` §3.3); the daemon's
-        // edge owns the resolution in `REVIEW-mint-principal`.
-        crate::principal::resolve_principal(headers, peer)
+        // The one edge resolver (`crate::principal::AppState::resolve`),
+        // called here and nowhere else. The port is reached only after the
+        // edge has vetted the request, and the one arm a listener posture
+        // gates — a self-declared `X-Principal` on loopback — is unreachable
+        // here on an untrusting listener because `client_auth_layer` has
+        // already refused a caller with no bearer, so the trusting posture is
+        // the correct default for this port.
+        AppState::resolve(self, headers, peer, ClientAuthPolicy::default())
     }
 
     fn parse_node_id(&self, headers: &HeaderMap) -> Option<NodeId> {

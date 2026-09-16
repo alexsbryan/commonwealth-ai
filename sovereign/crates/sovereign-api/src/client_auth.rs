@@ -56,6 +56,7 @@
 //! inference (which carries no `Authorization` at all) keep working.
 
 use commonwealth_core::ct::constant_time_eq;
+use sovereign_contracts::principal::Principal;
 use sovereign_grants::GuestGrant;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -201,11 +202,12 @@ pub async fn client_auth_layer(
         return next.run(request).await;
     }
 
-    // Remote, gated path. TWO credentials can admit here — the daemon-wide
-    // token and an ephemeral guest grant — and they are INDEPENDENT. The
-    // daemon token is checked first so a guest token can never widen into
-    // full access by matching an earlier arm; that ordering is the whole
-    // constraint, and it is the only one.
+    // Remote, gated path. The caller's identity is resolved ONCE, through the
+    // one edge resolver, and this layer's decision reads the arm it returns.
+    // Two credentials can admit here — the daemon-wide token and an ephemeral
+    // guest grant — and they are INDEPENDENT. The resolver reads the grant
+    // store, so a live grant is the `Guest` arm and any other bearer the
+    // `RemoteClient` arm; the token is checked only on that arm.
     //
     // Until 2026-08-28 this read "no daemon token configured → 403" BEFORE
     // ever looking at a grant, which made a live guest grant unusable on any
@@ -216,46 +218,51 @@ pub async fn client_auth_layer(
     // one is absent is the substitution this codebase refuses (§18.3).
     let configured = state.client_token();
     let presented = bearer_token(&request);
+    let principal = state.resolve(request.headers(), Some(peer), policy);
 
-    if let (Some(expected), Some(p)) = (configured.as_ref(), presented) {
-        if constant_time_eq(p.as_bytes(), expected.as_bytes()) {
-            return next.run(request).await;
-        }
-    }
-
-    // A guest grant — a bearer that is NOT membership and NOT the daemon
-    // token.
-    //
-    // This arm never inspects a `Scope` variant: it asks the grant whether
-    // it permits this path and inserts the grant for the handler. That is
-    // what keeps a newly-added scope from having to touch this file at all
-    // — see `sovereign_grants::guest_grant`.
-    if let Some(p) = presented {
-        let now = commonwealth_core::clock::unix_now_millis();
-        match state.inner.node.guest_grants.live(p, now) {
-            Some(grant) if grant.permits_path(request.uri().path()) => {
-                let mut request = request;
-                request.extensions_mut().insert(Guest(Arc::new(grant)));
-                return next.run(request).await;
+    match principal {
+        // A bearer that is a live guest grant. The grant bounds the routes:
+        // it must cover this path, and it is attached for the handlers that
+        // refine a scope per-request. It is re-read here because the resolver
+        // returns only the non-secret fingerprint, not the grant itself.
+        Principal::Guest { .. } => {
+            if let Some(p) = presented {
+                let now = commonwealth_core::clock::unix_now_millis();
+                match state.inner.node.guest_grants.live(p, now) {
+                    Some(grant) if grant.permits_path(request.uri().path()) => {
+                        let mut request = request;
+                        request.extensions_mut().insert(Guest(Arc::new(grant)));
+                        return next.run(request).await;
+                    }
+                    Some(grant) => {
+                        // Out of scope, not unauthenticated. Say which — a bare
+                        // 403 sends the operator hunting for a credential
+                        // problem that isn't there.
+                        tracing::info!(
+                            peer = %peer,
+                            path = %request.uri().path(),
+                            scopes = %grant.summary(),
+                            "client_auth: guest grant does not cover this path"
+                        );
+                        return guest_out_of_scope(&grant, request.uri().path());
+                    }
+                    // Not a live grant either — a raced revocation. Fall
+                    // through to the shared refusal below.
+                    None => {}
+                }
             }
-            Some(grant) => {
-                // Out of scope, not unauthenticated. Say which — a bare 403
-                // sends the operator hunting for a credential problem that
-                // isn't there.
-                tracing::info!(
-                    peer = %peer,
-                    path = %request.uri().path(),
-                    scopes = %grant.summary(),
-                    "client_auth: guest grant does not cover this path"
-                );
-                return guest_out_of_scope(&grant, request.uri().path());
-            }
-            // Not a live grant either. Fall through to the shared refusal
-            // below rather than answering here, so that "this node has no
-            // client token" wins over "your bearer did not match" — it is
-            // the operative fact, and the more actionable one.
-            None => {}
         }
+        // A bearer that is not a grant: the daemon-wide token admits it.
+        Principal::RemoteClient { .. } => {
+            if let (Some(expected), Some(p)) = (configured.as_ref(), presented) {
+                if constant_time_eq(p.as_bytes(), expected.as_bytes()) {
+                    return next.run(request).await;
+                }
+            }
+        }
+        // A member, a local owner or an anonymous caller is not admitted on a
+        // remote gated path by this layer.
+        _ => {}
     }
 
     // Nothing admitted. A daemon that never configured a client token is

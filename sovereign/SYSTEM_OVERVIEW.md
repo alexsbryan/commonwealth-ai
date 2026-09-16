@@ -7387,11 +7387,19 @@ work pins the GPU while the user is chatting. Components:
   is never double-gated. It keys the same policy core as
   **`SchedCore<Principal>`** (`AppStateInner.serving.client_sched`), where
   the principal comes from `sovereign-api/principal.rs`: the ONE
-  resolver, called from this layer and nowhere else — presented
-  `Authorization: Bearer` → `Credential(<fingerprint>)` (a
-  `WorkerToken` rides this branch, it is a plain bearer); else
-  `X-Principal` from a **loopback** caller → `Declared(<name>)`; else
-  `Anonymous`. It is deliberately NOT `sovereign-contracts`'
+  resolver, `AppState::resolve(headers, peer, policy)`, which covers all
+  five arms of the published `Principal` — a live guest grant →
+  `Guest` (the grant store decides; the key is a fingerprint); another
+  presented `Authorization: Bearer` → `RemoteClient` (a `WorkerToken`
+  rides this branch, it is a plain bearer); a readable `X-Node-Id` →
+  `Member` (read BEFORE the loopback branch, because a mesh peer arrives
+  on the trusting listener over loopback); `X-Principal` from a
+  **loopback** caller on a listener that trusts a loopback peer address →
+  `LocalOwner`; else `Anonymous`. It is the one resolution at the edge:
+  `client_auth_layer`'s credential/grant decision, the host's
+  `AdmissionHost::resolve` port (which this layer calls) and
+  `peer_admission_layer`'s `Member` construction all come through it. It
+  is deliberately NOT `sovereign-contracts`'
   `PrincipalResolver` (`traits.rs:106`), which keys on a conversation
   id that stateless `/v1/chat/completions` does not carry. The share
   rule is `serving_policy::fair_sched::fair_share_cap(budget,

@@ -34,7 +34,7 @@ use std::net::SocketAddr;
 
 use axum::{
     body::Body,
-    extract::State,
+    extract::{ConnectInfo, State},
     http::{header::RETRY_AFTER, HeaderMap, Request, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
@@ -269,14 +269,16 @@ pub trait Admission: Send + Sync {
 ///
 /// A supertrait of [`Admission`] so the adapters take one `State<S>`. Each
 /// method is a fact the daemon owns and the package may not name: the edge
-/// resolver (`DAEMON_CORE.md` §3.3, until `REVIEW-mint-principal`), the peer
-/// tally row, and the malformed-header record.
+/// resolver (`DAEMON_CORE.md` §3.3), the peer tally row, and the
+/// malformed-header record.
 pub trait AdmissionHost: Admission + Send + Sync {
     /// Resolve a request to its principal — the daemon's one edge resolver.
     ///
-    /// The daemon implements this over `resolve_principal`; a loopback caller's
-    /// self-declared name becomes [`Principal::LocalOwner`], a presented bearer
-    /// a [`Principal::RemoteClient`], nothing at all
+    /// The daemon implements this over `AppState::resolve`, which covers all
+    /// five arms: a live guest grant becomes [`Principal::Guest`], another
+    /// bearer [`Principal::RemoteClient`], a readable `X-Node-Id`
+    /// [`Principal::Member`], a loopback caller's self-declared name
+    /// [`Principal::LocalOwner`], and nothing at all
     /// [`Principal::Anonymous`].
     fn resolve(&self, headers: &HeaderMap, peer: Option<SocketAddr>) -> Principal;
 
@@ -462,15 +464,22 @@ where
     if headers.get("x-node-id").is_none() {
         return next.run(req).await;
     }
-    // Peer request: key the fair scheduler on the origin node. A present-but-
-    // unparseable id buckets under the zero node, so it's still gated and never
-    // silently bypasses the ceiling. The rejected raw value is recorded so
-    // /status can NAME it on the zero-bucket row (order commons-fluency fix 7)
-    // — an opaque `node-0000000000000000` row would default the absence instead
-    // of reporting it (ARCH §18.3).
-    let node = match state.parse_node_id(&headers) {
-        Some(node) => node,
-        None => {
+    // Peer request: key the fair scheduler on the origin node. The one edge
+    // resolver assigns the `Member` arm — it reads `X-Node-Id` before the
+    // loopback branch, so a peer on the trusting listener is a member and not
+    // a local owner. A present-but-unparseable id does not resolve to a
+    // member: its raw value is recorded and it buckets under the zero node, so
+    // it is still gated and never silently bypasses the ceiling. Recording the
+    // raw value is what lets /status NAME it on the zero-bucket row (order
+    // commons-fluency fix 7) — an opaque `node-0000000000000000` row would
+    // default the absence instead of reporting it (ARCH §18.3).
+    let peer_addr = req
+        .extensions()
+        .get::<ConnectInfo<SocketAddr>>()
+        .map(|c| c.0);
+    let node = match state.resolve(&headers, peer_addr) {
+        Principal::Member { node_id } => node_id,
+        _ => {
             let raw = headers
                 .get("x-node-id")
                 .or_else(|| headers.get("X-Node-Id"))
