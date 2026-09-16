@@ -221,20 +221,6 @@ pub fn spawn_resume_in_progress_ingests(state: AppState) {
     });
 }
 
-/// ONE truthiness rule for this crate's operator switches (ARCH §10.6).
-/// `pub(crate)` since 2026-09-04 so the reindexer's warm-LSP-tier gate reads
-/// "on" the same way every other mesh switch does, rather than growing a
-/// second spelling of `matches!(v, "1" | "true" | ...)`.
-pub(crate) fn env_truthy(key: &str) -> bool {
-    match std::env::var(key) {
-        Ok(v) => {
-            let v = v.trim().to_ascii_lowercase();
-            matches!(v.as_str(), "1" | "true" | "yes" | "on")
-        }
-        Err(_) => false,
-    }
-}
-
 /// The actual scan. Pulled out so a future test can drive it
 /// against a fixture engine without depending on `tokio::spawn`
 /// timing.
@@ -242,8 +228,10 @@ async fn resume_in_progress_ingests(state: AppState) {
     // Operator-facing opt-out — used by `sovereign agent-bench` to
     // stop a half-finished corpus ingest from competing with the
     // bench's chat slot. Default behaviour (env unset / "0" / "false")
-    // is unchanged.
-    if env_truthy("SOVEREIGN_DISABLE_AUTO_RESUME") {
+    // is unchanged. The truthiness rule is shared with the reindexer's
+    // warm-LSP-tier gate at `sovereign_contracts::env` — one spelling for
+    // both, now that they no longer live in the same crate.
+    if sovereign_contracts::env::truthy("SOVEREIGN_DISABLE_AUTO_RESUME") {
         tracing::info!("auto_resume: SOVEREIGN_DISABLE_AUTO_RESUME set — skipping ingest resume");
         return;
     }

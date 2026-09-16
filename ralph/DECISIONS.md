@@ -158,6 +158,74 @@ left unedited because `HUMAN-design-review` approved it.
 **Landed in.** this commit — the re-scoped `REVIEW-build-appstate-self-claims`
 row in `ralph/STATE.md` and this entry. `git revert <sha>` reverts it alone.
 
+## 2026-09-16 · REVIEW-build-mesh-host-decouple · four mesh files cannot be decoupled; they are the daemon's, and move with the type
+
+**Fork.** `REVIEW-build-mesh-host-decouple` (STATE.md:173) is the `[~]` row the
+pool resumed; it stopped after committing the 9 mechanical sites (`93f0c04a3`)
+with 8 left. Four of the eight sit in `venue_host.rs`, `roster_repair.rs`,
+`media_reach.rs` and `origin_fanout.rs`, each of which carries an inherent
+`impl EmbeddedDaemon` (or `impl VenueSource`/`VenueHost for EmbeddedDaemon`)
+plus a route shell. The row's resolution method — "each item moves to a leaf
+both crates can name, or the caller stops needing it" — has no instance here:
+`EmbeddedDaemon` is the daemon's composition root and no leaf can host it.
+Decide whether those four files are `fabric` (and their daemon glue is
+extracted) or `host` (and the files move with the type), and where the eighth
+site's helper belongs.
+
+**Choice.**
+
+1. **The four files are not decoupled; their disposition is
+   `REVIEW-build-daemon-embedded-split`.** Rust pins them to the crate that
+   defines `EmbeddedDaemon`: E0116 forbids an inherent impl leaving its type's
+   crate, and the orphan rule does the same for `impl VenueSource for
+   EmbeddedDaemon`. `EmbeddedDaemon` lives in the host-tagged `daemon.rs`, and
+   DC §4.1 says it "splits by owner, not size" — the route shells and the
+   `VenueSource`/`VenueHost` impls to sovereign-daemon, while the membership
+   methods DC §4.1 itself names (`forget_member`; `origin_offers`/`origin_reach`
+   = "report reach") re-home to Fabric. So the four files are *mixed* today and
+   are split — not decoupled — by row 175. Tagging them `host` would have
+   mis-tagged the membership methods; tagging them `fabric` and extracting the
+   impls here would have duplicated row 175. Row 173's check is therefore
+   narrowed to name the four deferred files explicitly (principle 6: the
+   absence is reported, not defaulted), and row 175 gains them.
+2. **The eighth site is resolvable and is resolved.** `reindexer.rs:972` named
+   `crate::auto_resume::env_truthy`, a pure truthiness helper. It moves to
+   `sovereign-contracts::env::truthy` — the shared leaf the row's own method
+   cites (`sovereign-contracts::worker_pod` precedent) — and both callers
+   (`auto_resume.rs`, `reindexer.rs`) repoint. One spelling survives, so ARCH 8
+   holds when `auto_resume` moves to `sovereign-daemon` and `reindexer` to a
+   `corpus-engine` crate and they may no longer name each other.
+
+**Evidence (reproduced this session).**
+- `git grep -nE 'crate::(local_only|loopback_guard|http_response|types|daemon|
+  supervised_task|work_donor|auto_resume)' -- sovereign/crates/sovereign-mesh/src`
+  excluding host-tagged modules: exactly 8 sites before, 7 after (the four
+  files, lines listed in `93f0c04a3`'s body); the reindexer site is gone.
+- `git grep -n 'impl EmbeddedDaemon\|impl .* for EmbeddedDaemon'` →
+  `daemon.rs:512`, `media_reach.rs:56`, `origin_fanout.rs:55`,
+  `roster_repair.rs:50`, `venue_host.rs:51,58`; `pub struct EmbeddedDaemon`
+  is `daemon.rs:211` (DT context `host`).
+- DC §4.1 (DAEMON_CORE.md:287-334): the host is "assembly / surface / edge /
+  adapter", `EmbeddedDaemon` "splits by owner, not size", membership operations
+  are Fabric's methods; `quality/ARCH_LAYERS.toml:739-742` is the forbid.
+- `sovereign-mesh/Cargo.toml:13` already names `sovereign-contracts`, so the
+  leaf move adds no edge.
+
+**Falsified by.** A later measurement showing the four files' route shells and
+impls are cleanly separable without touching `EmbeddedDaemon` (then 173 could
+have resolved them directly); or row 175's split keeping the files in
+`sovereign-mesh`, which would make `fabric` the right tag and this deferral a
+detour.
+
+**REVIEW-AFTER:** the charter covers re-scoping and deferring a row, but this
+also narrows a row's *check* (from "empty" to "only the four named files"), and
+mints the four files into row 175 — the morning review should confirm the
+four-file boundary is the one DC §4.1 draws.
+
+**Landed in.** this commit — `ralph/STATE.md` rows 173 (marked `[x]`, corrected
+scope/check) and 175 (four files added), `sovereign-contracts/src/env.rs` +
+`lib.rs`, `sovereign-mesh/src/auto_resume.rs`, `sovereign-mesh/src/reindexer.rs`.
+
 ## 2026-09-16 · REVIEW-build-appstate-self-claims · REVIEW-AFTER resolved — the DC records the redraw, no follow-up row
 
 **Fork.** The redraw left DC §4.2 claiming five answers (availability, in-flight,

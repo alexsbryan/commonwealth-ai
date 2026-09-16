@@ -969,7 +969,7 @@ async fn run_worker(ctx: WorkerCtx) {
                     //     warm analyzer's time on the hot path and its
                     //     duty-cycle effect over a 30-minute editing window is
                     //     not measured yet. See sovereign/DEFAULTS_LEDGER.md.
-                    if crate::auto_resume::env_truthy("SOVEREIGN_SCIP_LSP_TIER") {
+                    if sovereign_contracts::env::truthy("SOVEREIGN_SCIP_LSP_TIER") {
                         let graph = rebuild_ctx.merged.load();
                         crate::lsp_tier::run_edge_pass(
                             &mut lsp_tier,
