@@ -85,3 +85,75 @@ violation from the `sovereign-core` path.
 **Landed in.** this commit. The director session died mid-edit (an opencode
 server error, `err_3a891645`); the operator finished and verified its delta, so
 the decision is the director's and the verification is the operator's.
+
+## 2026-09-16 · REVIEW-build-appstate-self-claims · the SelfClaims port has no home that carries all five inputs; redraw hosted corpora out
+
+**Fork.** `REVIEW-build-appstate-self-claims` (STATE.md:155) stopped because the
+`SelfClaims` port DC §4.2 decides has no crate that is simultaneously nameable by
+both `sovereign-mesh` and `sovereign-api`, able to carry `CorpusShardInfo`, able
+to declare an `async fn`, and ratchet-neutral. The worker named four placements
+and recommended option 1 (contracts port, hosted corpora redrawn out); it did not
+decide, because clearing the row is an operator act.
+
+**Choice.** Option 1, and the row is re-scoped to it. Declare `SelfClaims` +
+`LocalClaims` in `sovereign-contracts`, re-exported at `sovereign_core::self_claims`
+on the `identity` precedent (`sovereign-core/src/lib.rs:89`; DECISIONS.md
+2026-09-16 identity entry). It answers availability, in-flight, storage remaining
+and embed model, plus the storage-used write-back. **Hosted corpora is redrawn
+out**: it is read from the `engine` parameter, not `AppState`, and `Fabric`
+already legitimately names `corpus-engine`, so `build_hosted_corpora` stays in
+`sovereign-mesh` and the port does not carry `CorpusShardInfo`.
+
+This is the design's own terms, not a deviation from it. DC §6's kill bar says
+"If `SelfClaims` needs more than about five inputs from other contexts'
+internals, Fabric is computing Serving's claims for it: redraw the port"
+(`quality/DAEMON_CORE.md:570-572`), and DC §7 names the five inputs unverified
+("§4.2's five come from reading gossip and the capabilities builder, not from a
+port drafted against them", `:591-592`). Options 2–4 each buy the literal row at
+a named cost the charter puts off-limits or principle 11 avoids: option 2 weakens
+`commonwealth-core`'s stated liftability contract ("declares no `async fn`",
+`commonwealth-core/src/lib.rs:21`); option 3 puts a Fabric/node port in the
+Serving package (owner mismatch, DC §4.2's owner table); option 4 raises
+`commonwealth-core`'s fan-in 16 → 17 (`quality/baselines/fan_in.tsv:6`) against a
+baseline whose header says "never adds, never raises". The inventory (a contracts
+port already exists for `MemberReach` and `IdentityReader`) outranks a new edge.
+
+**Evidence (all reproduced this session).**
+- `sovereign code converge noun SelfClaims --corpus-id commonwealth-ai` → 0
+  definitions; `LocalClaims` → 0 definitions.
+- `build_local_capabilities` (`sovereign-mesh/src/capabilities.rs:64-70`) reads
+  only storage (`:132` `set_storage_used_bytes`, `:133` `storage_remaining_bytes`)
+  and in-flight (`:238` `current_local_in_flight`) off `AppState`; the caller
+  `gossip::run_one_round` reads the inference store and recomputes availability
+  (`gossip.rs:468`, `:474-478`); hosted corpora comes from the `engine` parameter
+  (`:102-124`, `build_hosted_corpora` `:263`). `loaded_models` is a non-read
+  (`:189`).
+- `sovereign-contracts` is a layer-0 `[[package_leaf]]` with allow-list
+  `["oicp-types", "kernel-types", "sovereign-time"]`
+  (`quality/ARCH_LAYERS.toml:860-873`); `commonwealth-core` is in `mesh-foundation`
+  (`:161`); `CorpusShardInfo` is `commonwealth-core/src/knowledge.rs:64`. A
+  contracts trait cannot name it.
+- `sovereign-contracts` already declares `#[async_trait]` traits
+  (`traits.rs:32`, `local_inference.rs:33`), so an async port is native there.
+- `EmbedModelInfo` is `oicp_types::manifest::EmbedModelInfo`
+  (`oicp-types/src/manifest.rs:263`), re-exported as
+  `commonwealth_core::oicp::EmbedModelInfo` — so the contracts port CAN name it.
+- `sovereign-mesh` already depends on `sovereign-contracts`
+  (`sovereign-mesh/Cargo.toml:13`); `sovereign-api` does not, and reaches it via
+  `sovereign_core` (`sovereign-core/src/lib.rs:89`), so no fan-in moves.
+
+**Falsified by.** A later measurement showing `CorpusShardInfo` has no
+`commonwealth-core`-only field (it is a `Serialize`/`Deserialize` wire type whose
+fields are `String`/`Option`/`Vec`/`u64` — `knowledge.rs:64-95`), in which case
+the follow-up move lands and hosted corpora folds into the port without the
+redraw; or DC §6/§7 being revised to require all five inputs in the port, which
+would reopen the placement fork.
+
+**REVIEW-AFTER:** the redraw drops one of the five answers DC §4.2's narrative
+lists (hosted corpora), so the morning review should decide whether DC §4.2's
+text is amended to record the redraw or a follow-up row is minted to move
+`CorpusShardInfo` to `oicp-types`. The row text carries the redraw; the DC was
+left unedited because `HUMAN-design-review` approved it.
+
+**Landed in.** this commit — the re-scoped `REVIEW-build-appstate-self-claims`
+row in `ralph/STATE.md` and this entry. `git revert <sha>` reverts it alone.
