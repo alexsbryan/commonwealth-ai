@@ -47,7 +47,7 @@
 //!    unlimited principals by rotating a header and escape rationing
 //!    entirely. Pinning a remote caller to its credential is the stricter
 //!    reading and the safe one.
-//! 3. **[`PrincipalKey::Anonymous`].** Nothing was presented. One shared
+//! 3. **[`Principal::Anonymous`].** Nothing was presented. One shared
 //!    bucket — which is exactly what these callers are *today*, so this is
 //!    the no-change branch, not a new grouping.
 //!
@@ -68,6 +68,7 @@ use std::hash::{Hash, Hasher};
 use std::net::SocketAddr;
 
 use axum::http::HeaderMap;
+use sovereign_contracts::principal::Principal;
 
 /// `X-Principal` values longer than this are fingerprinted rather than kept
 /// verbatim. A principal key becomes a map key and a log field, so an
@@ -78,76 +79,6 @@ const MAX_DECLARED_PRINCIPAL_LEN: usize = 128;
 
 /// The header a local caller uses to name itself.
 pub const PRINCIPAL_HEADER: &str = "x-principal";
-
-/// A fairness bucket. `Eq + Hash` because this is a `SchedCore` key.
-///
-/// Identity comes from what the caller *presented*, never from where it
-/// connected from: ARCH_PRINCIPLES §7.5 forbids deriving a key from an
-/// address or a counter, which rules out the per-connection `SocketAddr`
-/// fallback that would otherwise be the obvious third branch. An
-/// unidentified caller is [`Anonymous`](Self::Anonymous) — one honest bucket
-/// — rather than a fleet of buckets minted from ephemeral port numbers, which
-/// would hand every caller a fresh identity per TCP connection and defeat the
-/// cap outright.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum PrincipalKey {
-    /// A presented bearer credential, by fingerprint. Covers the daemon
-    /// client token, a per-caller bearer, and an owner-signed `WorkerToken`.
-    Credential(String),
-    /// A loopback caller's self-declared `X-Principal`.
-    Declared(String),
-    /// Nothing presented. Every such caller shares this one bucket.
-    Anonymous,
-}
-
-impl PrincipalKey {
-    /// Stable, non-secret rendering for logs and `/status`. A `Credential`
-    /// renders as its fingerprint, so the token never reaches a log line.
-    pub fn label(&self) -> String {
-        match self {
-            Self::Credential(fp) => format!("cred:{fp}"),
-            Self::Declared(name) => format!("decl:{name}"),
-            Self::Anonymous => "anon".to_string(),
-        }
-    }
-}
-
-impl std::fmt::Display for PrincipalKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.label())
-    }
-}
-
-/// Which branch of the resolution order produced the key. Carried separately
-/// from the key so a `debug` line can say *how* a caller was identified
-/// without parsing the label back apart.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PrincipalSource {
-    /// A bearer credential was presented (branch 1).
-    Credential,
-    /// A loopback caller declared `X-Principal` (branch 2).
-    Declared,
-    /// Nothing was presented (branch 3).
-    Absent,
-}
-
-impl PrincipalSource {
-    /// Short tracing-friendly name.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Credential => "credential",
-            Self::Declared => "declared",
-            Self::Absent => "absent",
-        }
-    }
-}
-
-/// A resolved principal plus the branch that produced it.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ResolvedPrincipal {
-    pub key: PrincipalKey,
-    pub source: PrincipalSource,
-}
 
 /// Non-cryptographic fingerprint of a secret, for use as a bucket key.
 ///
@@ -182,17 +113,30 @@ fn bearer(headers: &HeaderMap) -> Option<&str> {
 /// THE resolver: request headers + where the connection came from → the
 /// principal this request's turns are charged to.
 ///
+/// The value it returns is the published [`Principal`] itself, never a
+/// wire-side twin: the type is published language (`DAEMON_CORE.md` §3.3) and
+/// admission keys on it directly, so there is one identity type and no second
+/// scheme to drift (ARCH principle 8).
+///
 /// `peer` is the real `ConnectInfo<SocketAddr>` address, not a header — the
 /// same source `client_auth` decides loopback from, and for the same reason
 /// (`client_auth.rs:17-22`: the old header-keyed split made "omit the header"
 /// a full-trust bypass). `None` means the listener did not wire
 /// `ConnectInfo`, which `client_auth` already fails closed on; here it is
 /// treated as *not* loopback, the stricter reading.
-pub fn resolve_principal(headers: &HeaderMap, peer: Option<SocketAddr>) -> ResolvedPrincipal {
+///
+/// Identity comes from what the caller *presented*, never from where it
+/// connected from: ARCH_PRINCIPLES §7.5 forbids deriving a key from an
+/// address or a counter, which rules out the per-connection `SocketAddr`
+/// fallback that would otherwise be the obvious third branch. An
+/// unidentified caller is [`Principal::Anonymous`] — one honest bucket —
+/// rather than a fleet of buckets minted from ephemeral port numbers, which
+/// would hand every caller a fresh identity per TCP connection and defeat the
+/// cap outright.
+pub fn resolve_principal(headers: &HeaderMap, peer: Option<SocketAddr>) -> Principal {
     if let Some(token) = bearer(headers) {
-        return ResolvedPrincipal {
-            key: PrincipalKey::Credential(fingerprint(token)),
-            source: PrincipalSource::Credential,
+        return Principal::RemoteClient {
+            credential: fingerprint(token),
         };
     }
 
@@ -209,17 +153,13 @@ pub fn resolve_principal(headers: &HeaderMap, peer: Option<SocketAddr>) -> Resol
             } else {
                 declared.to_string()
             };
-            return ResolvedPrincipal {
-                key: PrincipalKey::Declared(name),
-                source: PrincipalSource::Declared,
+            return Principal::LocalOwner {
+                sub_identity: Some(name),
             };
         }
     }
 
-    ResolvedPrincipal {
-        key: PrincipalKey::Anonymous,
-        source: PrincipalSource::Absent,
-    }
+    Principal::Anonymous
 }
 
 #[cfg(test)]
@@ -250,10 +190,9 @@ mod tests {
         let a = resolve_principal(&headers(&[]), loopback());
         let b = resolve_principal(&headers(&[]), remote());
         let c = resolve_principal(&headers(&[]), None);
-        assert_eq!(a.key, PrincipalKey::Anonymous);
-        assert_eq!(a.source, PrincipalSource::Absent);
-        assert_eq!(a.key, b.key, "an unidentified caller is one bucket");
-        assert_eq!(a.key, c.key, "including when ConnectInfo is missing");
+        assert_eq!(a, Principal::Anonymous);
+        assert_eq!(a, b, "an unidentified caller is one bucket");
+        assert_eq!(a, c, "including when ConnectInfo is missing");
     }
 
     #[test]
@@ -262,8 +201,8 @@ mod tests {
             &headers(&[("authorization", "Bearer super-secret-token")]),
             loopback(),
         );
-        assert_eq!(r.source, PrincipalSource::Credential);
-        let label = r.key.label();
+        assert!(matches!(r, Principal::RemoteClient { .. }));
+        let label = r.label();
         assert!(
             !label.contains("super-secret-token"),
             "the token must never appear in a loggable key: {label}"
@@ -278,29 +217,33 @@ mod tests {
         let a = resolve_principal(&headers(&[("authorization", "Bearer tok-a")]), loopback());
         let b = resolve_principal(&headers(&[("authorization", "Bearer tok-b")]), loopback());
         let a2 = resolve_principal(&headers(&[("authorization", "Bearer tok-a")]), remote());
-        assert_ne!(a.key, b.key, "different credentials are different callers");
-        assert_eq!(a.key, a2.key, "the same credential is the same caller");
+        assert_ne!(a, b, "different credentials are different callers");
+        assert_eq!(a, a2, "the same credential is the same caller");
     }
 
     #[test]
     fn bearer_scheme_is_case_insensitive_and_an_empty_one_is_not_identity() {
         let lower = resolve_principal(&headers(&[("authorization", "bearer tok")]), loopback());
         let upper = resolve_principal(&headers(&[("authorization", "BEARER  tok ")]), loopback());
-        assert_eq!(lower.key, upper.key);
+        assert_eq!(lower, upper);
         // An empty or non-bearer credential presents nothing.
         for bad in ["Bearer ", "Basic tok"] {
             let r = resolve_principal(&headers(&[("authorization", bad)]), loopback());
-            assert_eq!(r.key, PrincipalKey::Anonymous, "{bad} is not an identity");
+            assert_eq!(r, Principal::Anonymous, "{bad} is not an identity");
         }
     }
 
     #[test]
     fn x_principal_identifies_a_loopback_caller() {
         let r = resolve_principal(&headers(&[("x-principal", "desktop")]), loopback());
-        assert_eq!(r.source, PrincipalSource::Declared);
-        assert_eq!(r.key, PrincipalKey::Declared("desktop".into()));
+        assert_eq!(
+            r,
+            Principal::LocalOwner {
+                sub_identity: Some("desktop".into())
+            }
+        );
         let other = resolve_principal(&headers(&[("x-principal", "cli")]), loopback());
-        assert_ne!(r.key, other.key);
+        assert_ne!(r, other);
     }
 
     #[test]
@@ -308,8 +251,7 @@ mod tests {
         // A remote caller may not mint principals: it would escape rationing
         // by rotating one header. It stays in its credential bucket.
         let declared_only = resolve_principal(&headers(&[("x-principal", "whoever")]), remote());
-        assert_eq!(declared_only.key, PrincipalKey::Anonymous);
-        assert_eq!(declared_only.source, PrincipalSource::Absent);
+        assert_eq!(declared_only, Principal::Anonymous);
 
         let with_cred = resolve_principal(
             &headers(&[("x-principal", "whoever"), ("authorization", "Bearer t")]),
@@ -317,7 +259,7 @@ mod tests {
         );
         let cred_alone = resolve_principal(&headers(&[("authorization", "Bearer t")]), remote());
         assert_eq!(
-            with_cred.key, cred_alone.key,
+            with_cred, cred_alone,
             "X-Principal must not move a remote caller out of its credential bucket"
         );
     }
@@ -333,8 +275,8 @@ mod tests {
             ]),
             loopback(),
         );
-        assert_eq!(r.source, PrincipalSource::Credential);
-        assert!(r.key.label().starts_with("cred:"));
+        assert!(matches!(r, Principal::RemoteClient { .. }));
+        assert!(r.label().starts_with("cred:"));
     }
 
     #[test]
@@ -342,7 +284,7 @@ mod tests {
         // Blank falls through to Anonymous rather than minting an empty key.
         for blank in ["", "   "] {
             let r = resolve_principal(&headers(&[("x-principal", blank)]), loopback());
-            assert_eq!(r.key, PrincipalKey::Anonymous);
+            assert_eq!(r, Principal::Anonymous);
         }
         // Oversized is fingerprinted, so two callers sharing a long prefix
         // stay distinct instead of being merged by truncation.
@@ -350,8 +292,8 @@ mod tests {
         let long_b = "x".repeat(MAX_DECLARED_PRINCIPAL_LEN) + "bbb";
         let a = resolve_principal(&headers(&[("x-principal", &long_a)]), loopback());
         let b = resolve_principal(&headers(&[("x-principal", &long_b)]), loopback());
-        assert_ne!(a.key, b.key, "a shared prefix must not merge two callers");
-        assert!(a.key.label().len() < long_a.len(), "the key stays bounded");
+        assert_ne!(a, b, "a shared prefix must not merge two callers");
+        assert!(a.label().len() < long_a.len(), "the key stays bounded");
     }
 
     #[test]
@@ -364,12 +306,12 @@ mod tests {
         let h = headers(&[("authorization", "Bearer same-token")]);
         let a = resolve_principal(&h, Some("127.0.0.1:40001".parse().unwrap()));
         let b = resolve_principal(&h, Some("127.0.0.1:59999".parse().unwrap()));
-        assert_eq!(a.key, b.key);
+        assert_eq!(a, b);
         // And two anonymous callers on different ports are likewise one.
         let empty = headers(&[]);
         assert_eq!(
-            resolve_principal(&empty, Some("127.0.0.1:40001".parse().unwrap())).key,
-            resolve_principal(&empty, Some("127.0.0.1:59999".parse().unwrap())).key
+            resolve_principal(&empty, Some("127.0.0.1:40001".parse().unwrap())),
+            resolve_principal(&empty, Some("127.0.0.1:59999".parse().unwrap()))
         );
     }
 }

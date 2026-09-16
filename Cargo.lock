@@ -12054,6 +12054,7 @@ dependencies = [
  "serving-policy",
  "sha2 0.10.9",
  "sovereign-atos",
+ "sovereign-contracts",
  "sovereign-core",
  "sovereign-grants",
  "sovereign-meshapp-registry",

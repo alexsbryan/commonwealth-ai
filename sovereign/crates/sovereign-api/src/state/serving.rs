@@ -201,11 +201,10 @@ pub struct ServingPart {
     /// §9.3 measured (ten local callers on one node) is rationed by *who is
     /// asking* rather than by arrival order.
     ///
-    /// The key is the published `Principal`, not the wire-side `PrincipalKey`:
-    /// `admission` derives both its fairness and its peer keys from the one
-    /// identity type (`DAEMON_CORE.md` §3.3), so there is no second identity
-    /// scheme to drift (ARCH principle 8). The daemon's resolver maps the two
-    /// partitions one-to-one.
+    /// The key is the published `Principal`: `admission` derives both its
+    /// fairness and its peer keys from the one identity type (`DAEMON_CORE.md`
+    /// §3.3), so there is no second identity scheme to drift (ARCH principle
+    /// 8). The daemon's resolver produces that value directly.
     ///
     /// Its global slot budget is deliberately `usize::MAX`: this gate must
     /// never refuse on depth. §7.1 R2's correction is explicit that a depth

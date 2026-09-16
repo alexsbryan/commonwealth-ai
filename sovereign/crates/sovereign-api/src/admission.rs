@@ -262,19 +262,10 @@ impl Admission for AppState {
 
 impl AdmissionHost for AppState {
     fn resolve(&self, headers: &HeaderMap, peer: Option<std::net::SocketAddr>) -> Principal {
-        // THE resolver, called here and nowhere else. Its `PrincipalKey` and
-        // this `Principal` partition the same three buckets, so the key change
-        // is behaviour-preserving; `DAEMON_CORE.md` §3.3 moves the resolver to
-        // the daemon's edge in `REVIEW-mint-principal`.
-        match crate::principal::resolve_principal(headers, peer).key {
-            crate::principal::PrincipalKey::Credential(fp) => {
-                Principal::RemoteClient { credential: fp }
-            }
-            crate::principal::PrincipalKey::Declared(name) => Principal::LocalOwner {
-                sub_identity: Some(name),
-            },
-            crate::principal::PrincipalKey::Anonymous => Principal::Anonymous,
-        }
+        // THE resolver, called here and nowhere else. It produces the
+        // published `Principal` directly (`DAEMON_CORE.md` §3.3); the daemon's
+        // edge owns the resolution in `REVIEW-mint-principal`.
+        crate::principal::resolve_principal(headers, peer)
     }
 
     fn parse_node_id(&self, headers: &HeaderMap) -> Option<NodeId> {
