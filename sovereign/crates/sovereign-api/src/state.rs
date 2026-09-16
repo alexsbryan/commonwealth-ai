@@ -9,15 +9,15 @@ use async_trait::async_trait;
 use commonwealth_core::ids::HandoffId;
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::Mesh;
+use commonwealth_state::store_adapter::InferenceStateStore;
 use commonwealth_state::{ActivityEmitter, ContributionEmitter, MeshStore, PeerPreferenceStore};
 use corpus_engine::CorpusEngine;
+use oicp_types::model_aliases::ModelAliasTable;
 use serving_policy::fair_sched::{reciprocity_weight, SchedCore, TryGrant};
-use sovereign_serving_host::admission::Principal;
 use sovereign_grants::{EphemeralGrantStore, GuestGrantStore, VerifyReport, WorkQueueManager};
 use sovereign_meshapp_registry::proxy::AppPortMap;
 use sovereign_meshapp_registry::registry::AppRegistry;
-use oicp_types::model_aliases::ModelAliasTable;
-use commonwealth_state::store_adapter::InferenceStateStore;
+use sovereign_serving_host::admission::Principal;
 
 // Moved to the leaves by domains `REVIEW-build-local-inference`: the wire types
 // are protocol vocabulary (`oicp-types`) and the OpenAI-shaped port is a

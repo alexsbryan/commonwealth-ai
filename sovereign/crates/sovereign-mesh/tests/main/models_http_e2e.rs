@@ -50,11 +50,11 @@ use std::sync::Arc;
 
 use commonwealth_core::ids::{MeshId, ModelId, NodeId};
 use commonwealth_core::mesh::Mesh;
+use commonwealth_core::model::{ModelArchitecture, ModelInfo};
 use commonwealth_state::MeshStore;
 use sovereign_api::server::client_router;
 use sovereign_api::state::AppState;
 use sovereign_meshapp_registry::registry::AppRegistry;
-use commonwealth_core::model::{ModelArchitecture, ModelInfo};
 
 use crate::common;
 use crate::common::{member, spawn_router};
