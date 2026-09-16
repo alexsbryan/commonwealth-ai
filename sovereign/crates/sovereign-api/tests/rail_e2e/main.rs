@@ -92,6 +92,7 @@ fn with_guest(state: AppState, scopes: Vec<Scope>) -> AppState {
     let now = commonwealth_core::clock::unix_now_millis();
     state
         .inner
+        .node
         .guest_grants
         .issue(GUEST_TOKEN, scopes, Some("ring app".into()), 3_600, now);
     state
@@ -323,7 +324,7 @@ async fn a_revoked_rail_grant_fails_closed_on_the_next_call() {
     .await;
     assert_eq!(before, StatusCode::OK);
 
-    state.inner.guest_grants.revoke(GUEST_TOKEN);
+    state.inner.node.guest_grants.revoke(GUEST_TOKEN);
     let (after, _) = call(
         state,
         request("GET", "/v1/rail/log", LAN_PEER, Some(GUEST_TOKEN), None),

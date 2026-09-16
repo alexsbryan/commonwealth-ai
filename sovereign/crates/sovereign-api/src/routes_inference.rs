@@ -719,6 +719,7 @@ pub async fn embeddings(
     // previously invisible: nothing recorded embeddings served.
     state
         .inner
+        .node
         .activity_emitter
         .record(ActivityEventKind::EmbeddingsServed {
             served_for: match requester {
@@ -1225,6 +1226,7 @@ async fn serve_local_non_stream(
                 let wall_seconds = started.elapsed().as_secs_f64();
                 state
                     .inner
+                    .node
                     .activity_emitter
                     .record(ActivityEventKind::LocalInferenceServed {
                         model_id,
@@ -1458,7 +1460,7 @@ async fn serve_local_stream(
     // emission, matching the non-streaming policy.
     let chunks_for_done = chunks_count;
     let state_for_done = state.inner.contribution_emitter.clone();
-    let activity_for_done = state.inner.activity_emitter.clone();
+    let activity_for_done = state.inner.node.activity_emitter.clone();
     let requester_for_done = requester;
     let model_for_done = model_id_for_ledger;
     let done = futures::stream::once(async move {

@@ -61,7 +61,7 @@ pub async fn corpus_ingest_partition(
     State(state): State<AppState>,
     Json(req): Json<IngestPartitionRequest>,
 ) -> (StatusCode, Json<IngestPartitionResponse>) {
-    let _engine = match &state.inner.corpus_engine {
+    let _engine = match &state.inner.node.corpus_engine {
         Some(e) => e.clone(),
         None => {
             return (
@@ -529,7 +529,7 @@ pub fn find_local_handoff_for_corpus(
 /// and the operator can retry by re-issuing collaborative ingest.
 pub fn spawn_queue_merge(state: AppState, handoff_id: commonwealth_core::ids::HandoffId) {
     tokio::spawn(async move {
-        let engine = match state.inner.corpus_engine.as_ref() {
+        let engine = match state.inner.node.corpus_engine.as_ref() {
             Some(e) => Arc::clone(e),
             None => {
                 tracing::warn!(
@@ -707,7 +707,7 @@ pub async fn corpus_partition_evict(
     State(state): State<AppState>,
     Json(req): Json<PartitionEvictRequest>,
 ) -> (StatusCode, Json<PartitionEvictResponse>) {
-    let Some(engine) = state.inner.corpus_engine.as_ref() else {
+    let Some(engine) = state.inner.node.corpus_engine.as_ref() else {
         return (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(PartitionEvictResponse { evicted: false }),

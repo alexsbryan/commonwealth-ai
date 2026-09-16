@@ -29,6 +29,7 @@ pub use sovereign_core::traits::LocalInferenceService;
 
 pub mod answering;
 pub mod ingest;
+pub mod node;
 pub mod workbench;
 
 /// One inference slot's *actual* in-memory residency, as reported by
@@ -461,15 +462,11 @@ pub struct AppStateInner {
     /// costs nothing, so there is no `Option` and no "the daemon has not
     /// installed it yet" branch to get wrong.
     pub ring_write_nudge: Arc<tokio::sync::Notify>,
-    /// Bearer token required of non-loopback callers on the client API
-    /// (`:9741`). `None` (the default) means "no token configured" —
-    /// the [`crate::client_auth`] layer then admits ONLY loopback
-    /// callers and fails closed for any remote one. The embedded daemon
-    /// installs `Some(_)` via [`AppState::install_client_token`] at
-    /// startup when it binds a routable (non-loopback) address. Stored
-    /// in cleartext: the layer compares it byte-for-byte against the
-    /// incoming `Authorization: Bearer`. Set-once-read-many.
-    pub client_token: std::sync::RwLock<Option<Arc<str>>>,
+    /// The node's part: the client token, guest grants, start instant, the
+    /// corpus-engine handle, the foreground-yield signal (last active, window,
+    /// in-flight), the storage budget and usage, and the activity emitter.
+    /// Held as a part so route shells read it directly (DC §4.2).
+    pub node: node::NodePart,
     /// How this daemon reaches mesh peers — the PeerTransport seam.
     /// Every route handler that dials a peer resolves URLs through
     /// this instead of formatting `http://{ip}:{port}` inline, so a
@@ -532,11 +529,6 @@ pub struct AppStateInner {
     /// Answering's part: the ATOS middleware registry, session store and repo
     /// root. Held as a part so route shells read it directly (DC §4.2).
     pub answering: answering::AnsweringPart,
-    pub corpus_engine: Option<Arc<CorpusEngine>>,
-    /// Process start instant — drives `/status`'s `process.uptime_seconds`
-    /// (an uptime reset is the cheap witness that a supervised restart
-    /// actually produced a fresh process).
-    pub started_at: std::time::Instant,
     /// True when this node's iroh acceptor routes the RPC ALPN to a local
     /// ggml rpc-server — i.e. a cross-network host can genuinely reach our
     /// RPC worker through the mesh tunnel. Drives the additive
@@ -616,35 +608,6 @@ pub struct AppStateInner {
     /// daemon alongside `local_inference`; drives `POST /internal/rpc-warm`.
     /// `None` on a node that isn't an inference worker. See [`RpcShardWarmer`].
     pub rpc_shard_warmer: Option<std::sync::Arc<dyn RpcShardWarmer>>,
-    /// Ephemeral guest grants — short-lived bearers that are NOT mesh
-    /// membership. Consulted at exactly one point, `client_auth_layer`, which
-    /// asks the grant whether it permits the request's path and never inspects
-    /// a `Scope` variant itself. Never persisted, never gossiped, and never
-    /// touches `Mesh` — a guest is not a member and cannot become one.
-    /// See `commonwealth-knowledge::guest_grant`.
-    pub guest_grants: Arc<GuestGrantStore>,
-    /// Unix-seconds timestamp of the last foreground inference request
-    /// observed at `chat_completions`. `0` means "never touched" — the
-    /// initial state at boot. Bumped via [`AppState::bump_foreground_active`]
-    /// and read by the corpus-engine `YieldHook` impl to decide whether
-    /// background ingest workers should pause before the next embed
-    /// batch / enrichment phase. Plain atomic — no lock contention on
-    /// the hot read path.
-    pub foreground_last_active_ts: std::sync::atomic::AtomicI64,
-    /// Yield window in seconds. While `now - last_active < window`, the
-    /// daemon's `YieldHook` returns `should_yield = true`. `0` disables
-    /// the feature (tests, hosts that never want background work to
-    /// pause). Configured via `~/.config/sovereign/config.toml`'s
-    /// `daemon.yield_to_foreground_secs` and stuffed in here at
-    /// startup; the desktop Settings tab can rewrite it at runtime
-    /// without a daemon restart.
-    pub yield_window_secs: std::sync::atomic::AtomicU64,
-    /// Turns in flight right now. A turn holds a `ForegroundLease` on the
-    /// corpus engine for its whole life, so the yield hook stays true for
-    /// the entire turn regardless of the window; the window only governs
-    /// the quiet after the last turn ends.
-    pub foreground_inflight: std::sync::atomic::AtomicUsize,
-
     /// Fair admission for peer-served inference — one accounting authority
     /// (the same `SchedCore` policy the chat server uses) holding the
     /// runtime-mutable global ceiling (`slots`) AND a per-node concurrency
@@ -740,36 +703,6 @@ pub struct AppStateInner {
     /// as the foreground-yield window itself.
     pub yield_peers_to_foreground: std::sync::atomic::AtomicBool,
 
-    /// User-set ceiling on how much disk Sovereign is allowed to use
-    /// for corpus storage (sum of `~/.svrnmesh/indexes/*`). Encoded
-    /// as bytes; `0` is the sentinel for "no budget — use whatever
-    /// disk says is free". The desktop Settings panel writes this at
-    /// boot (computed from free disk on first launch, then persisted
-    /// in `desktop.toml`) and via `POST /internal/storage/budget`.
-    ///
-    /// The enforcement point is `sovereign-mesh::capabilities::
-    /// build_local_capabilities`, which clamps the gossiped
-    /// `free_storage_gb` (both the static `HardwareProfile` field and
-    /// the live `AvailableResources` reading) to
-    /// `min(actual_free, max(0, budget − used))`. The live planner
-    /// (the three `knowledge_assignment::plan_collaborative_ingestion*`
-    /// variants) reads that one value to decide what to assign here
-    /// (a peer at 0 is skipped outright), so clamping it
-    /// at the publish boundary makes the budget self-enforcing
-    /// across the whole mesh — peers won't push us shards that
-    /// would breach the budget, and our own local install path
-    /// already gates on the same number.
-    pub storage_budget_bytes: std::sync::atomic::AtomicU64,
-
-    /// Most recent observation of how much of the budget the corpus
-    /// engine is currently using on disk. Updated each gossip tick
-    /// from `CorpusEngine::installed_indexes()` (already walked once
-    /// per tick to publish `hosted_corpora`, so no extra IO). Read
-    /// by `GET /internal/storage/budget` to drive the desktop's
-    /// "X of Y GB used" indicator without forcing the UI to re-walk
-    /// the index directory.
-    pub storage_used_bytes: std::sync::atomic::AtomicU64,
-
     /// Dimensional contribution emitter. Each route handler records
     /// `LedgerEvent`s through this on completion (per write site
     /// listed in the Mesh Health design). Cheap to clone; emission
@@ -777,16 +710,6 @@ pub struct AppStateInner {
     /// to `MeshStore` so it survives `AppState` clones and can be
     /// passed into spawned tasks without lifetime gymnastics.
     pub contribution_emitter: ContributionEmitter,
-
-    /// Local Activity ledger emitter. Records this daemon's own
-    /// resource work — tokens served to local clients, embeddings
-    /// produced, chunks ingested/enriched, newsworthy fetches — in
-    /// Sovereign's vocabulary, for the glassbox "Activity & Sharing"
-    /// surface. Unlike `contribution_emitter`, its records are
-    /// **local-only and never gossip** (written under the
-    /// `activity-private` namespace). Cheap to clone; shares the same
-    /// underlying `MeshStore`. See `commonwealth_core::activity`.
-    pub activity_emitter: ActivityEmitter,
 
     /// Per-peer preference store (Ostrom sanctions). Local-only,
     /// never gossiped — see
@@ -849,12 +772,14 @@ impl AppStateInner {
     /// [`Self::foreground_yield_remaining_secs`] against a passed clock.
     pub(crate) fn foreground_yield_remaining_secs_at(&self, now: i64) -> Option<u64> {
         let window = self
+            .node
             .yield_window_secs
             .load(std::sync::atomic::Ordering::Relaxed);
         if window == 0 {
             return None;
         }
         if self
+            .node
             .foreground_inflight
             .load(std::sync::atomic::Ordering::Relaxed)
             > 0
@@ -862,6 +787,7 @@ impl AppStateInner {
             return Some(window);
         }
         let last = self
+            .node
             .foreground_last_active_ts
             .load(std::sync::atomic::Ordering::Relaxed);
         if last == 0 {
@@ -1130,6 +1056,7 @@ impl AppState {
     pub fn install_client_token(&self, token: Option<Arc<str>>) {
         *self
             .inner
+            .node
             .client_token
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = token;
@@ -1140,6 +1067,7 @@ impl AppState {
     /// by the [`crate::client_auth`] layer.
     pub fn client_token(&self) -> Option<Arc<str>> {
         self.inner
+            .node
             .client_token
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -1403,7 +1331,6 @@ impl AppState {
         ));
         Self {
             inner: Arc::new(AppStateInner {
-                started_at: std::time::Instant::now(),
                 rpc_iroh_accept: std::sync::atomic::AtomicBool::new(false),
                 self_node_id_swap: ArcSwap::from_pointee(self_node_id),
                 mesh: RwLock::new(mesh),
@@ -1418,7 +1345,30 @@ impl AppState {
                 self_dial_signer: std::sync::RwLock::new(None),
                 ring_rail: std::sync::RwLock::new(None),
                 ring_write_nudge: Arc::new(tokio::sync::Notify::new()),
-                client_token: std::sync::RwLock::new(None),
+                node: node::NodePart {
+                    client_token: std::sync::RwLock::new(None),
+                    corpus_engine,
+                    started_at: std::time::Instant::now(),
+                    guest_grants: Arc::new(GuestGrantStore::new()),
+                    // 0 sentinel = no foreground activity observed yet.
+                    // The yield hook treats 0 as "never active", regardless
+                    // of the window — so a fresh boot doesn't accidentally
+                    // pause ingest before the first chat request.
+                    foreground_last_active_ts: std::sync::atomic::AtomicI64::new(0),
+                    // 0 = disabled. The daemon constructor overrides this
+                    // from config (`daemon.yield_to_foreground_secs`,
+                    // default 60) before AppState is shared.
+                    yield_window_secs: std::sync::atomic::AtomicU64::new(0),
+                    foreground_inflight: std::sync::atomic::AtomicUsize::new(0),
+                    // 0 = unlimited (no clamp). The desktop overwrites
+                    // this at boot with either the persisted user choice
+                    // or a computed default; CLI/standalone daemons leave
+                    // it at 0 so headless servers don't surprise their
+                    // operators with a budget they didn't set.
+                    storage_budget_bytes: std::sync::atomic::AtomicU64::new(0),
+                    storage_used_bytes: std::sync::atomic::AtomicU64::new(0),
+                    activity_emitter,
+                },
                 peer_transport: std::sync::RwLock::new(Arc::new(
                     commonwealth_transport::IpTransport::default(),
                 )),
@@ -1432,7 +1382,6 @@ impl AppState {
                     session_store,
                     repo_root: std::env::current_dir().ok(),
                 },
-                corpus_engine,
                 mesh_store,
                 app_registry,
                 app_port_map: AppPortMap::new(),
@@ -1462,17 +1411,6 @@ impl AppState {
                     next_edit_model_slot: std::sync::Arc::new(tokio::sync::Semaphore::new(1)),
                 },
                 rpc_shard_warmer: None,
-                guest_grants: Arc::new(GuestGrantStore::new()),
-                // 0 sentinel = no foreground activity observed yet.
-                // The yield hook treats 0 as "never active", regardless
-                // of the window — so a fresh boot doesn't accidentally
-                // pause ingest before the first chat request.
-                foreground_last_active_ts: std::sync::atomic::AtomicI64::new(0),
-                // 0 = disabled. The daemon constructor overrides this
-                // from config (`daemon.yield_to_foreground_secs`,
-                // default 60) before AppState is shared.
-                yield_window_secs: std::sync::atomic::AtomicU64::new(0),
-                foreground_inflight: std::sync::atomic::AtomicUsize::new(0),
                 // usize::MAX = unlimited. The desktop overwrites this
                 // at boot with the user's persisted setting (default
                 // matched to their consent-dialog choice in W4);
@@ -1506,15 +1444,7 @@ impl AppState {
                 // the GPU is pinned by a peer's enrich job" failure
                 // mode is exactly what this prevents.
                 yield_peers_to_foreground: std::sync::atomic::AtomicBool::new(true),
-                // 0 = unlimited (no clamp). The desktop overwrites
-                // this at boot with either the persisted user choice
-                // or a computed default; CLI/standalone daemons leave
-                // it at 0 so headless servers don't surprise their
-                // operators with a budget they didn't set.
-                storage_budget_bytes: std::sync::atomic::AtomicU64::new(0),
-                storage_used_bytes: std::sync::atomic::AtomicU64::new(0),
                 contribution_emitter,
-                activity_emitter,
                 peer_preferences,
                 local_in_flight_publisher: std::sync::OnceLock::new(),
             }),
@@ -1570,7 +1500,7 @@ impl AppState {
     /// expiry on every read, so a lapsed grant already fails closed. What it
     /// costs is unbounded growth of the grant map over a long-lived daemon.
     pub fn start_guest_grant_reaper(&self) -> tokio::task::JoinHandle<()> {
-        Arc::clone(&self.inner.guest_grants).spawn_reaper()
+        Arc::clone(&self.inner.node.guest_grants).spawn_reaper()
     }
 
     /// This node's NodeId, by value. Cheap (atomic load + Arc deref).
@@ -1815,6 +1745,7 @@ impl AppState {
             .map(|d| d.as_secs() as i64)
             .unwrap_or(0);
         self.inner
+            .node
             .foreground_last_active_ts
             .store(now, std::sync::atomic::Ordering::Relaxed);
     }
@@ -1832,13 +1763,14 @@ impl AppState {
     pub fn foreground_begin(&self) {
         self.bump_foreground_active();
         self.inner
+            .node
             .foreground_inflight
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// A turn ended; the yield window counts from here.
     pub fn foreground_end(&self) {
-        let _ = self.inner.foreground_inflight.fetch_update(
+        let _ = self.inner.node.foreground_inflight.fetch_update(
             std::sync::atomic::Ordering::Relaxed,
             std::sync::atomic::Ordering::Relaxed,
             |n| Some(n.saturating_sub(1)),
@@ -1848,6 +1780,7 @@ impl AppState {
 
     pub fn foreground_inflight(&self) -> usize {
         self.inner
+            .node
             .foreground_inflight
             .load(std::sync::atomic::Ordering::Relaxed)
     }
@@ -1873,6 +1806,7 @@ impl AppState {
     /// the feature entirely.
     pub fn set_yield_window_secs(&self, secs: u64) {
         self.inner
+            .node
             .yield_window_secs
             .store(secs, std::sync::atomic::Ordering::Relaxed);
     }
@@ -1880,6 +1814,7 @@ impl AppState {
     /// Read the configured yield window (seconds). `0` means disabled.
     pub fn yield_window_secs(&self) -> u64 {
         self.inner
+            .node
             .yield_window_secs
             .load(std::sync::atomic::Ordering::Relaxed)
     }
@@ -1890,6 +1825,7 @@ impl AppState {
     /// the feature is actually wired during contention triage.
     pub fn foreground_last_active_ts(&self) -> i64 {
         self.inner
+            .node
             .foreground_last_active_ts
             .load(std::sync::atomic::Ordering::Relaxed)
     }
@@ -2218,6 +2154,7 @@ impl AppState {
     pub fn storage_budget_bytes(&self) -> Option<u64> {
         let raw = self
             .inner
+            .node
             .storage_budget_bytes
             .load(std::sync::atomic::Ordering::Relaxed);
         (raw > 0).then_some(raw)
@@ -2240,6 +2177,7 @@ impl AppState {
             Some(n) => n,
         };
         self.inner
+            .node
             .storage_budget_bytes
             .store(raw, std::sync::atomic::Ordering::Relaxed);
         Ok(())
@@ -2249,6 +2187,7 @@ impl AppState {
     /// Updated by the gossip-tick capabilities builder.
     pub fn storage_used_bytes(&self) -> u64 {
         self.inner
+            .node
             .storage_used_bytes
             .load(std::sync::atomic::Ordering::Relaxed)
     }
@@ -2258,6 +2197,7 @@ impl AppState {
     /// `GET /internal/storage/budget` reports back to the desktop.
     pub fn set_storage_used_bytes(&self, used: u64) {
         self.inner
+            .node
             .storage_used_bytes
             .store(used, std::sync::atomic::Ordering::Relaxed);
     }

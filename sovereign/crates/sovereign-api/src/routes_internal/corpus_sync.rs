@@ -59,7 +59,7 @@ pub async fn index_serve(
             ));
         }
     };
-    let engine = match &state.inner.corpus_engine {
+    let engine = match &state.inner.node.corpus_engine {
         Some(e) => e.clone(),
         None => {
             return Err((
@@ -180,7 +180,7 @@ pub async fn index_transfer(
         }
     };
 
-    let engine = match &state.inner.corpus_engine {
+    let engine = match &state.inner.node.corpus_engine {
         Some(e) => e.clone(),
         None => {
             return (

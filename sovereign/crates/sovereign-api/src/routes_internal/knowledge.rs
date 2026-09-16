@@ -108,7 +108,7 @@ pub async fn knowledge_search(
     // the dimensional ledger is intra-mesh-only per the spec scope.
     let requester = crate::headers::parse_x_node_id(&headers);
 
-    let engine = match &state.inner.corpus_engine {
+    let engine = match &state.inner.node.corpus_engine {
         Some(e) => e.clone(),
         None => {
             // Peers may have gossiped `hosted_corpora` that's since

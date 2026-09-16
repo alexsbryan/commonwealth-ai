@@ -165,7 +165,7 @@ fn apply_v04_enrichment(state: &AppState, embedded: bool, manifest: &mut Provide
     // and these feature strings MUST travel together, so they are derived
     // in one place: the `.then` both pushes the features and yields the
     // endpoints, or neither happens.
-    let ingest = state.inner.corpus_engine.is_some().then(|| {
+    let ingest = state.inner.node.corpus_engine.is_some().then(|| {
         feats.push(features::INGEST_V1.to_string());
         feats.push(features::INGEST_RECIPE_TEST.to_string());
         IngestEndpoints {

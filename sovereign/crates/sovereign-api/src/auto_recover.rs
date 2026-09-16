@@ -239,7 +239,7 @@ pub async fn merge_from_fold_coverage(
     participants: &[commonwealth_core::ids::NodeId],
     expected: usize,
 ) -> RecoveryOutcome {
-    let Some(engine) = state.inner.corpus_engine.as_ref() else {
+    let Some(engine) = state.inner.node.corpus_engine.as_ref() else {
         return RecoveryOutcome::Failed("no corpus engine on this node".to_string());
     };
     if corpus_id.trim().is_empty() {

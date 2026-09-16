@@ -671,6 +671,7 @@ async fn symbol_lane(
     let root = std::path::Path::new(wire.workspace_root.as_deref().ok_or(Decline::NoPath)?);
     let engine = state
         .inner
+        .node
         .corpus_engine
         .as_ref()
         .ok_or(Decline::GraphUnavailable)?;

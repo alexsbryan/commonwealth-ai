@@ -169,6 +169,7 @@ pub async fn guest_grant_issue(
     let now_ms = commonwealth_core::clock::unix_now_millis();
     let grant = state
         .inner
+        .node
         .guest_grants
         .issue(token, scopes, req.label, ttl_secs, now_ms);
 
@@ -207,7 +208,7 @@ pub async fn guest_grant_revoke(
     State(state): State<AppState>,
     Json(req): Json<GuestGrantRevokeRequest>,
 ) -> Json<GuestGrantRevokeResponse> {
-    let revoked = state.inner.guest_grants.revoke(&req.token).is_some();
+    let revoked = state.inner.node.guest_grants.revoke(&req.token).is_some();
     if revoked {
         tracing::info!("guest_grant: revoked a guest grant");
     }
@@ -236,6 +237,7 @@ pub async fn guest_grant_list(State(state): State<AppState>) -> Json<Vec<GuestGr
     Json(
         state
             .inner
+            .node
             .guest_grants
             .all()
             .into_iter()

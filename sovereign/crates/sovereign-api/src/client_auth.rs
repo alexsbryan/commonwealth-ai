@@ -232,7 +232,7 @@ pub async fn client_auth_layer(
     // — see `sovereign_grants::guest_grant`.
     if let Some(p) = presented {
         let now = commonwealth_core::clock::unix_now_millis();
-        match state.inner.guest_grants.live(p, now) {
+        match state.inner.node.guest_grants.live(p, now) {
             Some(grant) if grant.permits_path(request.uri().path()) => {
                 let mut request = request;
                 request.extensions_mut().insert(Guest(Arc::new(grant)));

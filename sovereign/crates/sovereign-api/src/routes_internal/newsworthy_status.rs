@@ -143,7 +143,7 @@ pub async fn newsworthy_tick(
 }
 
 async fn local_corpus_installed(state: &AppState) -> bool {
-    let Some(engine) = state.inner.corpus_engine.clone() else {
+    let Some(engine) = state.inner.node.corpus_engine.clone() else {
         return false;
     };
     match engine.installed_indexes().await {
@@ -186,7 +186,7 @@ async fn compute_leader(state: &AppState) -> (Option<String>, usize) {
     let self_id = state.self_node_id();
     let mut holders: Vec<NodeId> = Vec::new();
 
-    if let Some(engine) = state.inner.corpus_engine.clone() {
+    if let Some(engine) = state.inner.node.corpus_engine.clone() {
         if let Ok(list) = engine.installed_indexes().await {
             if list
                 .iter()

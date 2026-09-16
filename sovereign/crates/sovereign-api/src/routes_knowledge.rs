@@ -99,7 +99,7 @@ pub async fn knowledge_search(
 
     // Step 1: figure out what corpora are locally installed, keyed
     // by id. This drives the "search here vs. fan out" split.
-    let local_corpora: HashSet<String> = match &state.inner.corpus_engine {
+    let local_corpora: HashSet<String> = match &state.inner.node.corpus_engine {
         Some(e) => e
             .installed_indexes()
             .await
@@ -194,7 +194,7 @@ pub async fn knowledge_search(
     let mut corpora_unavailable: HashSet<String> = HashSet::new();
 
     if !local_targets.is_empty() {
-        if let Some(engine) = state.inner.corpus_engine.as_ref() {
+        if let Some(engine) = state.inner.node.corpus_engine.as_ref() {
             for corpus_id in &local_targets {
                 match engine.open_index_for_corpus(corpus_id).await {
                     Ok(index) => match index

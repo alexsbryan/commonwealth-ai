@@ -37,7 +37,7 @@ pub async fn corpus_install(
     State(state): State<AppState>,
     Json(req): Json<CorpusInstallRequest>,
 ) -> Result<Json<CorpusInstallResponse>, (StatusCode, Json<ErrorBody>)> {
-    if state.inner.corpus_engine.is_none() {
+    if state.inner.node.corpus_engine.is_none() {
         return Err((
             StatusCode::SERVICE_UNAVAILABLE,
             Json(ErrorBody {
@@ -72,7 +72,7 @@ pub async fn recipe_test(
     State(state): State<AppState>,
     Json(req): Json<RecipeTestRequest>,
 ) -> Result<Json<RecipeTestReport>, (StatusCode, Json<ErrorBody>)> {
-    let Some(engine) = state.inner.corpus_engine.clone() else {
+    let Some(engine) = state.inner.node.corpus_engine.clone() else {
         return Err((
             StatusCode::SERVICE_UNAVAILABLE,
             Json(ErrorBody {

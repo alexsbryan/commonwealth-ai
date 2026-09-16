@@ -472,7 +472,7 @@ pub async fn run_one_round(
     // the planner treats that as "don't include me in distribution".
     let embed_model = app_state.inner.inference_store.get_local_embed_model();
     let fresh_caps = build_local_capabilities(
-        app_state.inner.corpus_engine.as_ref(),
+        app_state.inner.node.corpus_engine.as_ref(),
         now,
         availability,
         embed_model,

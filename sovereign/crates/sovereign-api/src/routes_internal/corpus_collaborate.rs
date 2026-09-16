@@ -58,7 +58,7 @@ pub async fn corpus_collaborate(
     State(state): State<AppState>,
     Json(req): Json<CollaborateRequest>,
 ) -> Result<Json<IngestionHandoff>, (StatusCode, Json<ErrorBody>)> {
-    let engine = state.inner.corpus_engine.as_ref().ok_or_else(|| {
+    let engine = state.inner.node.corpus_engine.as_ref().ok_or_else(|| {
         (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(ErrorBody {
@@ -981,7 +981,7 @@ pub async fn corpus_eligible_peers(
     State(state): State<AppState>,
     Json(req): Json<EligiblePeersRequest>,
 ) -> Result<Json<EligiblePeersResponse>, (StatusCode, Json<ErrorBody>)> {
-    let engine = state.inner.corpus_engine.as_ref().ok_or_else(|| {
+    let engine = state.inner.node.corpus_engine.as_ref().ok_or_else(|| {
         (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(ErrorBody {

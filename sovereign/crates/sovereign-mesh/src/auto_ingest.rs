@@ -149,7 +149,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
 
         // We can't call `in_progress_ingestions()` until we have an
         // engine, so query it right after the peer-set refresh.
-        let Some(engine) = state.inner.corpus_engine.as_ref() else {
+        let Some(engine) = state.inner.node.corpus_engine.as_ref() else {
             tracing::debug!("auto_ingest: no corpus engine yet — waiting");
             first_iteration = false;
             tokio::time::sleep(CHECK_INTERVAL).await;
@@ -1096,7 +1096,7 @@ async fn pull_loop(
         // ingest loop (which polls it at document/batch boundaries) can
         // stop cleanly when the heartbeat tells us the lease is gone.
         let engine =
-            state.inner.corpus_engine.as_ref().expect(
+            state.inner.node.corpus_engine.as_ref().expect(
                 "pull_loop: corpus_engine must be present — auto_ingest already checks this",
             );
         let engine_cancel: CancellationFlag = engine.cancel_registry().register(&corpus_id);
@@ -1225,7 +1225,7 @@ async fn pull_loop(
     // covers the revoke / coordinator-crash cases where that call never
     // arrives, so the user's chunk text never lingers on a helper peer.
     if handoff.ephemeral {
-        if let Some(engine) = state.inner.corpus_engine.as_ref() {
+        if let Some(engine) = state.inner.node.corpus_engine.as_ref() {
             let dir = engine.partition_path(&corpus_id);
             let existed = dir.exists();
             std::fs::remove_dir_all(&dir).ok();

@@ -101,7 +101,7 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
     // corpus scan. Code indexes are excluded: they serve symbol lookup,
     // not prose retrieval (see `CorpusKind::Code`); every other kind
     // (Knowledge, Catalog, future additions) counts as searchable.
-    let (hosted_corpora, total_chunks_searchable) = match &state.inner.corpus_engine {
+    let (hosted_corpora, total_chunks_searchable) = match &state.inner.node.corpus_engine {
         Some(engine) => {
             let infos = engine.installed_indexes().await.unwrap_or_default();
             let mut ids: Vec<String> = Vec::new();
@@ -187,7 +187,7 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
             pid: std::process::id(),
             run_id: sovereign_core::run_identity::run_id(),
             build: sovereign_core::run_identity::stamp(env!("CARGO_PKG_VERSION")),
-            uptime_seconds: state.inner.started_at.elapsed().as_secs(),
+            uptime_seconds: state.inner.node.started_at.elapsed().as_secs(),
             rss_mb: current_rss_mb(),
             peak_rss_mb: peak_rss_mb(),
         },

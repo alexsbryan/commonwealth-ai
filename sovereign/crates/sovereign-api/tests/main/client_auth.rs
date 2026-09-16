@@ -272,6 +272,7 @@ fn state_with_guest(scopes: Vec<Scope>) -> AppState {
     let now = commonwealth_core::clock::unix_now_millis();
     state
         .inner
+        .node
         .guest_grants
         .issue(GUEST_TOKEN, scopes, Some("test".into()), 3_600, now);
     state
@@ -371,7 +372,7 @@ async fn an_expired_guest_token_is_401_not_admitted() {
     let now = commonwealth_core::clock::unix_now_millis();
     // Issue against a clock two hours in the past with a 1s TTL: lapsed by the
     // time the layer reads it, without sleeping.
-    state.inner.guest_grants.issue(
+    state.inner.node.guest_grants.issue(
         GUEST_TOKEN,
         vec![Scope::Models(vec![GRANTED_MODEL.into()])],
         None,
@@ -394,7 +395,7 @@ async fn a_revoked_guest_token_fails_closed_on_the_very_next_request() {
     .await;
     assert!(!is_auth_rejection(before), "live before revoke");
 
-    assert!(state.inner.guest_grants.revoke(GUEST_TOKEN).is_some());
+    assert!(state.inner.node.guest_grants.revoke(GUEST_TOKEN).is_some());
 
     let (after, _) = get_with_body(state, "/v1/models", Some(LAN_PEER), Some(GUEST_TOKEN)).await;
     assert_eq!(
@@ -629,7 +630,7 @@ async fn a_guest_bearer_is_admitted_on_the_guest_listener_from_the_tunnel_hop() 
 async fn a_guest_grant_is_honoured_on_a_daemon_with_no_client_token() {
     let state = state_with_token(None);
     let now = commonwealth_core::clock::unix_now_millis();
-    state.inner.guest_grants.issue(
+    state.inner.node.guest_grants.issue(
         GUEST_TOKEN,
         vec![Scope::Models(vec![GRANTED_MODEL.into()])],
         Some("no-daemon-token".into()),

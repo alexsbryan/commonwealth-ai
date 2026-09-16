@@ -97,7 +97,7 @@ impl MeshNewsworthyHost {
         let mut holders: Vec<NodeId> = Vec::new();
 
         // Self: check local engine directly — fastest source of truth.
-        if let Some(engine) = self.app_state.inner.corpus_engine.clone() {
+        if let Some(engine) = self.app_state.inner.node.corpus_engine.clone() {
             match engine.installed_indexes().await {
                 Ok(list) => {
                     if list
@@ -230,7 +230,7 @@ impl NewsworthyHost for MeshNewsworthyHost {
     /// would overlap and the second would block on Lance file
     /// contention until the first finished.
     fn on_chunks_committed(&self, affected: &[(String, &'static str)]) {
-        let Some(engine) = self.app_state.inner.corpus_engine.clone() else {
+        let Some(engine) = self.app_state.inner.node.corpus_engine.clone() else {
             tracing::warn!(
                 affected_count = affected.len(),
                 "newsworthy.atlas_rebuild_skipped — no corpus_engine on AppState; refreshed chunks landed but atlas stays stale"
@@ -355,7 +355,7 @@ impl NewsworthyHost for MeshNewsworthyHost {
             return;
         }
 
-        let Some(engine) = self.app_state.inner.corpus_engine.clone() else {
+        let Some(engine) = self.app_state.inner.node.corpus_engine.clone() else {
             tracing::warn!(
                 committed_count = committed.len(),
                 "newsworthy.atlas_delta_skipped — no corpus_engine on AppState"

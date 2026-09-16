@@ -247,7 +247,7 @@ async fn resume_in_progress_ingests(state: AppState) {
         tracing::info!("auto_resume: SOVEREIGN_DISABLE_AUTO_RESUME set — skipping ingest resume");
         return;
     }
-    let Some(engine) = state.inner.corpus_engine.clone() else {
+    let Some(engine) = state.inner.node.corpus_engine.clone() else {
         // No engine = nothing to resume. Standalone Commonwealth
         // configurations that disable the corpus surface land here.
         tracing::debug!("auto_resume: no corpus engine — skipping");

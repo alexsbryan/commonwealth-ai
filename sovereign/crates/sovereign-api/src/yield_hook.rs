@@ -177,6 +177,7 @@ mod tests {
             .map(|d| d.as_secs() as i64)
             .unwrap_or(0);
         app.inner
+            .node
             .foreground_last_active_ts
             .store(now - 120, std::sync::atomic::Ordering::Relaxed);
         let hook = AppStateYieldHook::new(app.inner.clone());
@@ -210,6 +211,7 @@ mod tests {
             .map(|d| d.as_secs() as i64)
             .unwrap_or(0);
         app.inner
+            .node
             .foreground_last_active_ts
             .store(now - secs_ago, std::sync::atomic::Ordering::Relaxed);
     }

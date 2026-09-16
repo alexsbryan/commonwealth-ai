@@ -30,7 +30,7 @@ pub struct AtlasStatusResponse {
 pub async fn atlas_status(
     State(state): State<AppState>,
 ) -> Result<Json<AtlasStatusResponse>, (StatusCode, Json<serde_json::Value>)> {
-    let engine = state.inner.corpus_engine.as_ref().ok_or_else(|| {
+    let engine = state.inner.node.corpus_engine.as_ref().ok_or_else(|| {
         (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(serde_json::json!({"error": "no corpus engine on this node"})),

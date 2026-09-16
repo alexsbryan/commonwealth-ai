@@ -142,7 +142,7 @@ pub async fn corpus_install(
     State(state): State<AppState>,
     Json(req): Json<InstallRequest>,
 ) -> Result<Json<InstallResponse>, (StatusCode, Json<ErrorBody>)> {
-    if state.inner.corpus_engine.is_none() {
+    if state.inner.node.corpus_engine.is_none() {
         return Err((
             StatusCode::SERVICE_UNAVAILABLE,
             Json(ErrorBody {
@@ -227,7 +227,7 @@ pub async fn corpus_canonical_stream(
     use axum::http::{header, StatusCode};
     use axum::response::IntoResponse;
 
-    let Some(engine) = state.inner.corpus_engine.clone() else {
+    let Some(engine) = state.inner.node.corpus_engine.clone() else {
         return (
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({"error": "corpus engine not wired on this node"})),
@@ -391,7 +391,7 @@ pub async fn corpus_canonical_stream(
 /// sync whether or not this particular Desktop session kicked off
 /// the install.
 pub async fn corpus_status(State(state): State<AppState>) -> Json<CorpusStatusResponse> {
-    let engine = match state.inner.corpus_engine.as_ref() {
+    let engine = match state.inner.node.corpus_engine.as_ref() {
         Some(e) => e.clone(),
         None => {
             return Json(CorpusStatusResponse {
@@ -572,7 +572,7 @@ pub async fn corpus_expand(
     State(state): State<AppState>,
     Json(req): Json<ExpandRequest>,
 ) -> Result<Json<InstallResponse>, (StatusCode, Json<ErrorBody>)> {
-    if state.inner.corpus_engine.is_none() {
+    if state.inner.node.corpus_engine.is_none() {
         return Err((
             StatusCode::SERVICE_UNAVAILABLE,
             Json(ErrorBody {
@@ -662,7 +662,7 @@ async fn record_failure(state: &AppState, corpus_id: &str, message: String) {
 }
 
 pub async fn spawn_corpus_expand(state: AppState, corpus_id: String) -> bool {
-    let Some(engine) = state.inner.corpus_engine.clone() else {
+    let Some(engine) = state.inner.node.corpus_engine.clone() else {
         return false;
     };
 
@@ -744,7 +744,7 @@ pub async fn spawn_corpus_install_outcome(
     corpus_id: String,
     parameters: std::collections::BTreeMap<String, serde_json::Value>,
 ) -> InstallOutcome {
-    let Some(engine) = state.inner.corpus_engine.clone() else {
+    let Some(engine) = state.inner.node.corpus_engine.clone() else {
         tracing::warn!(
             corpus = %corpus_id,
             "spawn_corpus_install: no corpus engine — ignoring"
@@ -873,14 +873,13 @@ pub async fn spawn_corpus_install_outcome(
                 // thousands of chunks is heavy local resource use that
                 // never crosses a peer boundary, so the contribution
                 // ledger never sees it; this is where it becomes visible.
-                state_for_task
-                    .inner
-                    .activity_emitter
-                    .record(ActivityEventKind::ChunksIngested {
+                state_for_task.inner.node.activity_emitter.record(
+                    ActivityEventKind::ChunksIngested {
                         corpus_id: corpus_id_for_task.clone(),
                         chunks: info.chunks_created,
                         duration_secs: info.duration_secs,
-                    });
+                    },
+                );
                 // Post-install hook: build the structural atlas the
                 // moment chunks are committed. Detached so the route
                 // handler that triggered the install isn't held up
@@ -892,7 +891,7 @@ pub async fn spawn_corpus_install_outcome(
                 // the CorpusEngine constructor without a recipe lookup.
                 let indexes = engine.index_dir().to_path_buf();
                 let recipes = indexes.clone();
-                let enrich_activity = state_for_task.inner.activity_emitter.clone();
+                let enrich_activity = state_for_task.inner.node.activity_emitter.clone();
                 // The SEC filings corpus's typed fact store moves into
                 // the index dir HERE, synchronously, BEFORE the detached
                 // block below. The `sec_facts` tool resolves a corpus by
@@ -1398,7 +1397,7 @@ pub async fn corpus_pause(
     State(state): State<AppState>,
     Json(req): Json<CancelRequest>,
 ) -> Result<Json<PauseResponse>, (StatusCode, Json<ErrorBody>)> {
-    let engine = state.inner.corpus_engine.as_ref().ok_or_else(|| {
+    let engine = state.inner.node.corpus_engine.as_ref().ok_or_else(|| {
         (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(ErrorBody {
@@ -1462,7 +1461,7 @@ pub async fn corpus_cancel(
         ));
     }
 
-    let engine = state.inner.corpus_engine.as_ref().ok_or_else(|| {
+    let engine = state.inner.node.corpus_engine.as_ref().ok_or_else(|| {
         (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(ErrorBody {
