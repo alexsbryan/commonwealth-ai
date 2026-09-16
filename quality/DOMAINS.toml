@@ -146,11 +146,13 @@ question = "which engine answers this, and can I prove why?"
 # suffix, not a noun); `Seat` refused as a near-synonym of `Slot`
 # (oicp-types/src/slot.rs:54); `Lender` refused because guest_lender.rs:17-27
 # already uses it for the pinned-grant concept and says "a lender is not a
-# peer". Admission's caller is a `Principal` — zero definitions, three of four
-# kin are the owner (sovereign-api/src/principal.rs:93,125,147), and it
-# CONVERGES with DAEMON_CORE.md §1's `principal -> Scope` table: zero renames.
-# Its owner may move to Answering (beside `Scope`) when daemon-core Phase 5
-# lands one resolver; until then Admission is its only consumer.
+# peer". Admission's caller is a `Principal`, and DC §3.3 decides the word is
+# PUBLISHED LANGUAGE, not Admission's: `kernel` owns it `owns_exact` (registry
+# :238) and its one definition lives in a kernel crate
+# (sovereign-contracts/src/principal.rs:59), because Serving's package and
+# Answering both key on it and neither may name the daemon. It CONVERGES with
+# DAEMON_CORE.md §1's `principal -> Scope` table: zero renames. The RESOLVER is
+# the daemon's edge, not the type (DC §3.3; REVIEW-mint-principal).
 owns = ["Venue", "Slot", "Admission", "Replay", "Decision"]
 package = "serving"   # declared by dm-serving-package-rows 2026-09-15 (ARCH_LAYERS.toml:1044); boundary-gate is red until the extraction completes, so the predicate still fails
 crates = ["sovereign-scheduler", "sovereign-serving-host", "serving-policy", "sovereign-compute"]   # the first two are CREATED by dm-mesh-serving (SERVING_BOUNDARY.md); the peg sovereign-serving emptied to zero at REVIEW-build-serving-empty-peg (2026-09-15) and is deleted
@@ -233,6 +235,13 @@ id = "kernel"
 kind = "published-language"
 question = "what do all contexts speak?"
 owns = []
+owns_exact = ["Principal"]
+# `Principal` is published language, not Serving's/Admission's word: DC §3.3
+# "In the registry, `Principal` leaves Serving's owned words for the published
+# language", because Serving's package and Answering both key on it and neither
+# may name the daemon. Exact match: the one definition is
+# `sovereign_contracts::principal::Principal`
+# (sovereign-contracts/src/principal.rs:59), a kernel crate, so it is exempt.
 # A definition in a crate tagged `kernel` counts against NO owner (registry
 # head, :19-22); the word-owners axis reads this flag, never a hardcoded id.
 exempt = true
@@ -1579,7 +1588,7 @@ rename = "Fabric says Member; Serving says Candidate (DOMAINS.md section 5 call 
 #
 # THE FIVE WORDS (evidence and converge blocks: scratchpad/adjudications-words.md):
 #   serving    = Venue      (converge: 0 defs, 1 kin VenueAction @ kernel-types/src/quality/triggers.rs:36, 18 refs/3 files -> renamed apart)
-#   admission  = Principal  (converge: 0 defs, 4 kin, 3 of them the OWNER at sovereign-api/src/principal.rs — a CONVERGENCE with DAEMON_CORE.md section 1 `principal -> Scope`)
+#   admission  = <none>     (Principal is PUBLISHED LANGUAGE, not Admission's word: `kernel` owns it `owns_exact` — DC §3.3, "Principal leaves Serving's owned words for the published language"; one definition, sovereign-contracts/src/principal.rs:59, in a kernel crate, so exempt; a CONVERGENCE with DAEMON_CORE.md section 1 `principal -> Scope`)
 #   knowledge  = <none>     (MERGE verdict, dm-word-owners kill bar: atlas half -> understanding (Atlas), ask-a-peer half -> retrieval (Index))
 #   fabric     = Member     (converge: 2 defs, both back-of-house/workbench; 1 exempt, 1 renamed apart at 13 refs)
 #   compute    = Donor      (converge: 0 defs; the one kin WorkDonorHandle @ sovereign-mesh/src/work_donor.rs:363 is Compute's own)
