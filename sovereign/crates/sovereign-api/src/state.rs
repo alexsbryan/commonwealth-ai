@@ -13,6 +13,7 @@ use commonwealth_state::{ActivityEmitter, ContributionEmitter, MeshStore, PeerPr
 use corpus_engine::CorpusEngine;
 use oicp_types::model_aliases::ModelAliasTable;
 use serving_policy::fair_sched::{reciprocity_weight, SchedCore, TryGrant};
+use sovereign_contracts::identity::IdentityReader;
 use sovereign_grants::{EphemeralGrantStore, GuestGrantStore, WorkQueueManager};
 use sovereign_meshapp_registry::proxy::AppPortMap;
 use sovereign_meshapp_registry::registry::AppRegistry;
@@ -1013,7 +1014,7 @@ impl AppState {
             self_node_id,
         ));
         let fabric = fabric::FabricPart {
-            self_node_id_swap: ArcSwap::from_pointee(self_node_id),
+            identity: IdentityReader::new(self_node_id),
             mesh: RwLock::new(mesh),
             self_node_pubkey: std::sync::RwLock::new(None),
             self_iroh_dialinfo: std::sync::RwLock::new(None),
@@ -1193,19 +1194,19 @@ impl AppState {
     }
 
     /// This node's NodeId, by value. Cheap (atomic load + Arc deref).
-    /// Use everywhere instead of the old field access — `join_mesh`
-    /// swaps this when adopting a founder-assigned ID, and the field
-    /// access path would always see the placeholder.
+    /// A convenience over [`Self::identity_reader`]; `join_mesh` swaps
+    /// the id when adopting a founder-assigned one, and this always
+    /// reads the current value rather than a copied placeholder.
     pub fn self_node_id(&self) -> NodeId {
-        **self.inner.fabric.self_node_id_swap.load()
+        self.inner.fabric.identity.current()
     }
 
-    /// Replace this node's `self_node_id` (atomic). Called by
-    /// `join_mesh` after the founder assigns us a NodeId during the
-    /// handshake. Cheap pointer swap; concurrent readers see either
-    /// the old or new value but never garbage.
-    pub fn set_self_node_id(&self, new_id: NodeId) {
-        self.inner.fabric.self_node_id_swap.store(Arc::new(new_id));
+    /// Fabric's identity, published as a watch (`DC §4.2` "Identity is a
+    /// reader, not a value"). A consumer that must observe a `join_mesh`
+    /// adoption holds this handle rather than reading the id once; the daemon
+    /// publishes through it.
+    pub fn identity_reader(&self) -> IdentityReader {
+        self.inner.fabric.identity.clone()
     }
 
     /// Install the in-process inference service. Same Arc-get_mut

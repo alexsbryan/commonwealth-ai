@@ -12054,6 +12054,7 @@ dependencies = [
  "serving-policy",
  "sha2 0.10.9",
  "sovereign-atos",
+ "sovereign-contracts",
  "sovereign-core",
  "sovereign-grants",
  "sovereign-meshapp-registry",
@@ -12367,6 +12368,7 @@ dependencies = [
 name = "sovereign-contracts"
 version = "0.7.0"
 dependencies = [
+ "arc-swap",
  "async-trait",
  "base64 0.22.1",
  "bytes",

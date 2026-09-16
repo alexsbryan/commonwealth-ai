@@ -114,7 +114,7 @@ pub async fn corpus_ingest_partition(
     let file_indices = req.file_indices.clone();
     let article_range = req.article_range;
     let handoff_id = req.handoff_id;
-    let local_node_id = *state.inner.fabric.self_node_id_swap.load_full().as_ref();
+    let local_node_id = state.inner.fabric.identity.current();
     let engine = _engine.clone();
     let mesh_store = Arc::clone(&state.inner.fabric.mesh_store);
     let state_clone = state.clone();
@@ -542,7 +542,7 @@ pub fn spawn_queue_merge(state: AppState, handoff_id: commonwealth_core::ids::Ha
             }
         };
         let mesh_store = Arc::clone(&state.inner.fabric.mesh_store);
-        let local_node_id = *state.inner.fabric.self_node_id_swap.load_full().as_ref();
+        let local_node_id = state.inner.fabric.identity.current();
         let peer_urls: Vec<(NodeId, String)> = peer_control_urls(&state, local_node_id).await;
 
         let shard_mgr = ShardManager::new(
@@ -715,7 +715,7 @@ pub async fn corpus_partition_evict(
             Json(PartitionEvictResponse { evicted: false }),
         );
     };
-    let local_node_id = *state.inner.fabric.self_node_id_swap.load_full().as_ref();
+    let local_node_id = state.inner.fabric.identity.current();
     let evicted = sovereign_grants::shard_manager::evict_partition_dir(
         engine.index_dir(),
         &req.corpus_id,

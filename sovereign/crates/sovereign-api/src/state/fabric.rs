@@ -13,12 +13,12 @@
 
 use std::sync::Arc;
 
-use arc_swap::ArcSwap;
 use tokio::sync::RwLock;
 
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::Mesh;
 use commonwealth_state::{ContributionEmitter, MeshStore};
+use sovereign_contracts::identity::IdentityReader;
 use sovereign_meshapp_registry::proxy::AppPortMap;
 use sovereign_meshapp_registry::registry::AppRegistry;
 
@@ -26,17 +26,15 @@ use super::{ConvergenceRecord, MeshMutationHook};
 
 /// Fabric's twenty fields, held as `AppStateInner::fabric`.
 pub struct FabricPart {
-    /// Internal storage. Use [`crate::state::AppState::self_node_id`] to read
-    /// (returns `NodeId` by value) — direct field access is hidden
-    /// behind a method so callers always go through the load.
-    ///
-    /// Backed by `ArcSwap` so the `join_mesh` adoption flow can swap
-    /// the placeholder ID for the founder-assigned ID atomically
-    /// after the handshake completes. Without that swap, gossip
-    /// would never find our own member record (it indexes by
-    /// `self_node_id`), `corpus_collaborate` would 500 with "local
-    /// node not found in mesh", and partitions would never dispatch.
-    pub self_node_id_swap: ArcSwap<NodeId>,
+    /// This node's identity, published as a **watch** rather than copied as a
+    /// value (`sovereign_contracts::identity::IdentityReader`; DC §4.2
+    /// "Identity is a reader, not a value"). `join_mesh` swaps the placeholder
+    /// id for the founder-assigned one atomically after the handshake, and a
+    /// consumer that holds this handle observes the swap — one that copied a
+    /// `NodeId` would keep the placeholder, so gossip would never find our own
+    /// member record (it indexes by `self_node_id`) and `corpus_collaborate`
+    /// would 500 with "local node not found in mesh".
+    pub identity: IdentityReader,
     pub mesh: RwLock<Mesh>,
     /// This node's Ed25519 identity pubkey (see
     /// `commonwealth_core::ids::NodePubkey`). Installed by the

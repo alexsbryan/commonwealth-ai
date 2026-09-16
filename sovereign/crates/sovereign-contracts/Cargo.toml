@@ -24,6 +24,10 @@ oicp-types = { workspace = true }
 # it costs the contract seam nothing — and it keeps the port's payload the
 # SAME type the mesh store already speaks, so an adapter is a move, not a copy.
 bytes = { workspace = true }
+# `identity::IdentityReader` — the node id as a watch, not a value. A leaf
+# third-party crate (no in-repo edges), so the contract seam's closure is
+# unchanged; `sovereign-api` and `sovereign-mesh` already carry it.
+arc-swap = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 async-trait = { workspace = true }

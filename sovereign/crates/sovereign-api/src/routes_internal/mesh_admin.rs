@@ -610,7 +610,7 @@ pub async fn join(
     State(state): State<AppState>,
     Json(req): Json<JoinRequest>,
 ) -> Result<Json<JoinResponse>, (StatusCode, Json<JoinRejection>)> {
-    let self_node_id = *state.inner.fabric.self_node_id_swap.load_full().as_ref();
+    let self_node_id = state.inner.fabric.identity.current();
 
     // Identity proof of possession — verified BEFORE taking the mesh
     // write lock. Only enforced when the joiner presents a pubkey:

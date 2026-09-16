@@ -120,7 +120,7 @@ pub async fn corpus_collaborate(
 
     // Build local node view.
     let mesh = state.inner.fabric.mesh.read().await;
-    let self_id = *state.inner.fabric.self_node_id_swap.load_full().as_ref();
+    let self_id = state.inner.fabric.identity.current();
     let local_member = mesh.members.get(&self_id).cloned().ok_or_else(|| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -1000,7 +1000,7 @@ pub async fn corpus_eligible_peers(
     let local_embed_model = state.inner.serving.inference_store.get_local_embed_model();
 
     let mesh = state.inner.fabric.mesh.read().await;
-    let self_id = *state.inner.fabric.self_node_id_swap.load_full().as_ref();
+    let self_id = state.inner.fabric.identity.current();
     let mut peers: Vec<EligiblePeerDto> = Vec::new();
     for m in mesh.members.values() {
         if m.node_id == self_id {

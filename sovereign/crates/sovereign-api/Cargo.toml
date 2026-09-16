@@ -8,6 +8,11 @@ license.workspace = true
 [dependencies]
 serving-policy = { workspace = true }
 kernel-types = { workspace = true }
+# The published daemon↔package language. `IdentityReader` (Fabric's node id as
+# a watch) is the reason this edge exists directly rather than through
+# `sovereign-serving-host`'s re-export: the reader is Fabric's, not Serving's.
+# Allowed by the R6 `[[forbid]]` except at quality/ARCH_LAYERS.toml:705.
+sovereign-contracts = { workspace = true }
 commonwealth-core = { workspace = true }
 commonwealth-transport = { workspace = true, features = ["fanout"] }
 commonwealth-discovery = { workspace = true }

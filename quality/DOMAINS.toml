@@ -11475,6 +11475,12 @@ lines = 691
 note = ""
 
 [[module]]
+path = "sovereign/crates/sovereign-contracts/src/identity.rs"
+context = "kernel"
+lines = 104
+note = "IdentityReader — this node's id as a watch, not a value (DC §4.2; REVIEW-build-appstate-identity)"
+
+[[module]]
 path = "sovereign/crates/sovereign-contracts/src/intent_policy.rs"
 context = "kernel"
 lines = 693

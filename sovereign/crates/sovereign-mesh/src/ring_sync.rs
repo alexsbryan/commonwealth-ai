@@ -225,12 +225,7 @@ pub async fn run_one_round(app_state: &AppState) -> RoundOutcome {
         }
     };
 
-    let self_id = *app_state
-        .inner
-        .fabric
-        .self_node_id_swap
-        .load_full()
-        .as_ref();
+    let self_id = app_state.inner.fabric.identity.current();
     let peers: Vec<commonwealth_transport::PeerContact> = {
         let mesh = app_state.inner.fabric.mesh.read().await;
         mesh.members

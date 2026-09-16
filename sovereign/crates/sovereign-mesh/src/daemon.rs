@@ -1685,7 +1685,7 @@ impl EmbeddedDaemon {
                 // placeholder which doesn't exist in the adopted
                 // mesh — manifesting as `local node not found in
                 // mesh` 500s and gossip log spam every 10s.
-                app_state.set_self_node_id(adopted_node_id);
+                app_state.identity_reader().publish(adopted_node_id);
                 *mesh_state.write().await = MeshState::from_app_state(app_state).await;
             }
         }
@@ -2016,12 +2016,7 @@ impl EmbeddedDaemon {
             _ => return Vec::new(),
         };
         drop(state);
-        let self_id = *app_state
-            .inner
-            .fabric
-            .self_node_id_swap
-            .load_full()
-            .as_ref();
+        let self_id = app_state.inner.fabric.identity.current();
         let members: Vec<commonwealth_core::mesh::MemberRecord> = {
             let mesh = app_state.inner.fabric.mesh.read().await;
             mesh.members
@@ -2302,12 +2297,7 @@ impl EmbeddedDaemon {
         let transport = app_state.peer_transport();
         let members: Vec<commonwealth_core::mesh::MemberRecord> = {
             let mesh = app_state.inner.fabric.mesh.read().await;
-            let self_id = *app_state
-                .inner
-                .fabric
-                .self_node_id_swap
-                .load_full()
-                .as_ref();
+            let self_id = app_state.inner.fabric.identity.current();
             mesh.members
                 .values()
                 .filter(|m| m.node_id != self_id)
@@ -2508,12 +2498,7 @@ impl EmbeddedDaemon {
         let transport = app_state.peer_transport();
         let members: Vec<commonwealth_core::mesh::MemberRecord> = {
             let mesh = app_state.inner.fabric.mesh.read().await;
-            let self_id = *app_state
-                .inner
-                .fabric
-                .self_node_id_swap
-                .load_full()
-                .as_ref();
+            let self_id = app_state.inner.fabric.identity.current();
             mesh.members
                 .values()
                 .filter(|m| m.node_id != self_id)

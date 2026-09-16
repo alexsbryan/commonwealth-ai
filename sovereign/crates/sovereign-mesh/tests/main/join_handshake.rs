@@ -153,13 +153,7 @@ async fn valid_join_key_admits_new_member_and_fires_hook() {
     // unchanged. The handshake admits the joiner; it doesn't
     // re-stamp the founder.
     assert_eq!(
-        founder_state
-            .inner
-            .fabric
-            .self_node_id_swap
-            .load_full()
-            .as_ref()
-            .clone(),
+        founder_state.inner.fabric.identity.current(),
         founder_id,
         "founder NodeId must not change under /internal/join"
     );

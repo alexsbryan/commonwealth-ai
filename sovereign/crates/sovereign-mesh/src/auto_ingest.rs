@@ -109,6 +109,9 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
     let mut last_known_in_progress: HashSet<String> = HashSet::new();
     let mut first_iteration = true;
     let client = reqwest::Client::new();
+    // Hold the identity watch for the loop's lifetime, not a copied id: a
+    // `join_mesh` adoption swaps it under a running daemon (DC §4.2).
+    let identity = state.identity_reader();
 
     // Brief startup delay so the HTTP server is accepting connections.
     tokio::time::sleep(Duration::from_secs(10)).await;
@@ -132,7 +135,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
             continue;
         }
 
-        let self_id = *state.inner.fabric.self_node_id_swap.load_full().as_ref();
+        let self_id = identity.current();
 
         let current_peers: HashSet<NodeId> = {
             let mesh = state.inner.fabric.mesh.read().await;
@@ -1393,7 +1396,7 @@ async fn find_best_peer_canonical(
     corpus_id: &str,
 ) -> Option<PeerCanonicalLead> {
     let mesh = state.inner.fabric.mesh.read().await;
-    let self_id = state.self_node_id();
+    let self_id = state.identity_reader().current();
     let mut best: Option<PeerCanonicalLead> = None;
     for member in mesh.members.values() {
         // Skip ourselves — gossip echoes our own capability report.

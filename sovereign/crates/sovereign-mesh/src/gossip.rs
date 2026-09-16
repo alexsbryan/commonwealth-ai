@@ -183,12 +183,7 @@ pub fn spawn_gossip_loop(
             // — if peers start flapping Offline, this is why", and
             // raising fanout is NOT the indicated fix.
             let online_peers = {
-                let self_id = *app_state
-                    .inner
-                    .fabric
-                    .self_node_id_swap
-                    .load_full()
-                    .as_ref();
+                let self_id = app_state.inner.fabric.identity.current();
                 let mesh = app_state.inner.fabric.mesh.read().await;
                 mesh.members
                     .values()
@@ -228,12 +223,7 @@ pub fn spawn_gossip_loop(
             }
             if let Some(dir) = persist_dir.as_deref() {
                 let mesh = app_state.inner.fabric.mesh.read().await.clone();
-                let self_id = *app_state
-                    .inner
-                    .fabric
-                    .self_node_id_swap
-                    .load_full()
-                    .as_ref();
+                let self_id = app_state.inner.fabric.identity.current();
                 if let Err(e) = crate::persist::save(dir, &mesh, self_id) {
                     // Don't spam — persistence failure is rarely
                     // fatal to the running session, but the operator
@@ -456,12 +446,7 @@ pub async fn run_one_round(
     app_state: &AppState,
     offline_threshold: Duration,
 ) -> Result<(), GossipError> {
-    let self_id = *app_state
-        .inner
-        .fabric
-        .self_node_id_swap
-        .load_full()
-        .as_ref();
+    let self_id = app_state.inner.fabric.identity.current();
     let now = app_state.clock().now_unix_secs();
     let threshold = offline_threshold.as_secs();
 
@@ -942,12 +927,7 @@ pub async fn announce_departure(app_state: &AppState) {
 }
 
 pub async fn announce_presence_change(app_state: &AppState, change: PresenceChange) {
-    let self_id = *app_state
-        .inner
-        .fabric
-        .self_node_id_swap
-        .load_full()
-        .as_ref();
+    let self_id = app_state.inner.fabric.identity.current();
     let now = app_state.clock().now_unix_secs();
     let (snapshot, targets) = {
         let mut mesh = app_state.inner.fabric.mesh.write().await;

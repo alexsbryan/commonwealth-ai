@@ -30,9 +30,15 @@ use commonwealth_state::MeshStore;
 use corpus_engine::error::{Error as CorpusError, Result as CorpusResult};
 use corpus_engine::update::newsworthy_watcher::{CommittedDocs, NewsworthyHost};
 use sovereign_api::state::AppState;
+use sovereign_contracts::identity::IdentityReader;
 
 pub struct MeshNewsworthyHost {
     app_state: AppState,
+    /// This node's identity as a **watch** (DC §4.2 "Identity is a reader, not
+    /// a value"): `join_mesh` swaps the id in a running daemon, and a watcher
+    /// that cached the placeholder at construction would elect the wrong
+    /// leader for the rest of the process's life.
+    identity: IdentityReader,
     /// The corpus this watcher is responsible for. Used to restrict
     /// leader/owner election to peers that have advertised the corpus
     /// in their most recent `StorageSnapshot` ledger event — without
@@ -45,6 +51,7 @@ pub struct MeshNewsworthyHost {
 impl MeshNewsworthyHost {
     pub fn new(app_state: AppState, target_corpus_id: impl Into<String>) -> Self {
         Self {
+            identity: app_state.identity_reader(),
             app_state,
             target_corpus_id: target_corpus_id.into(),
         }
@@ -55,7 +62,7 @@ impl MeshNewsworthyHost {
     }
 
     fn self_node_id(&self) -> NodeId {
-        self.app_state.self_node_id()
+        self.identity.current()
     }
 
     /// Snapshot the current online member set. Online = `Online` *or*

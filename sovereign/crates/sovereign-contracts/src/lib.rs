@@ -46,6 +46,13 @@ pub mod fim;
 pub mod frame;
 pub mod gguf_validator;
 pub mod health;
+/// This node's identity, published as a watch over `kernel_types::NodeId` —
+/// a reader a consumer holds rather than a value it copies, because
+/// `join_mesh` swaps the id inside a running daemon
+/// (`quality/DAEMON_CORE.md` §4.2). Here because its consumers span crates
+/// that may not name each other (`sovereign-api` cannot name
+/// `sovereign-mesh`).
+pub mod identity;
 pub mod intent_policy;
 pub mod launch;
 pub mod lessons;

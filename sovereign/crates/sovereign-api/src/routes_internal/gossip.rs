@@ -35,7 +35,7 @@ pub async fn gossip(
     Json(req): Json<GossipRequest>,
 ) -> Result<Json<GossipResponse>, (StatusCode, Json<GossipRejection>)> {
     let incoming = req.mesh.into_mesh();
-    let self_node_id = *state.inner.fabric.self_node_id_swap.load_full().as_ref();
+    let self_node_id = state.inner.fabric.identity.current();
     let now_secs = state.clock().now_unix_secs();
     let auth = commonwealth_core::mesh::GossipAuth {
         sender: req.from,

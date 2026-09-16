@@ -96,7 +96,7 @@ pub async fn knowledge_search(
         }
     }
 
-    let self_id = *state.inner.fabric.self_node_id_swap.load_full().as_ref();
+    let self_id = state.inner.fabric.identity.current();
 
     // Step 1: figure out what corpora are locally installed, keyed
     // by id. This drives the "search here vs. fan out" split.

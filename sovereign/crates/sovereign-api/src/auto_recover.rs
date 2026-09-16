@@ -249,7 +249,7 @@ pub async fn merge_from_fold_coverage(
         return RecoveryOutcome::AlreadyHasCanonical;
     }
 
-    let local_node_id = *state.inner.fabric.self_node_id_swap.load_full().as_ref();
+    let local_node_id = state.identity_reader().current();
     let peer_urls = crate::routes_internal::peer_control_urls(state, local_node_id).await;
 
     let shard_mgr = ShardManager::new(
