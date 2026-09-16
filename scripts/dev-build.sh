@@ -96,10 +96,15 @@ if [[ "${1:-}" == "--clean" || "${1:-}" == "--gate-only" ]]; then
     if [[ -n "${size_mb:-}" && "$size_mb" -ge "$limit_mb" ]]; then
         echo "dev-build: debug target is $((size_mb / 1024))G (>= $((limit_mb / 1024))G) — cleaning" >&2
         cargo clean --profile dev
+        cleaned=1
     else
         echo "dev-build: debug target is $(( ${size_mb:-0} / 1024 ))G (under $((limit_mb / 1024))G) — keeping the cache" >&2
+        cleaned=0
     fi
-    if [[ "$gate_only" == "1" ]]; then
+    # After a clean the build runs even in gate-only mode: the clean removes
+    # the CLI binaries the loop's checks and premise tools call (sovereign,
+    # sovereign-cli-dev), and nothing else rebuilds them (2026-09-16).
+    if [[ "$gate_only" == "1" && "$cleaned" == "0" ]]; then
         echo "dev-build: gate-only — skipping the build" >&2
         exit 0
     fi
