@@ -672,6 +672,12 @@ lines = 749
 note = "the InferenceProvider impl for InferenceRouter, split out of peer_inference.rs by REVIEW-audit-8 (ARCH 3.1, #[path]); an impl block has no module path, so no caller changed"
 
 [[module]]
+path = "sovereign/crates/sovereign-serving-host/src/router_builder.rs"
+context = "serving"
+lines = 87
+note = "the InferenceRouterBuilder, split out of peer_inference.rs by REVIEW-audit-8 (ARCH 3.1, re-exported at the old path); the row was missing, so `crate-lines` read a coverage hole - added by domains dm-mesh-move-turn-approval"
+
+[[module]]
 path = "sovereign/crates/sovereign-mesh/src/persist.rs"
 context = "fabric"
 lines = 1146
@@ -861,7 +867,7 @@ lines = 585
 note = "moved host-side by domains REVIEW-build-serving-move-adapter; the tool-profile trim runs in the inference adapter"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/turn_approval.rs"
+path = "sovereign/crates/sovereign-core/src/turn_approval.rs"
 context = "answering"
 lines = 747
 note = ""

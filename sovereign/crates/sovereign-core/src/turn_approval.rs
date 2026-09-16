@@ -16,7 +16,7 @@
 //!
 //! # Why this file is small
 //!
-//! Because the channel is PER TURN. `sovereign_core::runtime::capabilities`
+//! Because the channel is PER TURN. `crate::runtime::capabilities`
 //! installs it around the turn the socket started, so the turn holds its own
 //! channel and there is no shared map to address. A process-wide router would
 //! have needed a conversation→socket registry, an RAII owner guard to survive
@@ -40,15 +40,15 @@
 
 use std::sync::Arc;
 
+use crate::approval_desk::{ApprovalDesk, ResolveOutcome, StepStatus};
+use crate::error::{Error, Result};
+use crate::traits::ApprovalChannel;
+use crate::types::{ActionPreview, Step, StepOutput};
 use async_trait::async_trait;
 use sovereign_contracts::types::{
     InformationRequest, LessonProposedPayload, MessageRefinedPayload, TurnAnswer, TurnFrame,
     TurnNotice, TurnPrompt,
 };
-use sovereign_core::approval_desk::{ApprovalDesk, ResolveOutcome, StepStatus};
-use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::ApprovalChannel;
-use sovereign_core::types::{ActionPreview, Step, StepOutput};
 use tokio::sync::mpsc;
 
 /// The approval channel of ONE turn socket: show the question as a frame,
@@ -185,7 +185,7 @@ impl SocketApprovalChannel {
     async fn ask<T>(
         &self,
         id: String,
-        parked: sovereign_core::approval_desk::Parked<T>,
+        parked: crate::approval_desk::Parked<T>,
         prompt: TurnPrompt,
     ) -> Result<T> {
         // The id travels in the frame; a clone stays behind for the
@@ -487,8 +487,8 @@ mod r3_producer_tests {
     // The consent fixtures live one module up; one spelling of a step and
     // its preview, not two (ARCH §10.6).
     use super::tests::{preview, step};
+    use crate::types::StepOutput;
     use sovereign_contracts::types::InformationRequest;
-    use sovereign_core::types::StepOutput;
 
     fn channel() -> (
         Arc<SocketApprovalChannel>,

@@ -56,6 +56,7 @@ pub mod stubs;
 pub mod time;
 pub mod title;
 pub mod tool_loop;
+pub mod turn_approval;
 
 // The daemon↔package contract lives in `sovereign-contracts`; re-export every
 // item at its historical `sovereign_core::{error, traits, registry, types,
