@@ -1,5 +1,13 @@
 {
   "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "external_directory": {
+      "/tmp/*": "allow",
+      "/private/tmp/*": "allow",
+      "/run/*": "allow",
+      "/Users/alexsbryan/.svrnmesh/ralph/*": "allow"
+    }
+  },
   "plugin": [
     "./plugins/sovereign-atos.ts"
   ],
