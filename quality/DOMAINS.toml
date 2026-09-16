@@ -1052,7 +1052,7 @@ note = "was compute; jobs — DAEMON_CORE.md §3.2, §4.3 (2026-09-14)"
 [[module]]
 path = "sovereign/crates/sovereign-api/src/admission.rs"
 context = "serving"
-lines = 1112
+lines = 1121
 note = "the daemon's side of admission since REVIEW-build-serving-move-admission (2026-09-15): the `Admission`/`AdmissionHost` impls over AppState, the RAII guards, and the re-exports of the host's surface. The decision, the two axum middlewares and the 503 renderer are `sovereign-serving-host/src/admission.rs`; SERVING_BOUNDARY.md (c)"
 
 [[module]]
@@ -1064,7 +1064,7 @@ note = "reactive recovery for stranded corpus partitions"
 [[module]]
 path = "sovereign/crates/sovereign-api/src/client_auth.rs"
 context = "host"
-lines = 354
+lines = 448
 note = ""
 
 [[module]]
@@ -1184,7 +1184,7 @@ note = "the local inference service wire vocabulary (FIM request/stream, edit-sl
 [[module]]
 path = "sovereign/crates/sovereign-api/src/principal.rs"
 context = "serving"
-lines = 375
+lines = 502
 note = "the ONE resolver from a request to a fairness principal - admission's input"
 
 [[module]]
@@ -1394,7 +1394,7 @@ note = "was serving; route shell — DAEMON_CORE.md §4 placement test (2026-09-
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_status.rs"
 context = "host"
-lines = 755
+lines = 764
 note = ""
 
 [[module]]
@@ -1406,7 +1406,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-api/src/state.rs"
 context = "host"
-lines = 2146
+lines = 2161
 note = "the api-side god object, dissolving: the flat owner fields are six parts now (DC §4.2). Names commonwealth_core::mesh::Mesh (:10), commonwealth_state (:11-12), corpus_engine::CorpusEngine (:13), serving_policy::fair_sched (:15), sovereign_grants (:17), sovereign_serving_host::admission (:20)"
 
 [[module]]
@@ -1436,7 +1436,7 @@ note = "The node's part (DC §4.2) with its construction seed; scaffolding until
 [[module]]
 path = "sovereign/crates/sovereign-api/src/state/serving.rs"
 context = "host"
-lines = 305
+lines = 311
 note = "Serving's part (DC §4.2) with its construction seed and readers; scaffolding until REVIEW-mint-daemon-move relocates it to sovereign-serving-host"
 
 [[module]]
@@ -1480,7 +1480,7 @@ note = "the host crate root; the host half arrives in rung domains-10 (2026-09-1
 [[module]]
 path = "sovereign/crates/sovereign-serving-host/src/admission.rs"
 context = "serving"
-lines = 800
+lines = 922
 note = "the Admission decider and its two axum middlewares — moved out of sovereign-api by REVIEW-build-serving-move-admission (2026-09-15); `admit(&Principal, now_unix_ms)` is pure over the snapshot, the daemon implements `AdmissionHost` for the resolver/tally/parser; SERVING_BOUNDARY.md (c)"
 
 [[module]]

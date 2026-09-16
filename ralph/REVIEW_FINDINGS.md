@@ -729,3 +729,87 @@ Recorded, not changed:
   crates read "new and unbaselined". `warn_gate` by design (AGENTS.md), does not
   block PREPUSH. Not re-pinned.
 
+## REVIEW-audit-principal — the one resolver
+
+Range audited: `git log aff8aad65..HEAD` (the previous audit's hash) — the
+`dm-principal-registry` row and `REVIEW-build-principal-wire-fold`,
+`-one-resolver`, `-peer-key`, `-attach`. Checks: TESTALL exit=0 (13362 pass, 0
+fail); PREPUSH exit=0 (layer-gate cleared below; `size-gate` is the advisory
+`warn_gate`; `concept-gate` is the declared could-not-judge).
+
+The row's claims, verified:
+
+- **One resolution produces the published `Principal`; admission's fairness and
+  peer keys derive from it (ARCH 8).** One implementation, `AppState::resolve`
+  (`sovereign-api/src/principal.rs:165`); its only production callers are
+  `client_auth_layer` (`client_auth.rs:209`) and the `AdmissionHost::resolve`
+  port (`sovereign-api/src/admission.rs:274`), which the two host middlewares
+  reach through `principal_of` (`sovereign-serving-host/src/admission.rs:421`) —
+  the attached extension first, the port as the internal router's fallback.
+  `peer_sched` is `SchedCore<Principal>` and `peer_tally` is
+  `RwLock<HashMap<Principal, PrincipalTally>>`, keyed `Principal::Member
+  { node_id }`; `reciprocity_weights` stays `NodeId`-keyed
+  (`state/serving.rs:265`), because that is the contribution ledger's key, not
+  admission's. The three wire-side types are gone: `git grep 'PrincipalKey\|
+  PrincipalSource\|ResolvedPrincipal' -- '*.rs'` finds no code importer (only
+  frozen measurement records, below).
+- **The five arms are the union, never a narrowing (ARCH 6).** `LocalOwner
+  { sub_identity }`, `RemoteClient { credential }`, `Member { node_id }`,
+  `Guest { grant }`, `Anonymous` — a superset of the old `PrincipalKey`'s three
+  arms (Credential/Declared/Anonymous) and of the old peer gate's node key, and
+  the shape DC §3.3 decides.
+
+Findings, fixed (the first two in `e503219bd`, the registry re-key in this
+commit):
+
+- **ARCH 8 / `layer-gate` fan-in ratchet** · `sovereign/crates/sovereign-api/
+  Cargo.toml:11` · the range added a direct `sovereign-contracts` dependency to
+  `sovereign-api`, growing the god-crate fan-in 30 → 31 and reddening
+  `layer-gate` (a hard gate). The host's own re-export comment
+  (`sovereign-serving-host/src/admission.rs:48-52`) states the intended shape:
+  "the daemon reaching the type through the module that publishes it is what
+  keeps the direct `sovereign-contracts` fan-in from growing". Repointed the
+  two `use sovereign_contracts::principal::Principal;` sites
+  (`client_auth.rs:69`, `principal.rs:82`) at
+  `sovereign_serving_host::admission::Principal` and dropped the dep. Same type,
+  same callers; fan-in back to 30.
+- **ARCH 3 (the doc lands with the code)** · `quality/DAEMON_CORE.md:210` ·
+  "The full edge resolver below is still `REVIEW-mint-principal`" was falsified
+  by `REVIEW-build-principal-one-resolver`; it now names the landed resolver and
+  its three callers.
+- **ARCH 3 (the doc lands with the code)** · `quality/DOMAINS.toml` · the range
+  grew seven `.rs` files without re-measuring their `[[module]]` rows
+  (`principal.rs` 375→502, `client_auth.rs` 354→448, `admission.rs` 1112→1121,
+  `routes_status.rs` 755→764, `state.rs` 2146→2161, `state/serving.rs` 305→311,
+  `sovereign-serving-host/src/admission.rs` 800→922), so `crate-lines`/
+  `misnamed`/`queue` read a stale snapshot. Re-measured with `wc -l`; the
+  registry is now fresh (0 stale module rows).
+
+Recorded, not changed:
+
+- **ARCH 6 (a precedence interaction, not a missing arm)** ·
+  `sovereign-api/src/principal.rs:174-194` and
+  `sovereign-serving-host/src/admission.rs:511-522` · the resolver reads the
+  bearer before `X-Node-Id`, so a request carrying BOTH resolves to
+  `RemoteClient`, and `peer_admission_layer` then records its (valid) `X-Node-Id`
+  as malformed and keys the peer ceiling under node zero. The old peer gate read
+  `parse_node_id` independent of the bearer. Reachable only for a peer that
+  stamps both headers (`peer_inference.rs:3308-3322`, the pinned-pod branch: a
+  bearer + `X-Node-Id`). Reordering the resolver is NOT behaviour-preserving —
+  the `RemoteClient` arm is what `client_auth_layer`'s token check reads
+  (`client_auth.rs:276-282`), so a reorder also changes the auth decision — so
+  it needs its own decision row, not an audit fix.
+- **Frozen measurement coordinates** · `quality/DOMAINS.md:416` (cites the
+  deleted `principal.rs:93,125,147` — the `PrincipalKey`/`PrincipalSource`/
+  `ResolvedPrincipal` lines), `quality/DOMAINS.toml:4369` (the cluster note's
+  "`Principal` is Admission's decided word", the `dm-principal-registry`
+  finding), and `research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md:
+  1503,1510,1645` (`PrincipalKey::Credential`, `SchedCore<PrincipalKey>`). They
+  are the measurement's own coordinates at measurement time, not live pointers
+  (the audit-3/5/7/8/9 precedent); a re-key would falsify the record.
+- **`size-gate` (advisory)** · 49 keys grew, the campaign's own growth; the new
+  crates read "new and unbaselined". `warn_gate` by design (AGENTS.md), does not
+  block PREPUSH. Not re-pinned.
+- **`concept-gate` could-not-judge** · exit 3, declared; the pre-push runner
+  counts it as attention, not blocking.
+
