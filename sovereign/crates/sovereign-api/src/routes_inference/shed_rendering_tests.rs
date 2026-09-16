@@ -9,7 +9,9 @@
 //! the gap; nothing failed until the probe supplied the input.
 
 use super::*;
-use crate::state::{test_app_state, LocalInferenceError, LocalInferenceService};
+use crate::state::{
+    test_app_state, test_app_state_with_inference, LocalInferenceError, LocalInferenceService,
+};
 use axum::http::header::RETRY_AFTER;
 use futures::Stream;
 use sovereign_core::traits::InferenceProvider;
@@ -134,7 +136,7 @@ async fn assert_reads_as_backpressure(resp: Response, lane: &str) {
 
 #[tokio::test]
 async fn non_streaming_shed_reads_as_backpressure() {
-    let state = test_app_state().with_local_inference(Arc::new(AlwaysSheds));
+    let state = test_app_state_with_inference(Arc::new(AlwaysSheds));
     let resp = serve_local_non_stream(
         Arc::new(AlwaysSheds),
         chat_request(),
@@ -149,7 +151,7 @@ async fn non_streaming_shed_reads_as_backpressure() {
 #[tokio::test]
 async fn streaming_shed_reads_as_backpressure() {
     // The lane most clients actually take.
-    let state = test_app_state().with_local_inference(Arc::new(AlwaysSheds));
+    let state = test_app_state_with_inference(Arc::new(AlwaysSheds));
     let resp = serve_local_stream(
         Arc::new(AlwaysSheds),
         chat_request(),

@@ -24,7 +24,7 @@ use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
 use futures::Stream;
 use sovereign_api::openai_types::{ChatCompletionRequest, ChatCompletionResponse, StreamFrame};
 use sovereign_api::routes_inference::chat_completions;
-use sovereign_api::state::{AppState, LocalInferenceError, LocalInferenceService};
+use sovereign_api::state::{AppState, LocalInferenceError, LocalInferenceService, ServingSeed};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, CompletionResponse, ProviderCapabilities};
 
@@ -85,7 +85,14 @@ pub(crate) fn solo_state(service: Arc<dyn LocalInferenceService>) -> AppState {
         members,
         peers: vec![],
     };
-    AppState::new(node, mesh).with_local_inference(service)
+    AppState::new_with_serving(
+        node,
+        mesh,
+        ServingSeed {
+            local_inference: Some(service),
+            ..Default::default()
+        },
+    )
 }
 
 /// Captures the request as the service actually received it — after

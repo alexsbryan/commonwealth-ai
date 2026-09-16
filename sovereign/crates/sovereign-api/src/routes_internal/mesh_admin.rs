@@ -738,7 +738,7 @@ mod tests {
     use axum::Router;
     use tower::ServiceExt;
 
-    use crate::state::test_app_state;
+    use crate::state::{test_app_state, test_app_state_with_inference};
 
     fn activity_router() -> (AppState, Router) {
         let state = test_app_state();
@@ -961,7 +961,7 @@ mod tests {
     }
 
     fn models_router(stub: Arc<StubLocalInference>) -> Router {
-        let state = test_app_state().with_local_inference(stub);
+        let state = test_app_state_with_inference(stub);
         Router::new()
             .route("/internal/models/load", post(models_load))
             .route("/internal/models/unload", post(models_unload))
@@ -974,7 +974,7 @@ mod tests {
 
     #[tokio::test]
     async fn models_load_returns_503_when_local_inference_absent() {
-        // No `.with_local_inference(...)` → local_inference is None.
+        // No inference service in the seed → local_inference is None.
         let state = test_app_state();
         let app = Router::new()
             .route("/internal/models/load", post(models_load))
@@ -1147,7 +1147,7 @@ mod tests {
         // entry until the next daemon restart even though routing
         // would have worked.
         let stub = Arc::new(StubLocalInference::new(Ok("test-model".into()), vec![]));
-        let state = test_app_state().with_local_inference(Arc::clone(&stub) as Arc<_>);
+        let state = test_app_state_with_inference(Arc::clone(&stub) as Arc<_>);
         let app = Router::new()
             .route("/internal/models/load", post(models_load))
             .with_state(state.clone());
@@ -1182,7 +1182,7 @@ mod tests {
             Ok("ignored".into()),
             vec![("bulk".into(), "Qwen3.5-9B.Q8_0".into())],
         ));
-        let state = test_app_state().with_local_inference(Arc::clone(&stub) as Arc<_>);
+        let state = test_app_state_with_inference(Arc::clone(&stub) as Arc<_>);
         // Register a fake entry the way `models_load` would so we
         // can verify removal.
         register_extras_in_store(

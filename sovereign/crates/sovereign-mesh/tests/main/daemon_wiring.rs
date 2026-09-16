@@ -1,20 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Daemon-wiring integration test.
 //!
-//! Verifies the load-bearing service-injection order from
-//! `EmbeddedDaemon::start_daemon` (see `daemon.rs:1196-1212`'s
-//! "Order is load-bearing" comment) by reproducing the exact wiring
-//! against a real `AppState` + ephemeral-port HTTP servers — without
-//! actually invoking `start_daemon`, which hardcodes 9741/9742 and
-//! cannot be parallelised across tests (see §10.1 deferral).
+//! Reproduces `EmbeddedDaemon::start_daemon`'s wiring against a real
+//! `AppState` + ephemeral-port HTTP servers — without actually invoking
+//! `start_daemon`, which hardcodes 9741/9742 and cannot be parallelised
+//! across tests (see §10.1 deferral).
 //!
 //! Two invariants are pinned:
 //!
-//! 1. **`with_local_inference` fires.** When the adapter is installed
-//!    in the documented position (before any clone of `app_state.inner`),
-//!    a `/v1/chat/completions` request must serve through the local
-//!    path and NOT return a 503 `model_not_ready` — that error is the
-//!    canary for a regression that reverses the wiring order.
+//! 1. **The inference provider serves chat.** The provider is a
+//!    construction argument now (`ServingSeed::local_inference`), so a
+//!    `/v1/chat/completions` request must serve through the local path and
+//!    NOT return a 503 `model_not_ready` — that error is the canary for a
+//!    regression that drops the provider.
 //! 2. **The mesh-mutation hook fires.** A `/internal/gossip` POST
 //!    that adds a member must invoke the hook the node was constructed
 //!    with (`FabricSeed::mesh_mutation_hook`); the `Arc::get_mut`
@@ -34,7 +32,7 @@ use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_state::MeshStore;
 use sovereign_api::server::{client_router, internal_router};
-use sovereign_api::state::{AppState, LocalInferenceService};
+use sovereign_api::state::{AppState, LocalInferenceService, ServingSeed};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
 use sovereign_mesh::slot_manifest::CoreSlotManifest;
@@ -44,10 +42,10 @@ use crate::common;
 use crate::common::{member_with_last_seen, spawn_router, TestProvider};
 
 /// Build an `AppState` the same way `EmbeddedDaemon::start_daemon`
-/// does — the mutation hook at construction, the `with_local_inference`
-/// installer applied *before* any `app_state.inner.clone()` would
-/// occur. Returns the wired `AppState` plus the atomic the hook
-/// will increment on every mutation.
+/// does — the mutation hook and the inference provider are both
+/// constructor arguments now (DC §4.2 "Construction is staged, and
+/// parts are total"). Returns the wired `AppState` plus the atomic the
+/// hook will increment on every mutation.
 fn build_wired_app_state() -> (AppState, Arc<AtomicUsize>) {
     let self_id = NodeId::from_u128(0x1111_1111_1111_1111);
     let mut members = HashMap::new();
@@ -76,27 +74,12 @@ fn build_wired_app_state() -> (AppState, Arc<AtomicUsize>) {
         Arc::new(move |_mesh: &Mesh, _self_id: NodeId| {
             counter_clone.fetch_add(1, Ordering::Relaxed);
         });
-    // The mutation hook is a construction argument now (DC §4.2 "Construction
-    // is staged"), so the `Arc::get_mut` ordering hazard cannot silently drop
-    // it; only `with_local_inference` still rides that block.
-    let app_state = AppState::new_with_platform_and_engine_and_gauge_and_fabric(
-        self_id,
-        mesh,
-        mesh_store,
-        app_registry,
-        None,
-        None,
-        sovereign_api::state::FabricSeed {
-            mesh_mutation_hook: Some(hook),
-            ..Default::default()
-        },
-    );
-
-    // ── Order matches `daemon.rs:1199-1217` exactly ───────────────
-    // `with_local_inference` goes through `Arc::get_mut`; cloning
-    // `app_state.inner` before it would silently no-op.
-    // Provider emits "ok" on both complete + complete_stream so
-    // the wiring test can hit either route shape.
+    // The mutation hook and the inference provider are construction arguments
+    // now (DC §4.2 "Construction is staged"), so the `Arc::get_mut` ordering
+    // hazard that could silently drop either is gone.
+    //
+    // Provider emits "ok" on both complete + complete_stream so the wiring
+    // test can hit either route shape.
     let provider: Arc<dyn InferenceProvider> = Arc::new(
         TestProvider::new()
             .with_model_id("stub-primary")
@@ -108,7 +91,22 @@ fn build_wired_app_state() -> (AppState, Arc<AtomicUsize>) {
         provider,
         Arc::new(CoreSlotManifest),
     ));
-    let app_state = app_state.with_local_inference(adapter);
+    let app_state = AppState::new_with_platform_and_engine_and_gauge_and_fabric_and_serving(
+        self_id,
+        mesh,
+        mesh_store,
+        app_registry,
+        None,
+        None,
+        sovereign_api::state::FabricSeed {
+            mesh_mutation_hook: Some(hook),
+            ..Default::default()
+        },
+        ServingSeed {
+            local_inference: Some(adapter),
+            ..Default::default()
+        },
+    );
 
     (app_state, counter)
 }
@@ -122,11 +120,11 @@ async fn spawn_internal(state: AppState) -> SocketAddr {
 }
 
 #[tokio::test]
-async fn with_local_inference_routes_chat_completions_to_adapter() {
-    // Pins the canary: if a future refactor reverses the
-    // `with_local_inference` / `Arc::clone` ordering in start_daemon,
-    // this test fails because the request falls through to the
-    // forward_to_model path and 503s with `model_not_ready`.
+async fn inference_provider_routes_chat_completions_to_adapter() {
+    // Pins the canary: if a future refactor drops the provider from the
+    // construction seed in start_daemon, this test fails because the request
+    // falls through to the forward_to_model path and 503s with
+    // `model_not_ready`.
     let (state, _counter) = build_wired_app_state();
     let addr = spawn_client(state).await;
 
@@ -146,9 +144,9 @@ async fn with_local_inference_routes_chat_completions_to_adapter() {
     assert_eq!(
         resp.status(),
         reqwest::StatusCode::OK,
-        "with_local_inference wiring must serve a 200; \
-         a 503 here means start_daemon's load-bearing order got reversed \
-         and local_inference was silently dropped"
+        "inference-provider wiring must serve a 200; \
+         a 503 here means start_daemon dropped the provider from the \
+         construction seed and local_inference was absent"
     );
 
     // Body sanity: we got back the stub provider's output, not a

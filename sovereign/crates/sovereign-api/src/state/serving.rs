@@ -12,7 +12,7 @@
 //! directly rather than through delegating accessors.
 
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use arc_swap::ArcSwap;
 use tokio::sync::RwLock;
@@ -26,6 +26,72 @@ use sovereign_core::in_flight::LocalInFlightGauge;
 use sovereign_serving_host::admission::Principal;
 
 use super::{LocalInferenceService, PeerTally, RejectedNodeIdHeader, RpcShardWarmer};
+
+/// The dynamic slot-name alias table, published as a **reader**: the daemon
+/// seeds it empty at construction and publishes the boot table (and any models
+/// reload) through its own handle while the route shells read. A reader created
+/// first, not a slot filled later (DC §4.2 "Construction is staged, and parts
+/// are total").
+#[derive(Clone)]
+pub struct SlotAliasesReader(Arc<ArcSwap<HashMap<String, String>>>);
+
+impl SlotAliasesReader {
+    /// The alias table right now.
+    pub fn current(&self) -> Arc<HashMap<String, String>> {
+        self.0.load_full()
+    }
+
+    /// Publish a new alias table (boot, or a `[models]` reload).
+    pub fn publish(&self, aliases: HashMap<String, String>) {
+        self.0.store(Arc::new(aliases));
+    }
+}
+
+impl Default for SlotAliasesReader {
+    fn default() -> Self {
+        Self(Arc::new(ArcSwap::from_pointee(HashMap::new())))
+    }
+}
+
+/// The servable-model-files allowlist, published as a **reader** for the same
+/// reason as [`SlotAliasesReader`]: it is seeded empty at construction and the
+/// daemon publishes the boot list (and any `[models]` reload) through its own
+/// handle while the peer-fetch routes read.
+#[derive(Clone)]
+pub struct ServableModelFilesReader(Arc<ArcSwap<Vec<std::path::PathBuf>>>);
+
+impl ServableModelFilesReader {
+    /// The allowlist right now.
+    pub fn current(&self) -> Arc<Vec<std::path::PathBuf>> {
+        self.0.load_full()
+    }
+
+    /// Publish a new allowlist (boot, or a `[models]` reload).
+    pub fn publish(&self, files: Vec<std::path::PathBuf>) {
+        self.0.store(Arc::new(files));
+    }
+}
+
+impl Default for ServableModelFilesReader {
+    fn default() -> Self {
+        Self(Arc::new(ArcSwap::from_pointee(Vec::new())))
+    }
+}
+
+/// Everything Serving's part is constructed with (DC §4.2 "Construction is
+/// staged, and parts are total"): the values that exist before the part is
+/// built. The daemon gathers them and passes them to `AppState::new…`; a test
+/// takes `Default`.
+#[derive(Default)]
+pub struct ServingSeed {
+    /// The in-process inference service, when this node serves local chat.
+    /// `None` on the standalone daemon and on storage-only nodes.
+    pub local_inference: Option<Arc<dyn LocalInferenceService>>,
+    /// The worker-side auto-warm hook for distributed inference, installed
+    /// alongside `local_inference`. `None` on a node that is not an inference
+    /// worker.
+    pub rpc_shard_warmer: Option<Arc<dyn RpcShardWarmer>>,
+}
 
 /// Serving's twenty fields, held as `AppStateInner::serving`.
 pub struct ServingPart {
@@ -46,14 +112,14 @@ pub struct ServingPart {
     /// operator can write `commonwealth/primary` in opencode's config
     /// (or any other client) and have requests follow whatever GGUF
     /// the daemon happens to be loading without rewriting the client
-    /// config when models swap. `ArcSwap` lets the admin reload path
-    /// hot-swap the table when `[models]` changes on disk.
+    /// config when models swap. The reader lets the daemon publish the table
+    /// on boot and on a `[models]` reload without an install step.
     ///
-    /// Empty when the daemon hasn't installed slot bindings yet
+    /// Empty when the daemon hasn't published slot bindings yet
     /// (early boot, or non-embedded daemons that don't own a
     /// `SetupConfig`). Resolution then falls through to the
     /// existing pipeline / model alias paths.
-    pub slot_aliases: ArcSwap<std::collections::HashMap<String, String>>,
+    pub slot_aliases: SlotAliasesReader,
     /// Absolute paths of GGUF files this daemon will serve over
     /// `/internal/v1/models/*` to other mesh peers. Populated at
     /// daemon boot from `SetupConfig.models.*` so a friend or a
@@ -64,7 +130,7 @@ pub struct ServingPart {
     ///
     /// `ArcSwap` so the admin reload path can update the list when
     /// `[models]` paths change on disk. Empty when the daemon has
-    /// not installed bindings yet (early boot, or test fixtures
+    /// not published bindings yet (early boot, or test fixtures
     /// that bypass the production `start_daemon` flow).
     ///
     /// Serving is an allowlist, not a directory browser: only paths
@@ -74,7 +140,7 @@ pub struct ServingPart {
     /// "files this daemon is configured to load and would have
     /// already loaded itself" — same trust boundary as the
     /// inference path.
-    pub servable_model_files: ArcSwap<Vec<std::path::PathBuf>>,
+    pub servable_model_files: ServableModelFilesReader,
     /// Current PUBLISHED inference availability (0.0–1.0) — read by gossip
     /// each round to populate `NodeCapabilities.inference_availability`.
     /// Default 1.0.
@@ -110,11 +176,13 @@ pub struct ServingPart {
     /// `/v1/chat/completions` serves peer requests from the same
     /// model the local user would use. `None` in the standalone
     /// Commonwealth daemon — that path routes via the orchestrator
-    /// to spawned `llama-server` processes instead.
+    /// to spawned `llama-server` processes instead. A construction
+    /// argument ([`ServingSeed::local_inference`]), not an install.
     pub local_inference: Option<std::sync::Arc<dyn LocalInferenceService>>,
-    /// Worker-side auto-warm hook for distributed inference. Installed by the
-    /// daemon alongside `local_inference`; drives `POST /internal/rpc-warm`.
-    /// `None` on a node that isn't an inference worker. See [`RpcShardWarmer`].
+    /// Worker-side auto-warm hook for distributed inference, passed at
+    /// construction alongside `local_inference`; drives
+    /// `POST /internal/rpc-warm`. `None` on a node that isn't an inference
+    /// worker. See [`RpcShardWarmer`].
     pub rpc_shard_warmer: Option<std::sync::Arc<dyn RpcShardWarmer>>,
     /// Fair admission for peer-served inference — one accounting authority
     /// (the same `SchedCore` policy the chat server uses) holding the

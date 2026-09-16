@@ -11,8 +11,8 @@
 //!
 //!   GET  /internal/v1/models/list
 //!     → 200  { "files": [{ "name", "size_bytes", "sha256" }, …] }
-//!         lists only the files explicitly registered via
-//!         `AppState::install_servable_model_files` — i.e. the
+//!         lists only the files the daemon published through
+//!         `AppState::servable_model_files_reader` — i.e. the
 //!         GGUFs this daemon is configured to load. Not a
 //!         directory browser; arbitrary files under the same
 //!         folder are NOT exposed.
@@ -23,7 +23,7 @@
 //!     → 404  when {name} isn't on the allowlist OR the file no
 //!            longer exists on disk
 //!     → 503  when no files are registered (early boot / test
-//!            fixtures that didn't call `install_…`)
+//!            fixtures that didn't publish a list)
 //!
 //! **Trust boundary**: the internal port is bound on the tailnet
 //! interface only (per the daemon's bind config). Anyone on the
@@ -128,7 +128,7 @@ fn cached_or_compute_sha(path: &Path, size: u64, mtime: i64) -> std::io::Result<
 /// GET /internal/v1/models/list — enumerate this daemon's
 /// servable GGUF files with verification metadata.
 pub async fn list_model_files(State(state): State<AppState>) -> Json<ModelFileListing> {
-    let allowlist = state.inner.serving.servable_model_files.load();
+    let allowlist = state.inner.serving.servable_model_files.current();
     let mut files = Vec::with_capacity(allowlist.len());
     for path in allowlist.iter() {
         let Some(name) = path.file_name().and_then(|s| s.to_str()) else {
@@ -235,7 +235,7 @@ pub async fn serve_model_file(
     AxumPath(name): AxumPath<String>,
     headers_in: HeaderMap,
 ) -> Result<Response, (StatusCode, Json<ErrorBody>)> {
-    let allowlist = state.inner.serving.servable_model_files.load();
+    let allowlist = state.inner.serving.servable_model_files.current();
     if allowlist.is_empty() {
         return Err((
             StatusCode::SERVICE_UNAVAILABLE,
@@ -455,7 +455,7 @@ mod tests {
             peers: vec![],
         };
         let state = AppState::new(NodeId::generate(), mesh);
-        state.install_servable_model_files(files);
+        state.servable_model_files_reader().publish(files);
         state
     }
 

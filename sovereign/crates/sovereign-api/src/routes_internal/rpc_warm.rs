@@ -38,7 +38,7 @@ fn resolve_local_model(state: &AppState, model_id: &str) -> Option<PathBuf> {
     if model_id.is_empty() || model_id.contains('/') || model_id.contains('\\') {
         return None;
     }
-    let allow = state.inner.serving.servable_model_files.load();
+    let allow = state.inner.serving.servable_model_files.current();
     // 1. Exact slot match.
     if let Some(p) = allow
         .iter()

@@ -39,6 +39,8 @@ pub mod workbench;
 // test harnesses name them at `sovereign_api::state::*` (the same surface the
 // constructors take).
 pub use fabric::{ClockReader, DialInfoReader, DialSigner, FabricSeed, PeerTransportReader};
+// Serving's construction seed and its readers, for the same reason.
+pub use serving::{ServableModelFilesReader, ServingSeed, SlotAliasesReader};
 
 /// One inference slot's *actual* in-memory residency, as reported by
 /// the embedded engine — the daemon-facing mirror of
@@ -550,33 +552,26 @@ impl AppState {
     /// through to the next resolution layer.
     ///
     /// Lookup is exact-match on both the bare alias and the
-    /// `commonwealth/`-namespaced form. We pre-register both forms at
-    /// install time so the lookup is a single map probe regardless of
+    /// `commonwealth/`-namespaced form. Both forms are registered when the
+    /// table is published, so the lookup is a single map probe regardless of
     /// which form the client sent.
     pub fn resolve_slot_alias(&self, model_name: &str) -> Option<String> {
-        let map = self.inner.serving.slot_aliases.load();
+        let map = self.inner.serving.slot_aliases.current();
         map.get(model_name).cloned()
     }
-    /// Replace the slot alias table atomically. Daemon startup calls
-    /// this once after `SetupConfig` is loaded; the admin reload path
-    /// calls it again whenever `[models]` changes on disk so clients
-    /// using `commonwealth/primary` follow the swap without restart.
-    pub fn install_slot_aliases(&self, aliases: std::collections::HashMap<String, String>) {
-        self.inner.serving.slot_aliases.store(Arc::new(aliases));
+
+    /// Serving's slot-alias reader — the owner's write handle. The daemon
+    /// publishes the boot table (and a `[models]` reload) through it while the
+    /// route shells read. A reader created at construction, not a slot filled
+    /// later (DC §4.2 "Construction is staged, and parts are total").
+    pub fn slot_aliases_reader(&self) -> serving::SlotAliasesReader {
+        self.inner.serving.slot_aliases.clone()
     }
 
-    /// Replace the servable-model-files allowlist atomically. Daemon
-    /// startup calls this once after the slot table is built; the
-    /// admin reload path calls it again on `[models]` change. Each
-    /// path should be absolute (no `..`/symlink trickery) — the
-    /// serve handler matches only on `file_name()` and reads the
-    /// canonical path, but feeding it relative inputs would still
-    /// be a footgun for whoever calls it next.
-    pub fn install_servable_model_files(&self, files: Vec<std::path::PathBuf>) {
-        self.inner
-            .serving
-            .servable_model_files
-            .store(Arc::new(files));
+    /// Serving's servable-model-files reader — the owner's write handle, the
+    /// same shape as [`Self::slot_aliases_reader`].
+    pub fn servable_model_files_reader(&self) -> serving::ServableModelFilesReader {
+        self.inner.serving.servable_model_files.clone()
     }
 
     /// This node's identity pubkey, if the node has one.
@@ -819,6 +814,26 @@ impl AppState {
         Self::new_with_platform(self_node_id, mesh, mesh_store, Arc::new(AppRegistry::new()))
     }
 
+    /// [`Self::new`] with Serving's construction seed — the test-support shape
+    /// for an integration test that serves local chat (DC §4.2 "Construction
+    /// is staged, and parts are total").
+    pub fn new_with_serving(
+        self_node_id: NodeId,
+        mesh: Mesh,
+        serving_seed: serving::ServingSeed,
+    ) -> Self {
+        #[allow(clippy::expect_used)]
+        let mesh_store = Arc::new(MeshStore::in_memory().expect("in-memory MeshStore failed"));
+        Self::new_with_platform_and_engine_and_serving(
+            self_node_id,
+            mesh,
+            mesh_store,
+            Arc::new(AppRegistry::new()),
+            None,
+            serving_seed,
+        )
+    }
+
     /// Create state with explicit platform components (used by the daemon).
     pub fn new_with_platform(
         self_node_id: NodeId,
@@ -901,6 +916,61 @@ impl AppState {
         corpus_engine: Option<Arc<CorpusEngine>>,
         in_flight_gauge: Option<sovereign_core::in_flight::LocalInFlightGauge>,
         fabric_seed: fabric::FabricSeed,
+    ) -> Self {
+        Self::new_with_platform_and_engine_and_gauge_and_fabric_and_serving(
+            self_node_id,
+            mesh,
+            mesh_store,
+            app_registry,
+            corpus_engine,
+            in_flight_gauge,
+            fabric_seed,
+            serving::ServingSeed::default(),
+        )
+    }
+
+    /// [`Self::new_with_platform_and_engine`] with Serving's construction seed.
+    ///
+    /// The in-process inference service and the RPC shard warmer exist before
+    /// the part is built, so a caller that has them passes them here rather
+    /// than installing them afterwards (DC §4.2 "Construction is staged, and
+    /// parts are total"). Tests that serve local chat take this form.
+    pub fn new_with_platform_and_engine_and_serving(
+        self_node_id: NodeId,
+        mesh: Mesh,
+        mesh_store: Arc<MeshStore>,
+        app_registry: Arc<AppRegistry>,
+        corpus_engine: Option<Arc<CorpusEngine>>,
+        serving_seed: serving::ServingSeed,
+    ) -> Self {
+        Self::new_with_platform_and_engine_and_gauge_and_fabric_and_serving(
+            self_node_id,
+            mesh,
+            mesh_store,
+            app_registry,
+            corpus_engine,
+            None,
+            fabric::FabricSeed::default(),
+            serving_seed,
+        )
+    }
+
+    /// [`Self::new_with_platform_and_engine_and_gauge_and_fabric`] with
+    /// Serving's part.
+    ///
+    /// DC §4.2 "Construction is staged, and parts are total": Serving's
+    /// provider and warmer exist before the part is built, so the daemon
+    /// gathers them into a [`serving::ServingSeed`] and passes it here rather
+    /// than installing them afterwards.
+    pub fn new_with_platform_and_engine_and_gauge_and_fabric_and_serving(
+        self_node_id: NodeId,
+        mesh: Mesh,
+        mesh_store: Arc<MeshStore>,
+        app_registry: Arc<AppRegistry>,
+        corpus_engine: Option<Arc<CorpusEngine>>,
+        in_flight_gauge: Option<sovereign_core::in_flight::LocalInFlightGauge>,
+        fabric_seed: fabric::FabricSeed,
+        serving_seed: serving::ServingSeed,
     ) -> Self {
         let inference_store = InferenceStateStore::new(Arc::clone(&mesh_store), self_node_id);
         let contribution_emitter = ContributionEmitter::new((*mesh_store).clone(), self_node_id);
@@ -988,12 +1058,12 @@ impl AppState {
                     model_aliases: ModelAliasTable::default_table(),
                     pipeline_aliases:
                         serving_policy::pipeline_aliases::PipelineAliasTable::default_table(),
-                    slot_aliases: ArcSwap::from_pointee(std::collections::HashMap::new()),
-                    servable_model_files: ArcSwap::from_pointee(Vec::new()),
+                    slot_aliases: serving::SlotAliasesReader::default(),
+                    servable_model_files: serving::ServableModelFilesReader::default(),
                     local_inference_availability: RwLock::new(1.0_f32),
                     activity_inference_availability: RwLock::new(1.0_f32),
-                    local_inference: None,
-                    rpc_shard_warmer: None,
+                    local_inference: serving_seed.local_inference,
+                    rpc_shard_warmer: serving_seed.rpc_shard_warmer,
                     // usize::MAX = unlimited. The desktop overwrites this
                     // at boot with the user's persisted setting (default
                     // matched to their consent-dialog choice in W4);
@@ -1144,76 +1214,6 @@ impl AppState {
     /// publishes through it.
     pub fn identity_reader(&self) -> IdentityReader {
         self.inner.fabric.identity.clone()
-    }
-
-    /// Install the in-process inference service. Same Arc-get_mut
-    /// Whether the `with_*` installers below can still take effect.
-    ///
-    /// They mutate through `Arc::get_mut`, which refuses when ANY other
-    /// `Arc` or `Weak` to the inner state exists — and on refusal they log
-    /// and carry on, so the daemon boots with no local inference and every
-    /// chat turn 503s. The caller asks this ONCE before the block and refuses
-    /// to boot on `Err`, turning a silent outage into a sentence (§18.3).
-    pub fn installers_can_run(&self) -> Result<(), String> {
-        let strong = Arc::strong_count(&self.inner);
-        let weak = Arc::weak_count(&self.inner);
-        if strong == 1 && weak == 0 {
-            Ok(())
-        } else {
-            Err(format!(
-                "AppState is already shared (strong={strong}, weak={weak}) before its \
-                 with_* installers ran; they would silently no-op and the daemon would \
-                 boot without local inference. Move whatever cloned or downgraded \
-                 `app_state.inner` below the Arc::get_mut-sensitive block in \
-                 EmbeddedDaemon::start_daemon"
-            ))
-        }
-    }
-
-    /// contract as `with_rpc_shard_warmer` — call before cloning
-    /// AppState into the HTTP servers.
-    pub fn with_local_inference(
-        mut self,
-        service: std::sync::Arc<dyn LocalInferenceService>,
-    ) -> Self {
-        match Arc::get_mut(&mut self.inner) {
-            Some(inner) => {
-                inner.serving.local_inference = Some(service);
-            }
-            None => {
-                tracing::error!(
-                    strong_count = Arc::strong_count(&self.inner),
-                    "with_local_inference called on shared AppState — \
-                     local inference NOT installed and /v1/chat/completions \
-                     will 503 every request with model_not_ready. \
-                     Likely cause: another caller cloned AppState.inner \
-                     (e.g. AppStateYieldHook::new) before this point. \
-                     Move the with_* installer above any inner.clone() in \
-                     EmbeddedDaemon::start_daemon."
-                );
-            }
-        }
-        self
-    }
-
-    /// Install the worker-side RPC shard warmer ([`RpcShardWarmer`]) — the
-    /// `POST /internal/rpc-warm` backend. Same contract as `with_local_inference`:
-    /// call before cloning AppState into the HTTP servers (uses `Arc::get_mut`).
-    pub fn with_rpc_shard_warmer(mut self, warmer: std::sync::Arc<dyn RpcShardWarmer>) -> Self {
-        match Arc::get_mut(&mut self.inner) {
-            Some(inner) => {
-                inner.serving.rpc_shard_warmer = Some(warmer);
-            }
-            None => {
-                tracing::error!(
-                    strong_count = Arc::strong_count(&self.inner),
-                    "with_rpc_shard_warmer called on shared AppState — auto-warm \
-                     orchestration disabled; a distributed primary load will fall \
-                     back to local-only. Move the installer above any inner.clone()."
-                );
-            }
-        }
-        self
     }
 
     /// Register a model as available on the mesh.
@@ -1931,31 +1931,69 @@ pub fn test_app_state_with_seed(seed: fabric::FabricSeed) -> AppState {
     )
 }
 
-#[cfg(test)]
-mod installer_guard_tests {
-    use super::test_app_state;
-    use std::sync::Arc;
+/// [`test_app_state`] with a local inference service — the shape a test that
+/// serves local chat uses now that the provider is a constructor argument
+/// rather than an install (DC §4.2 "Construction is staged, and parts are
+/// total").
+pub fn test_app_state_with_inference(service: Arc<dyn LocalInferenceService>) -> AppState {
+    use commonwealth_core::ids::MeshId;
+    use commonwealth_core::mesh::Mesh;
+    use std::collections::HashMap;
+    let mesh = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
+        id: MeshId::from_u128(1),
+        name: "Test Mesh".into(),
+        invite_key_hash: [0u8; 32],
+        invite_version: 0,
+        require_encryption: false,
+        members: HashMap::new(),
+        peers: vec![],
+    };
+    AppState::new_with_platform_and_engine_and_serving(
+        NodeId::from_u128(1),
+        mesh,
+        Arc::new(MeshStore::in_memory().expect("in-memory MeshStore")),
+        Arc::new(AppRegistry::new()),
+        None,
+        serving::ServingSeed {
+            local_inference: Some(service),
+            ..Default::default()
+        },
+    )
+}
 
-    /// A fresh state can run its installers; a state anyone has cloned OR
-    /// downgraded cannot, and says so. The `Weak` case is the one that
-    /// took local inference down on 2026-09-08 — a Weak reads as harmless
-    /// and `Arc::get_mut` disagrees.
+#[cfg(test)]
+mod serving_reader_tests {
+    use super::test_app_state;
+
+    /// The slot-alias and servable-files readers are total at construction
+    /// (empty, not absent) and the owner publishes through its own handle,
+    /// which the part then observes. There is no `install_*` step whose
+    /// `Arc::get_mut` could silently no-op (DC §4.2 "Construction is staged,
+    /// and parts are total").
     #[test]
-    fn installers_refuse_a_state_that_is_already_shared_even_weakly() {
+    fn readers_start_empty_and_observe_a_publish() {
         let state = test_app_state();
-        assert!(state.installers_can_run().is_ok());
-        let weak = Arc::downgrade(&state.inner);
-        let err = state.installers_can_run().unwrap_err();
-        assert!(err.contains("weak=1"), "{err}");
-        drop(weak);
-        assert!(
-            state.installers_can_run().is_ok(),
-            "dropping the Weak restores it"
+        assert!(state.inner.serving.slot_aliases.current().is_empty());
+        assert!(state
+            .inner
+            .serving
+            .servable_model_files
+            .current()
+            .is_empty());
+
+        state.slot_aliases_reader().publish(
+            [("primary".to_string(), "m".to_string())]
+                .into_iter()
+                .collect(),
         );
-        let strong = state.clone();
-        let err = state.installers_can_run().unwrap_err();
-        assert!(err.contains("strong=2"), "{err}");
-        drop(strong);
+        assert_eq!(state.resolve_slot_alias("primary").as_deref(), Some("m"));
+
+        state
+            .servable_model_files_reader()
+            .publish(vec![std::path::PathBuf::from("/x.gguf")]);
+        assert_eq!(state.inner.serving.servable_model_files.current().len(), 1);
     }
 }
 

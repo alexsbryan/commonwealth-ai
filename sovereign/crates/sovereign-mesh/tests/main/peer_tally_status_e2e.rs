@@ -33,7 +33,7 @@ use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_state::MeshStore;
 use sovereign_api::server::client_router;
-use sovereign_api::state::{AppState, LocalInferenceService};
+use sovereign_api::state::{AppState, LocalInferenceService, ServingSeed};
 use sovereign_core::error::Result as SovResult;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{
@@ -124,8 +124,6 @@ fn build_state(peer_name: &str) -> (AppState, NodeId) {
 
     let mesh_store = Arc::new(MeshStore::in_memory().unwrap());
     let app_registry = Arc::new(AppRegistry::new());
-    let app_state =
-        AppState::new_with_platform_and_engine(self_id, mesh, mesh_store, app_registry, None);
 
     let fast: Arc<dyn InferenceProvider> = Arc::new(
         TestProvider::new()
@@ -140,7 +138,18 @@ fn build_state(peer_name: &str) -> (AppState, NodeId) {
         slow,
         Arc::new(CoreSlotManifest),
     ));
-    (app_state.with_local_inference(adapter), peer_id)
+    let app_state = AppState::new_with_platform_and_engine_and_serving(
+        self_id,
+        mesh,
+        mesh_store,
+        app_registry,
+        None,
+        ServingSeed {
+            local_inference: Some(adapter),
+            ..Default::default()
+        },
+    );
+    (app_state, peer_id)
 }
 
 async fn status_peer_requests(client: &reqwest::Client, addr: &SocketAddr) -> Vec<Value> {

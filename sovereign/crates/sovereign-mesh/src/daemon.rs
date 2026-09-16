@@ -3061,7 +3061,39 @@ impl EmbeddedDaemon {
             peer_transport: sovereign_api::state::PeerTransportReader::new(ip_transport.clone()),
             ..Default::default()
         };
-        let app_state = AppState::new_with_platform_and_engine_and_gauge_and_fabric(
+        // Serving's provider and warmer exist before its part is built (DC §4.2
+        // "Construction is staged, and parts are total"). Gathering them into a
+        // `ServingSeed` and passing it to the constructor removes the
+        // post-construction `Arc::get_mut` installer that could silently no-op
+        // and leave `/v1/chat/completions` 503ing with `model_not_ready`.
+        //
+        // If Sovereign installed an InferenceProvider, wrap it in the
+        // OpenAI-flavour adapter so this node's `/v1/chat/completions` serves
+        // peer requests directly from the same local model the user would use.
+        // Without this, peer inference requests 503 because the daemon's
+        // scheduler/llama-server path is empty in the embedded topology.
+        let serving_seed = match self.inference_provider().await {
+            Some(provider) => {
+                let adapter: Arc<dyn LocalInferenceService> =
+                    Arc::new(crate::inference_adapter::SovereignInferenceAdapter::new(
+                        provider,
+                        Arc::new(crate::slot_manifest::CoreSlotManifest),
+                    ));
+                info!("inference adapter: wired into /v1/chat/completions");
+                // Worker side of distributed-inference auto-warm: this node can
+                // seed its RPC tensor cache with a shard on request
+                // (`POST /internal/rpc-warm`). A node that can serve chat can
+                // serve as an RPC worker. See `rpc_warm_http`.
+                let warmer: Arc<dyn sovereign_api::state::RpcShardWarmer> =
+                    Arc::new(crate::rpc_warm_http::MeshRpcShardWarmer::new());
+                sovereign_api::state::ServingSeed {
+                    local_inference: Some(adapter),
+                    rpc_shard_warmer: Some(warmer),
+                }
+            }
+            None => sovereign_api::state::ServingSeed::default(),
+        };
+        let app_state = AppState::new_with_platform_and_engine_and_gauge_and_fabric_and_serving(
             node_id,
             mesh,
             mesh_store,
@@ -3071,74 +3103,21 @@ impl EmbeddedDaemon {
                 .serving()
                 .and_then(|s| s.core.in_flight_gauge.clone()),
             fabric_seed,
+            serving_seed,
         );
 
-        // ── Order is load-bearing ─────────────────────────────────
-        //
-        // Checked, not remembered (§7): a `Weak` counts against
-        // `Arc::get_mut` exactly as a strong clone does, and on 2026-09-08
-        // one installed six lines above this comment — every `with_*`
-        // below silently no-op'd and the host served 503 on every chat
-        // turn while advertising twelve models. A daemon that cannot run
-        // its installers refuses to boot rather than booting without
-        // inference (§18.3).
-        app_state.installers_can_run().map_err(MeshError::Config)?;
-        //
-        // The `with_*` installers below mutate `AppStateInner`
-        // through `Arc::get_mut`, which silently fails (with a
-        // tracing::warn!) the moment any other code clones
-        // `app_state.inner`. The YieldHook construction
-        // (`AppStateYieldHook::new(app_state.inner.clone())`) and
-        // the embed-info publication (`app_state.inner.serving.inference_store
-        // .set_local_embed_model(...)`) both bump the Arc strong
-        // count, so we must run the remaining `with_*` installers
-        // BEFORE any of those.
-        //
-        // Inverting this order silently breaks
-        // `/v1/chat/completions` — the orchestrator path is taken
-        // and every request 503s with `model_not_ready`. See
-        // `with_local_inference` in commonwealth-api/src/state.rs.
-        // (Fabric's values no longer ride this block: they are
-        // constructor arguments now, DC §4.2.)
-
-        // If Sovereign installed an InferenceProvider, wrap it in
-        // the OpenAI-flavour adapter so this node's
-        // `/v1/chat/completions` serves peer requests directly
-        // from the same local model the user would use. Without
-        // this, peer inference requests 503 because the daemon's
-        // scheduler/llama-server path is empty in the embedded
-        // topology.
-        let app_state = if let Some(provider) = self.inference_provider.read().await.as_ref() {
-            let adapter: Arc<dyn LocalInferenceService> =
-                Arc::new(crate::inference_adapter::SovereignInferenceAdapter::new(
-                    provider.clone(),
-                    Arc::new(crate::slot_manifest::CoreSlotManifest),
-                ));
-            info!("inference adapter: wired into /v1/chat/completions");
-            // Worker side of distributed-inference auto-warm: this node can seed
-            // its RPC tensor cache with a shard on request (`POST /internal/
-            // rpc-warm`). Installed alongside local inference — a node that can
-            // serve chat can serve as an RPC worker. See `rpc_warm_http`.
-            let warmer: Arc<dyn sovereign_api::state::RpcShardWarmer> =
-                Arc::new(crate::rpc_warm_http::MeshRpcShardWarmer::new());
-            app_state
-                .with_local_inference(adapter)
-                .with_rpc_shard_warmer(warmer)
-        } else {
-            app_state
-        };
-
-        // ── End of Arc::get_mut-sensitive block ───────────────────
-        // Everything below is free to clone `app_state.inner`.
+        // (The former `Arc::get_mut` installer block lived here. Fabric's and
+        // Serving's values are constructor arguments now, so nothing is
+        // installed into a part after it is built and no ordering can silently
+        // drop local inference. DC §4.2 "Construction is staged, and parts are
+        // total".)
 
         // The daemon's own ring namespace has no hand-written roster: its
         // membership IS the roster, and the rail's one reader has to know
         // that or the append route refuses this node's own key there. The
-        // source holds the state WEAKLY, and a Weak is a share as far as
-        // `Arc::get_mut` is concerned — which is why it is installed HERE,
-        // below the block, and not at the rail's construction. The rail's
-        // lookup is at read time, so nothing between the rail's construction
-        // and this line could have read the wrong roster.
+        // source holds the state WEAKLY. The rail's lookup is at read time, so
+        // nothing between the rail's construction and this line could have
+        // read the wrong roster.
         if let Some(rail) = app_state.ring_rail() {
             if let Err(e) = crate::ring_roster::MeshRosterSource::install(&rail, &app_state) {
                 tracing::error!(error = %e, "ring rail: the daemon's own namespace could not register its roster source");
@@ -4733,9 +4712,9 @@ fn register_local_model_slots(app_state: &AppState, cfg: &SetupConfig, node_id: 
     if !slot_aliases.is_empty() {
         info!(
             count = slot_aliases.len(),
-            "installing slot alias map for chat_completions / list_models"
+            "publishing slot alias map for chat_completions / list_models"
         );
-        app_state.install_slot_aliases(slot_aliases);
+        app_state.slot_aliases_reader().publish(slot_aliases);
     }
 
     // Install the servable-model-files allowlist so peers can
@@ -4761,9 +4740,9 @@ fn register_local_model_slots(app_state: &AppState, cfg: &SetupConfig, node_id: 
     if !servable.is_empty() {
         info!(
             files = servable.len(),
-            "installing servable model files allowlist for peer fetch"
+            "publishing servable model files allowlist for peer fetch"
         );
-        app_state.install_servable_model_files(servable);
+        app_state.servable_model_files_reader().publish(servable);
     }
 }
 

@@ -542,7 +542,7 @@ step. Buckets follow the daemon's structural layout.
 
 | Capability | Coverage | Impact | Test / Next step |
 |---|---|---|---|
-| `EmbeddedDaemon::new` + service injection order | ✓ | P0 | `daemon_wiring::with_local_inference_routes_chat_completions_to_adapter` |
+| `EmbeddedDaemon::new` + service injection at construction | ✓ | P0 | `daemon_wiring::inference_provider_routes_chat_completions_to_adapter` |
 | `with_mesh_mutation_hook` fires on real route mutation | ✓ | P0 | `daemon_wiring::with_mesh_mutation_hook_fires_on_gossip_delta`, `join_handshake::valid_join_key_admits_new_member_and_fires_hook` |
 | `create_mesh` → `start_daemon` happy path | ✓ | P1 | `mesh_http::tests::create_and_status_round_trip`, `port_config::*` |
 | `join_mesh` deep-link parse → `/internal/join` → adopt | ~ | P1 | `join_handshake::joiner_can_adopt_founder_mesh_after_handshake` covers wire+adopt; full `EmbeddedDaemon::join_mesh` path (auto-leave gate, mDNS discovery, swap of self_node_id) is uncovered |
@@ -550,7 +550,7 @@ step. Buckets follow the daemon's structural layout.
 | `leave` clears persistence + tears down | ~ | P1 | Lib tests on `persist::clear`; no daemon-level test that `leave` then `create_mesh` works without state bleed |
 | `shutdown` / `stop` graceful drain | ~ | P2 | Used by `port_config::*` but no assertion on background-task teardown |
 | `SetupConfig` ports flow through | ✓ | P1 | `port_config::custom_client_port_from_setup_config_flows_to_api_address` |
-| Service-injection ordering — `Arc::get_mut` no-op detection | ✓ | **P0** | `injection_order::{with_local_inference_emits_error_when_arc_already_cloned, with_mesh_mutation_hook_emits_error_when_arc_already_cloned, happy_path_does_not_emit_error_when_arc_uncloned}` |
+| Service-injection — providers are construction arguments | ✓ | **P0** | `injection_order::{local_inference_is_present_at_construction, mesh_mutation_hook_is_present_at_construction}` |
 | Concurrent `create_mesh` rejected with `AlreadyRunning` | ~ | P2 | `mesh_http::tests::create_fails_when_mesh_already_exists` covers HTTP layer; no concurrency-stress test |
 
 ### B. Inference path (`/v1/*`)

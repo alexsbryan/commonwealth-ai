@@ -42,7 +42,7 @@ use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_state::MeshStore;
 use sovereign_api::server::client_router;
-use sovereign_api::state::{AppState, LocalInferenceService};
+use sovereign_api::state::{AppState, LocalInferenceService, ServingSeed};
 use sovereign_core::in_flight::LocalInFlightGauge;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_mesh::capabilities::build_local_capabilities;
@@ -286,18 +286,23 @@ async fn desktop_topology_serving_a_peer_request_does_not_publish_in_flight() {
 
     let mesh_store = Arc::new(MeshStore::in_memory().unwrap());
     let app_registry = Arc::new(AppRegistry::new());
-    // `with_local_inference` goes through `Arc::get_mut` and must run before
-    // anything clones `inner` (see `injection_order.rs`); the gauge is a
-    // constructor argument, so it is already in place.
-    let state = AppState::new_with_platform_and_engine_and_gauge(
+    // The gauge and the inference provider are both construction arguments now,
+    // so there is no `Arc::get_mut` installer whose ordering could silently
+    // drop the provider (DC §4.2 "Construction is staged, and parts are
+    // total").
+    let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric_and_serving(
         self_id,
         mesh,
         mesh_store,
         app_registry,
         None,
         Some(gauge),
-    )
-    .with_local_inference(adapter);
+        sovereign_api::state::FabricSeed::default(),
+        ServingSeed {
+            local_inference: Some(adapter),
+            ..Default::default()
+        },
+    );
 
     let addr = spawn_router(client_router(state)).await;
 

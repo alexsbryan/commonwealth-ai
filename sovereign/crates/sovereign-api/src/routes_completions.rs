@@ -274,7 +274,10 @@ fn serve_fim_sse(
 mod tests {
     use super::*;
     use crate::openai_types::{FinishReason, StreamUsage};
-    use crate::state::{test_app_state, EditSlotStatus, FimStreamStart, LocalInferenceService};
+    use crate::state::{
+        test_app_state, test_app_state_with_inference, EditSlotStatus, FimStreamStart,
+        LocalInferenceService,
+    };
     use async_trait::async_trait;
     use axum::body::Body;
     use axum::http::Request;
@@ -433,7 +436,7 @@ mod tests {
     }
 
     fn router_with(service: Arc<dyn LocalInferenceService>) -> axum::Router {
-        let state = test_app_state().with_local_inference(service);
+        let state = test_app_state_with_inference(service);
         crate::server::mock_router(state)
     }
 

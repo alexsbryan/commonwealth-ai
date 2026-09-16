@@ -30,7 +30,9 @@
 //! you are changing this handler.
 
 use super::*;
-use crate::state::{test_app_state, LocalInferenceError, LocalInferenceService};
+use crate::state::{
+    test_app_state, test_app_state_with_inference, LocalInferenceError, LocalInferenceService,
+};
 use futures::Stream;
 use oicp_types::{ModelStatus, ProviderManifest, ProviderModel};
 use sovereign_core::traits::InferenceProvider;
@@ -134,7 +136,7 @@ impl LocalInferenceService for TwoNodeMesh {
 }
 
 async fn rows(service: Arc<dyn LocalInferenceService>) -> Vec<ModelObject> {
-    let state = test_app_state().with_local_inference(service);
+    let state = test_app_state_with_inference(service);
     let resp = list_models(State(state), None).await.into_response();
     let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
         .await
@@ -169,7 +171,7 @@ async fn every_listed_id_is_advertised_by_some_manifest() {
 /// only thing the pre-fix handler read — must not put it on the list.
 #[tokio::test]
 async fn a_store_entry_no_manifest_carries_is_not_listed() {
-    let state = test_app_state().with_local_inference(Arc::new(TwoNodeMesh));
+    let state = test_app_state_with_inference(Arc::new(TwoNodeMesh));
     state.register_model(commonwealth_core::model::ModelInfo {
         id: commonwealth_core::ModelId::from_u128(7),
         name: "ghost-from-gossip".into(),
@@ -345,7 +347,7 @@ fn guest_for(models: &[&str]) -> Option<axum::Extension<crate::client_auth::Gues
 }
 
 async fn chat_as_guest(model: Option<&str>, granted: &[&str]) -> (StatusCode, serde_json::Value) {
-    let state = test_app_state().with_local_inference(Arc::new(TwoNodeMesh));
+    let state = test_app_state_with_inference(Arc::new(TwoNodeMesh));
     let request: ChatCompletionRequest = serde_json::from_value(serde_json::json!({
         "model": model,
         "messages": [{"role": "user", "content": "hello"}],
@@ -439,7 +441,7 @@ async fn a_guest_naming_a_granted_model_is_served_that_model() {
 /// the refusal would point back at the list.
 #[tokio::test]
 async fn a_guest_sees_only_the_models_its_grant_names() {
-    let state = test_app_state().with_local_inference(Arc::new(TwoNodeMesh));
+    let state = test_app_state_with_inference(Arc::new(TwoNodeMesh));
     let ungated = list_models(State(state.clone()), None)
         .await
         .into_response();
@@ -474,7 +476,7 @@ async fn a_guest_sees_only_the_models_its_grant_names() {
 /// grant existing; this pins that the listing never papers over one.
 #[tokio::test]
 async fn a_grant_naming_an_unserved_model_lists_nothing() {
-    let state = test_app_state().with_local_inference(Arc::new(TwoNodeMesh));
+    let state = test_app_state_with_inference(Arc::new(TwoNodeMesh));
     let resp = list_models(State(state), guest_for(&["not-on-this-node"]))
         .await
         .into_response();
@@ -493,7 +495,7 @@ async fn a_grant_naming_an_unserved_model_lists_nothing() {
 /// path will refuse (§10.6).
 #[tokio::test]
 async fn dispatchable_ids_matches_what_an_ungated_listing_reports() {
-    let state = test_app_state().with_local_inference(Arc::new(TwoNodeMesh));
+    let state = test_app_state_with_inference(Arc::new(TwoNodeMesh));
     let resp = list_models(State(state.clone()), None)
         .await
         .into_response();

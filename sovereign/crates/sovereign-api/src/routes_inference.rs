@@ -894,7 +894,7 @@ async fn manifest_rows(state: &AppState) -> Option<Vec<ModelObject>> {
         }
     }
 
-    let slot_aliases = state.inner.serving.slot_aliases.load();
+    let slot_aliases = state.inner.serving.slot_aliases.current();
     let mut rows: Vec<ModelObject> = Vec::new();
     let mut index: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
 
@@ -1096,7 +1096,7 @@ async fn store_rows(state: &AppState) -> Vec<ModelObject> {
     // dispatchable; synthesising them from `slot_aliases` there is how the
     // `embed` alias came to be listed on a node whose manifest never
     // carried it, permanently un-dispatchable.
-    let slot_aliases = state.inner.serving.slot_aliases.load();
+    let slot_aliases = state.inner.serving.slot_aliases.current();
     let mut alias_entries: Vec<(String, String)> = slot_aliases
         .iter()
         .map(|(alias, target)| (alias.clone(), target.clone()))

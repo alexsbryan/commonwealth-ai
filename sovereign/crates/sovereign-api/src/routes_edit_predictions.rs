@@ -869,7 +869,9 @@ mod tests {
     use tower::ServiceExt;
 
     use crate::openai_types::{ChatChoice, ChatCompletionResponse, ChatMessage, StreamFrame};
-    use crate::state::{test_app_state, EditSlotStatus, LocalInferenceService};
+    use crate::state::{
+        test_app_state, test_app_state_with_inference, EditSlotStatus, LocalInferenceService,
+    };
     use sovereign_core::traits::InferenceProvider;
     use sovereign_core::types::{CompletionRequest, CompletionResponse, ProviderCapabilities};
 
@@ -980,7 +982,7 @@ mod tests {
     }
 
     fn model_router(content: &str) -> axum::Router {
-        let state = test_app_state().with_local_inference(Arc::new(StubChat {
+        let state = test_app_state_with_inference(Arc::new(StubChat {
             content: content.into(),
             finish: "stop",
         }));
@@ -1323,7 +1325,7 @@ mod tests {
     /// mid-rewrite; diffed whole it reads as "delete the rest".
     #[tokio::test]
     async fn truncated_completion_is_dropped() {
-        let state = test_app_state().with_local_inference(Arc::new(StubChat {
+        let state = test_app_state_with_inference(Arc::new(StubChat {
             content: "\tprimary := Conn{\n\t\tPort: 8080,\n".into(),
             finish: "length",
         }));
@@ -1403,7 +1405,7 @@ mod tests {
                 })
             }
         }
-        let state = test_app_state().with_local_inference(Arc::new(SlowChat));
+        let state = test_app_state_with_inference(Arc::new(SlowChat));
         let app = crate::server::mock_router(state);
 
         let first = tokio::spawn({

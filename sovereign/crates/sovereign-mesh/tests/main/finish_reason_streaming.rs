@@ -38,7 +38,7 @@ use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_state::MeshStore;
 use sovereign_api::server::client_router;
-use sovereign_api::state::{AppState, LocalInferenceService};
+use sovereign_api::state::{AppState, LocalInferenceService, ServingSeed};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{FinishReason, StreamFrame};
 use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
@@ -83,13 +83,21 @@ fn build_state(provider: Arc<dyn InferenceProvider>) -> AppState {
     };
     let mesh_store = Arc::new(MeshStore::in_memory().unwrap());
     let app_registry = Arc::new(AppRegistry::new());
-    let state =
-        AppState::new_with_platform_and_engine(self_id, mesh, mesh_store, app_registry, None);
     let adapter: Arc<dyn LocalInferenceService> = Arc::new(SovereignInferenceAdapter::new(
         provider,
         Arc::new(CoreSlotManifest),
     ));
-    state.with_local_inference(adapter)
+    AppState::new_with_platform_and_engine_and_serving(
+        self_id,
+        mesh,
+        mesh_store,
+        app_registry,
+        None,
+        ServingSeed {
+            local_inference: Some(adapter),
+            ..Default::default()
+        },
+    )
 }
 
 async fn spawn(state: AppState) -> SocketAddr {

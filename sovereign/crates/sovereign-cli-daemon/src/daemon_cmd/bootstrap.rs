@@ -1231,7 +1231,7 @@ pub(super) fn spawn_slot_alias_push(
             let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
             loop {
                 if let Some(state) = daemon_for_alias_push.app_state().await {
-                    let snapshot = state.inner.serving.slot_aliases.load();
+                    let snapshot = state.inner.serving.slot_aliases.current();
                     let map: std::collections::HashMap<String, String> = snapshot
                         .iter()
                         .map(|(k, v)| (k.clone(), v.clone()))
