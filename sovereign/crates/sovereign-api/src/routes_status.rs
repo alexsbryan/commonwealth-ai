@@ -129,7 +129,13 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
     Json(StatusResponse {
         node_id: format!(
             "{}",
-            state.inner.fabric.self_node_id_swap.load_full().as_ref().clone()
+            state
+                .inner
+                .fabric
+                .self_node_id_swap
+                .load_full()
+                .as_ref()
+                .clone()
         ),
         mesh: MeshStatus {
             name: mesh.name.clone(),

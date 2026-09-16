@@ -69,7 +69,10 @@ async fn valid_join_key_admits_new_member_and_fires_hook() {
     let addr = spawn_internal_router(founder_state.clone()).await;
 
     // Pre-condition: founder is alone, hook hasn't fired.
-    assert_eq!(founder_state.inner.fabric.mesh.read().await.members.len(), 1);
+    assert_eq!(
+        founder_state.inner.fabric.mesh.read().await.members.len(),
+        1
+    );
     assert_eq!(hook_counter.load(Ordering::Relaxed), 0);
 
     let joiner_addr: SocketAddr = "127.0.0.1:9876".parse().unwrap();

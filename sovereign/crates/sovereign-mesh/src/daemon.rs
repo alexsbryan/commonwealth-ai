@@ -2016,7 +2016,12 @@ impl EmbeddedDaemon {
             _ => return Vec::new(),
         };
         drop(state);
-        let self_id = *app_state.inner.fabric.self_node_id_swap.load_full().as_ref();
+        let self_id = *app_state
+            .inner
+            .fabric
+            .self_node_id_swap
+            .load_full()
+            .as_ref();
         let members: Vec<commonwealth_core::mesh::MemberRecord> = {
             let mesh = app_state.inner.fabric.mesh.read().await;
             mesh.members
@@ -2297,7 +2302,12 @@ impl EmbeddedDaemon {
         let transport = app_state.peer_transport();
         let members: Vec<commonwealth_core::mesh::MemberRecord> = {
             let mesh = app_state.inner.fabric.mesh.read().await;
-            let self_id = *app_state.inner.fabric.self_node_id_swap.load_full().as_ref();
+            let self_id = *app_state
+                .inner
+                .fabric
+                .self_node_id_swap
+                .load_full()
+                .as_ref();
             mesh.members
                 .values()
                 .filter(|m| m.node_id != self_id)
@@ -2498,7 +2508,12 @@ impl EmbeddedDaemon {
         let transport = app_state.peer_transport();
         let members: Vec<commonwealth_core::mesh::MemberRecord> = {
             let mesh = app_state.inner.fabric.mesh.read().await;
-            let self_id = *app_state.inner.fabric.self_node_id_swap.load_full().as_ref();
+            let self_id = *app_state
+                .inner
+                .fabric
+                .self_node_id_swap
+                .load_full()
+                .as_ref();
             mesh.members
                 .values()
                 .filter(|m| m.node_id != self_id)

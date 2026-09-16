@@ -681,7 +681,12 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
 /// nor peer should run a separate spawn_local_ingest — the pull_loop
 /// (self or remote) is the single writer into `<corpus>-partition-<node>/`.
 async fn has_active_queue_handoff(state: &AppState, corpus_id: &str) -> bool {
-    let entries = match state.inner.fabric.mesh_store.scan("corpus-engine", "handoff:") {
+    let entries = match state
+        .inner
+        .fabric
+        .mesh_store
+        .scan("corpus-engine", "handoff:")
+    {
         Ok(e) => e,
         Err(_) => return false,
     };
@@ -806,7 +811,12 @@ async fn discover_and_spawn_pull_loops(state: AppState, self_id: NodeId, daemon_
         return;
     };
 
-    let entries = match state.inner.fabric.mesh_store.scan("corpus-engine", "handoff:") {
+    let entries = match state
+        .inner
+        .fabric
+        .mesh_store
+        .scan("corpus-engine", "handoff:")
+    {
         Ok(e) => e,
         Err(e) => {
             tracing::debug!(error = %e, "pull_loops: mesh_store scan failed");

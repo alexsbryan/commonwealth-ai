@@ -59,7 +59,12 @@ pub async fn install_app(
         )
             .into_response();
     }
-    state.inner.fabric.app_registry.register(body.manifest).await;
+    state
+        .inner
+        .fabric
+        .app_registry
+        .register(body.manifest)
+        .await;
     (
         StatusCode::OK,
         Json(serde_json::json!({"status": "registered"})),

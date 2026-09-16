@@ -1567,13 +1567,15 @@ pub async fn activity_summary(
         .window_days
         .unwrap_or(commonwealth_core::activity::DEFAULT_ACTIVITY_WINDOW_DAYS)
         .min(365);
-    let activity = commonwealth_state::current_activity(&state.inner.fabric.mesh_store, window_days)
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("activity_summary: aggregate failed: {e}"),
-            )
-        })?;
+    let activity =
+        commonwealth_state::current_activity(&state.inner.fabric.mesh_store, window_days).map_err(
+            |e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("activity_summary: aggregate failed: {e}"),
+                )
+            },
+        )?;
 
     // Fold in this node's own contribution totals. Self-origin
     // contribution events land on the self node's `NodeContributions`,

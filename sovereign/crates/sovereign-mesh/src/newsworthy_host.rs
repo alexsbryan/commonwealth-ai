@@ -121,17 +121,18 @@ impl MeshNewsworthyHost {
         // `target_corpus_id`. Snapshots are gossiped hourly, so a
         // freshly-installed peer may not show up for up to an hour —
         // acceptable for a daily watcher tick.
-        let events: Vec<LedgerEvent> = match self.app_state.inner.fabric.contribution_emitter.events() {
-            Ok(ev) => ev,
-            Err(e) => {
-                tracing::warn!(
-                    error = %e,
-                    "newsworthy.host: contribution_emitter.events failed; \
-                     leader pool falls back to self-only"
-                );
-                return holders;
-            }
-        };
+        let events: Vec<LedgerEvent> =
+            match self.app_state.inner.fabric.contribution_emitter.events() {
+                Ok(ev) => ev,
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        "newsworthy.host: contribution_emitter.events failed; \
+                         leader pool falls back to self-only"
+                    );
+                    return holders;
+                }
+            };
 
         let mut latest_per_node: HashMap<NodeId, (&LedgerEvent, &Vec<(String, f64)>)> =
             HashMap::new();
