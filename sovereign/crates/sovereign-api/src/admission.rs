@@ -36,18 +36,18 @@ pub use sovereign_serving_host::admission::{
 };
 
 /// RAII guard returned by the peer admission decision. Holds one slot in the
-/// peer fair scheduler for `node`; `release`s it on drop so callers can't
-/// forget. The drop happens at the end of the middleware's response future —
-/// including on unwind, which keeps the scheduler accurate when a downstream
-/// handler panics.
+/// peer fair scheduler for `key` — the published [`Principal`] (`Member` for
+/// peer traffic); `release`s it on drop so callers can't forget. The drop
+/// happens at the end of the middleware's response future — including on
+/// unwind, which keeps the scheduler accurate when a downstream handler panics.
 #[must_use = "drop the guard when the peer request completes — \
               the scheduler slot only releases on drop"]
-pub struct PeerInflightGuard {
+pub struct PrincipalInflightGuard {
     inner: Arc<AppStateInner>,
-    node: NodeId,
+    key: Principal,
 }
 
-impl std::fmt::Debug for PeerInflightGuard {
+impl std::fmt::Debug for PrincipalInflightGuard {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let in_flight = self
             .inner
@@ -55,19 +55,19 @@ impl std::fmt::Debug for PeerInflightGuard {
             .peer_sched
             .lock()
             .map_or(0, |s| s.in_flight());
-        write!(f, "PeerInflightGuard {{ in_flight: {in_flight} }}")
+        write!(f, "PrincipalInflightGuard {{ in_flight: {in_flight} }}")
     }
 }
 
-impl PeerInflightGuard {
-    pub(crate) fn new(inner: Arc<AppStateInner>, node: NodeId) -> Self {
-        Self { inner, node }
+impl PrincipalInflightGuard {
+    pub(crate) fn new(inner: Arc<AppStateInner>, key: Principal) -> Self {
+        Self { inner, key }
     }
 }
 
-impl Drop for PeerInflightGuard {
+impl Drop for PrincipalInflightGuard {
     fn drop(&mut self) {
-        // Release this node's slot back to the scheduler (promoting any
+        // Release this principal's slot back to the scheduler (promoting any
         // waiter — none on this shed-only gate). Recover from a poisoned lock
         // rather than cascade the panic.
         self.inner
@@ -75,36 +75,36 @@ impl Drop for PeerInflightGuard {
             .peer_sched
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .release(&self.node);
+            .release(&self.key);
     }
 }
 
-impl AdmissionLease for PeerInflightGuard {}
+impl AdmissionLease for PrincipalInflightGuard {}
 
-/// RAII open/close of the per-peer tally row (order `seat-resource-commons`
+/// RAII open/close of the per-principal tally row (order `seat-resource-commons`
 /// UC-R1). Construction opens the row (`tally_peer_request_begin`); drop closes
-/// it (`tally_peer_request_end`). Panic-safe like [`PeerInflightGuard`]: if the
-/// downstream handler unwinds before a response exists, the guard drops on the
-/// middleware's stack frame and `active` is not leaked. When a response IS
+/// it (`tally_peer_request_end`). Panic-safe like [`PrincipalInflightGuard`]: if
+/// the downstream handler unwinds before a response exists, the guard drops on
+/// the middleware's stack frame and `active` is not leaked. When a response IS
 /// produced, the guard moves into the response body's wrapper, so the decrement
 /// fires when the BODY ends — the truthful in-flight window for streaming
 /// responses (the scheduler slot, by contrast, releases at headers time).
 #[must_use = "drop the guard when the peer request body ends — the tally active counter only decrements on drop"]
 pub struct TallyGuard {
     inner: Arc<AppStateInner>,
-    node: NodeId,
+    key: Principal,
 }
 
 impl TallyGuard {
-    pub(crate) fn new(inner: Arc<AppStateInner>, node: NodeId) -> Self {
-        inner.tally_peer_request_begin(node);
-        Self { inner, node }
+    pub(crate) fn new(inner: Arc<AppStateInner>, key: Principal) -> Self {
+        inner.tally_peer_request_begin(key.clone());
+        Self { inner, key }
     }
 }
 
 impl Drop for TallyGuard {
     fn drop(&mut self) {
-        self.inner.tally_peer_request_end(self.node);
+        self.inner.tally_peer_request_end(self.key.clone());
     }
 }
 
@@ -279,7 +279,12 @@ impl AdmissionHost for AppState {
     }
 
     fn peer_tally(&self, node: &NodeId) -> Box<dyn AdmissionLease> {
-        Box::new(TallyGuard::new(Arc::clone(&self.inner), *node))
+        // The port carries the verified node id (the wire fact the host
+        // parsed); the tally is keyed by the one `Principal` it forms.
+        Box::new(TallyGuard::new(
+            Arc::clone(&self.inner),
+            Principal::Member { node_id: *node },
+        ))
     }
 
     fn record_rejected_node_id(&self, raw: &str) {
@@ -568,11 +573,18 @@ mod tests {
 
     // ── UC-R1 per-peer tally (order seat-resource-commons) ──────────
 
-    fn tally_of(s: &AppState, node: NodeId) -> crate::state::PeerTally {
+    /// The `Principal` the peer gate keys a verified node id by — the one
+    /// spelling the tests and `AdmissionHost::peer_tally` both use.
+    fn member(n: u128) -> Principal {
+        Principal::Member { node_id: nid(n) }
+    }
+
+    fn tally_of(s: &AppState, node: NodeId) -> crate::state::PrincipalTally {
+        let key = Principal::Member { node_id: node };
         s.inner
             .peer_tally_snapshot()
             .into_iter()
-            .find(|(id, _)| *id == node)
+            .find(|(id, _)| *id == key)
             .map(|(_, t)| t)
             .expect("no tally row for node")
     }
@@ -586,7 +598,7 @@ mod tests {
             s.inner.peer_tally_snapshot().is_empty(),
             "fresh daemon must have an empty tally"
         );
-        let g = TallyGuard::new(Arc::clone(&s.inner), nid(1));
+        let g = TallyGuard::new(Arc::clone(&s.inner), member(1));
         let t = tally_of(&s, nid(1));
         assert_eq!(t.active, 1, "admit must open the row");
         assert_eq!(t.served_total, 1);
@@ -603,8 +615,8 @@ mod tests {
     #[test]
     fn tally_served_total_is_monotonic_across_overlapping_requests() {
         let s = fresh_state();
-        let g1 = TallyGuard::new(Arc::clone(&s.inner), nid(1));
-        let g2 = TallyGuard::new(Arc::clone(&s.inner), nid(1));
+        let g1 = TallyGuard::new(Arc::clone(&s.inner), member(1));
+        let g2 = TallyGuard::new(Arc::clone(&s.inner), member(1));
         let t = tally_of(&s, nid(1));
         assert_eq!(t.active, 2, "two concurrent bodies = two active");
         assert_eq!(t.served_total, 2);
@@ -624,7 +636,7 @@ mod tests {
         // forever after one panic.
         let s = fresh_state();
         {
-            let _g = TallyGuard::new(Arc::clone(&s.inner), nid(1));
+            let _g = TallyGuard::new(Arc::clone(&s.inner), member(1));
             // simulate unwind: scope exit without a response body
         }
         assert_eq!(tally_of(&s, nid(1)).active, 0);
@@ -636,7 +648,7 @@ mod tests {
         let s = fresh_state();
         // end without a begin (poison recovery / raced drop): no panic,
         // and active cannot underflow.
-        s.inner.tally_peer_request_end(nid(1));
+        s.inner.tally_peer_request_end(member(1));
         assert!(s.inner.peer_tally_snapshot().is_empty());
     }
 

@@ -185,7 +185,7 @@ fn node_id_fixture() -> TargetFixture {
                 fixture: WireFixture::json(&id.to_string(), &id),
             },
             JsonForm {
-                label: "to_hex (PeerRequestStatus.node_id, routes_status.rs:428)",
+                label: "to_hex (PrincipalRequestStatus.node_id, routes_status.rs:428)",
                 fixture: WireFixture::json(&id.to_hex(), &id),
             },
         ],
@@ -542,7 +542,7 @@ mod tests {
             display.reason()
         );
 
-        // The to_hex form (PeerRequestStatus.node_id) diverges too.
+        // The to_hex form (PrincipalRequestStatus.node_id) diverges too.
         let hex = row(&report, "to_hex");
         assert_eq!(hex.verdict(), Verdict::Failed);
         assert!(

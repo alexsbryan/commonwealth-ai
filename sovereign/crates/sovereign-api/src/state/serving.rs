@@ -25,7 +25,7 @@ use serving_policy::fair_sched::SchedCore;
 use sovereign_core::in_flight::LocalInFlightGauge;
 use sovereign_serving_host::admission::Principal;
 
-use super::{LocalInferenceService, PeerTally, RejectedNodeIdHeader, RpcShardWarmer};
+use super::{LocalInferenceService, PrincipalTally, RejectedNodeIdHeader, RpcShardWarmer};
 
 /// The dynamic slot-name alias table, published as a **reader**: the daemon
 /// seeds it empty at construction and publishes the boot table (and any models
@@ -186,14 +186,20 @@ pub struct ServingPart {
     pub rpc_shard_warmer: Option<std::sync::Arc<dyn RpcShardWarmer>>,
     /// Fair admission for peer-served inference — one accounting authority
     /// (the same `SchedCore` policy the chat server uses) holding the
-    /// runtime-mutable global ceiling (`slots`) AND a per-node concurrency
+    /// runtime-mutable global ceiling (`slots`) AND a per-principal concurrency
     /// cap, so one peer can't hog the pool even under the ceiling. `slots =
     /// usize::MAX` (default) disables the ceiling ("share freely"); `0`
     /// rejects all peer work (equivalent to `SOVEREIGN_DISABLE_PEER_INFERENCE=1`).
     /// Set via `POST /internal/contribution/ceiling`. The middleware
     /// (`crate::admission`) calls `try_grant` per peer request and 503s on
-    /// refusal; the per-request `PeerInflightGuard` `release`s on drop.
-    pub peer_sched: Mutex<SchedCore<NodeId>>,
+    /// refusal; the per-request `PrincipalInflightGuard` `release`s on drop.
+    ///
+    /// Keyed by the published [`Principal`] — the `Member` arm for peer traffic
+    /// (`DAEMON_CORE.md` §3.3: admission derives its fairness and peer keys from
+    /// the one identity type). The reciprocity weight is still looked up by the
+    /// member's [`NodeId`] (`reciprocity_weights`), because that is the
+    /// contribution ledger's key, not admission's.
+    pub peer_sched: Mutex<SchedCore<Principal>>,
 
     /// Fair admission for **client**-served inference — the same `SchedCore`
     /// policy as `peer_sched`, keyed by [`sovereign_serving_host::admission::Principal`]
@@ -227,17 +233,18 @@ pub struct ServingPart {
     /// §9.3 red, reachable on the shipped binary for A/B.
     pub client_fairness_enabled: std::sync::atomic::AtomicBool,
 
-    /// Per-peer request tally (order `seat-resource-commons` UC-R1).
+    /// Per-principal request tally (order `seat-resource-commons` UC-R1).
     /// Written by the admission middleware (begin on admit, end when
     /// the response BODY ends — see `crate::admission::GuardedBody`);
     /// read by `/status` to answer "is this daemon serving the peer
-    /// right now?" Keyed by the `X-Node-Id` header value (the only
-    /// peer attribution available; see [`PeerTally`]).
+    /// right now?" Keyed by the published [`Principal`] — the `Member`
+    /// arm, built from the `X-Node-Id` header value (the only peer
+    /// attribution available; see [`PrincipalTally`]).
     ///
     /// `std::sync::RwLock` on purpose: a short-lived counter map with
     /// sync read/write (no await points on the admission hot path),
     /// the same shape as `peer_sched`'s `std::sync::Mutex`.
-    pub peer_tally: std::sync::RwLock<HashMap<NodeId, PeerTally>>,
+    pub peer_tally: std::sync::RwLock<HashMap<Principal, PrincipalTally>>,
 
     /// The most recent present-but-malformed `X-Node-Id` header value
     /// (order commons-fluency fix 7). A peer request whose header

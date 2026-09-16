@@ -14,14 +14,14 @@
 requirement = "FE-100"
 test = "sovereign-api::admission::tests::peer_traffic_and_client_traffic_never_consume_each_others_budget"
 file = "sovereign/crates/sovereign-api/src/admission.rs"
-line = 762
+line = 771
 asserts = 7
 
 [[claim]]
 requirement = "FE-99"
 test = "sovereign-api::admission::tests::middleware_malformed_header_buckets_zero_and_is_named"
 file = "sovereign/crates/sovereign-api/src/admission.rs"
-line = 1084
+line = 1093
 asserts = 4
 
 [[claim]]
@@ -42,7 +42,7 @@ asserts = 2
 requirement = "FE-99"
 test = "sovereign-api::routes_status::process_status_tests::zero_bucket_row_names_rejected_header_and_expected_form"
 file = "sovereign/crates/sovereign-api/src/routes_status.rs"
-line = 684
+line = 693
 asserts = 4
 
 [[claim]]

@@ -208,8 +208,7 @@ pub trait RpcShardWarmer: Send + Sync {
 /// `None` and rely on their assertions without touching disk.
 pub type MeshMutationHook = std::sync::Arc<dyn Fn(&Mesh, NodeId) + Send + Sync>;
 
-/// Shared application state for all API handlers.
-/// One peer's request tally on this daemon (order `seat-resource-commons`
+/// One principal's request tally on this daemon (order `seat-resource-commons`
 /// UC-R1) — the "who is my GPU serving right now?" answer `/status`
 /// publishes.
 ///
@@ -222,12 +221,14 @@ pub type MeshMutationHook = std::sync::Arc<dyn Fn(&Mesh, NodeId) + Send + Sync>;
 /// time of the most recent request, so a reader can tell "actively
 /// serving" from "served before, idle since".
 ///
-/// Keyed by `NodeId` parsed from the `X-Node-Id` header — the ONLY peer
-/// attribution the daemon has (iroh tunnels raw-forward without
-/// identity). Only ADMITTED requests are tallied; rejections are not
-/// "serving".
+/// Keyed by the published [`Principal`] — the `Member` arm, built from the
+/// `X-Node-Id` header value (the ONLY peer attribution the daemon has; iroh
+/// tunnels raw-forward without identity). Only ADMITTED requests are tallied;
+/// rejections are not "serving". Converging this on `Principal` makes
+/// `X-Node-Id` a branch of the one key rather than a parallel identity scheme
+/// (ARCH principle 8; `DAEMON_CORE.md` §3.3).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct PeerTally {
+pub struct PrincipalTally {
     /// Requests whose response body is currently streaming.
     pub active: u64,
     /// Requests admitted since daemon start (cumulative, monotonic).
@@ -456,57 +457,61 @@ impl AppStateInner {
         }
     }
 
-    /// Open a peer's tally row: `active += 1`, `served_total += 1`,
+    /// Open `key`'s tally row: `active += 1`, `served_total += 1`,
     /// stamp `last_request_at`. Called by the admission middleware the
     /// moment a peer request is ADMITTED — before the handler runs, so
-    /// the row exists for the whole serving window.
+    /// the row exists for the whole serving window. `key` is the published
+    /// [`Principal`] (`Member` for peer traffic), so a peer's row and a local
+    /// caller's row would have the same shape (`DAEMON_CORE.md` §1).
     ///
     /// Lives on `AppStateInner` (not `AppState`) so the admission
     /// middleware's `TallyGuard`, which holds `Arc<AppStateInner>`,
     /// can open/close rows without reaching through a second Arc.
-    pub fn tally_peer_request_begin(&self, node: NodeId) {
+    pub fn tally_peer_request_begin(&self, key: Principal) {
         let now = sovereign_time::unix_now();
         let mut tally = self
             .serving
             .peer_tally
             .write()
             .unwrap_or_else(|e| e.into_inner());
-        let row = tally.entry(node).or_default();
+        let row = tally.entry(key.clone()).or_default();
         row.active += 1;
         row.served_total += 1;
         row.last_request_at = now;
-        tracing::debug!(node = %node, active = row.active, "peer_tally: request began");
+        tracing::debug!(principal = %key, active = row.active, "peer_tally: request began");
     }
 
     /// Close a peer's tally row: `active` decrements (saturating — a
     /// poison-recovered or raced decrement must never go negative).
     /// Called when the response BODY ends (see `admission::GuardedBody`),
     /// so `active` tracks the true streaming window, not headers time.
-    pub fn tally_peer_request_end(&self, node: NodeId) {
+    pub fn tally_peer_request_end(&self, key: Principal) {
         let mut tally = self
             .serving
             .peer_tally
             .write()
             .unwrap_or_else(|e| e.into_inner());
-        if let Some(row) = tally.get_mut(&node) {
+        if let Some(row) = tally.get_mut(&key) {
             row.active = row.active.saturating_sub(1);
-            tracing::debug!(node = %node, active = row.active, "peer_tally: request ended");
+            tracing::debug!(principal = %key, active = row.active, "peer_tally: request ended");
         }
     }
 
-    /// Snapshot the per-peer tally, sorted by `NodeId` for a
-    /// deterministic `/status` payload. Entries are never pruned
-    /// during a daemon lifetime: `active: 0` after service is exactly
-    /// the "idle now, served before" reading UC-R1's negative control
-    /// needs to distinguish from "never served".
-    pub fn peer_tally_snapshot(&self) -> Vec<(NodeId, PeerTally)> {
+    /// Snapshot the per-principal tally, sorted by the key's stable
+    /// [`Principal::label`] for a deterministic `/status` payload (a member's
+    /// label is `member:<hex>`, so the order is the same as the old NodeId
+    /// order). Entries are never pruned during a daemon lifetime: `active: 0`
+    /// after service is exactly the "idle now, served before" reading UC-R1's
+    /// negative control needs to distinguish from "never served".
+    pub fn peer_tally_snapshot(&self) -> Vec<(Principal, PrincipalTally)> {
         let tally = self
             .serving
             .peer_tally
             .read()
             .unwrap_or_else(|e| e.into_inner());
-        let mut out: Vec<(NodeId, PeerTally)> = tally.iter().map(|(k, v)| (*k, *v)).collect();
-        out.sort_by_key(|(k, _)| *k);
+        let mut out: Vec<(Principal, PrincipalTally)> =
+            tally.iter().map(|(k, v)| (k.clone(), *v)).collect();
+        out.sort_by(|a, b| a.0.label().cmp(&b.0.label()));
         out
     }
 
@@ -1585,7 +1590,7 @@ impl AppState {
 
     /// Lock the peer scheduler, recovering from poison rather than cascading a
     /// panic into every future admission.
-    fn lock_peer_sched(&self) -> std::sync::MutexGuard<'_, SchedCore<NodeId>> {
+    fn lock_peer_sched(&self) -> std::sync::MutexGuard<'_, SchedCore<Principal>> {
         self.inner
             .serving
             .peer_sched
@@ -1712,32 +1717,40 @@ impl AppState {
     }
 
     /// Try to admit a peer-served request from `node`. Returns a
-    /// `PeerInflightGuard` (RAII: `release`s the node's slot on drop), or an
-    /// `AdmissionRejection` (mapped to 503 by the middleware) when the request
-    /// shouldn't be served right now.
+    /// `PrincipalInflightGuard` (RAII: `release`s the principal's slot on
+    /// drop), or an `AdmissionRejection` (mapped to 503 by the middleware) when
+    /// the request shouldn't be served right now.
     ///
     /// Order matters: pause checked first (the most explicit "no"), then yield
     /// (the user is actively using their machine), then the fair scheduler — a
-    /// per-node cap (anti-hog) scaled by the node's reciprocity weight, under
-    /// the global ceiling. The scheduler is shed-only here (the peer load
+    /// per-principal cap (anti-hog) scaled by the node's reciprocity weight,
+    /// under the global ceiling. The scheduler is shed-only here (the peer load
     /// balancer routes elsewhere on refusal), so a refusal is immediate.
     /// `retry_after_secs` hints how long to wait before retrying.
     pub fn admit_peer_request(
         &self,
         node: NodeId,
-    ) -> Result<crate::admission::PeerInflightGuard, crate::admission::AdmissionRejection> {
+    ) -> Result<crate::admission::PrincipalInflightGuard, crate::admission::AdmissionRejection>
+    {
         self.admit_peer_request_at(node, sovereign_time::unix_now())
     }
 
     /// [`Self::admit_peer_request`] against a passed clock — the decider the
     /// published `Admission::admit` calls, so the decision reads no clock of
     /// its own (`SERVING_BOUNDARY.md` (c)).
+    ///
+    /// The scheduler key is the published [`Principal`]'s `Member` arm, built
+    /// from the verified node id (`DAEMON_CORE.md` §3.3: admission derives its
+    /// fairness and peer keys from the one identity type). The reciprocity
+    /// weight is still read by `NodeId`, because that is the contribution
+    /// ledger's key.
     pub fn admit_peer_request_at(
         &self,
         node: NodeId,
         now_unix_secs: i64,
-    ) -> Result<crate::admission::PeerInflightGuard, crate::admission::AdmissionRejection> {
-        use crate::admission::{AdmissionReason, AdmissionRejection, PeerInflightGuard};
+    ) -> Result<crate::admission::PrincipalInflightGuard, crate::admission::AdmissionRejection>
+    {
+        use crate::admission::{AdmissionReason, AdmissionRejection, PrincipalInflightGuard};
 
         if let Some(remaining) = self.seconds_until_unpaused_at(now_unix_secs) {
             return Err(AdmissionRejection::new(
@@ -1756,18 +1769,20 @@ impl AppState {
             }
         }
 
-        // Fair admission: a per-node cap (reciprocity-scaled) under the global
-        // ceiling, enforced by the shared `SchedCore`. `node` is `Copy`, so we
-        // reuse it for the guard after the (consuming) `try_grant`.
+        // Fair admission: a per-principal cap (reciprocity-scaled) under the
+        // global ceiling, enforced by the shared `SchedCore`. The key is the
+        // one `Principal`; it is cloned for the guard after the (consuming)
+        // `try_grant`.
+        let key = Principal::Member { node_id: node };
         let weight = self.peer_reciprocity_weight(&node);
         let mut sched = self.lock_peer_sched();
         let cap = effective_peer_cap(sched.slots(), weight);
-        match sched.try_grant(node, weight, cap) {
+        match sched.try_grant(key.clone(), weight, cap) {
             TryGrant::Granted => {
                 drop(sched);
-                Ok(PeerInflightGuard::new(
+                Ok(PrincipalInflightGuard::new(
                     std::sync::Arc::clone(&self.inner),
-                    node,
+                    key,
                 ))
             }
             // Both outcomes mean "at capacity now" on this shed-only gate.

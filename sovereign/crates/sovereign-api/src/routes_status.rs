@@ -159,26 +159,34 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
                     .inner
                     .peer_tally_snapshot()
                     .into_iter()
-                    .map(|(node, t)| PeerRequestStatus {
-                        node_id: format!("{node}"),
-                        name: names.get(&node).cloned(),
-                        active: t.active,
-                        served_total: t.served_total,
-                        last_request_at: t.last_request_at,
-                        // The zero bucket is the malformed-header bucket
-                        // (the admission layer in sovereign-serving-host buckets parse failures
-                        // there, fix 7):
-                        // name the rejected value and the expected wire form
-                        // instead of leaving an opaque zero row. Only this
-                        // row carries the fields.
-                        rejected_header_value: (node == NodeId::from_u128(0))
-                            .then(|| rejected.as_ref().map(|r| r.raw.clone()))
-                            .flatten(),
-                        rejected_at_unix: (node == NodeId::from_u128(0))
-                            .then(|| rejected.as_ref().map(|r| r.at_unix))
-                            .flatten(),
-                        expected_wire_form: (node == NodeId::from_u128(0) && rejected.is_some())
+                    .map(|(who, t)| {
+                        // The tally is keyed by the one `Principal`; a peer row
+                        // is its `Member` arm, so the peer key is present. A
+                        // non-member key (which the peer gate never opens) is
+                        // reported by its label rather than dropped (ARCH 6).
+                        let node = who.node_id();
+                        PrincipalRequestStatus {
+                            node_id: node.map(|n| format!("{n}")).unwrap_or_else(|| who.label()),
+                            name: node.and_then(|n| names.get(&n).cloned()),
+                            active: t.active,
+                            served_total: t.served_total,
+                            last_request_at: t.last_request_at,
+                            // The zero bucket is the malformed-header bucket
+                            // (the admission layer in sovereign-serving-host buckets parse failures
+                            // there, fix 7):
+                            // name the rejected value and the expected wire form
+                            // instead of leaving an opaque zero row. Only this
+                            // row carries the fields.
+                            rejected_header_value: (node == Some(NodeId::from_u128(0)))
+                                .then(|| rejected.as_ref().map(|r| r.raw.clone()))
+                                .flatten(),
+                            rejected_at_unix: (node == Some(NodeId::from_u128(0)))
+                                .then(|| rejected.as_ref().map(|r| r.at_unix))
+                                .flatten(),
+                            expected_wire_form: (node == Some(NodeId::from_u128(0))
+                                && rejected.is_some())
                             .then(crate::state::RejectedNodeIdHeader::expected_wire_form),
+                        }
                     })
                     .collect()
             },
@@ -437,12 +445,13 @@ pub struct InferenceStatus {
     /// `active` for the headline, `served_total` as the cumulative
     /// attribution witness, `last_request_at` for staleness.
     #[serde(default)]
-    pub peer_requests: Vec<PeerRequestStatus>,
+    pub peer_requests: Vec<PrincipalRequestStatus>,
 }
 
-/// One peer's tally row on `/status` (UC-R1). `name` is joined from
-/// the mesh roster so the reading is a name, not an opaque hash;
-/// absent when the node is not a roster member.
+/// One principal's tally row on `/status` (UC-R1) — the `Member` arm of the
+/// one `Principal` the tally is keyed by, so `node_id` is present for every row
+/// the peer gate opens. `name` is joined from the mesh roster so the reading is
+/// a name, not an opaque hash; absent when the node is not a roster member.
 ///
 /// Wire forms (order commons-fluency fix 7 — one canonical form per
 /// surface, documented here): `node_id` is the DISPLAY form
@@ -453,7 +462,7 @@ pub struct InferenceStatus {
 /// truncated hex string from a status row must never be echoed back
 /// as a header — resolve through the roster or `to_hex`.
 #[derive(Debug, Serialize)]
-pub struct PeerRequestStatus {
+pub struct PrincipalRequestStatus {
     pub node_id: String,
     /// Mesh roster name (e.g. `BeefyMac`). Omitted when the node is
     /// not (or no longer) a roster member.
@@ -690,7 +699,7 @@ mod process_status_tests {
             raw: "not-a-node-id!".into(),
             at_unix: 1786549000,
         });
-        let zero_row = PeerRequestStatus {
+        let zero_row = PrincipalRequestStatus {
             node_id: "node-0000000000000000".into(),
             name: None,
             active: 1,
@@ -710,7 +719,7 @@ mod process_status_tests {
             .unwrap()
             .contains("32 lowercase hex chars"));
 
-        let clean_row = PeerRequestStatus {
+        let clean_row = PrincipalRequestStatus {
             node_id: "node-6c955b5f1361aaaa".into(),
             name: Some("BeefyMac".into()),
             active: 0,

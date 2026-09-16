@@ -7362,15 +7362,17 @@ work pins the GPU while the user is chatting. Components:
   `/v1/knowledge/search`. Local requests admit unconditionally;
   peer requests are rejected with 503 + `Retry-After` when paused,
   yielding to a recent local foreground request, or refused by the
-  fair scheduler. The flat ceiling became a **`serving_policy::fair_sched::SchedCore<NodeId>`**
+  fair scheduler. The flat ceiling became a **`serving_policy::fair_sched::SchedCore<Principal>`**
   (`AppStateInner.serving.peer_sched`): a runtime-mutable global ceiling
-  (`set_slots`, `0` = reject all) **plus a per-node concurrency cap**
+  (`set_slots`, `0` = reject all) **plus a per-principal concurrency cap**
   so one peer can't hog the pool, **reciprocity-scaled** — a
   contributor's effective cap rises toward the ceiling, read from a
   cached per-node weight table (`reciprocity_weights`, refreshed
   ~30 s by a daemon loop from the contribution ledger). This is the
   host-side convergence point for a shared-model fleet (every
-  consumer's turn lands here as a peer request keyed on `X-Node-Id`).
+  consumer's turn lands here as a peer request, keyed by the published
+  `Principal`'s `Member` arm built from `X-Node-Id`; `DAEMON_CORE.md`
+  §3.3).
   **One canonical wire form (order commons-fluency fix 7):** the header
   value is `NodeId::to_hex()` — exactly 32 lowercase hex chars, the
   encoding of the 16-byte id; `crate::headers::parse_x_node_id` accepts
@@ -7451,7 +7453,7 @@ work pins the GPU while the user is chatting. Components:
   the resulting sheds from `PeerHealthTracker` — a `503` from this
   gate is a healthy peer declining, and booking it as a fault would
   quarantine that peer for 60 s after three of them.
-  `PeerInflightGuard` is RAII (`release`s the node's slot on drop,
+  `PrincipalInflightGuard` is RAII (`release`s the principal's slot on drop,
   accurate under panic unwind). The **same `SchedCore` policy** backs
   the chat server's turn scheduler (`sovereign-server/scheduler.rs`),
   so both admission gates are fair by identical rules.
