@@ -43,9 +43,7 @@ pub mod documents_http;
 #[cfg(feature = "dst")]
 pub mod dst;
 pub mod enrich_http;
-pub use sovereign_serving_host::entry_endpoint; // shim: moved by domains REVIEW-build-serving-move-peer
 pub mod features_http;
-pub use sovereign_serving_host::fim_adapter; // shim: moved by domains REVIEW-build-serving-move-adapter
 pub mod gossip;
 pub mod governance_http;
 pub use sovereign_serving_host::guest_lender; // shim: moved by domains REVIEW-build-serving-move-throughput-guest
@@ -128,7 +126,6 @@ pub use sovereign_scheduler::slot_aliases; // shim: moved by domains dm-sched-mo
 /// bundled manifest; supplied to the serving host's inference adapter and
 /// self-manifest advertisement (domains REVIEW-build-serving-move-adapter).
 pub mod slot_manifest;
-pub use sovereign_serving_host::source_content_validator; // shim: moved by domains dm-serving-move-leaves
 pub mod state;
 pub mod supervised_task;
 /// Capability bands — the tier floor of `SCHEDULER_QUALITY.md` §4.1:
@@ -136,7 +133,6 @@ pub mod supervised_task;
 /// survives.
 pub use sovereign_scheduler::tier;
 pub use sovereign_serving_host::throughput_tracking; // shim: moved by domains REVIEW-build-serving-move-throughput-guest
-pub use sovereign_serving_host::tool_profile; // shim: moved by domains REVIEW-build-serving-move-adapter
 pub mod turn_approval;
 pub mod turn_extras_http;
 pub mod turn_http;

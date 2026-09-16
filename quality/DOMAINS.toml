@@ -361,8 +361,8 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/daemon.rs"
 context = "host"
-lines = 5611
-note = "composition root; also holds PeerInferenceEndpoint (:4783) and the Member->Candidate translation (:2286)"
+lines = 5613
+note = "composition root; the MemberRecord -> InferenceVenue translation (:2280-2345); re-exports the scheduler's InferenceVenue (:25)"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/daemon_services.rs"
@@ -530,7 +530,7 @@ note = "was understanding; client of the daemon's own surface; the client family
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/landscape_digest_http.rs"
 context = "host"
-lines = 109
+lines = 107
 note = ""
 
 [[module]]
@@ -542,7 +542,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/lib.rs"
 context = "host"
-lines = 174
+lines = 167
 note = ""
 
 [[module]]
@@ -644,7 +644,7 @@ note = "mostly a renaming shim over oicp-types::scoring (:32)"
 [[module]]
 path = "sovereign/crates/sovereign-serving-host/src/oicp_synthesis.rs"
 context = "serving"
-lines = 1264
+lines = 1282
 note = ""
 
 [[module]]
@@ -662,7 +662,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-serving-host/src/peer_inference.rs"
 context = "serving"
-lines = 5408
+lines = 5493
 note = "THE KNOT - moved host-side by REVIEW-build-serving-move-peer; the EmbeddedDaemon reaches became the VenueSource port + the identity reader, and DeferredDaemon split back to sovereign-mesh/src/venue_host.rs"
 
 [[module]]
@@ -686,7 +686,7 @@ note = "was compute; sovereign-serving-host — SERVING_BOUNDARY.md corrections 
 [[module]]
 path = "sovereign/crates/sovereign-serving-host/src/pinned_worker_source.rs"
 context = "serving"
-lines = 437
+lines = 409
 note = "PeerEndpointSource + CompositeEndpointSource impls (:224, :271)"
 
 [[module]]
@@ -1007,7 +1007,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/mesh_sim/scoreboard.rs"
 context = "back-of-house"
-lines = 821
+lines = 822
 note = "reads decision_log::{DecisionEvent,RoutingDecision,RoutingOutcome,ServedBy,Verdict} (:20)"
 
 [[module]]
@@ -1205,7 +1205,7 @@ note = "was serving; route shell — DAEMON_CORE.md §4 placement test (2026-09-
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_inference/list_models_tests.rs"
 context = "host"
-lines = 520
+lines = 515
 note = "routes_inference's /v1/models tests, split out (REVIEW-audit-6, ARCH §3.1)"
 
 [[module]]
@@ -1260,7 +1260,7 @@ note = ""
 path = "sovereign/crates/sovereign-api/src/routes_internal/gossip.rs"
 context = "host"
 lines = 196
-note = "the mesh's own; also the ONE non-harness consumer of sovereign_serving::InferencePlan (:15, :180); was fabric; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
+note = "the mesh's own; also the ONE non-harness consumer of commonwealth_state::inference_plan::InferencePlan (:15, :180); was fabric; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_internal/guest_grant.rs"
@@ -1331,7 +1331,7 @@ note = "was retrieval; route shell — DAEMON_CORE.md §4 placement test (2026-0
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_oicp.rs"
 context = "host"
-lines = 653
+lines = 637
 note = "was serving; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
@@ -1361,20 +1361,20 @@ note = "was serving; route shell — DAEMON_CORE.md §4 placement test (2026-09-
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_status.rs"
 context = "host"
-lines = 746
+lines = 747
 note = ""
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/server.rs"
 context = "host"
-lines = 1259
+lines = 1268
 note = ""
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/state.rs"
 context = "host"
-lines = 2455
-note = "the api-side god object; every Serving module here reaches it. Names commonwealth_core::mesh::Mesh (:13), commonwealth_state (:14), corpus_engine::CorpusEngine (:15), serving_policy::fair_sched (:17), sovereign_grants (:18), sovereign_serving (:21-23)"
+lines = 2486
+note = "the api-side god object; every Serving module here reaches it. Names commonwealth_core::mesh::Mesh (:11), commonwealth_state (:12-13), corpus_engine::CorpusEngine (:14), serving_policy::fair_sched (:16), sovereign_grants (:17), sovereign_serving_host::admission (:20)"
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/turn_fidelity.rs"
@@ -1405,7 +1405,7 @@ note = "the crate root; modules lifted out of sovereign-mesh across REVIEW-build
 [[module]]
 path = "sovereign/crates/sovereign-serving-host/src/lib.rs"
 context = "serving"
-lines = 21
+lines = 31
 note = "the host crate root; the host half arrives in rung domains-10 (2026-09-15)"
 
 [[module]]
@@ -6713,7 +6713,7 @@ note = ""
 [[module]]
 path = "commonwealth/crates/commonwealth-media/src/apps.rs"
 context = "fabric"
-lines = 657
+lines = 662
 note = ""
 
 [[module]]
@@ -6906,12 +6906,12 @@ note = ""
 [[module]]
 path = "commonwealth/crates/commonwealth-state/src/inference_plan.rs"
 context = "fabric"
-lines = 135
+lines = 90
 note = "the mesh's inference sharding plan; moved here from the peg sovereign-serving by REVIEW-build-serving-empty-peg (2026-09-15) — the peg's only consumers (sovereign-api, sovereign-mesh, the harness) already reach commonwealth-state, so the move adds no edge"
 [[module]]
 path = "commonwealth/crates/commonwealth-state/src/lib.rs"
 context = "fabric"
-lines = 129
+lines = 137
 note = ""
 
 [[module]]
@@ -6948,7 +6948,7 @@ note = ""
 [[module]]
 path = "commonwealth/crates/commonwealth-state/src/store_adapter.rs"
 context = "fabric"
-lines = 274
+lines = 233
 note = "the MeshStore adapter for inference state; moved here from the peg sovereign-serving by REVIEW-build-serving-empty-peg (2026-09-15) — commonwealth-state owns MeshStore and the namespace it writes to"
 [[module]]
 path = "commonwealth/crates/commonwealth-transport/src/fanout.rs"
@@ -7679,7 +7679,7 @@ note = ""
 [[module]]
 path = "oicp-types/src/completion.rs"
 context = "kernel"
-lines = 749
+lines = 750
 note = ""
 
 [[module]]
@@ -7721,13 +7721,13 @@ note = ""
 [[module]]
 path = "oicp-types/src/lib.rs"
 context = "kernel"
-lines = 107
+lines = 113
 note = ""
 
 [[module]]
 path = "oicp-types/src/manifest.rs"
 context = "kernel"
-lines = 428
+lines = 455
 note = ""
 
 [[module]]
@@ -8357,7 +8357,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs"
 context = "host"
-lines = 2864
+lines = 2862
 note = ""
 
 [[module]]
@@ -8369,7 +8369,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/build/inference.rs"
 context = "host"
-lines = 657
+lines = 662
 note = ""
 
 [[module]]
@@ -8399,7 +8399,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/mod.rs"
 context = "host"
-lines = 1589
+lines = 1625
 note = ""
 
 [[module]]
@@ -8417,7 +8417,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/provider.rs"
 context = "host"
-lines = 179
+lines = 163
 note = ""
 
 [[module]]
@@ -11243,7 +11243,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-compute/src/supervisor.rs"
 context = "serving"
-lines = 2028
+lines = 2050
 note = ""
 
 [[module]]
@@ -11489,7 +11489,7 @@ note = "LocalInferenceService split out of traits.rs (REVIEW-audit-6); re-export
 [[module]]
 path = "sovereign/crates/sovereign-contracts/src/lib.rs"
 context = "kernel"
-lines = 134
+lines = 140
 note = ""
 
 [[module]]
@@ -11663,7 +11663,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-contracts/src/types/conversation.rs"
 context = "kernel"
-lines = 498
+lines = 501
 note = ""
 
 [[module]]
@@ -11789,7 +11789,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-core/src/context.rs"
 context = "unknown"
-lines = 357
+lines = 427
 note = ""
 
 [[module]]
@@ -12035,7 +12035,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-core/src/runtime.rs"
 context = "unknown"
-lines = 1104
+lines = 1112
 note = ""
 
 [[module]]
@@ -12365,7 +12365,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-core/src/runtime/handlers/knowledge_query.rs"
 context = "unknown"
-lines = 2127
+lines = 2131
 note = ""
 
 [[module]]
@@ -12545,7 +12545,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-core/src/runtime/streaming.rs"
 context = "unknown"
-lines = 4689
+lines = 4673
 note = ""
 
 [[module]]
@@ -12563,7 +12563,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-core/src/runtime/turn.rs"
 context = "unknown"
-lines = 1039
+lines = 1031
 note = ""
 
 [[module]]
@@ -12617,7 +12617,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-core/src/time.rs"
 context = "unknown"
-lines = 75
+lines = 17
 note = ""
 
 [[module]]
@@ -13553,7 +13553,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-grants/src/lib.rs"
 context = "unknown"
-lines = 12
+lines = 13
 note = ""
 
 [[module]]
@@ -13721,7 +13721,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-inference/src/fim.rs"
 context = "unknown"
-lines = 62
+lines = 61
 note = ""
 
 [[module]]
@@ -13877,7 +13877,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-mesh-test-harness/src/simulated_mesh.rs"
 context = "back-of-house"
-lines = 297
+lines = 260
 note = ""
 
 [[module]]
@@ -14045,7 +14045,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-server/src/corpus_upload.rs"
 context = "host"
-lines = 383
+lines = 391
 note = ""
 
 [[module]]
@@ -14123,7 +14123,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-server/src/tenant.rs"
 context = "host"
-lines = 108
+lines = 110
 note = ""
 
 [[module]]
@@ -14447,7 +14447,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-time/src/lib.rs"
 context = "unknown"
-lines = 59
+lines = 78
 note = ""
 
 [[module]]
