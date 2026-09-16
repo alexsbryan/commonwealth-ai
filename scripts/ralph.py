@@ -321,6 +321,26 @@ class Paths:
         return self.workdir / rel
 
 
+# The Popen of every running session, so a SIGTERM (launchd bootout, Ctrl-C)
+# can take the sessions down with the process — they run in their own process
+# groups (start_new_session) and otherwise survive a bootout as orphans
+# (2026-09-16).
+_ACTIVE_SESSIONS = set()
+
+
+def _install_signal_handlers():
+    def _term(signum, _frame):
+        for proc in list(_ACTIVE_SESSIONS):
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            except (ProcessLookupError, PermissionError):
+                pass
+        raise SystemExit(128 + signum)
+
+    signal.signal(signal.SIGTERM, _term)
+    signal.signal(signal.SIGINT, _term)
+
+
 class Session:
     """One opencode session in its own process group, with a wall-clock
     timeout, a STOP check, a heartbeat, and permission-reject detection."""
@@ -359,6 +379,7 @@ class Session:
                 [self.opencode, "run", *model_args, note + prompt_text],
                 cwd=workdir, env={**os.environ, **self.env},
                 stdout=fh, stderr=subprocess.STDOUT, start_new_session=True)
+        _ACTIVE_SESSIONS.add(proc)
         waited = 0
         while proc.poll() is None and waited < self.timeout:
             time.sleep(min(self.poll, max(1, self.timeout - waited)))
@@ -381,6 +402,7 @@ class Session:
         if rejects:
             say(f"WARNING: {rejects} permission auto-rejections — extend opencode.json")
             self.notifier("permissions", f"{rejects} auto-rejections", self.notify_enabled)
+        _ACTIVE_SESSIONS.discard(proc)
         return rc
 
     @staticmethod
@@ -520,7 +542,10 @@ class Supervisor:
             return 0
         stop = self.paths.p(self.paths.stop)
         pkg = self.paths.p(self.paths.needs_human)
-        if stop.exists() and not stop.stat().st_size and not (pkg.exists() and pkg.stat().st_size):
+        # An EMPTY STOP is the operator's and wins over any package beside it:
+        # requiring the absence of a package made a stop unhonored, which kept
+        # the supervisor dispatching resolutions (2026-09-16).
+        if stop.exists() and not stop.stat().st_size:
             say("supervisor: operator STOP — leaving it stopped")
             self.notifier("STOP", "operator stop preserved", self.notify_enabled)
             return 0
@@ -696,8 +721,14 @@ class Pool:
                 "row. Open only that row in ralph/STATE.md; do not scan the queue for "
                 "another.\n\n")
         for attempt in range(1, self.max_review_attempts + 1):
+            if self.paths.p(self.paths.stop).exists():
+                say("pool: operator STOP — leaving the review")
+                return 0
             say(f"pool: serial review {review.id} (main tree) attempt {attempt}")
             session.run(model_args, note + self._prompt_text(), log)
+            if self.paths.p(self.paths.stop).exists():
+                say("pool: operator STOP — leaving the review")
+                return 0
             queue = self._queue()
             if queue is not None and queue.status_of(review.id) is Status.DONE:
                 return None
@@ -747,6 +778,9 @@ class Pool:
         say(f"pool: wave {', '.join(wave)}")
         with ThreadPoolExecutor(max_workers=len(wave)) as ex:
             list(ex.map(self.run_lane, wave))
+        if self.paths.p(self.paths.stop).exists():
+            say("pool: operator STOP — leaving the lanes unmerged (their worktrees resume)")
+            return 0
         for unit in wave:
             wt = self.paths.workdir / ".ralph" / "wt" / unit
             branch = f"ralph/{unit}"
@@ -1117,6 +1151,7 @@ def cmd_supervise(args):
 
 
 def main(argv=None):
+    _install_signal_handlers()
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
 
