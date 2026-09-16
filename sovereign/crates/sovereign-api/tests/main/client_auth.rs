@@ -26,7 +26,7 @@ use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeC
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
 use sovereign_api::server::client_router;
-use sovereign_api::state::AppState;
+use sovereign_api::state::{AppState, NodeSeed};
 use tower::ServiceExt;
 
 const LOOPBACK: &str = "127.0.0.1:55001";
@@ -73,7 +73,7 @@ fn member(id: NodeId) -> MemberRecord {
     }
 }
 
-/// `AppState` with `token` installed (`Some` = token configured,
+/// `AppState` with `token` configured (`Some` = token configured,
 /// `None` = no token → remote callers fail closed).
 fn state_with_token(token: Option<&str>) -> AppState {
     let node = NodeId::from_u128(1);
@@ -90,9 +90,13 @@ fn state_with_token(token: Option<&str>) -> AppState {
         members,
         peers: vec![],
     };
-    let state = AppState::new(node, mesh);
-    state.install_client_token(token.map(Arc::<str>::from));
-    state
+    AppState::new_with_node(
+        node,
+        mesh,
+        NodeSeed {
+            client_token: token.map(Arc::<str>::from),
+        },
+    )
 }
 
 /// Oneshot a GET through the real client_router. `peer` = injected

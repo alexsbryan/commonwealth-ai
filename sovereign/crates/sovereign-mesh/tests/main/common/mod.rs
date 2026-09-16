@@ -158,7 +158,7 @@ pub async fn spawn_router(router: Router) -> SocketAddr {
     addr
 }
 
-/// An `AppState` with one member (self) and a client token installed.
+/// An `AppState` with one member (self) and a client token configured.
 ///
 /// Shared by the tests that drive the REAL `sovereign_api` client router
 /// over a transport — they differ only in the mesh's encryption posture, and a
@@ -184,9 +184,13 @@ pub fn client_app_state(
         members,
         peers: vec![],
     };
-    let state = sovereign_api::state::AppState::new(self_id, mesh);
-    state.install_client_token(token.map(std::sync::Arc::<str>::from));
-    state
+    sovereign_api::state::AppState::new_with_node(
+        self_id,
+        mesh,
+        sovereign_api::state::NodeSeed {
+            client_token: token.map(std::sync::Arc::<str>::from),
+        },
+    )
 }
 
 // ── Configurable InferenceProvider stub ─────────────────────────

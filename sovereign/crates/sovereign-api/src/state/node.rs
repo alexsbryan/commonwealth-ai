@@ -15,17 +15,31 @@ use commonwealth_state::ActivityEmitter;
 use corpus_engine::CorpusEngine;
 use sovereign_grants::GuestGrantStore;
 
+/// Everything the node's part is constructed with (DC §4.2 "Construction is
+/// staged, and parts are total"): the values that exist before the part is
+/// built. The daemon resolves the client-token posture before the listeners
+/// bind and passes it here; a test takes `Default`.
+#[derive(Default)]
+pub struct NodeSeed {
+    /// The client-API bearer token, resolved by the daemon's
+    /// `resolve_client_bind_posture` before it builds the state, so it is known
+    /// before the listeners exist. `None` means "no token configured" — a
+    /// loopback-only bind, or a non-loopback bind whose token could not be
+    /// resolved, which the [`crate::client_auth`] layer treats as fail-closed.
+    pub client_token: Option<Arc<str>>,
+}
+
 /// The node's ten fields, held as `AppStateInner::node`.
 pub struct NodePart {
     /// Bearer token required of non-loopback callers on the client API
-    /// (`:9741`). `None` (the default) means "no token configured" —
-    /// the [`crate::client_auth`] layer then admits ONLY loopback
-    /// callers and fails closed for any remote one. The embedded daemon
-    /// installs `Some(_)` via [`crate::state::AppState::install_client_token`]
-    /// at startup when it binds a routable (non-loopback) address. Stored
-    /// in cleartext: the layer compares it byte-for-byte against the
-    /// incoming `Authorization: Bearer`. Set-once-read-many.
-    pub client_token: std::sync::RwLock<Option<Arc<str>>>,
+    /// (`:9741`). `None` means "no token configured" — the
+    /// [`crate::client_auth`] layer then admits ONLY loopback callers and fails
+    /// closed for any remote one. A construction argument
+    /// ([`NodeSeed::client_token`]), not an install: the daemon resolves the
+    /// token before the listeners bind, so the set-once `RwLock<Option<_>>`
+    /// slot it used to arrive through is gone. Stored in cleartext: the layer
+    /// compares it byte-for-byte against the incoming `Authorization: Bearer`.
+    pub client_token: Option<Arc<str>>,
     /// The in-process corpus engine, when this daemon hosts one. `None` on a
     /// daemon with no data directory (the knowledge routes then behave as if
     /// this node hosts no corpora).

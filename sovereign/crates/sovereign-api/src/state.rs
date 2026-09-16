@@ -41,6 +41,8 @@ pub mod workbench;
 pub use fabric::{ClockReader, DialInfoReader, DialSigner, FabricSeed, PeerTransportReader};
 // Serving's construction seed and its readers, for the same reason.
 pub use serving::{ServableModelFilesReader, ServingSeed, SlotAliasesReader};
+// The node's construction seed, for the same reason.
+pub use node::NodeSeed;
 
 /// One inference slot's *actual* in-memory residency, as reported by
 /// the embedded engine — the daemon-facing mirror of
@@ -625,31 +627,11 @@ impl AppState {
         Arc::clone(&self.inner.fabric.ring_write_nudge)
     }
 
-    /// Install the client-API bearer token. The embedded daemon calls
-    /// this at startup with the token from
-    /// `commonwealth_transport::identity::load_or_create_client_token`
-    /// ONLY when it binds a non-loopback address; loopback-only
-    /// deployments leave it `None` (no secret generated, all local
-    /// traffic admitted by [`crate::client_auth`]).
-    pub fn install_client_token(&self, token: Option<Arc<str>>) {
-        *self
-            .inner
-            .node
-            .client_token
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = token;
-    }
-
-    /// Snapshot of the configured client-API bearer token (cheap RwLock
-    /// read + Arc clone). `None` ⇒ no token configured. Read per request
+    /// The configured client-API bearer token. `None` ⇒ no token configured.
+    /// A construction argument ([`NodeSeed::client_token`]), read per request
     /// by the [`crate::client_auth`] layer.
     pub fn client_token(&self) -> Option<Arc<str>> {
-        self.inner
-            .node
-            .client_token
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone()
+        self.inner.node.client_token.clone()
     }
 
     /// Record whether the iroh acceptor routes the RPC ALPN to a local
@@ -834,6 +816,25 @@ impl AppState {
         )
     }
 
+    /// [`Self::new`] with the node's construction seed — the test-support shape
+    /// for a test that configures a client token (DC §4.2 "Construction is
+    /// staged, and parts are total").
+    pub fn new_with_node(self_node_id: NodeId, mesh: Mesh, node_seed: node::NodeSeed) -> Self {
+        #[allow(clippy::expect_used)]
+        let mesh_store = Arc::new(MeshStore::in_memory().expect("in-memory MeshStore failed"));
+        Self::new_with_platform_and_engine_and_gauge_and_fabric_and_serving_and_node(
+            self_node_id,
+            mesh,
+            mesh_store,
+            Arc::new(AppRegistry::new()),
+            None,
+            None,
+            fabric::FabricSeed::default(),
+            serving::ServingSeed::default(),
+            node_seed,
+        )
+    }
+
     /// Create state with explicit platform components (used by the daemon).
     pub fn new_with_platform(
         self_node_id: NodeId,
@@ -972,6 +973,37 @@ impl AppState {
         fabric_seed: fabric::FabricSeed,
         serving_seed: serving::ServingSeed,
     ) -> Self {
+        Self::new_with_platform_and_engine_and_gauge_and_fabric_and_serving_and_node(
+            self_node_id,
+            mesh,
+            mesh_store,
+            app_registry,
+            corpus_engine,
+            in_flight_gauge,
+            fabric_seed,
+            serving_seed,
+            node::NodeSeed::default(),
+        )
+    }
+
+    /// [`Self::new_with_platform_and_engine_and_gauge_and_fabric_and_serving`]
+    /// with the node's part.
+    ///
+    /// DC §4.2 "Construction is staged, and parts are total": the client token
+    /// is resolved before the listeners bind, so the daemon gathers it into a
+    /// [`node::NodeSeed`] and passes it here rather than installing it into the
+    /// part afterwards.
+    pub fn new_with_platform_and_engine_and_gauge_and_fabric_and_serving_and_node(
+        self_node_id: NodeId,
+        mesh: Mesh,
+        mesh_store: Arc<MeshStore>,
+        app_registry: Arc<AppRegistry>,
+        corpus_engine: Option<Arc<CorpusEngine>>,
+        in_flight_gauge: Option<sovereign_core::in_flight::LocalInFlightGauge>,
+        fabric_seed: fabric::FabricSeed,
+        serving_seed: serving::ServingSeed,
+        node_seed: node::NodeSeed,
+    ) -> Self {
         let inference_store = InferenceStateStore::new(Arc::clone(&mesh_store), self_node_id);
         let contribution_emitter = ContributionEmitter::new((*mesh_store).clone(), self_node_id);
         let activity_emitter = ActivityEmitter::new((*mesh_store).clone(), self_node_id);
@@ -1100,7 +1132,7 @@ impl AppState {
                     local_in_flight_gauge: in_flight_gauge,
                 },
                 node: node::NodePart {
-                    client_token: std::sync::RwLock::new(None),
+                    client_token: node_seed.client_token,
                     corpus_engine,
                     started_at: std::time::Instant::now(),
                     guest_grants: Arc::new(GuestGrantStore::new()),
@@ -1899,6 +1931,35 @@ pub fn test_app_state() -> AppState {
         peers: vec![],
     };
     AppState::new(NodeId::from_u128(1), mesh)
+}
+
+/// [`test_app_state`] with a client token — the shape a test that exercises the
+/// [`crate::client_auth`] layer uses now that the token is a constructor
+/// argument rather than an install (DC §4.2 "Construction is staged, and parts
+/// are total").
+#[cfg(test)]
+pub fn test_app_state_with_token(token: Option<Arc<str>>) -> AppState {
+    use commonwealth_core::ids::MeshId;
+    use commonwealth_core::mesh::Mesh;
+    use std::collections::HashMap;
+    let mesh = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
+        id: MeshId::from_u128(1),
+        name: "Test Mesh".into(),
+        invite_key_hash: [0u8; 32],
+        invite_version: 0,
+        require_encryption: false,
+        members: HashMap::new(),
+        peers: vec![],
+    };
+    AppState::new_with_node(
+        NodeId::from_u128(1),
+        mesh,
+        node::NodeSeed {
+            client_token: token,
+        },
+    )
 }
 
 /// [`test_app_state`] with Fabric's construction seed — the shape a test that

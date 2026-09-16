@@ -71,7 +71,7 @@ fn bare_state_with_seed(seed: sovereign_api::state::FabricSeed) -> AppState {
         members: HashMap::new(),
         peers: vec![],
     };
-    let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric(
+    AppState::new_with_platform_and_engine_and_gauge_and_fabric_and_serving_and_node(
         node,
         mesh,
         Arc::new(commonwealth_state::MeshStore::in_memory().unwrap()),
@@ -79,9 +79,11 @@ fn bare_state_with_seed(seed: sovereign_api::state::FabricSeed) -> AppState {
         None,
         None,
         seed,
-    );
-    state.install_client_token(Some(Arc::<str>::from(TOKEN)));
-    state
+        sovereign_api::state::ServingSeed::default(),
+        sovereign_api::state::NodeSeed {
+            client_token: Some(Arc::<str>::from(TOKEN)),
+        },
+    )
 }
 
 /// A daemon with ring storage under `root`, signing as `key`, and a roster

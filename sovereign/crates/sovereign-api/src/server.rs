@@ -691,7 +691,7 @@ pub(crate) fn mock_router_for(state: AppState, surface: ClientSurface) -> Router
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::test_app_state;
+    use crate::state::{test_app_state, test_app_state_with_token};
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
     use tower::ServiceExt;
@@ -1122,8 +1122,7 @@ mod tests {
         // absent.
         for surface in [ClientSurface::Guest, ClientSurface::Rail] {
             for path in OPERATOR_ONLY {
-                let state = test_app_state();
-                state.install_client_token(Some(TOKEN.into()));
+                let state = test_app_state_with_token(Some(TOKEN.into()));
                 let response = mock_router_for(state, surface)
                     .oneshot(
                         Request::post(*path)
@@ -1182,8 +1181,7 @@ mod tests {
         const TOKEN: &str = "deadbeefcafef00ddeadbeefcafef00ddeadbeefcafef00ddeadbeefcafef00d";
 
         let probe = |surface: ClientSurface, method: &str, path: &str| {
-            let state = test_app_state();
-            state.install_client_token(Some(TOKEN.into()));
+            let state = test_app_state_with_token(Some(TOKEN.into()));
             let req = Request::builder()
                 .method(method)
                 .uri(path)

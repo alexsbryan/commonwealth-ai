@@ -3093,18 +3093,75 @@ impl EmbeddedDaemon {
             }
             None => sovereign_api::state::ServingSeed::default(),
         };
-        let app_state = AppState::new_with_platform_and_engine_and_gauge_and_fabric_and_serving(
-            node_id,
-            mesh,
-            mesh_store,
-            app_registry,
-            corpus_engine.clone(),
-            self.services
-                .serving()
-                .and_then(|s| s.core.in_flight_gauge.clone()),
-            fabric_seed,
-            serving_seed,
+        // ── Client API bind — the OpenAI-compatible public surface ────
+        //
+        // (SYSTEM_OVERVIEW.md §5.5.) Peers fetch `/oicp/v1/capabilities`
+        // here, the Joiner's HybridProvider POSTs `/v1/chat/completions`
+        // here for federated inference, and mesh apps federate via
+        // `/v1/apps/*`.
+        //
+        // **Trust boundary (2026-06 auth: localhost-default + bearer).**
+        // `daemon.client_bind` defaults to `127.0.0.1` — secure by
+        // default, single-user needs no auth. When an operator binds a
+        // routable address to serve a mesh / remote clients, the
+        // `client_auth` layer requires a bearer token of every
+        // non-loopback caller. The posture (bind + auth) is resolved HERE,
+        // before the state is built, because the token is a construction
+        // argument of the node's part (DC §4.2 "Construction is staged, and
+        // parts are total") — the layer reads it off `AppState` before the
+        // listener binds, and nothing installs it afterwards. The internal
+        // port (`:9742`, mTLS) is unrelated and always binds `0.0.0.0`.
+        let (mut client_bind, configured_token, internal_bind) = {
+            let c = self.setup_config.read().await;
+            (
+                c.daemon.client_bind.clone(),
+                c.daemon.client_token.clone(),
+                c.daemon.internal_bind.clone(),
+            )
+        };
+        // The whole posture — bind + auth — is one decision, resolved in
+        // `resolve_client_bind_posture` so it can be exercised without
+        // starting a daemon. The token chain (env → config →
+        // generate-and-persist) is passed as a closure and is called ONLY on
+        // a non-loopback bind: a loopback daemon must not mint or persist a
+        // credential it has no use for.
+        let data_dir = self.data_dir.clone();
+        let posture = resolve_client_bind_posture(
+            &client_bind,
+            persist::client_exposed(&self.data_dir),
+            require_encryption,
+            move || {
+                std::env::var("SOVEREIGN_CLIENT_TOKEN")
+                    .ok()
+                    .filter(|s| !s.trim().is_empty())
+                    .or(configured_token)
+                    .or_else(|| {
+                        commonwealth_transport::identity::load_or_create_client_token(&data_dir)
+                            .map_err(|e| warn!("client-token persistence failed: {e}"))
+                            .ok()
+                    })
+            },
         );
+        client_bind = posture.bind;
+        // The node's part exists before it is built, token and all (DC §4.2
+        // "Construction is staged, and parts are total").
+        let node_seed = sovereign_api::state::NodeSeed {
+            client_token: posture.token.map(Into::into),
+        };
+        let app_state =
+            AppState::new_with_platform_and_engine_and_gauge_and_fabric_and_serving_and_node(
+                node_id,
+                mesh,
+                mesh_store,
+                app_registry,
+                corpus_engine.clone(),
+                self.services
+                    .serving()
+                    .and_then(|s| s.core.in_flight_gauge.clone()),
+                fabric_seed,
+                serving_seed,
+                node_seed,
+            );
 
         // (The former `Arc::get_mut` installer block lived here. Fabric's and
         // Serving's values are constructor arguments now, so nothing is
@@ -3220,54 +3277,9 @@ impl EmbeddedDaemon {
             register_local_model_slots(&app_state, &cfg, node_id);
         }
 
-        // Client API bind — the OpenAI-compatible public surface
-        // (SYSTEM_OVERVIEW.md §5.5). Peers fetch `/oicp/v1/capabilities`
-        // here, the Joiner's HybridProvider POSTs `/v1/chat/completions`
-        // here for federated inference, and mesh apps federate via
-        // `/v1/apps/*`.
-        //
-        // **Trust boundary (2026-06 auth: localhost-default + bearer).**
-        // `daemon.client_bind` defaults to `127.0.0.1` — secure by
-        // default, single-user needs no auth. When an operator binds a
-        // routable address to serve a mesh / remote clients, the
-        // `client_auth` layer requires a bearer token of every
-        // non-loopback caller. We resolve + install that token here so
-        // the layer (which reads it from `AppState`) has it before the
-        // first request. The internal port (`:9742`, mTLS) is unrelated
-        // and always binds `0.0.0.0`.
-        let (mut client_bind, configured_token, internal_bind) = {
-            let c = self.setup_config.read().await;
-            (
-                c.daemon.client_bind.clone(),
-                c.daemon.client_token.clone(),
-                c.daemon.internal_bind.clone(),
-            )
-        };
-        // The whole posture — bind + auth — is one decision, resolved in
-        // `resolve_client_bind_posture` so it can be exercised without
-        // starting a daemon. The token chain (env → config →
-        // generate-and-persist) is passed as a closure and is called ONLY on
-        // a non-loopback bind: a loopback daemon must not mint or persist a
-        // credential it has no use for.
-        let data_dir = self.data_dir.clone();
-        let posture = resolve_client_bind_posture(
-            &client_bind,
-            persist::client_exposed(&self.data_dir),
-            require_encryption,
-            move || {
-                std::env::var("SOVEREIGN_CLIENT_TOKEN")
-                    .ok()
-                    .filter(|s| !s.trim().is_empty())
-                    .or(configured_token)
-                    .or_else(|| {
-                        commonwealth_transport::identity::load_or_create_client_token(&data_dir)
-                            .map_err(|e| warn!("client-token persistence failed: {e}"))
-                            .ok()
-                    })
-            },
-        );
-        client_bind = posture.bind;
-        app_state.install_client_token(posture.token.map(Into::into));
+        // `client_bind` and the auth posture were resolved above, before the
+        // state was built, so the node's part already holds the token the auth
+        // layer reads. The listener address derives from the resolved bind.
         let client_addr: SocketAddr = format!("{client_bind}:{client_port}")
             .parse()
             .unwrap_or_else(|_| {
