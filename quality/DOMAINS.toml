@@ -258,10 +258,10 @@ kind = "composition-root"
 question = "what assembles the four things DAEMON_CORE.md names?"
 owns = []
 package = ""
-crates = ["sovereign-cli-daemon", "sovereign-desktop", "sovereign-server", "sovereign-cli", "sovereign-cli-llm", "sovereign-cli-dev", "sovereign-mobile"]   # the daemon host crate that receives sovereign-mesh's 25,432 host lines is decided by dm-mesh-host from the cluster graph (existing sovereign-cli-daemon vs a new sovereign-daemon library)
+crates = ["sovereign-cli-daemon", "sovereign-desktop", "sovereign-server", "sovereign-cli", "sovereign-cli-llm", "sovereign-cli-dev", "sovereign-mobile", "sovereign-daemon"]   # sovereign-daemon is the host crate that receives sovereign-mesh's host lines (REVIEW-mint-daemon-move minted the moves into it)
 lift = ""
 applicable_as = "not applicable by design — the daemon is not a domain (DOMAINS §4)"
-roots = ["sovereign/crates/sovereign-cli-daemon", "sovereign/crates/sovereign-desktop", "sovereign/crates/sovereign-server"]
+roots = ["sovereign/crates/sovereign-cli-daemon", "sovereign/crates/sovereign-desktop", "sovereign/crates/sovereign-server", "sovereign/crates/sovereign-daemon"]
 status = "kept"
 
 [[context]]
@@ -11859,7 +11859,7 @@ note = ""
 path = "sovereign/crates/sovereign-daemon/src/lib.rs"
 context = "host"
 lines = 30
-note = "the node's host crate root (DAEMON_CORE.md §4.1); a stub until the host modules move in (REVIEW-mint-daemon-move). The `host` context's crates list does not name it yet, so its lines count against the crate in `misnamed`/`queue` — the home list is the mint's call"
+note = "the node's host crate root (DAEMON_CORE.md §4.1); a stub until the host modules move in (REVIEW-mint-daemon-move); the `host` context names it (dm-daemon-registry)"
 
 [[module]]
 path = "sovereign/crates/sovereign-core/src/approval_desk.rs"
