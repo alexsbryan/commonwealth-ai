@@ -4129,7 +4129,7 @@ impl EmbeddedDaemon {
         // encryption policy still FORCES iroh on: an encrypted mesh
         // must be dialable by key and must dial peers by key.
         let iroh_enabled = crate::iroh_access::resolve_enabled(
-            local_only,
+            local_only.is_local_only(),
             cfg_iroh_enabled,
             persist::client_exposed(&self.data_dir),
             require_encryption,

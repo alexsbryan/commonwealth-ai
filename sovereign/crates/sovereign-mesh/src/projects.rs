@@ -2,7 +2,7 @@
 //! Per-project state machine for the daemon's reindexer + watchers.
 //!
 //! `ProjectState` holds the live, read-mostly state that
-//! [`crate::supervised_task::supervise`] writes and MCP tools /
+//! `supervised_task::supervise` writes and MCP tools /
 //! HTTP endpoints read. One instance per registered project.
 //!
 //! This module intentionally carries no IO (registry load/save,
@@ -33,7 +33,7 @@ pub enum WatcherKind {
     Lint,
     /// Sovereign.toml config watcher that live-reloads on TOML changes.
     Config,
-    /// The mesh work-plane donor loop (`crate::work_donor`). Supervised for
+    /// The mesh work-plane donor loop (`work_donor`). Supervised for
     /// the same reason the three above are: its body runs a THIRD PARTY's
     /// argv, so a panic in it must take out its own task and nothing else.
     WorkDonor,

@@ -5,7 +5,7 @@
 use commonwealth_core::mesh::NodeStatus;
 use sovereign_api::state::AppState;
 
-use crate::types::*;
+use sovereign_contracts::daemon_wire::*;
 
 /// Snapshot of the mesh state, rendered for UI consumption.
 #[derive(Debug, Clone)]

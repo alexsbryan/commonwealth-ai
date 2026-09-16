@@ -196,12 +196,12 @@ fn rpc_serve_port() -> Option<u16> {
 /// hard-fails later if the endpoint won't bind, rather than silently
 /// downgrading).
 pub fn resolve_enabled(
-    profile: crate::local_only::LocalOnlyProfile,
+    local_only: bool,
     cfg_enabled: Option<bool>,
     mesh_participant: bool,
     require_encryption: bool,
 ) -> bool {
-    if profile.is_local_only() {
+    if local_only {
         return false;
     }
     cfg_enabled.unwrap_or(mesh_participant) || require_encryption
@@ -998,8 +998,7 @@ mod tests {
 
     #[test]
     fn resolve_enabled_matrix() {
-        use crate::local_only::LocalOnlyProfile;
-        let net = LocalOnlyProfile::default();
+        let net = false;
         // Explicit config wins over the participation marker…
         assert!(resolve_enabled(net, Some(true), false, false));
         assert!(!resolve_enabled(net, Some(false), true, false));
@@ -1018,9 +1017,7 @@ mod tests {
     /// `start_daemon` refuses that pair before reaching here.
     #[test]
     fn local_only_profile_beats_every_other_iroh_input() {
-        use crate::local_only::LocalOnlyProfile;
-        let local = LocalOnlyProfile::decide(None, true);
-        assert!(local.is_local_only());
+        let local = true;
         for cfg in [None, Some(true), Some(false)] {
             for participant in [true, false] {
                 for encrypted in [true, false] {
