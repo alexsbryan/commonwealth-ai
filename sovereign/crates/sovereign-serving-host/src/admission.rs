@@ -17,9 +17,11 @@
 //! - [`AdmissionHost`] is the daemon-state port the two middlewares need and
 //!   the decision does not: the edge resolver, the peer tally row, and the
 //!   recording of a malformed `X-Node-Id`. The daemon implements it over
-//!   `AppState`. `DAEMON_CORE.md` §3.3 keeps the resolver in the daemon until
-//!   `REVIEW-mint-principal`, so it arrives here as a method rather than as a
-//!   request extension.
+//!   `AppState`. The edge authenticates a request once and attaches the
+//!   resolved [`Principal`] as an [`AttachedPrincipal`] extension
+//!   (`DAEMON_CORE.md` §3.3, "one resolution at the edge, one value"); both
+//!   middlewares read it, and [`AdmissionHost::resolve`] is the fallback for
+//!   the internal router, which carries no edge layer.
 //!
 //! # The two identities are one key
 //!
@@ -48,6 +50,18 @@ use serde::Serialize;
 // type through the module that publishes it is what keeps the direct
 // `sovereign-contracts` fan-in from growing (layer-gate's ratchet).
 pub use sovereign_contracts::principal::Principal;
+
+/// The edge-resolved [`Principal`], attached to the request by the daemon's
+/// `client_auth_layer` and read by the two admission middlewares.
+///
+/// One resolution per request (`DAEMON_CORE.md` §3.3, "authenticates a request
+/// once and attaches a `Principal`"): the edge resolves the caller once and
+/// puts the value here, so neither middleware answers "who is asking" a second
+/// time. The internal router (`sovereign-api/src/server.rs`) carries no
+/// `client_auth_layer`, so [`principal_of`] falls back to
+/// [`AdmissionHost::resolve`] when the extension is absent.
+#[derive(Clone)]
+pub struct AttachedPrincipal(pub Principal);
 
 /// Why a request was rejected. Serialised in the 503 body and in tracing
 /// spans so contention triage doesn't require log spelunking.
@@ -397,14 +411,38 @@ pub fn client_fairness_enabled_from_env() -> bool {
     }
 }
 
+/// The request's principal: the value the edge attached, or — where no edge
+/// layer ran (the internal router) — a resolution here.
+///
+/// Both middlewares call this, so the "attached or resolved" fallback has one
+/// implementation and cannot drift between them (ARCH principle 8). The
+/// resolver reads the same headers and `ConnectInfo` peer address either way,
+/// so the attached value equals what the fallback would have produced.
+fn principal_of<S: AdmissionHost>(
+    state: &S,
+    req: &Request<Body>,
+    headers: &HeaderMap,
+) -> Principal {
+    if let Some(attached) = req.extensions().get::<AttachedPrincipal>() {
+        return attached.0.clone();
+    }
+    let peer = req
+        .extensions()
+        .get::<ConnectInfo<SocketAddr>>()
+        .map(|c| c.0);
+    state.resolve(headers, peer)
+}
+
 /// Axum middleware: per-principal fair share on the CLIENT surface.
 ///
 /// The §9.3 red in one sentence: ten callers with ten credentials were served
 /// strictly by arrival order, so the one keeping 32 requests in flight took
-/// 79.5% of the turns against a 10% population share. This adapter resolves the
-/// principal through [`AdmissionHost::resolve`] (the one resolver, called here
-/// and nowhere else) and asks [`Admission::admit`] whether that principal is
-/// already holding its equal share.
+/// 79.5% of the turns against a 10% population share. This adapter reads the
+/// [`Principal`] the edge attached as an [`AttachedPrincipal`] extension (the
+/// one resolver, run once by `client_auth_layer`), falling back to
+/// [`AdmissionHost::resolve`] on the internal router, and asks
+/// [`Admission::admit`] whether that principal is already holding its equal
+/// share.
 ///
 /// **Peer traffic passes straight through.** A request carrying `X-Node-Id` is
 /// already rationed per node by [`peer_admission_layer`]. Gating it here too
@@ -423,12 +461,9 @@ where
         return next.run(req).await;
     }
 
-    let peer_addr = req
-        .extensions()
-        .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
-        .map(|c| c.0);
-    // THE call site. Resolving anywhere else would be a second identity.
-    let principal = state.resolve(&headers, peer_addr);
+    // The edge resolved once and attached the value; only the internal router,
+    // which has no `client_auth_layer`, reaches the resolver fallback.
+    let principal = principal_of(&state, &req, &headers);
 
     match state.admit(&principal, sovereign_time::unix_millis()) {
         AdmissionVerdict::Admitted(lease) => {
@@ -473,11 +508,7 @@ where
     // raw value is what lets /status NAME it on the zero-bucket row (order
     // commons-fluency fix 7) — an opaque `node-0000000000000000` row would
     // default the absence instead of reporting it (ARCH §18.3).
-    let peer_addr = req
-        .extensions()
-        .get::<ConnectInfo<SocketAddr>>()
-        .map(|c| c.0);
-    let node = match state.resolve(&headers, peer_addr) {
+    let node = match principal_of(&state, &req, &headers) {
         Principal::Member { node_id } => node_id,
         _ => {
             let raw = headers
@@ -539,6 +570,7 @@ mod tests {
         tallies: Arc<AtomicU32>,
         rejected: Arc<Mutex<Option<String>>>,
         principal: Principal,
+        last_principal: Arc<Mutex<Option<Principal>>>,
     }
 
     impl StubHost {
@@ -549,6 +581,7 @@ mod tests {
                 tallies: Arc::new(AtomicU32::new(0)),
                 rejected: Arc::new(Mutex::new(None)),
                 principal: Principal::Anonymous,
+                last_principal: Arc::new(Mutex::new(None)),
             }
         }
 
@@ -563,11 +596,16 @@ mod tests {
         fn rejected(&self) -> Option<String> {
             self.rejected.lock().unwrap().clone()
         }
+
+        fn last_principal(&self) -> Option<Principal> {
+            self.last_principal.lock().unwrap().clone()
+        }
     }
 
     impl Admission for StubHost {
-        fn admit(&self, _who: &Principal, _now_unix_ms: u64) -> AdmissionVerdict {
+        fn admit(&self, who: &Principal, _now_unix_ms: u64) -> AdmissionVerdict {
             self.admits.fetch_add(1, Ordering::Relaxed);
+            *self.last_principal.lock().unwrap() = Some(who.clone());
             if self.admit {
                 AdmissionVerdict::Admitted(Box::new(Lease))
             } else {
@@ -725,6 +763,81 @@ mod tests {
             state.admits(),
             0,
             "peer traffic is the peer gate's business — never double-gated"
+        );
+    }
+
+    /// Stand in for `client_auth_layer`'s insertion: attach `attached` to the
+    /// request before the admission layer runs.
+    fn with_attached(router: Router, attached: Principal) -> Router {
+        router.layer(axum::middleware::from_fn(
+            move |mut req: Request<Body>, next: Next| {
+                let attached = attached.clone();
+                async move {
+                    req.extensions_mut().insert(AttachedPrincipal(attached));
+                    next.run(req).await
+                }
+            },
+        ))
+    }
+
+    /// The edge resolves once and attaches the value; both middlewares read it
+    /// rather than resolving a second time (`DAEMON_CORE.md` §3.3, "one
+    /// resolution at the edge, one value").
+    ///
+    /// Positive: with the extension present, the decision sees the attached
+    /// principal — here a `Member` the stub's own `resolve` would never return
+    /// (it returns `Anonymous`). Negative control: with no extension, the
+    /// fallback resolution is what reaches the decision.
+    #[tokio::test]
+    async fn the_attached_principal_is_used_instead_of_a_second_resolution() {
+        let attached = Principal::Member {
+            node_id: NodeId::from_u128(0xBEEF),
+        };
+
+        // Positive, client layer: the attached value reaches `admit`.
+        let state = StubHost::new(true);
+        assert_eq!(state.principal, Principal::Anonymous);
+        let resp = with_attached(client_router(state.clone()), attached.clone())
+            .oneshot(request(None))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(
+            state.last_principal(),
+            Some(attached.clone()),
+            "the edge's value must reach the decision, not a fresh resolution"
+        );
+
+        // Positive, peer layer: the attached `Member` keys the tally, and the
+        // header parse is not consulted.
+        let state = StubHost::new(true);
+        let resp = with_attached(peer_router(state.clone()), attached.clone())
+            .oneshot(request(Some(VALID)))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(
+            state.tallies(),
+            1,
+            "the attached member opens the tally row"
+        );
+        assert_eq!(
+            state.last_principal(),
+            Some(attached),
+            "the peer gate must decide on the attached member"
+        );
+
+        // Negative control: no extension → the fallback resolver decides.
+        let state = StubHost::new(true);
+        let resp = client_router(state.clone())
+            .oneshot(request(None))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(
+            state.last_principal(),
+            Some(Principal::Anonymous),
+            "the internal router's fallback must still resolve"
         );
     }
 

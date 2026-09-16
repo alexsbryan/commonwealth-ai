@@ -38,6 +38,15 @@
 //! *before* it could possibly hold a token. Everything that does work
 //! or returns user data is gated.
 //!
+//! ## One resolution, attached for the inner layers
+//!
+//! The edge resolver runs ONCE here, before any admission branch, and the value
+//! is attached to the request as [`crate::admission::AttachedPrincipal`] so the
+//! fairness and peer-admission middlewares read it rather than resolving a
+//! second time (`DAEMON_CORE.md` §3.3, "authenticates a request once and
+//! attaches a `Principal`"). The internal router carries no `client_auth_layer`
+//! and keeps its own resolver fallback.
+//!
 //! ## Loopback is a property of the LISTENER, not of the layer
 //!
 //! "Admit loopback" is right for the daemon's own client listener and
@@ -158,7 +167,9 @@ fn unauthorized(reason: &'static str) -> Response {
 /// `from_fn_with_state`-compatible client-API auth layer. See module
 /// docs for the full decision table. Apply as the OUTERMOST layer on
 /// the client router so it runs before load-shedding admission and
-/// before any handler work.
+/// before any handler work. It resolves the caller once and attaches the
+/// [`Principal`](crate::admission::AttachedPrincipal) for the admission
+/// middlewares.
 pub async fn client_auth_layer(
     State(auth): State<ClientAuthState>,
     request: Request,
@@ -190,6 +201,17 @@ pub async fn client_auth_layer(
         }
     };
 
+    // Resolve ONCE, at the edge, and attach the value for every downstream
+    // reader (`DAEMON_CORE.md` §3.3, "authenticates a request once and attaches
+    // a `Principal`"). The admission middlewares read this rather than
+    // resolving a second time; the internal router, which carries no
+    // `client_auth_layer`, keeps its `AdmissionHost::resolve` fallback.
+    let principal = state.resolve(request.headers(), Some(peer), policy);
+    let mut request = request;
+    request
+        .extensions_mut()
+        .insert(crate::admission::AttachedPrincipal(principal.clone()));
+
     // Loopback is local — admit without a token, on a listener where that
     // inference holds. It does not hold on the guest listener: see the module
     // docs, and `ClientAuthPolicy`.
@@ -218,7 +240,6 @@ pub async fn client_auth_layer(
     // one is absent is the substitution this codebase refuses (§18.3).
     let configured = state.client_token();
     let presented = bearer_token(&request);
-    let principal = state.resolve(request.headers(), Some(peer), policy);
 
     match principal {
         // A bearer that is a live guest grant. The grant bounds the routes:
@@ -230,7 +251,6 @@ pub async fn client_auth_layer(
                 let now = commonwealth_core::clock::unix_now_millis();
                 match state.inner.node.guest_grants.live(p, now) {
                     Some(grant) if grant.permits_path(request.uri().path()) => {
-                        let mut request = request;
                         request.extensions_mut().insert(Guest(Arc::new(grant)));
                         return next.run(request).await;
                     }
@@ -357,5 +377,72 @@ mod tests {
         // A child path must NOT be exempt by prefix.
         assert!(!AUTH_EXEMPT_PATHS.contains(&"/status/../v1/chat/completions"));
         assert!(!AUTH_EXEMPT_PATHS.contains(&"/oicp/v1/capabilities/secret"));
+    }
+
+    /// The edge resolves the caller once and attaches the published
+    /// `Principal` for the admission middlewares (`DAEMON_CORE.md` §3.3, "one
+    /// resolution at the edge, one value"). A loopback caller is admitted
+    /// without a credential, so this also proves the attachment happens on the
+    /// early-admit branch, not only on the gated one.
+    #[tokio::test]
+    async fn the_edge_attaches_the_resolved_principal() {
+        use axum::body::Body;
+        use axum::routing::get;
+        use axum::Router;
+        use commonwealth_core::ids::{MeshId, NodeId};
+        use commonwealth_core::mesh::Mesh;
+        use std::collections::HashMap;
+        use tower::ServiceExt;
+
+        let mesh = Mesh {
+            mesh_secret: [0u8; 32],
+            invite_expires_at: None,
+            id: MeshId::from_u128(1),
+            name: "Attach Test".into(),
+            invite_key_hash: [0u8; 32],
+            invite_version: 0,
+            require_encryption: false,
+            members: HashMap::new(),
+            peers: vec![],
+        };
+        let state = AppState::new(NodeId::from_u128(1), mesh);
+
+        let app = Router::new()
+            .route(
+                "/probe",
+                get(|req: Request| async move {
+                    match req
+                        .extensions()
+                        .get::<crate::admission::AttachedPrincipal>()
+                    {
+                        Some(p) => p.0.label(),
+                        None => "none".to_string(),
+                    }
+                }),
+            )
+            .layer(axum::middleware::from_fn_with_state(
+                ClientAuthState::new(state, ClientAuthPolicy::default()),
+                client_auth_layer,
+            ));
+
+        let mut req = Request::builder()
+            .uri("/probe")
+            .header("x-principal", "desktop")
+            .body(Body::empty())
+            .unwrap();
+        req.extensions_mut().insert(ConnectInfo(
+            "127.0.0.1:51000".parse::<SocketAddr>().unwrap(),
+        ));
+
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(
+            &body[..],
+            b"owner:desktop",
+            "the edge must attach the resolved principal for the inner layers"
+        );
     }
 }

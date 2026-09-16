@@ -31,8 +31,8 @@ pub use sovereign_serving_host::admission::{
     client_fair_concurrency_from_env, client_fairness_enabled_from_env, client_fairness_layer,
     jitter_retry_after, jittered_retry_after_secs, local_queue_shed_response, peer_admission_layer,
     shed_response, Admission, AdmissionHost, AdmissionLease, AdmissionPosture, AdmissionReason,
-    AdmissionRejection, AdmissionVerdict, GuardedBody, Principal, DEFAULT_CLIENT_FAIR_CONCURRENCY,
-    RETRY_AFTER_JITTER_SPREAD_SECS,
+    AdmissionRejection, AdmissionVerdict, AttachedPrincipal, GuardedBody, Principal,
+    DEFAULT_CLIENT_FAIR_CONCURRENCY, RETRY_AFTER_JITTER_SPREAD_SECS,
 };
 
 /// RAII guard returned by the peer admission decision. Holds one slot in the
