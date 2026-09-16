@@ -100,7 +100,7 @@ pub async fn newsworthy_tick(
     State(state): State<AppState>,
 ) -> (StatusCode, Json<NewsworthyTickResponse>) {
     let sender = {
-        let guard = state.inner.newsworthy_force_tick.read().await;
+        let guard = state.inner.ingest.newsworthy_force_tick.read().await;
         guard.clone()
     };
     let Some(sender) = sender else {

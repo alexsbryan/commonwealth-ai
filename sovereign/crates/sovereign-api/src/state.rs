@@ -6,7 +6,6 @@ use arc_swap::ArcSwap;
 use tokio::sync::RwLock;
 
 use async_trait::async_trait;
-use commonwealth_core::ids::HandoffId;
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::Mesh;
 use commonwealth_state::store_adapter::InferenceStateStore;
@@ -14,7 +13,7 @@ use commonwealth_state::{ActivityEmitter, ContributionEmitter, MeshStore, PeerPr
 use corpus_engine::CorpusEngine;
 use oicp_types::model_aliases::ModelAliasTable;
 use serving_policy::fair_sched::{reciprocity_weight, SchedCore, TryGrant};
-use sovereign_grants::{EphemeralGrantStore, GuestGrantStore, VerifyReport, WorkQueueManager};
+use sovereign_grants::{EphemeralGrantStore, GuestGrantStore, WorkQueueManager};
 use sovereign_meshapp_registry::proxy::AppPortMap;
 use sovereign_meshapp_registry::registry::AppRegistry;
 use sovereign_serving_host::admission::Principal;
@@ -29,6 +28,7 @@ pub use oicp_types::{EditSlotStatus, FimCompletionRequest, FimStreamStart, Local
 pub use sovereign_core::traits::LocalInferenceService;
 
 pub mod answering;
+pub mod ingest;
 pub mod workbench;
 
 /// One inference slot's *actual* in-memory residency, as reported by
@@ -561,27 +561,11 @@ pub struct AppStateInner {
     /// serves a process with no `AppState` at all. Read via
     /// [`AppState::fanout_inflight_count`].
     pub fanout_inflight: commonwealth_transport::fanout::InflightGauge,
-    /// Corpus IDs currently being actively ingested on this node.
-    /// Prevents the auto-collaborate loop from firing a second
-    /// `collaborate` call while a live ingest task is writing chunks.
-    pub active_ingests: RwLock<HashSet<String>>,
-    /// Latest `IngestProgress` observed for each active corpus.
-    /// Populated by the daemon-side ingest spawn's progress callback
-    /// so the Desktop UI can poll `GET /internal/corpus/progress`
-    /// instead of taking a Tauri-event-only path that dies when the
-    /// app closes mid-ingest. Entries are retained until either a
-    /// terminal phase (`Complete`) overwrites them or an explicit
-    /// cancel wipes the corpus.
-    pub corpus_progress: RwLock<HashMap<String, corpus_engine::IngestProgress>>,
-    /// Operator-triggered tick channel for the `wikipedia-newsworthy`
-    /// freshness watcher. Installed by the embedded daemon when (and
-    /// only when) the watcher spawns; `None` in tests and on daemons
-    /// without a corpus engine. The `POST /internal/newsworthy/tick`
-    /// route grabs this sender to fire one tick on demand, bypassing
-    /// the 24h interval — the only path operators have to recover
-    /// from a stale snapshot or kick off the first portal ingest
-    /// after becoming leader.
-    pub newsworthy_force_tick: RwLock<Option<tokio::sync::mpsc::Sender<()>>>,
+    /// Collaborative ingest's part: the active-ingest set, progress, the work
+    /// queue and grants, pull loops and verify reports, the quiesce and
+    /// throttle dials, and the newsworthy tick handle. Held as a part so route
+    /// shells read it directly (DC §4.2).
+    pub ingest: ingest::IngestPart,
     /// Current PUBLISHED inference availability (0.0–1.0) — read by gossip
     /// each round to populate `NodeCapabilities.inference_availability`.
     /// Default 1.0.
@@ -632,19 +616,6 @@ pub struct AppStateInner {
     /// daemon alongside `local_inference`; drives `POST /internal/rpc-warm`.
     /// `None` on a node that isn't an inference worker. See [`RpcShardWarmer`].
     pub rpc_shard_warmer: Option<std::sync::Arc<dyn RpcShardWarmer>>,
-    /// Pull-based corpus ingestion work queues keyed by `HandoffId`.
-    /// The coordinator's `corpus_collaborate` handler populates this with
-    /// a unit list; peers pull units via `POST /internal/corpus/next_unit`.
-    /// Only coordinators hold entries here — peer nodes never mutate it.
-    /// See `commonwealth-knowledge::work_queue` for the full design.
-    pub work_queue: Arc<WorkQueueManager>,
-    /// Ephemeral, renewable ingest grants — the out-of-band capability that
-    /// authorizes a one-off peer-assisted ingest of an otherwise local-only
-    /// corpus. Consulted at the `corpus_collaborate` kickoff gate; never
-    /// persisted, never mutates on-disk corpus metadata (so the corpus's
-    /// standing `mesh_sharing = false` posture is preserved throughout).
-    /// See `commonwealth-knowledge::ingest_grant`.
-    pub grant_store: Arc<EphemeralGrantStore>,
     /// Ephemeral guest grants — short-lived bearers that are NOT mesh
     /// membership. Consulted at exactly one point, `client_auth_layer`, which
     /// asks the grant whether it permits the request's path and never inspects
@@ -652,15 +623,6 @@ pub struct AppStateInner {
     /// touches `Mesh` — a guest is not a member and cannot become one.
     /// See `commonwealth-knowledge::guest_grant`.
     pub guest_grants: Arc<GuestGrantStore>,
-    /// Handoff IDs for which this node is currently running a pull loop
-    /// (as a peer). Prevents `auto_ingest` from spawning duplicate pull
-    /// loops when the same open handoff is seen across multiple gossip ticks.
-    pub active_pull_loops: RwLock<HashSet<HandoffId>>,
-    /// Post-merge verification spot-check reports, keyed by handoff. The merge
-    /// coordinator writes one after re-embedding a sample of the merged corpus
-    /// locally; the collaborate-status endpoint surfaces it for the desktop's
-    /// glassbox "re-checked N chunks — all matched" line.
-    pub verify_reports: RwLock<HashMap<HandoffId, VerifyReport>>,
     /// Unix-seconds timestamp of the last foreground inference request
     /// observed at `chat_completions`. `0` means "never touched" — the
     /// initial state at boot. Bumped via [`AppState::bump_foreground_active`]
@@ -682,17 +644,6 @@ pub struct AppStateInner {
     /// the entire turn regardless of the window; the window only governs
     /// the quiet after the last turn ends.
     pub foreground_inflight: std::sync::atomic::AtomicUsize,
-
-    /// Mesh quiesce flag. When `true`, the auto-collaborate loop
-    /// (`sovereign-mesh::auto_ingest`) skips peer-pull discovery and
-    /// dispatch on every tick — this node neither pulls work assigned
-    /// by other coordinators nor dispatches its own queue to peers.
-    /// Initial value is set from the `SOVEREIGN_DISABLE_AUTO_COLLAB`
-    /// env var at boot (preserves the existing operator escape hatch);
-    /// `POST /internal/mesh/quiesce` flips it at runtime without
-    /// requiring a daemon restart. Reads on the hot path are a single
-    /// relaxed atomic load.
-    pub mesh_quiesced: std::sync::atomic::AtomicBool,
 
     /// Fair admission for peer-served inference — one accounting authority
     /// (the same `SchedCore` policy the chat server uses) holding the
@@ -788,16 +739,6 @@ pub struct AppStateInner {
     /// `true`; the setting is exposed via the same Settings surface
     /// as the foreground-yield window itself.
     pub yield_peers_to_foreground: std::sync::atomic::AtomicBool,
-
-    /// Per-batch ingest throttle. Encoded as fixed-point ‰ (parts
-    /// per thousand) so we can represent fractional levels without
-    /// floats. `1000` = full speed (no post-batch sleep — the legacy
-    /// behaviour and the default). `500` = duty-cycle 50% (sleep
-    /// after each batch equal to the batch's wall time, halving
-    /// effective throughput while leaving the GPU/CPU unblocked
-    /// in between). `0` is rejected by the setter — use the pause
-    /// route to fully stop a corpus.
-    pub ingest_throttle_milli: std::sync::atomic::AtomicU32,
 
     /// User-set ceiling on how much disk Sovereign is allowed to use
     /// for corpus storage (sum of `~/.svrnmesh/indexes/*`). Encoded
@@ -1496,9 +1437,23 @@ impl AppState {
                 app_registry,
                 app_port_map: AppPortMap::new(),
                 fanout_inflight: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
-                active_ingests: RwLock::new(HashSet::new()),
-                corpus_progress: RwLock::new(HashMap::new()),
-                newsworthy_force_tick: RwLock::new(None),
+                ingest: ingest::IngestPart {
+                    active_ingests: RwLock::new(HashSet::new()),
+                    corpus_progress: RwLock::new(HashMap::new()),
+                    newsworthy_force_tick: RwLock::new(None),
+                    work_queue: Arc::new(WorkQueueManager::new()),
+                    grant_store: Arc::new(EphemeralGrantStore::new()),
+                    active_pull_loops: RwLock::new(HashSet::new()),
+                    verify_reports: RwLock::new(HashMap::new()),
+                    // false = full peer collaboration. Daemon startup
+                    // overrides this from `SOVEREIGN_DISABLE_AUTO_COLLAB`
+                    // when set, preserving the env-var escape hatch.
+                    mesh_quiesced: std::sync::atomic::AtomicBool::new(false),
+                    // 1000 ‰ = full speed; ingest pipeline pays one atomic
+                    // load per batch and otherwise behaves identically to
+                    // the pre-throttle build.
+                    ingest_throttle_milli: std::sync::atomic::AtomicU32::new(1000),
+                },
                 local_inference_availability: RwLock::new(1.0_f32),
                 activity_inference_availability: RwLock::new(1.0_f32),
                 on_mesh_mutation: None,
@@ -1507,11 +1462,7 @@ impl AppState {
                     next_edit_model_slot: std::sync::Arc::new(tokio::sync::Semaphore::new(1)),
                 },
                 rpc_shard_warmer: None,
-                work_queue: Arc::new(WorkQueueManager::new()),
-                grant_store: Arc::new(EphemeralGrantStore::new()),
                 guest_grants: Arc::new(GuestGrantStore::new()),
-                active_pull_loops: RwLock::new(HashSet::new()),
-                verify_reports: RwLock::new(HashMap::new()),
                 // 0 sentinel = no foreground activity observed yet.
                 // The yield hook treats 0 as "never active", regardless
                 // of the window — so a fresh boot doesn't accidentally
@@ -1522,10 +1473,6 @@ impl AppState {
                 // default 60) before AppState is shared.
                 yield_window_secs: std::sync::atomic::AtomicU64::new(0),
                 foreground_inflight: std::sync::atomic::AtomicUsize::new(0),
-                // false = full peer collaboration. Daemon startup
-                // overrides this from `SOVEREIGN_DISABLE_AUTO_COLLAB`
-                // when set, preserving the env-var escape hatch.
-                mesh_quiesced: std::sync::atomic::AtomicBool::new(false),
                 // usize::MAX = unlimited. The desktop overwrites this
                 // at boot with the user's persisted setting (default
                 // matched to their consent-dialog choice in W4);
@@ -1559,10 +1506,6 @@ impl AppState {
                 // the GPU is pinned by a peer's enrich job" failure
                 // mode is exactly what this prevents.
                 yield_peers_to_foreground: std::sync::atomic::AtomicBool::new(true),
-                // 1000 ‰ = full speed; ingest pipeline pays one atomic
-                // load per batch and otherwise behaves identically to
-                // the pre-throttle build.
-                ingest_throttle_milli: std::sync::atomic::AtomicU32::new(1000),
                 // 0 = unlimited (no clamp). The desktop overwrites
                 // this at boot with either the persisted user choice
                 // or a computed default; CLI/standalone daemons leave
@@ -1617,7 +1560,7 @@ impl AppState {
     /// shutdown, though the process normally exits before the handle
     /// would matter.
     pub fn start_work_queue_reaper(&self) -> tokio::task::JoinHandle<()> {
-        Arc::clone(&self.inner.work_queue).spawn_reaper()
+        Arc::clone(&self.inner.ingest.work_queue).spawn_reaper()
     }
 
     /// Spawn the guest-grant sweep. Call once per daemon process beside
@@ -1956,6 +1899,7 @@ impl AppState {
     /// and will not dispatch to peers on this tick.
     pub fn mesh_quiesced(&self) -> bool {
         self.inner
+            .ingest
             .mesh_quiesced
             .load(std::sync::atomic::Ordering::Relaxed)
     }
@@ -1966,6 +1910,7 @@ impl AppState {
     /// Reset to `false` to rejoin the auto-collaborate loop.
     pub fn set_mesh_quiesced(&self, quiesced: bool) {
         self.inner
+            .ingest
             .mesh_quiesced
             .store(quiesced, std::sync::atomic::Ordering::Relaxed);
     }
@@ -2242,6 +2187,7 @@ impl AppState {
     pub fn ingest_throttle_factor(&self) -> f32 {
         let raw = self
             .inner
+            .ingest
             .ingest_throttle_milli
             .load(std::sync::atomic::Ordering::Relaxed);
         ((raw.max(1) as f32) / 1000.0).clamp(0.001, 1.0)
@@ -2259,6 +2205,7 @@ impl AppState {
         let clamped = factor.min(1.0);
         let milli = (clamped * 1000.0).round().clamp(1.0, 1000.0) as u32;
         self.inner
+            .ingest
             .ingest_throttle_milli
             .store(milli, std::sync::atomic::Ordering::Relaxed);
         Ok(milli as f32 / 1000.0)

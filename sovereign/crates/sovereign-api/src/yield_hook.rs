@@ -70,6 +70,7 @@ impl YieldHook for AppStateYieldHook {
     fn throttle_factor(&self) -> f32 {
         let raw = self
             .inner
+            .ingest
             .ingest_throttle_milli
             .load(std::sync::atomic::Ordering::Relaxed);
         ((raw.max(1) as f32) / 1000.0).clamp(0.001, 1.0)

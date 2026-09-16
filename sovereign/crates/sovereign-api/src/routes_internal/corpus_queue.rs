@@ -129,7 +129,7 @@ pub async fn corpus_ingest_partition(
     // pressure and reliably trigger the Metal backend's
     // `ggml_metal_buffer_set_tensor: buf_src = NULL` abort.
     {
-        let mut active = state.inner.active_ingests.write().await;
+        let mut active = state.inner.ingest.active_ingests.write().await;
         if active.contains(&corpus_id) {
             tracing::info!(
                 corpus = %corpus_id,
@@ -180,6 +180,7 @@ pub async fn corpus_ingest_partition(
             .await;
         state_clone
             .inner
+            .ingest
             .active_ingests
             .write()
             .await
@@ -264,6 +265,7 @@ pub async fn corpus_next_unit(
     let peer_id = req.peer_id;
     match state
         .inner
+        .ingest
         .work_queue
         .next_unit(&req.handoff_id, req.peer_id)
         .await
@@ -291,6 +293,7 @@ pub async fn corpus_next_unit(
             // from "done, move to merge (Merging / Complete)".
             let phase = state
                 .inner
+                .ingest
                 .work_queue
                 .snapshot(&req.handoff_id)
                 .await
@@ -343,6 +346,7 @@ pub async fn corpus_heartbeat(
     let unit_id = req.unit_id;
     match state
         .inner
+        .ingest
         .work_queue
         .heartbeat(&req.handoff_id, req.peer_id, req.unit_id)
         .await
@@ -419,6 +423,7 @@ pub async fn corpus_complete_unit(
     let outcome_dbg = format!("{:?}", req.outcome);
     match state
         .inner
+        .ingest
         .work_queue
         .complete_unit(
             &req.handoff_id,
@@ -544,7 +549,7 @@ pub fn spawn_queue_merge(state: AppState, handoff_id: commonwealth_core::ids::Ha
             mesh_store,
         )
         .with_emitter(state.inner.contribution_emitter.clone())
-        .with_work_queue(Arc::clone(&state.inner.work_queue));
+        .with_work_queue(Arc::clone(&state.inner.ingest.work_queue));
 
         match shard_mgr
             .coordinate_merge(handoff_id, local_node_id, &peer_urls)
@@ -593,6 +598,7 @@ pub fn spawn_queue_merge(state: AppState, handoff_id: commonwealth_core::ids::Ha
                         }
                         state
                             .inner
+                            .ingest
                             .verify_reports
                             .write()
                             .await
@@ -774,7 +780,13 @@ pub async fn corpus_collaborate_status(
     State(state): State<AppState>,
     Json(req): Json<CollaborateStatusRequest>,
 ) -> (StatusCode, Json<Option<CollaborateStatusResponse>>) {
-    let Some(snap) = state.inner.work_queue.snapshot(&req.handoff_id).await else {
+    let Some(snap) = state
+        .inner
+        .ingest
+        .work_queue
+        .snapshot(&req.handoff_id)
+        .await
+    else {
         return (StatusCode::NOT_FOUND, Json(None));
     };
 
@@ -811,7 +823,7 @@ pub async fn corpus_collaborate_status(
         .collect();
 
     let now_ms = commonwealth_core::clock::unix_now_millis();
-    let grant = state.inner.grant_store.live(&snap.corpus_id, now_ms);
+    let grant = state.inner.ingest.grant_store.live(&snap.corpus_id, now_ms);
     let grant_dto = grant.as_ref().map(|g| GrantStatusDto {
         expires_at_ms: g.expires_at_ms,
         revoked: g.revoked,
@@ -819,6 +831,7 @@ pub async fn corpus_collaborate_status(
     });
     let verification = state
         .inner
+        .ingest
         .verify_reports
         .read()
         .await

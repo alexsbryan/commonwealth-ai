@@ -476,6 +476,7 @@ async fn install_cancel_reinstall_lifecycle() {
     assert!(
         state
             .inner
+            .ingest
             .active_ingests
             .read()
             .await
@@ -486,6 +487,7 @@ async fn install_cancel_reinstall_lifecycle() {
     assert!(
         state
             .inner
+            .ingest
             .corpus_progress
             .read()
             .await
@@ -616,6 +618,7 @@ async fn install_pause_resume_lifecycle() {
     assert!(
         state
             .inner
+            .ingest
             .active_ingests
             .read()
             .await
@@ -626,6 +629,7 @@ async fn install_pause_resume_lifecycle() {
     assert!(
         state
             .inner
+            .ingest
             .corpus_progress
             .read()
             .await

@@ -211,7 +211,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
         // by conversations-personal install 2026-05-17 — 180 chunks
         // embedded, zero landed.
         let active_for_recovery: HashSet<String> =
-            { state.inner.active_ingests.read().await.clone() };
+            { state.inner.ingest.active_ingests.read().await.clone() };
         let stranded = engine.corpora_with_stranded_partitions();
         // Folded ONCE per tick rather than once per corpus: admitting a
         // journal is not free, and every corpus in `stranded` asks the same
@@ -509,7 +509,8 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
         // Retire cooldown entries for corpora that have since completed.
         triggered.retain(|id, _| in_progress.contains(id));
 
-        let active_ingests: HashSet<String> = { state.inner.active_ingests.read().await.clone() };
+        let active_ingests: HashSet<String> =
+            { state.inner.ingest.active_ingests.read().await.clone() };
 
         // Use the ordered Vec form to keep log output stable across
         // ticks — iterating a HashSet shuffles per-run and makes
@@ -813,7 +814,7 @@ async fn discover_and_spawn_pull_loops(state: AppState, self_id: NodeId, daemon_
         }
     };
 
-    let active = state.inner.active_pull_loops.read().await;
+    let active = state.inner.ingest.active_pull_loops.read().await;
     let already_running: HashSet<HandoffId> = active.clone();
     drop(active);
 
@@ -907,6 +908,7 @@ async fn discover_and_spawn_pull_loops(state: AppState, self_id: NodeId, daemon_
         // Mark as running before spawn so concurrent ticks don't double-spawn.
         state
             .inner
+            .ingest
             .active_pull_loops
             .write()
             .await
@@ -1132,6 +1134,7 @@ async fn pull_loop(
             tokio::spawn(async move {
                 progress_state
                     .inner
+                    .ingest
                     .corpus_progress
                     .write()
                     .await
@@ -1241,6 +1244,7 @@ async fn pull_loop(
     // reopens (e.g. coordinator restart).
     state
         .inner
+        .ingest
         .active_pull_loops
         .write()
         .await

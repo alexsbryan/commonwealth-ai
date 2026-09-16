@@ -194,7 +194,7 @@ pub async fn corpus_install(
 /// for direct lookup; an empty object means nothing is currently
 /// ingesting on this node.
 pub async fn corpus_progress(State(state): State<AppState>) -> Json<ProgressSnapshotResponse> {
-    let snapshot = state.inner.corpus_progress.read().await.clone();
+    let snapshot = state.inner.ingest.corpus_progress.read().await.clone();
     Json(ProgressSnapshotResponse { progress: snapshot })
 }
 
@@ -404,16 +404,16 @@ pub async fn corpus_status(State(state): State<AppState>) -> Json<CorpusStatusRe
     // the response is deterministically ordered — makes debugging
     // and the integration test's snapshot comparisons less flaky.
     let mut candidates: std::collections::BTreeSet<String> = Default::default();
-    for id in state.inner.active_ingests.read().await.iter() {
+    for id in state.inner.ingest.active_ingests.read().await.iter() {
         candidates.insert(id.clone());
     }
-    for id in state.inner.corpus_progress.read().await.keys() {
+    for id in state.inner.ingest.corpus_progress.read().await.keys() {
         candidates.insert(id.clone());
     }
     candidates.extend(engine.in_progress_ingestions());
 
-    let active_snapshot = state.inner.active_ingests.read().await.clone();
-    let progress_snapshot = state.inner.corpus_progress.read().await.clone();
+    let active_snapshot = state.inner.ingest.active_ingests.read().await.clone();
+    let progress_snapshot = state.inner.ingest.corpus_progress.read().await.clone();
 
     // Gather per-corpus data, then spawn sample jobs for any corpus
     // that needs a fresh article-stats sidecar. We do this OFF the
@@ -615,7 +615,7 @@ fn ingest_progress_callback(state: AppState, corpus_id: String) -> corpus_engine
         // The callback is synchronous but the map needs an async lock.
         // Spawn a short-lived task; it finishes essentially instantly.
         tokio::spawn(async move {
-            let mut map = state.inner.corpus_progress.write().await;
+            let mut map = state.inner.ingest.corpus_progress.write().await;
             if matches!(
                 map.get(&corpus_id),
                 Some(corpus_engine::IngestProgress::Failed { .. })
@@ -640,7 +640,7 @@ fn ingest_progress_callback(state: AppState, corpus_id: String) -> corpus_engine
 /// `active_ingests` guard already returned), and a `Complete` entry is
 /// legitimate history until overwritten.
 async fn clear_stale_failure(state: &AppState, corpus_id: &str) {
-    let mut progress = state.inner.corpus_progress.write().await;
+    let mut progress = state.inner.ingest.corpus_progress.write().await;
     if let Some(corpus_engine::IngestProgress::Failed { .. }) = progress.get(corpus_id) {
         progress.remove(corpus_id);
     }
@@ -655,7 +655,7 @@ async fn clear_stale_failure(state: &AppState, corpus_id: &str) {
 /// "present last tick, absent this tick" as SUCCESS — emitting
 /// phase=complete / 100% / "Done" for an install that committed nothing.
 async fn record_failure(state: &AppState, corpus_id: &str, message: String) {
-    state.inner.corpus_progress.write().await.insert(
+    state.inner.ingest.corpus_progress.write().await.insert(
         corpus_id.to_string(),
         corpus_engine::IngestProgress::Failed { message },
     );
@@ -667,7 +667,7 @@ pub async fn spawn_corpus_expand(state: AppState, corpus_id: String) -> bool {
     };
 
     {
-        let mut active = state.inner.active_ingests.write().await;
+        let mut active = state.inner.ingest.active_ingests.write().await;
         if active.contains(&corpus_id) {
             return false;
         }
@@ -688,6 +688,7 @@ pub async fn spawn_corpus_expand(state: AppState, corpus_id: String) -> bool {
 
         state_for_task
             .inner
+            .ingest
             .active_ingests
             .write()
             .await
@@ -752,7 +753,7 @@ pub async fn spawn_corpus_install_outcome(
     };
 
     {
-        let mut active = state.inner.active_ingests.write().await;
+        let mut active = state.inner.ingest.active_ingests.write().await;
         if active.contains(&corpus_id) {
             tracing::info!(
                 corpus = %corpus_id,
@@ -778,7 +779,13 @@ pub async fn spawn_corpus_install_outcome(
             );
             // Roll back the active_ingests insert so a subsequent
             // retry isn't blocked.
-            state.inner.active_ingests.write().await.remove(&corpus_id);
+            state
+                .inner
+                .ingest
+                .active_ingests
+                .write()
+                .await
+                .remove(&corpus_id);
             return InstallOutcome::RecipeNotFound(e.to_string());
         }
     };
@@ -796,7 +803,13 @@ pub async fn spawn_corpus_install_outcome(
                 error = %e,
                 "spawn_corpus_install: parameter coercion failed"
             );
-            state.inner.active_ingests.write().await.remove(&corpus_id);
+            state
+                .inner
+                .ingest
+                .active_ingests
+                .write()
+                .await
+                .remove(&corpus_id);
             return InstallOutcome::InvalidParameters(e);
         }
     };
@@ -808,7 +821,13 @@ pub async fn spawn_corpus_install_outcome(
                 error = %e,
                 "spawn_corpus_install: parameter validation failed"
             );
-            state.inner.active_ingests.write().await.remove(&corpus_id);
+            state
+                .inner
+                .ingest
+                .active_ingests
+                .write()
+                .await
+                .remove(&corpus_id);
             return InstallOutcome::InvalidParameters(e.to_string());
         }
     };
@@ -835,6 +854,7 @@ pub async fn spawn_corpus_install_outcome(
 
         state_for_task
             .inner
+            .ingest
             .active_ingests
             .write()
             .await
@@ -1155,6 +1175,7 @@ pub async fn spawn_corpus_install_outcome(
                 // "not_installed" on the next poll.
                 state_for_task
                     .inner
+                    .ingest
                     .corpus_progress
                     .write()
                     .await
@@ -1325,7 +1346,13 @@ async fn stop_in_flight_ingest(
     if cancelled {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
         loop {
-            let still_active = state.inner.active_ingests.read().await.contains(corpus_id);
+            let still_active = state
+                .inner
+                .ingest
+                .active_ingests
+                .read()
+                .await
+                .contains(corpus_id);
             if !still_active {
                 break;
             }
@@ -1342,7 +1369,13 @@ async fn stop_in_flight_ingest(
 
     // Drop the progress entry so polling clients see "not_installed"
     // on their next tick instead of a stale final-embedding frame.
-    state.inner.corpus_progress.write().await.remove(corpus_id);
+    state
+        .inner
+        .ingest
+        .corpus_progress
+        .write()
+        .await
+        .remove(corpus_id);
 
     cancelled
 }

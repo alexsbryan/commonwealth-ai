@@ -2366,7 +2366,7 @@ impl EmbeddedDaemon {
         let inflight = app_state.peer_inflight_count();
         let ceiling = app_state.contribution_max_peer_inflight();
         let fanout = app_state.fanout_inflight_count();
-        let ingests = app_state.inner.active_ingests.read().await.len();
+        let ingests = app_state.inner.ingest.active_ingests.read().await.len();
         (inflight, ceiling, fanout, ingests)
     }
 
@@ -4073,7 +4073,7 @@ impl EmbeddedDaemon {
                 // handler can fire without holding a watcher handle.
                 let (newsworthy_force_tick_tx, newsworthy_force_tick_rx) =
                     tokio::sync::mpsc::channel::<()>(4);
-                if let Ok(mut slot) = app_state.inner.newsworthy_force_tick.try_write() {
+                if let Ok(mut slot) = app_state.inner.ingest.newsworthy_force_tick.try_write() {
                     *slot = Some(newsworthy_force_tick_tx);
                 }
                 // Wrap `watcher.spawn` in another `tokio::spawn` so the

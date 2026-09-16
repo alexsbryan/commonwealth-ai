@@ -98,6 +98,7 @@ pub async fn corpus_collaborate(
         let authorized = recipe_privacy.corpus.grantable
             && state
                 .inner
+                .ingest
                 .grant_store
                 .live(req.corpus_id.as_str(), now_ms)
                 .map(|g| g.authorizes(&requested))
@@ -554,6 +555,7 @@ pub async fn corpus_collaborate(
 
         state
             .inner
+            .ingest
             .work_queue
             .register(
                 handoff.handoff_id,
@@ -574,6 +576,7 @@ pub async fn corpus_collaborate(
         if handoff.ephemeral {
             state
                 .inner
+                .ingest
                 .grant_store
                 .bind_handoff(&handoff.corpus_id, handoff.handoff_id);
         }

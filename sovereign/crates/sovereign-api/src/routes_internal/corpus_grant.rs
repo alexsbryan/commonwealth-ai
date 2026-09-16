@@ -109,11 +109,12 @@ pub async fn corpus_grant_issue(
 
     let ttl_secs = req.ttl_secs.unwrap_or(DEFAULT_GRANT_TTL_SECS);
     let now_ms = commonwealth_core::clock::unix_now_millis();
-    let grant =
-        state
-            .inner
-            .grant_store
-            .issue(req.corpus_id.clone(), allowed_peers, ttl_secs, now_ms);
+    let grant = state.inner.ingest.grant_store.issue(
+        req.corpus_id.clone(),
+        allowed_peers,
+        ttl_secs,
+        now_ms,
+    );
 
     tracing::info!(
         corpus = %grant.corpus_id,
@@ -149,7 +150,12 @@ pub async fn corpus_grant_revoke(
     State(state): State<AppState>,
     Json(req): Json<GrantRevokeRequest>,
 ) -> Result<Json<GrantRevokeResponse>, (StatusCode, Json<ErrorBody>)> {
-    let Some(grant) = state.inner.grant_store.revoke(req.corpus_id.as_str()) else {
+    let Some(grant) = state
+        .inner
+        .ingest
+        .grant_store
+        .revoke(req.corpus_id.as_str())
+    else {
         return Ok(Json(GrantRevokeResponse {
             corpus_id: req.corpus_id,
             revoked: false,
@@ -163,7 +169,7 @@ pub async fn corpus_grant_revoke(
     // rediscovered. Peer partition-dir eviction is driven by the ephemeral
     // teardown path (see `partition_evict`).
     if let Some(handoff_id) = grant.handoff_id {
-        state.inner.work_queue.retire(&handoff_id).await;
+        state.inner.ingest.work_queue.retire(&handoff_id).await;
         let gossip_key = format!("handoff:{handoff_id}");
         let _ = state.inner.mesh_store.delete("corpus-engine", &gossip_key);
         tracing::info!(

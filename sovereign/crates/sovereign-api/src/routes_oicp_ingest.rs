@@ -57,7 +57,7 @@ pub async fn corpus_install(
 /// `corpus_id -> IngestProgress` snapshot onto the coarse protocol
 /// `CorpusIngestProgress`, so no `corpus_engine` type reaches the wire.
 pub async fn corpus_progress(State(state): State<AppState>) -> Json<CorpusProgressResponse> {
-    let snapshot = state.inner.corpus_progress.read().await;
+    let snapshot = state.inner.ingest.corpus_progress.read().await;
     let progress = snapshot
         .iter()
         .map(|(id, p)| (id.clone(), map_progress(p)))

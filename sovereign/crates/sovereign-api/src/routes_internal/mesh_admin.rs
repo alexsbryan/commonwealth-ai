@@ -371,7 +371,7 @@ pub struct ForegroundStateResponse {
 /// `GET /internal/daemon/foreground_state` — read-only snapshot of
 /// the foreground-yield atomics. See [`ForegroundStateResponse`].
 pub async fn foreground_state(State(state): State<AppState>) -> Json<ForegroundStateResponse> {
-    let active_ingests_count = state.inner.active_ingests.read().await.len();
+    let active_ingests_count = state.inner.ingest.active_ingests.read().await.len();
     Json(ForegroundStateResponse {
         last_active_unix_ts: state.foreground_last_active_ts(),
         window_secs: state.yield_window_secs(),
