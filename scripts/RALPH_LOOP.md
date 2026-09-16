@@ -61,6 +61,26 @@ unit, on top of checks that are cold anyway. Every build goes through that
 entry or the check scripts, never bare `cargo`: a `-p` build resolves features
 differently and rebuilds the dependents twice.
 
+## The director and the charter
+
+The supervisor's resolution session is a headless agent that fixes what a
+blocker needs. By default it defers design forks to the operator; when
+`ralph/CHARTER.md` exists (or `--charter FILE` names one) it becomes the
+**director** — the operator's standing delegate — and decides the forks the
+charter covers: row order and re-scoping, which documented option to take,
+placements the docs already imply. The charter's bright lines still stop it:
+no weakening a pass bar, no third `[[exception]]`, no widening an `except`, no
+`HUMAN-` rows, no pushes.
+
+Every director decision is one commit, recorded in `ralph/DECISIONS.md` with
+its evidence and the commit hash(es), and tagged `REVIEW-AFTER:` when the
+charter did not clearly cover it. The supervisor records each resolution's
+commit range in `ralph/.director-commits`, and
+`python3 scripts/ralph.py report` prints the decisions, the ranges with their
+commits, the packages and the queue head — so a decision the operator
+disagrees with is named and one `git revert` away. The director runs on
+`RESOLVE_MODEL` (`models.env`), separately from the worker and review models.
+
 ## Parallel lanes
 
 `pool` runs a ring's ready units concurrently, each in its own git worktree on

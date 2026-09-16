@@ -5,6 +5,8 @@ The FSM is exercised through its seams: session runners, clocks and
 notifiers are injected, so every gate runs in milliseconds and its failing
 input is explicit.
 """
+import contextlib
+import io
 import os
 import pathlib
 import subprocess
@@ -65,13 +67,48 @@ class ModelTests(unittest.TestCase):
     def test_load_and_review_routing(self):
         with tempfile.TemporaryDirectory() as tmp:
             p = write(tmp, "ralph/models.env",
-                      "# comment\nMODEL=w/x\nREVIEW_MODEL=r/y\nVARIANT=high\nOTHER=z\n")
+                      "# comment\nMODEL=w/x\nREVIEW_MODEL=r/y\nRESOLVE_MODEL=d/z\nVARIANT=high\nOTHER=z\n")
             m = ralph.load_models(p)
-            self.assertEqual(m, {"MODEL": "w/x", "REVIEW_MODEL": "r/y", "VARIANT": "high"})
+            self.assertEqual(m, {"MODEL": "w/x", "REVIEW_MODEL": "r/y",
+                                 "RESOLVE_MODEL": "d/z", "VARIANT": "high"})
             self.assertEqual(ralph.select_model_args("dm-x", "w", "r", "high"),
                              ["--model", "w", "--variant", "high"])
             self.assertEqual(ralph.select_model_args("REVIEW-build-x", "w", "r", "high"),
                              ["--model", "r", "--variant", "high"])
+
+
+class ResolverPromptTests(unittest.TestCase):
+    def test_without_charter_the_resolver_defers(self):
+        paths = ralph.Paths(pathlib.Path("/tmp/x"))
+        prompt = ralph.resolver_prompt(paths, 1, 4, "blocked")
+        self.assertIn("leave", prompt)
+        self.assertNotIn("DIRECTOR", prompt)
+
+    def test_with_charter_the_resolver_decides(self):
+        paths = ralph.Paths(pathlib.Path("/tmp/x"))
+        prompt = ralph.resolver_prompt(paths, 1, 4, "blocked", charter="# charter body")
+        self.assertIn("DIRECTOR", prompt)
+        self.assertIn("# charter body", prompt)
+        self.assertIn("DECISIONS.md", prompt)
+
+
+class ReportTests(unittest.TestCase):
+    def test_report_prints_queue_decisions_and_ranges(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "ralph/STATE.md",
+                  "- [x] dm-a abc1234 — depends [] — done\n- [ ] dm-b — depends []\n")
+            write(tmp, "ralph/DECISIONS.md",
+                  "- 2026-09-16 dm-b: chose X. REVIEW-AFTER: no\n")
+            write(tmp, "ralph/.director-commits",
+                  "1789500000 attempt=1 deadbee..cafe123 — blocker\n")
+            subprocess.run(["git", "init", "-q", tmp], check=True)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                ralph.main(["report", "--workdir", tmp])
+            out = buf.getvalue()
+            self.assertIn("done 1", out)
+            self.assertIn("REVIEW-AFTER", out)
+            self.assertIn("deadbee..cafe123", out)
 
 
 class CampaignTests(unittest.TestCase):
@@ -216,6 +253,20 @@ class SupervisorTests(unittest.TestCase):
             with mock.patch.object(ralph, "head_of", side_effect=lambda wd: heads["h"]):
                 self.assertEqual(s.run(), 2)
             self.assertEqual(attempts, [1, 2])
+
+    def test_director_commit_range_is_recorded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "ralph/NEEDS_HUMAN.md", "# blocker\n")
+            heads = {"h": "a" * 40}
+
+            def resolver(attempt, reason):
+                heads["h"] = f"{attempt:040x}"
+
+            s = self.make(tmp, run_inner=lambda: None, resolver_run=resolver, resolve_max=1)
+            with mock.patch.object(ralph, "head_of", side_effect=lambda wd: heads["h"]):
+                s.run()
+            log = (pathlib.Path(tmp) / "ralph/.director-commits").read_text()
+            self.assertIn("a" * 40 + ".." + f"{1:040x}", log)
 
     def test_halt_stop_without_package_dispatches(self):
         with tempfile.TemporaryDirectory() as tmp:

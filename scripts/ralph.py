@@ -123,6 +123,44 @@ def wait_for_marker(paths, marker_timeout):
     return "wait"
 
 
+def resolver_prompt(paths, attempt, resolve_max, reason, charter=None):
+    """The resolver's instruction. With a charter the session is the operator's
+    delegate and decides; without one it defers design forks, as before."""
+    head = (f"SUPERVISOR RESOLUTION (attempt {attempt} of {resolve_max}).\n\n"
+            f"The campaign stopped short of DONE. Reason:\n  {reason}\n\n")
+    if charter:
+        return head + (
+            "You are the DIRECTOR: the operator's delegate under the charter below.\n"
+            f"Read the package (`{paths.needs_human}`), verify its facts, and DECIDE — do not\n"
+            "defer a fork the charter covers. Reproduce every claim you rely on.\n\n"
+            f"1. Read `{paths.needs_human}`, `{paths.state}`, `git status`, and the charter.\n"
+            "   Campaign logs are under `~/.svrnmesh/ralph/` and `target/ralph/`.\n"
+            "2. Apply the smallest change that makes the campaign flow: correct the row or\n"
+            "   the code, with its source order corrected together when a premise was false.\n"
+            "3. Record the decision in `ralph/DECISIONS.md` (date, unit, fork, choice,\n"
+            "   evidence, what would falsify it; tag `REVIEW-AFTER:` when the charter did\n"
+            "   not clearly cover it) and land it with the change.\n"
+            f"4. Remove `{paths.needs_human}` so the campaign resumes, and commit.\n"
+            f"   The supervisor cleared the old blocker STOP; a NEW `{paths.stop}` is an\n"
+            "   operator request and you must not remove it.\n"
+            "5. If the fork is one the charter leaves to the operator, say so in the\n"
+            "   package — the options, their costs, and your recommendation — and stop. An\n"
+            "   honest package beats a guessed decision.\n\n"
+            "=== CHARTER ===\n" + charter)
+    return head + (
+        "You are the resolution session. Diagnose and fix so the campaign flows again:\n"
+        f"1. Read `{paths.needs_human}`, `{paths.state}`, and `git status`. Campaign logs are\n"
+        "   under `~/.svrnmesh/ralph/` and `target/ralph/`.\n"
+        "2. Fix the blocker. A false premise may be corrected only from verified code or\n"
+        "   consumer evidence, with the row and its source order corrected together.\n"
+        "3. Do NOT weaken a PASS BAR and do not mark a unit [x] that has not earned it.\n"
+        f"   Never approve or mark a HUMAN- row. If this is a genuine design fork, leave\n"
+        f"   a clear `{paths.needs_human}` for the operator and stop.\n"
+        f"4. When fixed: remove `{paths.needs_human}` so the campaign resumes, and commit.\n"
+        f"   The supervisor cleared the old blocker STOP; a NEW `{paths.stop}` is an\n"
+        "   operator request and you must not remove it.\n")
+
+
 class Status(enum.Enum):
     PENDING = " "
     ACTIVE = "~"
@@ -238,7 +276,7 @@ class Queue:
         return wave
 
 
-MODEL_KEYS = ("MODEL", "REVIEW_MODEL", "VARIANT")
+MODEL_KEYS = ("MODEL", "REVIEW_MODEL", "RESOLVE_MODEL", "VARIANT")
 
 
 def load_models(path):
@@ -460,6 +498,16 @@ class Supervisor:
         except (OSError, ValueError):
             return None
 
+    def _record_director_range(self, before, after, attempt, reason):
+        """Name the director's commits so the morning review can revert one:
+        `git revert <sha>` works because a decision is its own commit."""
+        log = self.paths.p("ralph/.director-commits")
+        try:
+            with log.open("a") as fh:
+                fh.write(f"{int(time.time())} attempt={attempt} {before}..{after} — {reason}\n")
+        except OSError:
+            pass
+
     def terminal_stop(self):
         if self.paths.p(self.paths.done).exists():
             say("supervisor: campaign DONE")
@@ -516,6 +564,9 @@ class Supervisor:
             say(f"supervisor: dispatching resolution session {attempt} — {reason}")
             self.notifier("resolving", f"attempt {attempt}: {reason}", self.notify_enabled)
             self.resolver_run(attempt, reason)
+            head_after = head_of(self.paths.workdir)
+            if head_after and head_after != head_before:
+                self._record_director_range(head_before, head_after, attempt, reason)
             if stop_file.exists():
                 say("supervisor: operator STOP during resolution — leaving it stopped")
                 self.notifier("STOP", "resolution interrupted; operator stop preserved",
@@ -819,7 +870,7 @@ def state_dir_for(paths, label):
 
 RUNTIME_MARKERS = ("ralph/DONE", "ralph/STOP", "ralph/NEEDS_HUMAN.md",
                    "ralph/.heartbeat", "ralph/waiting", "ralph/models.env",
-                   "ralph/log.txt")
+                   "ralph/log.txt", "ralph/.director-commits")
 
 
 def cmd_plan(args):
@@ -845,15 +896,17 @@ def cmd_models(args):
     paths = Paths(pathlib.Path(args.workdir).resolve())
     file = paths.p(paths.models)
     current = load_models(file)
-    if args.model or args.review_model or args.variant:
+    if args.model or args.review_model or args.resolve_model or args.variant:
         current["MODEL"] = args.model or current.get("MODEL", "")
         current["REVIEW_MODEL"] = args.review_model or current.get("REVIEW_MODEL", "")
+        current["RESOLVE_MODEL"] = args.resolve_model or current.get("RESOLVE_MODEL", "")
         current["VARIANT"] = args.variant or current.get("VARIANT", "")
         file.parent.mkdir(parents=True, exist_ok=True)
         file.write_text(
             "# ralph per-host model configuration (gitignored); written by scripts/ralph.py\n"
             f"MODEL={current.get('MODEL', '')}\n"
             f"REVIEW_MODEL={current.get('REVIEW_MODEL', '')}\n"
+            f"RESOLVE_MODEL={current.get('RESOLVE_MODEL', '')}\n"
             f"VARIANT={current.get('VARIANT', '')}\n")
         if not args.no_restart and args.label:
             job = f"dev.ralph.{paths.workdir.name}-{args.label}"
@@ -868,6 +921,7 @@ def cmd_models(args):
     print(f"models: {paths.models}")
     print(f"  MODEL={current.get('MODEL') or '<unset>'}")
     print(f"  REVIEW_MODEL={current.get('REVIEW_MODEL') or '<unset>'}")
+    print(f"  RESOLVE_MODEL={current.get('RESOLVE_MODEL') or '<unset>'}")
     print(f"  VARIANT={current.get('VARIANT') or '<unset>'}")
     return 0
 
@@ -904,6 +958,45 @@ def cmd_pool(args):
         print(f"wrote {plist}")
         return 0
     return guarded(pool.run, paths, notify_enabled=args.notify)
+
+
+def cmd_report(args):
+    paths = Paths(pathlib.Path(args.workdir).resolve())
+    queue = Queue(paths.p(paths.state))
+    done = queue.done_count()
+    active = sum(1 for r in queue.rows if r.status is Status.ACTIVE)
+    pending = sum(1 for r in queue.rows if r.status is Status.PENDING)
+    print(f"queue: {len(queue.rows)} rows — done {done}, active {active}, pending {pending}")
+    current = queue.current()
+    print(f"current: {current.id if current else 'none'}")
+    markers = [m for m in ("DONE", "STOP", "NEEDS_HUMAN.md") if paths.p(f"ralph/{m}").exists()]
+    print(f"markers: {', '.join(markers) if markers else 'none'}")
+    decisions = paths.p("ralph/DECISIONS.md")
+    if decisions.exists():
+        lines = [l for l in decisions.read_text().splitlines() if l.strip()]
+        after = sum(1 for l in lines if "REVIEW-AFTER:" in l)
+        print(f"\n=== ralph/DECISIONS.md — {after} REVIEW-AFTER, last {args.lines} lines ===")
+        print("\n".join(lines[-args.lines:]))
+    else:
+        print("\nralph/DECISIONS.md: not written yet")
+    ranges = paths.p("ralph/.director-commits")
+    if ranges.exists():
+        entries = [l for l in ranges.read_text().splitlines() if ".." in l]
+        print(f"\n=== director commit ranges ({len(entries)}) — revert one with "
+              "`git revert <sha>` ===")
+        for line in entries[-args.lines:]:
+            print(f"  {line}")
+            rng = next((p for p in line.split() if ".." in p), "")
+            if rng:
+                out = subprocess.run(["git", "-C", str(paths.workdir), "log", "--oneline", rng],
+                                     capture_output=True, text=True).stdout.strip()
+                for l in out.splitlines()[:8]:
+                    print(f"      {l}")
+    log = subprocess.run(["git", "-C", str(paths.workdir), "log", "--oneline", "-12"],
+                         capture_output=True, text=True).stdout.strip()
+    print("\n=== recent commits ===")
+    print(log)
+    return 0
 
 
 def cmd_watch(args):
@@ -964,28 +1057,21 @@ def cmd_supervise(args):
     if not campaign:
         print("ralph supervise: the campaign command is required after --", file=sys.stderr)
         return 2
+    charter_path = pathlib.Path(args.charter) if args.charter else paths.p("ralph/CHARTER.md")
+    charter = charter_path.read_text() if charter_path.exists() else None
+    if charter:
+        say(f"supervisor: director charter loaded from {charter_path}")
+    ensure_excludes(paths.workdir, RUNTIME_MARKERS)
 
     def run_inner():
         subprocess.run(campaign, cwd=str(paths.workdir))
 
     def resolver_run(attempt, reason):
-        resolve_model = args.resolve_model or args.review_model or models.get("REVIEW_MODEL", "")
+        resolve_model = (args.resolve_model or models.get("RESOLVE_MODEL", "")
+                         or args.review_model or models.get("REVIEW_MODEL", ""))
         resolve_variant = args.resolve_variant or args.variant or models.get("VARIANT", "")
         model_args = select_model_args("review", resolve_model, "", resolve_variant)
-        prompt = (
-            f"SUPERVISOR RESOLUTION (attempt {attempt} of {args.resolve_max}).\n\n"
-            f"The campaign stopped short of DONE. Reason:\n  {reason}\n\n"
-            "You are the resolution session. Diagnose and fix so the campaign flows again:\n"
-            f"1. Read `{paths.needs_human}`, `{paths.state}`, and `git status`. Campaign logs are\n"
-            "   under `~/.svrnmesh/ralph/` and `target/ralph/`.\n"
-            "2. Fix the blocker. A false premise may be corrected only from verified code or\n"
-            "   consumer evidence, with the row and its source order corrected together.\n"
-            "3. Do NOT weaken a PASS BAR and do not mark a unit [x] that has not earned it.\n"
-            f"   Never approve or mark a HUMAN- row. If this is a genuine design fork, leave\n"
-            f"   a clear `{paths.needs_human}` for the operator and stop.\n"
-            f"4. When fixed: remove `{paths.needs_human}` so the campaign resumes, and commit.\n"
-            f"   The supervisor cleared the old blocker STOP; a NEW `{paths.stop}` is an\n"
-            "   operator request and you must not remove it.\n")
+        prompt = resolver_prompt(paths, attempt, args.resolve_max, reason, charter)
         session.run(model_args, prompt, str(paths.workdir / "target" / "ralph"
                                            / f"supervise-{attempt}.out"))
 
@@ -1032,6 +1118,7 @@ def main(argv=None):
     p.add_argument("--resolve-model", default="")
     p.add_argument("--resolve-variant", default="")
     p.add_argument("--resolve-max", type=int, default=4)
+    p.add_argument("--charter", default="", help="default: ralph/CHARTER.md when present")
     p.add_argument("--install-launchd", action="store_true")
     p.add_argument("campaign", nargs=argparse.REMAINDER)
     p.set_defaults(fn=cmd_supervise)
@@ -1057,9 +1144,15 @@ def main(argv=None):
     p.add_argument("--label", default="")
     p.add_argument("--model", default="")
     p.add_argument("--review-model", default="")
+    p.add_argument("--resolve-model", default="")
     p.add_argument("--variant", default="")
     p.add_argument("--no-restart", action="store_true")
     p.set_defaults(fn=cmd_models)
+
+    p = sub.add_parser("report")
+    p.add_argument("--workdir", default=".")
+    p.add_argument("--lines", type=int, default=40)
+    p.set_defaults(fn=cmd_report)
 
     p = sub.add_parser("plan")
     common(p)
