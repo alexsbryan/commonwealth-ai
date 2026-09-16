@@ -129,7 +129,7 @@ fn with_local_inference_emits_error_when_arc_already_cloned() {
     // And the installation should have silently no-op'd:
     // `local_inference` stays `None`.
     assert!(
-        app_state.inner.local_inference.is_none(),
+        app_state.inner.serving.local_inference.is_none(),
         "with_local_inference must NOT have installed the service when Arc was cloned"
     );
 }
@@ -192,7 +192,7 @@ fn happy_path_does_not_emit_error_when_arc_uncloned() {
     );
 
     assert!(
-        app_state.inner.local_inference.is_some(),
+        app_state.inner.serving.local_inference.is_some(),
         "happy path: local_inference installed"
     );
     assert!(

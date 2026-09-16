@@ -47,7 +47,12 @@ pub struct PeerInflightGuard {
 
 impl std::fmt::Debug for PeerInflightGuard {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let in_flight = self.inner.peer_sched.lock().map_or(0, |s| s.in_flight());
+        let in_flight = self
+            .inner
+            .serving
+            .peer_sched
+            .lock()
+            .map_or(0, |s| s.in_flight());
         write!(f, "PeerInflightGuard {{ in_flight: {in_flight} }}")
     }
 }
@@ -64,6 +69,7 @@ impl Drop for PeerInflightGuard {
         // waiter — none on this shed-only gate). Recover from a poisoned lock
         // rather than cascade the panic.
         self.inner
+            .serving
             .peer_sched
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -122,6 +128,7 @@ impl Drop for ClientShareGuard {
     fn drop(&mut self) {
         let mut sched = self
             .inner
+            .serving
             .client_sched
             .lock()
             .unwrap_or_else(|e| e.into_inner());

@@ -38,7 +38,7 @@ fn resolve_local_model(state: &AppState, model_id: &str) -> Option<PathBuf> {
     if model_id.is_empty() || model_id.contains('/') || model_id.contains('\\') {
         return None;
     }
-    let allow = state.inner.servable_model_files.load();
+    let allow = state.inner.serving.servable_model_files.load();
     // 1. Exact slot match.
     if let Some(p) = allow
         .iter()
@@ -64,7 +64,7 @@ fn resolve_local_model(state: &AppState, model_id: &str) -> Option<PathBuf> {
 /// `500` with `{ "error": … }` when warming fails; `200` with the warmer's stats
 /// on success.
 pub async fn rpc_warm(State(state): State<AppState>, Json(body): Json<Value>) -> Response {
-    let Some(warmer) = state.inner.rpc_shard_warmer.clone() else {
+    let Some(warmer) = state.inner.serving.rpc_shard_warmer.clone() else {
         return (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(json!({

@@ -203,7 +203,7 @@ impl SimulatedNode {
 
     /// Set the inference plan for this node.
     pub fn set_inference_plan(&self, plan: InferencePlan) {
-        self.state.inner.inference_store.set_plan(&plan);
+        self.state.inner.serving.inference_store.set_plan(&plan);
     }
 
     /// Set the llama-server address for a model.

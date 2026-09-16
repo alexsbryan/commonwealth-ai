@@ -188,6 +188,7 @@ pub async fn chat_completions(
     #[cfg(feature = "atos")]
     if let Some(pipeline_res) = state
         .inner
+        .serving
         .pipeline_aliases
         .resolve(&requested_model)
         .cloned()
@@ -221,7 +222,7 @@ pub async fn chat_completions(
     // gate. The privacy enforcement below intercepts only the
     // forward-to-mesh / forward-to-Commonwealth paths where a
     // request *would* leave this machine.
-    if let Some(service) = state.inner.local_inference.as_ref() {
+    if let Some(service) = state.inner.serving.local_inference.as_ref() {
         // Pre-generation chat-side reshape. Three surgical nudges,
         // each targeting a distinct failure mode observed in the
         // gym fixtures:
@@ -373,7 +374,7 @@ pub async fn chat_completions(
         }
 
         // --- Priority 3: Model name matches an alias → synthesize OICP ---
-        if let Some(resolution) = state.inner.model_aliases.resolve(requested_model) {
+        if let Some(resolution) = state.inner.serving.model_aliases.resolve(requested_model) {
             debug!(
                 model_name = requested_model,
                 alias_hint = %resolution.hint,
@@ -415,8 +416,13 @@ pub async fn chat_completions(
 /// request — load/locality/cold-start/availability are peer-shaped
 /// signals that don't differentiate candidates sharing one host.
 fn route_with_oicp(state: &AppState, req: &InferenceRequirements) -> Option<ModelId> {
-    let models = state.inner.inference_store.list_models();
-    let plan = state.inner.inference_store.get_plan().unwrap_or_default();
+    let models = state.inner.serving.inference_store.list_models();
+    let plan = state
+        .inner
+        .serving
+        .inference_store
+        .get_plan()
+        .unwrap_or_default();
 
     let mut best_model = None;
     let mut best_name = String::new();
@@ -484,7 +490,7 @@ fn synthesize_claims_for_model_info(
 }
 
 fn find_model_by_name(state: &AppState, name: &str) -> Option<ModelId> {
-    let models = state.inner.inference_store.list_models();
+    let models = state.inner.serving.inference_store.list_models();
     let name_lower = name.to_lowercase();
     models
         .values()
@@ -611,7 +617,7 @@ pub async fn embeddings(
     // OpenAI-API client does not. Either way it's real embedding work
     // this daemon performed — recorded on the Activity ledger below.
     let requester = crate::headers::parse_x_node_id(&headers);
-    let Some(service) = state.inner.local_inference.as_ref() else {
+    let Some(service) = state.inner.serving.local_inference.as_ref() else {
         return (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(
@@ -826,7 +832,7 @@ pub(crate) async fn dispatchable_ids(state: &AppState) -> Vec<String> {
 /// nothing, and answering that with a list of store entries is precisely
 /// the substitution this change removes (ARCH §18.3 — report the absence).
 async fn manifest_rows(state: &AppState) -> Option<Vec<ModelObject>> {
-    let service = state.inner.local_inference.as_ref()?;
+    let service = state.inner.serving.local_inference.as_ref()?;
     let local = service.provider_manifest()?;
 
     // (holder display name, model). Local first so it wins the
@@ -888,7 +894,7 @@ async fn manifest_rows(state: &AppState) -> Option<Vec<ModelObject>> {
         }
     }
 
-    let slot_aliases = state.inner.slot_aliases.load();
+    let slot_aliases = state.inner.serving.slot_aliases.load();
     let mut rows: Vec<ModelObject> = Vec::new();
     let mut index: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
 
@@ -984,19 +990,25 @@ async fn store_rows(state: &AppState) -> Vec<ModelObject> {
             .collect()
     };
 
-    let plan = state.inner.inference_store.get_plan().unwrap_or_default();
+    let plan = state
+        .inner
+        .serving
+        .inference_store
+        .get_plan()
+        .unwrap_or_default();
 
     // Ground-truth residency from the embedded engine (empty on the
     // orchestrator daemon). Used only to OR-correct the `loaded` flag,
     // which the `llama_addr:` store key can't answer on the embedded
     // path — never removes the orchestrator signal.
-    let resident: Vec<crate::state::ResidentSlot> = match &state.inner.local_inference {
+    let resident: Vec<crate::state::ResidentSlot> = match &state.inner.serving.local_inference {
         Some(svc) => svc.resident_slots().into_iter().map(Into::into).collect(),
         None => Vec::new(),
     };
 
     let mut data: Vec<ModelObject> = state
         .inner
+        .serving
         .inference_store
         .list_models_with_origins()
         .into_iter()
@@ -1004,6 +1016,7 @@ async fn store_rows(state: &AppState) -> Vec<ModelObject> {
             live_nodes.contains(origin)
                 || state
                     .inner
+                    .serving
                     .inference_store
                     .get_llama_address(model.id)
                     .is_some()
@@ -1012,6 +1025,7 @@ async fn store_rows(state: &AppState) -> Vec<ModelObject> {
             let shard_plan = plan.model_plans.iter().find(|p| p.model == model.id);
             let loaded = state
                 .inner
+                .serving
                 .inference_store
                 .get_llama_address(model.id)
                 .is_some()
@@ -1082,7 +1096,7 @@ async fn store_rows(state: &AppState) -> Vec<ModelObject> {
     // dispatchable; synthesising them from `slot_aliases` there is how the
     // `embed` alias came to be listed on a node whose manifest never
     // carried it, permanently un-dispatchable.
-    let slot_aliases = state.inner.slot_aliases.load();
+    let slot_aliases = state.inner.serving.slot_aliases.load();
     let mut alias_entries: Vec<(String, String)> = slot_aliases
         .iter()
         .map(|(alias, target)| (alias.clone(), target.clone()))

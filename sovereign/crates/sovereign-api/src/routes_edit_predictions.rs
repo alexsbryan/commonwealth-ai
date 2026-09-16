@@ -411,6 +411,7 @@ pub async fn edit_predictions(
         // debug block below reports `unavailable` rather than guessing.
         state
             .inner
+            .serving
             .local_inference
             .as_ref()
             .and_then(|s| s.edit_status())
@@ -426,7 +427,7 @@ pub async fn edit_predictions(
     } else {
         None
     };
-    let service = state.inner.local_inference.clone();
+    let service = state.inner.serving.local_inference.clone();
     let sem = state.inner.workbench.next_edit_model_slot.clone();
     let req_path = wire.path.clone();
     let req_language = wire.language.clone();

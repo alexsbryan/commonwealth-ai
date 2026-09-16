@@ -112,6 +112,7 @@ async fn locally_owned_model_appears_in_v1_models_response() {
     // self_id from AppState).
     state
         .inner
+        .serving
         .inference_store
         .set_model_info(&empty_model_info(1, "test-local-model"));
 
@@ -195,7 +196,7 @@ async fn offline_peer_only_model_is_filtered_out_of_v1_models() {
     // Sanity: the store sees BOTH the self-owned + peer-owned
     // entries — the filter is the only thing standing between this
     // and the wire.
-    let raw_count = state.inner.inference_store.list_models().len();
+    let raw_count = state.inner.serving.inference_store.list_models().len();
     assert_eq!(
         raw_count, 1,
         "test precondition: with no local-self model registered, \

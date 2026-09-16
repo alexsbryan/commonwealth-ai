@@ -1242,7 +1242,7 @@ pub(super) fn spawn_slot_alias_push(
                              — gossip will now advertise this node's actual load"
                         );
                     }
-                    let snapshot = state.inner.slot_aliases.load();
+                    let snapshot = state.inner.serving.slot_aliases.load();
                     let map: std::collections::HashMap<String, String> = snapshot
                         .iter()
                         .map(|(k, v)| (k.clone(), v.clone()))

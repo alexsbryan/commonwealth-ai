@@ -67,7 +67,7 @@ pub async fn knowledge_search(
         if request.query_text.trim().is_empty() {
             return (StatusCode::BAD_REQUEST, Json(empty_knowledge_response()));
         }
-        let Some(local) = state.inner.local_inference.as_ref() else {
+        let Some(local) = state.inner.serving.local_inference.as_ref() else {
             tracing::warn!("knowledge search: text-only query but no local inference to embed it");
             return (
                 StatusCode::SERVICE_UNAVAILABLE,
@@ -76,6 +76,7 @@ pub async fn knowledge_search(
         };
         let prefix = state
             .inner
+            .serving
             .inference_store
             .get_local_embed_model()
             .map(|e| e.query_instruction_prefix)

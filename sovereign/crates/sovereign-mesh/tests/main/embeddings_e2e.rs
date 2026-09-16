@@ -148,7 +148,7 @@ async fn batch_input_yields_one_embedding_per_input_with_sequential_index() {
 
 #[tokio::test]
 async fn no_local_inference_backend_returns_503_with_documented_error_code() {
-    // `with_embed = false` → `state.inner.local_inference == None`.
+    // `with_embed = false` → `state.inner.serving.local_inference == None`.
     // The route documents this exact error code; the desktop
     // bootstrap branches on it to decide whether to fall back to
     // a peer-served embedding.

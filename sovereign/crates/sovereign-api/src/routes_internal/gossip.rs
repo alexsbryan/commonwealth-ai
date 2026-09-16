@@ -179,7 +179,7 @@ pub async fn scheduling_plan(
     State(state): State<AppState>,
     Json(plan): Json<InferencePlan>,
 ) -> StatusCode {
-    state.inner.inference_store.set_plan(&plan);
+    state.inner.serving.inference_store.set_plan(&plan);
     StatusCode::OK
 }
 

@@ -9,7 +9,7 @@
 //! is the only constructor that can produce a valid one.
 //!
 //! Before sv-surface svt-3 the desktop reached into an in-process
-//! `AppState.inner.peer_preferences` to serve the Mesh Health panel, and
+//! `AppState.inner.serving.peer_preferences` to serve the Mesh Health panel, and
 //! REFUSED in Attach mode because there was no route. Refusing was correct
 //! (ARCH principle 6 — never quietly do the work against the wrong process),
 //! but it left two crates, `commonwealth-core` and `commonwealth-state`,
@@ -105,7 +105,7 @@ fn parse_node_id_hex(s: &str) -> Result<NodeId, (StatusCode, String)> {
 pub async fn peer_preference_list(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<PeerPreferenceView>>, (StatusCode, String)> {
-    let entries = state.inner.peer_preferences.list().map_err(|e| {
+    let entries = state.inner.serving.peer_preferences.list().map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("peer_preference_list: {e}"),
@@ -145,6 +145,7 @@ pub async fn peer_preference_set(
         .map_err(|e| (StatusCode::BAD_REQUEST, format!("{e}")))?;
     state
         .inner
+        .serving
         .peer_preferences
         .set(&target, pref)
         .map_err(|e| {
@@ -167,12 +168,17 @@ pub async fn peer_preference_clear(
     Json(req): Json<ClearPeerPreferenceRequest>,
 ) -> Result<Json<bool>, (StatusCode, String)> {
     let target = parse_node_id_hex(&req.node_id)?;
-    let existed = state.inner.peer_preferences.clear(&target).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("peer_preference_clear: {e}"),
-        )
-    })?;
+    let existed = state
+        .inner
+        .serving
+        .peer_preferences
+        .clear(&target)
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("peer_preference_clear: {e}"),
+            )
+        })?;
     Ok(Json(existed))
 }
 

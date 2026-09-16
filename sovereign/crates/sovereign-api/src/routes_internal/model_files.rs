@@ -128,7 +128,7 @@ fn cached_or_compute_sha(path: &Path, size: u64, mtime: i64) -> std::io::Result<
 /// GET /internal/v1/models/list — enumerate this daemon's
 /// servable GGUF files with verification metadata.
 pub async fn list_model_files(State(state): State<AppState>) -> Json<ModelFileListing> {
-    let allowlist = state.inner.servable_model_files.load();
+    let allowlist = state.inner.serving.servable_model_files.load();
     let mut files = Vec::with_capacity(allowlist.len());
     for path in allowlist.iter() {
         let Some(name) = path.file_name().and_then(|s| s.to_str()) else {
@@ -235,7 +235,7 @@ pub async fn serve_model_file(
     AxumPath(name): AxumPath<String>,
     headers_in: HeaderMap,
 ) -> Result<Response, (StatusCode, Json<ErrorBody>)> {
-    let allowlist = state.inner.servable_model_files.load();
+    let allowlist = state.inner.serving.servable_model_files.load();
     if allowlist.is_empty() {
         return Err((
             StatusCode::SERVICE_UNAVAILABLE,

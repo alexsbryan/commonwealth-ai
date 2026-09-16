@@ -3055,7 +3055,7 @@ impl EmbeddedDaemon {
         // tracing::warn!) the moment any other code clones
         // `app_state.inner`. The YieldHook construction
         // (`AppStateYieldHook::new(app_state.inner.clone())`) and
-        // the embed-info publication (`app_state.inner.inference_store
+        // the embed-info publication (`app_state.inner.serving.inference_store
         // .set_local_embed_model(...)`) both bump the Arc strong
         // count, so we must run ALL `with_*` installers BEFORE any
         // of those.
@@ -3196,6 +3196,7 @@ impl EmbeddedDaemon {
         {
             app_state
                 .inner
+                .serving
                 .inference_store
                 .set_local_embed_model(embed_info);
             info!(
@@ -4695,7 +4696,11 @@ fn register_local_model_slots(app_state: &AppState, cfg: &SetupConfig, node_id: 
             supports_parallel_instances: false,
             supports_pipeline_shard: false,
         };
-        app_state.inner.inference_store.set_model_info(&info);
+        app_state
+            .inner
+            .serving
+            .inference_store
+            .set_model_info(&info);
         info!(
             role,
             name = %info.name,
@@ -5410,7 +5415,7 @@ mod tests {
 
         register_local_model_slots(&app_state, &cfg, node_id);
 
-        let models = app_state.inner.inference_store.list_models();
+        let models = app_state.inner.serving.inference_store.list_models();
         assert_eq!(
             models.len(),
             3,
@@ -5425,7 +5430,7 @@ mod tests {
         // Second call with the same config must not duplicate entries
         // (deterministic ModelId per slot + path).
         register_local_model_slots(&app_state, &cfg, node_id);
-        let models2 = app_state.inner.inference_store.list_models();
+        let models2 = app_state.inner.serving.inference_store.list_models();
         assert_eq!(
             models2.len(),
             3,

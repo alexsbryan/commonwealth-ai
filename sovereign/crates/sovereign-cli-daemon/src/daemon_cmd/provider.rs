@@ -136,7 +136,7 @@ impl ProviderFactory for LlamaCppFactory {
         // `run_daemon`; here we run inline because the daemon is
         // already in the Running state at reload time.
         if let Some(state) = app_state_opt {
-            let snapshot = state.inner.slot_aliases.load();
+            let snapshot = state.inner.serving.slot_aliases.load();
             let map: std::collections::HashMap<String, String> = snapshot
                 .iter()
                 .map(|(k, v)| (k.clone(), v.clone()))

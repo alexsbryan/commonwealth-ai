@@ -470,7 +470,11 @@ pub async fn run_one_round(
     // what `daemon::start_daemon` publishes after the fast slot
     // probes the GGUF. `None` on fresh daemons / pure-storage nodes;
     // the planner treats that as "don't include me in distribution".
-    let embed_model = app_state.inner.inference_store.get_local_embed_model();
+    let embed_model = app_state
+        .inner
+        .serving
+        .inference_store
+        .get_local_embed_model();
     let fresh_caps = build_local_capabilities(
         app_state.inner.node.corpus_engine.as_ref(),
         now,

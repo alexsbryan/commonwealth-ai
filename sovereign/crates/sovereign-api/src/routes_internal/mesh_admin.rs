@@ -139,7 +139,7 @@ pub async fn models_load(
     State(state): State<AppState>,
     Json(req): Json<LoadModelRequest>,
 ) -> Result<Json<LoadModelResponse>, (StatusCode, String)> {
-    let Some(service) = state.inner.local_inference.as_ref() else {
+    let Some(service) = state.inner.serving.local_inference.as_ref() else {
         return Err((
             StatusCode::SERVICE_UNAVAILABLE,
             "no local inference service is bound — runtime slot \
@@ -219,7 +219,7 @@ fn register_extras_in_store(
         supports_parallel_instances: false,
         supports_pipeline_shard: false,
     };
-    state.inner.inference_store.set_model_info(&info);
+    state.inner.serving.inference_store.set_model_info(&info);
 }
 
 fn deregister_extras_from_store(state: &AppState, model_id_str: &str) -> bool {
@@ -228,12 +228,12 @@ fn deregister_extras_from_store(state: &AppState, model_id_str: &str) -> bool {
     // `unload` request only carries the slot name), so we can't
     // recompute the deterministic id directly — name lookup is the
     // right path, and matches how `/v1/models` exposes the entries.
-    let models = state.inner.inference_store.list_models();
+    let models = state.inner.serving.inference_store.list_models();
     let target = models
         .into_iter()
         .find(|(_, info)| info.name == model_id_str);
     if let Some((id, _)) = target {
-        state.inner.inference_store.remove_model_info(id);
+        state.inner.serving.inference_store.remove_model_info(id);
         true
     } else {
         false
@@ -250,7 +250,7 @@ pub async fn models_unload(
     State(state): State<AppState>,
     Json(req): Json<UnloadModelRequest>,
 ) -> Result<Json<UnloadModelResponse>, (StatusCode, String)> {
-    let Some(service) = state.inner.local_inference.as_ref() else {
+    let Some(service) = state.inner.serving.local_inference.as_ref() else {
         return Err((
             StatusCode::SERVICE_UNAVAILABLE,
             "no local inference service is bound".to_string(),
@@ -295,7 +295,7 @@ pub async fn models_unload(
 pub async fn inference_warmup(
     State(state): State<AppState>,
 ) -> Result<Json<WarmupResponse>, (StatusCode, String)> {
-    let Some(service) = state.inner.local_inference.as_ref() else {
+    let Some(service) = state.inner.serving.local_inference.as_ref() else {
         // Standalone Commonwealth daemon path (orchestrator-spawned
         // llama-server) — no in-process slot to warm. 200 with
         // zero latency so the desktop's fire-and-forget call
@@ -314,7 +314,7 @@ pub async fn inference_warmup(
 /// `GET /internal/models/inventory` — list the currently-loaded
 /// extras lineup.
 pub async fn models_inventory(State(state): State<AppState>) -> Json<InventoryResponse> {
-    let Some(service) = state.inner.local_inference.as_ref() else {
+    let Some(service) = state.inner.serving.local_inference.as_ref() else {
         return Json(InventoryResponse { extras: Vec::new() });
     };
     let inventory = service.extras_inventory();
@@ -771,7 +771,12 @@ mod tests {
     async fn hot_level_sets_availability_to_020() {
         let (state, app) = activity_router();
         post_activity(app, "hot", "tests_running").await;
-        let val = *state.inner.local_inference_availability.read().await;
+        let val = *state
+            .inner
+            .serving
+            .local_inference_availability
+            .read()
+            .await;
         assert!(
             (val - 0.20).abs() < 1e-6,
             "hot must set availability to 0.20, got {val}"
@@ -782,7 +787,12 @@ mod tests {
     async fn warm_level_sets_availability_to_065() {
         let (state, app) = activity_router();
         post_activity(app, "warm", "recent_edits").await;
-        let val = *state.inner.local_inference_availability.read().await;
+        let val = *state
+            .inner
+            .serving
+            .local_inference_availability
+            .read()
+            .await;
         assert!(
             (val - 0.65).abs() < 1e-6,
             "warm must set availability to 0.65, got {val}"
@@ -793,7 +803,12 @@ mod tests {
     async fn cool_level_sets_availability_to_085() {
         let (state, app) = activity_router();
         post_activity(app, "cool", "settling").await;
-        let val = *state.inner.local_inference_availability.read().await;
+        let val = *state
+            .inner
+            .serving
+            .local_inference_availability
+            .read()
+            .await;
         assert!(
             (val - 0.85).abs() < 1e-6,
             "cool must set availability to 0.85, got {val}"
@@ -806,7 +821,12 @@ mod tests {
         let (state, app) = activity_router();
         post_activity(app.clone(), "hot", "start").await;
         post_activity(app, "idle", "long_pause").await;
-        let val = *state.inner.local_inference_availability.read().await;
+        let val = *state
+            .inner
+            .serving
+            .local_inference_availability
+            .read()
+            .await;
         assert!(
             (val - 1.00).abs() < 1e-6,
             "idle must set availability to 1.00, got {val}"
@@ -817,7 +837,12 @@ mod tests {
     async fn unknown_level_defaults_to_idle() {
         let (state, app) = activity_router();
         post_activity(app, "turbo", "unknown_level").await;
-        let val = *state.inner.local_inference_availability.read().await;
+        let val = *state
+            .inner
+            .serving
+            .local_inference_availability
+            .read()
+            .await;
         assert!(
             (val - 1.00).abs() < 1e-6,
             "unknown level must default to 1.00, got {val}"
@@ -1142,7 +1167,7 @@ mod tests {
 
         // The store should now contain a ModelInfo whose name is
         // the model_id returned by the provider.
-        let models = state.inner.inference_store.list_models();
+        let models = state.inner.serving.inference_store.list_models();
         assert!(
             models.values().any(|m| m.name == "test-model"),
             "post-load: expected `test-model` in inference_store; got {:?}",
@@ -1168,6 +1193,7 @@ mod tests {
         );
         assert!(state
             .inner
+            .serving
             .inference_store
             .list_models()
             .values()
@@ -1186,7 +1212,7 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), HttpStatus::OK);
 
-        let models = state.inner.inference_store.list_models();
+        let models = state.inner.serving.inference_store.list_models();
         assert!(
             !models.values().any(|m| m.name == "Qwen3.5-9B.Q8_0"),
             "post-unload: model_id should no longer be in store; got {:?}",

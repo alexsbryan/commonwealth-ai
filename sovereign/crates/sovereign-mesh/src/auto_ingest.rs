@@ -802,7 +802,7 @@ const MAX_NEXT_UNIT_FAILURES: u32 = 5;
 async fn discover_and_spawn_pull_loops(state: AppState, self_id: NodeId, daemon_port: u16) {
     // Read the local embed model. If missing, we can't match any
     // handoff — skip silently (peer is still bootstrapping).
-    let Some(local_embed) = state.inner.inference_store.get_local_embed_model() else {
+    let Some(local_embed) = state.inner.serving.inference_store.get_local_embed_model() else {
         return;
     };
 

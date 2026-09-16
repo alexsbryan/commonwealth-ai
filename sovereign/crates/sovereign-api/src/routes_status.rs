@@ -12,7 +12,12 @@ use crate::state::AppState;
 /// GET /status — mesh and node status summary.
 pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
     let mesh = state.inner.mesh.read().await;
-    let plan = state.inner.inference_store.get_plan().unwrap_or_default();
+    let plan = state
+        .inner
+        .serving
+        .inference_store
+        .get_plan()
+        .unwrap_or_default();
 
     let members_online = mesh
         .members
@@ -42,7 +47,7 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
     // analog). `None` on the orchestrator daemon — which keeps reporting
     // residency via the `llama_addr:` store keys below, so this only
     // ADDS truth for the embedded/desktop path, never removes it.
-    let resident: Vec<crate::state::ResidentSlot> = match &state.inner.local_inference {
+    let resident: Vec<crate::state::ResidentSlot> = match &state.inner.serving.local_inference {
         Some(svc) => svc.resident_slots().into_iter().map(Into::into).collect(),
         None => Vec::new(),
     };
@@ -50,19 +55,19 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
     // Supervised compute children (P1) — the glassbox source for
     // "distributed across N children / warming / recovering". Empty unless
     // `[compute]` pools are configured.
-    let compute_children: Vec<crate::state::ComputeChildStatus> = match &state.inner.local_inference
-    {
-        Some(svc) => svc.compute_children().into_iter().map(Into::into).collect(),
-        None => Vec::new(),
-    };
+    let compute_children: Vec<crate::state::ComputeChildStatus> =
+        match &state.inner.serving.local_inference {
+            Some(svc) => svc.compute_children().into_iter().map(Into::into).collect(),
+            None => Vec::new(),
+        };
 
     // Read once, published under two keys (`edit` and the deprecated
     // `fim` mirror) so the two can never report different arrangements.
-    let edit_slot_status: Option<crate::state::EditSlotStatus> = match &state.inner.local_inference
-    {
-        Some(svc) => svc.edit_status(),
-        None => None,
-    };
+    let edit_slot_status: Option<crate::state::EditSlotStatus> =
+        match &state.inner.serving.local_inference {
+            Some(svc) => svc.edit_status(),
+            None => None,
+        };
 
     let loaded_models: Vec<LoadedModelStatus> = plan
         .model_plans
@@ -76,12 +81,14 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
             // against the ModelId's `model-<hex>` Display can never match.
             let name = state
                 .inner
+                .serving
                 .inference_store
                 .get_model_info(p.model)
                 .map(|m| m.name);
             LoadedModelStatus {
                 loaded: state
                     .inner
+                    .serving
                     .inference_store
                     .get_llama_address(p.model)
                     .is_some()

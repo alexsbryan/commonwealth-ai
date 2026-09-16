@@ -50,7 +50,7 @@ pub async fn completions(
             .into_response();
     };
 
-    let Some(service) = state.inner.local_inference.as_ref() else {
+    let Some(service) = state.inner.serving.local_inference.as_ref() else {
         return (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(

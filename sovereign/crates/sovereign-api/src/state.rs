@@ -30,6 +30,7 @@ pub use sovereign_core::traits::LocalInferenceService;
 pub mod answering;
 pub mod ingest;
 pub mod node;
+pub mod serving;
 pub mod workbench;
 
 /// One inference slot's *actual* in-memory residency, as reported by
@@ -360,52 +361,14 @@ pub struct AppStateInner {
     /// node not found in mesh", and partitions would never dispatch.
     pub self_node_id_swap: ArcSwap<NodeId>,
     pub mesh: RwLock<Mesh>,
-    /// Inference plan, model info, ledger, and llama addresses — all via MeshStore.
-    pub inference_store: InferenceStateStore,
-    pub model_aliases: ModelAliasTable,
-    /// ATOS pipeline aliases — resolved before `model_aliases` when
-    /// an incoming request carries a pipeline name like
-    /// `commonwealth/sovereign-coder`. Loaded from the embedded
-    /// `default_pipelines.toml` at `AppState::new` time.
-    pub pipeline_aliases: serving_policy::pipeline_aliases::PipelineAliasTable,
-    /// Dynamic slot-name aliases. Map keys are operator-friendly slot
-    /// labels (`primary`, `fast`, `code`, `embed`) — possibly prefixed
-    /// `commonwealth/` for namespaced lookups. Values are the GGUF
-    /// stems (model_ids) currently bound to that slot.
-    ///
-    /// Populated at daemon boot from `SetupConfig.models.*` so an
-    /// operator can write `commonwealth/primary` in opencode's config
-    /// (or any other client) and have requests follow whatever GGUF
-    /// the daemon happens to be loading without rewriting the client
-    /// config when models swap. `ArcSwap` lets the admin reload path
-    /// hot-swap the table when `[models]` changes on disk.
-    ///
-    /// Empty when the daemon hasn't installed slot bindings yet
-    /// (early boot, or non-embedded daemons that don't own a
-    /// `SetupConfig`). Resolution then falls through to the
-    /// existing pipeline / model alias paths.
-    pub slot_aliases: ArcSwap<std::collections::HashMap<String, String>>,
-    /// Absolute paths of GGUF files this daemon will serve over
-    /// `/internal/v1/models/*` to other mesh peers. Populated at
-    /// daemon boot from `SetupConfig.models.*` so a friend or a
-    /// fresh cloud pod can pull the model files from us instead of
-    /// from R2/S3 — the friend doesn't have our bucket creds, and
-    /// the cloud pod's R2 sync has been the slowest step of every
-    /// fresh launch.
-    ///
-    /// `ArcSwap` so the admin reload path can update the list when
-    /// `[models]` paths change on disk. Empty when the daemon has
-    /// not installed bindings yet (early boot, or test fixtures
-    /// that bypass the production `start_daemon` flow).
-    ///
-    /// Serving is an allowlist, not a directory browser: only paths
-    /// listed here are exposed. A request whose `name` doesn't match
-    /// the `file_name()` of one of these paths gets 404, even if
-    /// the file exists somewhere on disk. Keeps the surface area to
-    /// "files this daemon is configured to load and would have
-    /// already loaded itself" — same trust boundary as the
-    /// inference path.
-    pub servable_model_files: ArcSwap<Vec<std::path::PathBuf>>,
+    /// Serving's part: the model, pipeline and slot aliases, the servable
+    /// model files, the local inference handle and RPC shard warmer, the
+    /// inference store, the peer and client admission schedulers with their
+    /// caps, switch, tallies, rejected-header record and reciprocity weights,
+    /// the contribution pause and yield-peers switch, the availability
+    /// composite, the in-flight gauge and the venue preferences. Held as a
+    /// part so route shells read it directly (DC §4.2).
+    pub serving: serving::ServingPart,
     /// This node's Ed25519 identity pubkey (see
     /// `commonwealth_core::ids::NodePubkey`). Installed by the
     /// embedded daemon at startup from `<data_dir>/node_key`; `None`
@@ -558,35 +521,6 @@ pub struct AppStateInner {
     /// throttle dials, and the newsworthy tick handle. Held as a part so route
     /// shells read it directly (DC §4.2).
     pub ingest: ingest::IngestPart,
-    /// Current PUBLISHED inference availability (0.0–1.0) — read by gossip
-    /// each round to populate `NodeCapabilities.inference_availability`.
-    /// Default 1.0.
-    ///
-    /// This is a DERIVED value with exactly one writer,
-    /// [`AppState::recompute_local_availability`], and two named inputs:
-    /// [`Self::activity_inference_availability`] (what sovereign-server's
-    /// ActivityReporter reports) and the yield-to-local-user predicate
-    /// (`AppState::yield_availability_floor`). The published value is the
-    /// MINIMUM of the two, because both are ceilings on what this node can
-    /// actually serve and the honest advertisement is the tighter one.
-    ///
-    /// It is a composite rather than a plain setter target because the two
-    /// inputs move independently: before 2026-08-14 the field was
-    /// last-writer-wins, so a node that was refusing every peer request with
-    /// `yielded_to_local` still gossiped `availability: 1.0` forever, and the
-    /// mesh scheduler kept selecting it (measured: 421 of 421 dispatches
-    /// refused — note 3234d770). Writing the yield state through the same
-    /// plain setter would have re-created that bug in the other direction,
-    /// with an "idle" activity report erasing a live yield window.
-    pub local_inference_availability: RwLock<f32>,
-    /// The ACTIVITY half of the availability composite: what
-    /// sovereign-server's ActivityReporter last reported via
-    /// POST /internal/node/activity ("hot" 0.20 … "idle" 1.00). Default 1.0
-    /// on nodes where no reporter runs (the daemon-only case).
-    ///
-    /// Stored separately from the published value so a yield window can rise
-    /// and fall without destroying the coding-activity signal underneath it.
-    pub activity_inference_availability: RwLock<f32>,
     /// Optional callback fired after any `Mesh` mutation by the
     /// route handlers. Set by the embedded daemon to the
     /// `persist::save` function so `/internal/join` accepts survive
@@ -594,114 +528,15 @@ pub struct AppStateInner {
     /// tick). `None` in tests and in the standalone Commonwealth
     /// daemon, where persistence is managed elsewhere.
     pub on_mesh_mutation: Option<MeshMutationHook>,
-    /// Optional in-process inference service. When Sovereign embeds
-    /// the daemon, this is a wrapper over its `EmbeddedLlamaCpp` so
-    /// `/v1/chat/completions` serves peer requests from the same
-    /// model the local user would use. `None` in the standalone
-    /// Commonwealth daemon — that path routes via the orchestrator
-    /// to spawned `llama-server` processes instead.
-    pub local_inference: Option<std::sync::Arc<dyn LocalInferenceService>>,
     /// Workbench's part: the next-edit model lane's one-in-flight budget.
     /// Held as a part so route shells read it directly (DC §4.2).
     pub workbench: workbench::WorkbenchPart,
-    /// Worker-side auto-warm hook for distributed inference. Installed by the
-    /// daemon alongside `local_inference`; drives `POST /internal/rpc-warm`.
-    /// `None` on a node that isn't an inference worker. See [`RpcShardWarmer`].
-    pub rpc_shard_warmer: Option<std::sync::Arc<dyn RpcShardWarmer>>,
-    /// Fair admission for peer-served inference — one accounting authority
-    /// (the same `SchedCore` policy the chat server uses) holding the
-    /// runtime-mutable global ceiling (`slots`) AND a per-node concurrency
-    /// cap, so one peer can't hog the pool even under the ceiling. `slots =
-    /// usize::MAX` (default) disables the ceiling ("share freely"); `0`
-    /// rejects all peer work (equivalent to `SOVEREIGN_DISABLE_PEER_INFERENCE=1`).
-    /// Set via `POST /internal/contribution/ceiling`. The middleware
-    /// (`crate::admission`) calls `try_grant` per peer request and 503s on
-    /// refusal; the per-request `PeerInflightGuard` `release`s on drop.
-    pub peer_sched: Mutex<SchedCore<NodeId>>,
-
-    /// Fair admission for **client**-served inference — the same `SchedCore`
-    /// policy as `peer_sched`, keyed by [`sovereign_contracts::principal::Principal`]
-    /// instead of `NodeId`, so the population `MESH_SCALE_100_USERS_1000_CORPORA.md`
-    /// §9.3 measured (ten local callers on one node) is rationed by *who is
-    /// asking* rather than by arrival order.
-    ///
-    /// The key is the published `Principal`, not the wire-side `PrincipalKey`:
-    /// `admission` derives both its fairness and its peer keys from the one
-    /// identity type (`DAEMON_CORE.md` §3.3), so there is no second identity
-    /// scheme to drift (ARCH principle 8). The daemon's resolver maps the two
-    /// partitions one-to-one.
-    ///
-    /// Its global slot budget is deliberately `usize::MAX`: this gate must
-    /// never refuse on depth. §7.1 R2's correction is explicit that a depth
-    /// shed here would double-queue against the inference slot queue's
-    /// deliberate predicted-wait shed, which remains THE shed decider. The
-    /// only rule this scheduler enforces is the per-principal equal share
-    /// ([`serving_policy::fair_sched::fair_share_cap`]), and `try_grant`
-    /// never leaves a waiter behind — so there is no second queue either.
-    pub client_sched: Mutex<SchedCore<Principal>>,
-
-    /// Concurrency budget divided among active principals by
-    /// [`serving_policy::fair_sched::fair_share_cap`]. See
-    /// [`crate::admission::DEFAULT_CLIENT_FAIR_CONCURRENCY`] for how the
-    /// default is derived and `SOVEREIGN_CLIENT_FAIR_CONCURRENCY` to override.
-    pub client_fair_concurrency: std::sync::atomic::AtomicU32,
-
-    /// Kill switch for the client fairness gate
-    /// (`SOVEREIGN_CLIENT_FAIRNESS=0`). Default on. When off, the gate
-    /// resolves and LOGS the principal but never caps — which is exactly the
-    /// §9.3 red, reachable on the shipped binary for A/B.
-    pub client_fairness_enabled: std::sync::atomic::AtomicBool,
-
-    /// Per-peer request tally (order `seat-resource-commons` UC-R1).
-    /// Written by the admission middleware (begin on admit, end when
-    /// the response BODY ends — see `crate::admission::GuardedBody`);
-    /// read by `/status` to answer "is this daemon serving the peer
-    /// right now?" Keyed by the `X-Node-Id` header value (the only
-    /// peer attribution available; see [`PeerTally`]).
-    ///
-    /// `std::sync::RwLock` on purpose: a short-lived counter map with
-    /// sync read/write (no await points on the admission hot path),
-    /// the same shape as `peer_sched`'s `std::sync::Mutex`.
-    pub peer_tally: std::sync::RwLock<HashMap<NodeId, PeerTally>>,
-
-    /// The most recent present-but-malformed `X-Node-Id` header value
-    /// (order commons-fluency fix 7). A peer request whose header
-    /// fails [`crate::headers::parse_x_node_id`] still gets gated and
-    /// tallied under the zero node, and `/status` must NAME the
-    /// rejected value and the expected wire form instead of showing an
-    /// opaque `node-0000000000000000` row — absence is reported, never
-    /// defaulted (ARCH §18.3). `None` until the first malformed header
-    /// arrives. Written on the admission path, read by `/status`.
-    pub peer_tally_rejected: std::sync::Mutex<Option<RejectedNodeIdHeader>>,
-
     /// The notes-rail convergence recorder (order commons-fluency
     /// fix 9). `None` until the daemon installs the shared instance at
     /// boot (`set_convergence_recorder` → AppState construction); the
     /// daemon-side publish sink and ingest poller stamp it, `/status`
     /// reads it. Written once at boot, read on every status poll.
     pub convergence: std::sync::RwLock<Option<std::sync::Arc<ConvergenceRecord>>>,
-
-    /// Cached reciprocity weight per peer node (`1.0 + k·norm(contribution)`),
-    /// refreshed out-of-band from the contribution ledger by a daemon loop.
-    /// Scales each node's effective concurrency cap when the operator is
-    /// rationing (a finite ceiling) — a contributor may hold more slots at
-    /// once. Absent nodes are neutral (`1.0`). `ArcSwap` for lock-free reads
-    /// on the admission hot path.
-    pub reciprocity_weights: ArcSwap<HashMap<NodeId, f64>>,
-
-    /// Unix-seconds expiry for a runtime contribution pause. `0`
-    /// means not paused. `now >= paused_until` means the pause has
-    /// expired; the middleware simply compares without writing the
-    /// field. Settable via `POST /internal/contribution/pause`.
-    pub contribution_paused_until: std::sync::atomic::AtomicI64,
-
-    /// When `true`, peer-served requests honour the foreground-yield
-    /// window just like ingest workers do — a peer chat that lands
-    /// during the window after a local turn 503s with `Retry-After`
-    /// rather than competing with the user for the GPU. Default
-    /// `true`; the setting is exposed via the same Settings surface
-    /// as the foreground-yield window itself.
-    pub yield_peers_to_foreground: std::sync::atomic::AtomicBool,
 
     /// Dimensional contribution emitter. Each route handler records
     /// `LedgerEvent`s through this on completion (per write site
@@ -710,37 +545,6 @@ pub struct AppStateInner {
     /// to `MeshStore` so it survives `AppState` clones and can be
     /// passed into spawned tasks without lifetime gymnastics.
     pub contribution_emitter: ContributionEmitter,
-
-    /// Per-peer preference store (Ostrom sanctions). Local-only,
-    /// never gossiped — see
-    /// `commonwealth_state::peer_preferences` for the structural
-    /// invariants. The manifest endpoint reads this on every
-    /// fetch to apply per-requester affinity multipliers.
-    pub peer_preferences: PeerPreferenceStore,
-
-    /// Shared in-flight counter for local-serve inference. Installed
-    /// once by the daemon bootstrap after `InferenceRouter::new`
-    /// returns. Read by the gossip emitter
-    /// (`sovereign-mesh::capabilities::build_local_capabilities`) on
-    /// every tick to populate
-    /// [`commonwealth_core::capabilities::NodeCapabilities::current_in_flight`].
-    ///
-    /// Lifecycle:
-    /// * Cold start: the router creates its own private `Arc<AtomicU32>`,
-    ///   then the bootstrap calls
-    ///   [`AppState::install_in_flight_publisher`] with that Arc.
-    ///   `OnceLock::set` succeeds on the first call.
-    /// * Hot reload (`replace_models_and_reload`): the new router is
-    ///   constructed via [`InferenceRouter::with_in_flight_publisher`]
-    ///   passing the *already-installed* Arc back in. The OnceLock
-    ///   is unchanged; old router guards and new router guards share the
-    ///   same atomic, so the counter stays accurate across the swap.
-    ///
-    /// Empty in tests and on storage-only nodes that never construct
-    /// a `InferenceRouter`; gossip then emits
-    /// `current_in_flight: None`, which is the legacy / "no signal"
-    /// behaviour every scoring path handles correctly.
-    pub local_in_flight_publisher: std::sync::OnceLock<Arc<std::sync::atomic::AtomicU32>>,
 }
 
 impl AppStateInner {
@@ -815,7 +619,11 @@ impl AppStateInner {
     /// can open/close rows without reaching through a second Arc.
     pub fn tally_peer_request_begin(&self, node: NodeId) {
         let now = sovereign_time::unix_now();
-        let mut tally = self.peer_tally.write().unwrap_or_else(|e| e.into_inner());
+        let mut tally = self
+            .serving
+            .peer_tally
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
         let row = tally.entry(node).or_default();
         row.active += 1;
         row.served_total += 1;
@@ -828,7 +636,11 @@ impl AppStateInner {
     /// Called when the response BODY ends (see `admission::GuardedBody`),
     /// so `active` tracks the true streaming window, not headers time.
     pub fn tally_peer_request_end(&self, node: NodeId) {
-        let mut tally = self.peer_tally.write().unwrap_or_else(|e| e.into_inner());
+        let mut tally = self
+            .serving
+            .peer_tally
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
         if let Some(row) = tally.get_mut(&node) {
             row.active = row.active.saturating_sub(1);
             tracing::debug!(node = %node, active = row.active, "peer_tally: request ended");
@@ -841,7 +653,11 @@ impl AppStateInner {
     /// the "idle now, served before" reading UC-R1's negative control
     /// needs to distinguish from "never served".
     pub fn peer_tally_snapshot(&self) -> Vec<(NodeId, PeerTally)> {
-        let tally = self.peer_tally.read().unwrap_or_else(|e| e.into_inner());
+        let tally = self
+            .serving
+            .peer_tally
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
         let mut out: Vec<(NodeId, PeerTally)> = tally.iter().map(|(k, v)| (*k, *v)).collect();
         out.sort_by_key(|(k, _)| *k);
         out
@@ -854,6 +670,7 @@ impl AppStateInner {
     /// or the status payload.
     pub fn record_rejected_x_node_id(&self, raw: &str) {
         let mut slot = self
+            .serving
             .peer_tally_rejected
             .lock()
             .unwrap_or_else(|e| e.into_inner());
@@ -866,7 +683,8 @@ impl AppStateInner {
     /// The most recent malformed-header record, for `/status`'s
     /// zero-bucket row. `None` when every peer header parsed.
     pub fn last_rejected_x_node_id(&self) -> Option<RejectedNodeIdHeader> {
-        self.peer_tally_rejected
+        self.serving
+            .peer_tally_rejected
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clone()
@@ -914,7 +732,7 @@ impl AppState {
     /// install time so the lookup is a single map probe regardless of
     /// which form the client sent.
     pub fn resolve_slot_alias(&self, model_name: &str) -> Option<String> {
-        let map = self.inner.slot_aliases.load();
+        let map = self.inner.serving.slot_aliases.load();
         map.get(model_name).cloned()
     }
     /// Replace the slot alias table atomically. Daemon startup calls
@@ -922,7 +740,7 @@ impl AppState {
     /// calls it again whenever `[models]` changes on disk so clients
     /// using `commonwealth/primary` follow the swap without restart.
     pub fn install_slot_aliases(&self, aliases: std::collections::HashMap<String, String>) {
-        self.inner.slot_aliases.store(Arc::new(aliases));
+        self.inner.serving.slot_aliases.store(Arc::new(aliases));
     }
 
     /// Replace the servable-model-files allowlist atomically. Daemon
@@ -933,7 +751,10 @@ impl AppState {
     /// canonical path, but feeding it relative inputs would still
     /// be a footgun for whoever calls it next.
     pub fn install_servable_model_files(&self, files: Vec<std::path::PathBuf>) {
-        self.inner.servable_model_files.store(Arc::new(files));
+        self.inner
+            .serving
+            .servable_model_files
+            .store(Arc::new(files));
     }
 
     /// This node's identity pubkey, if one was installed.
@@ -1334,12 +1155,52 @@ impl AppState {
                 rpc_iroh_accept: std::sync::atomic::AtomicBool::new(false),
                 self_node_id_swap: ArcSwap::from_pointee(self_node_id),
                 mesh: RwLock::new(mesh),
-                inference_store,
-                model_aliases: ModelAliasTable::default_table(),
-                pipeline_aliases:
-                    serving_policy::pipeline_aliases::PipelineAliasTable::default_table(),
-                slot_aliases: ArcSwap::from_pointee(std::collections::HashMap::new()),
-                servable_model_files: ArcSwap::from_pointee(Vec::new()),
+                serving: serving::ServingPart {
+                    inference_store,
+                    model_aliases: ModelAliasTable::default_table(),
+                    pipeline_aliases:
+                        serving_policy::pipeline_aliases::PipelineAliasTable::default_table(),
+                    slot_aliases: ArcSwap::from_pointee(std::collections::HashMap::new()),
+                    servable_model_files: ArcSwap::from_pointee(Vec::new()),
+                    local_inference_availability: RwLock::new(1.0_f32),
+                    activity_inference_availability: RwLock::new(1.0_f32),
+                    local_inference: None,
+                    rpc_shard_warmer: None,
+                    // usize::MAX = unlimited. The desktop overwrites this
+                    // at boot with the user's persisted setting (default
+                    // matched to their consent-dialog choice in W4);
+                    // headless / CLI daemons leave it unlimited so they
+                    // don't surprise their operators.
+                    // Peer-admission fair scheduler: global ceiling = the boot
+                    // value above; queue depth is unused on this shed-only gate
+                    // (`try_grant` never queues). Reciprocity weights start empty
+                    // (every node neutral) until the daemon's refresh loop runs.
+                    peer_sched: Mutex::new(SchedCore::new(DEFAULT_PEER_INFLIGHT_CEILING, 1)),
+                    // Client-admission fair scheduler. `usize::MAX` slots on
+                    // purpose: no depth ceiling here (see the field docs) — the
+                    // per-principal equal share is the only rule, and the
+                    // inference slot queue stays the one shed decider.
+                    client_sched: Mutex::new(SchedCore::new(usize::MAX, 1)),
+                    client_fair_concurrency: std::sync::atomic::AtomicU32::new(
+                        crate::admission::client_fair_concurrency_from_env(),
+                    ),
+                    client_fairness_enabled: std::sync::atomic::AtomicBool::new(
+                        crate::admission::client_fairness_enabled_from_env(),
+                    ),
+                    peer_tally: std::sync::RwLock::new(HashMap::new()),
+                    peer_tally_rejected: std::sync::Mutex::new(None),
+                    reciprocity_weights: ArcSwap::from_pointee(HashMap::new()),
+                    // 0 = not paused. Wall-clock unix-seconds expiry when
+                    // a user-initiated pause is active.
+                    contribution_paused_until: std::sync::atomic::AtomicI64::new(0),
+                    // Default on: foreground-yield gates peer requests
+                    // too, not just ingest. The "press send mid-chat and
+                    // the GPU is pinned by a peer's enrich job" failure
+                    // mode is exactly what this prevents.
+                    yield_peers_to_foreground: std::sync::atomic::AtomicBool::new(true),
+                    peer_preferences,
+                    local_in_flight_publisher: std::sync::OnceLock::new(),
+                },
                 self_node_pubkey: std::sync::RwLock::new(None),
                 self_iroh_dialinfo: std::sync::RwLock::new(None),
                 self_dial_signer: std::sync::RwLock::new(None),
@@ -1403,50 +1264,12 @@ impl AppState {
                     // the pre-throttle build.
                     ingest_throttle_milli: std::sync::atomic::AtomicU32::new(1000),
                 },
-                local_inference_availability: RwLock::new(1.0_f32),
-                activity_inference_availability: RwLock::new(1.0_f32),
                 on_mesh_mutation: None,
-                local_inference: None,
                 workbench: workbench::WorkbenchPart {
                     next_edit_model_slot: std::sync::Arc::new(tokio::sync::Semaphore::new(1)),
                 },
-                rpc_shard_warmer: None,
-                // usize::MAX = unlimited. The desktop overwrites this
-                // at boot with the user's persisted setting (default
-                // matched to their consent-dialog choice in W4);
-                // headless / CLI daemons leave it unlimited so they
-                // don't surprise their operators.
-                // Peer-admission fair scheduler: global ceiling = the boot
-                // value above; queue depth is unused on this shed-only gate
-                // (`try_grant` never queues). Reciprocity weights start empty
-                // (every node neutral) until the daemon's refresh loop runs.
-                peer_sched: Mutex::new(SchedCore::new(DEFAULT_PEER_INFLIGHT_CEILING, 1)),
-                // Client-admission fair scheduler. `usize::MAX` slots on
-                // purpose: no depth ceiling here (see the field docs) — the
-                // per-principal equal share is the only rule, and the
-                // inference slot queue stays the one shed decider.
-                client_sched: Mutex::new(SchedCore::new(usize::MAX, 1)),
-                client_fair_concurrency: std::sync::atomic::AtomicU32::new(
-                    crate::admission::client_fair_concurrency_from_env(),
-                ),
-                client_fairness_enabled: std::sync::atomic::AtomicBool::new(
-                    crate::admission::client_fairness_enabled_from_env(),
-                ),
-                peer_tally: std::sync::RwLock::new(HashMap::new()),
-                peer_tally_rejected: std::sync::Mutex::new(None),
                 convergence: std::sync::RwLock::new(None),
-                reciprocity_weights: ArcSwap::from_pointee(HashMap::new()),
-                // 0 = not paused. Wall-clock unix-seconds expiry when
-                // a user-initiated pause is active.
-                contribution_paused_until: std::sync::atomic::AtomicI64::new(0),
-                // Default on: foreground-yield gates peer requests
-                // too, not just ingest. The "press send mid-chat and
-                // the GPU is pinned by a peer's enrich job" failure
-                // mode is exactly what this prevents.
-                yield_peers_to_foreground: std::sync::atomic::AtomicBool::new(true),
                 contribution_emitter,
-                peer_preferences,
-                local_in_flight_publisher: std::sync::OnceLock::new(),
             }),
         }
     }
@@ -1458,7 +1281,7 @@ impl AppState {
     /// the publisher the cold-start path installed, or live guards
     /// from the old router would decrement an Arc nobody reads.
     pub fn install_in_flight_publisher(&self, publisher: Arc<std::sync::atomic::AtomicU32>) {
-        let _ = self.inner.local_in_flight_publisher.set(publisher);
+        let _ = self.inner.serving.local_in_flight_publisher.set(publisher);
     }
 
     /// Borrow the installed in-flight publisher Arc. Hot-reload path
@@ -1467,7 +1290,7 @@ impl AppState {
     /// the bootstrap hasn't run an install yet (test harnesses,
     /// storage-only nodes).
     pub fn in_flight_publisher(&self) -> Option<Arc<std::sync::atomic::AtomicU32>> {
-        self.inner.local_in_flight_publisher.get().cloned()
+        self.inner.serving.local_in_flight_publisher.get().cloned()
     }
 
     /// Read the current local in-flight count if a publisher has been
@@ -1477,6 +1300,7 @@ impl AppState {
     /// `NodeCapabilities.current_in_flight`.
     pub fn current_local_in_flight(&self) -> Option<u32> {
         self.inner
+            .serving
             .local_in_flight_publisher
             .get()
             .map(|p| p.load(std::sync::atomic::Ordering::Relaxed))
@@ -1551,7 +1375,7 @@ impl AppState {
     ) -> Self {
         match Arc::get_mut(&mut self.inner) {
             Some(inner) => {
-                inner.local_inference = Some(service);
+                inner.serving.local_inference = Some(service);
             }
             None => {
                 tracing::error!(
@@ -1575,7 +1399,7 @@ impl AppState {
     pub fn with_rpc_shard_warmer(mut self, warmer: std::sync::Arc<dyn RpcShardWarmer>) -> Self {
         match Arc::get_mut(&mut self.inner) {
             Some(inner) => {
-                inner.rpc_shard_warmer = Some(warmer);
+                inner.serving.rpc_shard_warmer = Some(warmer);
             }
             None => {
                 tracing::error!(
@@ -1618,7 +1442,7 @@ impl AppState {
 
     /// Register a model as available on the mesh.
     pub fn register_model(&self, model: commonwealth_core::model::ModelInfo) {
-        self.inner.inference_store.set_model_info(&model);
+        self.inner.serving.inference_store.set_model_info(&model);
     }
 
     /// Set the address of a llama-server for a model (after orchestrator spawns it).
@@ -1628,6 +1452,7 @@ impl AppState {
         address: String,
     ) {
         self.inner
+            .serving
             .inference_store
             .set_llama_address(model_id, &address);
     }
@@ -1637,12 +1462,16 @@ impl AppState {
         &self,
         model_id: commonwealth_core::ids::ModelId,
     ) -> Option<String> {
-        self.inner.inference_store.get_llama_address(model_id)
+        self.inner
+            .serving
+            .inference_store
+            .get_llama_address(model_id)
     }
 
     /// Get the default model (first in the inference plan).
     pub fn default_model_id(&self) -> Option<commonwealth_core::ids::ModelId> {
         self.inner
+            .serving
             .inference_store
             .get_plan()
             .and_then(|p| p.model_plans.first().map(|mp| mp.model))
@@ -1659,7 +1488,12 @@ impl AppState {
     /// live yield window is also a ceiling, and an "idle" report must not be
     /// able to advertise 1.0 while this node is refusing peer requests.
     pub async fn update_local_availability(&self, availability: f32) {
-        *self.inner.activity_inference_availability.write().await = availability;
+        *self
+            .inner
+            .serving
+            .activity_inference_availability
+            .write()
+            .await = availability;
         let published = self.recompute_local_availability().await;
         tracing::debug!(
             activity_availability = availability,
@@ -1700,10 +1534,20 @@ impl AppState {
     /// `debug` on every other call, so the 10-second heartbeat does not
     /// drown the signal.
     pub async fn recompute_local_availability(&self) -> f32 {
-        let activity = *self.inner.activity_inference_availability.read().await;
+        let activity = *self
+            .inner
+            .serving
+            .activity_inference_availability
+            .read()
+            .await;
         let yield_floor = self.yield_availability_floor();
         let published = activity.min(yield_floor);
-        let mut slot = self.inner.local_inference_availability.write().await;
+        let mut slot = self
+            .inner
+            .serving
+            .local_inference_availability
+            .write()
+            .await;
         let previous = *slot;
         *slot = published;
         drop(slot);
@@ -1730,7 +1574,7 @@ impl AppState {
     /// Read the published inference availability without recomputing.
     /// The introspection routes and tests use this; gossip recomputes first.
     pub async fn local_availability_published(&self) -> f32 {
-        *self.inner.local_inference_availability.read().await
+        *self.inner.serving.local_inference_availability.read().await
     }
 
     /// Record that a foreground inference request just landed. Called
@@ -1881,6 +1725,7 @@ impl AppState {
     /// [`Self::lock_peer_sched`]).
     pub(crate) fn lock_client_sched(&self) -> std::sync::MutexGuard<'_, SchedCore<Principal>> {
         self.inner
+            .serving
             .client_sched
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -1900,6 +1745,7 @@ impl AppState {
     /// [`serving_policy::fair_sched::fair_share_cap`].
     pub fn client_fair_concurrency(&self) -> u32 {
         self.inner
+            .serving
             .client_fair_concurrency
             .load(std::sync::atomic::Ordering::Relaxed)
     }
@@ -1907,6 +1753,7 @@ impl AppState {
     /// Override the budget (tests, and any future settings surface).
     pub fn set_client_fair_concurrency(&self, budget: u32) {
         self.inner
+            .serving
             .client_fair_concurrency
             .store(budget, std::sync::atomic::Ordering::Relaxed);
     }
@@ -1914,6 +1761,7 @@ impl AppState {
     /// Is the client fairness gate enforcing (as opposed to observing)?
     pub fn client_fairness_enabled(&self) -> bool {
         self.inner
+            .serving
             .client_fairness_enabled
             .load(std::sync::atomic::Ordering::Relaxed)
     }
@@ -1921,6 +1769,7 @@ impl AppState {
     /// Flip the gate between enforcing and observe-only.
     pub fn set_client_fairness_enabled(&self, enabled: bool) {
         self.inner
+            .serving
             .client_fairness_enabled
             .store(enabled, std::sync::atomic::Ordering::Relaxed);
     }
@@ -1929,6 +1778,7 @@ impl AppState {
     /// panic into every future admission.
     fn lock_peer_sched(&self) -> std::sync::MutexGuard<'_, SchedCore<NodeId>> {
         self.inner
+            .serving
             .peer_sched
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -1938,6 +1788,7 @@ impl AppState {
     /// lock-free `ArcSwap` read — safe on the admission hot path.
     fn peer_reciprocity_weight(&self, node: &NodeId) -> f64 {
         self.inner
+            .serving
             .reciprocity_weights
             .load()
             .get(node)
@@ -1981,7 +1832,10 @@ impl AppState {
             })
             .collect();
         let n = weights.len();
-        self.inner.reciprocity_weights.store(Arc::new(weights));
+        self.inner
+            .serving
+            .reciprocity_weights
+            .store(Arc::new(weights));
         tracing::debug!(contributors = n, "reciprocity: peer weights refreshed");
     }
 
@@ -1992,6 +1846,7 @@ impl AppState {
     /// just compares against `now()` on each peer request.
     pub fn set_contribution_paused_until(&self, expiry_unix: i64) {
         self.inner
+            .serving
             .contribution_paused_until
             .store(expiry_unix, std::sync::atomic::Ordering::Relaxed);
     }
@@ -2000,6 +1855,7 @@ impl AppState {
     /// not paused.
     pub fn contribution_paused_until(&self) -> i64 {
         self.inner
+            .serving
             .contribution_paused_until
             .load(std::sync::atomic::Ordering::Relaxed)
     }
@@ -2032,6 +1888,7 @@ impl AppState {
     /// "the user pressed send and the GPU isn't pinned by peer work."
     pub fn yield_peers_to_foreground(&self) -> bool {
         self.inner
+            .serving
             .yield_peers_to_foreground
             .load(std::sync::atomic::Ordering::Relaxed)
     }
@@ -2040,6 +1897,7 @@ impl AppState {
     /// yield window.
     pub fn set_yield_peers_to_foreground(&self, on: bool) {
         self.inner
+            .serving
             .yield_peers_to_foreground
             .store(on, std::sync::atomic::Ordering::Relaxed);
     }
