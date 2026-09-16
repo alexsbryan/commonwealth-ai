@@ -207,7 +207,10 @@ caller classes the tree actually serves, measured: the turn surface is `.localho
 (`turn_http.rs:142`), so only loopback callers — the attached desktop, `svrn chat`, MCP, other
 local processes — reach a turn, and every one is the single local owner; remote callers reach the
 OpenAI-compat surface (`/v1/chat/completions`), which performs no corpus retrieval, or the
-peer-admission-gated mesh routes. The full edge resolver below is still `REVIEW-mint-principal`.
+peer-admission-gated mesh routes. The full edge resolver below landed as `AppState::resolve`
+(`sovereign-api/src/principal.rs`), the one resolution over all five `Principal` arms, which
+`client_auth_layer`, the host's `AdmissionHost::resolve` port and `peer_admission_layer` all call
+(`REVIEW-build-principal-one-resolver`, 2026-09-16).
 
 The resolver, decided:
 

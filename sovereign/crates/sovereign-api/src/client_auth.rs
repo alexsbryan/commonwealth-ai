@@ -65,8 +65,8 @@
 //! inference (which carries no `Authorization` at all) keep working.
 
 use commonwealth_core::ct::constant_time_eq;
-use sovereign_contracts::principal::Principal;
 use sovereign_grants::GuestGrant;
+use sovereign_serving_host::admission::Principal;
 use std::net::SocketAddr;
 use std::sync::Arc;
 

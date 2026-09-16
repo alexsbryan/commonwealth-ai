@@ -8,10 +8,6 @@ license.workspace = true
 [dependencies]
 serving-policy = { workspace = true }
 kernel-types = { workspace = true }
-# The published `Principal` (`sovereign_contracts::principal`) the edge resolver
-# returns directly (domains row REVIEW-build-principal-wire-fold); the layer
-# forbid's `except` at quality/ARCH_LAYERS.toml:704 already permits the edge.
-sovereign-contracts = { workspace = true }
 commonwealth-core = { workspace = true }
 commonwealth-transport = { workspace = true, features = ["fanout"] }
 commonwealth-discovery = { workspace = true }

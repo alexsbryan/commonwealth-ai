@@ -79,7 +79,7 @@ use std::hash::{Hash, Hasher};
 use std::net::SocketAddr;
 
 use axum::http::HeaderMap;
-use sovereign_contracts::principal::Principal;
+use sovereign_serving_host::admission::Principal;
 
 use crate::admission::AdmissionHost;
 use crate::client_auth::ClientAuthPolicy;
