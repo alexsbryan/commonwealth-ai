@@ -441,3 +441,54 @@ Recorded, not changed:
   This audit adds none (K4).
 - **`size-gate` (advisory)** · the campaign's own growth; `warn_gate` by design,
   does not block PREPUSH. Not re-pinned.
+
+## Resolution 2026-09-16 — the lift's RUN half lands, and the closure defect it exposed
+
+The supervisor halted `domains` at "3 iterations without a commit" on
+`REVIEW-build-serving-lift-harness`. The work was coherent and passing; what
+blocked a commit was that `scripts/serving-lift.sh --sandbox` could not reach the
+harness it had just been given. Committed as `f1f4b7b7f`.
+
+**ARCH 6 (never silently substitute) — steps 5-8 were made real, and the lift
+cannot reach them.** Verified by `cargo tree` on 2026-09-15:
+
+    cargo tree -p sovereign-serving-host -i corpus-engine
+      corpus-engine <- sovereign-core <- sovereign-inference <- sovereign-serving-host
+    cargo tree -p sovereign-serving-host -i llama-cpp-4
+      llama-cpp-4 <- sovereign-inference <- sovereign-serving-host
+
+The grandfathered `sovereign-serving-host -> sovereign-inference`
+`[[exception]]` edge puts the whole inference stack in the package's closure, so
+`scripts/serving-lift.sh --sandbox` writes verdict 0 at step 2 —
+`corpus-engine/build.rs:59` requires the sibling `sovereign-recipes/` tree — and
+would write 0 at step 4 (`llama-cpp-4` present). That contradicts SB "The two
+tiers" and the lift's own step 4 ("the inference stack are deliberately outside
+this closure"). The exception's tracking says it clears when "the remote provider
+is reached through `oicp-client`", which is already true for
+`sovereign_inference::remote` (`pub use oicp_client::*`); the remaining reaches
+(`embedded/grammar.rs`'s tool-call parsing, `fim.rs`) were not counted when the
+exception was written.
+
+The plan's premise — that the lift reaches verdict 1 after the peg empties — was
+false. Row and source order corrected together:
+`REVIEW-build-serving-drop-inference` is minted (the burn-down, with the
+`f573999ee` / order ei-5a-build-cut precedent named in the row) and
+`DEMO-d1-serving-lift` now depends on it. `quality/DOMAINS.toml`'s `serving.lift`
+comment named the old cause and now names this one.
+
+**Second, independent blocker, folded into the same row: the lift's toolchain.**
+The sandbox runs the host's default rustup toolchain (1.94.1) while the copied
+`[workspace.package] rust-version = "1.95"` is inherited by every package crate,
+so `cargo build` fails on the MSRV check before any closure is judged. The lift
+must run the sandbox on a toolchain satisfying the declared MSRV or ABSTAIN
+(exit 3) naming the toolchain — a measured `{"value": 0}` from an inadequate
+toolchain is the substitution ARCH §18.2/§18.3 forbids.
+
+**Honest status of the harness row.** Its verb (write the harness, flip steps
+5-8) is done and its `LINT` and `TEST(sovereign-serving-host)` checks pass; its
+lift check yields exit=0 with the lift's own verdict 0, the same shape the
+`dm-serving-lift-skeleton` row was marked on. What is NOT proven is that the lift
+ever RUNS steps 5-8 — that is now `DEMO-d1-serving-lift`'s job, and it cannot
+happen until the burn-down row lands. The row is marked done on its verb; the
+lift's verdict-1 requirement was not weakened and no `[x]` was written on a check
+that fails.
