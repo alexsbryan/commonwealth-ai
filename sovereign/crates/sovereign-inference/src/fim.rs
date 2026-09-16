@@ -26,7 +26,6 @@
 //!   the single/multi-line mode decision, depth tracking, and suffix
 //!   dedupe land in F1.
 
-
 // The pure FIM text moved DOWN to `sovereign-contracts` (domains
 // `REVIEW-build-serving-drop-inference`): it is arithmetic over `FimStyle`,
 // which already lives there, and the serving host must reach it without
