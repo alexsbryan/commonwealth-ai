@@ -22,8 +22,8 @@ sovereign-core = { workspace = true }
 # reads and writes AtosSessionState / FeatureApproval rows into the
 # same gossip-replicated KV store Commonwealth uses for inference
 # state + mesh membership.
-commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
-commonwealth-core  = { path = "../../../commonwealth/crates/commonwealth-core" }
+commonwealth-state = { workspace = true }
+commonwealth-core  = { workspace = true }
 bytes = "1"
 # SHA-256 for spec content hashing.
 sha2 = { workspace = true }

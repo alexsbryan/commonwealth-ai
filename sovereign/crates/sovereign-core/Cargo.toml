@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-oicp-types = { path = "../../../oicp-types" }
+oicp-types = { workspace = true }
 # The daemon↔package contract (error, traits, registry, tool_result_cache,
 # setup_config, types) was carved out here; sovereign-core re-exports every
 # item at its historical path so importers are unaffected.

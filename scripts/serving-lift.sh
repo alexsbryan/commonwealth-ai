@@ -44,17 +44,27 @@
 # the bar's own text forbids. Every abstention below names what was absent, on
 # stderr, before it exits 3.
 #
-# STEPS 5-8 ABSTAIN BY NAME, and steps 1-4 measure for real. The package is
-# declared red and not yet extracted: today step 1 fails because the peg
-# `sovereign-serving` still spells its `commonwealth-{core,state}` deps as
-# relative paths, so the closure cannot leave the monorepo (SERVING_BOUNDARY.md
-# "The two tiers"; rung domains-10 empties the peg). Once steps 1-4 pass, the
-# RUN half — stub OpenAI endpoints, admission 429 with `Retry-After`, replay
-# reproducing every decision, the positive/negative controls and the decider
-# guard — abstains by name rather than printing a pass it did not earn. One
-# honesty note the replay step must carry when it lands: `replay_decision`
-# assumes `RankObjective::Product` (scheduler_core.rs:72-76), so it abstains
-# rather than pass on a record whose objective it cannot read.
+# STEPS 1-4 MEASURE, AND SO DO 5-8. Steps 1-4 prove the closure RESOLVES,
+# BUILDS, TESTS and carries no inference backend outside the monorepo. Steps
+# 5-8 run the package's OWN harness
+# (`sovereign-serving-host/tests/main/serving_lift_harness.rs`, run inside the
+# sandbox so nothing of this monorepo is on the path): it stands up N stub
+# OpenAI endpoints, routes K requests across them, meets a `429` +
+# `Retry-After` on the K+1th, replays every decision, and guards the decider
+# with positive and negative controls. Each step below reads one `LIFT `
+# evidence line the harness printed; the harness asserts the same facts, so a
+# green harness and a green lift cannot disagree.
+#
+# The `429` is the STUB endpoint's refusal, not the host admission's:
+# `admission::shed_response` renders `503 + Retry-After` (this crate's own
+# contract, asserted in `admission.rs`), and `decision_log::looks_shed`
+# (decision_log.rs:907) reads both. The host's `503` shed is the harness's
+# negative control.
+#
+# One honesty note the replay step carries: `replay_decision` assumes
+# `RankObjective::Product` (scheduler_core.rs:72-76), which is the only
+# objective production ranks on (`peer_inference.rs:1775`), so a record whose
+# objective it cannot read is skipped by name, never passed.
 #
 # NOT `set -e`: a failure here is a VERDICT to classify, never an abort.
 set -uo pipefail
@@ -310,18 +320,57 @@ for backend in llama-cpp-4 ort iroh; do
 done
 say "llama-cpp-4, ort and iroh are all absent from the closure"
 
-# ── The RUN half. The package is declared red and not yet extracted, so each
-# ── step below abstains by name rather than printing a pass it did not earn.
+# ── The RUN half. The package's own harness
+# ── (`tests/main/serving_lift_harness.rs`) runs INSIDE the sandbox, so nothing
+# ── of this monorepo is on the path, and prints the `LIFT ` evidence each step
+# ── below reads.
 rule "5. the package RUNS against N stub OpenAI endpoints"
-abstain "step 5 (run against N stub OpenAI endpoints): package not yet extracted"
+(cd "$SANDBOX" && RUSTC_WRAPPER= cargo test -p sovereign-serving-host --test main \
+    -- --nocapture serving_lift_harness 2>&1) \
+  | tee "$SANDBOX/run.log" | grep -E '^LIFT ' >&2
+run_rc=${PIPESTATUS[0]}
+say "harness: rc=$run_rc"
+[ "$run_rc" = 0 ] || verdict 0 "the package's own run harness did not pass in isolation (rc $run_rc, see $SANDBOX/run.log)"
+run_log="$SANDBOX/run.log"
+endpoints=$(sed -nE 's/^LIFT endpoints=([0-9]+).*/\1/p' "$run_log" | head -1)
+requests=$(sed -nE 's/^LIFT endpoints=[0-9]+ requests=([0-9]+).*/\1/p' "$run_log" | head -1)
+served=$(sed -nE 's/^LIFT endpoints=[0-9]+ requests=[0-9]+ served=([0-9]+).*/\1/p' "$run_log" | head -1)
+[ -n "$endpoints" ] && [ "$endpoints" -ge 1 ] || verdict 0 "the run harness reported no stub endpoints (see $run_log)"
+[ -n "$requests" ] && [ "$requests" -ge 1 ] || verdict 0 "the run harness reported no requests (see $run_log)"
+[ -n "$served" ] && [ "$served" -ge "$requests" ] || verdict 0 "the stub pool served $served of $requests request(s) (see $run_log)"
+say "step 5: $served/$requests request(s) served across $endpoints stub endpoint(s)"
 
-rule "6. admission answers 429 with Retry-After"
-abstain "step 6 (admission 429 with Retry-After): package not yet extracted"
+rule "6. the K+1th request meets a 429 with Retry-After"
+# The 429 is the STUB endpoint's refusal; the host's own `shed_response`
+# renders 503 + Retry-After and is the negative control in step 8. The harness
+# asserts the refusal is recorded as a SHED, never a fault.
+shed_count=$(sed -nE 's/^LIFT shed=429 retry_after=[0-9]+ count=([0-9]+).*/\1/p' "$run_log" | head -1)
+[ -n "$shed_count" ] && [ "$shed_count" -ge 1 ] || verdict 0 "the run harness saw no 429 refusal (see $run_log)"
+say "step 6: $shed_count shed(s) recorded, each 429 + Retry-After"
 
 rule "7. replay reproduces every decision"
-abstain "step 7 (replay reproduces every decision): package not yet extracted"
+# Honesty note: `replay_decision` assumes `RankObjective::Product`
+# (scheduler_core.rs:72-76), the only objective production ranks on
+# (peer_inference.rs:1775); a record whose objective it cannot read is skipped
+# by name, never passed. The harness asserts 1.0 policy AND scorer agreement.
+replayed=$(sed -nE 's/^LIFT replay=([0-9]+)\/[0-9]+ scorer=.*/\1/p' "$run_log" | head -1)
+replayable=$(sed -nE 's/^LIFT replay=[0-9]+\/([0-9]+) scorer=.*/\1/p' "$run_log" | head -1)
+scorer_agreed=$(sed -nE 's/^LIFT replay=[0-9]+\/[0-9]+ scorer=([0-9]+)\/[0-9]+.*/\1/p' "$run_log" | head -1)
+scorer_checked=$(sed -nE 's/^LIFT replay=[0-9]+\/[0-9]+ scorer=[0-9]+\/([0-9]+).*/\1/p' "$run_log" | head -1)
+[ -n "$replayed" ] && [ "$replayed" -ge 1 ] || verdict 0 "the run harness reported no replay (see $run_log)"
+[ "$replayed" = "$replayable" ] || verdict 0 "replay reproduced $replayed of $replayable decisions (see $run_log)"
+[ "$scorer_agreed" = "$scorer_checked" ] || verdict 0 "scorer replay agreed on $scorer_agreed of $scorer_checked candidates (see $run_log)"
+say "step 7: $replayed/$replayable decisions and $scorer_agreed/$scorer_checked candidates reproduced"
 
 rule "8. positive and negative control, and the decider guard"
-abstain "step 8 (positive + negative control + decider guard): package not yet extracted"
+decisions=$(sed -nE 's/^LIFT decisions=([0-9]+).*/\1/p' "$run_log" | head -1)
+outcomes=$(sed -nE 's/^LIFT decisions=[0-9]+ outcomes=([0-9]+).*/\1/p' "$run_log" | head -1)
+snapshots=$(sed -nE 's/^LIFT decisions=[0-9]+ outcomes=[0-9]+ snapshots=([0-9]+).*/\1/p' "$run_log" | head -1)
+[ -n "$decisions" ] && [ "$decisions" -ge "$requests" ] || verdict 0 "the decider guard found ${decisions:-no} decisions, want >= $requests (see $run_log)"
+[ -n "$outcomes" ] && [ "$outcomes" -ge "$requests" ] || verdict 0 "the decider guard found ${outcomes:-no} outcomes, want >= $requests (see $run_log)"
+[ -n "$snapshots" ] && [ "$snapshots" -ge 1 ] || verdict 0 "the decider guard found no FleetSnapshot (see $run_log)"
+grep -qE '^LIFT controls=positive:stub_served=[1-9][0-9]* negative:shed_recorded=true' "$run_log" \
+  || verdict 0 "the positive or negative control did not hold (see $run_log)"
+say "step 8: $decisions decision(s), $outcomes outcome(s), $snapshots snapshot(s); positive control served, negative control recorded the shed"
 
-verdict 1 "the serving package resolved, built and passed its own tests outside the monorepo with no inference backend in its closure"
+verdict 1 "the serving package resolved, built, passed its own tests and RAN outside the monorepo ($served/$requests served across $endpoints stub endpoint(s), $shed_count shed(s), $replayed/$replayable decisions replayed), with no inference backend in its closure"

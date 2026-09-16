@@ -290,6 +290,7 @@ arch-layers = { path = "quality/arch-layers" }
 sovereign-contracts = { path = "sovereign/crates/sovereign-contracts" }
 sovereign-core = { path = "sovereign/crates/sovereign-core" }
 sovereign-inference = { path = "sovereign/crates/sovereign-inference" }
+sovereign-scheduler = { path = "sovereign/crates/sovereign-scheduler" }
 sovereign-store = { path = "sovereign/crates/sovereign-store" }
 sovereign-time = { path = "sovereign/crates/sovereign-time" }
 sovereign-tools = { path = "sovereign/crates/sovereign-tools" }

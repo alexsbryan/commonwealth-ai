@@ -27,7 +27,7 @@ sovereign-tools-base = { workspace = true }
 # commonwealth-core's gossip schema. One-way dep: sovereign-tools
 # never re-enters commonwealth-* (path break is enforced by
 # rustc, not just convention).
-commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
+commonwealth-core = { workspace = true }
 # `DriftTool` calls `sovereign_atos::approval::{find_approval,
 # detect_drift, current_spec_hash}` so its verdict matches the
 # daemon's approval_gate middleware exactly. The dep is one-way

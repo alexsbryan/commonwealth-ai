@@ -19,7 +19,7 @@ tracing = { workspace = true }
 # The recording sink is the host's (SERVING_BOUNDARY.md "Corrected
 # 2026-09-14", bullet 1): it serialises the scheduler's record types, mints
 # decision ids, and stamps them from the tier-0 `sovereign-time` leaf.
-sovereign-scheduler = { path = "../sovereign-scheduler" }
+sovereign-scheduler = { workspace = true }
 sovereign-time = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }
@@ -32,7 +32,7 @@ async-trait = { workspace = true }
 # `source_content_validator` names `sovereign-inference` (the grandfathered
 # inference edge); `model_fetch` streams a peer file through reqwest and
 # hashes it on the fly.
-commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
+commonwealth-core = { workspace = true }
 sovereign-inference = { workspace = true }
 reqwest = { workspace = true }
 urlencoding = "2"
