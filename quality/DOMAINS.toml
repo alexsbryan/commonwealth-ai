@@ -662,8 +662,14 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-serving-host/src/peer_inference.rs"
 context = "serving"
-lines = 5493
-note = "THE KNOT - moved host-side by REVIEW-build-serving-move-peer; the EmbeddedDaemon reaches became the VenueSource port + the identity reader, and DeferredDaemon split back to sovereign-mesh/src/venue_host.rs"
+lines = 4692
+note = "THE KNOT - moved host-side by REVIEW-build-serving-move-peer; the EmbeddedDaemon reaches became the VenueSource port + the identity reader, and DeferredDaemon split back to sovereign-mesh/src/venue_host.rs. Its InferenceProvider impl split out at REVIEW-audit-8 (ARCH 3.1)"
+
+[[module]]
+path = "sovereign/crates/sovereign-serving-host/src/peer_inference/provider_impl.rs"
+context = "serving"
+lines = 749
+note = "the InferenceProvider impl for InferenceRouter, split out of peer_inference.rs by REVIEW-audit-8 (ARCH 3.1, #[path]); an impl block has no module path, so no caller changed"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/persist.rs"

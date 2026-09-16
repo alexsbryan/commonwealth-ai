@@ -21,9 +21,9 @@
 
 use std::sync::Arc;
 
+use crate::state::{AppState, AppStateInner};
 use axum::http::HeaderMap;
 use commonwealth_core::ids::NodeId;
-use crate::state::{AppState, AppStateInner};
 
 pub use sovereign_serving_host::admission::{
     client_fair_concurrency_from_env, client_fairness_enabled_from_env, client_fairness_layer,
