@@ -1510,7 +1510,7 @@ async fn run_atos_pipeline(
     request: &mut ChatCompletionRequest,
     pipeline: &serving_policy::pipeline_aliases::PipelineResolution,
 ) -> Result<Option<PostPathGuard>, Response> {
-    let Some(session_store) = state.inner.session_store.clone() else {
+    let Some(session_store) = state.inner.answering.session_store.clone() else {
         debug!("atos pipeline resolved but no session store configured; skipping middleware");
         return Ok(None);
     };
@@ -1535,6 +1535,7 @@ async fn run_atos_pipeline(
     // doesn't silently skip an important step.
     let pipeline_exec = match state
         .inner
+        .answering
         .middleware_registry
         .build_pipeline(&pipeline.middleware)
     {
@@ -1556,6 +1557,7 @@ async fn run_atos_pipeline(
         session_id: Some(session_id.clone()),
         repo_root: state
             .inner
+            .answering
             .repo_root
             .clone()
             .unwrap_or_else(|| std::path::PathBuf::from(".")),

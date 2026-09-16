@@ -28,6 +28,8 @@ use sovereign_serving_host::admission::Principal;
 pub use oicp_types::{EditSlotStatus, FimCompletionRequest, FimStreamStart, LocalInferenceError};
 pub use sovereign_core::traits::LocalInferenceService;
 
+pub mod answering;
+
 /// One inference slot's *actual* in-memory residency, as reported by
 /// the embedded engine — the daemon-facing mirror of
 /// `sovereign_core::traits::ResidentSlot`. Kept as its own type here
@@ -526,21 +528,9 @@ pub struct AppStateInner {
     /// something another node may assert on its behalf (ARCH §18.1 — never
     /// let the subject supply the field a guard reads).
     pub peer_post_split: std::sync::RwLock<std::collections::HashMap<NodeId, bool>>,
-    /// ATOS middleware registry. Holds one instance of each
-    /// middleware the pipelines can reference by id.
-    pub middleware_registry: Arc<crate::middleware::MiddlewareRegistry>,
-    /// ATOS session-state store. `None` until a M4.4+ daemon wires
-    /// it (tests without a MeshStore handle leave this empty; the
-    /// handler skips ATOS pipeline processing when the store is
-    /// absent). ATOS-only — absent entirely in product builds.
-    #[cfg(feature = "atos")]
-    pub session_store: Option<sovereign_atos::session::SessionStore>,
-    /// Repository root the Commonwealth daemon is anchored to —
-    /// the directory that contains `.sovereign/features/`. Used by
-    /// ApprovalGate for git lookups and by ContextInjector for
-    /// reading spec.md. `None` when the daemon wasn't started in a
-    /// repo-like context (degrades ATOS pipelines to a noop).
-    pub repo_root: Option<std::path::PathBuf>,
+    /// Answering's part: the ATOS middleware registry, session store and repo
+    /// root. Held as a part so route shells read it directly (DC §4.2).
+    pub answering: answering::AnsweringPart,
     pub corpus_engine: Option<Arc<CorpusEngine>>,
     /// Process start instant — drives `/status`'s `process.uptime_seconds`
     /// (an uptime reset is the cheap witness that a supervised restart
@@ -1504,10 +1494,12 @@ impl AppState {
                 peer_last_contact: std::sync::RwLock::new(std::collections::HashMap::new()),
                 peer_last_attempt: std::sync::RwLock::new(std::collections::HashMap::new()),
                 peer_post_split: std::sync::RwLock::new(std::collections::HashMap::new()),
-                middleware_registry: Arc::new(middleware_registry),
-                #[cfg(feature = "atos")]
-                session_store,
-                repo_root: std::env::current_dir().ok(),
+                answering: answering::AnsweringPart {
+                    middleware_registry: Arc::new(middleware_registry),
+                    #[cfg(feature = "atos")]
+                    session_store,
+                    repo_root: std::env::current_dir().ok(),
+                },
                 corpus_engine,
                 mesh_store,
                 app_registry,
