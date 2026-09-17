@@ -345,3 +345,57 @@ unnecessary.
 **Landed in.** this commit — `ralph/STATE.md` (three edits: the two `depends`
 lines, the row's RE-SEQUENCED note, and the row back to `[ ]`) and this entry.
 `git revert <sha>` reverts it alone.
+
+## 2026-09-16 · REVIEW-build-api-host-decouple · the daemon's edge is host; the AppState reads defer to the state dissolution
+
+**Fork.** The row lists 29 non-`host` → `host` references across seven host
+modules and asks to resolve each ("moves to a leaf both sides can name or
+becomes a port"), noting the `middleware` seam lifts to sovereign-contracts
+only with the answering move. Sixteen resolve against the tree; thirteen do not
+— the `AppState`/`AppStateInner` reads and the `server::mock_router` /
+`state::test_app_state*` test infrastructure. Are `admission.rs` and
+`principal.rs` serving (as DT tagged them) or host, and where do the AppState
+reads go?
+
+**Choice.**
+
+1. `admission.rs` and `principal.rs` are **host**, retagged in DT.
+   `principal.rs` is `impl AppState { fn resolve }` (an inherent impl cannot
+   leave the crate defining the type); `admission.rs` holds `Arc<AppStateInner>`
+   and `impl Admission for AppState`. DAEMON_CORE.md §3.3 and SERVING_BOUNDARY
+   (c) both call the resolver the daemon's edge and keep the axum middlewares
+   host-side, and the serving *decision* already moved at
+   `REVIEW-build-serving-move-admission` (`abd718469`). They move with
+   `dm-daemon-api-edge` — which does not list them today; that row should absorb
+   them. This breaks the census's `host ↔ serving` cycle: serving's tree in
+   `sovereign-api` goes 1623/2 → 0/0 and host's 31016/50 → 32639/52.
+2. The non-`middleware` items repoint to the leaf that already exists:
+   `FimCompletionRequest` / `EditSlotStatus` / `LocalInferenceError` →
+   `oicp_types` (already `state.rs`'s own source), `LocalInferenceService` →
+   `sovereign_core::traits`; `next_edit_journal.rs`'s unused `State<AppState>`
+   extractor is deleted; `turn_fidelity.rs`'s two `crate::frontdoor` doc links
+   become plain text.
+3. The `AppState` reads **defer**, as the mesh sibling's did
+   (`REVIEW-build-mesh-api-decouple`): `auto_recover.rs` to
+   `REVIEW-build-daemon-parts` (the ingest ports — engine handle, mesh store,
+   emitter, identity reader), `routes_edit_predictions.rs` (the foreground
+   signal, Serving's local-inference handle, the test node) to
+   `dm-daemon-api-state` / `REVIEW-build-daemon-parts`, `server::mock_router` to
+   the test-node assembly DC §4.2 names. The `middleware` seam (5) defers to the
+   answering move, which the row itself states.
+
+**Evidence.** `git grep` over the DT module tags: 29 sites before, 13 after,
+all named above. `python3 scripts/domains-census.py plan --crate sovereign-api`
+before (serving tree 1623/2, `host -> serving` import) and after (serving tree
+0/0, host imports no serving). DAEMON_CORE.md §3.3, §4.1, §4.2;
+SERVING_BOUNDARY.md (c); `git show abd718469`.
+
+**Falsified by.** A showing that the resolver can leave `sovereign-api` —
+E0116 would need `AppState::resolve` to become a free function over a port the
+daemon implements, after which the resolver could live in
+`sovereign-serving-host`; or a port introduced for the AppState reads that
+removes the need for the state dissolution to carry them.
+
+**Landed in.** `0cb82a426` (code + DT; `fba39af69` is its rustfmt) and the
+`ralph: REVIEW-build-api-host-decouple done` commit (`ralph/STATE.md` + this
+entry). `git revert 0cb82a426` reverts the code half alone.
