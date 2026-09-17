@@ -297,7 +297,7 @@ mod tests {
     use super::*;
     use crate::decision_log::{
         CandidateInputs, CandidateKind, CandidateRecord, DecisionBuilder, DecisionPath, LoadSource,
-        LocalObservationRecord, VenueObservationRecord, RequestFacts, ScoreRecord, ServedBy,
+        LocalObservationRecord, RequestFacts, ScoreRecord, ServedBy, VenueObservationRecord,
         Verdict,
     };
     use oicp_types::NodeObservations;
