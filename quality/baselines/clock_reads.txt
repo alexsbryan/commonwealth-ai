@@ -30,7 +30,7 @@
 2	sovereign/crates/sovereign-api/src/routes_internal/mesh_admin.rs
 3	sovereign/crates/sovereign-api/src/state.rs
 2	sovereign/crates/sovereign-api/src/yield_hook.rs
-2	sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs
+2	sovereign/crates/sovereign-daemon/src/bootstrap.rs
 1	sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/lifecycle.rs
 1	sovereign/crates/sovereign-cli-daemon/src/doctor_cmd/checks_freshness.rs
 1	sovereign/crates/sovereign-cli-daemon/src/doctor_cmd/mod.rs

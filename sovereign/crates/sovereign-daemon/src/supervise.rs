@@ -38,7 +38,7 @@ const MAX_RESTARTS: u32 = 5;
 /// captured `Arc`s into a fresh future. Loop-internal state resets on
 /// restart — every task supervised this way is either stateless per
 /// iteration or explicitly idempotent (documented at its site).
-pub(crate) fn spawn_supervised<F, Fut>(name: &'static str, make: F) -> tokio::task::JoinHandle<()>
+pub fn spawn_supervised<F, Fut>(name: &'static str, make: F) -> tokio::task::JoinHandle<()>
 where
     F: Fn() -> Fut + Send + 'static,
     Fut: Future<Output = ()> + Send + 'static,

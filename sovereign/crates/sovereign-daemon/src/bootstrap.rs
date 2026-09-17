@@ -9,8 +9,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use super::discovery_policy;
-use super::lifecycle::daemon_pid_path;
-use super::warn_orphaned_indexes;
+use crate::startup::{daemon_pid_path, warn_orphaned_indexes};
+use crate::EmbeddedDaemon;
 use corpus_engine::{CorpusEngine, EmbedFn};
 use corpus_engine_notes::{NodeRoster, NotePropagationEvent, NoteStore, RosterEntry};
 use kernel_types::NodeId;
@@ -21,7 +21,6 @@ use sovereign_core::model_family::{
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::ToolRegistry;
-use sovereign_daemon::EmbeddedDaemon;
 use sovereign_inference::embedded::EmbeddedLlamaCpp;
 
 /// Resolve this node's persistent id using the same precedence
@@ -29,7 +28,7 @@ use sovereign_inference::embedded::EmbeddedLlamaCpp;
 /// the id baked into `mesh.json`, then generate-and-persist. Shared by the
 /// work-atlas store id and the engine's `self_node_id` so a partition-of-self
 /// lookup matches the daemon's own id.
-pub(super) fn resolve_self_node_id(data_dir: &Path) -> NodeId {
+pub fn resolve_self_node_id(data_dir: &Path) -> NodeId {
     sovereign_mesh::persist::resolve_self_node_id(data_dir)
 }
 
@@ -44,7 +43,7 @@ pub(super) fn resolve_self_node_id(data_dir: &Path) -> NodeId {
 /// carry the truncated `Display` form, because the truncation is lossy
 /// and only the full id makes the prefix match unambiguous. Resolution
 /// and ambiguity handling live in `NodeRoster::resolve`.
-pub(super) fn build_node_roster(data_dir: &Path, self_node_id: NodeId) -> Option<NodeRoster> {
+pub fn build_node_roster(data_dir: &Path, self_node_id: NodeId) -> Option<NodeRoster> {
     let mesh = match sovereign_mesh::persist::load(data_dir) {
         Ok(Some(m)) => m,
         Ok(None) => return None,
@@ -88,7 +87,7 @@ pub(super) fn build_node_roster(data_dir: &Path, self_node_id: NodeId) -> Option
 /// Generation is chosen inside the shared builder
 /// (`sovereign_gliner::configured_model_id`); nothing on this side of the
 /// call knows or needs to know which backend it got.
-pub(super) fn load_gliner_extractor(
+pub fn load_gliner_extractor(
     data_dir: &Path,
 ) -> (
     Option<Arc<dyn sovereign_gliner::LabeledEntityExtractor>>,
@@ -104,7 +103,7 @@ pub(super) fn load_gliner_extractor(
 /// (a zero-vector stub here once poisoned 4M chunks — see inline note), the
 /// batch variant, the NoteStore T1/T2 hooks, the conv-tiered provider, and
 /// the shared GLiNER chunk extractor.
-pub(super) fn build_corpus_engine(
+pub fn build_corpus_engine(
     data_dir: &Path,
     provider: Arc<dyn InferenceProvider>,
     notes_store: Arc<NoteStore>,
@@ -306,7 +305,7 @@ pub(super) fn build_corpus_engine(
 /// `FolderTieredProvider` over the shared `sovereign.db`). Independent of the
 /// engine-side conv provider; `None` (legacy-subprocess fallback) when the
 /// state store can't be opened. Consumes the GLiNER extractor handle.
-pub(super) fn build_folder_tiered_deps(
+pub fn build_folder_tiered_deps(
     data_dir: &Path,
     provider: Arc<dyn InferenceProvider>,
     chunk_entity_extractor: Option<
@@ -345,8 +344,8 @@ const DEFAULT_RPC_BIND: &str = "0.0.0.0:50052";
 /// the host election; this flag only offers the GPU. On a node whose daemon
 /// predates the 2026-07-29 containment fix that distinction matters, because
 /// the discovery flag is what the boot gate reads back — see
-/// [`crate::daemon_cmd::build::containment`].
-pub(super) fn rpc_worker_flag(args: &[String]) -> Option<String> {
+/// [`crate::build::containment`].
+pub fn rpc_worker_flag(args: &[String]) -> Option<String> {
     let mut it = args.iter().enumerate();
     let (i, a) =
         it.find(|(_, a)| a.as_str() == "--rpc-worker" || a.starts_with("--rpc-worker="))?;
@@ -374,7 +373,7 @@ pub(super) fn rpc_worker_flag(args: &[String]) -> Option<String> {
 /// Runs BEFORE [`apply_shared_model_role_to_env`], which only fills
 /// `SOVEREIGN_RPC_SERVE` in when it is unset — so an explicit flag beats the
 /// configured role, matching how an explicit env var already beats both.
-pub(super) fn apply_rpc_worker_flag(args: &[String]) {
+pub fn apply_rpc_worker_flag(args: &[String]) {
     let Some(bind) = rpc_worker_flag(args) else {
         return;
     };
@@ -394,9 +393,7 @@ pub(super) fn apply_rpc_worker_flag(args: &[String]) {
 /// - `Anchor` → serve this node's GPU into the layer-split.
 /// - `Consumer` (default) → neither; the node only queries the shared
 ///   model (that routing is wired separately, not via these env vars).
-pub(super) fn apply_shared_model_role_to_env(
-    cfg: &sovereign_core::setup_config::SharedModelSection,
-) {
+pub fn apply_shared_model_role_to_env(cfg: &sovereign_core::setup_config::SharedModelSection) {
     use sovereign_core::setup_config::SharedModelRole;
     // The shared model this node routes its primary turns into (any role that
     // names one — consumers query it, anchors/host also serve it). Read by the
@@ -521,9 +518,11 @@ fn worker_allowlist() -> Option<Vec<String>> {
 /// `doctor_cmd`), and two of them feed a containment VERDICT — so a divergence
 /// would mean the doctor reporting a containment posture the daemon does not
 /// actually run under.
-pub(crate) fn rpc_discovery_armed() -> bool {
-    std::env::var("SOVEREIGN_RPC_DISCOVER").is_ok()
-}
+///
+/// Lives in `crate::startup` rather than here (moved 2026-09-17) because this
+/// module is gated on `treesitter` and `build/containment` is not; the env read
+/// has no treesitter dependency.
+pub use crate::startup::rpc_discovery_armed;
 
 fn env_rpc_workers() -> Vec<String> {
     // One reader, in `sovereign_inference::embedded` — this function used to
@@ -532,7 +531,7 @@ fn env_rpc_workers() -> Vec<String> {
 }
 
 /// Spawn the mesh RPC-worker auto-discovery loop (opt-in via `SOVEREIGN_RPC_DISCOVER`).
-pub(super) fn spawn_rpc_worker_discovery(
+pub fn spawn_rpc_worker_discovery(
     daemon: Arc<EmbeddedDaemon>,
     engine_handle: Option<Arc<EmbeddedLlamaCpp>>,
     distributed_slot: Option<Arc<sovereign_compute::manager::DynamicChildSlot>>,
@@ -776,7 +775,7 @@ pub(super) fn spawn_rpc_worker_discovery(
                         );
                         // Publish for `/v1/mesh/status` so the mesh soak can assert
                         // the no-split-brain invariant (≤1 host across the fleet).
-                        sovereign_daemon::mesh_http::set_shared_model_host(am_host);
+                        crate::mesh_http::set_shared_model_host(am_host);
                         was_host = am_host;
                     }
 
@@ -1199,7 +1198,7 @@ pub fn spawn_self_manifest_refresh(
 }
 
 /// Spawn the deferred slot-alias push onto the mesh provider.
-pub(super) fn spawn_slot_alias_push(
+pub fn spawn_slot_alias_push(
     daemon: Arc<EmbeddedDaemon>,
     mesh_provider: Arc<sovereign_serving_host::peer_inference::InferenceRouter>,
 ) {
@@ -1281,7 +1280,7 @@ pub(super) fn spawn_slot_alias_push(
 /// Deferred, with the same deadline pattern as the work-atlas broadcaster
 /// wire-up: the roster is derived from live membership, so this cannot run
 /// until `daemon.app_state()` answers.
-pub(super) fn reconcile_local_measurements(daemon: Arc<EmbeddedDaemon>) {
+pub fn reconcile_local_measurements(daemon: Arc<EmbeddedDaemon>) {
     tokio::spawn(async move {
         let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
         let app_state = loop {
@@ -1325,7 +1324,7 @@ pub(super) fn reconcile_local_measurements(daemon: Arc<EmbeddedDaemon>) {
 }
 
 /// Wire NoteStore's outbound propagation sink to publish notes via the mesh store.
-pub(super) fn wire_note_propagation_sink(
+pub fn wire_note_propagation_sink(
     notes_store: Arc<NoteStore>,
     peer_store: Arc<dyn PeerStore>,
     self_node_id: NodeId,
@@ -1436,7 +1435,7 @@ pub(super) fn wire_note_propagation_sink(
 }
 
 /// Spawn the one-shot pre-T1/T2 note tier-artifact backfill (embeddings + entities).
-pub(super) fn spawn_notes_tier_backfill(notes_store: Arc<NoteStore>) {
+pub fn spawn_notes_tier_backfill(notes_store: Arc<NoteStore>) {
     // One-shot tier-artifact backfill: pre-T1/T2 notes (anything
     // written before `embed_fn`/`gliner_fn` were wired) get
     // embeddings + entity rows on a background task so the
@@ -1521,7 +1520,7 @@ pub(super) fn spawn_notes_tier_backfill(notes_store: Arc<NoteStore>) {
 }
 
 /// Spawn the poller that bridges inbound gossip note entries into `NoteStore`.
-pub(super) fn spawn_notes_ingest_poller(
+pub fn spawn_notes_ingest_poller(
     peer_store: Arc<dyn PeerStore>,
     notes_store: Arc<NoteStore>,
     self_node_id: NodeId,
@@ -1649,7 +1648,7 @@ pub(super) fn spawn_notes_ingest_poller(
 }
 
 /// Spawn the lazy canonical-fingerprint stamper for legacy (pre-fingerprint) ingests.
-pub(super) fn spawn_lazy_stamp_fingerprints(engine: Arc<CorpusEngine>) {
+pub fn spawn_lazy_stamp_fingerprints(engine: Arc<CorpusEngine>) {
     // Lazy-stamp canonical fingerprints for any installed
     // canonicals that don't yet carry one (legacy ingests pre-
     // dating the canonical-sync surface). One BLAKE3 over the
@@ -1675,14 +1674,14 @@ pub(super) fn spawn_lazy_stamp_fingerprints(engine: Arc<CorpusEngine>) {
 /// `corpus_engine::index::create::is_vector_index_ready` calls
 /// `mark_vector_index_built` when LanceDB reports a complete index the meta
 /// had not recorded. The ONE reader of that field is
-/// `sovereign_daemon::corpus_catalog_http::catalog`, which prefers it over the
+/// `crate::corpus_catalog_http::catalog`, which prefers it over the
 /// state store's flag — so with no sweep, a corpus whose index finished but
 /// whose meta predates the field reports FTS-only forever.
 ///
 /// It belongs here because this process owns the indexes root and serves the
 /// catalogue that reads the result (ARCH principle 12). Idempotent on every
 /// boot: a corpus already marked built is a read and no write.
-pub(super) fn spawn_vector_index_readiness_sweep(engine: Arc<CorpusEngine>) {
+pub fn spawn_vector_index_readiness_sweep(engine: Arc<CorpusEngine>) {
     // Supervised one-shot: idempotent per the contract above —
     // DAEMON_RESILIENCE.md P0.4.
     crate::supervise::spawn_supervised("vector_index_readiness_sweep", move || {
@@ -1716,7 +1715,7 @@ pub(super) fn spawn_vector_index_readiness_sweep(engine: Arc<CorpusEngine>) {
 }
 
 /// Spawn the tier-2 enrichment resume scan for unfinished workspaces after a restart.
-pub(super) fn spawn_tier2_enrichment_resume(data_dir: &Path) {
+pub fn spawn_tier2_enrichment_resume(data_dir: &Path) {
     // Tier-2 enrichment resume: find any `<...>-tier2` workspace
     // under `<data_dir>/enrichment/` whose checkpoint is incomplete
     // and re-spawn `enrich extract --resume` for each. Picks up
@@ -1771,11 +1770,11 @@ pub(super) fn spawn_tier2_enrichment_resume(data_dir: &Path) {
 
 /// Probe the embed slot and advertise this node's embed-model fingerprint to mesh
 /// peers — gates whether peers route collaborative ingestion here.
-pub(super) async fn advertise_embed_model(
+pub async fn advertise_embed_model(
     provider: Arc<dyn InferenceProvider>,
     config: &SetupConfig,
     resolved_embed_family: ModelFamily,
-) -> sovereign_daemon::EmbedAdvertisement {
+) -> crate::EmbedAdvertisement {
     // Publish this node's embed model fingerprint so peers can filter
     // us in/out of collaborative ingestion.
     //
@@ -1820,7 +1819,7 @@ pub(super) async fn advertise_embed_model(
             %reason,
             "embed model info: NOT advertising to mesh peers — this node holds no embed slot"
         );
-        return sovereign_daemon::EmbedAdvertisement::Unavailable { reason };
+        return crate::EmbedAdvertisement::Unavailable { reason };
     };
 
     match provider.embed("probe").await {
@@ -1885,27 +1884,24 @@ pub(super) async fn advertise_embed_model(
                 normalization = ?normalization,
                 "embed model info: advertising to mesh peers"
             );
-            sovereign_daemon::EmbedAdvertisement::Advertised(embed_info)
+            crate::EmbedAdvertisement::Advertised(embed_info)
         }
-        Err(e) => sovereign_daemon::EmbedAdvertisement::Unavailable {
+        Err(e) => crate::EmbedAdvertisement::Unavailable {
             reason: format!("embed probe failed: {e}"),
         },
     }
 }
 
-/// Build the `/mcp` mount for the daemon's [`sovereign_daemon::ServingCapability`].
+/// Build the `/mcp` mount for the daemon's [`crate::ServingCapability`].
 ///
 /// It used to also install the mesh, admin, reading and solve routers, the
 /// provider factory and the setup config — six separate calls, each of which a
 /// host could omit. The first four are now built by the daemon itself or
 /// declared on the headless variant; only the tool mount is genuinely
 /// host-specific, because only the host knows which tools it registered.
-pub(super) fn build_mcp_surface(
-    tools: ToolRegistry,
-    notes_store: Arc<NoteStore>,
-) -> sovereign_daemon::McpSurface {
+pub fn build_mcp_surface(tools: ToolRegistry, notes_store: Arc<NoteStore>) -> crate::McpSurface {
     let session_id = format!("daemon-{}", uuid::Uuid::new_v4());
-    sovereign_daemon::McpSurface::Mounted(sovereign_daemon::McpMount {
+    crate::McpSurface::Mounted(crate::McpMount {
         tools: Arc::new(tools),
         notes: notes_store,
         session_id,
@@ -1921,7 +1917,7 @@ pub(super) fn build_mcp_surface(
 /// daemon from in here; they are now returned so the caller can name them in
 /// the daemon's variant, which is what makes "the daemon serves a knowledge
 /// digest" a fact of the type rather than of whether this function ran.
-pub(super) async fn start_freshness_pipeline(
+pub async fn start_freshness_pipeline(
     data_dir: &Path,
     notes_store: Arc<NoteStore>,
     engine: Arc<CorpusEngine>,
@@ -1960,7 +1956,7 @@ pub(super) async fn start_freshness_pipeline(
         &mut reindexer,
         Arc::clone(&notes_store),
     );
-    let project_http = sovereign_daemon::project_http::project_router(Arc::clone(&reindexer));
+    let project_http = crate::project_http::project_router(Arc::clone(&reindexer));
 
     // Knowledge-view HTTP surface — POST /v1/knowledge/landscape_digest.
     //
@@ -1992,9 +1988,8 @@ pub(super) async fn start_freshness_pipeline(
         )
         .await,
     );
-    let knowledge_view_http = sovereign_daemon::landscape_digest_http::landscape_digest_router(
-        Arc::clone(&knowledge_view_manager),
-    );
+    let knowledge_view_http =
+        crate::landscape_digest_http::landscape_digest_router(Arc::clone(&knowledge_view_manager));
 
     // Resume any previously-registered projects so FS watchers
     // come back up without the user running `project register`
@@ -2015,7 +2010,7 @@ pub(super) async fn start_freshness_pipeline(
 /// Build the watched-folder reconciliation subsystem (LocalCorpusManager +
 /// enrichment defaults + tiered deps) and spawn its scheduler; returns the held
 /// subsystem handle.
-pub(super) async fn setup_watched_folders(
+pub async fn setup_watched_folders(
     engine: Arc<CorpusEngine>,
     state_store: Arc<dyn sovereign_core::traits::StateStore>,
     data_dir: &Path,
@@ -2024,7 +2019,7 @@ pub(super) async fn setup_watched_folders(
     atlas_builder: Option<
         Arc<dyn sovereign_tools::local_corpus::watched::enrich::AtlasBuildRunner>,
     >,
-) -> Option<sovereign_daemon::watched_folder_setup::WatchedSubsystem> {
+) -> Option<crate::watched_folder_setup::WatchedSubsystem> {
     // ── Watched-folder reconciliation scheduler ─────────────────
     //
     // Constructs the LocalCorpusManager + per-corpus registry,
@@ -2046,7 +2041,7 @@ pub(super) async fn setup_watched_folders(
     // Watched-folder reconciliation subsystem. The full wiring (build
     // registry → resume corpora → install runtime singleton → mount
     // HTTP routes → spawn scheduler) is factored into
-    // `sovereign_daemon::watched_folder_setup` so the desktop's
+    // `crate::watched_folder_setup` so the desktop's
     // embedded daemon can call the same path.
     // Critical: pass the same `recipes_dir` the `CorpusEngine`
     // was constructed with (see the `let recipes_dir = …` block
@@ -2154,7 +2149,7 @@ pub(super) async fn setup_watched_folders(
                 )),
             ));
             Some(
-                sovereign_daemon::watched_folder_setup::WatchedSubsystem::install(
+                crate::watched_folder_setup::WatchedSubsystem::install(
                     Arc::clone(&engine),
                     Arc::new(manager),
                     config.watched_folders.max_concurrent_sweeps,
@@ -2188,11 +2183,11 @@ pub(super) async fn setup_watched_folders(
 /// runs — and binds to its entry node through the same handle. One
 /// `DeferredDaemon` per daemon, or the terminal would resolve its entry node
 /// through a mesh view nobody ever binds (§10.6).
-pub(super) async fn build_mesh_provider(
+pub async fn build_mesh_provider(
     provider: Arc<dyn InferenceProvider>,
-    daemon: Arc<sovereign_daemon::DeferredDaemon>,
+    daemon: Arc<crate::DeferredDaemon>,
 ) -> (
-    Arc<sovereign_daemon::DeferredDaemon>,
+    Arc<crate::DeferredDaemon>,
     Arc<sovereign_serving_host::peer_inference::InferenceRouter>,
     sovereign_contracts::in_flight::LocalInFlightGauge,
 ) {
@@ -2314,7 +2309,7 @@ pub(super) async fn build_mesh_provider(
         sovereign_serving_host::peer_inference::InferenceRouter::builder(Arc::clone(&provider))
             .candidates(Arc::clone(&composite) as Arc<dyn sovereign_scheduler::venue::VenueSource>)
             .host(Arc::clone(&daemon) as Arc<dyn sovereign_serving_host::venue_host::VenueHost>)
-            .manifest(Arc::new(sovereign_daemon::slot_manifest::CoreSlotManifest))
+            .manifest(Arc::new(crate::slot_manifest::CoreSlotManifest))
             .in_flight(in_flight_gauge.arc())
             .build(),
     );
@@ -2337,7 +2332,7 @@ pub(super) async fn build_mesh_provider(
 
 /// Swap the real `MeshBroadcaster` into the deferred handle (peer fan-out) and
 /// spawn the work-atlas TTL GC; returns the GC task handle to hold.
-pub(super) fn finalize_work_atlas(
+pub fn finalize_work_atlas(
     daemon: Arc<EmbeddedDaemon>,
     work_atlas_broadcaster: Arc<sovereign_work_atlas::tools::DeferredBroadcaster>,
     work_atlas_store: Arc<sovereign_work_atlas::WorkAtlasStore>,
@@ -2358,9 +2353,8 @@ pub(super) fn finalize_work_atlas(
             let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
             loop {
                 if let Some(state) = daemon_for_atlas.app_state().await {
-                    let real: Box<dyn sovereign_work_atlas::tools::ClaimBroadcaster> = Box::new(
-                        sovereign_daemon::work_atlas_broadcaster::MeshBroadcaster::new(state),
-                    );
+                    let real: Box<dyn sovereign_work_atlas::tools::ClaimBroadcaster> =
+                        Box::new(crate::work_atlas_broadcaster::MeshBroadcaster::new(state));
                     broadcaster_for_atlas.set(real);
                     tracing::info!("work_atlas: real broadcaster wired (peer fan-out active)");
                     return;
@@ -2383,7 +2377,7 @@ pub(super) fn finalize_work_atlas(
 
 /// Install the AppState foreground-yield hook on the lint/test watchers so their
 /// cargo subprocesses back off under chat-slot memory pressure.
-pub(super) fn install_foreground_yield_hook(
+pub fn install_foreground_yield_hook(
     daemon: Arc<EmbeddedDaemon>,
     lint_watcher: Option<Arc<corpus_engine_watchers::LintWatcher>>,
     test_watcher: Option<Arc<corpus_engine_watchers::TestWatcher>>,
@@ -2437,7 +2431,7 @@ pub(super) fn install_foreground_yield_hook(
 
 /// Write the daemon pidfile (so `daemon stop` can find us) and return its path +
 /// our pid for the shutdown path.
-pub(super) fn write_pidfile() -> (std::path::PathBuf, u32) {
+pub fn write_pidfile() -> (std::path::PathBuf, u32) {
     // ── Pidfile ───────────────────────────────────────────────────
     //
     // `svrn daemon stop` keys off `~/.svrnmesh/daemon.pid` to
@@ -2471,26 +2465,26 @@ pub(super) fn write_pidfile() -> (std::path::PathBuf, u32) {
 /// Bundle of every handle the workspace watchers + Phase-2 work-atlas setup
 /// produces. Destructured at the call site back into locals, so the rest of the
 /// bootstrap reads unchanged.
-pub(super) struct WatcherAtlasSetup {
-    pub(super) watcher_heartbeat: Arc<corpus_engine_watchers::WatcherHeartbeat>,
-    pub(super) lint_watcher: Option<Arc<corpus_engine_watchers::LintWatcher>>,
-    pub(super) test_watcher: Option<Arc<corpus_engine_watchers::TestWatcher>>,
-    pub(super) watched_lint_scope: Option<String>,
-    pub(super) watched_test_scope: Option<String>,
-    pub(super) watcher_monitor: Option<tokio::task::JoinHandle<()>>,
-    pub(super) work_atlas_mesh_store: Arc<sovereign_mesh::peer_adapter::MeshReplicatedKv>,
-    pub(super) work_atlas_store: Arc<sovereign_work_atlas::WorkAtlasStore>,
-    pub(super) work_atlas_broadcaster: Arc<sovereign_work_atlas::tools::DeferredBroadcaster>,
-    pub(super) work_atlas_cfg: sovereign_work_atlas::WorkAtlasConfig,
-    pub(super) work_atlas_repo_root: Option<PathBuf>,
-    pub(super) work_atlas_repo_id: Option<String>,
-    pub(super) work_atlas_branch: Option<String>,
+pub struct WatcherAtlasSetup {
+    pub watcher_heartbeat: Arc<corpus_engine_watchers::WatcherHeartbeat>,
+    pub lint_watcher: Option<Arc<corpus_engine_watchers::LintWatcher>>,
+    pub test_watcher: Option<Arc<corpus_engine_watchers::TestWatcher>>,
+    pub watched_lint_scope: Option<String>,
+    pub watched_test_scope: Option<String>,
+    pub watcher_monitor: Option<tokio::task::JoinHandle<()>>,
+    pub work_atlas_mesh_store: Arc<sovereign_mesh::peer_adapter::MeshReplicatedKv>,
+    pub work_atlas_store: Arc<sovereign_work_atlas::WorkAtlasStore>,
+    pub work_atlas_broadcaster: Arc<sovereign_work_atlas::tools::DeferredBroadcaster>,
+    pub work_atlas_cfg: sovereign_work_atlas::WorkAtlasConfig,
+    pub work_atlas_repo_root: Option<PathBuf>,
+    pub work_atlas_repo_id: Option<String>,
+    pub work_atlas_branch: Option<String>,
 }
 
 /// Resolve the workspace-driven lint/test watchers and the Phase-2 work-atlas
 /// store/observer/supervisor. Returns every handle the rest of the bootstrap
 /// needs as a [`WatcherAtlasSetup`] bundle.
-pub(super) fn setup_watchers_and_work_atlas(
+pub fn setup_watchers_and_work_atlas(
     workspace_dir: &Option<PathBuf>,
     data_dir: &Path,
     lint_store: Arc<corpus_engine_watchers::LintResultStore>,
@@ -2627,7 +2621,7 @@ pub(super) fn setup_watchers_and_work_atlas(
         // unwired.
         match sovereign_work_atlas::resolve_repo_id_allowing_local(ws) {
             Ok((repo_root, repo_id, _source)) => {
-                let branch = sovereign_cli_shared::repo::current_branch(&repo_root);
+                let branch = sovereign_contracts::git::current_branch(&repo_root);
                 let observer = Arc::new(sovereign_work_atlas::AtlasObserver::new(
                     Arc::clone(&work_atlas_store),
                     work_atlas_cfg.clone(),
@@ -2857,11 +2851,11 @@ mod advertise_tests {
             ad.info().map(|i| i.model_id.clone()),
         );
         match ad {
-            sovereign_daemon::EmbedAdvertisement::Unavailable { reason } => assert!(
+            crate::EmbedAdvertisement::Unavailable { reason } => assert!(
                 reason.contains("terminal") && reason.contains("halo"),
                 "the absence must say WHY and name the entry node, got: {reason}"
             ),
-            sovereign_daemon::EmbedAdvertisement::Advertised(_) => {
+            crate::EmbedAdvertisement::Advertised(_) => {
                 unreachable!("asserted absent above")
             }
         }

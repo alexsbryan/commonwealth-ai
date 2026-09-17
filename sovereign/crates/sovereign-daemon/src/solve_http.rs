@@ -399,7 +399,7 @@ impl SolveJob {
         true
     }
 
-    pub(super) fn status_json(&self) -> serde_json::Value {
+    pub fn status_json(&self) -> serde_json::Value {
         let state = self.state.lock().unwrap().clone();
         let rounds: Vec<SolveEvent> = self
             .events
@@ -731,7 +731,7 @@ pub fn solve_router(jobs: Arc<SolveJobs>) -> Router {
         // The solver executes the workdir's test command — this
         // surface must never be reachable off-box.
         .layer(axum::middleware::from_fn(
-            sovereign_daemon::loopback_guard::loopback_only,
+            crate::loopback_guard::loopback_only,
         ))
         .layer(Extension(jobs))
 }

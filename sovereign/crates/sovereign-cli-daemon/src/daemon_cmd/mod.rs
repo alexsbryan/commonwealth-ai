@@ -33,14 +33,12 @@ use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_inference::embedded::EmbeddedLlamaCpp;
 
-// §3.2 split: the run_daemon bootstrap stays here (it's the orchestrator);
-// the separable lifecycle / workspace / provider / worker / tool-registry
-// concerns moved to submodules. `home_dir_buf` + `warn_orphaned_indexes`
-// stay here (the former is shared with submodules as an ancestor-private).
-mod atlas_builder;
-pub(crate) mod bootstrap;
-pub(crate) mod build;
-mod discovery_policy;
+// The composition half of `daemon_cmd` (the bootstrap phases, `build/`, the
+// tool registry, the solve surface and the assembly helpers) moved to
+// `sovereign-daemon` at domains `dm-daemon-cli-composition` (2026-09-17);
+// `run_daemon` below calls `sovereign_daemon::…`. What stays is the process
+// half: argv dispatch, `HELP`, `run_daemon`, the lifecycle verbs and the
+// pidfile.
 mod rlimit;
 mod vram_plan;
 // `pub(crate)` so `setup_cmd::fim` can reach `restart_daemon` directly.
@@ -49,29 +47,19 @@ mod vram_plan;
 // mid-flow would break the one-command promise and leave the verify
 // ladder below with nothing to verify.
 pub(crate) mod lifecycle;
-// Headless OCR install. Compiled unconditionally — the module carries both
-// cfg arms of `install_ocr_ctx` so the single call site in `bootstrap` never
-// grows a `#[cfg]`, and a build without `--features ocr` still logs WHY OCR
-// is unavailable instead of doing nothing.
-mod ocr_install;
-mod principal;
-mod solve_http;
-mod solve_tools;
 // Liveness probe for the pidfile-managed (manual) daemon — consumed by
 // `install-service`'s double-start guard and doctor's supervision check.
 pub(crate) use lifecycle::read_daemon_pid;
-mod provider;
-mod tool_registry;
-mod worker;
-mod workflow_trigger;
-mod workspace;
 
 use lifecycle::{
     reload_daemon, restart_daemon, start_daemon, status_daemon, stop_daemon, wait_for_shutdown,
 };
-use tool_registry::build_tool_registry;
-use worker::run_worker_daemon;
-use workspace::resolve_workspace_dir;
+use sovereign_daemon::bootstrap;
+use sovereign_daemon::solve_http;
+use sovereign_daemon::tool_registry;
+use sovereign_daemon::tool_registry::build_tool_registry;
+use sovereign_daemon::worker::run_worker_daemon;
+use sovereign_daemon::workspace::resolve_workspace_dir;
 
 /// Entry point routed from `main.rs` when the user invokes
 /// `svrn daemon` or one of its subcommands.
@@ -302,7 +290,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     // wakeups; 30 min is comfortably long for a stat() + size check.
     // Supervised: a panic must not silently stop rotation for the rest
     // of the process's life (DAEMON_RESILIENCE.md P0.4).
-    let _rotation_handle = crate::supervise::spawn_supervised("log_rotation", {
+    let _rotation_handle = sovereign_daemon::supervise::spawn_supervised("log_rotation", {
         let log_dir = log_dir.clone();
         move || {
             crate::log_rotation::rotation_loop(
@@ -323,9 +311,10 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     // (`scripts/daemon-supervised.sh` sets it). See `crate::memory_watch`.
     // Supervised: a panicked sampler used to silently disarm the OOM
     // defense (DAEMON_RESILIENCE.md P0.4).
-    let _memory_watch_handle = crate::supervise::spawn_supervised("memory_watch", || {
-        crate::memory_watch::watch_loop(std::time::Duration::from_secs(60))
-    });
+    let _memory_watch_handle =
+        sovereign_daemon::supervise::spawn_supervised("memory_watch", || {
+            crate::memory_watch::watch_loop(std::time::Duration::from_secs(60))
+        });
 
     // ── Load config ───────────────────────────────────────────────
     let config = match config_override.as_ref() {
@@ -426,7 +415,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     let config_path_in_use = config_override
         .clone()
         .unwrap_or_else(sovereign_core::setup_config::SetupConfig::default_path);
-    if !build::preflight::check_vram_reporting(&config, &config_path_in_use) {
+    if !sovereign_daemon::build::preflight::check_vram_reporting(&config, &config_path_in_use) {
         return 1;
     }
 
@@ -474,7 +463,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
 
     // Inference provider — load the embedded llama.cpp provider (3 GGUF
     // slots + extras/idle/rerank wiring); full rationale on
-    // `build::inference::load_provider`. `engine_handle` (concrete) feeds
+    // `sovereign_daemon::build::inference::load_provider`. `engine_handle` (concrete) feeds
     // the RPC-worker auto-reload path; `resolved_embed_family` feeds the
     // mesh embed-model advertisement.
     //
@@ -486,7 +475,10 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     // rather than inventing an address for it.
     let deferred_daemon = Arc::new(sovereign_daemon::DeferredDaemon::new());
     let (provider, raw_engine, resolved_embed_family, distributed_primary_slot) =
-        match build::inference::load_provider(&config, Arc::clone(&deferred_daemon)) {
+        match sovereign_daemon::build::inference::load_provider(
+            &config,
+            Arc::clone(&deferred_daemon),
+        ) {
             Ok(t) => t,
             Err(()) => return 1,
         };
@@ -768,7 +760,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     // search, which is silent, correct, and progressively slower. A desktop
     // user has no way to notice or fix that, so the daemon owns it. See
     // `crate::corpus_maintenance`.
-    crate::corpus_maintenance::spawn(Arc::clone(&engine));
+    sovereign_daemon::corpus_maintenance::spawn(Arc::clone(&engine));
 
     // ── Folder tiered deps ───────────────────────────────────────
     // Watched-folder corpora reuse the conv-tiered table shape
@@ -912,9 +904,9 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
         &data_dir,
         &config,
         folder_tiered_deps,
-        Some(atlas_builder::in_process_atlas_builder(Arc::clone(
-            &routed_provider,
-        ))),
+        Some(sovereign_daemon::atlas_builder::in_process_atlas_builder(
+            Arc::clone(&routed_provider),
+        )),
     )
     .await;
 
@@ -1079,7 +1071,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
             // reachable. Byte-identical to the behaviour this host had
             // before `LaneScope` existed.
             scope: sovereign_runtime_recipe::LaneScope::All,
-            // `build::inference::load_provider` above already installed a
+            // `sovereign_daemon::build::inference::load_provider` above already installed a
             // rerank slot INSIDE the embedded engine from the same
             // `SOVEREIGN_RERANK_MODEL_PATH`. A standalone one here would put
             // the same GGUF in this process twice, and the VRAM pre-flight
@@ -1122,7 +1114,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     }
     let runtime = sovereign_runtime_recipe::commission(sovereign_core::RuntimeParts {
         sensitive_corpora,
-        corpus_principal: Some(Arc::new(principal::LocalOwnerPrincipal)),
+        corpus_principal: Some(Arc::new(sovereign_daemon::principal::LocalOwnerPrincipal)),
         ..common.parts
     });
     tracing::info!(
@@ -1204,7 +1196,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
                 rails: sovereign_daemon::HeadlessRails {
                     // Rebuilds the provider when `models.*` changes on disk. Holds
                     // the same deferred handle, bound below.
-                    provider_factory: Arc::new(provider::LlamaCppFactory {
+                    provider_factory: Arc::new(sovereign_daemon::provider::LlamaCppFactory {
                         daemon: Arc::clone(&deferred_daemon),
                     }),
                     // The work atlas writes into THIS store, so its entries reach
@@ -1418,8 +1410,8 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     let _listener_watch_handle = {
         let bind = config.daemon.client_bind.clone();
         let port = config.daemon.client_port;
-        crate::supervise::spawn_supervised("listener_watch", move || {
-            crate::listener_watch::watch_loop(bind.clone(), port)
+        sovereign_daemon::supervise::spawn_supervised("listener_watch", move || {
+            sovereign_daemon::listener_watch::watch_loop(bind.clone(), port)
         })
     };
 
@@ -1526,7 +1518,7 @@ async fn shutdown_daemon(
     let exit_code: i32 = if crate::memory_watch::hard_exit_requested() {
         eprintln!("svrn daemon exiting non-zero: RSS hard limit (service manager will relaunch)");
         102
-    } else if crate::listener_watch::exit_requested() {
+    } else if sovereign_daemon::listener_watch::exit_requested() {
         eprintln!(
             "svrn daemon exiting non-zero: client listener lost (service manager will relaunch)"
         );

@@ -64,9 +64,9 @@ use sovereign_inference::embedded::EmbeddedLlamaCpp;
 /// this point in the boot — it answers "no peers" until `DeferredDaemon::bind`
 /// — which is correct: a terminal that boots before gossip converges reports
 /// its entry node unreachable and starts serving the moment it appears.
-pub(crate) fn load_provider(
+pub fn load_provider(
     config: &SetupConfig,
-    mesh: Arc<sovereign_daemon::DeferredDaemon>,
+    mesh: Arc<crate::DeferredDaemon>,
 ) -> Result<
     (
         Arc<dyn InferenceProvider>,

@@ -11,7 +11,7 @@ use corpus_engine_notes::NoteStore;
 use corpus_engine_watchers::{LintResultStore, TestResultStore};
 use sovereign_core::ToolRegistry;
 
-pub(super) async fn build_tool_registry(
+pub async fn build_tool_registry(
     data_dir: &std::path::Path,
     engine: Arc<CorpusEngine>,
     notes: Arc<NoteStore>,
@@ -387,11 +387,11 @@ pub(super) async fn build_tool_registry(
 /// single in-memory graph. Same idea as `project_cmd::load_merged_graph`
 /// but without the operator-facing stdout printing, since the daemon
 /// runs under launchd/systemd.
-pub(super) async fn build_merged_scip_graph(
+pub async fn build_merged_scip_graph(
     indexes_dir: &std::path::Path,
-) -> corpus_engine_scip::ScipGraph {
-    let merged =
-        corpus_engine_scip::ScipGraph::open_in_memory("merged").expect("in-memory ScipGraph");
+) -> sovereign_mesh::reindexer::ScipGraph {
+    let merged = sovereign_mesh::reindexer::ScipGraph::open_in_memory("merged")
+        .expect("in-memory ScipGraph");
     let Ok(entries) = std::fs::read_dir(indexes_dir) else {
         return merged;
     };

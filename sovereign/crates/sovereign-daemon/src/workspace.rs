@@ -5,7 +5,14 @@
 
 use std::path::PathBuf;
 
-use super::sovereign_root;
+/// The branded per-user data root. Local because this module moved into the
+/// daemon crate at domains `dm-daemon-cli-composition` (2026-09-17) and may not
+/// name the CLI helper crate (`sovereign-cli-shared`, layer `hosts`) that used
+/// to supply `sovereign_root()`. This is that wrapper's own body —
+/// `sovereign-cli-shared/src/dirs.rs:22-24` delegates here verbatim.
+fn sovereign_root() -> PathBuf {
+    sovereign_contracts::rebrand::svrnmesh_root()
+}
 
 /// Resolve the workspace directory the daemon should watch for
 /// lint/test changes. Returns `None` when the user has not opted in,
@@ -24,7 +31,7 @@ use super::sovereign_root;
 /// missing or non-directory path is treated as "no workspace
 /// configured" (with a warning log so the misconfiguration is
 /// visible in the daemon log without breaking startup).
-pub(super) fn resolve_workspace_dir() -> Option<PathBuf> {
+pub fn resolve_workspace_dir() -> Option<PathBuf> {
     // 1. Explicit env override — preferred for launchd / systemd /
     //    container setups where the daemon doesn't know its own
     //    repo path at build time.

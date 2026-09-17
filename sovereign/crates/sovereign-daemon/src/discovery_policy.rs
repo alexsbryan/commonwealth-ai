@@ -28,14 +28,14 @@ use sovereign_compute::supervisor::SpawnVerdict;
 /// pays a full warm + respawn per worker.
 ///
 /// Shrinks deliberately bypass this — see [`TickInputs::shrank`].
-pub(super) const STABLE: Duration = Duration::from_secs(20);
+pub const STABLE: Duration = Duration::from_secs(20);
 
 /// Everything one discovery tick knows, as data.
 ///
 /// One struct rather than eight arguments so the call site cannot silently
 /// forget a term, and so a test can state a tick declaratively instead of
 /// reconstructing loop-local mutable state.
-pub(super) struct TickInputs<'a> {
+pub struct TickInputs<'a> {
     /// Whether this node won the shared-model host election this tick. Only the
     /// host assembles the split; a non-host anchor still keeps its discovery and
     /// eligibility warm so that election is followed by an immediate assemble.
@@ -104,7 +104,7 @@ impl TickInputs<'_> {
 
 /// What the tick should do to the distributed-primary child.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) enum ChildAction {
+pub enum ChildAction {
     /// Nothing to do: not the host, nothing changed, or a grow still inside the
     /// debounce.
     Hold,
@@ -130,7 +130,7 @@ pub(super) enum ChildAction {
 /// Pure: no clock, no I/O, no locks. Every temporal input arrives as an elapsed
 /// [`Duration`] so a test can state "the set has been empty for 8 seconds"
 /// without sleeping.
-pub(super) fn decide_child_action(t: &TickInputs<'_>) -> ChildAction {
+pub fn decide_child_action(t: &TickInputs<'_>) -> ChildAction {
     // Only the host distributes, and only when something actually moved. Note
     // the ordering: the host/changed/debounce gate is evaluated BEFORE the busy
     // check, matching the original loop — a busy tick inside a quiet window is
@@ -185,11 +185,7 @@ pub(super) fn decide_child_action(t: &TickInputs<'_>) -> ChildAction {
 /// the discovery loop is a tick away from issuing a correct new handoff, and a
 /// stricter all-must-be-eligible rule would hold on a single transient probe
 /// miss. This gate's job is to stop futile work, not to second-guess placement.
-pub(super) fn spawn_gate_verdict(
-    pinned: &[String],
-    eligible: &[String],
-    env: &[String],
-) -> SpawnVerdict {
+pub fn spawn_gate_verdict(pinned: &[String], eligible: &[String], env: &[String]) -> SpawnVerdict {
     if pinned.is_empty() {
         return SpawnVerdict::Allow;
     }
@@ -225,7 +221,7 @@ pub(super) fn spawn_gate_verdict(
 /// about whether to run at all. `SOVEREIGN_LOCAL_FIT_RESERVE_GB` and
 /// `SOVEREIGN_COMPUTE_SPAWN_GATE=0` are the escape hatches when the estimate
 /// is wrong for a given host.
-pub(super) fn host_share_need_bytes(
+pub fn host_share_need_bytes(
     model_bytes: u64,
     local_blocks: u32,
     total_blocks: u32,
@@ -269,7 +265,7 @@ pub(super) fn host_share_need_bytes(
 ///
 /// The equivalent guard on the LocalOnly path predates this one and never
 /// covered the distributed door — see [`ChildAction::Retire`].
-pub(super) fn memory_headroom_verdict(
+pub fn memory_headroom_verdict(
     need_bytes: Option<u64>,
     available_bytes: u64,
     reserve_bytes: u64,

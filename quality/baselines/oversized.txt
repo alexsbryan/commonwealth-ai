@@ -51,7 +51,7 @@
 2746	sovereign/crates/sovereign-api/src/routes_responses.rs
 1259	sovereign/crates/sovereign-api/src/server.rs
 2736	sovereign/crates/sovereign-api/src/state.rs
-2857	sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs
+2857	sovereign/crates/sovereign-daemon/src/bootstrap.rs
 1311	sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/lifecycle.rs
 1589	sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/mod.rs
 1345	sovereign/crates/sovereign-cli-daemon/src/setup_cmd/fim.rs

@@ -15,7 +15,7 @@ use std::sync::Arc;
 /// <file>`. Falls through to the foreground worker daemon; exits when
 /// the owner sends `DELETE /internal/worker/job` (TBD: wire shutdown
 /// from the worker state's flag) or the process receives SIGTERM.
-pub(super) async fn run_worker_daemon(args: &[String]) -> i32 {
+pub async fn run_worker_daemon(args: &[String]) -> i32 {
     // Parse `--bootstrap-blob <path>` if supplied. The env-var path
     // is the production default (Vast injects it via `onstart_cmd`);
     // the file-path mode is for local testing where shell quoting a

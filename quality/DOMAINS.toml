@@ -1580,16 +1580,16 @@ impls_production = [
     "sovereign/crates/sovereign-mesh/src/entry_endpoint.rs:170",
 ]
 inward_callers = [
-    "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/provider.rs:111",
-    "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/provider.rs:117",
-    "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/provider.rs:128",
-    "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/provider.rs:136",
-    "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs:1151",
-    "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs:1203",
-    "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs:2202",
-    "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs:2301",
-    "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs:2308",
-    "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/build/inference.rs:130",
+    "sovereign/crates/sovereign-daemon/src/provider.rs:111",
+    "sovereign/crates/sovereign-daemon/src/provider.rs:117",
+    "sovereign/crates/sovereign-daemon/src/provider.rs:128",
+    "sovereign/crates/sovereign-daemon/src/provider.rs:136",
+    "sovereign/crates/sovereign-daemon/src/bootstrap.rs:1151",
+    "sovereign/crates/sovereign-daemon/src/bootstrap.rs:1203",
+    "sovereign/crates/sovereign-daemon/src/bootstrap.rs:2202",
+    "sovereign/crates/sovereign-daemon/src/bootstrap.rs:2301",
+    "sovereign/crates/sovereign-daemon/src/bootstrap.rs:2308",
+    "sovereign/crates/sovereign-daemon/src/build/inference.rs:130",
 ]
 inward_callers_note = "Eight production sites in ONE crate (bootstrap.rs:2301 and :2308 are the CompositeEndpointSource assembly and the constructor it feeds, counted as one site in prose). sovereign-core has ZERO: its Cargo.toml names no sovereign-mesh / -api / -serving, and every sovereign_mesh:: string inside it is a doc comment. The seam is the trait InferenceProvider at sovereign/crates/sovereign-contracts/src/traits.rs:281 - already a leaf."
 rename = "Fabric says Member; Serving says Candidate (DOMAINS.md section 5 call 1). PeerInferenceEndpoint -> Candidate, PeerEndpointSource -> CandidateSource, PeerCandidateView -> CandidateView. The translation already exists and is already the only door; Phase C is a rename plus moving this function to the Fabric side of the seam, not a new mechanism."
@@ -8456,51 +8456,51 @@ lines = 150
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-daemon/src/corpus_maintenance.rs"
+path = "sovereign/crates/sovereign-daemon/src/corpus_maintenance.rs"
 context = "host"
 lines = 339
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/atlas_builder.rs"
+path = "sovereign/crates/sovereign-daemon/src/atlas_builder.rs"
 context = "host"
 lines = 74
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs"
+path = "sovereign/crates/sovereign-daemon/src/bootstrap.rs"
 context = "host"
-lines = 2869
+lines = 2861
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/build/containment.rs"
+path = "sovereign/crates/sovereign-daemon/src/build/containment.rs"
 context = "host"
 lines = 348
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/build/inference.rs"
+path = "sovereign/crates/sovereign-daemon/src/build/inference.rs"
 context = "host"
 lines = 662
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/build/mod.rs"
+path = "sovereign/crates/sovereign-daemon/src/build/mod.rs"
 context = "host"
 lines = 20
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/build/preflight.rs"
+path = "sovereign/crates/sovereign-daemon/src/build/preflight.rs"
 context = "host"
 lines = 293
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/discovery_policy.rs"
+path = "sovereign/crates/sovereign-daemon/src/discovery_policy.rs"
 context = "host"
-lines = 693
+lines = 689
 note = ""
 
 [[module]]
@@ -8516,19 +8516,19 @@ lines = 1630
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/ocr_install.rs"
+path = "sovereign/crates/sovereign-daemon/src/ocr_install.rs"
 context = "host"
 lines = 296
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/principal.rs"
+path = "sovereign/crates/sovereign-daemon/src/principal.rs"
 context = "host"
 lines = 64
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/provider.rs"
+path = "sovereign/crates/sovereign-daemon/src/provider.rs"
 context = "host"
 lines = 164
 note = ""
@@ -8540,19 +8540,25 @@ lines = 48
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/solve_http.rs"
+path = "sovereign/crates/sovereign-daemon/src/solve_http.rs"
 context = "host"
 lines = 1150
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/solve_tools.rs"
+path = "sovereign/crates/sovereign-daemon/src/solve_tools.rs"
 context = "host"
 lines = 171
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/tool_registry.rs"
+path = "sovereign/crates/sovereign-daemon/src/startup.rs"
+context = "host"
+lines = 77
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-daemon/src/tool_registry.rs"
 context = "host"
 lines = 433
 note = ""
@@ -8564,21 +8570,21 @@ lines = 310
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/worker.rs"
+path = "sovereign/crates/sovereign-daemon/src/worker.rs"
 context = "host"
 lines = 148
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/workflow_trigger.rs"
+path = "sovereign/crates/sovereign-daemon/src/workflow_trigger.rs"
 context = "host"
 lines = 179
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/workspace.rs"
+path = "sovereign/crates/sovereign-daemon/src/workspace.rs"
 context = "host"
-lines = 223
+lines = 230
 note = ""
 
 [[module]]
@@ -8636,7 +8642,7 @@ lines = 675
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-daemon/src/listener_watch.rs"
+path = "sovereign/crates/sovereign-daemon/src/listener_watch.rs"
 context = "host"
 lines = 144
 note = ""
@@ -8750,13 +8756,13 @@ lines = 8
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-daemon/src/supervise.rs"
+path = "sovereign/crates/sovereign-daemon/src/supervise.rs"
 context = "host"
 lines = 145
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-daemon/src/watcher_supervisor.rs"
+path = "sovereign/crates/sovereign-daemon/src/watcher_supervisor.rs"
 context = "host"
 lines = 259
 note = ""
@@ -11561,6 +11567,12 @@ note = ""
 path = "sovereign/crates/sovereign-contracts/src/fim.rs"
 context = "kernel"
 lines = 842
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/git.rs"
+context = "kernel"
+lines = 35
 note = ""
 
 [[module]]
