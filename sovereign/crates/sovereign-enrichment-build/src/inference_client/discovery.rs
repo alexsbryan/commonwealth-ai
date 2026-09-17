@@ -38,10 +38,7 @@ pub(crate) enum DaemonProbe {
 /// production budget is [`V1_MODELS_TIMEOUT`], applied by
 /// [`probe_daemon_status`].
 async fn probe_with_budget(base_url: &str, budget: Duration) -> DaemonProbe {
-    let Ok(client) = reqwest::Client::builder()
-        .timeout(budget)
-        .build()
-    else {
+    let Ok(client) = reqwest::Client::builder().timeout(budget).build() else {
         return DaemonProbe::Down;
     };
     let url = if base_url.ends_with("/v1/models") {
@@ -271,11 +268,8 @@ mod tests {
         // the probe is still waiting at 2 s. This is the assertion the
         // timeout raise was watched red against.
         let base = hanging_server();
-        let outcome = tokio::time::timeout(
-            Duration::from_secs(2),
-            probe_daemon_status(&base),
-        )
-        .await;
+        let outcome =
+            tokio::time::timeout(Duration::from_secs(2), probe_daemon_status(&base)).await;
         assert!(
             outcome.is_err(),
             "probe returned before 2s — the module budget is not applied"
