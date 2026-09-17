@@ -52,9 +52,8 @@ pub use sovereign_serving_host::inference_adapter; // shim: moved by domains REV
 pub mod iroh_access;
 pub mod iroh_watchdog;
 pub mod join;
+pub use corpus_engine_scip::lsp_tier; // shim: moved by domains dm-mesh-workbench-move-scip
 pub use sovereign_turn_client::knowledge_client; // shim: moved by domains REVIEW-build-mesh-client-pair
-#[cfg(feature = "treesitter")]
-pub mod lsp_tier;
 pub mod measurements_rail;
 pub mod mesh_discovery;
 /// Tier-1 scheduler simulator — `SCHEDULER_QUALITY.md` §5. Behind a

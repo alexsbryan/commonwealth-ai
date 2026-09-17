@@ -45,6 +45,12 @@ pub mod converge;
 /// the unusable `symbols.kind` and never-written `refs.ref_kind` columns.
 pub mod descriptor;
 pub mod error;
+/// Compiler-resolved call edges for changed files, asked of a rust-analyzer
+/// that is ALREADY warm — the LSP tier between the tree-sitter overlay and the
+/// full SCIP export. Moved here from `sovereign-mesh` (domains row
+/// dm-mesh-workbench-move-scip): it is code intelligence over the graph, not
+/// mesh machinery.
+pub mod lsp_tier;
 /// Duplicated concept ROLE over the graph — the third feed, seeing what
 /// neither a name census nor a behaviour report can. See the module docs.
 pub mod roles;

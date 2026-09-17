@@ -794,7 +794,7 @@ async fn run_worker(ctx: WorkerCtx) {
     // meanwhile the tree-sitter overlay carries on alone. Dropping the session
     // kills the client process (`kill_on_drop`), so a wedged analyzer cannot
     // outlive the worker.
-    let mut lsp_tier: Option<crate::lsp_tier::LspTier> = None;
+    let mut lsp_tier: Option<corpus_engine_scip::lsp_tier::LspTier> = None;
     // When the full export last RELEASED the machine (not when it was
     // spawned — see `FULL_REBUILD_COOLDOWN`). Stamped by the detached
     // rebuild task's guard on every exit path, read here to gate the
@@ -976,7 +976,7 @@ async fn run_worker(ctx: WorkerCtx) {
                     //     not measured yet. See sovereign/DEFAULTS_LEDGER.md.
                     if sovereign_contracts::env::truthy("SOVEREIGN_SCIP_LSP_TIER") {
                         let graph = rebuild_ctx.merged.load();
-                        crate::lsp_tier::run_edge_pass(
+                        corpus_engine_scip::lsp_tier::run_edge_pass(
                             &mut lsp_tier,
                             &graph,
                             &rebuild_ctx.entry.corpus_id,

@@ -561,7 +561,7 @@ lines = 353
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/lsp_tier.rs"
+path = "corpus-engine-scip/src/lsp_tier.rs"
 context = "workbench"
 lines = 761
 note = ""
