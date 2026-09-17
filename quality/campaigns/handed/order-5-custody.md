@@ -94,18 +94,29 @@ row is an approval-time decision on three data values, answered in the Premises 
   `IndexMeta.query_sharing` (:327) — those are the persistence and wire shapes replication ships,
   and an installed index keeps what it was stamped with; `IndexInfo`; the `grantable` field
   (already non-optional, already defaults false); `CorpusMeta.scope` itself (only its comment);
-  `RegistryEntry.mesh_sharing` (corpus-engine/src/registry.rs:76) and
-  `CorpusDefinition.mesh_sharing` (sovereign-tools/src/corpus/registry.rs:45), neither of which is
-  an egress decider; the enforcement sites that read INDEX metadata (sovereign-mesh
-  capabilities.rs:269, sovereign-api corpus_ingest.rs:285, sovereign-daemon daemon.rs:3926,
-  sovereign-server routes.rs:559) — the flip does not reach them and must not.
+  the two SECOND parsers of the same key (next bullet); the enforcement sites that read INDEX
+  metadata (sovereign-mesh capabilities.rs:269, sovereign-api corpus_ingest.rs:285, sovereign-daemon
+  daemon.rs:3926, sovereign-server routes.rs:559) — the flip does not reach them and must not.
+- **Two SECOND parsers keep their own `true` default, and this row flips neither.**
+  `RegistryEntry.mesh_sharing` — corpus-engine/src/registry.rs:76-77, `#[serde(default =
+  "default_true")]` at :76 over that crate's own `fn default_true()` (registry.rs:112) — and
+  `CorpusDefinition.mesh_sharing` — sovereign/crates/sovereign-tools/src/corpus/registry.rs:45-51,
+  `#[serde(default = "default_mesh_sharing")]` at :45 over a private
+  `fn default_mesh_sharing() -> bool { true }` at :49-51 that a `git grep default_true` cannot see.
+  `RegistryEntry` reaches the desktop catalog type: `Registry::catalog()` (registry.rs:311) maps
+  `e.mesh_sharing` at :321 into `BuiltinCorpus` (corpus-engine/src/types.rs:674, the field at :681).
+  Both keep the shared default after this row, and **whether either reaches an egress decision was NOT
+  established by a reader census** — what was checked is the two defaults and the one flow above,
+  nothing further. Both are named in `quality/campaigns/handed.toml` `[[ability]] custody`
+  `not_covered`, and they are hd-9's subject: "no second reader can resolve absence its own way" is
+  that rung's claim, not this one's.
 - **hd-3 (writers)** under its CUT design touches no file this row touches. The
   `engine/ingest.rs` / `harness/runner.rs` overlap that the 25-row hd-3 shape had is gone.
 - The 64 `[corpus]` tables in `#[cfg(test)]` modules and `tests/` that state no `mesh_sharing`
   become private under the flip. Any test asserting `mesh_sharing == true` on one of them goes red
   and is fixed in this row by stating the key in the fixture, never by reverting the default —
   this is the expected shape of the row's fallout and is not a §6.
-- `sovereign/SYSTEM_OVERVIEW.md` is edited by every rung and is dirty on the tree now; the peer's
+- `sovereign/SYSTEM_OVERVIEW.md` is edited by every rung and was dirty on 2026-09-17 (since committed — clean at round 2); re-check `git status --short` before `git add`, and if the peer's
   hunks must be committed before this row's commit.
 
 ## Done when
@@ -122,29 +133,8 @@ row is an approval-time decision on three data values, answered in the Premises 
 - LINT, TEST(corpus-engine), TEST(sovereign-daemon), TEST(sovereign-server), TEST(sovereign-api)
   exit 0.
 
-**The promise this rung actually makes, narrowed.** *A corpus whose recipe states no sharing policy
-is private, and no recipe or generator in the tree relies on the default.* What that does NOT cover,
-each named rather than implied:
-
-- **Prompt content routed to a peer is not covered.** `select_peers_ranked`
-  (sovereign-serving-host/src/peer_inference.rs:1456) ships a completion — including retrieved
-  corpus text in the prompt — to another node, and nothing in sovereign-serving-host,
-  sovereign-inference or the commonwealth crates reads `mesh_sharing`, `query_sharing` or
-  sensitivity (`git grep -c` over those three trees returns hits only in commonwealth's own `.md`
-  files). That is the campaign's excluded `egress`/`model-reach`, and it is this promise's own
-  subject: a private corpus's content can still leave the node inside a prompt.
-- **Already-installed indexes keep their stamped value.** `IndexMeta.mesh_sharing`
-  (corpus-engine/src/index/mod.rs:323) is written at ingest and read thereafter, so every corpus
-  built before this commit keeps the `true` it was stamped with until it is re-ingested. Peer
-  advertisement (sovereign-mesh capabilities.rs:269) reads the stamp, not the recipe, so the flip
-  changes nothing there. The flip reaches exactly one production decider today —
-  corpus_collaborate.rs:92 — plus every future ingest.
-- **User recipes on disk change meaning.** An installed user recipe that omits the key was shared
-  and becomes private. That is the intended direction (a custody default that errs toward silence),
-  and it is stated here so it is a decision rather than a discovery.
-- **Authored recipes.** The studio's JSON schema
-  (studio/crates/sovereign-recipe-author/src/recipe_schema.rs:154-155) lists both keys and requires
-  neither, so an authored recipe that names neither is now private. No change is made there.
+The promise this rung makes and everything it does not cover live in one record — principle 8:
+`quality/campaigns/handed.toml` `[[ability]] custody`, fields `promise` and `not_covered`.
 
 ## Kill
 

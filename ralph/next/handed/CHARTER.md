@@ -15,17 +15,20 @@ wrong resolution.
 ## Decide these
 
 - Splitting or folding rows; fixing a row whose premise the tree contradicts,
-  when the order (`.sovereign/features/handed-<n>/order.md`) already implies
-  the fix. Cite the order step.
+  when the order (`quality/campaigns/handed/order-<n>-*.md`) already implies
+  the fix. Cite the order step. Those are the COMMITTED orders and the only
+  ones — the `.sovereign/features/handed-<n>-*` copies held the round-1 designs
+  and are removed by `REVIEW-build-hd-0-adopt`.
 - Which of two options an order names; the smaller reversible step over the
   larger; the existing type or decider over a new one (principles 8, 11).
 - Re-running a red gate to understand it, and fixing the code the gate names.
 
 ## Leave these for the operator (write the package and stop)
 
-- Any `HUMAN-hd-` row, and anything that changes behaviour a user or peer can
-  observe beyond what the row states (custody default, sovereign-server's fate,
-  a wire field a client reads).
+- Anything that changes behaviour a user or peer can observe beyond what the
+  row states (custody default, sovereign-server's fate, a wire field a client
+  reads). There are no `HUMAN-hd-` rows in this queue: the five decisions they
+  carried are answered at approval.
 - A `REVIEW-mint-hd-` that needs more rows than its cap.
 - Weakening a PLANT, adding an `[[exception]]`, or widening an `except` list.
 - A kill condition from `quality/campaigns/handed.toml` firing.

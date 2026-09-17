@@ -39,9 +39,7 @@ comment beyond the one the row asks for (ARCH principle 2).
 | `REVIEW-build-hd-` | build the unit (§3); it needs judgment, which is why the stronger model runs it |
 | `REVIEW-mint-hd-` | do not build; decompose into rows (§4), never more than the row's `cap` |
 | `REVIEW-audit-hd-` | full gate and principles review (§4) |
-| `DEMO-hd-` | run the demo command in the row; paste its output; anything but its expected verdict is §6 |
-| `REVIEW-DEMO-hd-` | the same, but it runs in the MAIN workdir (a lane worktree has no built binaries and no gitignored files) |
-| `HUMAN-hd-` | never do it and never mark it: write `ralph/NEEDS_HUMAN.md` (§6) from the row, then stop |
+| `REVIEW-DEMO-hd-` | run the demo command in the row; paste its output; anything but its expected verdict is §6. It runs in the MAIN workdir — a lane worktree has no built binaries and no gitignored files |
 
 ## 3. Building a unit
 
@@ -95,7 +93,6 @@ On Linux every check runs inside the `sovereign-vulkan` toolbox; if
 | TEST(c) | `./scripts/with-cargo-lock.sh ./scripts/sovereign-test.sh --human --package c > target/ralph/test.log 2>&1; echo exit=$?; tail -8 target/ralph/test.log` | exit=0 |
 | LAYER | `(cd corpus-engine && ../scripts/with-cargo-lock.sh cargo xtask layer-gate) > target/ralph/layer.log 2>&1; echo exit=$?; tail -5 target/ralph/layer.log` | exit=0 |
 | TOML | `python3 -c "import tomllib; [tomllib.load(open(p,'rb')) for p in ('quality/campaigns/handed.toml','quality/ARCH_LAYERS.toml','quality/TOPOLOGY.toml')]" && python3 scripts/co-lineage.py list >/dev/null && echo exit=0` | exit=0 |
-| DOCS | `(cd corpus-engine && ../scripts/with-cargo-lock.sh cargo xtask docs-gate) > target/ralph/docs.log 2>&1; echo exit=$?; tail -5 target/ralph/docs.log` | exit=0 (rows that edit a doc) |
 | PLANT(x) | make the one-line violation `x` names, run the gate the row names (LINT or LAYER or TEST(c)), paste its red line, `git checkout --` the plant, run the gate again | red with the plant, exit=0 without it |
 | TESTALL | `./scripts/with-cargo-lock.sh ./scripts/sovereign-test.sh --human > target/ralph/testall.log 2>&1; echo exit=$?; tail -12 target/ralph/testall.log` | exit=0 (audits only) |
 | PREPUSH | `./scripts/pre-push.sh > target/ralph/prepush.log 2>&1; echo exit=$?; tail -20 target/ralph/prepush.log` | exit=0 (audits only) |

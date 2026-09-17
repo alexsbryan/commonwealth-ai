@@ -48,7 +48,7 @@ say refuses by name instead of pretending to record.
 ## Seams
 
 - Do NOT touch: the executor (executor.rs:796-930, including the discarded `mark_failed` at :927); the three real store impls (already total); `HealthStore` and the other defaulted store traits (HT names only the ledger; `durable-state` is not a rung).
-- Files other rungs also touch: `sovereign-core/tests/main/core_tests.rs` (hd-2 `hd-2-seal-core` edits seven `RuntimeParts::new(` calls — this row changes core_tests.rs by 0 lines so the pair fits the 11-line oversized slack; either order works, but not concurrently); `sovereign/SYSTEM_OVERVIEW.md` (every rung; uncommitted peer edits on the tree now — commit after they land).
+- Files other rungs also touch: `sovereign-core/tests/main/core_tests.rs` (hd-2 `hd-2-seal-core` edits seven `RuntimeParts::new(` calls — this row changes core_tests.rs by 0 lines so the pair fits the 11-line oversized slack; either order works, but not concurrently); `sovereign/SYSTEM_OVERVIEW.md` (every rung; a peer's uncommitted edits were on the tree on 2026-09-17 and are committed as of round 2 — re-check `git status --short` before `git add` rather than trusting either statement).
 
 ## Done when
 

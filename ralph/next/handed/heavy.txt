@@ -1,5 +1,8 @@
-# At most ONE of these per wave.
-REVIEW-build-hd-1-complete
-REVIEW-build-hd-2-commission
+# At most ONE of these per wave. LANE rows only — scripts/ralph.py:275-276 skips
+# every `REVIEW-` id in pick_wave, so listing one here constrains nothing (three
+# of the four entries here were REVIEW- rows until round 2). Each of these
+# cold-builds its own worktree target: .ralph/wt/<unit> has no target/ and
+# nothing sets CARGO_TARGET_DIR.
 hd-2-seal-core
-REVIEW-build-hd-3-guard
+hd-2-seal-tests
+hd-3-atlas-guard

@@ -54,12 +54,21 @@ this rung's); both HUMAN rows (both are approval-time decisions with `depends []
   - maintain.rs:287 `prune` (:273) · :332,:359 `optimize` (:325).
   - raptor.rs:306,:334,:350 `build_raptor_index` (:260).
   - mod.rs:749 `migrate_schema` (private, :705) — called from `CorpusIndex::open` at :805.
-- **`_corpus_meta.json` has ONE funnel.** `fn write_meta(index_dir, meta)` — index/mod.rs:770, private.
+- **`_corpus_meta.json` has one funnel plus two raw rewrites, both guarded by step 1.**
+  `fn write_meta(index_dir, meta)` — index/mod.rs:770, private.
   35 call sites go through it: create.rs (:267,:457,:475,:500,:528,:545,:554,:686,:699,:706,:735,:742,:758,:778),
   mod.rs (:660,:666,:807,:996,:1007,:1039,:1054,:1066,:1092,:1105,:1125,:1159,:1175,:1194,:1216,:1235,:1258
   plus four `#[cfg(test)]`), write.rs (:75,:187,:387). So every `set_*` / `write_scope` /
   `backfill_*` / `set_total_shards` / `set_grantable` / `set_personal_scope` / `set_stream_axes`
   writer named in sufficiency finding 8 is covered by guarding this one function — no per-setter row.
+  Three production writers reach the file WITHOUT `write_meta`, all three round-tripping raw
+  `serde_json::Value` to preserve unknown fields, so none can be re-routed through `write_meta`'s
+  typed signature: engine/mod.rs:2543 inside `pub fn migrate_canonical_to_partition` (:2481);
+  sharding.rs:162-166 inside `pub fn promote_single_shard` (:73); snapshot_restore.rs:201 inside
+  `fn patch_meta_corpus_id` (:187), reached from `pub fn restore_snapshot_archive` (:68) at :170.
+  The first two take the guard directly (step 1). The third is already covered by the
+  whole-directory-replace clause in `quality/campaigns/handed.toml` `[[ability]] writers`
+  `not_covered`, which names `restore_snapshot_archive` by name.
 - **Two JSON sidecar writers on `CorpusIndex`** not through `write_meta`: `write_field_checkpoint`
   index/enrichment.rs:520 and `write_field_skeleton` :553 (both `std::fs::write(self.path().join(..))`).
 - **index/enrichment.rs is NOT a writer.** Its seven `.execute()` sites (:26,:77,:125,:178,:232,:306,:415)
@@ -88,7 +97,7 @@ this rung's); both HUMAN rows (both are approval-time decisions with `depends []
 - **The atlas is the same store** (TOPOLOGY.toml:161-166: corpus-index holds "chunks.lance, atlas/,
   asset CAS, _corpus_meta.json, caches"). Every atlas write fn takes `atlas_dir: &Path`, and the
   atlas dir is `<index_dir>/<corpus>/atlas/` (atlas/mod.rs:147), so `atlas_dir.parent()` is the
-  corpus dir the lock keys on. `git grep -nE '^\s*pub (async )?fn (write_|append_|build_and_write|build_wikipedia)'
+  corpus dir the lock keys on. `git grep -nE '^[[:space:]]*pub (async )?fn (write_|append_|build_and_write|build_wikipedia)'
   corpus-engine/src/enrichment/atlas/*.rs corpus-engine/src/enrichment/atlas/store/*.rs` prints
   **22** lines (not 21, and the mint's stated pattern missed `build_wikipedia_columnar_store_from_chunks`):
   writer.rs :84,:127,:318,:419,:491,:503,:517,:550,:582,:632,:653,:675; store.rs :682,:719,:734,:743;
@@ -96,6 +105,19 @@ this rung's); both HUMAN rows (both are approval-time decisions with `depends []
   seed_population.rs:187. Four more writers the pattern does not match (sufficiency finding 8):
   `AnnSeedTable::build` ann_store.rs:214, `doc_to_atoms::write` :176, `section_cache::store` :55,
   and `write_summary_file` summary.rs:~406 reached from the READ path `read_or_compute_summary` :355.
+  Five more public atlas writers the pattern does not match, each taking `atlas_dir` and mutating it
+  (none matches the pattern above — five one-line takes, no new row):
+  `pub async fn build_persistent_ann_seed_table` context.rs:1450 (`remove_dir_all(&dir)` at :1478);
+  `pub fn clear` section_cache.rs:87; `pub fn migrate_atlas_ids` migrate_ids.rs:68;
+  `pub fn apply_atom_delta` atoms_delta.rs:105; `pub async fn build_borrowed_ann_seed_table`
+  wiki_store.rs:746. None of the five is established on a READ path, so none takes step 1's
+  `migrate_schema` warn-and-skip precedent on this evidence: context.rs:1448-1449 says
+  "lifecycle-time only … never the hot query path" and its production callers are `backfill_ann`
+  (context_loader.rs:142) and wiki_store.rs:810; `build_borrowed_ann_seed_table`'s one production
+  caller is the `atlas wikipedia` build verb (sovereign-cli-llm/src/atlas_cmd/wikipedia.rs:604);
+  `migrate_atlas_ids` is reached from `post_build_at` (sovereign-daemon/src/governance_http.rs:790-791),
+  atlas_cmd/migrate_ids.rs:109 and enrich_cmd/delta_cmd.rs:178,:354. The row must re-establish
+  reachability per writer before it propagates a refusal — that check is the row's, not this premise's.
   `atlas_teardown` atlas/mod.rs:146 renames the whole atlas dir aside and deletes it.
 - **Config.** `SetupConfig::save` sovereign-contracts/src/setup_config.rs:2067 → `save_to(path)` :2074
   (`create_dir_all` + `toml::to_string_pretty` + `std::fs::write`, no lock); `remove()` :2085 →
@@ -119,20 +141,34 @@ this rung's); both HUMAN rows (both are approval-time decisions with `depends []
    `Mutex<HashMap<PathBuf, Weak<RunLock>>>` keyed on the canonicalized corpus dir (upgrade before
    acquire, so a cached `CorpusIndex` handle and a nested re-open share one claim and never
    self-refuse), and `Error::WriterHeld { path }`. Guard taken at the top of each mutating method
-   and inside `write_meta`.
+   and inside `write_meta`. Two more takes in the same row, for the two raw meta rewrites that
+   cannot route through `write_meta`: at the top of `migrate_canonical_to_partition`
+   (engine/mod.rs:2481, writes at :2543) and at the top of `promote_single_shard`
+   (sharding.rs:73, writes at :162-166).
 2. The same guard at the atlas write fns — `hd-3-atlas-guard`.
 3. Close the raw handle: `table()`/`connection()` become `pub(crate)`, a `query()` accessor is
    added, the out-of-crate readers move to it, sharding's four `.table().add` writes route through
    the guarded door, the one example that cannot compile is deleted, TOPOLOGY.toml is updated —
    `REVIEW-build-hd-3-close-raw`.
-4. A flock inside `SetupConfig::save_to`/`remove_at` — `hd-3-config-lock`.
+4. A flock inside `SetupConfig::save_to`/`remove_at` — `hd-3-config-lock`. The `config` store is FOUR
+   files (quality/TOPOLOGY.toml:192: `<root>/{config.toml,projects.json,mesh.json,join_key.secret}`)
+   and `save_to` covers one; the other three have independent writers a flock in `save_to` cannot see
+   — `mesh.json` via `persist::save` (sovereign-mesh/src/persist.rs:642) and `save_and_activate`
+   (:681), called from sovereign-daemon/src/daemon.rs:1358,:1709,:2212,:3049,
+   roster_repair.rs:145 and sovereign-mesh/src/gossip.rs:227; `join_key.secret` via
+   `persist::save_join_key` :528 / `save_join_key_for` :552 (`JOIN_KEY_FILE` :37);
+   `projects.json` via `ProjectRegistry::save_to` sovereign-mesh/src/projects.rs:391. So the sentence
+   this row writes into TOPOLOGY.toml is: "`config.toml` is now locked by its writer;
+   `projects.json`, `mesh.json` and `join_key.secret` are not." A second, smaller gap the row also
+   records: `SetupConfig` still derives `Serialize` (setup_config.rs:31) with a pub `default_path()`
+   (:1991), so a thin surface can serialize `config.toml` by hand without going through `save_to`.
 
 ## Seams
 
 - **Must not touch.** The 91 `CorpusIndex::open` READ sites (corpus-read is excluded — campaign.md
   Decisions); IndexMeta / IndexInfo sharing fields (hd-5); the enrichment catalog store
   (`sovereign-enrichment-catalog/src/config.rs:246`, `corpus-engine/src/enrichment/state.rs:294` —
-  dirty on the tree now); `scip_graph.db` and its own flock; asset CAS (engine/mod.rs:559); raw
+  dirty on 2026-09-17, clean as of round 2; either way this order does not touch it); `scip_graph.db` and its own flock; asset CAS (engine/mod.rs:559); raw
   `lancedb::connect` inside corpus-engine and sovereign-tools; the `cancellation-reaches-the-writer`
   invariant (TOPOLOGY.toml:327, not adopted).
 - **hd-5 (custody)** edits `corpus-engine/src/engine/ingest.rs` and `harness/runner.rs`. No hd-3 row
@@ -154,40 +190,16 @@ this rung's); both HUMAN rows (both are approval-time decisions with `depends []
   `REVIEW-build-hd-3-close-raw` LINT red **E0624** on `index.table()` from sovereign-tools;
   `hd-3-config-lock` TEST(sovereign-contracts) red on `a_config_save_is_refused_while_the_lock_is_held`.
 - **Ambient path gone**, both greps empty:
-  `git grep -nE '^\s*pub fn (table|connection)\(' -- corpus-engine/src/index/`
+  `git grep -nE '^[[:space:]]*pub fn (table|connection)\(' -- corpus-engine/src/index/`
+  (`[[:space:]]`, not `\s`: under POSIX ERE the `\s` form matched nothing on the tree
+  BEFORE the work, so that Done-when bullet was satisfied by a broken pattern rather
+  than by a closed handle. With the class it finds index/mod.rs:975 and :980 today.)
   `git grep -n '\.table()\|\.connection()' -- '*.rs' | grep -vE '^corpus-engine/src/(index/|sharding|alignment_projector)|sovereign-(store|daemon|cli-daemon|mesh)/'`
 - LINT, TEST(corpus-engine), TEST(sovereign-contracts), TEST(sovereign-tools), TOML exit 0 at the
   last row; the audit re-runs the four PLANTs.
 
-**The promise this rung actually makes, narrowed.** *No two in-process write paths mutate one index,
-atlas or config at once, and a second PROCESS attempting a write is refused by name.* What that does
-NOT cover, each named rather than implied:
-
-- **Whole-directory replace bypasses every write path**, because it never calls one:
-  `sovereign-mesh/src/canonical_pull.rs:292` (rename over `<index_dir>/<corpus>`);
-  `corpus_engine::restore_snapshot_archive` (corpus-engine/src/snapshot_restore.rs:68);
-  the desktop's `std::fs::remove_dir_all(&index_dir)` (sovereign-desktop/src-tauri/src/import_commands.rs:299,:695);
-  `sovereign-tools/src/local_corpus/writeback.rs`; `sovereign-cli/src/project_init/mod.rs:463`
-  (`remove_dir_all(&existing_index)`). `atlas_teardown` (atlas/mod.rs:146) is the one of this class
-  that IS covered, because it is inside corpus-engine and its signature already names the corpus.
-- **Jobs interleave.** The guard is per-write, not per-job: two processes each running an ingest on
-  one corpus serialize each individual mutation but interleave between them. TOPOLOGY.md:284-287
-  promises no more than that ("two processes writing one corpus index" stays runtime-refusable).
-  Job-level exclusion would be a different mechanism and is not in this rung.
-- **Off unix the flock enforces nothing.** `RunLock::is_enforced()` is `cfg!(unix)` (run_lock.rs:192).
-  The guard logs which it got on every acquire; on Windows the desktop gets an advisory claim and
-  the refusal never fires. Named, not defaulted (principle 6).
-- **Raw `lancedb::connect` stays nameable** inside corpus-engine and sovereign-tools (both list
-  `lancedb` in their Cargo.toml). Closing that is a clippy `disallowed_methods` rule and no gate
-  the loop runs executes clippy.
-- **Config keeps two writers.** After this order the CLI (`model_cmd.rs:378`, `mcp_cmd.rs:236,:283`,
-  `setup_cmd/*`) and the desktop (7 sites in 3 files) both still write `config.toml` — but now both
-  go through `save_to`, so both take the lock. What is not delivered is "the desktop is not a config
-  writer": `SetupConfig` still derives `Serialize` with a pub `default_path()` (setup_config.rs:1991),
-  so a thin surface can serialize the file by hand. TOPOLOGY.toml
-  `a-process-writes-only-what-it-is-granted` :322 therefore stays `holds = false`.
-- The enrichment catalog, `scip_graph.db` and the asset CAS are separate stores and keep their
-  current posture.
+The narrowed promise this rung makes, and every clause it does NOT cover, live in
+`quality/campaigns/handed.toml` `[[ability]] writers` — `promise` and `not_covered`, one record.
 
 ## Kill
 

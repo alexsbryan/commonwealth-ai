@@ -41,6 +41,15 @@ only by a calibrated judge, private constructor, capability token" — and marks
 `GateSurface` already exists as a closed enum of 8 variants with one calibration bank
 each (sovereign-core runtime grounding config.rs ~:460). Every exit names one.
 
+**The persisted-verdict hole the receipt work closes.** Verified 2026-09-17:
+sovereign-core/src/runtime/collaboration.rs:693 writes the refined `Message` with
+`metadata: original_metadata` — the gate meta from BEFORE the refinement — so the STORED
+row carries refined text under the previous turn's verdict, and history, a desktop reload
+and a json replay all read it back that way. `hd-1-refined` fixes the LIVE notice only:
+`collaboration.rs` is at 885/885 lines, inside arch-gate's 800-1200 approach band which
+has no slack, so that row has no headroom for the store-side fix. Whatever shape the
+receipt takes, the write at :693 is one of its sites.
+
 ## Steps
 
 1. Each turn exit names its `GateSurface`. Mechanical, ~14 sites; group by file.
@@ -51,6 +60,11 @@ each (sovereign-core runtime grounding config.rs ~:460). Every exit names one.
    out, and its reason must name the failure, not the intent.
 4. PLANT: hand-roll `Judgement::passed` at a turn exit outside a verifier; LINT reports
    the private-constructor error. Revert, LINT green.
+5. Append every row you mint to the `depends` of `REVIEW-DEMO-hd-7-bench` and of
+   `REVIEW-audit-hd-2` in `ralph/next/handed/STATE.md` (or `ralph/STATE.md` once
+   promoted), in the same commit that mints them. Without it the pool's
+   `first_ready_review` (scripts/ralph.py:256-261) can run the bench and the final
+   audit before the rows they are meant to cover.
 
 ## Kill — read this before minting
 

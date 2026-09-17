@@ -43,6 +43,11 @@ compilation unit — and TOPOLOGY.md:284-287 says so.
 2. Repoint the in-crate callers. Mechanical; group by module, at most ~10 files a row.
 3. PLANT: call a mutating method on a bare `CorpusIndex` inside corpus-engine; LINT
    must report E0599 naming the method. Revert, LINT green.
+4. Append every row you mint to the `depends` of `REVIEW-DEMO-hd-7-bench` and of
+   `REVIEW-audit-hd-2` in `ralph/next/handed/STATE.md` (or `ralph/STATE.md` once
+   promoted), in the same commit that mints them. Without it the pool's
+   `first_ready_review` (scripts/ralph.py:256-261) can run the bench and the final
+   audit before the rows they are meant to cover.
 
 ## Kill
 

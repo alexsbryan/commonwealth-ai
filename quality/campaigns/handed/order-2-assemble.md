@@ -8,7 +8,7 @@ serves: handed
 campaign: handed
 lane: structural — assemble: a Runtime exists only through a named profile
 engine: ralph pool; hd- rows default worker, REVIEW-build rows the stronger model
-budget: 4 rows; TEST on the two behaviour rows; covered by REVIEW-audit-hd-1
+budget: 5 rows; TEST on the two behaviour rows; covered by REVIEW-audit-hd-1
 ---
 
 # Order: handed-2-assemble — commission takes a Launch; nothing else can build a Runtime
@@ -42,21 +42,40 @@ principle 5; the desktop already cannot link the recipe) and sovereign-server's 
 
 ## Steps
 
-1. **Mint the seal and make its dependents a gate**, one commit (nothing depends on the crate yet). New crate `sovereign-commission-seal` (layer `runtime`, zero deps): `pub struct CommissionSeal(());` with `pub fn mint() -> Self`; no `Clone`/`Copy`/`Default`. Then: `[[forbid]]` gains `except_from` (from-side exemption, same wildcard as `except`); a row `from = "*"`, `to = "sovereign-commission-seal"`, `except_from = ["sovereign-core", "sovereign-runtime-recipe"]`. Rejected alternative: two `[[exception]]` rows — that table is a burn-down list whose header says entries are expected to disappear. Row `hd-2-seal`; its PLANT is the layer-gate red on `sovereign-server -> sovereign-commission-seal`.
-2. **Seal `RuntimeParts` in core.** Field `pub seal: CommissionSeal`; constructor `RuntimeParts::sealed(seal, ..the nine)`; `Runtime::new` destructures `seal: _`. For ONE row `RuntimeParts::new` survives as a delegator that mints (so downstream tests still compile), and the recipe plus core's own seven files move to `sealed`. Row `hd-2-seal-core`.
-3. **Downstream tests take the seal through a dev-dependency; delete `RuntimeParts::new`.** Row `hd-2-seal-tests`.
-4. **Commission takes a Launch.** Move `RecipeInputs`, `CommonParts`, `common_parts` and `commission` from recipe lib.rs to `src/commission.rs` (lib.rs re-exports `commission`, `RecipeInputs`, `CommonParts` so `sovereign_runtime_recipe::commission(` stays literal for the census). `RecipeInputs` gains the five host slots (`mesh_knowledge`, `routing_events`, `sensitive_corpora`, `corpus_principal`, `landscape_digests`, types as runtime.rs:458-467); `CommonParts.parts` becomes `runtime: Arc<Runtime>`; `common_parts` goes private; `CommissionSeal::mint()` appears once, inside it. `pub async fn commission(launch: &Launch, inputs: RecipeInputs, progress: &dyn RecipeProgress) -> CommonParts` emits `tracing::info!(target: "capability", launch = launch.as_str(), "runtime: commissioned")` exactly once — the line the hd-7 DEMO pastes. Hosts: daemon passes its `launch`; chat passes a literal `Launch::Verb{name: "chat", ..}` (mesh_cmd.rs:37-46 is the precedent); server passes `&Launch::Server`. A unit test pins that the trace names the launch it was given. SYSTEM_OVERVIEW.md:250 updated (one line). Row `REVIEW-build-hd-2-commission` — the PLANT lands here.
+1. **Mint the seal**, one commit (nothing depends on the crate yet). New zero-dep crate
+   `sovereign-commission-seal` (layer `runtime`): `pub struct CommissionSeal(());` with
+   `pub fn mint() -> Self`; no `Clone`/`Copy`/`Default`. The same row registers it as a workspace
+   member in the root `Cargo.toml` `[workspace] members` (members are enumerated by name, not
+   globbed) and in `[workspace.dependencies]` (Cargo.toml:283), and assigns it a layer in
+   the `runtime` layer in `quality/ARCH_LAYERS.toml` (:215): `evaluate` requires the COMPLETE
+   workspace-member name set (quality/arch-layers/src/lib.rs:280-283) and pushes
+   `Violation::UnassignedCrate` for a member no layer matches (:297), so a member with no layer
+   fails the gate. Row `hd-2-seal-crate`. No PLANT on this row.
+2. **The from-side forbid.** `[[forbid]]` gains `except_from` — a from-side exemption with the same
+   wildcard semantics as `except`: `pub struct Forbid { from, to, except, reason }`
+   quality/arch-layers/src/lib.rs:135-142, and `forbidden_by` :270-276 filters on the `to` side
+   only today. A unit test lands beside `forbid_rule_fires_across_families_and_respects_except`
+   (:507). Then the rule row in quality/ARCH_LAYERS.toml: `from = "*"`,
+   `to = "sovereign-commission-seal"`, `except_from = ["sovereign-core", "sovereign-runtime-recipe"]`.
+   `git grep -n except_from -- quality/arch-layers quality/ARCH_LAYERS.toml` is empty today, so this
+   is a schema addition, not a config edit. Rejected alternative: two `[[exception]]` rows — that
+   table is a burn-down list whose header says entries are expected to disappear. Row
+   `REVIEW-build-hd-2-forbid-from`; its PLANT is the layer-gate red on
+   `sovereign-server -> sovereign-commission-seal`.
+3. **Seal `RuntimeParts` in core.** Field `pub seal: CommissionSeal`; constructor `RuntimeParts::sealed(seal, ..the nine)`; `Runtime::new` destructures `seal: _`. For ONE row `RuntimeParts::new` survives as a delegator that mints (so downstream tests still compile), and the recipe plus core's own seven files move to `sealed`. Row `hd-2-seal-core`.
+4. **Downstream tests take the seal through a dev-dependency; delete `RuntimeParts::new`.** Row `hd-2-seal-tests`.
+5. **Commission takes a Launch.** Move `RecipeInputs`, `CommonParts`, `common_parts` and `commission` from recipe lib.rs to `src/commission.rs` (lib.rs re-exports `commission`, `RecipeInputs`, `CommonParts` so `sovereign_runtime_recipe::commission(` stays literal for the census). `RecipeInputs` gains the five host slots (`mesh_knowledge`, `routing_events`, `sensitive_corpora`, `corpus_principal`, `landscape_digests`, types as runtime.rs:458-467); `CommonParts.parts` becomes `runtime: Arc<Runtime>`; `common_parts` goes private; `CommissionSeal::mint()` appears once, inside it. `pub async fn commission(launch: &Launch, inputs: RecipeInputs, progress: &dyn RecipeProgress) -> CommonParts` emits `tracing::info!(target: "capability", launch = launch.as_str(), "runtime: commissioned")` exactly once — the line the hd-7 DEMO pastes. Hosts: daemon passes its `launch`; chat passes a literal `Launch::Verb{name: "chat", ..}` (mesh_cmd.rs:37-46 is the precedent); server passes `&Launch::Server`. A unit test pins that the trace names the launch it was given. `commission` returns `CommonParts`, NOT a `Result`: the refusal branch and the `Launch` match were cut at round 1, and `AssemblyRefusal` (sovereign-daemon/src/daemon_services.rs:522) is in layer `mesh-api` while the recipe is layer `capabilities` (quality/ARCH_LAYERS.toml:277, :307), so importing it would be an upward edge that fails the LAYER check this row's own check list runs. SYSTEM_OVERVIEW.md:250 updated (one line). Row `REVIEW-build-hd-2-commission` — the PLANT lands here.
 
 ## Seams
 
 - Do NOT touch: `daemon_cmd/tool_registry.rs` (the `/mcp` registry, HT excluded `registries`); the seven TURN_EXECUTION_SITES harnesses (dispatch, not assemble); `TurnFrame::Complete` and every turn exit (hd-1); the MEANING of `corpus_principal`/`sensitive_corpora` — they move from a struct-update into `RecipeInputs` fields with identical values (hd-6 / warrant own principal -> Scope); `EmbeddedDaemon`/`LaunchParts` shape (unchanged; the nesting is by `ServingCore.runtime`).
-- Files other rungs also touch: `sovereign/SYSTEM_OVERVIEW.md` (every rung; uncommitted peer edits on the tree now); `quality/ARCH_LAYERS.toml` + `quality/arch-layers/src/lib.rs` (hd-3's layer-gate rule for `SetupConfig::save`); `sovereign-core/tests/main/core_tests.rs` (hd-4 — 11 lines of oversized slack shared, see Atoms); `sovereign-contracts/src/setup_config.rs` (hd-3's config flock).
-- Peer state now: `sovereign/crates/sovereign-mesh/Cargo.toml` and `sovereign/SYSTEM_OVERVIEW.md` carry uncommitted edits — `hd-2-seal-tests` must not run until those are committed. Domains CUT rows `dm-daemon-cli-composition` and `REVIEW-build-daemon-embedded-split` would relocate `daemon_cmd/mod.rs` and `daemon_services.rs`; they must not be re-dispatched while hd-2 runs.
-- hd-7 owns the single bench DEMO row (HT bar `hd-surfaces`); it depends on `REVIEW-build-hd-2-commission` and pastes this order's `capability` trace line.
+- Files other rungs also touch: `sovereign/SYSTEM_OVERVIEW.md` (every rung; a peer's edits were uncommitted on 2026-09-17, committed as of round 2 — re-check `git status --short`); `quality/ARCH_LAYERS.toml` + `quality/arch-layers/src/lib.rs` (hd-3's layer-gate rule for `SetupConfig::save`); `sovereign-core/tests/main/core_tests.rs` (hd-4 — 11 lines of oversized slack shared, see Atoms); `sovereign-contracts/src/setup_config.rs` (hd-3's config flock).
+- Peer state: `sovereign/crates/sovereign-mesh/Cargo.toml` and `sovereign/SYSTEM_OVERVIEW.md` carried uncommitted peer edits on 2026-09-17 and BOTH are clean as of round 2. The rule stands as a premise the row checks, not as a claim about now: `hd-2-seal-tests` verifies `git status --short sovereign/crates/sovereign-mesh/Cargo.toml` is empty before editing, and stops (§6) if it is not. Domains CUT rows `dm-daemon-cli-composition` and `REVIEW-build-daemon-embedded-split` would relocate `daemon_cmd/mod.rs` and `daemon_services.rs`; they must not be re-dispatched while hd-2 runs.
+- hd-7 owns the single bench DEMO row and runs LAST in the queue; it pastes this order's `capability` trace line.
 
 ## Done when
 
-- `REVIEW-build-hd-2-commission`'s commit body pastes the PLANT red (E0433 on `sovereign_commission_seal` in `sovereign-server/src/main.rs`; E0603/E0425 on `sovereign_runtime_recipe::common_parts`) and the green LINT after revert; `hd-2-seal`'s body pastes layer-gate red on `sovereign-server -> sovereign-commission-seal` and green after revert.
+- `REVIEW-build-hd-2-commission`'s commit body pastes the PLANT red (E0433 on `sovereign_commission_seal` in `sovereign-server/src/main.rs`; E0603/E0425 on `sovereign_runtime_recipe::common_parts`) and the green LINT after revert; `REVIEW-build-hd-2-forbid-from`'s body pastes layer-gate red on `sovereign-server -> sovereign-commission-seal` and green after revert.
 - LINT, LAYER, TEST(sovereign-runtime-recipe), TEST(sovereign-core) exit 0.
 - These return nothing:
   - `git grep -n 'RuntimeParts::new(' -- '*.rs'`
@@ -68,5 +87,5 @@ principle 5; the desktop already cannot link the recipe) and sovereign-server's 
 
 - A non-test path other than the recipe needs a `Runtime` from custom parts (a second mint site in production). None exists today.
 - A process that commissions is not `Daemon | Worker | Server | Verb` (a new `Launch` variant would be needed): stop and redraw — HT bar `hd-structural` kill.
-- The layer-gate owner refuses `except_from` and no existing rule can restrict inbound edges: the seal is then convention, not structure — stop and report rather than landing it (HT bar `hd-structural` kill).
+- The layer-gate owner refuses `except_from` (step 2, row `REVIEW-build-hd-2-forbid-from`) and no existing rule can restrict inbound edges: the seal is then convention, not structure — stop and report rather than landing it (HT bar `hd-structural` kill).
 - Folding `common_parts` needs per-host branching inside the recipe beyond the five data fields (an adapter per host): stop.

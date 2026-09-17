@@ -44,8 +44,12 @@ with it, and the HUMAN row is moot because no behaviour changes.
   - the test ratchet — `match s` at sovereign-api/tests/main/client_auth.rs:446, arms :447, :448,
     under a doc comment (:437-439) that says in English exactly what the plant proves: "adding a
     variant makes it non-exhaustive, so the build breaks HERE".
-  `git grep -n 'Scope::Models(_)\|Scope::Rails(_)' -- '*.rs'` lists all nine arm lines and nothing
-  else. There are **seven** match sites, not two.
+  That is **14** arm lines across **seven** match sites, not two.
+  `git grep -n 'Scope::Models(_)\|Scope::Rails(_)' -- '*.rs'` prints **9** lines — 9 of those 14 arms.
+  The other five bind a name and the grep cannot see them: `Scope::Models(ids)` at
+  routes_internal/guest_grant.rs:136, guest_grant.rs:161 and :197; `Scope::Rails(ns)` at
+  guest_grant.rs:176 and :198. So the grep is a floor on the arms, not a census of them; the
+  enumeration above is the census.
 - `permits_path` (guest_grant.rs:151) is the only decider the auth layer calls
   (sovereign-api client_auth.rs:253) and it consults `paths()` of every scope, so a variant with no
   `paths()` arm cannot reach the allowlist by accident — it cannot compile.
@@ -93,26 +97,8 @@ with it, and the HUMAN row is moot because no behaviour changes.
 - The audit re-runs pass 1 and checks the code is **E0004** ("non-exhaustive patterns"), not merely
   that something was red.
 
-**The promise this rung actually makes, narrowed.** *A GUEST LINK reaches exactly the scopes it
-names, and a scope kind cannot be added without every decider being made to name it.* What that does
-NOT cover, named rather than implied:
-
-- **A mesh member on `CLIENT_ALPN` is admitted by membership, and `Limits` does not cover it.**
-  `ClientSurface::Peer` is the third bind of the client router
-  (sovereign-api/src/client_surface.rs:26 table; sovereign-daemon/src/daemon.rs:3574-3588). The
-  acceptor forwards a member over `TcpStream::connect("127.0.0.1")`, so the peer arrives as
-  loopback, and `client_auth.rs:218` admits any loopback caller when `trust_loopback` holds —
-  which it does for `Peer` (`auth_policy`, client_surface.rs:70-74). The member's key, proved at the
-  QUIC handshake, IS the grant; no `Scope` and no `GuestGrant` is ever consulted on that path. The
-  surface serves `/v1/*` and mounts no `/internal/*` (closed 2026-08-28, note `3d2f1ae0`), so the
-  gap is "a member reaches every route the Peer surface mounts", not "a member reaches everything".
-  Making membership a grant with kinds is warrant wr-2, which is parked.
-- **`EphemeralIngestGrant` and knowledge-assignment are untouched.** They are separate grant types
-  with separate deciders; nothing in this rung reaches them.
-- **The rung changes no behaviour at all.** It converts an unwatched claim into a watched one. If
-  the operator wants the two declared guest-grant behaviour changes (an empty model list becoming
-  indistinguishable from no model kind; `{"scopes":{"models":[]}}` refused at mint), those are the
-  warrant campaign's, not this rung's, and they need the `Limits` type this order does not mint.
+The promise this rung makes and everything it does not cover live in one record — principle 8:
+`quality/campaigns/handed.toml` `[[ability]] principal`, fields `promise` and `not_covered`.
 
 ## Kill
 

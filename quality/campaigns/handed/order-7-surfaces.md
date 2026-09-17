@@ -15,11 +15,12 @@ budget: 1 row; no build rows, no HUMAN row
 
 ## Objective
 
-Predicate half 2 and bar `hd-surfaces` (target 1): the bench serves one grounded and one generative turn
-**in-process**, and both terminal values show the verdict hd-1 put on them, under the profile hd-2 made
-structural. This order builds nothing. It runs one command and pastes three lines: two
-`turn.verdict: serve_turn complete` lines — the grounded one reading `verdict=passed` or `verdict=failed`,
-the generative one `verdict=never-ran` — and the one `runtime: commissioned launch=…` line.
+Predicate half 2 (bar `hd-surfaces` was deleted at round 2 — see `## Done when`): the bench serves one
+grounded and one generative turn **in-process**, and both terminal values show the verdict hd-1 put on
+them, under the profile hd-2 made structural. This order builds nothing. It runs one command and pastes
+three lines: two `turn.verdict: serve_turn complete` lines — the grounded one reading `verdict=passed` or
+`verdict=failed`, the generative one `verdict=never-ran` — and the one `runtime: commissioned launch=…`
+line.
 
 Cut at round 1 (2026-09-17): the desktop driver script, the daemon-restart HUMAN row, and the chat / HTTP /
 desktop DEMOs. All four surfaces terminate in ONE `TurnFrame::Complete` builder (serve.rs:306, :425, :506),
@@ -64,7 +65,7 @@ only door to a `Runtime`, so every served turn has a named profile structurally.
   - `quality/campaigns/handed/order-1-render.md` step 2 / row `REVIEW-build-hd-1-complete`:
     `tracing::info!(target: "turn.verdict", conversation_id, message_id, verdict = …, reason = …, source = …, "turn.verdict: serve_turn complete")`,
     emitted once per turn at the one `Complete` builder.
-  - `quality/campaigns/handed/order-2-assemble.md` step 4 / row `REVIEW-build-hd-2-commission`:
+  - `quality/campaigns/handed/order-2-assemble.md` step 5 / row `REVIEW-build-hd-2-commission`:
     `tracing::info!(target: "capability", launch = launch.as_str(), "runtime: commissioned")`, emitted
     exactly once per process.
 - **The pool runs this row in the main workdir.** `Pool.run` takes `first_ready_review` before
@@ -77,6 +78,10 @@ only door to a `Runtime`, so every served turn has a named profile structurally.
   the debug target is under `RALPH_CLEAN_MB` (default 51,200 MB) — scripts/dev-build.sh:104-120 — and LINT
   is `cargo check`. So the row builds explicitly with the sanctioned debug build
   (`scripts/dev-build.sh`, `--workspace --features corpus-engine/treesitter,sovereign-cli/dev-tools`, :123-135).
+  Round 2 dropped `CLEAN` from the row's `check:` list for the other half of the same fact: CLEAN *is*
+  `dev-build.sh --clean --gate-only` (PROMPT §5), this row changes no tracked file, and running both was
+  two invocations of one script. **Step 2's own `exit=` is the build evidence** — there is no separate
+  CLEAN to read.
 - `sovereign-cli` is a dispatcher that `exec`s `sovereign-cli-llm` for `bench`; a full workspace build
   produces both, and the environment (including `RUST_LOG`) survives the exec.
 - `svrn` is not on this host's PATH; `~/.local/bin/sovereign -> target/debug/sovereign-cli`. The row calls
@@ -131,10 +136,12 @@ error in the log is not a failure of this row; a missing or wrong-verdict `turn.
 - Depends on hd-1's `turn.verdict` trace and on hd-2's `capability` trace, both quoted in Premises. If
   either message text differs from the literal there, the grep is the instrument that says so — that is a
   finding against the row that emitted it, not a reason to loosen the grep.
-- The seat places this row LAST in `ralph/STATE.md` and adds the final `REVIEW-audit-hd-*` id to its
-  `depends` when the audit rows are inserted (PROMPT §4: the seat inserts audit rows). Without that, the
-  pool's `first_ready_review` will run it as soon as its two named dependencies are `[x]`, which may be
-  mid-campaign — the evidence is still valid, but a later lane could regress it unobserved.
+- **Ordering, taken at round 2.** This row runs LAST. Its `depends` carries the three `REVIEW-mint-hd-`
+  rows and the rows those mints produce — each mint order's last step appends what it mints to this row's
+  `depends` and to the final audit's — and the FINAL audit `REVIEW-audit-hd-2` depends on this row and
+  covers it. Why it has to be that way: `first_ready_review` (scripts/ralph.py:256-261) returns the first
+  PENDING or ACTIVE `REVIEW-` row whose deps are met, so with only its two build dependencies named it
+  would fire mid-campaign. The evidence would still be valid; a later lane could regress it unobserved.
 - Reads the operator's resident corpora and models over loopback and starts, stops and restarts nothing.
 - Three of the four surfaces named in the campaign's `today` line (chat, daemon HTTP, desktop) go through
   the daemon's turn wire, which hd-1 changes with no serde default. They are not exercised here, and the
@@ -144,10 +151,17 @@ error in the log is not a failure of this row; a missing or wrong-verdict `turn.
 ## Done when
 
 - The row is `[x]` with the three lines of step 4 pasted in its commit body, alongside both `exit=` values.
-- Bar `hd-surfaces` measures **1** (this row is the instrument the bar names).
-- This rung lands no `enforced_by` and deletes no ambient path — stated rather than implied. It is bar
-  `hd-surfaces`'s measurement, and its Done-when IS the pasted evidence. The predicate's structural half
-  and every PLANT belong to rungs hd-1 … hd-6.
+  Those three lines and the two `exit=` values ARE this row's evidence; there is no bar to measure. Bar
+  `hd-surfaces` was deleted at round 2 — nothing ever recorded a `bar-measurement` row for it, and
+  `verdict_of_bar` (scripts/co-lineage.py:431-435, the only reader of a bar verdict) returns
+  never-attempted when a bar has no rows, so it would have read NEVER-MEASURED forever.
+- The RECORD is rung `hd-7`'s `status`, flipped in `quality/campaigns/handed.toml` by the final audit
+  `REVIEW-audit-hd-2`. No other row edits that file.
+- **A pass takes two runs, because every Kill below takes two.** The final audit re-runs step 3 and pastes
+  it a second time; one passing run is not the verdict (principle 7 — a judge is never tuned in one
+  direction).
+- This rung lands no `enforced_by` and deletes no ambient path — stated rather than implied. Its Done-when
+  IS the pasted evidence. The predicate's structural half and every PLANT belong to rungs hd-1 … hd-6.
 - Read back as a shape check, printing nothing: `grep -c 'verdict=' target/ralph/hd7-bench.log` is **2**,
   and `grep 'turn\.verdict: serve_turn complete' target/ralph/hd7-bench.log | grep -v 'verdict='` is empty.
 

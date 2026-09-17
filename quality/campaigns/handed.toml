@@ -15,7 +15,7 @@ status    = "staged"   # next up after domains; `scripts/ralph.py promote handed
 # second is the load-bearing one.
 [predicate]
 statement = "Every [[ability]] below is structural — the planted violation its rung names goes red, and the tree is green — and the bench serves one grounded and one generative turn in-process, pasting both verdicts and the commission trace line"
-check     = "./scripts/sovereign-lint.sh --human --full && (cd corpus-engine && cargo xtask layer-gate) && ./scripts/sovereign-test.sh --human"
+check     = "./scripts/with-cargo-lock.sh ./scripts/sovereign-lint.sh --human --full && (cd corpus-engine && ../scripts/with-cargo-lock.sh cargo xtask layer-gate) && ./scripts/with-cargo-lock.sh ./scripts/sovereign-test.sh --human"
 
 # ── THE SCOREBOARD ───────────────────────────────────────────────────────────
 # A row is structural in the commit that lands its enforced_by AND deletes the
@@ -27,27 +27,48 @@ check     = "./scripts/sovereign-lint.sh --human --full && (cd corpus-engine && 
 
 [[ability]]
 id          = "assemble"
+rungs       = ["hd-2"]
 promise     = "a Runtime exists only through `commission`, and `commission` names the profile it is built for"
-enforced_by = "RuntimeParts requires a CommissionSeal that only sovereign-runtime-recipe can mint (E0433 anywhere else); layer-gate forbids any other crate depending on the seal crate"
+enforced_by = "RuntimeParts requires a CommissionSeal; the seal crate's `[[forbid]]` rule excepts only sovereign-core and sovereign-runtime-recipe on the from side, so a mint anywhere else in production is E0433. Four crates take the seal under `[dev-dependencies]`, which the layer map exempts (ARCH_LAYERS.toml:6-7) — the claim is 'no production crate but those two', not 'only the recipe'"
 today       = "three hosts build RuntimeParts by struct-update on common.parts; 21 RuntimeParts::new calls in 12 files (20 of them tests); `commission` exists (sovereign-runtime-recipe/src/lib.rs:385) and decides nothing"
 not_covered = "sovereign-server is converted in place; whether it should exist at all is a separate decision"
 
 [[ability]]
 id          = "render"
+rungs       = ["hd-1", "hd-10"]
 promise     = "every released text carries a verdict from a verifier that ran on it"
 enforced_by = "Complete.judgement is required and serve.rs is its only builder (E0063); every exit names a GateSurface and every surface has a verifier; Judgement's constructors are private behind a receipt only a verifier mints, so an exit cannot hand-roll a verdict (rung hd-10)"
-today       = "the gate outcome rides `metadata: Option<TurnMetadata>`; `Draft::release_ungated` has 0 callers; MessageRefined swaps the answer text after Complete at five sites"
-not_covered = "no user-facing surface renders the verdict except `--format json` and the desktop payload (EpistemicFooter.svelte:10-21 reads the epistemic ledger, render.rs:281 renders provenance, mobile renders nothing) — a candidate rung, not funded here. `could_not_judge` still ships text: a verifier that RAN and abstained is not a verifier that never ran, and which verdicts force a rewrite is turn policy, enforced at runtime"
+today       = "the gate outcome rides `metadata: Option<TurnMetadata>`; MessageRefined swaps the answer text after Complete at three production sites (collaboration.rs:679,:705,:729) plus three test constructions"
+not_covered = """
+no user-facing surface renders the verdict: `hd-1-surfaces-print` was cut at round 2 (no plant, no test, nothing read either field), so `--format json` and the desktop `message-complete` payload still drop it, EpistemicFooter.svelte:10-21 reads the epistemic ledger instead, render.rs:281 renders provenance, and mobile renders nothing. A candidate rung, not funded here.
+`could_not_judge` still ships text: a verifier that RAN and abstained is not one that never ran, and which verdicts force a rewrite is turn policy, enforced at runtime.
+A THIRD MessageResponse — the desktop's own, sovereign-desktop/src-tauri/src/commands/mod.rs:13 — carries `metadata: Option<Value>` (:19), an untyped blob the compiler will NOT name when the daemon's and the server's are converted, so it ships with no verdict.
+`ApprovalChannel::emit_message_refined` has a no-op default body (sovereign-contracts/src/traits.rs:2008) and only SocketApprovalChannel overrides it (turn_approval.rs:298); AutoApprovalChannel (executor.rs:235) and ServerApprovalChannel (sovereign-server/src/approval.rs:103) discard the notice, judgement and all. Deleting that default is a rung of its own — it is hd-4's defect 200 lines up the same file.
+The PERSISTED refined row keeps the pre-refinement verdict: collaboration.rs:693 writes `metadata: original_metadata`, so history, a desktop reload and a json replay all show refined text under the previous turn's verdict. hd-1-refined fixes the live notice only (885/885 lines, arch-gate's no-slack band); hd-10 owns the fix.
+`TurnFrame::StreamError` (sovereign-contracts/src/types/turn.rs:147-153) is a fourth terminal — the contract at :350-351 says Complete and StreamError both settle — with no judgement slot and no row touching it.
+"""
 
 [[ability]]
 id          = "writers"
-promise     = "no two in-process write paths mutate one index, atlas or config at once, and a second process is refused by name"
+rungs       = ["hd-3", "hd-8"]
+promise     = "a second PROCESS writing one index, atlas or config is refused by name"
 enforced_by = "`table()`/`connection()` pub(crate) so an out-of-crate write is E0624; the mutating methods move behind a CorpusWriter facade that acquires the flock, so an in-crate write without it is E0599 (rung hd-8); a per-corpus flock (the `.rebuild.lock` precedent, corpus-engine-scip/src/scip_graph.rs:483-500) and a flock inside SetupConfig::save_to"
 today       = "no lock on the corpus index; TOPOLOGY.toml has 4 of 7 invariants false; SetupConfig::save_to is a plain fs::write"
-not_covered = "whole-directory replace bypasses every write path — canonical_pull.rs:292, restore_snapshot_archive, the desktop's import remove_dir_all, local_corpus/writeback.rs:383, project_init/mod.rs:463. Cross-process exclusion is a runtime refusal by construction: another process is not in this compilation unit"
+not_covered = """
+two write paths inside ONE process share the claim by design: the `Weak` map is what lets eleven nested writes (maintain.rs:374, create.rs:854/:917, write.rs:75, mod.rs:806-807 and seven `mark_*` helpers) run at all, since RunLock refuses a second same-process acquire on one path (run_lock.rs:210-222). `two_handles_in_one_process_both_write` pins the sharing. In-process exclusion would need an owned Mutex, not a shared Weak — hd-8 makes the door compile-enforced, not exclusive.
+whole-directory replace bypasses every write path, because it never calls one — canonical_pull.rs:292 (rename over `<index_dir>/<corpus>`), restore_snapshot_archive (snapshot_restore.rs:68), the desktop's import remove_dir_all (import_commands.rs:299,:695), local_corpus/writeback.rs:383, project_init/mod.rs:463. `atlas_teardown` (atlas/mod.rs:146) is the one of this class that IS covered: it is inside corpus-engine and its signature already names the corpus.
+two in-crate raw meta rewrites cannot route through `write_meta`'s typed signature (both round-trip serde_json::Value to preserve unknown fields) and take the guard directly instead: engine/mod.rs:2543 in `migrate_canonical_to_partition`, sharding.rs:162 in `promote_single_shard`.
+jobs interleave: the guard is per-write, not per-job, so two processes each ingesting one corpus serialize every mutation and interleave between them (TOPOLOGY.md:284-287 promises no more).
+off unix the flock enforces nothing — `RunLock::is_enforced()` is `cfg!(unix)` (run_lock.rs:192); the guard logs which it got.
+raw `lancedb::connect` stays nameable inside corpus-engine and sovereign-tools; closing it is a clippy rule and no gate the loop runs executes clippy.
+config keeps two writers — the CLI (model_cmd.rs:378, mcp_cmd.rs:236,:283, setup_cmd/*) and the desktop (7 sites in 3 files) — both through `save_to` and so both locked; what is NOT delivered is "the desktop is not a config writer": `SetupConfig` still derives `Serialize` with a pub `default_path()` (setup_config.rs:1991), so a thin surface can serialize the file by hand, and TOPOLOGY.toml `a-process-writes-only-what-it-is-granted` :322 stays `holds = false`; `projects.json`, `mesh.json` and `join_key.secret` are in the same TOPOLOGY store (:192) and are NOT locked — only `config.toml` is.
+the enrichment catalog, `scip_graph.db` and the asset CAS are separate stores and keep their current posture.
+Cross-process exclusion is a runtime refusal by construction: another process is not in this compilation unit.
+"""
 
 [[ability]]
 id          = "ledger"
+rungs       = ["hd-4"]
 promise     = "a ComplexTask step that goes through the executor runs exactly once across crash and replay"
 enforced_by = "StepExecutionStore has no default method bodies, so an empty impl is E0046"
 today       = "all four methods default to no-ops (sovereign-contracts/src/traits.rs:1805); 4 impls, one of them an empty MockStore"
@@ -55,13 +76,19 @@ not_covered = "six production `tool.execute(` sites never reach the executor —
 
 [[ability]]
 id          = "custody"
+rungs       = ["hd-5", "hd-9"]
 promise     = "a corpus whose recipe states no sharing policy is private"
 enforced_by = "`mesh_sharing` takes serde's `default` instead of `default_true`; the policy becomes a type with no `Default` impl behind a private field and one accessor, so in-repo code that omits it is E0063 and no second reader can resolve absence its own way (rung hd-9)"
 today       = "`#[serde(default = \"default_true\")]` at corpus-engine/src/recipe.rs:790; two shipped recipes and two generators state nothing; `scope` carries a doc comment claiming a structural guarantee it does not have"
-not_covered = "prompt content routed to a peer for inference reads no sharing flag (sovereign-serving-host peer_inference select_peers_ranked); indexes already installed keep the mesh_sharing stamped in their IndexMeta. TOML authorship cannot be compile-enforced — a recipe is data, so absence resolves to Private through the one accessor with a named warn; refusing at parse instead is the approval-time decision"
+not_covered = """
+prompt content routed to a peer for inference reads no sharing flag (sovereign-serving-host peer_inference select_peers_ranked); indexes already installed keep the mesh_sharing stamped in their IndexMeta.
+two SECOND parsers keep their own `true` default and hd-5 flips neither: `RegistryEntry.mesh_sharing` (corpus-engine/src/registry.rs:76-77, `default_true`, flowing to the desktop catalog at :321) and `CorpusDefinition.mesh_sharing` (sovereign-tools/src/corpus/registry.rs:45-51, its own private `default_mesh_sharing() -> bool { true }`, invisible to a `git grep default_true`). Whether either reaches an egress decision was NOT established by a reader census; they are hd-9's subject — "no second reader resolves absence its own way" is that rung's claim.
+TOML authorship cannot be compile-enforced — a recipe is data, so absence resolves to Private through the one accessor with a named warn; refusing at parse instead is the approval-time decision.
+"""
 
 [[ability]]
 id          = "principal"
+rungs       = ["hd-6"]
 promise     = "a guest link reaches exactly the scopes it names"
 enforced_by = "Scope's decider matches exhaustively with no `_` arm, so a new variant is E0004 at guest_grant.rs:103 and client_auth.rs:446"
 today       = "already true in the code and never watched failing — rung hd-6 is the plant, not a change"
@@ -92,6 +119,17 @@ reason = "none crosses a promise this campaign's predicate names; each is banked
 
 # ── BARS ─────────────────────────────────────────────────────────────────────
 
+# ONE bar. `hd-surfaces` was cut at round 2: co-lineage.py:435 is the only reader
+# of a bar verdict and it reads recorded `bar-measurement` rows, no row recorded
+# one, and `[[rung]].status` cannot produce `met` — so it would have ended
+# NEVER-MEASURED (co-lineage.py:792,:947) while `is_open` counted it OPEN forever.
+# It was also a 0->1 boolean identical to rung hd-7's status. Predicate half 2 is
+# now carried by rung hd-7 and re-run by the final audit.
+#
+# The instrument below is EXECUTABLE (co-lineage measure runs it and parses the
+# last stdout line), and it reads the ladder rather than a second table: an
+# ability is structural when every rung in its `rungs` list is `done`, and a rung
+# goes `done` only in an audit that re-ran its PLANT and checked the error code.
 [[bar]]
 id           = "hd-structural"
 one_line     = "abilities whose enforced_by has not been watched red then green"
@@ -100,22 +138,9 @@ floor        = 6.0
 floor_basis  = "2026-09-17: six ability rows, none with a watched plant"
 target       = 0.0
 direction    = "lower_is_better"
-instrument   = "per row: the PLANT line its rung's landing commit pastes, and the same gate green on the tree"
-goodhart     = "a PLANT can go red for the wrong reason — a typo, an unrelated error. The audit re-runs each PLANT and checks the error code the row names (E0063, E0624, E0433, E0046, E0004), not merely that something was red"
+instrument   = '''python3 -c "import tomllib;d=tomllib.load(open('quality/campaigns/handed.toml','rb'));s={r['id']:r['status'] for r in d['rung']};print(sum(1 for a in d['ability'] if any(s.get(x)!='done' for x in a['rungs'])))"'''
+goodhart     = "a PLANT can go red for the wrong reason — a typo, an unrelated error. The audit re-runs each PLANT and checks the error code the row names: E0063, E0624, E0433, E0046, E0004, E0308, E0603/E0425, and hd-8's E0599. Five of the plants assert in a TEST rather than in rustc — for those the audit checks the failing assertion is the named test's, not an unrelated one. A rung whose status is flipped without that re-run makes this bar read lower than the truth, which is the one way to cheat it"
 kill         = "the seal cannot be minted without a new layer-gate key, or a row needs an adapter in both directions: stop and redraw"
-status       = "open"
-
-[[bar]]
-id           = "hd-surfaces"
-one_line     = "surfaces serving a grounded and a generative turn with a verdict on the terminal frame"
-derives_from = "predicate half 2; principle 5 (a verdict that never ran is not a pass)"
-floor        = 0.0
-floor_basis  = "2026-09-17: the gate outcome is optional on the wire, so no surface can show one"
-target       = 1.0
-direction    = "higher_is_better"
-instrument   = "the bench DEMO row, in-process, pasting both turns' verdicts and the commission trace"
-goodhart     = "never_ran on both turns satisfies the shape; the grounded turn must read passed or failed, and the judge failing open reads could-not-judge — the row names the short probe that avoids it"
-kill         = "more than 3 turn exits need a verdict kernel_types::Verdict lacks"
 status       = "open"
 
 # ── ADOPTED (operator 2026-09-17: every active campaign is adopted) ─────────
@@ -132,7 +157,11 @@ campaign  = "warrant"
 necessary = ["wr-kinds-are-read (as a plant, not a change)"]
 
 [[adopted]]
-campaign  = "topology"
+# Not a campaign — quality/TOPOLOGY.md/.toml is the SPEC this campaign is drawn
+# from (there is no quality/campaigns/topology.toml). Kept in this table because
+# its rows were dispositioned in the same sweep; the thirteen-campaign count
+# above excludes it.
+campaign  = "topology (spec, not a campaign)"
 necessary = ["phase 6a", "9.2 tail", "writer-lease invariant", "writes-only-what-granted invariant"]
 
 [[adopted]]
@@ -144,8 +173,12 @@ campaign  = "sv-surface, conformance, verifier-loop, drb1-race, epistemic-index,
 necessary = []
 
 # ── LADDER ───────────────────────────────────────────────────────────────────
-# Each REVIEW-audit row flips the `status` of the rungs it covers and the bars
-# they move; no other row edits this file.
+# Two REVIEW-audit rows flip `status` here and nothing else in the queue edits
+# this file (hd-0 flips `status = "staged"` above, once, and that is its whole
+# claim on the file). A rung goes `done` only in an audit that re-ran its PLANT
+# and checked the error code the row names — bar `hd-structural` reads this
+# column, so flipping one without that re-run is how the bar gets cheated.
+# `demo` names a demo in campaign.md (D1/D2/D3), never a bar.
 
 [[rung]]
 id     = "hd-0"
@@ -157,61 +190,62 @@ demo   = "none"
 id     = "hd-1"
 title  = "render: the gate stamps the judgement, serve.rs projects it, Complete requires it"
 status = "open"
-demo   = "hd-surfaces"
+demo   = "D1"
 
 [[rung]]
 id     = "hd-2"
 title  = "assemble: RuntimeParts needs a seal only the recipe can mint"
 status = "open"
-demo   = "hd-surfaces"
+demo   = "D2"
 
 [[rung]]
 id     = "hd-3"
 title  = "writers: a flock inside the write path, and the raw handle closes"
 status = "open"
-demo   = "none"
+demo   = "D3"
 
 [[rung]]
 id     = "hd-4"
 title  = "ledger: StepExecutionStore has no defaults"
 status = "open"
-demo   = "none"
+demo   = "D3"
 
 [[rung]]
 id     = "hd-5"
 title  = "custody: a recipe that states no policy is private"
 status = "open"
-demo   = "none"
+demo   = "D3"
 
 [[rung]]
 id     = "hd-6"
 title  = "principal: watch the exhaustive Scope decider refuse a new variant"
 status = "open"
-demo   = "none"
+demo   = "D3"
 
 [[rung]]
 id     = "hd-8"
 title  = "writers: the in-crate door — an unguarded write does not compile"
 status = "open"
-demo   = "none"
+demo   = "D3"
 note   = "lifts writers from flock-only to E0599 inside corpus-engine; cross-process stays a runtime refusal"
 
 [[rung]]
 id     = "hd-9"
 title  = "custody: the policy has no Default and one accessor — code cannot omit it"
 status = "open"
-demo   = "none"
+demo   = "D3"
 note   = "closes the code half at compile time; the TOML half stays a named resolution or a parse refusal (approval decision)"
 
 [[rung]]
 id     = "hd-10"
 title  = "render: nothing ships unverified — every exit names a surface, every surface has a verifier, Judgement is minted only by one"
 status = "open"
-demo   = "hd-surfaces"
+demo   = "D1"
 note   = "the sentence docs/ARCHITECTURE_TOUR.md:61 already claims; TARGET_ARCHITECTURE.md §2 specified the receipt and it was never built"
 
 [[rung]]
 id     = "hd-7"
 title  = "surfaces: one in-process bench turn pair with verdicts"
 status = "open"
-demo   = "hd-surfaces"
+demo   = "D1"
+note   = "runs LAST, after the rows hd-8/9/10 mint; the final audit re-runs its step 3 so a pass needs two runs, as every Kill does"
