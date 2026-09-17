@@ -299,6 +299,27 @@ the first time costs 170–250 s before the first test runs, and contracts,
 turn-client and kernel-types cost 4–15 s because their scoped closure
 resolves the same units the workspace did.
 
+### The 28-probe baseline (`quality/build-probe/2026-09-17-baseline-29/`, HEAD 525a5a940)
+
+Same three columns over the generated ruler (27 crates, 92% of file-edits).
+Sums: **warm 419.8 s, fresh 2204.2 s, build 473.4 s**. A/A on warm: 413.9 vs
+419.8, band 1.42%, largest per-file difference 5.6 s; the 3% bank band
+holds. No probe failed. The cold full gates that precede the fresh column:
+lint 220 s, test 470 s, build 229 s.
+
+The fresh column sorts the workspace into two kinds of crate with nothing
+in between. Above corpus-engine on the chain, opening a crate costs
+100–270 s before its first focused test: cli-llm 268, cli-daemon 226, core
+197, api 190, inference 187, server 184, tools 174, corpus-engine 142,
+enrichment-build 133, corpus-mcp 130, cli-dev 125, cli 96. Below it, the
+same act costs 2–15 s: kernel-types 4, oicp-types 3, corpus-engine-vocab 3,
+contracts 14, turn-client 13, commonwealth-core 7, -work 2, -transport 5,
+-state 5, -rail-core 2, tdd 8, agent-bench 10, cli-shared 7. The line is
+whether the crate's scoped resolution pulls a datafusion/lance/hyper
+feature set the workspace run did not compile (D1); no crate's own size
+moves it across. That is the single largest number the campaign can move,
+and it moves with a Cargo change, not a refactor.
+
 ## The loop this became
 
 Operator direction 2026-09-17: run this as a campaign shaped like a while

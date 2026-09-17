@@ -200,7 +200,7 @@ test   = "capability_hint_standardized_constructors"
 [[bar]]
 id           = "bl-noise"
 one_line     = "Two warm runs on an unchanged tree agree — the ruler can tell a move from nothing"
-derives_from = "ARCH_PRINCIPLES 7; measured 2026-09-17-baseline/score.aa.json: warm 229.0 vs 227.5, band 0.66%, max per-file delta 1.3 s"
+derives_from = "ARCH_PRINCIPLES 7; 2026-09-17-baseline-29/score.aa.json (28 probes): warm 413.9 vs 419.8, band 1.42%, max per-file delta 5.6 s; the 11-probe pair was 0.66% / 1.3 s"
 status       = "met"
 target       = 0.03
 direction    = "lower_is_better"
@@ -210,7 +210,7 @@ instrument   = "scripts/build-probe/score.sh --aa"
 [[bar]]
 id           = "bl-warm"
 one_line     = "Σ over probe files of (scoped lint + focused test) seconds, steady state"
-start        = 228.3   # 2026-09-17-baseline, HEAD bf5669d3a
+start        = 419.8   # 2026-09-17-baseline-29 (28 probes), HEAD 525a5a940; the 11-probe sub-table was 227.5 (2026-09-17-baseline)
 status       = "open"
 direction    = "lower_is_better"
 instrument   = "scripts/build-probe/score.sh          # .warm_s in target/build-probe/score.json"
@@ -219,7 +219,7 @@ instrument   = "scripts/build-probe/score.sh          # .warm_s in target/build-
 id           = "bl-fresh"
 one_line     = "Σ over probe crates of the first focused test's seconds on a full-gates-only target dir"
 derives_from = "quality/BUILD_LATENCY.md D1; the tail of the census"
-start        = 1130.2   # 2026-09-17-baseline, HEAD bf5669d3a
+start        = 2204.2   # 2026-09-17-baseline-29; 11-probe sub-table 1130.2
 status       = "open"
 direction    = "lower_is_better"
 instrument   = "scripts/build-probe/score.sh --fresh  # .fresh_s in target/build-probe/score.fresh.json; ~45 min; needs ~105 GB free (target/fresh-probe, removed after)"
@@ -227,7 +227,7 @@ instrument   = "scripts/build-probe/score.sh --fresh  # .fresh_s in target/build
 [[bar]]
 id           = "bl-build"
 one_line     = "Σ over probe files of `cargo build --workspace` seconds after the edit"
-start        = 210.6   # 2026-09-17-baseline, HEAD bf5669d3a
+start        = 473.4   # 2026-09-17-baseline-29; 11-probe sub-table 210.6
 status       = "open"
 direction    = "lower_is_better"
 instrument   = "scripts/build-probe/score.sh --build  # .build_s in target/build-probe/score.build.json"
