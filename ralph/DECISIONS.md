@@ -396,6 +396,45 @@ can be shown.
 ABSORBED marks, `REVIEW-build-daemon-parts`' dep) and this entry.
 `git revert <sha>` reverts it alone.
 
+## 2026-09-17 · dm-daemon-api-edge · the lane's package: the row's premises were wrong in six places
+
+**Fork.** The api-edge lane — refreshed onto the base, so the `.ralph` allow
+reached it — did the deep analysis and stopped with a package in its worktree
+(`.ralph/wt/dm-daemon-api-edge/ralph/NEEDS_HUMAN.md`, invisible to the pool
+until the wave check was fixed in the same commit): the folded row's premises
+are wrong in six places. Fix the row, or let it fail again?
+
+**Choice.** All six applied as row surgery; nothing moves destination.
+1. **P0** — `sovereign-mesh-test-harness` names `sovereign-api::server`/`state`
+   against a no-except `[[forbid]]` (ARCH_LAYERS.toml:754-757): minted
+   `REVIEW-build-harness-oicp-seam` (the forbid's own stated fix — simulate
+   against the OICP/contracts seam) and added it to the deps; widening the
+   except instead is an operator row.
+2. **Split the loops** — minted `REVIEW-build-mesh-loops-decouple`
+   (`state/fabric.rs` → sovereign-mesh, `MeshMutationHook` with it, the 16
+   accessors, the three loops taking Fabric's part plus the node's engine and
+   the `SelfClaims` answer, the callers in `daemon.rs`) and added it to the
+   deps.
+3. **The wire leaf holds four items, not six** — un-absorbed
+   `REVIEW-build-peer-wire` with the correction: `JoinRequest`/`GossipRequest`
+   already live in `commonwealth_core::mesh::wire` and are re-exports.
+4. **`dm-auto-recover-move` runs first** — added to the deps.
+5. **`sovereign-api/tests/` (13 files) joins the move set.**
+6. **Re-priced**: 32,284 host lines, ~45 source + 42 test files.
+
+**Evidence.** The lane's package (its commands and outputs, now surfaced to
+`ralph/NEEDS_HUMAN.md` by the new wave check); the `git grep` sites named in
+each item; `git grep -n 'sovereign_api::'` over the harness and mesh.
+
+**Falsified by.** A `REVIEW-build-mesh-loops-decouple` attempt that cannot move
+`state/fabric.rs` without breaking the api side (then the port is the answer,
+as that row says); or a seam fix that still leaves the harness naming
+`sovereign-api`.
+
+**Landed in.** this commit — `ralph/STATE.md` (four edits: the deps line, the
+correction note, two minted rows, the un-absorb) and this entry.
+`git revert <sha>` reverts it alone.
+
 ## 2026-09-16 · REVIEW-build-api-host-decouple · the daemon's edge is host; the AppState reads defer to the state dissolution
 
 **Fork.** The row lists 29 non-`host` → `host` references across seven host
