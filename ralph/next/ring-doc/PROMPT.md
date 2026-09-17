@@ -120,6 +120,13 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
 
 ## 7. Hard rules
 
+- Never `cd` inside a shell command, and never write a path with `../`. Every
+  path is relative to the repo root, where every command already runs.
+  opencode's permission check resolves `cd X && ../../y` against the wrong
+  base, auto-rejects a path INSIDE this repo, and ends your session with the
+  unit half done (rd-1-scaffold lost a session to `/home/sovereign/apps/...`).
+  For a scratch build dir use `target/ralph/bundle/` by its repo-relative path
+  in every argument (`npx esbuild target/ralph/bundle/entry.js --outfile=sovereign/apps/...`).
 - Never `git push`, never `--no-verify`, never rewrite history.
 - No `Co-Authored-By` line and no assistant name in any commit.
 - Never `--update-baseline` a ratchet; never add an `[[exception]]` row or widen
