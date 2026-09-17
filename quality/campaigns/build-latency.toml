@@ -147,7 +147,7 @@ derives_from = "quality/BUILD_LATENCY.md D1; the tail of the census"
 start        = 1130.2   # 2026-09-17-baseline, HEAD bf5669d3a
 status       = "open"
 direction    = "lower_is_better"
-instrument   = "scripts/build-probe/score.sh --fresh  # .fresh_s in target/build-probe/score.fresh.json; ~40 min, cold"
+instrument   = "scripts/build-probe/score.sh --fresh  # .fresh_s in target/build-probe/score.fresh.json; ~45 min; needs ~105 GB free (target/fresh-probe, removed after)"
 
 [[bar]]
 id           = "bl-build"
