@@ -21,6 +21,10 @@
 //!   concrete watchers. They poll a shared [`corpus_engine_yield::YieldHook`]
 //!   so their subprocess runs back off while the node serves
 //!   foreground inference.
+//! - [`commit_harvest`] — the commit-message harvester the daemon's
+//!   reindexer fires on a git-HEAD change (moved in from sovereign-mesh
+//!   by domains `dm-mesh-workbench-move-watchers`). It writes
+//!   `source='committed'` notes and touches no tree-sitter.
 //!
 //! ## What does NOT live here
 //! The SCIP `CodeWatcher` (`corpus_engine::update::watch`) stays in
@@ -29,6 +33,7 @@
 //! only spawn `cargo` subprocesses and touch SQLite). This crate
 //! therefore compiles unconditionally, with no feature flags.
 
+pub mod commit_harvest;
 pub mod error;
 pub mod lint_results;
 pub mod lint_watcher;

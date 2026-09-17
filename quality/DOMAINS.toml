@@ -350,7 +350,7 @@ lines = 485
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/commit_harvest.rs"
+path = "corpus-engine-watchers/src/commit_harvest.rs"
 context = "workbench"
 lines = 481
 note = ""

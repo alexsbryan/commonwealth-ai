@@ -8,7 +8,7 @@
 //! - [`patterns`] — observe sequences/gaps in `tool_call_log` and
 //!   write `source='observed'` notes (e.g. "investigated impact of X
 //!   before modifying Y"). Phase 7.1.
-//! - `commit_harvest` (in `sovereign_mesh::reindexer`) — harvest
+//! - `commit_harvest` (in `corpus_engine_watchers::commit_harvest`) — harvest
 //!   non-noisy git commit messages as `source='committed'` notes.
 //!   Phase 7.1.
 //! - [`nudge`] — surface a single-line "note worth recording?" hint
