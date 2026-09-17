@@ -1099,3 +1099,82 @@ re-run; recorded here so the morning sees it.
 `quality/DOMAINS.toml`, `ralph/STATE.md` (the row `[x]`),
 `ralph/lanes/dm-misnamed-coverage.done`, and `ralph/NEEDS_HUMAN.md` removed.
 `git revert -m 1 <sha>` reverts the merge.
+
+## 2026-09-17 · REVIEW-audit-daemon-2 · the audit's `depends` is missing the api host cluster, so the row is not ready
+
+**Fork.** The pool selected `REVIEW-audit-daemon-2` as the ready review row
+(its only `depends`, `dm-daemon-cli-composition`, is `[x]`). The row's first
+clause is "no `host`-tagged module remains in sovereign-mesh or sovereign-api".
+Measured on the tree: `sovereign-mesh` has zero `host` rows, but the api host
+cluster is still in `sovereign-api`. Options: (a) run the audit now, record the
+api cluster as a finding, and mark `[x]`; (b) re-scope the audit to the landed
+clusters (mesh host + composition) and defer the api clause to
+`REVIEW-audit-wave-2`, then mark `[x]`; (c) correct the missing dependency so
+the audit runs after `dm-daemon-api-edge`, and leave the row `[ ]`.
+
+**Choice.** (c). §6 (2026-09-17) names exactly this case — "a dependency it
+does not name" — and directs a correction, not a stop. (a) would mark `[x]` on
+an audit whose stated bar is false. (b) would drop the row's own first clause
+to make it pass, which is the bar-weakening §6 forbids and, per the charter,
+is the director's call ("Row order, re-scoping ... is a row defect"), not a
+worker's. The row keeps its scope and bar; only the missing edge is restored.
+
+**Evidence** (reproduced this session, on `701b67453`).
+- `python3 scripts/domains-census.py crate-lines --crate sovereign-api` →
+  60 rows / 39,953 lines; **52 of those rows are tagged `host`** and total
+  32,310 lines (`admission.rs`, `frontend`/`frontdoor.rs` 5,820, `client_auth.rs`,
+  `server.rs`, `state.rs` + its six parts, `routes_*`). The api host cluster has
+  not moved.
+- `python3 scripts/domains-census.py crate-lines --crate sovereign-mesh` →
+  33 rows / 20,990 lines, **zero `host` rows** (fabric / workbench /
+  back-of-house only). The mesh host cluster has moved.
+- `python3 scripts/domains-census.py crate-lines --crate sovereign-daemon` →
+  73 rows / 44,676 lines = mesh host 35,827 + the cli-daemon composition half
+  8,849 (DC §4.1's first and fourth table rows). The composition is why the
+  row's original "sum of the two host clusters" equality was already short by
+  8,849 before the api cluster entered it.
+- `ls sovereign/crates/sovereign-api/src` still holds `frontdoor.rs`,
+  `client_auth.rs`, `headers.rs`, `reshaping.rs`, `server.rs`, `state.rs`,
+  `state/`, `routes_internal/` and the `routes_*.rs` shells.
+- The mint (`9dee0015e`) chained the audit after every move through
+  `dm-daemon-cli-composition` -> `dm-daemon-api-http-b2`; `9a0ebfcb9` absorbed
+  `dm-daemon-api-http-a/b1/b2` into `dm-daemon-api-edge` and marked them `[x]`,
+  which severed the only edge from `cli-composition` to the api cluster. The
+  corrected `depends` restores it explicitly.
+- `git grep -nE 'daemon_cmd/(bootstrap|solve_http|solve_tools|provider|worker|...)'
+  -- '*.rs' '*.md' '*.toml'` finds ~30 live references still naming the moved
+  composition files (`quality/sabotage/all.toml:409`'s mutant target,
+  `quality/DOMAINS.toml:966,2797`, `docs/specs/SOLVE_UX.md:4`,
+  `sovereign/docs/specs/{MESH_N4_TOPOLOGY,DAEMON_RESILIENCE}.md`, several
+  `sovereign-desktop` doc comments, `corpus-engine/examples/fact_spike.rs:19`).
+  `dm-daemon-cli-composition`'s `503c66aac` repointed five citations; these
+  remain. They are the audit's to fix, not this correction's.
+
+**Falsified by.** A tree where `sovereign-api` holds zero `host` rows (then the
+original `depends` was sufficient and the audit could run as minted); or an
+operator ruling that `REVIEW-audit-daemon-2` is wave-1's close and the api host
+cluster belongs to `REVIEW-audit-wave-2` (then (b) is the right correction and
+the row's text, not its `depends`, was wrong).
+
+**REVIEW-AFTER:** the row is now correctly blocked, and the pool's review lane
+has no terminal state for a review that cannot run — it retries a non-`[x]`
+review (`scripts/ralph.py:824`) and halts after `max_review_attempts`. No
+package is owed under the charter (this correction weakens no bar, widens no
+`except`, touches no `HUMAN-` row, and its evidence reproduces), so the halt, if
+it comes, is the row-order fork the director owns: run `dm-daemon-api-edge`
+(`dm-auto-recover-move` is its last unmet dependency) and let the audit follow,
+or re-scope the audit to the landed clusters and give the api clause to
+`REVIEW-audit-wave-2`.
+
+Two findings are recorded here for the eventual audit, not fixed by this
+correction. (1) `PREPUSH` is RED on the tree as found: `./scripts/pre-push.sh`
+exit 1, `1 blocking: arch-gate`, `approach band GREW: lines 202703 -> 202846
+(+143)` since the band's 2026-09-15 baseline (`abd718469`); a green needs a real
+cut (the `ring_sync.rs`/`scoring.rs` split-out audit-daemon-1 used) and
+`--update-baseline` is forbidden (`PROMPT §7`). (2) The ARCH-3 doc drift above
+(~30 live references to the moved composition files). Both are the audit's
+"fix what you find" work, and the audit cannot run until the api cluster lands.
+
+**Landed in.** this commit — `ralph/STATE.md` (the row's `depends`, the
+line-sum clause, the CORRECTED note) and this entry. `git revert <sha>` reverts
+it alone.
