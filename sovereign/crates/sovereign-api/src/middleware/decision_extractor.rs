@@ -47,9 +47,9 @@ use async_trait::async_trait;
 use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
 use sovereign_tools::notes::response_mine;
 
-use super::shared::notes_db_path;
 use super::{Middleware, MiddlewareError, MiddlewareSession, PipelineContext, ResponseView};
 use crate::openai_types::{ChatCompletionRequest, ChatMessage};
+use sovereign_core::middleware::notes_db_path;
 
 /// User-message substrings (case-insensitive) that drop a pending
 /// candidate. Conservatively short — the goal is to recognise the
@@ -259,7 +259,7 @@ fn truncate_for_audit_line(s: &str, max: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::middleware::shared::fixtures::{ctx_with, request_with_messages as req_with};
+    use sovereign_contracts::middleware::fixtures::{ctx_with, request_with_messages as req_with};
 
     fn ctx() -> PipelineContext {
         ctx_with(

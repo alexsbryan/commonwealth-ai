@@ -967,31 +967,32 @@ impl AppState {
         let contribution_emitter = ContributionEmitter::new((*mesh_store).clone(), self_node_id);
         let activity_emitter = ActivityEmitter::new((*mesh_store).clone(), self_node_id);
         let peer_preferences = PeerPreferenceStore::new((*mesh_store).clone(), self_node_id);
-        // ATOS middleware registry with the M4 core four implementations
-        // registered under their TOML ids. The wiring is intentionally
-        // additive — operators deploying a stock Commonwealth daemon
-        // get the full stack without extra config; tests that want a
-        // bare daemon can build a minimal registry themselves.
+        // ATOS middleware registry. The wiring is intentionally additive —
+        // operators deploying a stock Commonwealth daemon get the full stack
+        // without extra config; tests that want a bare daemon can build a
+        // minimal registry themselves.
+        //
+        // The ATOS middlewares are installed through the inversion's entry
+        // point, `sovereign_atos::middleware::registrations()`, so this host
+        // never names an ATOS middleware type (domains
+        // REVIEW-build-answering-inversion). The tool injector lives in
+        // `sovereign-core::answering`; the artifact surface and the decision
+        // extractor stay host-side.
+        //
+        // 2026-05-22: ContextInjector + ToolInjector descriptor lists were
+        // previously pulled from `sovereign_tools::manifest`, a global static
+        // that forced commonwealth-api to drag the tree-sitter grammar crates
+        // through every downstream binary. They're now injected at construction
+        // time; `empty()` because the registry of available tools lives in the
+        // daemon host.
         let mut middleware_registry = crate::middleware::MiddlewareRegistry::new();
         #[cfg(feature = "atos")]
-        middleware_registry.register(Arc::new(crate::middleware::ApprovalGate::new()));
-        // 2026-05-22: ContextInjector + ToolInjector descriptor lists
-        // were previously pulled from `sovereign_tools::manifest`, a
-        // global static that forced commonwealth-api to drag the
-        // tree-sitter grammar crates through every downstream binary.
-        // They're now injected at construction time. AppState
-        // constructs them with `Vec::new()` because the registry of
-        // available tools lives in the daemon host (sovereign-cli-atos,
-        // sovereign-desktop, sovereign-server) — those wire the real
-        // descriptors via the `with_tool_descriptors` shim below the
-        // platform constructors.
-        #[cfg(feature = "atos")]
-        middleware_registry.register(Arc::new(crate::middleware::ContextInjector::empty()));
+        for mw in sovereign_atos::middleware::registrations() {
+            middleware_registry.register(mw);
+        }
         middleware_registry.register(Arc::new(crate::middleware::ToolInjector::empty()));
         #[cfg(feature = "atos")]
         middleware_registry.register(Arc::new(crate::middleware::ArtifactSurface::new()));
-        #[cfg(feature = "atos")]
-        middleware_registry.register(Arc::new(crate::middleware::SessionBriefing::new()));
         // Phase 7.2: per-turn DecisionExtractor mines assistant
         // responses for decision-shaped phrases on `post_process`,
         // then on the next turn either persists as

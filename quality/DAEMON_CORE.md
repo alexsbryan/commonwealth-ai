@@ -347,7 +347,7 @@ by what each field *is*, the 63 fall to six owners:
 | Fabric | 20 | node id with its public key, dial-info provider and dial signer; the roster; the ring rail and its write nudge; the replicated KV; transport; clock; gossip's liveness maps; the mutation persistence hook; the convergence recorder; the fan-out gauge; the mesh-app registry and port map; the contribution emitter; the RPC-over-iroh flag | `sovereign-mesh` |
 | Serving | 20 | model, pipeline and slot aliases; servable model files; the local inference handle and RPC shard warmer; the inference store; peer and client admission schedulers with their caps, switch, tallies, rejected-header record and reciprocity weights; the contribution pause and yield-peers switch; the availability composite; the in-flight gauge; venue preferences | `sovereign-serving-host` |
 | collaborative ingest | 9 | active ingests, progress, pull loops, verify reports, the work queue, ingest grants, the quiesce and throttle dials, the newsworthy tick handle | `jobs` (§3.2) |
-| Answering | 3 | the ATOS middleware registry, session store and repo root | `sovereign-core`'s pipeline, after the ATOS inversion |
+| Answering | 3 | the ATOS middleware registry, session store and repo root | `sovereign-core`'s pipeline, after the ATOS inversion. The inversion landed 2026-09-16: the ATOS middlewares moved to `sovereign-atos` (which gained the registration entry point the daemon bootstrap calls) and the tool injector / turn-fidelity switches to `sovereign-core/src/answering`; `MiddlewareRegistry` is host composition, so the three fields themselves travel with `REVIEW-build-daemon-parts` |
 | Workbench | 1 | the next-edit model slot | next-edit's crate |
 | node | 10 | client token, guest grants, start instant, the corpus-engine handle, the foreground signal (last active, window, in-flight), storage budget and used, the activity emitter | `sovereign-daemon` |
 
@@ -418,7 +418,13 @@ assembly with fakes at the ports.
 part holding Serving's provider rather than its reader serves the old model after a reload — the
 shape of the wrong-slot incident ARCH 8 records. And `sovereign-api`'s middleware seam
 (`Middleware`, `PipelineContext`) is Answering's port, named by Workspace's decision extractor
-and the ATOS middlewares; it lifts with Answering and is not host code.
+and the ATOS middlewares; it lifted to `sovereign-contracts` (2026-09-16) and is not host code.
+The inversion that followed is the same rule read backwards: because the ATOS-naming middlewares
+cannot land in `sovereign-core` without a new runtime→capabilities edge, they moved WITH ATOS —
+`sovereign-atos` owns them and exposes the registration entry point the daemon's bootstrap calls,
+so the host never names an ATOS middleware type. The two files that name neither ATOS nor the host
+(the tool injector, the turn-fidelity switches) landed in `sovereign-core/src/answering`; the
+composition (`MiddlewareRegistry`, `Pipeline`) stayed host.
 
 ### 4.3 Adapters, and the forbid that stays
 

@@ -29,7 +29,7 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-use crate::oicp::openai_types::ChatCompletionRequest;
+use crate::oicp::openai_types::{ChatCompletionRequest, ChatMessage};
 
 /// Everything a middleware might need to know about the request that
 /// isn't in `ChatCompletionRequest` itself — resolved pipeline config,
@@ -222,4 +222,190 @@ pub struct MilestonePassEvent {
     /// Relative path to the rendered artifact, e.g.
     /// `.sovereign/features/<id>/milestone-2.md`.
     pub artifact_path: String,
+}
+
+// ─── Shared conventions ──────────────────────────────────────────────────────
+//
+// The on-disk `.sovereign/` layout and the system-prompt prepend are shared by
+// the ATOS middlewares (now in `sovereign-atos`) and the host middlewares that
+// stay with the daemon, so they live beside the seam rather than on either
+// side. Moved out of `sovereign-api/src/middleware/shared.rs` by domains
+// `REVIEW-build-answering-inversion`; both sides name them through
+// `sovereign_core::middleware::{notes_db_path, features_db_path,
+// prepend_to_system}`.
+
+/// Canonical location of the notes store relative to the repo the daemon is
+/// anchored to: `<repo_root>/.sovereign/notes.db`.
+///
+/// Every middleware that opens a [`corpus_engine_notes::NoteStore`] must derive
+/// the path through here so they all read/write the same file.
+pub fn notes_db_path(repo_root: &std::path::Path) -> std::path::PathBuf {
+    repo_root.join(".sovereign").join("notes.db")
+}
+
+/// Canonical location of the ATOS feature store:
+/// `<repo_root>/.sovereign/features.db`. Same single-source rationale as
+/// [`notes_db_path`].
+pub fn features_db_path(repo_root: &std::path::Path) -> std::path::PathBuf {
+    repo_root.join(".sovereign").join("features.db")
+}
+
+/// Prepend `text` to the first system message; or insert a fresh system
+/// message at position 0 when none exists.
+///
+/// The join is exactly `"{text}\n{existing}"` — middlewares that run earlier in
+/// the pipeline end up ABOVE later ones in the final system prompt, which is
+/// what the declared pipeline order means.
+pub fn prepend_to_system(request: &mut ChatCompletionRequest, text: &str) {
+    for msg in &mut request.messages {
+        if msg.role == "system" {
+            msg.content = format!("{text}\n{}", msg.content);
+            return;
+        }
+    }
+    request
+        .messages
+        .insert(0, ChatMessage::new("system", text.to_string()));
+}
+
+/// Canonical test fixtures for middleware tests — the single
+/// field-enumerating `ChatCompletionRequest` literal and the
+/// [`PipelineContext`] builder.
+///
+/// Off by default so a lifted contract leaf ships no test support; the crates
+/// that own middleware tests enable it through a dev-dependency
+/// (`test-fixtures`). The one-literal shape means adding a field to
+/// `ChatCompletionRequest` touches exactly one place instead of one per
+/// middleware test module.
+#[cfg(any(test, feature = "test-fixtures"))]
+pub mod fixtures {
+    use super::{ChatCompletionRequest, ChatMessage, PipelineContext};
+
+    /// A request with a single `user: "hi"` message and every optional field
+    /// `None`.
+    pub fn minimal_request() -> ChatCompletionRequest {
+        ChatCompletionRequest {
+            model: None,
+            messages: vec![ChatMessage::new("user", "hi")],
+            temperature: None,
+            max_tokens: None,
+            stream: None,
+            top_p: None,
+            frequency_penalty: None,
+            presence_penalty: None,
+            stop: None,
+            tools: None,
+            tool_choice: None,
+            oicp: None,
+            response_format: None,
+            chat_template_kwargs: None,
+            think_budget: None,
+            tool_profile: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
+            stable_prefix_len: None,
+        }
+    }
+
+    /// [`minimal_request`] with the message list replaced by the given
+    /// `(role, content)` pairs.
+    pub fn request_with_messages(messages: &[(&str, &str)]) -> ChatCompletionRequest {
+        ChatCompletionRequest {
+            messages: messages
+                .iter()
+                .map(|(role, content)| ChatMessage::new(*role, *content))
+                .collect(),
+            ..minimal_request()
+        }
+    }
+
+    /// A `PipelineContext` for the given feature id + repo root, with neutral
+    /// defaults everywhere else.
+    pub fn ctx_with(feature_id: Option<&str>, repo: std::path::PathBuf) -> PipelineContext {
+        PipelineContext {
+            pipeline_name: "test".into(),
+            model_id: "qwen-27b-coder".into(),
+            context_config: Default::default(),
+            feature_id: feature_id.map(String::from),
+            session_id: Some("sess-1".into()),
+            repo_root: repo,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn notes_db_lives_under_dot_sovereign() {
+        let root = std::path::Path::new("/repo");
+        assert_eq!(
+            notes_db_path(root),
+            std::path::PathBuf::from("/repo/.sovereign/notes.db")
+        );
+    }
+
+    #[test]
+    fn features_db_lives_under_dot_sovereign() {
+        let root = std::path::Path::new("/repo");
+        assert_eq!(
+            features_db_path(root),
+            std::path::PathBuf::from("/repo/.sovereign/features.db")
+        );
+    }
+
+    mod prepend {
+        use super::super::{fixtures, prepend_to_system};
+
+        #[test]
+        fn inserts_system_message_at_front_when_absent() {
+            let mut req = fixtures::minimal_request();
+            prepend_to_system(&mut req, "PREAMBLE");
+            assert_eq!(req.messages.len(), 2);
+            assert_eq!(req.messages[0].role, "system");
+            assert_eq!(req.messages[0].content, "PREAMBLE");
+            assert_eq!(req.messages[1].role, "user");
+        }
+
+        #[test]
+        fn prepends_to_existing_system_message_with_newline_join() {
+            let mut req = fixtures::request_with_messages(&[
+                ("system", "Original directive."),
+                ("user", "hi"),
+            ]);
+            prepend_to_system(&mut req, "PREAMBLE");
+            // No new message; exact byte contract on the join.
+            assert_eq!(req.messages.len(), 2);
+            assert_eq!(req.messages[0].content, "PREAMBLE\nOriginal directive.");
+        }
+
+        #[test]
+        fn only_the_first_system_message_is_touched() {
+            let mut req = fixtures::request_with_messages(&[
+                ("system", "first"),
+                ("system", "second"),
+                ("user", "hi"),
+            ]);
+            prepend_to_system(&mut req, "P");
+            assert_eq!(req.messages[0].content, "P\nfirst");
+            assert_eq!(req.messages[1].content, "second");
+            assert_eq!(req.messages[2].content, "hi");
+        }
+
+        #[test]
+        fn repeated_prepends_stack_newest_first() {
+            // Pipeline order semantics: a middleware that runs later
+            // ends up ABOVE earlier content only if it prepends —
+            // two prepends stack newest-first.
+            let mut req = fixtures::minimal_request();
+            prepend_to_system(&mut req, "first");
+            prepend_to_system(&mut req, "second");
+            assert_eq!(req.messages[0].content, "second\nfirst");
+        }
+    }
 }

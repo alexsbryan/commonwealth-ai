@@ -30,11 +30,13 @@ use std::path::Path;
 use async_trait::async_trait;
 
 use corpus_engine_notes::{NoteStore, ScopeFilter};
-use sovereign_atos::approval;
+use oicp_types::openai_types::ChatCompletionRequest;
 
-use super::shared::{notes_db_path, prepend_to_system};
-use super::{Middleware, MiddlewareError, MiddlewareSession, PipelineContext};
-use crate::openai_types::ChatCompletionRequest;
+use super::{
+    notes_db_path, prepend_to_system, Middleware, MiddlewareError, MiddlewareSession,
+    PipelineContext,
+};
+use crate::approval;
 
 /// Agent-facing preamble (the `<atos-instructions>` XML block). Kept as
 /// an external asset so the instructions — which are *data* the model
@@ -493,7 +495,7 @@ fn extract_invariants_section(md: &str) -> String {
 /// [`ArtifactDelta`]. Compact by design — a few bullets per kind,
 /// no note bodies (just ids so the agent can expand via
 /// `read_note_by_id`).
-fn render_artifact_delta(delta: &sovereign_atos::session::ArtifactDelta) -> String {
+fn render_artifact_delta(delta: &crate::session::ArtifactDelta) -> String {
     let mut out = String::from("## Since last turn\n\n");
     let mut any = false;
 
@@ -534,8 +536,8 @@ fn render_artifact_delta(delta: &sovereign_atos::session::ArtifactDelta) -> Stri
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::middleware::shared::fixtures::{ctx_with, minimal_request};
-    use crate::openai_types::ChatMessage;
+    use oicp_types::openai_types::ChatMessage;
+    use sovereign_contracts::middleware::fixtures::{ctx_with, minimal_request};
 
     #[tokio::test]
     async fn no_feature_id_is_noop() {
@@ -691,7 +693,7 @@ mod tests {
 
     #[tokio::test]
     async fn pending_artifact_delta_rendered_then_popped() {
-        use sovereign_atos::session::{ArtifactDelta, MilestonePassEvent};
+        use crate::session::{ArtifactDelta, MilestonePassEvent};
 
         let tmp = tempfile::tempdir().unwrap();
         let spec_dir = tmp.path().join(".sovereign").join("features").join("fx");

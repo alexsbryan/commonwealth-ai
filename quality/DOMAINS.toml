@@ -1074,21 +1074,9 @@ lines = 56
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-api/src/middleware/approval_gate.rs"
-context = "answering"
-lines = 442
-note = ""
-
-[[module]]
 path = "sovereign/crates/sovereign-api/src/middleware/artifact_surface.rs"
 context = "host"
-lines = 306
-note = ""
-
-[[module]]
-path = "sovereign/crates/sovereign-api/src/middleware/context_injector.rs"
-context = "answering"
-lines = 845
+lines = 307
 note = ""
 
 [[module]]
@@ -1100,26 +1088,53 @@ note = "extracts agent decisions from responses; the note store's question, not 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/middleware/mod.rs"
 context = "host"
-lines = 588
-note = ""
+lines = 589
+note = "the composition (Pipeline + MiddlewareRegistry) stays host; the ATOS middlewares and the injector left for sovereign-atos / sovereign-core at REVIEW-build-answering-inversion"
 
+# The answering cluster's five files, split by what each names
+# (REVIEW-build-answering-inversion): the ATOS surface moved with ATOS, the
+# injector and the turn-fidelity switches to sovereign-core's `answering`.
 [[module]]
-path = "sovereign/crates/sovereign-api/src/middleware/session_briefing.rs"
+path = "sovereign/crates/sovereign-atos/src/middleware/mod.rs"
 context = "answering"
-lines = 354
+lines = 45
+note = "the registration entry point the daemon bootstrap calls; ATOS owns its middlewares, the host owns the registry"
+
+[[module]]
+path = "sovereign/crates/sovereign-atos/src/middleware/approval_gate.rs"
+context = "answering"
+lines = 443
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-api/src/middleware/shared.rs"
-context = "host"
-lines = 219
+path = "sovereign/crates/sovereign-atos/src/middleware/context_injector.rs"
+context = "answering"
+lines = 847
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-api/src/middleware/tool_injector.rs"
+path = "sovereign/crates/sovereign-atos/src/middleware/session_briefing.rs"
+context = "answering"
+lines = 356
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/answering/mod.rs"
+context = "answering"
+lines = 13
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/answering/tool_injector.rs"
 context = "answering"
 lines = 239
 note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-core/src/answering/turn_fidelity.rs"
+context = "answering"
+lines = 136
+note = "moved from sovereign-api/src/turn_fidelity.rs at REVIEW-build-answering-inversion"
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/next_edit.rs"
@@ -1388,7 +1403,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-api/src/state.rs"
 context = "host"
-lines = 2161
+lines = 2116
 note = "the api-side god object, dissolving: the flat owner fields are six parts now (DC §4.2). Names commonwealth_core::mesh::Mesh (:10), commonwealth_state (:11-12), corpus_engine::CorpusEngine (:13), serving_policy::fair_sched (:15), sovereign_grants (:17), sovereign_serving_host::admission (:20)"
 
 [[module]]
@@ -1426,12 +1441,6 @@ path = "sovereign/crates/sovereign-api/src/state/workbench.rs"
 context = "host"
 lines = 26
 note = "Workbench's part (DC §4.2); scaffolding until the next-edit crate exists and REVIEW-mint-daemon-move relocates it"
-
-[[module]]
-path = "sovereign/crates/sovereign-api/src/turn_fidelity.rs"
-context = "answering"
-lines = 136
-note = ""
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/yield_hook.rs"
@@ -4276,6 +4285,23 @@ MiddlewareSession + MiddlewareError + ResponseView move DOWN to
 sovereign-contracts; MiddlewareRegistry + Pipeline (the composition) stay host.
 turn_fidelity.rs is the one file `serving` imports from here (routes_responses/
 routes_inference read reshape_enabled / auto_allowlist_enabled, 3 sites).
+
+LANDED 2026-09-16 (REVIEW-build-answering-inversion). The inversion flipped the
+arrow rather than moving the cluster whole, because the ATOS-naming files cannot
+land in sovereign-core (that would be a NEW runtime->capabilities violation).
+Split by what each file names: approval_gate, context_injector and
+session_briefing moved WITH ATOS to `sovereign-atos/src/middleware/`, which
+gained the registration entry point (`registrations()`) the daemon bootstrap
+calls; tool_injector and turn_fidelity moved to
+`sovereign-core/src/answering/`. The composition (MiddlewareRegistry, Pipeline)
+and the artifact surface stay host. The middleware seam's
+`ArtifactDelta`/`MilestonePassEvent` were already in sovereign-contracts, so
+session_briefing's only remaining ATOS reach was `corpus_engine_atos::FeatureStore`
+— sovereign-atos already carries that dep, so no port was needed. This cluster
+now holds no files in sovereign-api (`plan --crate sovereign-api` reads tree
+0/0 against these frozen coordinates); the `[[module]]` rows carry the new
+paths. The registry `dest = "sovereign-core"` is now a SPLIT: sovereign-atos for
+the three ATOS files, sovereign-core for the two.
 """
 
 [[cluster]]
@@ -8336,7 +8362,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-atos/src/lib.rs"
 context = "unknown"
-lines = 391
+lines = 392
 note = ""
 
 [[module]]
@@ -11582,8 +11608,8 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-contracts/src/middleware.rs"
 context = "kernel"
-lines = 225
-note = "the middleware seam (Answering's port) lifted out of sovereign-api by REVIEW-build-middleware-seam"
+lines = 411
+note = "the middleware seam (Answering's port) lifted out of sovereign-api by REVIEW-build-middleware-seam; the shared `.sovereign/` path helpers and the canonical test fixtures landed beside it at REVIEW-build-answering-inversion"
 
 [[module]]
 path = "sovereign/crates/sovereign-contracts/src/mobile_host.rs"
@@ -11966,7 +11992,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-core/src/lib.rs"
 context = "unknown"
-lines = 152
+lines = 153
 note = ""
 
 [[module]]

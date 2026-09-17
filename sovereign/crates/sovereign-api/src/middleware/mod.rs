@@ -44,27 +44,22 @@ use std::sync::Arc;
 use crate::openai_types::ChatCompletionRequest;
 
 #[cfg(feature = "atos")]
-pub mod approval_gate;
-#[cfg(feature = "atos")]
 pub mod artifact_surface;
-#[cfg(feature = "atos")]
-pub mod context_injector;
 pub mod decision_extractor;
-#[cfg(feature = "atos")]
-pub mod session_briefing;
-pub(crate) mod shared;
-pub mod tool_injector;
 
 #[cfg(feature = "atos")]
-pub use approval_gate::ApprovalGate;
-#[cfg(feature = "atos")]
 pub use artifact_surface::ArtifactSurface;
-#[cfg(feature = "atos")]
-pub use context_injector::ContextInjector;
 pub use decision_extractor::DecisionExtractor;
+
+// The ATOS middlewares and the tool injector left this crate in domains
+// `REVIEW-build-answering-inversion`. The ATOS surface moved to
+// `sovereign-atos` (the arrow inverted: ATOS owns its middlewares and the
+// daemon installs them through `sovereign_atos::middleware::registrations`),
+// the injector to `sovereign-core::answering`. Re-exported so
+// `crate::middleware::{ApprovalGate, ToolInjector, …}` keeps resolving.
 #[cfg(feature = "atos")]
-pub use session_briefing::SessionBriefing;
-pub use tool_injector::ToolInjector;
+pub use sovereign_atos::middleware::{ApprovalGate, ContextInjector, SessionBriefing};
+pub use sovereign_core::answering::tool_injector::ToolInjector;
 
 // The seam — Answering's port, lifted to `sovereign-contracts` by domains
 // REVIEW-build-middleware-seam and re-exported here so the five middleware
@@ -217,8 +212,8 @@ impl MiddlewareRegistry {
 #[cfg(test)]
 mod tests {
     use async_trait::async_trait;
+    use sovereign_contracts::middleware::fixtures::{ctx_with, request_with_messages};
 
-    use super::shared::fixtures::{ctx_with, request_with_messages};
     use super::*;
     use crate::openai_types::ChatCompletionRequest;
 
@@ -351,13 +346,15 @@ mod tests {
     #[tokio::test]
     async fn sovereign_coder_default_pipeline_resolves_decision_extractor() {
         // Mirror the production registry from
-        // `commonwealth-api::state::AppState`.
+        // `commonwealth-api::state::AppState` — ATOS installs its own
+        // middlewares through the inversion's entry point; the host registers
+        // the injector, the artifact surface and the decision extractor.
         let mut registry = MiddlewareRegistry::new();
-        registry.register(Arc::new(ApprovalGate::new()));
-        registry.register(Arc::new(ContextInjector::empty()));
+        for mw in sovereign_atos::middleware::registrations() {
+            registry.register(mw);
+        }
         registry.register(Arc::new(ToolInjector::empty()));
         registry.register(Arc::new(ArtifactSurface::new()));
-        registry.register(Arc::new(SessionBriefing::new()));
         registry.register(Arc::new(DecisionExtractor::new()));
 
         // Resolve the toml-declared chain.
@@ -519,37 +516,41 @@ mod tests {
 
 #[cfg(test)]
 mod tool_vocabulary_boundary {
-    //! The MODULE-level half of the layer rule for the injector middlewares.
+    //! The MODULE-level half of the layer rule for the middlewares that remain
+    //! in this directory.
     //!
     //! `commonwealth` is layer 1 and `sovereign` is layer 2, so this crate must
-    //! not reach UP for vocabulary. The injectors need tool descriptors — that
-    //! is their whole job — and until noun-convergence rung 2c they got them by
-    //! naming the agent runtime hub's `types` module, which was 60 of the 98
-    //! references on the `commonwealth -> sovereign` backflow edge. The
-    //! definitions now live in `oicp-types` (layer 0) and the hub re-exports
-    //! them at their historical path, so the reach is gone.
+    //! not reach UP for vocabulary. The injectors — which needed tool
+    //! descriptors and got them, until noun-convergence rung 2c, by naming the
+    //! agent runtime hub's `types` module — moved out of this crate in domains
+    //! `REVIEW-build-answering-inversion`: `tool_injector` to
+    //! `sovereign-core::answering`, `context_injector` to `sovereign-atos`.
+    //! This guard stays for the middlewares that remain (the artifact surface
+    //! and the decision extractor) and for the composition.
     //!
-    //! This test is what stops it coming back by habit: the next author who
-    //! needs `Effect` or `ToolDescriptor` here reaches for whatever import the
-    //! IDE suggests, and the hub's re-export is still a valid path. ARCH §7 —
-    //! structural, not remembered.
+    //! Narrowed 2026-09-16: the seam lift (`REVIEW-build-middleware-seam`)
+    //! legitimately made `mod.rs` name `sovereign_core::middleware`, so the
+    //! broad `sovereign_core` needle became unsatisfiable. What the rung bought
+    //! is that the tool vocabulary lives in `oicp-types` (layer 0), not the
+    //! hub's `types` module — so the needle is that module's path.
     //!
     //! Deliberately narrow. `sovereign-atos` and `sovereign-tools` are still
     //! named in this directory (the feature-gated ATOS surface and
     //! `notes::response_mine`); both carry their own `[[exception]]` in
     //! `quality/ARCH_LAYERS.toml` tracked at R6 and are not this rung's
-    //! subject. What this asserts is exactly what rung 2c family A bought.
+    //! subject.
     //!
-    //! Failing input, if you want to watch it fail: put
-    //! `Vec<…::types::ToolDescriptor>` back on `ContextInjector::new`.
+    //! Failing input, if you want to watch it fail: add a `use` of the hub's
+    //! `types` module (`ToolDescriptor`) to `artifact_surface.rs`. Do NOT spell
+    //! that path here — this file is inside the scanned tree.
 
     #[test]
-    fn no_injector_names_the_agent_runtime_hub() {
+    fn no_middleware_names_the_agent_runtime_hub_types_module() {
         // Assembled at runtime, never written as a literal — THIS FILE IS
         // INSIDE THE SCANNED TREE, so a literal would make the guard match its
         // own source. Keep the token out of this file entirely, doc comments
         // and assertion text included.
-        let needle = ["sovereign", "core"].join("_");
+        let needle = ["sovereign", "core::types"].join("_");
 
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("src")
@@ -576,7 +577,7 @@ mod tool_vocabulary_boundary {
         // An empty walk would pass while proving nothing — the classic
         // zero-case false green (ARCH §18.1).
         assert!(
-            scanned >= 8,
+            scanned >= 3,
             "scanned only {scanned} middleware files; the walk is broken, not the boundary"
         );
         offenders.sort();

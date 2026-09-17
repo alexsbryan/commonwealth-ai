@@ -33,10 +33,10 @@
 
 use async_trait::async_trait;
 
+use oicp_types::openai_types::{ChatCompletionRequest, ToolDefinition, ToolFunction};
 use oicp_types::ToolDescriptor;
 
-use super::{Middleware, MiddlewareError, MiddlewareSession, PipelineContext};
-use crate::openai_types::{ChatCompletionRequest, ToolDefinition, ToolFunction};
+use crate::middleware::{Middleware, MiddlewareError, MiddlewareSession, PipelineContext};
 
 /// Descriptors the injector advertises on every pipeline request.
 ///
@@ -137,7 +137,7 @@ fn render_descriptors(descriptors: &[ToolDescriptor]) -> Vec<ToolDefinition> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::middleware::shared::fixtures::{ctx_with, minimal_request};
+    use crate::middleware::fixtures::{ctx_with, minimal_request};
     use serde_json::json;
 
     fn ctx() -> PipelineContext {

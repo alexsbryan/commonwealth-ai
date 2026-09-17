@@ -148,6 +148,9 @@ commonwealth-discovery = { workspace = true }
 tokio = { workspace = true, features = ["test-util", "macros"] }
 tower = "0.5"
 http-body-util = "0.1"
+# The canonical middleware test fixtures (`middleware::fixtures`), off by
+# default on the leaf; the host middleware test modules name them directly.
+sovereign-contracts = { workspace = true, features = ["test-fixtures"] }
 
 [lints]
 workspace = true

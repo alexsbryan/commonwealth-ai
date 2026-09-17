@@ -50,7 +50,7 @@ pub mod routes_responses;
 pub mod routes_status;
 pub mod server;
 pub mod state;
-pub mod turn_fidelity;
+pub use sovereign_core::answering::turn_fidelity; // shim: moved by domains REVIEW-build-answering-inversion
 pub mod yield_hook;
 
 pub use commonwealth_core::{Error, Result};

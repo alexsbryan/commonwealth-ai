@@ -40,10 +40,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use async_trait::async_trait;
 
 use corpus_engine_atos::FeatureStore;
+use oicp_types::openai_types::ChatCompletionRequest;
 
-use super::shared::{features_db_path, prepend_to_system};
-use super::{Middleware, MiddlewareError, MiddlewareSession, PipelineContext};
-use crate::openai_types::ChatCompletionRequest;
+use super::{
+    features_db_path, prepend_to_system, Middleware, MiddlewareError, MiddlewareSession,
+    PipelineContext,
+};
 
 /// Gap in seconds after which a session is considered "stale" and
 /// the briefing re-fires. 2 hours — short enough to catch a lunch
@@ -108,7 +110,7 @@ fn is_session_start(last_seen_at: i64) -> bool {
 async fn compose_briefing(
     repo_root: &Path,
     feature_id: &str,
-    delta: Option<&sovereign_atos::session::ArtifactDelta>,
+    delta: Option<&crate::session::ArtifactDelta>,
 ) -> String {
     let mut out = String::from("## Welcome back\n\n");
     out.push_str(&format!("Feature: `{feature_id}`\n"));
@@ -181,7 +183,7 @@ async fn append_milestone_state(out: &mut String, store: &FeatureStore, feature_
     }
 }
 
-fn render_delta_block(delta: &sovereign_atos::session::ArtifactDelta) -> String {
+fn render_delta_block(delta: &crate::session::ArtifactDelta) -> String {
     let mut out = String::from("### Since last session\n\n");
     let mut any = false;
     for event in &delta.milestones_passed {
@@ -243,7 +245,7 @@ fn derive_title(brief: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::middleware::shared::fixtures::{ctx_with, minimal_request};
+    use sovereign_contracts::middleware::fixtures::{ctx_with, minimal_request};
 
     #[test]
     fn fresh_session_triggers_briefing() {
@@ -322,10 +324,10 @@ mod tests {
         let mw = SessionBriefing::new();
         let mut req = minimal_request();
 
-        let mut delta = sovereign_atos::session::ArtifactDelta::default();
+        let mut delta = crate::session::ArtifactDelta::default();
         delta
             .milestones_passed
-            .push(sovereign_atos::session::MilestonePassEvent {
+            .push(crate::session::MilestonePassEvent {
                 feature_id: "fx".into(),
                 ordinal: 1,
                 artifact_path: ".sovereign/features/fx/milestone-1.md".into(),

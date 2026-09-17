@@ -68,6 +68,12 @@ hex = "0.4"
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
+[features]
+# The canonical middleware test fixtures (`middleware::fixtures`). Off by
+# default so the lifted contract leaf ships no test support; the crates that
+# own middleware tests enable it through a dev-dependency.
+test-fixtures = []
+
 [dev-dependencies]
 tempfile = { workspace = true }
 

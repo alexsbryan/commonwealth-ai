@@ -14,7 +14,7 @@
 //! calls tools. `ArtifactSurface.post_process` scans the tables
 //! for changes since `session.last_seen_at` and stashes an
 //! [`ArtifactDelta`] on the session so
-//! [`ContextInjector`](super::context_injector) can render it as
+//! `ContextInjector` (now `sovereign_atos::middleware::ContextInjector`) can render it as
 //! the "Since last turn" section of the next turn's preamble.
 //!
 //! Design choice: we read from the DB rather than from the
@@ -30,7 +30,8 @@ use corpus_engine_notes::{NoteStore, ScopeFilter};
 
 use sovereign_atos::session::{ArtifactDelta, MilestonePassEvent};
 
-use super::shared::{features_db_path, notes_db_path};
+use sovereign_core::middleware::{features_db_path, notes_db_path};
+
 use super::{Middleware, MiddlewareError, MiddlewareSession, PipelineContext, ResponseView};
 use crate::openai_types::ChatCompletionRequest;
 
@@ -208,7 +209,7 @@ fn rfc3339_to_unix(s: &str) -> Option<i64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::middleware::shared::fixtures::ctx_with;
+    use sovereign_contracts::middleware::fixtures::ctx_with;
 
     #[test]
     fn rfc3339_parses_utc() {

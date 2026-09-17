@@ -16,7 +16,14 @@ corpus-engine-notes = { workspace = true }
 
 # Optional Fast-slot classification pass in teardown. The library
 # works without an InferenceProvider — the caller passes None.
+# `sovereign_core::middleware` also carries the middleware seam
+# (`sovereign-contracts`) and the `.sovereign/` path conventions the
+# middlewares in `src/middleware/` name.
 sovereign-core = { workspace = true }
+
+# The ATOS middlewares build and inspect `ChatCompletionRequest` /
+# `ToolDescriptor`; the wire vocabulary lives on the family-neutral floor.
+oicp-types = { workspace = true }
 
 # Session-state backend. Cross-workspace path dep; sovereign-atos
 # reads and writes AtosSessionState / FeatureApproval rows into the
@@ -39,6 +46,9 @@ pulldown-cmark = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"
+# The canonical middleware test fixtures (`middleware::fixtures`), off by
+# default on the leaf. The middleware test modules name them directly.
+sovereign-contracts = { workspace = true, features = ["test-fixtures"] }
 
 [lints]
 workspace = true

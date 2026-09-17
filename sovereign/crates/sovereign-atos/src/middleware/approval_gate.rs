@@ -5,7 +5,7 @@
 //! Logic, in order:
 //!
 //! 1. Resolve an approval for `ctx.feature_id` via
-//!    [`sovereign_atos::approval::find_approval`], git path only —
+//!    [`crate::approval::find_approval`], git path only —
 //!    see the note on [`ApprovalGate`] for why the MeshStore arm is
 //!    gone. `None` if no commit touched the spec. Result cached on
 //!    the session state so the next request skips the git walk.
@@ -26,11 +26,10 @@ use std::path::Path;
 use async_trait::async_trait;
 
 use corpus_engine_notes::{NoteScope, NoteStore};
-use sovereign_atos::approval::{current_spec_hash, detect_drift, find_approval, FeatureApproval};
+use oicp_types::openai_types::ChatCompletionRequest;
 
-use super::shared::notes_db_path;
-use super::{Middleware, MiddlewareError, MiddlewareSession, PipelineContext};
-use crate::openai_types::ChatCompletionRequest;
+use super::{notes_db_path, Middleware, MiddlewareError, MiddlewareSession, PipelineContext};
+use crate::approval::{current_spec_hash, detect_drift, find_approval, FeatureApproval};
 
 /// Tool names that trigger the approval gate. When any of these
 /// appears in the request's `tool_choice` or `tools` array AND the
@@ -112,7 +111,7 @@ impl Middleware for ApprovalGate {
                 spec_content_hash: session.spec_content_hash.clone().unwrap_or_default(),
                 approved_by: String::new(),
                 approved_at: 0,
-                source: sovereign_atos::approval::ApprovalSource::Git,
+                source: crate::approval::ApprovalSource::Git,
                 witness: String::new(),
                 // Cached-approval path has no snapshot; callers that need
                 // content resolution fall back to `git show` via the
@@ -260,8 +259,10 @@ fn short_hash(h: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::middleware::shared::fixtures::{ctx_with, minimal_request};
-    use crate::openai_types::{ChatMessage, FunctionCall, ToolCall, ToolDefinition, ToolFunction};
+    use oicp_types::openai_types::{
+        ChatMessage, FunctionCall, ToolCall, ToolDefinition, ToolFunction,
+    };
+    use sovereign_contracts::middleware::fixtures::{ctx_with, minimal_request};
 
     #[tokio::test]
     async fn no_feature_id_is_noop() {
