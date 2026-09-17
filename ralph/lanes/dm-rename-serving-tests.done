@@ -1,0 +1,28 @@
+unit: dm-rename-serving-tests
+commits: 1754a2c6a (the test-tree renames)
+what: applied the DT [[noun]] dispositions (quality/DOMAINS.toml) to the
+  serving cluster's test doubles — identifiers only, no behaviour change:
+    PeerLedger -> VenueLedger, PeerLedgerHandle -> VenueLedgerHandle,
+    ResolvingPeerState -> ResolvingVenueState
+      sovereign-mesh/tests/main/chat_completion_e2e.rs (defs :1356, :1365,
+      :1367 + uses)
+    StubPeerSource -> StubVenueSource
+      sovereign-mesh/tests/main/chat_completion_e2e.rs:67 (the survivor)
+      sovereign-mesh/tests/main/manifest_fanout_concurrency.rs:46
+      sovereign-mesh/tests/main/scheduler_decision_records.rs:65
+      sovereign-mesh/tests/main/throughput_ledger_emission.rs:53
+    NoPeers -> NoVenues
+      sovereign-mesh/tests/main/guest_lender_routing.rs:57
+      sovereign-cli-daemon/tests/main/named_model_routes_after_child_serves_e2e.rs:112
+  The DT [[noun]] rows for the three non-survivor StubPeerSource copies
+  carry disposition "decided:merge" (into the chat_completion_e2e.rs
+  survivor), but the row directs a rename in all four files; the merge
+  into one shared test-support module is not asked for here and would be a
+  larger change. Noted, not done. No DT re-key: the row asks only for the
+  renames, and the [[noun]] rows are the registry's historical record.
+checks: CLEAN exit=0 (debug target 0G, under 50G — cache kept); LINT exit=0
+  (5 crates: sovereign-cli-daemon,sovereign-mesh,sovereign-cli-dev,
+  sovereign-cli-llm,sovereign-daemon; 0 errors, cargo exit 0, --all-targets
+  so the test trees compiled)
+evidence: `grep -rn 'PeerLedger\|ResolvingPeerState\|StubPeerSource\|\bNoPeers\b'`
+  over sovereign-mesh/tests and sovereign-cli-daemon/tests returns nothing.
