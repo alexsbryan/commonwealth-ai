@@ -35,6 +35,13 @@ mod wire;
 // and no further.
 pub use discovery::{probe_daemon, resolve_default_models};
 
+// The three-way probe (order enrich-probe-timeout) stays INSIDE the
+// crate: `probe_daemon`'s bool signature is frozen by the ~20
+// `sovereign-cli-llm` call sites that reach this module through the
+// re-export there, so the slow-vs-down split surfaces only to this
+// crate's own callers (extract) — it must not escape the module.
+pub(crate) use discovery::{probe_daemon_status, DaemonProbe, V1_MODELS_TIMEOUT};
+
 /// Default chat request timeout. Phase 1 extract on a 27B-Q6 model
 /// emitting up to 16k tokens of structured JSON can run 5–15 minutes
 /// on M2 hardware. The previous 180s ceiling silently killed real

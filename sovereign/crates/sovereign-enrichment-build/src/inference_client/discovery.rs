@@ -7,27 +7,79 @@
 
 use std::time::Duration;
 
-/// Readiness probe — returns `true` iff `GET /v1/models` responds
-/// 200 within 500ms. Used by `enrich init` / `extract` to fail early
-/// if the daemon isn't running.
-pub async fn probe_daemon(base_url: &str) -> bool {
+/// The ONE budget this module allows for `GET /v1/models` — the same
+/// figure `resolve_default_models` below has always used. The daemon
+/// answers `/v1/models` in 0.80–0.86 s under a 2-lane pool load
+/// (measured 2026-09-17, three probes through the ersilia proxy on
+/// 9740; ~0.80 s direct before that), so 5 s is >5x headroom. The
+/// readiness probe's old 500 ms killed cold `enrich build` runs at
+/// extract while the daemon was in fact serving (order
+/// enrich-probe-timeout).
+pub(crate) const V1_MODELS_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// What a readiness probe learned about the daemon. Split so a SLOW
+/// daemon is never reported to the user as a DOWN one — "did not
+/// answer within the budget" is not "not responding" (order
+/// enrich-probe-timeout).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DaemonProbe {
+    /// Answered 200 within the budget.
+    Up,
+    /// No answer within the budget — the daemon may be up under load.
+    Slow,
+    /// Connection refused (or another immediate failure) — treat as
+    /// not running.
+    Down,
+}
+
+/// Classification core. `budget` is a plain parameter, NOT a config
+/// surface: it exists so tests can watch the timeout path in
+/// milliseconds instead of waiting the production budget. The one
+/// production budget is [`V1_MODELS_TIMEOUT`], applied by
+/// [`probe_daemon_status`].
+async fn probe_with_budget(base_url: &str, budget: Duration) -> DaemonProbe {
     let Ok(client) = reqwest::Client::builder()
-        .timeout(Duration::from_millis(500))
+        .timeout(budget)
         .build()
     else {
-        return false;
+        return DaemonProbe::Down;
     };
     let url = if base_url.ends_with("/v1/models") {
         base_url.to_string()
     } else {
         format!("{base_url}/v1/models")
     };
-    client
-        .get(&url)
-        .send()
-        .await
-        .map(|r| r.status().is_success())
-        .unwrap_or(false)
+    match client.get(&url).send().await {
+        Ok(r) if r.status().is_success() => DaemonProbe::Up,
+        // Answered, but not 200 — unusable, and not slow: same
+        // not-up verdict the bool probe has always folded this into.
+        Ok(_) => DaemonProbe::Down,
+        // The budget elapsed with no answer at all.
+        Err(e) if e.is_timeout() => DaemonProbe::Slow,
+        // Refused, DNS, TLS — everything that fails fast is down.
+        Err(_) => DaemonProbe::Down,
+    }
+}
+
+/// Three-way readiness probe for this crate's callers that report the
+/// failure to a human: `Up` iff `GET /v1/models` answers 200 within
+/// [`V1_MODELS_TIMEOUT`], `Slow` if the budget elapsed with no answer,
+/// `Down` for refused/immediate failures.
+pub(crate) async fn probe_daemon_status(base_url: &str) -> DaemonProbe {
+    probe_with_budget(base_url, V1_MODELS_TIMEOUT).await
+}
+
+/// Readiness probe — returns `true` iff `GET /v1/models` responds
+/// 200 within [`V1_MODELS_TIMEOUT`]. Used by `enrich init` / `extract`
+/// to fail early if the daemon isn't running.
+///
+/// The bool folds `Slow` into `false`: roughly twenty call sites in
+/// `sovereign-cli-llm` reach this function through the
+/// `pub use sovereign_enrichment_build::{… inference_client …}`
+/// re-export, so its signature is frozen — callers that need to name
+/// slow-vs-down use [`probe_daemon_status`] instead.
+pub async fn probe_daemon(base_url: &str) -> bool {
+    matches!(probe_daemon_status(base_url).await, DaemonProbe::Up)
 }
 
 /// Enumerate the daemon's registered models. Returns `(chat_model, embed_model)`
@@ -39,7 +91,7 @@ pub async fn probe_daemon(base_url: &str) -> bool {
 /// `"embedding"` or `"-embed"` is classed as embed; everything else is chat.
 pub async fn resolve_default_models(base_url: &str) -> (Option<String>, Option<String>) {
     let client = match reqwest::Client::builder()
-        .timeout(Duration::from_secs(5))
+        .timeout(V1_MODELS_TIMEOUT)
         .build()
     {
         Ok(c) => c,
@@ -130,11 +182,104 @@ fn pick_default_models_from_v1(v: &serde_json::Value) -> (Option<String>, Option
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{Read as _, Write as _};
+    use std::net::TcpListener;
+
+    /// A TCP server that accepts one connection and answers a valid
+    /// empty HTTP 200 — just enough HTTP for the probe's status check.
+    fn http_200_server() -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            if let Ok((mut sock, _)) = listener.accept() {
+                // Read the request head first, then answer — answering
+                // before the request arrives is a race some clients
+                // reject, and a real daemon never runs it.
+                let mut buf = [0u8; 1024];
+                let _ = sock.read(&mut buf);
+                let _ = sock.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+                // Hold the connection briefly so reqwest can finish
+                // reading the response before the socket closes.
+                std::thread::sleep(Duration::from_secs(2));
+            }
+        });
+        format!("http://{addr}")
+    }
+
+    /// A TCP server that accepts and then never writes — the
+    /// daemon-under-load shape: connection up, no answer within any
+    /// budget we'd pass.
+    fn hanging_server() -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            if let Ok((sock, _)) = listener.accept() {
+                // Hold the accepted socket open across the sleep —
+                // closing it would end the connection early.
+                let _held = sock;
+                std::thread::sleep(Duration::from_secs(10));
+            }
+        });
+        format!("http://{addr}")
+    }
 
     #[tokio::test]
     async fn probe_daemon_returns_false_for_unreachable_host() {
         // Port 1 is reserved and never listening.
         assert!(!probe_daemon("http://127.0.0.1:1").await);
+    }
+
+    #[tokio::test]
+    async fn status_refused_host_is_down() {
+        assert_eq!(
+            probe_daemon_status("http://127.0.0.1:1").await,
+            DaemonProbe::Down
+        );
+    }
+
+    #[tokio::test]
+    async fn status_hanging_server_is_slow() {
+        // Short budget so the timeout path is watched in milliseconds;
+        // the production budget is pinned separately, below.
+        let base = hanging_server();
+        assert_eq!(
+            probe_with_budget(&base, Duration::from_millis(250)).await,
+            DaemonProbe::Slow
+        );
+    }
+
+    #[tokio::test]
+    async fn status_http_200_is_up() {
+        let base = http_200_server();
+        assert_eq!(
+            probe_with_budget(&base, Duration::from_secs(2)).await,
+            DaemonProbe::Up
+        );
+    }
+
+    #[test]
+    fn v1_models_budget_is_five_seconds() {
+        // The module's ONE /v1/models budget: the resolve_default_models
+        // precedent, >5x headroom over the measured 0.86 s latency.
+        assert_eq!(V1_MODELS_TIMEOUT, Duration::from_secs(5));
+    }
+
+    #[tokio::test]
+    async fn status_uses_the_module_budget_not_the_old_500ms() {
+        // Against the old 500 ms budget the probe returns at ~0.5 s and
+        // the 2 s outer timeout does NOT fire; against the 5 s budget
+        // the probe is still waiting at 2 s. This is the assertion the
+        // timeout raise was watched red against.
+        let base = hanging_server();
+        let outcome = tokio::time::timeout(
+            Duration::from_secs(2),
+            probe_daemon_status(&base),
+        )
+        .await;
+        assert!(
+            outcome.is_err(),
+            "probe returned before 2s — the module budget is not applied"
+        );
     }
 
     #[tokio::test]
