@@ -301,3 +301,47 @@ Fabric's state to the daemon instead of mesh.
 **Landed in.** this commit — `ralph/STATE.md` (the row re-scoped and marked
 `[x]`; `REVIEW-build-peer-wire` minted; `REVIEW-build-daemon-parts` re-scoped)
 and this entry. `git revert <sha>` reverts it alone.
+
+## 2026-09-16 · REVIEW-build-daemon-embedded-split · the shells leave first; the type moves when nothing in mesh names it
+
+**Fork.** The row is an ordering defect, not a content defect: moving
+`EmbeddedDaemon` out of `sovereign-mesh` needs every mesh module naming it to
+move in the same commit — 25 route shells hold `Arc<EmbeddedDaemon>` — but
+those shells are the payload of the rows that depend on this one, and
+`[[forbid]] from = "sovereign-mesh" to = "sovereign-daemon"`
+(`quality/ARCH_LAYERS.toml:739-742`) makes the intermediate state (type in the
+daemon, shells in mesh holding it) uncompilable. Re-sequence, widen, or split
+in place?
+
+**Choice.** Re-sequence (the package's option i). `dm-daemon-mesh-edge` now
+depends on `REVIEW-build-mesh-host-decouple` (done), not on this row, so the
+chain `edge -> http-a -> http-b -> jobs` moves the 21 shells to
+sovereign-daemon first — the daemon may name mesh, so they compile holding
+`sovereign_mesh::daemon::EmbeddedDaemon` — and this row then waits on
+`dm-daemon-mesh-jobs` and on `REVIEW-build-daemon-parts` (DC §4.1's "once
+Fabric owns its state they are Fabric's methods" is a forward reference until
+`state/fabric.rs` lands in sovereign-mesh — the package's supporting fact 1).
+The four files carrying inherent `impl EmbeddedDaemon` move with the type, not
+with the shells (E0116). The split is minted as three sub-rows rather than one
+commit (7,500+ lines over five files, 62 external sites; the ten-file grammar).
+
+Option (ii), widening the row to absorb the shell moves, is ~15,000 lines in
+one commit; option (iii), splitting in place, leaves the type in mesh and does
+not deliver DC §4.1's by-owner outcome.
+
+**Evidence.** ralph/NEEDS_HUMAN.md (the worker's package, measurements
+reproduced); `git grep -l 'Arc<EmbeddedDaemon>'` = 25 files;
+`quality/ARCH_LAYERS.toml:739-742`; DC §4.1 ("EmbeddedDaemon splits by owner,
+not size"); STATE.md:177-180 (the dependent chain); `wc -l` on the seven files
+(daemon.rs 5,638 + daemon_services.rs 1,084 + lib.rs 168 + the four impl files
+673). The director's own session produced nothing in 33 minutes and timed out;
+resolved by the supervisor session instead.
+
+**Falsified by.** A shell that turns out to need the daemon-side type before
+the type moves (LINT would fail on the chain); or DC §4.1 revised so the
+membership methods stay on the host type, which would make the split
+unnecessary.
+
+**Landed in.** this commit — `ralph/STATE.md` (three edits: the two `depends`
+lines, the row's RE-SEQUENCED note, and the row back to `[ ]`) and this entry.
+`git revert <sha>` reverts it alone.
