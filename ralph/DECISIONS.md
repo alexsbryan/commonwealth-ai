@@ -1243,3 +1243,56 @@ so the "no terminal state" is escalation, not a defect.
 **Landed in.** this commit — `ralph/STATE.md` (the row's `DIRECTOR` clause),
 `ralph/DECISIONS.md` (this entry), `ralph/NEEDS_HUMAN.md` removed. `git revert
 <sha>` reverts it alone.
+
+## 2026-09-17 · the domains campaign · director: the campaign's plan is superseded, so it is not resumed
+
+**Correction to the entry above.** That entry resolved the row-order fork and
+removed the package, which would resume the campaign. This entry records why the
+campaign is NOT resumed, and restores the package carrying the operator fork.
+
+**Fork.** `c35d235b2` (`docs/FIVE_PROGRAMS.md`) landed at 15:13:53, 34 seconds
+before the director's commit at 15:14:27. It states it "Supersedes the
+ten-context decomposition in `quality/DOMAINS.md` §4 and the `domains`
+campaign's relocation plan" (`docs/FIVE_PROGRAMS.md:3-4`); `quality/DOMAINS.md`
+now carries the banner "§4, §7 and §11 do not govern" (`:3-6`); §5 deletes "the
+ten-context registry `quality/DOMAINS.toml` and its census script"
+(`docs/FIVE_PROGRAMS.md:69-71`) and step 0 deletes the process apparatus
+(`:104-106`). The campaign's remaining rows ARE that relocation plan. Continue
+it, pause it and begin the new procedure, or finish wave 1 first?
+
+**Choice.** Do not decide it: package it and halt. This is not the charter's
+"Row order, re-scoping, splitting, folding, minting rows" — it is the operator
+replacing the campaign's plan, authored by the operator minutes earlier, and the
+charter's own instruction is "an honest package beats a guessed decision" and
+"If the fork is one the charter leaves to the operator, say so in the package —
+the options, their costs, and your recommendation — and stop." The director's
+recommendation is to pause and begin `docs/FIVE_PROGRAMS.md` step 0; the package
+(`ralph/NEEDS_HUMAN.md`) names the three options, their costs, and the one-line
+resume.
+
+**Evidence** (reproduced this session, on `ralph/domains-campaign`).
+- `git log --format='%h %ci %s' -3` -> `2220dbf93` (15:14:27), `c35d235b2`
+  (15:13:53), `7b2e304b8` (15:08:52).
+- `quality/DOMAINS.md:3-6` banner; `docs/FIVE_PROGRAMS.md:3-4,:69-71,:104-106`.
+- Ready rows are the relocation plan:
+  `Queue('ralph/STATE.md').first_ready_review()` -> `None`; ready non-review
+  lanes `['dm-mesh-workbench-move-scip', 'dm-vocab-compile-fail-test',
+  'dm-decision-extractor-move', 'dm-next-edit-move', 'dm-auto-recover-move']`.
+- No `ralph/STOP` exists (`ls ralph/STOP` -> absent), so the operator has not
+  asked for a halt through the loop's own mechanism; the supersession is the
+  only signal, which is why it is packaged rather than assumed.
+
+**Falsified by.** An operator instruction that the campaign continues to the
+transition (then remove the package and the director's row-order resolution
+resumes the campaign); or a `docs/FIVE_PROGRAMS.md` revision that keeps the
+relocation plan governing (then the campaign stands); or a `ralph/STOP` that
+appeared with `c35d235b2` (then the halt is the operator's already).
+
+**REVIEW-AFTER:** the whole entry. The director's row-order resolution of
+`REVIEW-audit-daemon-2` (the entry above) is a valid record of the campaign's
+own rules and stands if the campaign resumes; it is moot if the campaign is
+retired. The morning should read this entry first.
+
+**Landed in.** this commit — `ralph/DECISIONS.md` (this entry) and
+`ralph/NEEDS_HUMAN.md` restored (untracked; `.git/info/exclude:21`). `git
+revert <sha>` reverts the record alone; the package is a file, not a commit.
