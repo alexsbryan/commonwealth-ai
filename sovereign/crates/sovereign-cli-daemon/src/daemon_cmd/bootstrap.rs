@@ -21,8 +21,8 @@ use sovereign_core::model_family::{
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::ToolRegistry;
-use sovereign_inference::embedded::EmbeddedLlamaCpp;
 use sovereign_daemon::EmbeddedDaemon;
+use sovereign_inference::embedded::EmbeddedLlamaCpp;
 
 /// Resolve this node's persistent id using the same precedence
 /// `EmbeddedDaemon::start_daemon` applies on resume: the `node_id` file, then

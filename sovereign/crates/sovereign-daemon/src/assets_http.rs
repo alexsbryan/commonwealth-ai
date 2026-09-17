@@ -41,8 +41,8 @@ use sovereign_inference::setup_planner;
 
 use crate::daemon::EmbeddedDaemon;
 use crate::http_response::json_error;
-use crate::loopback_guard::{LocalOnly, LoopbackRouter};
 use crate::job_registry::JobRegistry;
+use crate::loopback_guard::{LocalOnly, LoopbackRouter};
 
 /// Build the assets router. Merged into the daemon's client router beside
 /// `admin_router`, and loopback-guarded for the same reason: these routes

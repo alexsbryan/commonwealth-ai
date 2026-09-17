@@ -99,8 +99,8 @@ use sovereign_contracts::setup_config::{InvalidWorkOffer, WorkOfferSection};
 use tokio::task::JoinSet;
 use tracing::{debug, info, warn};
 
-use sovereign_mesh::projects::{ProjectState, WatcherKind};
 use crate::supervised_task::SupervisedTask;
+use sovereign_mesh::projects::{ProjectState, WatcherKind};
 
 /// The tracing target for everything this module decides.
 ///

@@ -57,8 +57,8 @@ use sovereign_tools::local_corpus::progress::{CompletionResult, LocalCorpusProgr
 use sovereign_tools::local_corpus::LocalCorpusManager;
 
 use crate::http_response::{internal_error, not_found, Absence};
-use crate::loopback_guard::{LocalOnly, LoopbackRouter};
 use crate::job_registry::JobRegistry;
+use crate::loopback_guard::{LocalOnly, LoopbackRouter};
 use crate::watched_folder_runtime;
 
 // ─── Wire shapes ───────────────────────────────────────────────

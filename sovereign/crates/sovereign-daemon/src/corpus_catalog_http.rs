@@ -39,8 +39,8 @@ use sovereign_tools::local_corpus::config::{LocalCorpusConfig, LocalCorpusSource
 
 use crate::daemon::EmbeddedDaemon;
 use crate::http_response::{json_error, Absence};
-use crate::loopback_guard::{LocalOnly, LoopbackRouter};
 use crate::job_registry::JobRegistry;
+use crate::loopback_guard::{LocalOnly, LoopbackRouter};
 
 pub use sovereign_contracts::daemon_wire::{IndexBuildProgress, IndexBuildState, IngestJobAck};
 
