@@ -87,7 +87,7 @@ default = []
 # `sovereign_mesh::reindexer` and therefore mesh's `treesitter`. Off by
 # default so binaries that never serve the project surface don't drag in
 # `corpus-engine`'s 5 tree-sitter grammar crates.
-treesitter = ["sovereign-mesh/treesitter"]
+treesitter = ["sovereign-mesh/treesitter", "sovereign-tools/treesitter"]
 # The daemon's ATOS code-intel tools on the MCP surface and the headless OCR
 # installer. Both cfg gates moved here with the composition half (domains
 # `dm-daemon-cli-composition`); the binary's features forward to these.

@@ -518,9 +518,11 @@ fn worker_allowlist() -> Option<Vec<String>> {
 /// `doctor_cmd`), and two of them feed a containment VERDICT — so a divergence
 /// would mean the doctor reporting a containment posture the daemon does not
 /// actually run under.
-pub fn rpc_discovery_armed() -> bool {
-    std::env::var("SOVEREIGN_RPC_DISCOVER").is_ok()
-}
+///
+/// Lives in `crate::startup` rather than here (moved 2026-09-17) because this
+/// module is gated on `treesitter` and `build/containment` is not; the env read
+/// has no treesitter dependency.
+pub use crate::startup::rpc_discovery_armed;
 
 fn env_rpc_workers() -> Vec<String> {
     // One reader, in `sovereign_inference::embedded` — this function used to

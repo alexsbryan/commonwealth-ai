@@ -55,6 +55,12 @@ pub mod auto_resume;
 /// work-atlas wiring and the runtime-support leaves. `run_daemon` itself
 /// stays with the binary — it owns log rotation, the memory watchdog and
 /// the process exit code (DC §4 preamble), and calls these.
+///
+/// `bootstrap` and `tool_registry` are gated on `treesitter`: the bootstrap
+/// mounts `project_http` and the registry registers `sovereign-tools`' code
+/// tools, both of which are behind that feature. The daemon binary enables it
+/// unconditionally.
+#[cfg(feature = "treesitter")]
 pub mod bootstrap;
 pub mod build;
 pub mod corpus_catalog_http;
@@ -116,6 +122,9 @@ pub mod supervise;
 /// The panic-boundary supervisor every long-running watcher runs under
 /// (DAEMON_CORE.md §3.2, `jobs`).
 pub mod supervised_task;
+/// The `/mcp` tool registry. Gated with `bootstrap`: it registers
+/// `sovereign-tools`' code-intel tools, which are behind `treesitter`.
+#[cfg(feature = "treesitter")]
 pub mod tool_registry;
 pub mod turn_extras_http;
 pub mod turn_http;

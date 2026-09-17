@@ -993,7 +993,7 @@ pub(super) fn check_distributed_primary_contained() -> CheckResult {
         config.compute.enabled && config.compute.distributed_primary,
         config.shared_model.role,
         false, // self node id is not resolved here; the role term carries it
-        sovereign_daemon::bootstrap::rpc_discovery_armed(),
+        sovereign_daemon::startup::rpc_discovery_armed(),
         std::env::var(OVERRIDE_ENV).is_ok(),
     );
 

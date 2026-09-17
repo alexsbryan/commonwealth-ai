@@ -21,6 +21,19 @@ pub fn daemon_pid_path() -> PathBuf {
     sovereign_contracts::rebrand::svrnmesh_root().join("daemon.pid")
 }
 
+/// Is this process armed to serve RPC workers? One reader of
+/// `SOVEREIGN_RPC_DISCOVER`.
+///
+/// Three sites ask (`bootstrap`, `build/containment`, `doctor_cmd`) and two of
+/// them feed a containment VERDICT, so a divergence would mean the doctor
+/// reporting a containment posture the daemon does not actually run under. It
+/// lives here rather than in `bootstrap` because `bootstrap` is gated on
+/// `treesitter` and `build/containment` is not (domains
+/// `dm-daemon-cli-composition`, 2026-09-17).
+pub fn rpc_discovery_armed() -> bool {
+    std::env::var("SOVEREIGN_RPC_DISCOVER").is_ok()
+}
+
 /// Surface orphaned per-corpus SCIP indexes at startup.
 ///
 /// On an upgrade from a pre-registry sovereign, `~/.svrnmesh/
