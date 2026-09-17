@@ -1234,8 +1234,21 @@ def cmd_watch(args):
     return 0
 
 
+def paths_for(args):
+    """The one place a subcommand turns its flags into `Paths`.
+
+    `run` and `supervise` accept `--prompt` and `--state` and, until
+    2026-09-17, built `Paths(workdir)` with the DEFAULTS - so a staged queue
+    passed by flag was silently swapped for `ralph/STATE.md` (ARCH 6). Found
+    the expensive way: a ring-doc launch spent six minutes on a domains row.
+    """
+    return Paths(pathlib.Path(args.workdir).resolve(),
+                 prompt=getattr(args, "prompt", None) or "ralph/PROMPT.md",
+                 state=getattr(args, "state", None) or "ralph/STATE.md")
+
+
 def cmd_run(args):
-    paths = Paths(pathlib.Path(args.workdir).resolve())
+    paths = paths_for(args)
     models = load_models(paths.p(paths.models))
     session = Session(paths, timeout=args.session_timeout,
                       notify_enabled=args.notify)
@@ -1267,7 +1280,7 @@ def cmd_run(args):
 
 
 def cmd_supervise(args):
-    paths = Paths(pathlib.Path(args.workdir).resolve())
+    paths = paths_for(args)
     models = load_models(paths.p(paths.models))
     session = Session(paths, timeout=args.session_timeout, notify_enabled=args.notify)
     campaign = list(args.campaign)
@@ -1395,6 +1408,8 @@ def main(argv=None):
 
     p = sub.add_parser("supervise")
     common(p, notify_default=True)
+    p.add_argument("--prompt", default="ralph/PROMPT.md")
+    p.add_argument("--state", default="ralph/STATE.md")
     p.add_argument("--resolve-model", default="")
     p.add_argument("--resolve-variant", default="")
     p.add_argument("--resolve-max", type=int, default=4)

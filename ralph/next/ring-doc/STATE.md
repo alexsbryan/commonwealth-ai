@@ -15,6 +15,8 @@ NOT promoted over `ralph/STATE.md`, which the domains branch owns:
 
 ```
 nohup python3 scripts/ralph.py supervise --workdir . --label ring-doc \
+  --prompt ralph/next/ring-doc/PROMPT.md --state ralph/next/ring-doc/STATE.md \
+  --charter ralph/next/ring-doc/CHARTER.md \
   -- python3 scripts/ralph.py run --workdir . --label ring-doc \
   --prompt ralph/next/ring-doc/PROMPT.md --state ralph/next/ring-doc/STATE.md \
   --max-stall 3 >> ralph/log-ring-doc.txt 2>&1 &
