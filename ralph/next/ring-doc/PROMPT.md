@@ -91,19 +91,19 @@ you cannot make green: §6.
 On Linux every check runs inside the `sovereign-vulkan` toolbox; if
 `/run/.containerenv` does not exist on a Linux host, stop (§6) before building.
 
-| name | command | passes when |
+| name | command (each writes `target/ralph/<check>.log`, prints `exit=N`, tails it; `scripts/ralph-check.sh` is the one place the commands live) | passes when |
 |---|---|---|
-| CLEAN | `RALPH_CLEAN_MB=262144 ./scripts/dev-build.sh --clean --gate-only > target/ralph/build.log 2>&1; echo exit=$?; tail -5 target/ralph/build.log` | exit=0 (once per unit). No lock wrapper: at this ceiling the gate is a `du` and never runs cargo, and another campaign holds the cargo lock for ~19 min per fresh build in this tree - waiting on it here bought nothing (rd-1-scaffold lost a session to that wait). The ceiling is 256G here, not the 50G default: another campaign (build-latency) measures warm builds in this tree and a clean under it destroys their numbers - a clean is the operator's call, say so in NEEDS_HUMAN if the gate trips |
-| LINT | `./scripts/with-cargo-lock.sh ./scripts/sovereign-lint.sh --human > target/ralph/lint.log 2>&1; echo exit=$?; tail -5 target/ralph/lint.log` | exit=0 |
-| TEST(c) | `./scripts/with-cargo-lock.sh ./scripts/sovereign-test.sh --human --package c > target/ralph/test.log 2>&1; echo exit=$?; tail -8 target/ralph/test.log` | exit=0 |
-| LAYER | `(cd corpus-engine && ../scripts/with-cargo-lock.sh cargo xtask layer-gate) > target/ralph/layer.log 2>&1; echo exit=$?; tail -5 target/ralph/layer.log` | exit=0 |
-| TOML | `python3 -c "import tomllib; [tomllib.load(open(p,'rb')) for p in ('quality/campaigns/ring-doc.toml','quality/campaigns/ring-apps.toml')]" && python3 scripts/co-lineage.py list >/dev/null && echo exit=0` | exit=0 |
-| DOCS | `(cd corpus-engine && ../scripts/with-cargo-lock.sh cargo xtask docs-gate) > target/ralph/docs.log 2>&1; echo exit=$?; tail -5 target/ralph/docs.log` | exit=0 (rows that edit a doc) |
+| CLEAN | `scripts/ralph-check.sh clean` | exit=0 (once per unit). No lock wrapper: at this ceiling the gate is a `du` and never runs cargo, and another campaign holds the cargo lock for ~19 min per fresh build in this tree - waiting on it here bought nothing (rd-1-scaffold lost a session to that wait). The ceiling is 256G here, not the 50G default: another campaign (build-latency) measures warm builds in this tree and a clean under it destroys their numbers - a clean is the operator's call, say so in NEEDS_HUMAN if the gate trips |
+| LINT | `scripts/ralph-check.sh lint` | exit=0 |
+| TEST(c) | `scripts/ralph-check.sh test c` | exit=0 |
+| LAYER | `scripts/ralph-check.sh layer` | exit=0 |
+| TOML | `scripts/ralph-check.sh toml` | exit=0 |
+| DOCS | `scripts/ralph-check.sh docs` | exit=0 (rows that edit a doc) |
 | PLANT(x) | make the one-line violation `x` names, run the gate the row names (LINT or LAYER or TEST(c)), paste its red line, `git checkout --` the plant, run the gate again | red with the plant, exit=0 without it |
-| NODE(d) | `node --test d > target/ralph/node.log 2>&1; echo exit=$?; tail -8 target/ralph/node.log` (node 20 and npx are in the toolbox; pin every npm version the row names) | exit=0 |
-| DEMO | `scripts/ring-doc-demo.sh verdict all > target/ralph/demo.log 2>&1; echo exit=$?; tail -12 target/ralph/demo.log` — starts and stops its OWN throwaway daemons under `SOVEREIGN_DATA_DIR`, never the deployed one | exit=0 and five rows reading PASSED |
-| TESTALL | `./scripts/with-cargo-lock.sh ./scripts/sovereign-test.sh --human > target/ralph/testall.log 2>&1; echo exit=$?; tail -12 target/ralph/testall.log` | exit=0 (audits only) |
-| PREPUSH | `./scripts/pre-push.sh > target/ralph/prepush.log 2>&1; echo exit=$?; tail -20 target/ralph/prepush.log` | exit=0 (audits only) |
+| NODE(d) | `scripts/ralph-check.sh node d` (node 20 and npx are in the toolbox; pin every npm version the row names) | exit=0 |
+| DEMO | `scripts/ralph-check.sh demo` — starts and stops its OWN throwaway daemons under `SOVEREIGN_DATA_DIR`, never the deployed one | exit=0 and five rows reading PASSED |
+| TESTALL | `scripts/ralph-check.sh testall` | exit=0 (audits only) |
+| PREPUSH | `scripts/ralph-check.sh prepush` | exit=0 (audits only) |
 
 Never print a whole log into the session; grep it. A PLANT that stays green is
 §6: the enforcement does not enforce.

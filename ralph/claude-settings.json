@@ -95,15 +95,8 @@
       "Bash(curl -s http://localhost*)",
       "Bash(curl -sS http://127.0.0.1*)",
       "Bash(curl -sS http://localhost*)",
-      "Bash(node --test sovereign/apps/ring-doc > target/ralph/node.log 2>&1; echo exit=$?; tail -12 target/ralph/node.log)",
-      "Bash(RALPH_CLEAN_MB=262144 ./scripts/dev-build.sh --clean --gate-only > target/ralph/build.log 2>&1; echo exit=$?; tail -5 target/ralph/build.log)",
-      "Bash(./scripts/with-cargo-lock.sh ./scripts/sovereign-lint.sh --human > target/ralph/lint.log 2>&1; echo exit=$?; tail -5 target/ralph/lint.log)",
-      "Bash(./scripts/with-cargo-lock.sh ./scripts/sovereign-test.sh --human --package sovereign-api > target/ralph/test.log 2>&1; echo exit=$?; tail -8 target/ralph/test.log)",
-      "Bash(./scripts/with-cargo-lock.sh ./scripts/sovereign-test.sh --human --package sovereign-mesh > target/ralph/test.log 2>&1; echo exit=$?; tail -8 target/ralph/test.log)",
-      "Bash(./scripts/with-cargo-lock.sh ./scripts/sovereign-test.sh --human > target/ralph/testall.log 2>&1; echo exit=$?; tail -12 target/ralph/testall.log)",
-      "Bash(./scripts/pre-push.sh > target/ralph/prepush.log 2>&1; echo exit=$?; tail -20 target/ralph/prepush.log)",
-      "Bash(scripts/ring-doc-demo.sh verdict all > target/ralph/demo.log 2>&1; echo exit=$?; tail -12 target/ralph/demo.log)",
-      "Bash(bash -n scripts/ring-doc-demo.sh)"
+      "Bash(scripts/ralph-check.sh *)",
+      "Bash(./scripts/ralph-check.sh *)"
     ],
     "deny": [
       "Agent",
