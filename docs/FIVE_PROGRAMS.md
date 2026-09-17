@@ -1,6 +1,11 @@
 # Five programs — the idiomatic design, and the cut that gets there
 
-Drafted 2026-09-17. Supersedes the ten-context decomposition in
+> **DRAFT — not in force (2026-09-17).** The `domains` campaign continues to
+> completion; this document supersedes nothing until then, and the banner it
+> briefly put on `quality/DOMAINS.md` was reverted (operator: the edit was
+> premature). Kept as the design record for the cut that follows.
+
+Drafted 2026-09-17. Intended to supersede the ten-context decomposition in
 `quality/DOMAINS.md` §4 and the `domains` campaign's relocation plan. Keeps
 `sovereign/ARCH_PRINCIPLES.md` whole and the four-verdict rule. Everything
 here is either a measurement taken on 2026-09-17 against `ralph/domains-campaign`
