@@ -6,7 +6,7 @@
 //!
 //! `commonwealth_work` is the vocabulary, the fold and the one predicate, and
 //! it has no I/O and no clock. This is the half that has both: a supervised
-//! task beside [`crate::ring_sync`]'s and [`crate::rail_kv_pump`]'s that folds
+//! task beside [`sovereign_mesh::ring_sync`]'s and [`sovereign_mesh::rail_kv_pump`]'s that folds
 //! the `work` namespace every [`DONOR_POLL_INTERVAL`], asks
 //! [`may_take`](commonwealth_work::refusal::may_take) about each queued unit,
 //! and for the ones it may take appends a `Lease`, runs the unit, heartbeats a
@@ -99,7 +99,7 @@ use sovereign_contracts::setup_config::{InvalidWorkOffer, WorkOfferSection};
 use tokio::task::JoinSet;
 use tracing::{debug, info, warn};
 
-use crate::projects::{ProjectState, WatcherKind};
+use sovereign_mesh::projects::{ProjectState, WatcherKind};
 use crate::supervised_task::SupervisedTask;
 
 /// The tracing target for everything this module decides.
@@ -369,7 +369,7 @@ impl WorkDonorHandle {
     /// What the supervisor last recorded about the loop. Exposed so a test
     /// can assert the loop parked after repeated panics rather than inferring
     /// it from a log.
-    pub async fn status(&self) -> crate::projects::WatcherStatus {
+    pub async fn status(&self) -> sovereign_mesh::projects::WatcherStatus {
         self.state.status(WatcherKind::WorkDonor).await
     }
 

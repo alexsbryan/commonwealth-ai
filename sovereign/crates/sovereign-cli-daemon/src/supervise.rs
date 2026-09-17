@@ -29,7 +29,7 @@ use std::time::Duration;
 const INITIAL_BACKOFF: Duration = Duration::from_secs(2);
 const MAX_BACKOFF: Duration = Duration::from_secs(300);
 /// Panics tolerated before the task parks as degraded. Matches
-/// `sovereign-mesh::supervised_task::MAX_AUTO_RESTARTS`.
+/// `sovereign-daemon::supervised_task::MAX_AUTO_RESTARTS`.
 const MAX_RESTARTS: u32 = 5;
 
 /// Spawn `make()`'s future and keep it alive across panics.

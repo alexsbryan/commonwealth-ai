@@ -80,7 +80,7 @@ impl RebuildReason {
 /// (SCIP export, DB rename, git poll) — not user-authored scripts.
 /// A panic inside it is a bug we want to see, not a fault to
 /// auto-recover from, so we don't wrap it in a
-/// `supervised_task::SupervisedTask`. Test/lint runners
+/// `sovereign_daemon::supervised_task::SupervisedTask`. Test/lint runners
 /// (the user-script surface) are supervised separately in a later
 /// step.
 pub struct ProjectHandle {

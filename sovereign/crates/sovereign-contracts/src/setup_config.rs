@@ -824,7 +824,7 @@ pub struct ComputeSection {
 /// it a claim the code does not honour. `oicp_types::Isolation` refuses a
 /// `Default` for exactly that reason, and re-spelling it here as a config
 /// enum with an `Unset` arm would be a second speller of a closed set
-/// (ARCH §10.6). `sovereign_mesh::work_donor::DONOR_ISOLATION` is the one
+/// (ARCH §10.6). `sovereign_daemon::work_donor::DONOR_ISOLATION` is the one
 /// answer.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkOfferSection {
@@ -946,7 +946,7 @@ impl WorkOfferSection {
     /// Only the KIND spellings are validated here, because that is all this
     /// crate can see: whether a kind resolves to a registered executor is the
     /// donor's check, and it runs at boot against the registry
-    /// (`sovereign_mesh::work_donor::resolve_offer`).
+    /// (`sovereign_daemon::work_donor::resolve_offer`).
     pub fn to_offer(
         &self,
         os: &str,

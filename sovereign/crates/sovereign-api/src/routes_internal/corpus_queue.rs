@@ -167,7 +167,7 @@ pub async fn corpus_ingest_partition(
     // Spawn ingestion asynchronously — 202 Accepted returns immediately.
     // Legacy static-partition path: no work-queue unit_id to stamp chunks
     // with. Pull-based peers invoke `ingest_with_overrides` directly with
-    // `Some(unit_id)` from their own pull loop (see sovereign-mesh::auto_ingest).
+    // `Some(unit_id)` from their own pull loop (see sovereign-daemon::auto_ingest).
     tokio::spawn(async move {
         let ingest_result = engine
             .ingest_with_overrides(

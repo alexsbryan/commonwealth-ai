@@ -512,7 +512,7 @@ fn admission_gaps_are_carried_onto_the_projection() {
 
 /// **The decider a second donor got wrong, and it had no test until now.**
 ///
-/// `lease_state` lived in `sovereign-mesh::work_donor` where a package
+/// `lease_state` lived in `sovereign-daemon::work_donor` where a package
 /// consumer could not reach it, so cw-lift 5f's lifted peer re-derived it —
 /// as a BOOL — and cancelled a running unit whenever the journal merely
 /// failed to read. The fix was to move the decider here; this is the test

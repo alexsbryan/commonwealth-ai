@@ -199,7 +199,7 @@ pub enum RecoveryOutcome {
 /// half the data while recovery reported `Recovered` — watched red in
 /// `sovereign-mesh/tests/main/fold_ingest_cross_node_merge_e2e.rs`.
 ///
-/// The caller (`sovereign-mesh::auto_ingest`) reads the fold, because the
+/// The caller (`sovereign-daemon::auto_ingest`) reads the fold, because the
 /// `ingest:v1` vocabulary lives on the sovereign side of the package
 /// boundary. What crosses is plain data: node ids and a count. This crate
 /// learns nothing about the fold and `commonwealth-work` learns nothing about

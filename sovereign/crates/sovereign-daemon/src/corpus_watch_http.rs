@@ -29,7 +29,7 @@ use sovereign_tools::local_corpus::WatchedIncompleteJob;
 
 use crate::http_response::{json_error, service_unavailable};
 use crate::loopback_guard::{LocalOnly, LoopbackRouter};
-use sovereign_mesh::watched_folder_runtime;
+use crate::watched_folder_runtime;
 
 /// Build the watched-folder router. Mounts under
 /// `/internal/corpus/watch/...` and applies the loopback-only guard

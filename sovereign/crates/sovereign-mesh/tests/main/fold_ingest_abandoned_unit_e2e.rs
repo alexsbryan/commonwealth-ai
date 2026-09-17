@@ -58,7 +58,7 @@ use corpus_engine::index::CorpusIndex;
 use oicp_types::JobKind;
 use sovereign_api::auto_recover::{merge_from_fold_coverage, RecoveryOutcome};
 use sovereign_api::server::internal_router;
-use sovereign_mesh::ingest_executor::{fold_coverage_for, FoldCoverage, INGEST_KIND};
+use sovereign_daemon::ingest_executor::{fold_coverage_for, FoldCoverage, INGEST_KIND};
 use tempfile::TempDir;
 
 use crate::common;

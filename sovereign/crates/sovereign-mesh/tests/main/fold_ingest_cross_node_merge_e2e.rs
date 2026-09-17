@@ -20,7 +20,7 @@
 //! drives only the glue proves little. So both halves are driven, and the
 //! glue is driven too:
 //!
-//! * [`sovereign_mesh::ingest_executor::fold_coverage_for`] — a pure read.
+//! * [`sovereign_daemon::ingest_executor::fold_coverage_for`] — a pure read.
 //!   Given a folded journal it answers "who worked on this corpus, where do
 //!   their partitions live, and do I lead this handoff?". Measured by
 //!   [`the_fold_names_both_verified_donors_and_where_to_find_them`] (B2, first
@@ -115,7 +115,7 @@ use serde_json::json;
 use sovereign_api::auto_recover::{merge_from_fold_coverage, RecoveryOutcome};
 use sovereign_api::server::internal_router;
 use sovereign_api::state::AppState;
-use sovereign_mesh::ingest_executor::{fold_coverage_for, IngestPayload, INGEST_KIND};
+use sovereign_daemon::ingest_executor::{fold_coverage_for, IngestPayload, INGEST_KIND};
 use sovereign_meshapp_registry::AppRegistry;
 use tempfile::TempDir;
 
@@ -346,7 +346,7 @@ pub(crate) fn engine_at(index_dir: &std::path::Path, node: NodeId) -> Arc<Corpus
 }
 
 /// Write one donor's finished slice into the partition directory the real
-/// [`sovereign_mesh::ingest_executor::IngestExecutor`] would have chosen —
+/// [`sovereign_daemon::ingest_executor::IngestExecutor`] would have chosen —
 /// `CorpusEngine::partition_path`, called here rather than re-spelled, so a
 /// change to the layout breaks this test rather than silently detaching it.
 pub(crate) async fn write_donor_partition(

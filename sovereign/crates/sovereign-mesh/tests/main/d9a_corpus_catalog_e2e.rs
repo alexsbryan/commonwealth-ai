@@ -333,7 +333,7 @@ async fn catalog_without_a_corpus_engine_is_the_named_503() {
 /// `install` is a `OnceLock::set`, so this is a no-op when
 /// `lc_surface_e2e` got there first — which is the point.
 async fn install_a_manager_if_none() {
-    use sovereign_mesh::watched_folder_runtime;
+    use sovereign_daemon::watched_folder_runtime;
     if watched_folder_runtime::manager().is_some() {
         return;
     }

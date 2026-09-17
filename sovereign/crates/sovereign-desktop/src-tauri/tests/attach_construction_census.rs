@@ -515,7 +515,7 @@ fn the_in_process_daemon_is_gone() {
              spine's `NoteStore::open` on the floor list above",
         ),
         (
-            "sovereign_mesh::watched_folder_setup::WatchedSubsystem::install(",
+            "sovereign_daemon::watched_folder_setup::WatchedSubsystem::install(",
             "the watched-folder scheduler — the attached daemon owns it",
         ),
         (

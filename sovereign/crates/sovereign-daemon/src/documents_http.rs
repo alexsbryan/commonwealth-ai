@@ -73,7 +73,7 @@ use sovereign_tools::document_asset::DocumentAssetManager;
 use crate::daemon::EmbeddedDaemon;
 use crate::http_response::{json_error, Absence};
 use crate::loopback_guard::{LocalOnly, LoopbackRouter};
-use sovereign_mesh::job_registry::JobRegistry;
+use crate::job_registry::JobRegistry;
 
 // ─── The wire projections ──────────────────────────────────────
 

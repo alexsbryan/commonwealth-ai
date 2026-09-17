@@ -58,8 +58,8 @@ use sovereign_tools::local_corpus::LocalCorpusManager;
 
 use crate::http_response::{internal_error, not_found, Absence};
 use crate::loopback_guard::{LocalOnly, LoopbackRouter};
-use sovereign_mesh::job_registry::JobRegistry;
-use sovereign_mesh::watched_folder_runtime;
+use crate::job_registry::JobRegistry;
+use crate::watched_folder_runtime;
 
 // ─── Wire shapes ───────────────────────────────────────────────
 
@@ -699,10 +699,10 @@ static CLUSTER_JOBS: JobRegistry<ClusterJob> = JobRegistry::new("cluster");
 /// The job on record for `corpus_id`. `Err` is a poisoned table — a
 /// different fact from "no job", which is the `Ok(None)`. This distinction
 /// was written here first and is now the shared table's only answer
-/// (`sovereign_mesh::job_registry`).
+/// (`crate::job_registry`).
 fn cluster_job_for(
     corpus_id: &str,
-) -> Result<Option<Arc<ClusterJob>>, sovereign_mesh::job_registry::TablePoisoned> {
+) -> Result<Option<Arc<ClusterJob>>, crate::job_registry::TablePoisoned> {
     CLUSTER_JOBS.get(corpus_id)
 }
 

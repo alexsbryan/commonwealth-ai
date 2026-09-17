@@ -141,7 +141,7 @@
 3511	sovereign/crates/sovereign-inference/src/embedded/rpc_distribution.rs
 1952	sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs
 1308	sovereign/crates/sovereign-daemon/src/admin_http.rs
-1459	sovereign/crates/sovereign-mesh/src/auto_ingest.rs
+1459	sovereign/crates/sovereign-daemon/src/auto_ingest.rs
 1650	sovereign/crates/sovereign-daemon/src/corpus_watch_http.rs
 5683	sovereign/crates/sovereign-daemon/src/daemon.rs
 1493	sovereign/crates/sovereign-mesh/src/gossip.rs
