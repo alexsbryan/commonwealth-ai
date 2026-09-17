@@ -649,7 +649,8 @@ class Pool:
                  lanes=2, base_branch="", conflicts="ralph/conflicts.txt",
                  prompt="ralph/PROMPT.md", state="ralph/STATE.md",
                  marker_timeout=7200, wait_poll=120, sleep=time.sleep,
-                 model="", review_model="", variant="", max_review_attempts=3):
+                 model="", review_model="", variant="", max_review_attempts=3,
+                 max_lane_failures=3):
         self.paths = paths
         self.session_for = session_for
         self.notifier = notifier
@@ -666,6 +667,8 @@ class Pool:
         self.review_model = review_model
         self.variant = variant
         self.max_review_attempts = max_review_attempts
+        self.max_lane_failures = max_lane_failures
+        self._lane_failures = {}
 
     def _git(self, *args, cwd=None):
         return subprocess.run(["git", "-C", str(cwd or self.paths.workdir), *args],
@@ -814,8 +817,18 @@ class Pool:
             if not wt.exists():
                 continue
             if not (wt / "ralph" / "lanes" / f"{unit}.done").exists():
-                say(f"pool: lane {unit} ended without ralph/lanes/{unit}.done — branch {branch} kept")
+                # A lane that keeps ending without its marker would otherwise be
+                # re-run forever (2026-09-17: ~50 sessions over 2.5h on
+                # dm-daemon-api-edge). Bound it and hand the row to the director.
+                n = self._lane_failures.get(unit, 0) + 1
+                self._lane_failures[unit] = n
+                say(f"pool: lane {unit} ended without ralph/lanes/{unit}.done "
+                    f"(failure {n}/{self.max_lane_failures}) — branch {branch} kept")
+                if n >= self.max_lane_failures:
+                    return self._halt(f"lane {unit} failed {n} waves — see "
+                                      f"target/ralph/lane-{unit}.out and branch {branch}")
                 continue
+            self._lane_failures.pop(unit, None)
             say(f"pool: lane {unit} finished — merging {branch}")
             r = self._git("merge", "--no-ff", "-m", f"merge {unit}", branch)
             if r.returncode != 0:
@@ -830,6 +843,8 @@ class Pool:
             self._git("worktree", "remove", "--force", str(wt))
             self._git("branch", "-D", branch)
             say(f"pool: lane {unit} merged and marked [x]")
+        if self._lane_failures:
+            self.sleep(60)          # backoff between failed waves, never a hot loop
         return None
 
 
