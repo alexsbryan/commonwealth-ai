@@ -1,0 +1,1 @@
+      1    0.349736031s  INFO prepare_target{force=false package_id=sovereign-mesh v0.7.0 (/home/alexbryan/dev/commonwealth-ai/sovereign/crates/sovereign-mesh) target="build-script-build"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleItem(MissingFile { path: "/home/alexbryan/dev/commonwealth-ai/sovereign/crates/sovereign-mesh/../../.git/HEAD" }))
