@@ -1,0 +1,35 @@
+unit: dm-rename-serving-landed
+commits: e42714893 (the renames), 632a0da9a (rustfmt reflow)
+what: applied the DT [[noun]] dispositions (quality/DOMAINS.toml) to the code
+  the serving move landed, per THE STRATEGY ("a rename RIDES THE MOVE that
+  touches the file") — identifiers only, no behaviour change:
+    PeerObservationRecord -> VenueObservationRecord
+      sovereign-scheduler/src/decision_log.rs:114 (def), :161
+      sovereign-scheduler/src/decision_trace.rs:300, :413, :428, :443
+      sovereign-serving-host/src/peer_inference.rs:897, :916, :921
+    PeerFailureDisposition -> VenueFailureDisposition
+      sovereign-serving-host/src/peer_inference.rs:2954 (def) + 7 uses
+      sovereign-serving-host/src/peer_inference/provider_impl.rs:188,210,489,512
+    PeerEndpointSource -> VenueSource (finish)
+      sovereign-scheduler/src/venue.rs:63 and
+      sovereign-serving-host/src/venue_host.rs:12 — the rename itself landed at
+      REVIEW-build-venue (d43188ff9); these two .rs comments still named the
+      old noun and are reworded, so no .rs file names it any more. Precedent:
+      MeshInferenceProvider has zero remaining .rs mentions.
+    Peers -> FixedVenues
+      sovereign-serving-host/src/entry_endpoint.rs:167,170,191 (cfg(test)
+      double; the unrelated `Verdict::Peers` variant untouched)
+    NoPeers -> NoVenues, OnePeer -> OneVenue
+      sovereign-serving-host/src/peer_inference.rs (cfg(test) doubles)
+  The test-tree copies of NoPeers (sovereign-mesh/tests/main/
+  guest_lender_routing.rs, sovereign-cli-daemon/tests/main/
+  named_model_routes_after_child_serves_e2e.rs) belong to dm-rename-serving-
+  tests and are untouched here. No DT re-key: the row asks only for the
+  renames, and the [[noun]] rows are the registry's historical record.
+checks: CLEAN exit=0 (debug target 0G, under 50G — cache kept); LINT exit=0
+  (6 crates: sovereign-scheduler,sovereign-serving-host,sovereign-api,
+  sovereign-cli-daemon,sovereign-daemon,sovereign-mesh; 0 errors, cargo exit 0,
+  --all-targets so test code compiled); rustfmt --check exit=0 on all 7 files.
+evidence: domains-census peer-outside 28 in 10 crates -> 27 in 9 (sovereign/
+  scheduler drops off; its only Peer*-named definition was
+  PeerObservationRecord).
