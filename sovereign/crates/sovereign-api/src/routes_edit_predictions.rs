@@ -960,10 +960,8 @@ mod tests {
         async fn chat_completion_stream(
             &self,
             _r: crate::openai_types::ChatCompletionRequest,
-        ) -> Result<
-            Pin<Box<dyn Stream<Item = StreamFrame> + Send>>,
-            oicp_types::LocalInferenceError,
-        > {
+        ) -> Result<Pin<Box<dyn Stream<Item = StreamFrame> + Send>>, oicp_types::LocalInferenceError>
+        {
             unimplemented!("streaming not used by the model lane")
         }
         fn provider_manifest(&self) -> Option<oicp_types::ProviderManifest> {
