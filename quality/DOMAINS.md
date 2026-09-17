@@ -1,5 +1,10 @@
 # Domains — ten bounded contexts, and the test that says whether one is real
 
+> **Superseded 2026-09-17** by `docs/FIVE_PROGRAMS.md`: five programs joined by
+> two wires replace the ten contexts, and a reachability cut replaces the
+> relocation campaign. §2's lift test and §3's measurements still hold; §4, §7
+> and §11 do not govern.
+
 Drafted 2026-09-11. This is the THIRD leg of the daemon design and the one the
 other two cite without having. `quality/TOPOLOGY.md` §3.5 is the Runtime's
 internal shape; `quality/DAEMON_CORE.md` is the surface, its route census and
