@@ -813,3 +813,83 @@ Recorded, not changed:
 - **`concept-gate` could-not-judge** · exit 3, declared; the pre-push runner
   counts it as attention, not blocking.
 
+## REVIEW-audit-daemon-1 — the mesh host cluster's move
+
+Range audited: `git log REVIEW-audit-principal..HEAD` — the host-cluster rows
+`dm-daemon-mesh-edge`, `-jobs`, `-adapters` and everything they dragged in.
+Checks: TESTALL exit=0 (13393 pass, 0 fail); PREPUSH exit=0 (1 of 18 want
+attention: `size-gate`, the advisory `warn_gate`). The prior sessions left the
+fixes uncommitted; this audit read the tree, ran the two checks, and committed
+them at `cafc95dd7` without re-deriving.
+
+The row's claims, verified:
+
+- **`crate-lines --crate sovereign-mesh` drops by the host total.** It reads
+  20,990 lines today; the `host` context is absent from `crate-lines`'s output
+  and from the registry, and `misnamed` reads sovereign-mesh 13,100/20,990
+  (62.4%) fabric. The residue is the two workbench modules (`projects.rs`,
+  `reindexer.rs`) and the back-of-house harness, both already minted as leaver
+  rows.
+- **No mesh module names sovereign-daemon (the `[[forbid]]`'s mirror).**
+  `git grep sovereign_daemon -- 'sovereign/crates/sovereign-mesh/src/**/*.rs'`
+  is empty.
+- **Every dead shim is gone.** `sovereign-mesh/src/lib.rs` dropped
+  `landscape_digest_client`, `research_run_dir`, `slot_aliases`,
+  `throughput_tracking` and `turn_approval`; each of the sixteen shims left has
+  a live importer (`crate::tier`/`crate::oicp_select`/`crate::scheduler_core`
+  are the internal ones mesh_sim still reaches).
+
+Findings, fixed (all in `cafc95dd7`):
+
+- **ARCH 3 (the doc lands with the code)** · the move left doc pointers naming
+  `sovereign-mesh/src/...`: `quality/conformance-specs.toml` (UI-22, FE-10,
+  FE-15, FE-17, FE-43, FE-7), `quality/sabotage/{all,dst,fe-dst,fe-dst-mesh}.toml`,
+  `quality/tests/backlog.toml`, `quality/twin-plants.toml:300`,
+  `sovereign-api/src/routes_rail.rs:57`, `sovereign-contracts/src/identity.rs:9`,
+  `corpus-engine/src/enrichment/state.rs:226`, `commonwealth/docs/*`, `docs/*`.
+  Repointed at `sovereign-daemon/src/...`.
+- **ARCH 8/9 (one fact, one home)** · `quality/DOMAINS.toml` still tagged
+  `sovereign-mesh/src/lib.rs` `host` after the host cluster left and carried
+  stale counts for every file the move touched. Retagged host → fabric (the
+  crate is Fabric's home now) and re-measured.
+- **ARCH 5 (a check with no failing input)** · `code-next-edit/src/lib.rs` had
+  no `[[module]]` row, so `crate-lines`/`misnamed`/`queue` exited 4 on a
+  coverage hole (`quality/DOMAINS.toml:534`).
+- **ARCH 8 (one fact, one home)** · `quality/conformance/sovereign-mesh.toml`
+  still carried the UI-22 claim pointing at the moved daemon test. Regenerated:
+  the claim lives in the new `quality/conformance/sovereign-daemon.toml:14` and
+  is deleted from mesh.
+- **ARCH 3.1 (file ceiling)** · `sovereign-mesh/src/ring_sync.rs` (2,072) and
+  `oicp-types/src/scoring.rs` (1,269) grew past arch-gate's slack; their test
+  modules split out to `ring_sync/{tests,projection_tests,snapshot_tests}.rs`
+  and `scoring/tests.rs`, and the DT and egress-census rows re-keyed by path
+  with the counts unchanged.
+- **ARCH 5 (a check with no failing input)** ·
+  `sovereign-mesh/tests/main/replication_sender_census.rs:88` read a split-out
+  test module's fake-peer URL as a production sender; excluded `tests.rs` and
+  `*_tests.rs` by the convention's filename.
+- **ARCH 5/10 (make it structural)** · `scripts/dev-build.sh:104`: `--clean
+  --gate-only` leaked `--gate-only` to cargo on the cold path (the loop's CLEAN
+  died instead of building), and `du`'s non-zero exit under `pipefail` killed
+  the warm path silently before the size gate could decide. Both fixed.
+- **ARCH 5 (a gate you have not watched fail)** · the DST soak
+  (`dst_scenarios::seeded_chaos_soak`) crossed nextest's 180s wall in a full run
+  once `dst.rs` moved into the shared `main` binary; it is slow, not hung, so
+  `.config/nextest.toml:128` gives it headroom rather than cutting the seeds.
+- **ARCH 6 (never silently substitute)** · `sovereign-mesh/src/projects.rs:5`
+  and `reindexer.rs:83` named `sovereign_daemon::supervised_task` in doc
+  comments — the forbid's mirror in prose. Rewritten to plain text.
+- **ARCH 8 (one clock)** · `sovereign-atos/src/middleware/session_briefing.rs:102`
+  read `SystemTime::now()` directly; repointed at
+  `sovereign_core::time::unix_now()`.
+
+Recorded, not changed:
+
+- **Frozen `[[cluster]]` rows** · `plan --crate sovereign-mesh` still lists
+  `host`, `serving` and `compute` in its move order. They are the registry's
+  cluster rows, which predate the 2026-09-14 retags (the `REVIEW-build-dm3-plan`
+  finding), not live modules; the plan's `no-new-exception` FAIL on
+  `back-of-house` is the same stale row.
+- **`size-gate` (advisory)** · keys grew with the campaign; `warn_gate` by
+  design. Not re-pinned.
+
