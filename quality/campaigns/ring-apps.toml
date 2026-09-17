@@ -4,101 +4,201 @@
 # committed artifact: the `[[rung]]` table owns rung STATUS and the `[[bar]]`
 # rows own the numbers. The rationale lives in campaign.md.
 id        = "ring-apps"
-objective = "A way to BUILD robust applications and DISTRIBUTE them on a mesh the way AWS lets a builder ship to the internet - identity, an ordered log, blobs, a live lane, discovery, availability and a deploy verb handed out as primitives the app never re-derives - such that the end user barely feels the infrastructure: an average urban person joins by one QR code with no account, lives on the ring apps for a fortnight, and on day fourteen does not want the old way back. The first rungs made the NAMESPACE half honest (a person traces to who vouched and on what act); the ladder now converges on the complete primitive set, sequenced by the day a person hits each thing"
-spec      = "docs/internal/RING_APPLICATIONS.md (GITIGNORED, per-host) - the vision, the borrow-and-refuse table, and the substrate assessment S1-S8. Its first draft claimed rings were mesh-wide and singular; that was the exception generalised into the rule and is corrected in the doc under 'What a ring is today'. Read the CORRECTED section, not a memory of the claim. REFRAMED 2026-09-17 by operator direction (the AWS-shaped builder proposition + the fortnight); the rationale, the demo days and the ambiguity policy live in .sovereign/features/ring-apps/campaign.md on this host."
+objective = "A way to BUILD robust applications and DISTRIBUTE them on a mesh the way AWS lets a builder ship to the internet - identity, an ordered log, a doc, blobs, a live lane, a stream, discovery, availability and a deploy verb handed out as primitives the app never re-derives - such that the end user barely feels the infrastructure: an average urban person joins by one QR code with no account, lives on the ring apps for a fortnight - the feed, the album, movie night, a game, a shared doc, a jam, a call, a reshare, the offline atlas, and the expenses as the boring thing they should be - and on day fourteen does not want Instagram, Docs, Spotify and the group chat back. Organised by primitive and abstraction layer; the ladder is APPLICATION-LED with the hardest apps first, because a hard app is what bends an abstraction before it sets"
+spec      = "docs/internal/RING_APPLICATIONS.md (GITIGNORED, per-host; ABSENT on the Halo as of 2026-09-17). REFRAMED 2026-09-17 by operator direction in two steps: first the AWS-shaped builder proposition + the fortnight, then the re-cut from a co-op bulletin board to social, media, play and collaborative docs, hardest first. The rationale, the fortnight by day, and the ambiguity policy live in .sovereign/features/ring-apps/campaign.md on this host; the layer and rung tables below are the committed structure."
 declared  = "2026-09-13"
 status    = "active"
 
-# ── THE PRIMITIVE SET (the second axis) ──────────────────────────────────────
-# Sorted by what a BUILDER reaches for, named by the thing they already know.
-# `rides` is what the bytes move on: journal | blob | gossip | direct. A rung
-# declares one row; the campaign converges when every row a reference app needs
-# has a rung that landed. DATA, not prose (ARCH 9): adding a primitive is a diff
-# a reviewer reads. Readers use .get() on rows, so this table is inert to
-# co-resume/co-ladder/co-lineage (checked 2026-09-17).
+# ── THE LAYERS, bottom up ────────────────────────────────────────────────────
+# L0 transport   iroh 1.0.2 endpoint, relay, TrafficClass seams. Exists; no rung.
+# L1 bytes       how bytes move: journal | blob | gossip | stream. The axis a
+#                substrate row RIDES.
+# L2 substrate   what a builder reaches for, named by the thing they already
+#                know. Each row rides one L1 primitive.
+# L3 deployment  manifest + page over rails + `svrn ring deploy` + the grant.
+# L4 application the reference apps. NOT rows here - they are RUNGS, because
+#                an app is what a person watches and a primitive is what lands
+#                underneath it.
+#
+# DATA, not prose (ARCH 9). Readers (co-resume/co-ladder/co-lineage) use
+# .get() on rows, so these tables are inert to them (checked 2026-09-17).
+# `status` is a closed set - landed | partial | open - and is the ONLY field
+# that says whether a row exists in code (journal is landed by the rail crates
+# with no rung of its own). `landed_by` names the rung that lands the row;
+# `pulled_by` the app rungs that force its shape. A row with status open and
+# a non-empty pulled_by is a primitive an app is waiting on - the frontier.
+
+[[primitive]]
+id = "journal"
+status = "landed"
+layer = "bytes"
+builders_know_it_as = "an append-only log"
+on_the_ring = "the rail: signed ops, total order, corrections, seal + snapshot, gaps; 64 KiB per act; digest sync, 60 s ceiling on idleness, write nudge"
+landed_by = []
+pulled_by = ["ra-13", "ra-19", "ra-20"]
+note = "LANDED (commonwealth-rail-core, commonwealth-rail). The doc rung is the first to ask whether total order and a commutative merge coexist, and whether the rail must learn anything to carry a CRDT - the answer the campaign wants is no."
+
+[[primitive]]
+id = "blob"
+status = "open"
+layer = "bytes"
+builders_know_it_as = "S3"
+on_the_ring = "content-addressed by BLAKE3, encrypted on device BEFORE coding, k-of-n shares one per member, hot full copies on keepers, verified range requests, repair after a stated absence"
+landed_by = ["ra-3"]
+pulled_by = ["ra-15", "ra-18", "ra-19", "ra-21"]
+note = "NEW. Nothing serves: no blob noun on the rail, `Payload` capped at 64 KiB to refuse files (rail-core/src/payload.rs:55-61), iroh-blobs absent from Cargo.lock, no erasure code anywhere. Seams to reuse: TrafficClass::ModelTransfer (TRANSPORT_MIGRATION.md:393), model_files.rs RFC-7233 ranges + 206 (:189-195, :273-308)."
+
+[[primitive]]
+id = "gossip"
+status = "open"
+layer = "bytes"
+builders_know_it_as = "SNS/SQS"
+on_the_ring = "one topic per ring; presence, cursors, reactions, chat and doc-change DELIVERY; nothing durable rides here - the record is always a journal act"
+landed_by = ["ra-6"]
+pulled_by = ["ra-13", "ra-16", "ra-19"]
+note = "NEW on the existing TrafficClass::Gossip seam. iroh-gossip absent (the one hit is a test mock, commonwealth-transport/src/routed.rs:312). Must be PROVABLY non-durable: tests/main/replication_sender_census.rs pins /internal/ring/sync as the ONE sender of replicated state (gossip.rs:31-36)."
+
+[[primitive]]
+id = "stream"
+status = "open"
+layer = "bytes"
+builders_know_it_as = "a socket"
+on_the_ring = "a QUIC stream between two members with a latency budget; direct when the path allows, relayed when not, and the app is TOLD which"
+landed_by = ["ra-17"]
+pulled_by = ["ra-16", "ra-18"]
+note = "iroh gives the stream; nothing above transport reaches for it yet (all iroh use is in commonwealth-transport/src/iroh.rs behind the `iroh` feature). The honesty row: relays learn who talks to whom - the guarantees sheet says so."
+
 [[primitive]]
 id = "identity"
+status = "partial"
+layer = "substrate"
 builders_know_it_as = "IAM + KMS"
 rides = "journal"
-on_the_ring = "roster, vouch chain, device link, recovery, retired keys; the node key signs"
-rungs = ["ra-1", "ra-5"]
-
-[[primitive]]
-id = "record"
-builders_know_it_as = "an ordered log"
-rides = "journal"
-on_the_ring = "the rail: signed, total order, corrections, seal, gaps"
-rungs = []
-
-[[primitive]]
-id = "content"
-builders_know_it_as = "S3"
-rides = "blob"
-on_the_ring = "content-addressed, encrypted before coded, k-of-n shares, hot copies, range audits"
-rungs = ["ra-3"]
-
-[[primitive]]
-id = "live"
-builders_know_it_as = "SNS/SQS"
-rides = "gossip"
-on_the_ring = "presence, chat delivery, typing - nothing durable rides here"
-rungs = ["ra-6"]
-
-[[primitive]]
-id = "direct"
-builders_know_it_as = "a socket"
-rides = "direct"
-on_the_ring = "a QUIC stream between two members - calls, games, device control"
-rungs = []
-
-[[primitive]]
-id = "discovery"
-builders_know_it_as = "Route53 + CloudFront"
-rides = "journal"
-on_the_ring = "computed catalogue, never_asked rows, curated by vouch chain, any holder serves"
-rungs = ["ra-4"]
-
-[[primitive]]
-id = "availability"
-builders_know_it_as = "availability zones"
-rides = "blob"
-on_the_ring = "a keeper role that holds and never authors; k from the worst observed hour"
-rungs = ["ra-7"]
-
-[[primitive]]
-id = "compute"
-builders_know_it_as = "Lambda / EC2"
-rides = "direct"
-on_the_ring = "a page over rails by default; server-side compute is a declared escalation; hubs named"
-rungs = ["ra-10", "ra-12"]
-
-[[primitive]]
-id = "guarantees"
-builders_know_it_as = "CloudWatch + SLA"
-rides = "journal"
-on_the_ring = "gaps, audits, and a sheet computed from n, k and m that names what is NOT protected"
-rungs = ["ra-8"]
-
-[[primitive]]
-id = "commons"
-builders_know_it_as = "billing"
-rides = "journal"
-on_the_ring = "GB-hours proven by audit, weighted by scarcity; norms and priority, never a price"
-rungs = ["ra-9"]
-
-[[primitive]]
-id = "deployment"
-builders_know_it_as = "CloudFormation"
-rides = "journal"
-on_the_ring = "manifest + static page + rail scopes; `svrn ring deploy`; appears on peers uninstalled"
-rungs = ["ra-10"]
+on_the_ring = "the node key signs, the roster binds; vouch chain; linked devices; recovery by m PEOPLE; retired keys refused; the phone is the wallet"
+landed_by = ["ra-1", "ra-5"]
+pulled_by = ["ra-19", "ra-15"]
+note = "ra-1 landed in code 2026-09-13 (Roster.vouches, trace, svrn ring introduce). Device linking is ALREADY Traced (introduce.rs:191-193, pinned tests_introduce.rs:256-259)."
 
 [[primitive]]
 id = "membership"
+status = "open"
+layer = "substrate"
 builders_know_it_as = "an org / an account"
 rides = "journal"
-on_the_ring = "join by QR with no account; the phone is the wallet; Carry across rings"
-rungs = ["ra-11", "ra-2"]
+on_the_ring = "join by QR with no account; rings of rings; Carry an act across rings under your own key; curation by vouch chain instead of follow/block"
+landed_by = ["ra-2", "ra-11"]
+pulled_by = ["ra-19", "ra-16"]
+note = "Carry (ra-2) is the RESHARE primitive - the thing that makes a social paradigm out of rings. It sat last on the first ladder; it is pulled early by the feed now."
+
+[[primitive]]
+id = "doc"
+status = "open"
+layer = "substrate"
+builders_know_it_as = "Google Docs / Notion"
+rides = "journal"
+on_the_ring = "a CRDT whose changes are ordinary journal acts and whose live cursors ride gossip; snapshot at seal; the page holds the merge, the rail holds the record"
+landed_by = ["ra-14"]
+pulled_by = ["ra-13"]
+note = "NEW, and FIRST by operator direction: the app most likely to bend the abstractions. The design bet is that the rail learns NOTHING - Automerge changes are commutative so total order is harmless, changes are small so 64 KiB holds (a large paste must chunk or refuse, named), and the seal-with-snapshot the rail already has (ring_sync.rs:1426-1443) is the doc snapshot. Automerge-over-iroh is experimental upstream; that is a measurement to take, not a reason. NOUN: `Document` is almost certainly taken by corpus-engine - converge before minting."
+
+[[primitive]]
+id = "store"
+status = "open"
+layer = "substrate"
+builders_know_it_as = "S3 + Glacier"
+rides = "blob"
+on_the_ring = "the album, the loop library, the atlas: put a blob, it is on every device that wants it and survives any n-k members offline"
+landed_by = ["ra-3"]
+pulled_by = ["ra-15", "ra-19", "ra-21"]
+note = "The blob primitive as an app sees it. k is MEASURED from the worst observed hour, and no presence history exists (MemberRecord.last_seen is one LWW scalar, commonwealth-core/src/mesh/mod.rs:207) - a sampler is owed before k is declared."
+
+[[primitive]]
+id = "play"
+status = "open"
+layer = "substrate"
+builders_know_it_as = "CloudFront + a media server"
+rides = "stream"
+on_the_ring = "range-served playback of a blob from whichever holder is up, keeper hot copy so the owner's sleeping laptop does not buffer; commonwealth-media becomes the ring's library rather than a per-member URL"
+landed_by = ["ra-18"]
+pulled_by = ["ra-18"]
+note = "commonwealth-media exists as a Jellyfin-shaped PROXY (commonwealth/crates/commonwealth-media/src/lib.rs:1-40; fanout caps bodies and never streams, origin_fanout.rs:13-19). Converge, do not mint a second library. NOUN: `Stream` likely collides - converge."
+
+[[primitive]]
+id = "realtime"
+status = "open"
+layer = "substrate"
+builders_know_it_as = "WebRTC / a game server"
+rides = "stream"
+on_the_ring = "a call, a real-time game: two members, one stream, presence to know who is around, and the app is told direct vs relayed"
+landed_by = ["ra-17"]
+pulled_by = ["ra-16"]
+note = "NEW. Turn-based play is NOT this - a turn-based game is already the rail (a log of moves in total order, the fold is the rules) and is the small rung ra-20."
+
+[[primitive]]
+id = "discovery"
+status = "open"
+layer = "substrate"
+builders_know_it_as = "Route53 + a store"
+rides = "journal"
+on_the_ring = "computed catalogue over fanout with never_asked rows; every row carries its vouch; filter by vouch chain from a person you trust; any holder serves a package blob"
+landed_by = ["ra-4"]
+pulled_by = ["ra-19", "ra-10"]
+note = "ra-4 FUNDED 2026-09-13. The app store is this over package blobs once ra-3 lands."
+
+[[primitive]]
+id = "availability"
+status = "open"
+layer = "substrate"
+builders_know_it_as = "availability zones"
+rides = "blob"
+on_the_ring = "a keeper role on the roster: holds journal + blobs, authors nothing, can never introduce; catch-up after a seal is to compacted state and says so"
+landed_by = ["ra-7"]
+pulled_by = ["ra-18", "ra-15"]
+note = "REUSE ring_sync (author-blind republish, commonwealth-rail/src/lib.rs:482-487; empty digest asks for everything, routes_internal/ring_sync.rs:89-92). NOUN: `Anchor` taken twice (meta_atlas + AnchorProfile.can_anchor = tensor-split worker, commonwealth-core/src/capabilities.rs:148-156) - converge `Keeper`."
+
+[[primitive]]
+id = "guarantees"
+status = "open"
+layer = "substrate"
+builders_know_it_as = "CloudWatch + the SLA"
+rides = "journal"
+on_the_ring = "gaps, audits, SequenceFork, and `svrn ring guarantees`: three tiers computed from n, k and m, could-not-judge where a number cannot be measured yet"
+landed_by = ["ra-8"]
+pulled_by = []
+note = "REUSE kernel_types::Judgement through posture_cmd.rs (sources() :48-60, render_rows :546, honesty_footer :570). Equivocation ALREADY lands as RailGap::SequenceFork (admit.rs:369-392)."
+
+[[primitive]]
+id = "commons"
+status = "open"
+layer = "substrate"
+builders_know_it_as = "billing"
+rides = "journal"
+on_the_ring = "GB-hours PROVEN by audit acts, weighted by scarcity, per person via the roster join; norms and hot-copy priority, never a price, never a ban"
+landed_by = ["ra-9"]
+pulled_by = []
+note = "EXTEND LedgerEventKind - StorageSnapshot is already GB-hours per node (commonwealth-core/src/contributions.rs:107-112); add a variant in its own units per the JobUnitCompleted precedent (:113-137). `Commons` has zero definitions and needs a home crate."
+
+[[primitive]]
+id = "compute"
+status = "open"
+layer = "substrate"
+builders_know_it_as = "Lambda / EC2"
+rides = "stream"
+on_the_ring = "a page over rails by default; server-side compute is a declared escalation on a keeper; search and the house AI live on a hub and every answer names which machine it depended on"
+landed_by = ["ra-12"]
+pulled_by = []
+note = "docs/LAZY_INFERENCE_ON_THE_RAIL.md already treats the GPU node as the seam. Last on the ladder by the pasted argument: on a peer network availability and trust are the hard problems, not the AI."
+
+[[primitive]]
+id = "deployment"
+status = "open"
+layer = "deployment"
+builders_know_it_as = "CloudFormation + an app store"
+rides = "journal"
+on_the_ring = "manifest + static page + rail scopes; `svrn ring deploy <dir>`; the app appears on every member's device uninstalled; the grant admits the app, the roster names the person"
+landed_by = ["ra-10"]
+pulled_by = ["ra-13"]
+note = "The ring-deploy order (.sovereign/features/ring-deploy/order.md, draft 2026-08-30) M1-M5. Sequenced right after the doc because the doc is the first thing to distribute. `svrn ring dev` already exists for local iteration (ring_cmd/mod.rs:69-76)."
 
 # ── THE PREDICATE ────────────────────────────────────────────────────────────
 # TWO-SIDED since the 2026-09-17 reframe, and the BUILDER side is the one a
@@ -228,111 +328,241 @@ goodhart     = "zero is the expected good result and proves nothing alone (ARCH 
 status       = "open"
 
 # ── THE LADDER ───────────────────────────────────────────────────────────────
+# LANDING ORDER = TABLE ORDER; ids are identity, not position (ra-4's note).
+# Application-led: an APP rung is what a person watches and names the primitive
+# rows it pulls and the abstraction it is expected to STEER; a PRIMITIVE rung
+# lands a row and sits directly after the app that pulled it. The hardest apps
+# come first by operator direction 2026-09-17 - a hard app bends an abstraction
+# before it sets, a small one only confirms it. In-flight rungs stay in flight.
 
+# ── in flight ──
 [[rung]]
 id     = "ra-1"
-primitive = "identity"
+kind   = "primitive"
+lands  = ["identity"]
 title  = "ring-1-introduce: a roster row carries its warrant, and an act is the evidence"
 status = "open"
 demo   = "D1"
 moves  = ["ra-introduction-is-traceable", "ra-roster-stays-independent"]
-note   = "S1 + S2 from RING_APPLICATIONS.md, landed together: provenance with nothing to populate it is a field nobody fills, and an act with nowhere to land is a payload nobody reads. SAME-RING ONLY — cross-ring introduction needs S3 and the Carry vocabulary."
+note   = "S1 + S2 from RING_APPLICATIONS.md, landed together in code 2026-09-13; bars open until their instruments exist. SAME-RING ONLY - cross-ring introduction needs S3 and the Carry vocabulary (ra-2)."
 
 [[rung]]
 id     = "ra-4"
-primitive = "discovery"
+kind   = "primitive"
+lands  = ["discovery"]
 title  = "an Offer origin kind, the computed catalogue, and the vouch join"
 status = "open"
-demo   = "D4"
+demo   = "D8"
 moves  = ["ra-offers-catalogue-computed", "ra-seller-carries-their-vouch"]
-note   = "S6, FUNDED 2026-09-13 and lands NEXT despite the id — ids are identity, not position. Promoted ahead of ra-2 because ra-1's worker found the campaign's byproduct stop condition unmet: an Introduce cannot ride a transaction when no transaction act exists, so `svrn ring introduce` is the separate civic act the spec named as the PGP failure mode. This rung builds the first transaction vocabulary, which is what an introduction can later be a byproduct OF. Building Carry (ra-2) on an attestation nobody writes would be building on the rot."
+note   = "S6, FUNDED 2026-09-13 and finishes before the doc rung starts - it is small, already priced, and its vouch join is what the feed (ra-19) filters by. Promoted ahead of ra-2 because ra-1's worker found an Introduce cannot ride a transaction when no transaction act exists; this builds the first transaction vocabulary."
 
+# ── the hard applications, hardest first ──
 [[rung]]
-id     = "ra-5"
-primitive = "identity"
-title  = "your keys survive your devices - linked devices legible, recovery by m people, retired keys refused"
+id     = "ra-13"
+kind   = "application"
+pulls  = ["doc", "gossip", "journal", "deployment"]
+steers = "whether the rail must learn ANYTHING to carry a CRDT (the bet is no); delivery-on-gossip / record-on-journal as the general pattern; the 64 KiB act ceiling against a large paste; seal-with-snapshot as the doc snapshot; the 60 s sync ceiling against an edit rate"
+title  = "APP: the doc - three people write the party invite together, cursors visible, no account"
 status = "open"
 demo   = "D5"
-moves  = ["ra-linked-device-is-legible", "ra-recovery-names-m-people", "ra-retired-key-is-refused"]
-note   = "The pick on 2026-09-17 for what an END USER feels most: a house on this for a year loses a laptop with certainty, and 'no password reset' is the failure that makes key-based systems unusable by ordinary people; every local-first tool that solves it does so with a server holding the recovery. Sequenced after ra-4 because it reuses the trace join. Three corrections from the citation pass shape it: linking is landed and only needs a surface; recovery needs `vouches` to become a collection; retirement is roster metadata read by admit, never an op and never Seal."
+moves  = []
+note   = "FIRST by operator direction: the app most likely to bend the abstractions. Automerge in the page (wasm), changes as ordinary `Record` payloads of kind `doc-change`, cursors and change DELIVERY on the live lane, the journal as the record. Also calendar, tasks, notes and the house wiki, which are the same primitive with a different fold. Names no bar yet; the two to declare first, both watched failing: two writers partitioned, both edits survive the merge (an LWW store loses one - that is the failing input); and a cursor that only ever rode gossip is NOT in the history and the replication census stays green."
 
 [[rung]]
-id     = "ra-2"
-primitive = "membership"
-title  = "standalone op verification, and Carry across rings"
+id     = "ra-14"
+kind   = "primitive"
+lands  = ["doc"]
+title  = "the doc primitive - CRDT changes as journal acts, cursors on gossip, snapshot at seal"
 status = "open"
-demo   = "D2"
+demo   = "D5"
 moves  = []
-note   = "S3. DEFERRED behind ra-4, see that rung's note. Verify a foreign op's signature and derived id without holding the foreign roster, then Carry it into this ring under the carrier's own key. Names no bar yet — declare one before drafting the order."
-
-[[rung]]
-id     = "ra-3"
-primitive = "content"
-title  = "blob distribution - encrypt, code k-of-n, tier hot copies, audit by range; the bytes an act references"
-status = "open"
-demo   = "D3"
-moves  = []
-note   = "S5. Independent of ra-1/ra-2/ra-5 and can run in parallel with a different pair of hands. Inventory 2026-09-17 says the earlier note was understated: a photo cannot be referenced by a ring act AT ALL today - the rail has no blob/attachment noun, `Payload` is capped at 64 KiB precisely to refuse files (rail-core/src/payload.rs:55-61), `iroh-blobs` is absent from Cargo.lock, and no erasure code exists anywhere. NEW, on existing seams: `TrafficClass::ModelTransfer` is the declared iroh-blobs slot (TRANSPORT_MIGRATION.md:393, :530 - for GGUFs, a different question, reusable as the transport seam) and model_files.rs already parses RFC-7233 ranges and serves 206 with a whole-file X-Sha256 (:189-195, :273-308) - a RANGED verification hash is the genuinely new part. Recipe: encrypt on device before coding (coding is not secrecy - k-1 shares leak); one share per member; hot full copies on keepers, more for recent items; repair only after a member has been absent past a stated window. k is MEASURED from the worst observed hour, not the average, and no presence history exists today (MemberRecord.last_seen is a single LWW scalar, commonwealth-core/src/mesh/mod.rs:207) - a sampler is owed BEFORE k can be declared; until then the guarantees sheet renders k as could-not-judge. NOUN: `Share` sits inside the shared-model kin family (SharedModelFleet etc.) - converge a different word. Names no bar yet; the first to declare is the negative leg: with n-k members offline the blob still fetches, and with n-k+1 it reports NOT HELD rather than hanging."
+note   = "Lands inside ra-13. If the rail turns out to need a branch for doc changes, that is a FINDING against the whole design and escalates - it is the stop condition, not a fix. NOUN: converge `Document` (corpus-engine surely owns it) before minting; `DocChange` or the like."
 
 [[rung]]
 id     = "ra-6"
-primitive = "live"
-title  = "the live lane - presence and chat delivery in under a second, nothing durable on it"
+kind   = "primitive"
+lands  = ["gossip"]
+title  = "the live lane - presence, cursors, reactions and delivery in under a second, nothing durable on it"
 status = "open"
-demo   = "D6"
+demo   = "D5"
 moves  = []
-note   = "The rail syncs by digest with a 60s ceiling on idleness (sovereign-mesh/src/ring_sync.rs:87, :19-24) and cannot carry chat. The old 10s full-snapshot push is GONE (deleted at cw-lift 2e; gossip.rs:22-37) and `/internal/ring/sync` is pinned as the ONE sender of replicated state by tests/main/replication_sender_census.rs - so a live lane must be PROVABLY non-durable or it trips that census, which is the structural version of the line this rung draws: gossip is ephemeral, the rail is the record. NEW: `iroh-gossip` is absent (the one hit is a test mock, commonwealth-transport/src/routed.rs:312); nearest existing thing is the `TrafficClass::Gossip` seam plus `announce_presence_change`'s event-driven push-to-all (gossip.rs:925-970), which carries DURABLE membership and is not pub-sub. One topic per ring; message HISTORY is ordinary rail acts of kind `message`. `Presence` bare noun is free (kin: PresenceChange). Ahead of ra-3 because chat is what a person touches every hour. Names no bar yet - the negative leg to declare first: a message that only ever rode gossip is NOT in the history, and the census stays green."
-
-[[rung]]
-id     = "ra-7"
-primitive = "availability"
-title  = "the keeper role - an always-on member that holds the journal and blobs and never authors"
-status = "open"
-demo   = "D7"
-moves  = []
-note   = "REUSE ring_sync + the roster; extend nothing structural. A peer holding everything and authoring nothing is already the designed case: republish is author-blind (commonwealth-rail/src/lib.rs:482-487), an empty digest asks for everything (sovereign-api/src/routes_internal/ring_sync.rs:89-92), and a fresh node catches up in one exchange (ring_sync.rs:1203-1257). What the rung adds is AVAILABILITY for blobs (ra-3) and a closed enum on the roster row - member | keeper - so a keeper's ops are gaps and it can never introduce: 'still just a peer, not an authority' as a property of the roster. Two honesties: after a seal a rejoiner catches up to COMPACTED state, not full history (ring_sync.rs:1426-1443), and the demo says so; and `Anchor` is TAKEN twice - corpus-engine meta_atlas AND the live gossiped mesh noun `AnchorProfile.can_anchor` meaning tensor-split worker (commonwealth-core/src/capabilities.rs:148-156, MemberDto.can_anchor) - converge `Keeper` before minting. Names no bar yet - the demo is every laptop closed and a rejoining one catching up from the keeper alone."
-
-[[rung]]
-id     = "ra-8"
-primitive = "guarantees"
-title  = "`svrn ring guarantees` - a sheet computed from n, k and m that names what is not protected"
-status = "open"
-demo   = "D8"
-moves  = []
-note   = "Three tiers from the ring's real numbers: guaranteed by math on the device (confidentiality if encrypted before coding, integrity, transport, audits); guaranteed up to a stated threshold (n-k+1 must refuse to censor a blob; more than m colluders rewrite the roster); not protected (who talks to whom via relays, deletion beyond crypto-shredding, a compromised device). REUSE `kernel_types::Judgement` rows through posture_cmd.rs's `sources()` registry + render_rows + honesty_footer (sovereign-cli/src/posture_cmd.rs:48-60, :546, :570) - four verdicts, a reason that cannot be omitted; its module doc is the argument against a seventh renderer. docs/THREAT_MODEL.md is the prose to cite FROM (its rule: every claim pinned to code, gaps listed not embellished, :15-24), not a computation. Two inputs are NOT measurable today and render could-not-judge, never a number (ARCH 6): k has no presence history (see ra-3), and m does not exist - the only `quorum` in the tree is the unrelated tensor-split gate SOVEREIGN_RPC_QUORUM_ANCHORS (rpc_distribution.rs:1422), a name collision to avoid. Equivocation is ALREADY detected as `RailGap::SequenceFork` (admit.rs:369-392, both ops excluded) - the sheet cites it. `svrn ring` has verbs new|roster|introduce|dev|log|seal (ring_cmd/mod.rs:69-76); this adds one. Names no bar yet."
-
-[[rung]]
-id     = "ra-9"
-primitive = "commons"
-title  = "the commons ledger - GB-hours proven by audit, weighted by scarcity, folded like balances"
-status = "open"
-demo   = "D9"
-moves  = []
-note   = "After ra-3. EXTEND, do not mint: `LedgerEventKind::StorageSnapshot { corpora: Vec<(String, f64)> }` on an hourly tick folding to `CorpusHosting.size_gb` IS already GB-hours (commonwealth-core/src/contributions.rs:107-112, :200-206; emitter commonwealth-state/src/contributions.rs:161-191), replicates on the ring via DAEMON_OWN_NAMESPACES (ring_roster.rs:258), and is read cross-peer by newsworthy_host.rs:35-42; `svrn mesh balance` renders it. Two gaps: per-NODE not per-person (the roster join from ra-1 closes that) and its unit is corpus_id not a blob share. The module's own principle - dimensions are plural and incommensurable (:9) - and the JobUnitCompleted precedent (:113-137) say: a fifth variant in its own units, never folded into corpora_hosted. Reward storage PROVEN (an audit act from ra-3), never storage offered. No spendable credit at ring scale: the only graduated response is hot-copy priority, admission is never touched; a norm of giving roughly what you take, with room for phones. `Commons` has zero definitions and the converge tool says it needs a home crate. Names no bar yet."
+note   = "Lands inside ra-13 (the doc is the first thing that cannot wait 60 s). One topic per ring; delivery here, record on the rail. The rail syncs by digest with a 60 s ceiling on idleness (ring_sync.rs:87, :19-24); the old 10 s snapshot push is GONE (cw-lift 2e, gossip.rs:22-37). Nearest existing thing: TrafficClass::Gossip seam + announce_presence_change (gossip.rs:925-970), which carries DURABLE membership and is not pub-sub. `Presence` bare noun free (kin: PresenceChange). Negative leg first: a message that only rode gossip is NOT in the history."
 
 [[rung]]
 id     = "ra-10"
-primitive = "deployment"
-title  = "the builder leg - `svrn ring deploy`, and a second app built by someone else with zero rail diffs"
-status = "open"
-demo   = "D10"
-moves  = []
-note   = "This is the ring-deploy order (.sovereign/features/ring-deploy/order.md, draft 2026-08-30) adopted as a rung rather than left as a parallel draft: the rail listener (M1), identity-is-the-namespace (M2), the grant vocabulary (M3), page-over-rails (M4), the append_key promotion (M5). Its clause 3 - a housemate who is not the author builds the lending board from the docs in an evening with no rail change - is the campaign's builder-side predicate. Names no bar yet; the order's Done-when 5, 6 and 9 are the three negative legs to declare."
-
-[[rung]]
-id     = "ra-11"
-primitive = "membership"
-title  = "day zero - join by one QR code on a phone, no account, and see a name not a key"
-status = "open"
-demo   = "D0"
-moves  = []
-note   = "An average urban person does not carry a laptop to the corner shop. The ring-deploy order named the phone as a gap to measure before paying for; under the fortnight predicate it is day zero and is paid for. The guest-grant deep link already carries the QR shape (deep_link.rs); the phone key is a linked device (ra-5) so the phone IS the wallet. Mobile transport is unverified on this host (memory: mobile Tauri WS down). Names no bar yet."
-
-[[rung]]
-id     = "ra-12"
-primitive = "compute"
-title  = "hubs named honestly - search and shared inference live on one machine, and every answer says which"
+kind   = "primitive"
+lands  = ["deployment"]
+title  = "the builder leg - `svrn ring deploy`, and the doc appears on a second phone uninstalled"
 status = "open"
 demo   = "D12"
 moves  = []
-note   = "Search has no central index and a shared local AI is a server wherever the GPU is; the honest answer is a hub-like peer, attributed. docs/LAZY_INFERENCE_ON_THE_RAIL.md already treats the GPU node as the seam. Every hub-served answer carries the same kind of row ra-4 carries: which single node this depended on. Off the first ladder by the pasted argument (availability and trust are the hard problems on a peer network; the AI is not). Names no bar yet."
+note   = "The ring-deploy order adopted as a rung: rail listener (M1), identity-is-the-namespace (M2), one grant vocabulary (M3), page-over-rails (M4), append_key promotion (M5). Right after the doc because the doc is the first thing to distribute. Clause 3 there - someone who is not the author builds the next app from the docs in an evening with no rail change - is the campaign predicate's builder leg; the small app that proves it is ra-20. Done-when 5, 6 and 9 are the negative legs to declare."
+
+[[rung]]
+id     = "ra-15"
+kind   = "application"
+pulls  = ["blob", "store", "identity", "availability"]
+steers = "blob size classes and hot-copy policy (a loop is 1-10 MB and hot for an evening); encrypt-before-code; the phone as a full member on cheap Android; export to moderated public places (Scratch, BandLab) instead of a public feed"
+title  = "APP: the studio - someone starts a loop, someone adds a bassline, by evening there is a track nobody made alone"
+status = "open"
+demo   = "D6"
+moves  = []
+note   = "The Endlesss shape - trading loops like messages - on a local-first substrate tuned for a cheap phone; Web Audio in the page, loops as blobs, the jam as journal acts. Second because it is the second-hardest and it is the first app whose users are not the house. Names no bar yet; first to declare: a loop added on a phone plays on a laptop that was closed when it was added (pulls keeper + blob), and the phone that added it can be OFF."
+
+[[rung]]
+id     = "ra-3"
+kind   = "primitive"
+lands  = ["blob", "store"]
+title  = "blob distribution - encrypt, code k-of-n, tier hot copies, audit by range; the bytes an act references"
+status = "open"
+demo   = "D2"
+moves  = []
+note   = "S5. Lands inside ra-15 and is pulled again by ra-18/ra-19/ra-21. A photo cannot be referenced by a ring act AT ALL today - no blob noun, 64 KiB ceiling that exists to refuse files (payload.rs:55-61), iroh-blobs absent, no erasure code. NEW on existing seams: TrafficClass::ModelTransfer (TRANSPORT_MIGRATION.md:393, :530), model_files.rs range + 206 (:189-195, :273-308); a RANGED verification hash is the new part. Recipe: encrypt on device before coding; one share per member; hot copies on keepers, more for recent; repair only past a stated absence. k MEASURED from the worst hour - a presence sampler is owed first (MemberRecord.last_seen is one LWW scalar, mesh/mod.rs:207). NOUN: `Share` sits in the shared-model kin family - converge another word. Negative leg first: n-k members off, blob fetches; n-k+1 off, it says NOT HELD rather than hanging."
+
+[[rung]]
+id     = "ra-11"
+kind   = "primitive"
+lands  = ["membership"]
+title  = "day zero - join by one QR code on a phone, no account, and see a name not a key"
+status = "open"
+demo   = "D1"
+moves  = []
+note   = "Lands inside ra-15 (the studio is the first app that is phone-first). The guest-grant deep link already carries the QR shape (deep_link.rs); the phone key is a linked device (ra-5) so the phone IS the wallet. Mobile transport unverified on this host (memory: mobile Tauri WS down) - measure before pricing."
+
+[[rung]]
+id     = "ra-16"
+kind   = "application"
+pulls  = ["realtime", "stream", "gossip", "membership"]
+steers = "the direct row: latency budget, direct-vs-relayed told to the app, presence as who-is-around; the honesty row that relays learn who talks to whom; ring-to-ring calls as the first cross-ring act"
+title  = "APP: the call and the arcade - a call to the friends in the other building; two people play across the hall on their phones and a third watches"
+status = "open"
+demo   = "D7"
+moves  = []
+note   = "Third: it is the only app that cannot be built on the journal at all, so it is what proves the stream row rather than assumes it. Names no bar yet; first to declare: a call between two members that iroh cannot connect directly still connects via relay, the app is TOLD it is relayed, and the guarantees sheet row for it reads accordingly."
+
+[[rung]]
+id     = "ra-17"
+kind   = "primitive"
+lands  = ["stream", "realtime"]
+title  = "the stream primitive - a QUIC stream between two members with a latency budget, and the app is told direct vs relayed"
+status = "open"
+demo   = "D7"
+moves  = []
+note   = "Lands inside ra-16. iroh gives the stream; nothing above commonwealth-transport reaches for it yet. NOUN: converge `Stream` and `Realtime` before minting."
+
+[[rung]]
+id     = "ra-18"
+kind   = "application"
+pulls  = ["play", "blob", "availability", "stream"]
+steers = "k-of-n against a 4 GB file; hot-copy tiering by recency; the repair window against nightly laptop sleep; commonwealth-media convergence (library over blobs, not per-member URLs); the presence sampler that k needs"
+title  = "APP: the library - movie night streamed to the TV from whichever machine has it, and it does not buffer when the owner's laptop sleeps"
+status = "open"
+demo   = "D3"
+moves  = []
+note   = "Fourth, and the one that makes the keeper and k real numbers. Music is the same app. Names no bar yet; first to declare: playback continues across the owner's node going offline mid-film (pulls keeper hot copy), and a file with n-k+1 holders offline reports NOT HELD before play starts, never mid-film."
+
+[[rung]]
+id     = "ra-7"
+kind   = "primitive"
+lands  = ["availability"]
+title  = "the keeper role - an always-on member that holds the journal and blobs and never authors"
+status = "open"
+demo   = "D3"
+moves  = []
+note   = "Lands inside ra-18. REUSE ring_sync; extend only the roster: a closed enum member | keeper so a keeper's ops are gaps and it can never introduce. After a seal a rejoiner catches up to COMPACTED state (ring_sync.rs:1426-1443) and the demo says so. NOUN: converge `Keeper` (`Anchor` taken twice)."
+
+[[rung]]
+id     = "ra-19"
+kind   = "application"
+pulls  = ["membership", "discovery", "blob", "gossip", "identity"]
+steers = "Carry as reshare (cross-ring identity, what a carried act keeps and loses); curation by vouch chain instead of follow/block; live reactions on gossip with the record on the rail; the honest limit that there is no discovery beyond the rings you can reach and no moderator"
+title  = "APP: the feed - photos from last weekend, posts, reactions landing live, and a reshare from the other building that carries who vouched for them"
+status = "open"
+demo   = "D4"
+moves  = []
+note   = "Fifth, after the primitives it composes exist: it is the social paradigm and it is mostly composition - posts and reactions are journal acts, photos are blobs, live reactions ride gossip, reshare is Carry, following is a vouch-chain filter over ra-4's catalogue shape. The album (forty party photos on every device) is this app's blob half. Rings of rings, joined by people carrying acts under their own names, is the paradigm in place of a global feed - and the sheet says what that costs. Names no bar yet; first to declare: a carried post resolves on the receiving ring to the carrier AND the original author's vouch, or renders warrant-unknown - never blank, never substituted."
+
+[[rung]]
+id     = "ra-2"
+kind   = "primitive"
+lands  = ["membership"]
+title  = "standalone op verification, and Carry across rings"
+status = "open"
+demo   = "D4"
+moves  = []
+note   = "S3. Lands inside ra-19 - promoted from LAST on the first ladder to the feed's primitive, because Carry is the reshare primitive and reshare is the social graph. Verify a foreign op's signature and derived id without holding the foreign roster, then Carry it into this ring under the carrier's own key. Names no bar yet - declare one before drafting the order."
+
+# ── cross-cutting substrate, after the hard apps have bent the abstractions ──
+[[rung]]
+id     = "ra-5"
+kind   = "primitive"
+lands  = ["identity"]
+title  = "your keys survive your devices - linked devices legible, recovery by m people, retired keys refused"
+status = "open"
+demo   = "D9"
+moves  = ["ra-linked-device-is-legible", "ra-recovery-names-m-people", "ra-retired-key-is-refused"]
+note   = "The end-user pick on 2026-09-17: a group on this for a year loses a phone with certainty, and no-password-reset is the failure that makes key-based systems unusable by ordinary people. Sequenced after the hard apps so recovery is designed against real device churn (the studio on phones) rather than imagined. Three corrections from the citation pass are in each bar: linking is landed and only needs a surface; recovery needs `vouches` to become a collection; retirement is roster metadata read by admit, never an op and never Seal."
+
+[[rung]]
+id     = "ra-8"
+kind   = "primitive"
+lands  = ["guarantees"]
+title  = "`svrn ring guarantees` - a sheet computed from n, k and m that names what is not protected"
+status = "open"
+demo   = "D11"
+moves  = []
+note   = "After ra-16 and ra-18 so the relay row and the k row are real rather than hypothetical. Three tiers: guaranteed by math on the device; guaranteed up to a stated threshold (n-k+1 to censor a blob, more than m to rewrite the roster); not protected (who talks to whom via relays, deletion beyond crypto-shredding, a compromised device). REUSE Judgement rows via posture_cmd.rs; THREAT_MODEL.md is the prose to cite from (:15-24). k and m render could-not-judge until a sampler and a quorum config exist (ARCH 6); `quorum` collides with SOVEREIGN_RPC_QUORUM_ANCHORS (rpc_distribution.rs:1422) - avoid the word. `svrn ring` has new|roster|introduce|dev|log|seal; this adds one."
+
+[[rung]]
+id     = "ra-9"
+kind   = "primitive"
+lands  = ["commons"]
+title  = "the commons ledger - GB-hours proven by audit, weighted by scarcity, folded like balances"
+status = "open"
+demo   = "D13"
+moves  = []
+note   = "After ra-18: audits exist once the library's blobs do. EXTEND LedgerEventKind (StorageSnapshot is already GB-hours per node, contributions.rs:107-112; JobUnitCompleted precedent :113-137); per PERSON via the roster join; replicated on the ring via DAEMON_OWN_NAMESPACES (ring_roster.rs:258); `svrn mesh balance` renders. Reward storage PROVEN, never offered. No spendable credit at ring scale; graduated response is hot-copy priority only. `Commons` needs a home crate."
+
+# ── the small applications ──
+[[rung]]
+id     = "ra-20"
+kind   = "application"
+pulls  = ["journal", "deployment"]
+steers = "nothing new - that is the point: it is the third-party builder test (ring-deploy clause 3), built by someone who is not the author, from the docs, in an evening"
+title  = "APP: the turn-based arcade - a game is a log of moves in total order and the fold is the rules"
+status = "open"
+demo   = "D4"
+moves  = []
+note   = "Small. The rail is already a turn-based game engine; corrections are take-backs. Do NOT build it - it is the evidence that distinguishes rails from our code with extra steps."
+
+[[rung]]
+id     = "ra-21"
+kind   = "application"
+pulls  = ["store", "availability"]
+steers = "keeper seeding of large read-only blob sets; a phone with no data plan as the reader"
+title  = "APP: the atlas - offline Wikipedia and the city map are just there on your phone"
+status = "open"
+demo   = "D10"
+moves  = []
+note   = "Small once ra-3 and ra-7 exist: seed the blobs on the keeper, and every phone in the ring has them. sovereign already holds a Wikipedia corpus and a wikipedia_fetch tool - converge, do not re-ingest."
+
+[[rung]]
+id     = "ra-22"
+kind   = "application"
+pulls  = ["journal", "deployment"]
+steers = "nothing new; these are the one-screen folds the rail was born for"
+title  = "APP: the utilities - expenses, chores, lending; one screen each, the boring things they should be"
+status = "open"
+demo   = "D10"
+moves  = []
+note   = "The ring-deploy order's M6 (house expenses, already a `svrn ring new` template with 20 tests) and M7 (lending board, on the claims store; the repo_id unblock at repo_id.rs:38-49 is required). Day ten of the fortnight, not the anchor demo. Bar is the order's clause 1: a real month settles here and nobody opens Splitwise."
+
+[[rung]]
+id     = "ra-12"
+kind   = "primitive"
+lands  = ["compute"]
+title  = "hubs named honestly - search and the house AI live on one machine, and every answer says which"
+status = "open"
+demo   = "D13"
+moves  = []
+note   = "Last. Search has no central index and a shared local AI is a server wherever the GPU is; the honest answer is a hub-like peer, attributed. Every hub-served answer carries the same kind of row ra-4 carries: which single node this depended on. Off the first ladder by the pasted argument."
