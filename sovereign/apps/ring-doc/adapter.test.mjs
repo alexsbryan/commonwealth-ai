@@ -11,15 +11,21 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Y } from "./vendor/ring-doc-bundle.js";
+import { Y, awarenessProtocol } from "./vendor/ring-doc-bundle.js";
 import {
   DOC_CHANGE,
   DOC_ID,
   applyNew,
+  applyPresence,
   b64ToBytes,
   bytesToB64,
   changeAct,
+  colorFor,
   decodeActs,
+  decodePresence,
+  encodeSelf,
+  personFor,
+  presenceEnvelope,
 } from "./adapter.js";
 
 // The SDK's `fold` is served by `window.ring`, which only exists in the page.
@@ -127,4 +133,120 @@ test("an update survives the base64 trip whole", () => {
   const bytes = new Uint8Array(0x8000 * 2 + 7);
   for (let i = 0; i < bytes.length; i += 1) bytes[i] = i % 256;
   assert.deepEqual(Array.from(b64ToBytes(bytesToB64(bytes))), Array.from(bytes));
+});
+
+// --- presence ------------------------------------------------------------
+//
+// The live lane's half. What is pinned here is what the adapter DECIDES: the
+// name on a cursor comes from the roster, and a node that stopped sending is
+// gone rather than frozen on screen. The transport (fan-out, the bounded
+// buffer, the restart that empties it) is the daemon's and is pinned in
+// `sovereign-mesh/tests/main/ring_live_non_durable.rs` — a test here that
+// re-asserted it would be asserting a mock.
+
+/// The roster as `log.roster.members` ships it: person → the keys they sign
+/// with. Alex has two laptops, which is why the lookup is over the values.
+const MEMBERS = {
+  alex: ["aa".repeat(32), "cc".repeat(32)],
+  bo: ["bb".repeat(32)],
+};
+
+test("a cursor's name is the roster's, for the key the rail watched sign", () => {
+  // Both of one person's keys answer with that person; a key the ring never
+  // admitted answers `null`, which the page renders as a nameless cursor
+  // rather than inventing one.
+  assert.equal(personFor(MEMBERS, "aa".repeat(32)), "alex");
+  assert.equal(personFor(MEMBERS, "cc".repeat(32)), "alex");
+  assert.equal(personFor(MEMBERS, "bb".repeat(32)), "bo");
+  assert.equal(personFor(MEMBERS, "ff".repeat(32)), null);
+  assert.equal(personFor(MEMBERS, null), null);
+});
+
+test("a caret colour is a hex triple, or Tiptap draws nothing", () => {
+  // `isValidColor` in the caret extension is `/^#[0-9a-fA-F]{6}$/` and
+  // substitutes `transparent` for anything else — silently. An `hsl()` string
+  // here is an invisible cursor with no error on any surface.
+  assert.match(colorFor("alex"), /^#[0-9a-f]{6}$/);
+  assert.equal(colorFor("alex"), colorFor("alex"), "one person, two colours");
+  assert.notEqual(colorFor("alex"), colorFor("bo"));
+});
+
+test("an awareness roundtrip carries the roster name", async () => {
+  // A's presence, over the live lane's envelope, onto B's map. The name B
+  // reads is the one A looked up in the roster for the key the rail told it
+  // it signs with — never anything typed into the page.
+  const a = new awarenessProtocol.Awareness(new Y.Doc());
+  const b = new awarenessProtocol.Awareness(new Y.Doc());
+  try {
+    const name = personFor(MEMBERS, "aa".repeat(32));
+    a.setLocalStateField("user", { name, color: colorFor(name) });
+
+    const wire = presenceEnvelope(encodeSelf(a), DOC_ID);
+    const read = decodePresence([wire], DOC_ID);
+    assert.deepEqual(read.gaps, []);
+    applyPresence(b, read.updates);
+
+    assert.equal(b.getStates().get(a.clientID).user.name, "alex");
+    assert.equal(b.getStates().get(a.clientID).user.color, colorFor("alex"));
+  } finally {
+    a.destroy();
+    b.destroy();
+  }
+});
+
+test("the live lane carries other things and presence skips them", () => {
+  // One buffer per daemon: a payload for another document, or another kind,
+  // is not ours and is not a gap. A payload that CLAIMS to be ours and cannot
+  // be read is — an absent cursor and a peer who is not typing look the same.
+  const a = new awarenessProtocol.Awareness(new Y.Doc());
+  try {
+    a.setLocalStateField("user", { name: "alex", color: colorFor("alex") });
+    const read = decodePresence(
+      [
+        presenceEnvelope(encodeSelf(a), DOC_ID),
+        presenceEnvelope(encodeSelf(a), "other-doc"),
+        JSON.stringify({ kind: "something-else", doc: DOC_ID }),
+        "{not json",
+        JSON.stringify({ kind: "awareness", doc: DOC_ID, awareness: "%%%%" }),
+      ],
+      DOC_ID,
+    );
+    assert.equal(read.updates.length, 1);
+    assert.equal(read.gaps.length, 2, `${read.gaps}`);
+  } finally {
+    a.destroy();
+  }
+});
+
+test("a node absent for the outdated timeout is gone from the awareness map", async () => {
+  // y-protocols owns this — `outdatedTimeout` is 30 s and its sweep runs every
+  // 3 s — and the reason it is exercised here rather than trusted is the
+  // echo bug it guards: a node that rebroadcast the presence it RECEIVED
+  // would refresh `lastUpdated` on every tick, and a peer that pulled its
+  // network would stay on screen forever. `app.js` skips `FROM_LIVE` origins
+  // for that reason, and this is the property that would tell us it stopped.
+  const a = new awarenessProtocol.Awareness(new Y.Doc());
+  const b = new awarenessProtocol.Awareness(new Y.Doc());
+  try {
+    a.setLocalStateField("user", { name: "alex", color: colorFor("alex") });
+    applyPresence(b, decodePresence([presenceEnvelope(encodeSelf(a), DOC_ID)], DOC_ID).updates);
+    assert.ok(b.getStates().has(a.clientID), "the peer never arrived");
+
+    // A stopped, 31 s ago. Back-dating the metadata is how that is said
+    // without sleeping through it; the sweep itself is the library's.
+    b.meta.get(a.clientID).lastUpdated =
+      Date.now() - awarenessProtocol.outdatedTimeout - 1000;
+
+    const deadline = Date.now() + 8000;
+    while (b.getStates().has(a.clientID) && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    assert.ok(
+      !b.getStates().has(a.clientID),
+      "a peer that stopped sending is still on screen after its timeout",
+    );
+  } finally {
+    a.destroy();
+    b.destroy();
+  }
 });
