@@ -101,3 +101,78 @@ lane is replicated state, the row is owed, and
 
 Commit: recorded in the same commit as the row rewrite and the removal of
 `ralph/NEEDS_HUMAN.md`.
+
+## 2026-09-17 · rd-1-awareness · the page cannot reach `/v1/rail/live` under `svrn ring dev`
+
+The unit is done and committed (`d572d8f3d`); nothing is broken. What stopped
+the loop is that the transport the row names is not reachable from the page the
+demo opens, and the fix lives in files no row named. One fork, decided here,
+plus the sub-fork the package correctly called the substance. `rd-1-live-shim`
+is added to `ralph/next/ring-doc/STATE.md` and carries both.
+
+### Fork 1 — proxy the live lane, or move the demo off `svrn ring dev`. Choice: proxy it.
+
+Reproduced: `svrn ring dev` routes exactly three things
+(`ring_cmd/dev.rs:87-91`) — `POST /__ring/{op}`, the shim, and a static
+fallback — and the op table answers two ops with a 404 for anything else
+(`:140-166`). So a page `fetch("/v1/rail/live")` (`A/app.js:136`, `:172`)
+lands on `static_handler` and 404s, which the committed page renders honestly
+as `presence not read: /v1/rail/live answered 404`. The rail itself has three
+routes since `6ac1fd39f` (`sovereign-api/src/server.rs:262-272`).
+
+The order settles it without a new judgement: O1's Demo step 1
+(`order.md:51`) is "Three browser tabs, one per machine, `svrn ring dev
+ring-doc` on each", and step 5 (`STATE.md:40`) puts awareness on `POST/GET
+/v1/rail/live`. Both cannot be true unless the dev server carries the lane.
+The package's option 3 — serve the app same-origin with the rail listener —
+would rewrite that Demo step, which is the operator's, and would also hand the
+browser a page on the `UNTRUSTED_LOOPBACK` bind the proxy exists to keep the
+grant token off (`dev.rs:72-77`).
+
+The shim's own doc comment (`dev.rs:115-124`) pre-authorised this: "a third arm
+here would mean the rail had grown a third route, and that is where the
+decision belongs." The condition is met, so the comment is rewritten rather
+than worked around.
+
+*Falsified if* the day-6 demo is decided to run from somewhere other than
+`svrn ring dev` — then this row is dead code and O1's Demo step 1 is what
+changed.
+
+### Sub-fork — the drain is a GET and `op_handler` is POST-only. Choice: two POST ops, no router change.
+
+Three ways were open: make the route `any(...)`; spend one POST op on both
+directions with a direction field in the body; or name two ops.
+
+Two ops. The direction field is impossible, not merely worse: the push body
+reaches the daemon verbatim and is read as opaque text
+(`routes_rail_live.rs:253-258`), so there is nowhere in it to put a field
+without the daemon having to parse a payload it promises not to look inside.
+And `any(...)` is unnecessary, because the existing table already proves the
+shape — `"log"` is a browser POST that carries an upstream GET (`:141-147`).
+A drain op is that same shape a second time, whereas widening the route would
+additionally admit `GET /__ring/append`, a verb the proxy has no meaning for.
+
+The four arms become one pure `upstream(op) -> Option<(Method, path, ctype)>`.
+That is not cleanup for its own sake: it is the only way this row's PLANT can
+be watched fail without standing up a proxy and a daemon (principle 5). It
+also keeps one spelling of each path — `RAIL_LIVE_PATH` joins its two siblings
+in `sovereign-cli-shared/src/rail.rs:45-46`, which exist for exactly this
+reason. A four-arm `match` on string ids brushes principle 9; it stays a match
+because the set is closed and compiled in, and it is now one named decider
+rather than four inline ones.
+
+The second half is a JS trap worth naming: the shim's `call` helper
+`JSON.stringify`s its body (`dev.rs:215-218`), and `presenceEnvelope` already
+returns a JSON STRING (`A/adapter.js:220-222`). Routing `live.send` through
+`call` would double-encode, `decodePresence` would `JSON.parse` to a bare
+string, `env.kind` would be `undefined`, and every payload would be skipped
+SILENTLY (`adapter.js:232-240`) — a lane that answers 200 and shows no
+cursors. So `live.send` is a raw `text/plain` fetch, and a test watches for
+the regression.
+
+*Falsified if* something later needs to GET through the proxy from a plain
+`<a>` or an `<img>`, which a POST-only op cannot serve. Then the route becomes
+`any(...)` and `upstream`'s method column is what it was already for.
+
+Commit: recorded in the same commit as the new row and the removal of
+`ralph/NEEDS_HUMAN.md`.
