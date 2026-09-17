@@ -11,6 +11,8 @@ Subcommands:
   run        the serial campaign driver: one unit per session
   supervise  wrap a campaign command: bounded resolutions, progress by unit
   watch      the watchdog: needs-human, down, stalled, disk-low
+  stop       write the operator STOP and wait for the loop to go down
+  start      clear the operator STOP and bootstrap the installed job
   models     show or set ralph/models.env and kickstart the loaded job
   plan       print the queue's head and the model it routes to
 """
@@ -319,6 +321,31 @@ class Paths:
 
     def p(self, rel):
         return self.workdir / rel
+
+
+def job_name(paths, label):
+    return f"dev.ralph.{paths.workdir.name}-{label}"
+
+
+def job_running(paths, label):
+    r = subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/{job_name(paths, label)}"],
+                       capture_output=True, text=True)
+    return "state = running" in r.stdout
+
+
+def sessions_under(workdir):
+    """PIDs of `opencode run` processes whose cwd is under `workdir` — the
+    strays a bootout can leave when the code predates the SIGTERM handler."""
+    pids = []
+    r = subprocess.run(["pgrep", "-f", "opencode run"], capture_output=True, text=True)
+    for pid in r.stdout.split():
+        c = subprocess.run(["lsof", "-a", "-d", "cwd", "-p", pid, "-Fn"],
+                           capture_output=True, text=True)
+        for line in c.stdout.splitlines():
+            if line.startswith("n") and line[1:].startswith(str(workdir)):
+                pids.append(int(pid))
+                break
+    return pids
 
 
 # The Popen of every running session, so a SIGTERM (launchd bootout, Ctrl-C)
@@ -821,10 +848,7 @@ class Watch:
         self.dry = dry
 
     def _running(self):
-        job = f"dev.ralph.{self.paths.workdir.name}-{self.label}"
-        r = subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/{job}"],
-                           capture_output=True, text=True)
-        return "state = running" in r.stdout
+        return job_running(self.paths, self.label)
 
     def _disk_free_mb(self):
         r = subprocess.run(["df", "-m", "/System/Volumes/Data"],
@@ -1150,6 +1174,66 @@ def cmd_supervise(args):
     return guarded(supervisor.run, paths, notify_enabled=args.notify)
 
 
+def cmd_stop(args):
+    paths = Paths(pathlib.Path(args.workdir).resolve())
+    stop = paths.p(paths.stop)
+    stop.parent.mkdir(parents=True, exist_ok=True)
+    stop.write_text("")
+    say(f"stop: wrote {paths.stop} — waiting up to {args.timeout}s for the loop to exit")
+    deadline = time.time() + args.timeout
+    while time.time() < deadline:
+        if not job_running(paths, args.label):
+            say("stop: the loop is down — stop complete")
+            return 0
+        time.sleep(3)
+    if not args.hard:
+        say("stop: still running — re-run with --hard to boot the job out "
+            "(its SIGTERM handler takes the sessions with it)")
+        return 1
+    subprocess.run(["launchctl", "bootout",
+                    f"gui/{os.getuid()}/{job_name(paths, args.label)}"],
+                   capture_output=True, text=True)
+    strays = sessions_under(paths.workdir)
+    for pid in strays:
+        try:
+            os.killpg(os.getpgid(pid), signal.SIGTERM)
+        except (ProcessLookupError, PermissionError):
+            pass
+    say(f"stop: booted out; {len(strays)} stray session(s) taken down")
+    return 0
+
+
+def cmd_start(args):
+    paths = Paths(pathlib.Path(args.workdir).resolve())
+    plist = (pathlib.Path.home() / "Library" / "LaunchAgents"
+             / f"{job_name(paths, args.label)}.plist")
+    if not plist.exists():
+        print(f"start: no plist at {plist} — install it first:\n"
+              f"  python3 scripts/ralph.py supervise --workdir {paths.workdir} "
+              f"--label {args.label} --install-launchd -- <campaign command>",
+              file=sys.stderr)
+        return 2
+    stop = paths.p(paths.stop)
+    if stop.exists():
+        if stop.stat().st_size:
+            print(f"start: {paths.stop} holds a halt reason — resolve it "
+                  f"(read {paths.needs_human}) and remove the file first",
+                  file=sys.stderr)
+            return 2
+        stop.unlink()
+        say("start: cleared the operator STOP")
+    job = job_name(paths, args.label)
+    subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}/{job}"],
+                   capture_output=True, text=True)
+    r = subprocess.run(["launchctl", "bootstrap", f"gui/{os.getuid()}", str(plist)],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        print(f"start: bootstrap failed: {(r.stderr or r.stdout).strip()}", file=sys.stderr)
+        return r.returncode
+    say(f"start: {job} bootstrapped")
+    return 0
+
+
 def main(argv=None):
     _install_signal_handlers()
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -1199,6 +1283,20 @@ def main(argv=None):
     p.add_argument("--label", default="campaign")
     p.add_argument("--install-launchd", action="store_true")
     p.set_defaults(fn=cmd_watch)
+
+    p = sub.add_parser("stop")
+    p.add_argument("--workdir", default=".")
+    p.add_argument("--label", default="campaign")
+    p.add_argument("--timeout", type=int, default=180,
+                   help="seconds to wait for the loop to go down before suggesting --hard")
+    p.add_argument("--hard", action="store_true",
+                   help="boot the job out and take stray sessions down")
+    p.set_defaults(fn=cmd_stop)
+
+    p = sub.add_parser("start")
+    p.add_argument("--workdir", default=".")
+    p.add_argument("--label", default="campaign")
+    p.set_defaults(fn=cmd_start)
 
     p = sub.add_parser("models")
     p.add_argument("--workdir", default=".")
