@@ -345,83 +345,12 @@ instrument_note = "one actor, two ops: seq 3 before retirement and seq 4 after, 
 goodhart     = "zero is the expected good result and proves nothing alone (ARCH 5): a retired key that never signed anything scores zero perfectly. The same run must carry the positive control - the pre-retirement op admitted and folded. And a retirement that also dropped the key's EARLIER ops would re-divide history, which is the exact failure the roster/op-set separation exists to prevent."
 status       = "open"
 
-[[bar]]
-id           = "ra-doc-append-nudges-sync"
-demo         = "Type on machine A and it is on B within about a second, not a minute"
-rung         = "ra-13"
-one_line     = "CLAIM: an act appended through `POST /v1/rail/append` is held by every online peer within 2 s; without the nudge line the same act arrives only on the 60 s tick"
-derives_from = "the append route (sovereign-api/src/routes_rail.rs:184-221) writes the journal and never calls `AppState::ring_write_nudge`; two other writers do (work_donor.rs:1184, work_atlas_broadcaster.rs:86) and the module doc says the nudge is what makes 60 s a ceiling on idleness rather than on a write (ring_sync.rs:22-24). Found 2026-09-17 while pricing the week; one line, and the only daemon change the demo needs on the record path."
-floor        = 2.0
-floor_basis  = "structural: p99 SECONDS from append on the writer to held on each of two readers over 100 edits on three real nodes. Derived: one nudge round (sub-second over iroh) + the page's 500 ms poll. The NEGATIVE leg is the same test with the nudge line absent, watched failing at >= 60 s before the line lands."
-target       = 1.0
-direction    = "lower_is_better"
-# instrument   = (none yet) — owed by day 5: `scripts/ring-doc-demo.sh verdict ra-doc-append-nudges-sync`
-instrument_note = "three daemons (two hosts + one, or three on one host under SOVEREIGN_DATA_DIR as ring-offers-demo.sh does), 100 appends with wall-clock stamps; p50 and p99 reported, p99 judged. Order: ring-doc-week1 step 1."
-goodhart     = "2 s over one edit is noise; 100 edits and the p99. And a fast number measured with all three daemons on ONE host says nothing about the Halo-to-Mac path - the run names its topology."
-status       = "open"
-
-[[bar]]
-id           = "ra-doc-three-machines-converge"
-demo         = "Three people type at once in one document and all three screens end identical"
-rung         = "ra-13"
-one_line     = "CLAIM: after 100 concurrent edits from three nodes, the Yjs state vectors on all three are equal and the rail carried every update as an opaque act with ZERO diffs under commonwealth-rail*"
-derives_from = "the campaign's hardest-first bet: Yjs updates are commutative, associative and idempotent (shelf §doc), so the rail's total order is a convenience and admission needs no branch. A keystroke is 18 B and ~38,000 words fit one 64 KiB act (measured 2026-09-17), so the ceiling is not the constraint. The rail-crate diff count is the campaign predicate applied to this rung."
-floor        = 1.0
-floor_basis  = "structural: 1.0 iff the three state vectors are byte-equal after the run AND `git diff --stat origin/main -- commonwealth/crates/commonwealth-rail*` is empty. Either false is 0.0."
-target       = 1.0
-direction    = "higher_is_better"
-# instrument   = (none yet) — owed by day 5: `scripts/ring-doc-demo.sh verdict ra-doc-three-machines-converge`
-instrument_note = "the page exposes its state vector; the script reads all three and compares. 100 edits scripted through the page's append path on three nodes simultaneously. Order: ring-doc-week1 step 7."
-goodhart     = "equal state vectors after everyone typed the same thing proves nothing - the three nodes type DIFFERENT text in the same and in different paragraphs. And equal vectors with a lost-then-re-typed character is a lost write: the script diffs the final text against the union of what was typed."
-status       = "open"
-
-[[bar]]
-id           = "ra-doc-live-lane-non-durable"
-demo         = "Three cursors with three names move as people type, and a machine that drops off fades from the others within 30 s"
-rung         = "ra-13"
-one_line     = "CLAIM: awareness bytes posted on one node render on the other two within 1 s, the replication-sender census stays green, and a daemon restart holds NONE of them"
-derives_from = "the first implementation of the `live` row: the event-driven push-to-all-online peers that `announce_presence_change` already uses (sovereign-mesh/src/gossip.rs:925-970) pointed at an ephemeral payload, with a bounded in-memory ring buffer the page drains - the direct fan-out the shelf names as the default at ring scale, no iroh-gossip crate. y-protocols awareness is two pure functions over bytes (name+colour+cursor = 235 B); its 30 s outdatedTimeout is the fade. tests/main/replication_sender_census.rs pins ring-sync as the ONE sender of replicated state (gossip.rs:31-36) - a lane that wrote anywhere would trip it, which is the proof this lane is not a store."
-floor        = 1.0
-floor_basis  = "structural: 1.0 iff (a) cursor render p99 <= 1 s across three nodes, (b) the census test passes unchanged, and (c) after `daemon stop && daemon start` the live GET returns an empty buffer and no journal or MeshStore namespace gained a row. All three, or 0.0."
-target       = 1.0
-direction    = "higher_is_better"
-# instrument   = (none yet) — owed by day 5: `scripts/ring-doc-demo.sh verdict ra-doc-live-lane-non-durable`
-instrument_note = "leg (c) is the load-bearing negative and is WATCHED FAILING first: a deliberately durable variant of the route (writes the buffer to MeshStore) must turn the census red, then the real route keeps it green. Order: ring-doc-week1 step 4."
-goodhart     = "a lane nobody posts to is non-durable and fast. Legs (a) and (c) run in the SAME session: cursors visibly moved, then the restart shows nothing kept. And the 4 KiB payload cap must refuse loudly, not drop silently (shelf: iroh-gossip #131 is the failure to not inherit)."
-status       = "open"
-
-[[bar]]
-id           = "ra-doc-partition-drill"
-demo         = "Pull the cable on one machine, everyone keeps typing, plug it back in, all three documents are identical again"
-rung         = "ra-13"
-one_line     = "CLAIM: with one node partitioned for 60 s while all three type, reconnection yields byte-equal state on three nodes, and the gap panels NAMED the absence during the split"
-derives_from = "the ring-deploy order's clause 6 (no lost write for any interleaving) applied to the doc; the rail returns RailGap::SequenceHole for what it has not received (admit.rs:105) and the scaffolded page already has a gap panel - the positive control is that the panel said something while the nodes were apart, so 'converged' is not 'nothing happened'."
-floor        = 1.0
-floor_basis  = "structural: 1.0 iff state vectors are equal after reconnect AND the final text equals the union of what was typed on all three during the split AND each side's gap panel was non-empty at least once during the split. Any false is 0.0."
-target       = 1.0
-direction    = "higher_is_better"
-# instrument   = (none yet) — owed by day 5: `scripts/ring-doc-demo.sh verdict ra-doc-partition-drill`
-instrument_note = "partition = kill C's daemon or drop its iroh link for 60 s; scripted typing on all three throughout; the script samples the gap panels every 5 s. Order: ring-doc-week1 step 7."
-goodhart     = "a partition during which nobody typed converges trivially - all three type throughout, in the same paragraph on at least one edit. A run where the gap panel stayed empty has not shown the partition happened."
-status       = "open"
-
-[[bar]]
-id           = "ra-doc-attribution-from-signer"
-demo         = "Every paragraph says who last edited it, by name, and a page that lies about its author changes nothing"
-rung         = "ra-13"
-one_line     = "CLAIM: every 'last edited by' line resolves from the act's `actor` through the roster, and an update carrying a forged Yjs clientID renders under the SIGNER's name"
-derives_from = "ARCH §18.1 - assert on what the subject cannot author. The rail verifies the signer (admit.rs:349); the Yjs clientID inside the update is self-asserted and y-protocols says awareness is unauthenticated (shelf §doc, 'the one piece of code the shelf does not supply'). This week attribution is at the ACT level only; per-character colouring is not shown because it would not be trustworthy, and the page says so."
-floor        = 1.0
-floor_basis  = "structural: FRACTION of 'last edited by' lines whose name equals roster.person_for(op.actor) for the latest act touching that paragraph, over a run that INCLUDES a forged-clientID update - which must render under the signer. 1.0 or the bar is not met."
-target       = 1.0
-direction    = "higher_is_better"
-# instrument   = (none yet) — owed by day 5: `scripts/ring-doc-demo.sh verdict ra-doc-attribution-from-signer`
-instrument_note = "one node appends an update whose clientID is another node's; the line must still read the signer's name. Order: ring-doc-week1 step 8."
-goodhart     = "1.0 over honest updates only is a constant. The forged update is the failing input and the run must contain it."
-status       = "open"
-
 # ── THE LADDER ───────────────────────────────────────────────────────────────
 # LANDING ORDER = TABLE ORDER; ids are identity, not position (ra-4's note).
+# THE 9-BAR CAP (co-lineage.py MAX_BARS, a load error) means this umbrella
+# carries only CROSS-CUTTING bars; each APPLICATION rung that gets funded
+# opens a CHILD campaign `quality/campaigns/<app>.toml` with `parent =
+# "ring-apps"`, and the rung names it in `campaign`. First child: ring-doc.
 # Application-led: an APP rung is what a person watches and names the primitive
 # rows it pulls and the abstraction it is expected to STEER; a PRIMITIVE rung
 # lands a row and sits directly after the app that pulled it. The hardest apps
@@ -468,8 +397,9 @@ steers = "whether the rail must learn ANYTHING to carry a CRDT (the bet is no); 
 title  = "APP: the doc - three people write the party invite together, cursors visible, no account"
 status = "open"
 demo   = "D5"
-moves  = ["ra-doc-append-nudges-sync", "ra-doc-three-machines-converge", "ra-doc-live-lane-non-durable", "ra-doc-partition-drill", "ra-doc-attribution-from-signer"]
-note   = "WEEK ONE: order ring-doc-week1 (drafted 2026-09-17, demo on day six) - the demo script there is the DoD and moves the five bars above; the live lane lands as direct fan-out inside this rung, so ra-6 is PARTIALLY landed by it. FIRST by operator direction: the app most likely to bend the abstractions. Automerge in the page (wasm), changes as ordinary `Record` payloads of kind `doc-change`, cursors and change DELIVERY on the live lane, the journal as the record. Also calendar, tasks, notes and the house wiki, which are the same primitive with a different fold. Names no bar yet; the two to declare first, both watched failing: two writers partitioned, both edits survive the merge (an LWW store loses one - that is the failing input); and a cursor that only ever rode gossip is NOT in the history and the replication census stays green. SHELF: Yjs in the page, yrs in the node, Tiptap 3, y-protocols awareness; no adapter framework - the adapter is ~50 lines. Measured 2026-09-17: a keystroke is 18 B and ~38,000 words fit one act, so the 64 KiB ceiling is not the constraint. The FIRST negative leg is the one the shelf cannot supply: the Yjs clientID inside an act is self-asserted and must be bound to the roster key at validation and at gossip ingress."
+moves  = []
+campaign = "ring-doc"
+note   = "WEEK ONE: child campaign quality/campaigns/ring-doc.toml holds this rung's five bars (the 9-bar cap is a LOAD ERROR in co-lineage, so an umbrella of 23 rungs cannot carry per-app bars - each hard app gets a child campaign); order ring-doc-week1 (drafted 2026-09-17, demo on day six) serves ring-doc and its demo script is the DoD; the live lane lands as direct fan-out inside this rung, so ra-6 is PARTIALLY landed by it. FIRST by operator direction: the app most likely to bend the abstractions. Automerge in the page (wasm), changes as ordinary `Record` payloads of kind `doc-change`, cursors and change DELIVERY on the live lane, the journal as the record. Also calendar, tasks, notes and the house wiki, which are the same primitive with a different fold. Names no bar yet; the two to declare first, both watched failing: two writers partitioned, both edits survive the merge (an LWW store loses one - that is the failing input); and a cursor that only ever rode gossip is NOT in the history and the replication census stays green. SHELF: Yjs in the page, yrs in the node, Tiptap 3, y-protocols awareness; no adapter framework - the adapter is ~50 lines. Measured 2026-09-17: a keystroke is 18 B and ~38,000 words fit one act, so the 64 KiB ceiling is not the constraint. The FIRST negative leg is the one the shelf cannot supply: the Yjs clientID inside an act is self-asserted and must be bound to the roster key at validation and at gossip ingress."
 
 [[rung]]
 id     = "ra-14"
