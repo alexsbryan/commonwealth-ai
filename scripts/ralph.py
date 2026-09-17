@@ -15,6 +15,7 @@ Subcommands:
   start      clear the operator STOP and bootstrap the installed job
   models     show or set ralph/models.env and kickstart the loaded job
   plan       print the queue's head and the model it routes to
+  promote    make a staged campaign (ralph/next/<name>/) the active one
 """
 from __future__ import annotations
 
@@ -328,6 +329,11 @@ class Paths:
 
     def p(self, rel):
         return self.workdir / rel
+
+
+# A driver heartbeat younger than this means a loop is live. One number for the
+# watchdog's "stalled" and promote's "still running".
+STALL_SECS = 300
 
 
 def job_name(paths, label):
@@ -874,7 +880,7 @@ class Watch:
     """The watchdog conditions, in order of precedence."""
 
     def __init__(self, paths, *, label, running=None, disk_free_mb=None,
-                 stall_secs=300, min_free_mb=5120, notifier=notify, dry=False):
+                 stall_secs=STALL_SECS, min_free_mb=5120, notifier=notify, dry=False):
         self.paths = paths
         self.label = label
         self.running = running or self._running
@@ -1013,6 +1019,77 @@ def cmd_plan(args):
     return 0
 
 
+# A staged campaign is a directory nothing in the loop reads until `promote`.
+STAGED_DIR = "ralph/next"
+ARCHIVE_DIR = "ralph/archive"
+# What belongs to ONE campaign: authored before it runs, or its ledger while it
+# runs. Per-host runtime files (models.env, log.txt, markers) are not in it.
+CAMPAIGN_FILES = ("STATE.md", "PROMPT.md", "CHARTER.md", "heavy.txt", "conflicts.txt",
+                  "DECISIONS.md", "REVIEW_FINDINGS.md", ".director-commits", "lanes")
+
+
+def staged_campaigns(paths):
+    root = paths.p(STAGED_DIR)
+    if not root.is_dir():
+        return []
+    return sorted(d for d in root.iterdir() if (d / "STATE.md").is_file())
+
+
+def cmd_promote(args):
+    paths = Paths(pathlib.Path(args.workdir).resolve())
+    staged = paths.p(f"{STAGED_DIR}/{args.name}")
+    missing = [f for f in ("STATE.md", "PROMPT.md") if not (staged / f).is_file()]
+    if missing:
+        print(f"promote: {STAGED_DIR}/{args.name} lacks {', '.join(missing)}", file=sys.stderr)
+        return 2
+    queue = Queue(staged / "STATE.md")
+    if not queue.rows:
+        print(f"promote: {STAGED_DIR}/{args.name}/STATE.md parses to zero rows", file=sys.stderr)
+        return 2
+    head = queue.current()
+    print(f"staged {args.name}: {len(queue.rows)} rows, done {queue.done_count()}, "
+          f"head {head.id if head else 'none'}")
+    if args.dry_run:
+        return 0
+    pkg = paths.p(paths.needs_human)
+    if pkg.exists() and pkg.stat().st_size:
+        print(f"promote: {paths.needs_human} is unresolved — the active campaign is not over",
+              file=sys.stderr)
+        return 2
+    if not (paths.p(paths.done).exists() or paths.p(paths.stop).exists()):
+        print("promote: the active campaign has neither DONE nor an operator STOP — "
+              "run `ralph.py stop` first", file=sys.stderr)
+        return 2
+    beat = paths.p(paths.heartbeat)
+    beat_age = time.time() - beat.stat().st_mtime if beat.exists() else None
+    if job_running(paths, args.label) or (beat_age is not None and beat_age < STALL_SECS):
+        print(f"promote: a loop is still live (heartbeat {int(beat_age or 0)}s old) — "
+              "wait for it to go down", file=sys.stderr)
+        return 2
+    archive = paths.p(f"{ARCHIVE_DIR}/{time.strftime('%Y%m%d-%H%M%S', time.gmtime())}"
+                      f"-before-{args.name}")
+    archive.mkdir(parents=True)
+    for name in CAMPAIGN_FILES:
+        if paths.p(f"ralph/{name}").exists():
+            paths.p(f"ralph/{name}").rename(archive / name)
+    for marker in (paths.done, paths.stop):
+        if paths.p(marker).exists():
+            paths.p(marker).unlink()
+    for name in CAMPAIGN_FILES:
+        if (staged / name).exists():
+            (staged / name).rename(paths.p(f"ralph/{name}"))
+    leftovers = sorted(p.name for p in staged.iterdir())
+    if leftovers:
+        say(f"promote: left in {STAGED_DIR}/{args.name}: {', '.join(leftovers)} "
+            "(not campaign files)")
+    else:
+        staged.rmdir()
+    say(f"promote: {args.name} is active; the previous campaign is in "
+        f"{archive.relative_to(paths.workdir)}. Commit ralph/, then start the loop "
+        f"with --label {args.name}")
+    return 0
+
+
 def cmd_models(args):
     paths = Paths(pathlib.Path(args.workdir).resolve())
     file = paths.p(paths.models)
@@ -1090,7 +1167,9 @@ def cmd_report(args):
     print(f"queue: {len(queue.rows)} rows — done {done}, active {active}, pending {pending}")
     current = queue.current()
     print(f"current: {current.id if current else 'none'}")
-    markers = [m for m in ("DONE", "STOP", "NEEDS_HUMAN.md") if paths.p(f"ralph/{m}").exists()]
+    for d in staged_campaigns(paths):
+        print(f"next up: {d.name} ({len(Queue(d / 'STATE.md').rows)} rows, staged in {STAGED_DIR})")
+    markers =[m for m in ("DONE", "STOP", "NEEDS_HUMAN.md") if paths.p(f"ralph/{m}").exists()]
     print(f"markers: {', '.join(markers) if markers else 'none'}")
     decisions = paths.p("ralph/DECISIONS.md")
     if decisions.exists():
@@ -1353,6 +1432,14 @@ def main(argv=None):
     p = sub.add_parser("plan")
     common(p)
     p.set_defaults(fn=cmd_plan)
+
+    p = sub.add_parser("promote")
+    p.add_argument("name", help="the staged campaign under ralph/next/")
+    p.add_argument("--workdir", default=".")
+    p.add_argument("--label", default="campaign", help="the ACTIVE loop's label")
+    p.add_argument("--dry-run", action="store_true",
+                   help="parse the staged queue and print its head; change nothing")
+    p.set_defaults(fn=cmd_promote)
 
     args = ap.parse_args(argv)
     return args.fn(args)

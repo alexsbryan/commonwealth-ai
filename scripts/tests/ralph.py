@@ -111,6 +111,81 @@ class ReportTests(unittest.TestCase):
             self.assertIn("deadbee..cafe123", out)
 
 
+class PromoteTests(unittest.TestCase):
+    STAGED = "- [ ] h-a — depends [] — do a\n- [ ] h-b — depends [h-a] — do b\n"
+
+    def active_and_staged(self, tmp, markers=("DONE",), beat_age=None):
+        write(tmp, "ralph/STATE.md", "- [x] dm-a abc1234 — depends [] — done\n")
+        write(tmp, "ralph/PROMPT.md", "old prompt\n")
+        write(tmp, "ralph/DECISIONS.md", "- old decision\n")
+        write(tmp, "ralph/lanes/dm-a.done", "")
+        write(tmp, "ralph/models.env", "MODEL=x\n")
+        for m in markers:
+            write(tmp, f"ralph/{m}", "")
+        if beat_age is not None:
+            beat = write(tmp, "ralph/.heartbeat", "1 session\n")
+            then = time.time() - beat_age
+            os.utime(beat, (then, then))
+        write(tmp, "ralph/next/handed/STATE.md", self.STAGED)
+        write(tmp, "ralph/next/handed/PROMPT.md", "new prompt\n")
+
+    def promote(self, tmp, *extra):
+        err = io.StringIO()
+        with mock.patch.object(ralph, "job_running", return_value=False), \
+                contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+            rc = ralph.main(["promote", "handed", "--workdir", tmp, *extra])
+        return rc, err.getvalue()
+
+    def test_dry_run_parses_the_staged_queue_and_moves_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.active_and_staged(tmp)
+            rc, _ = self.promote(tmp, "--dry-run")
+            self.assertEqual(rc, 0)
+            self.assertEqual((pathlib.Path(tmp) / "ralph/PROMPT.md").read_text(), "old prompt\n")
+
+    def test_refuses_while_a_loop_is_live(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.active_and_staged(tmp, markers=("STOP",), beat_age=5)
+            rc, err = self.promote(tmp)
+            self.assertEqual(rc, 2)
+            self.assertIn("still live", err)
+            self.assertTrue((pathlib.Path(tmp) / "ralph/next/handed/STATE.md").exists())
+
+    def test_refuses_a_campaign_that_neither_finished_nor_was_stopped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.active_and_staged(tmp, markers=())
+            rc, err = self.promote(tmp)
+            self.assertEqual(rc, 2)
+            self.assertIn("neither DONE nor an operator STOP", err)
+
+    def test_promotes_archives_the_old_campaign_and_keeps_host_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.active_and_staged(tmp, markers=("DONE",), beat_age=STALE)
+            rc, _ = self.promote(tmp)
+            self.assertEqual(rc, 0)
+            root = pathlib.Path(tmp)
+            self.assertEqual((root / "ralph/STATE.md").read_text(), self.STAGED)
+            self.assertFalse((root / "ralph/DONE").exists())
+            self.assertFalse((root / "ralph/next/handed").exists())
+            self.assertFalse((root / "ralph/lanes").exists())
+            self.assertEqual((root / "ralph/models.env").read_text(), "MODEL=x\n")
+            (archive,) = (root / "ralph/archive").iterdir()
+            self.assertEqual((archive / "DECISIONS.md").read_text(), "- old decision\n")
+            self.assertTrue((archive / "lanes/dm-a.done").exists())
+
+    def test_report_names_the_next_campaign(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.active_and_staged(tmp)
+            subprocess.run(["git", "init", "-q", tmp], check=True)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                ralph.main(["report", "--workdir", tmp])
+            self.assertIn("next up: handed (2 rows", buf.getvalue())
+
+
+STALE = ralph.STALL_SECS + 60
+
+
 class CampaignTests(unittest.TestCase):
     def make(self, tmp, rows, *, session_run, max_stall=3, max_iter=10,
              marker_timeout=60):
