@@ -346,6 +346,56 @@ unnecessary.
 lines, the row's RE-SEQUENCED note, and the row back to `[ ]`) and this entry.
 `git revert <sha>` reverts it alone.
 
+## 2026-09-17 · dm-daemon-api-edge · the api host cluster is atomic; five rows fold into one
+
+**Fork.** `dm-daemon-api-edge` cannot execute as written. The package
+(`ralph/NEEDS_HUMAN.md`, 22:25) names two independent blockers: every file the
+row moves reaches `crate::state` (or `crate::routes_inference`) and `state.rs` /
+`server.rs` / the route shells reach the edge back — a Cargo package cycle if
+the edge moves alone — and `[[forbid]] sovereign-api -> sovereign-*`
+(`quality/ARCH_LAYERS.toml:711-741`) does not except `sovereign-daemon`, so §3a's
+own shim direction and the consumers' repoint both fail `LAYER`. The design
+already says the cluster is atomic: `quality/DOMAINS.toml` api-9, "host
+(18,930), frontdoor.rs included, whole -> sovereign-daemon. LAST. INTERLEAVE:
+with dm-mesh-host; the two host clusters land in ONE crate or the AppState edge
+just changes address."
+
+**Choice.** Fold the api host cluster's rows into this one and move it whole in
+ONE commit: the edge, `state.rs` with its six parts, `server.rs` and the routes.
+`dm-daemon-api-state`, `dm-daemon-api-http-a/b1/b2` and `REVIEW-build-peer-wire`
+are absorbed (marked `[x]` with an ABSORBED note; their `depends` stay
+satisfied). `REVIEW-build-daemon-parts` now depends on this row, not on
+`dm-daemon-api-state`. The same commit carries what the cluster needs to
+compile: (a) `sovereign-peer-wire` (the daemon↔daemon wire types, so the moved
+routes and the three mesh loops share one leaf); (b) `state/fabric.rs` →
+sovereign-mesh with the three loops repointed to Fabric's own state (the
+`REVIEW-build-mesh-api-decouple` deferral); (c) the external consumers
+(cli-daemon 35, cli-llm 24, cli-dev 3, the harness) repointed to
+`sovereign_daemon::…`.
+
+A sequence of small commits does not exist: no subset of the cycle compiles, and
+the one-way forbid blocks the shim that would make a partial move legal.
+
+**Evidence.** `ralph/NEEDS_HUMAN.md` 2026-09-17 (b) (the package's measurements);
+`quality/DOMAINS.toml` api-9; `quality/ARCH_LAYERS.toml:711-741`;
+`git grep -n 'impl EmbeddedDaemon'` and the `crate::state` reach measured in the
+package; the lane logs (`target/ralph/lane-dm-daemon-api-edge.out`) showing the
+row's own worker reaching the same wall and stopping.
+
+**Falsified by.** A working split of the cycle (a port or reader that lets the
+edge move before the state); or the operator widening api's `except` to include
+the daemon or a wire leaf, which would make a partial move legal.
+
+**REVIEW-AFTER:** the fold marks five rows `[x]` without their own commits —
+the operator may prefer the rows kept `[ ]` with a re-scope instead of an
+absorb; and the one-commit move is ~19k lines, far past the ten-file grammar,
+which the operator may want split by file family if a compile-only-once path
+can be shown.
+
+**Landed in.** this commit — `ralph/STATE.md` (the row's new scope, five
+ABSORBED marks, `REVIEW-build-daemon-parts`' dep) and this entry.
+`git revert <sha>` reverts it alone.
+
 ## 2026-09-16 · REVIEW-build-api-host-decouple · the daemon's edge is host; the AppState reads defer to the state dissolution
 
 **Fork.** The row lists 29 non-`host` → `host` references across seven host
