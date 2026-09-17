@@ -43,9 +43,9 @@ not_covered = """
 no user-facing surface renders the verdict: `hd-1-surfaces-print` was cut at round 2 (no plant, no test, nothing read either field), so `--format json` and the desktop `message-complete` payload still drop it, EpistemicFooter.svelte:10-21 reads the epistemic ledger instead, render.rs:281 renders provenance, and mobile renders nothing. A candidate rung, not funded here.
 `could_not_judge` still ships text: a verifier that RAN and abstained is not one that never ran, and which verdicts force a rewrite is turn policy, enforced at runtime.
 A THIRD MessageResponse — the desktop's own, sovereign-desktop/src-tauri/src/commands/mod.rs:13 — carries `metadata: Option<Value>` (:19), an untyped blob the compiler will NOT name when the daemon's and the server's are converted, so it ships with no verdict.
-`MessageRefined` carries no verdict at all until hd-10: the row that would have added one (`REVIEW-build-hd-1-refined`) was cut at round 3, because the field would have reached one socket channel rendered by nothing and would then have been re-typed by hd-10's projection — double work on the package's only zero-headroom file. hd-10 step 6 owns it, together with the persisted-meta hole below.
+`MessageRefined` carries no verdict at all until hd-10: the row that would have added one (`REVIEW-build-hd-1-refined`) was cut at round 3, because the field would have reached one socket channel rendered by nothing and would then have been re-typed by hd-10's projection — double work on the package's only zero-headroom file. hd-10 step 7 owns it, together with the persisted-meta hole below.
 `ApprovalChannel::emit_message_refined` has a no-op default body (sovereign-contracts/src/traits.rs:2008) and only SocketApprovalChannel overrides it (turn_approval.rs:298); AutoApprovalChannel (executor.rs:235) and ServerApprovalChannel (sovereign-server/src/approval.rs:103) discard the notice, judgement and all. Deleting that default is a rung of its own — it is hd-4's defect 200 lines up the same file.
-The PERSISTED refined row keeps the pre-refinement verdict: collaboration.rs:693 writes `metadata: original_metadata`, so history, a desktop reload and a json replay all show refined text under the previous turn's verdict. no row fixes it before hd-10 (collaboration.rs is 885/885, inside arch-gate's no-slack band, so the row that touches it pays for its lines or stops); hd-10 step 6 owns it.
+The PERSISTED refined row keeps the pre-refinement verdict: collaboration.rs:693 writes `metadata: original_metadata`, so history, a desktop reload and a json replay all show refined text under the previous turn's verdict. no row fixes it before hd-10 (collaboration.rs is 885/885, inside arch-gate's no-slack band, so the row that touches it pays for its lines or stops); hd-10 step 7 owns it.
 `TurnFrame::StreamError` (sovereign-contracts/src/types/turn.rs:147-153) is a fourth terminal — the contract at :350-351 says Complete and StreamError both settle — with no judgement slot and no row touching it.
 """
 
@@ -239,10 +239,10 @@ note   = "closes the code half at compile time; the TOML half stays a named reso
 
 [[rung]]
 id     = "hd-10"
-title  = "render: nothing ships unverified — a released verdict is its own type, minted only by a verifier"
+title  = "render: nothing ships unverified — every exit releases through the door that already requires a verdict"
 status = "open"
 demo   = "D1"
-note   = "the sentence docs/ARCHITECTURE_TOUR.md:61 already claims; TARGET_ARCHITECTURE.md §2 specified the receipt and it was never built. Operator decision 2026-09-17 (round 3): SPLIT THE TYPE rather than close Judgement's own constructors, which reach 159 sites in 30 files across 9 crates with only 2 on the turn path. Also absorbs the two render holes hd-1 leaves, cut from hd-1-refined at round 3"
+note   = "the sentence docs/ARCHITECTURE_TOUR.md:61 already claims. Round 4 replaced the design: `kernel_types::Answer` already has no door that does not take a Judgement, with a LOCAL `Seal` trait as its receipt, and `gate_release_census.rs` already pins the gate's five doors — so this rung ADOPTS both (principle 11) rather than minting a type, a marker crate, an ARCH_LAYERS entry or a second census. Operator round 4: the wire carries a PROJECTION, since Answer stays un-deserializable. Also absorbs the two render holes hd-1 leaves, cut from hd-1-refined at round 3"
 
 [[rung]]
 id     = "hd-7"

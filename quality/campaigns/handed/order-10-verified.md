@@ -8,7 +8,7 @@ serves: handed
 campaign: handed
 lane: structural — render: every turn exit releases through the door that already requires a verdict
 engine: ralph pool; REVIEW-mint first, then the rows it mints
-budget: see the mint row's cap in ralph/next/handed/STATE.md (10 — basis below)
+budget: see the mint row's cap in ralph/next/handed/STATE.md (11 — basis below)
 ---
 
 # Order: handed-10-verified — the exits adopt the type that already enforces this
@@ -84,9 +84,14 @@ lets `serve.rs` mint its own marker, and `except_from` is a layer-gate rule that
 
 - **grounded answers** — the existing claims-against-evidence gate. Already done.
 - **abstentions** (no documents, no chunks, no step summaries) — a no-assertion verifier:
-  the released text contains no factual claim, using the existing claim extractor.
-  `Answer::abstained` is already its door.
-- **clarifying questions** — the same no-assertion check.
+  the released text contains no factual claim, using the existing claim extractor. Its
+  door is `Draft::composed(text, vec![]).release(provenance, &[judgement])`
+  (answer.rs:310), NOT `Answer::abstained`: `abstained` (:364-372) takes a `Reason` and
+  hardcodes `Judgement::failed`, so routing a verified abstention through it DISCARDS the
+  verifier's verdict and stamps `Failed` whether the check passed or not — census green,
+  promise false. `abstained` stays the door for the one surface that genuinely declined.
+- **clarifying questions** — the same no-assertion check, through the same
+  `Draft::composed(...).release(...)` door for the same reason.
 - **fixed templates** (the wellbeing crisis text) — identity against the approved string.
 - **generative and expressive** — the deterministic vetoes that already exist: the
   numeric audit (the model never originates a number) and the invented-identifier
@@ -100,16 +105,45 @@ lets `serve.rs` mint its own marker, and `except_from` is a layer-gate rule that
    what verifies it.
 2. **A door per surface, beside the gate's five**, each wrapping exactly one kernel-types
    constructor and nothing else — the shape `gate_release_census.rs` already pins.
-3. **Extend `gate_release_census.rs`** to the new doors and to the seven gate-less
-   handler files: the six `MINTS` may appear only inside a door, there too. Extend the
-   existing test; do not write a second census.
-4. **Route the seven gate-less handlers** through a door each, grouped by file, at most
-   ~10 files a row.
-5. **`TurnFrame::Complete` carries the projection of an `Answer`**, built only from one:
-   the four builders in serve.rs must hold an `Answer` to construct a frame, and
-   `MessageResponseWire` likewise. The projection is a rendering — text, citations,
-   judgement as data — derived from the `Answer` by ONE function, never assembled field
-   by field at four sites.
+3. **Refactor `gate_release_census.rs` so it CAN be extended — instrument only, no new
+   coverage in this row.** Today `grounding_source()` (census:50-53) is zero-argument and
+   hardcodes one path, `DOORS` is a flat const, and `door_spans` (:63-69) PANICS when
+   `src.find(door)` misses, with a message naming `grounding/mod.rs`. Point it at seven
+   files that have no doors yet and it panics seven times over, so a row that extends
+   coverage before step 4 adds the doors cannot land. This row parameterizes the path and
+   the panic message and makes `DOORS` a per-file set; each file's entry then rides the
+   step-4 row that adds that file's door, so coverage and doors land together and the
+   census is never red for a file that has not been converted yet.
+4. **Classify the seven, THEN route the ones that are exits** — grouped by file, at most
+   ~10 files a row. The seven were found by grep-absence (`grounding|GateOutcome|gate(`
+   scoring zero), which finds files that do not mention the gate, not files that release
+   text. At least two are known not to be plain exits: `code_query.rs:97` DELEGATES to
+   `handle_knowledge_query`, the gated path, so a door there either double-stamps or is
+   dead; and `document_op.rs:286-328` releases `result_text` from a TOOL execution — text
+   it did not compose, which is this order's fourth Kill. `recipe_author` and `conation`
+   have no surface assigned by the design section above. So the row's first act is a
+   classification, recorded in the commit: exit (gets a door), delegator (gets none, and
+   say which gated path it reaches), or not-a-turn-exit (out of scope, named). Step 1's
+   exhaustive map cannot be written until that classification exists.
+5. **The projection EXISTS — make it required and make it the only way in.**
+   `TurnFrame::Complete` already carries `epistemic_state: Option<EpistemicState>`
+   (sovereign-contracts/src/types/turn.rs:126), and `EpistemicState.citations` is already
+   projected from a `kernel_types::Answer` by `EpistemicState::citations_of(answer,
+   headings)` (types/epistemic.rs:68, since rung `nc-20-turn-adoption`). So do NOT add a
+   second projection or a third citation list — that is this order's third Kill. The gaps
+   are: the field is `Option`, so a frame can omit it; and the judgement is not part of
+   what the projection derives. Both are this row's work: `epistemic_state` stops being
+   optional (or the row states why it cannot be and what that costs), the judgement joins
+   what `citations_of`'s sibling derives from the same `&Answer`, and the projection's
+   constructor takes `&Answer` — otherwise it is a pub-field DTO and the four serve.rs
+   builders (:306, :425, :506, :554) can assemble it field by field with step 8(b)'s
+   E0063 still passing, which would leave "ONE function" with no watcher at all.
+   NOTE for the reader and the audit: `EpistemicState.verdict: TurnVerdict`
+   (`Grounded | CannotKnowFromHere | GeneralKnowledge | Mixed | Unverified`,
+   epistemic.rs:357, computed in sovereign-core/src/runtime/epistemic.rs) is a DIFFERENT
+   axis from `Judgement`'s verdict — what basis the answer has, versus whether a check ran
+   and what it said. Two facts, not two implementations of one, so they coexist; a rung
+   that collapsed them would be deleting a distinction, not removing a duplicate.
 6. **Mint the two verifiers that do not exist** (no-assertion, template identity) and
    wire the existing deterministic vetoes as the creative surfaces' verifier. `never_ran`
    narrows here: a verifier that crashed or timed out, its reason naming the failure
@@ -121,7 +155,10 @@ lets `serve.rs` mint its own marker, and `except_from` is a layer-gate rule that
    release, outside any door -> `TEST(sovereign-core)` red on the extended
    `gate_release_census` naming that file, which is the assertion the audit checks.
    (b) Build a `Complete` from text without an `Answer` -> LINT red **E0063** (the
-   projection field is required and has no `Default`). (c) Add a 14th `Intent` variant ->
+   projection field is required and has no `Default`). E0063 alone only proves the field
+   is PRESENT, so the row also plants the field-by-field assembly it is meant to forbid:
+   construct the projection at one serve.rs builder without an `&Answer` in hand -> the
+   error the private constructor produces, which the row names. (c) Add a 14th `Intent` variant ->
    LINT red **E0004** at step 1's mapping. For (c): `guard_story` goes E0004 red on the
    same input TODAY, so the plant must show the error AT step 1's mapping file:line among
    the sites rustc names — "something went E0004" is watching `guard_story`, not this
@@ -130,11 +167,14 @@ lets `serve.rs` mint its own marker, and `except_from` is a layer-gate rule that
 9. Do the mint's three queue duties (PROMPT §4): the two `depends` lists, a
    `conflicts.txt` pair per shared file, and `ralph.py report` proving the queue parses.
 
-## Cap basis (cap 10 in STATE.md; 15 at round 3, re-priced at round 4 on the census find)
+## Cap basis (cap 11 in STATE.md; 15 at round 3, 10 at round 4, 11 after round 5)
 
-1 row for the mapping, 1 for the doors, 1 for the census extension, 2-3 for the seven
-handlers, 1-2 for the two verifiers, 1 for the projection, 1 for the two render holes —
-**8-10 rows**. Plants ride their rows' `check:` lists, as every landing row in this
+1 row for the mapping, 1 for the doors, 1 for the census INSTRUMENT refactor (step 3 no
+longer extends coverage — each file's entry rides its step-4 row), 1 for classifying the
+seven and 2 for routing the ones that are exits, 1-2 for the two verifiers, 1 for the
+projection, 1 for the two render holes — **9-11 rows**. The cap is the top of the
+measured range, not the middle: a cap below it is a predicted stop, and this rung has
+already spent three designs. Plants ride their rows' `check:` lists, as every landing row in this
 campaign does. Nothing is charged for minting a type, a marker crate, an ARCH_LAYERS
 entry or a census: all four exist. Past 10, PROMPT §4 applies — write
 `ralph/NEEDS_HUMAN.md` with the measured count and stop.
