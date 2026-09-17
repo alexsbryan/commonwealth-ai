@@ -35,4 +35,6 @@ what: MOVE sovereign/crates/sovereign-mesh/src/commit_harvest.rs (481) ->
   Also stale in the row and corrected in ralph/STATE.md: the treesitter gate is
   at lib.rs:81-82 not :113-114, and reindexer.rs is 2,155 lines not 2,150.
 checks: CLEAN exit=0 (disk gate); LINT exit=0 (11 crates, 0 errors, --all-targets);
-  LAYER exit=0 (fan-in within caps).
+  LAYER exit=0 (fan-in within caps); BOUNDARY exit=0 (code-intel closure still
+  clean with commit_harvest.rs in it); TOML exit=0; CENSUS --self-test exit=0
+  (11/11), misnamed exit=0 (corpus-engine-watchers 87.3%, not flagged).
