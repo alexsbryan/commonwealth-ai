@@ -871,6 +871,19 @@ class Pool:
             branch = f"ralph/{unit}"
             if not wt.exists():
                 continue
+            lane_pkg = wt / "ralph" / "NEEDS_HUMAN.md"
+            if lane_pkg.exists() and lane_pkg.stat().st_size:
+                # A lane writes its package in ITS worktree — the main-tree
+                # check never saw it, so the wave re-ran the row to the failure
+                # limit with the package sitting right there (2026-09-17,
+                # dm-daemon-api-edge). Surface it where the operator and the
+                # director look, then stop.
+                main_pkg = self.paths.p(self.paths.needs_human)
+                main_pkg.write_text(f"# lane {unit} left this package "
+                                    f"({lane_pkg})\n\n" + lane_pkg.read_text())
+                say(f"pool: lane {unit} left NEEDS_HUMAN.md — stopping for the director")
+                self.notifier("NEEDS_HUMAN", first_line(lane_pkg), self.notify_enabled)
+                return 3
             if not (wt / "ralph" / "lanes" / f"{unit}.done").exists():
                 # A lane that keeps ending without its marker would otherwise be
                 # re-run forever (2026-09-17: ~50 sessions over 2.5h on
