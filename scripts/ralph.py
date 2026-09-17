@@ -849,7 +849,8 @@ class Pool:
         note = (f"POOL LANE: you are working unit {unit} in an isolated git worktree.\n"
                 f"Commit your work here. When the unit passes its OWN tests, write "
                 f"ralph/lanes/{unit}.done and commit it — the pool merges your branch then.\n"
-                "Do NOT edit ralph/STATE.md; the pool marks the unit done after the merge.\n\n")
+                "Do NOT edit ralph/STATE.md except to correct your own row's premises "
+                "(PROMPT §6); the pool marks the unit done after the merge.\n\n")
         model_args = select_model_args(unit, self.model, self.review_model, self.variant)
         # One lock per lane: a lane builds in its own worktree/target, so the
         # shared /tmp lock would only serialize lanes against each other and

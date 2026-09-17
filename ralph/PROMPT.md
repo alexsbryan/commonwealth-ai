@@ -14,7 +14,7 @@ in the files the row points at. When a row and the tree disagree, you stop
 2. Otherwise your unit is the FIRST `[ ]` row, top to bottom, whose
    `depends [...]` ids are all `[x]`. Rows below it are not your business.
 3. If this prompt opens with a `POOL LANE` note, the note names your unit and
-   you do not edit `ralph/STATE.md` at all.
+   you edit `ralph/STATE.md` only to correct your own row's premises (§6).
 4. If the loop told you the tree holds uncommitted work, it belongs to the
    `[~]` unit: read `git status` and `git diff`, keep what is right, continue.
 5. If the loop's note names your unit (`Your unit: <id>`), that is your unit —
@@ -173,6 +173,18 @@ does not exist on a Linux host, you are outside it: stop (§6) before building.
 Never print a whole log into the session; grep it.
 
 ## 6. Stopping
+
+**A row whose premises fail is yours to correct (2026-09-17, operator
+direction).** When the row's own facts prove false — a dependency it does not
+name, a cycle, a count, a scope that cannot compile — do not stop. Correct the
+row in `ralph/STATE.md` (its `depends`, its scope, its text, its `check`),
+record the correction in the row itself (`CORRECTED <date>
+(ralph/DECISIONS.md): <what was false, what you verified>`), add an entry to
+`ralph/DECISIONS.md` (fork, choice, evidence, falsifier), commit it, and
+proceed on the corrected row. In a POOL LANE this is the one edit you make to
+the main tree's `ralph/STATE.md` (§1.3). Four things still stop you: weakening
+a pass bar, adding or widening an `[[exception]]`/`except`, touching a `HUMAN-`
+row, pushing — and any correction whose evidence you cannot reproduce.
 
 - **`ralph/NEEDS_HUMAN.md`** — a decision package, not a question:
   (a) the unit id and its row; (b) the exact commands you ran and their ACTUAL

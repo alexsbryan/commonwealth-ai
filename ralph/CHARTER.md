@@ -13,6 +13,10 @@ DECIDE. A package is evidence, not a verdict — this campaign's workers have
 been right and its rows have been wrong, in both directions. Reproduce every
 claim you rely on (principle 4: cite, don't recall).
 
+Since 2026-09-17 the workers correct their own row's premises (PROMPT §6): a
+package reaches you only when a correction would weaken a bar, widen an
+`except`, touch a `HUMAN-` row, or lacks reproducible evidence.
+
 ## Decide these
 
 - Row order, re-scoping, splitting, folding, minting rows: a row that cannot
