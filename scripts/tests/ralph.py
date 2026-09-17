@@ -489,7 +489,7 @@ class PoolTests(unittest.TestCase):
     def test_wave_merges_marks_and_writes_done(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = self.fixture(tmp, "- [ ] dm-a — depends []\n- [ ] dm-b — depends []\n")
-            pool = self.make(root, lambda cwd: FakeLane(cwd))
+            pool = self.make(root, lambda cwd, env=None: FakeLane(cwd))
             self.assertEqual(pool.run(), 0)
             self.assertTrue((root / "ralph/DONE").exists())
             self.assertTrue((root / "dm-a.txt").exists())
@@ -497,10 +497,32 @@ class PoolTests(unittest.TestCase):
             q = ralph.Queue(root / "ralph/STATE.md")
             self.assertTrue(q.all_done())
 
+    def test_resumed_lane_is_refreshed_onto_the_base(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] dm-a — depends []\n")
+            seed = subprocess.run(["git", "-C", tmp, "rev-parse", "HEAD"],
+                                  capture_output=True, text=True).stdout.strip()
+            # A harness fix lands on the base AFTER the lane worktree exists.
+            write(tmp, "harness.txt", "fixed")
+            subprocess.run(["git", "-C", tmp, "add", "-A"], check=True)
+            subprocess.run(["git", "-C", tmp, "commit", "-q", "-m", "fix"], check=True)
+            wt = root / ".ralph" / "wt" / "dm-a"
+            subprocess.run(["git", "-C", tmp, "worktree", "add", "-q", "-b",
+                            "ralph/dm-a", str(wt), seed], check=True)
+
+            class HarnessLane(FakeLane):
+                def run(self, model_args, prompt, log):
+                    self.body = (self.cwd / "harness.txt").read_text()
+                    return super().run(model_args, prompt, log)
+
+            pool = self.make(root, lambda cwd, env=None: HarnessLane(cwd))
+            self.assertEqual(pool.run(), 0)
+            self.assertEqual((root / "dm-a.txt").read_text(), "fixed")
+
     def test_merge_conflict_halts(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = self.fixture(tmp, "- [ ] dm-a — depends []\n- [ ] dm-b — depends []\n")
-            pool = self.make(root, lambda cwd: FakeLane(cwd, body=cwd.name, shared=True))
+            pool = self.make(root, lambda cwd, env=None: FakeLane(cwd, body=cwd.name, shared=True))
             self.assertEqual(pool.run(), 3)
             pkg = (root / "ralph/NEEDS_HUMAN.md").read_text()
             self.assertIn("merge conflict", pkg)
@@ -517,7 +539,7 @@ class PoolTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = self.fixture(tmp, "- [ ] dm-a — depends []\n")
             write(tmp, "ralph/STOP", "")
-            pool = self.make(root, lambda cwd: FakeLane(cwd))
+            pool = self.make(root, lambda cwd, env=None: FakeLane(cwd))
             self.assertEqual(pool.run(), 0)
 
 

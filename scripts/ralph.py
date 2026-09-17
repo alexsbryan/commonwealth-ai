@@ -832,6 +832,20 @@ class Pool:
             say(f"pool: lane start {unit} (worktree {wt})")
         else:
             say(f"pool: lane {unit} resuming in its existing worktree")
+            # A lane worktree is created once from the base branch and kept
+            # across waves, so a harness fix that lands on the base never
+            # reaches it. dm-daemon-api-edge burned its three waves on the
+            # stale `.opencode/opencode.json` that `bdb0f24e0` fixed on the
+            # base minutes after the lane exhausted (2026-09-17). Fast-forward
+            # a lane that has no commits of its own onto the base; a lane with
+            # work is left alone (--ff-only refuses to rewrite it).
+            own = self._git("rev-list", "--count", f"{self.base_branch}..HEAD", cwd=wt)
+            if own.returncode == 0 and own.stdout.strip() == "0":
+                ff = self._git("merge", "--ff-only", self.base_branch, cwd=wt)
+                if ff.returncode == 0:
+                    say(f"pool: lane {unit} refreshed onto {self.base_branch}")
+                else:
+                    say(f"pool: lane {unit} not refreshed: {ff.stderr.strip()}")
         note = (f"POOL LANE: you are working unit {unit} in an isolated git worktree.\n"
                 f"Commit your work here. When the unit passes its OWN tests, write "
                 f"ralph/lanes/{unit}.done and commit it — the pool merges your branch then.\n"

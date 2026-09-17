@@ -699,3 +699,58 @@ same E0116/atomicity reason the mesh cluster did, the fallback is to fold it.
 **Landed in.** this commit — `ralph/STATE.md` (the `dm-daemon-api-edge` depends,
 its (c) test list, the RE-SEQUENCED note) and this entry; `ralph/NEEDS_HUMAN.md`
 removed. `git revert <sha>` reverts it alone.
+
+## 2026-09-17 · dm-daemon-api-edge · the lane worktree's harness config is a stale snapshot; refresh a commit-less lane onto the base
+
+**Fork.** `dm-daemon-api-edge` failed all three waves without producing a
+diff, so the row's size and atomicity are NOT yet implicated — the harness is.
+The lane worktree `.ralph/wt/dm-daemon-api-edge` is a snapshot of the base
+branch taken when the lane was created (`9d1252262`, 11:42), so its
+`.opencode/opencode.json` predates `bdb0f24e0` (12:19), the commit that added
+the `.ralph/*` external-directory allow. Every wave hit the same auto-reject
+and ended 13–19 minutes in, well inside the 7,200s session budget. Options: (a) refresh the stale
+worktree by hand and resume; (b) make the pool refresh a resumed lane onto the
+base when the lane has no commits of its own, so a harness fix reaches lanes
+already in flight.
+
+**Choice.** (b), the structural fix (principle 10 — make it not-remembered),
+which also repairs the two stale lanes for free. `Pool.run_lane` now
+fast-forwards an existing lane worktree onto `base_branch` when
+`git rev-list --count <base>..HEAD` is 0; a lane with its own commits is left
+alone because `--ff-only` refuses to rewrite it. `dm-daemon-api-edge` and
+`dm-daemon-cli-composition` (both 0 own commits) are refreshed on the next
+wave; `dm-rename-fabric` (2 commits, `.done` present) is untouched and merges
+as before. The row is NOT re-scoped: no wave produced a diff, so nothing
+supports splitting it, and `dm-daemon-mesh-edge` moved 28,959 lines in one
+lane after the same class of harness fix, so size alone is not disqualifying.
+
+**Evidence.** The lane `.out` ends on the auto-reject
+(`target/ralph/lane-dm-daemon-api-edge.out:586-588`); the pool's own log shows
+the three failures at 19:01:52Z, 19:16:21Z and 19:30:49Z with the fix landing
+at 19:19:33Z (`bdb0f24e0`) — mid-wave-3. `git merge-base --is-ancestor
+bdb0f24e0 ralph/dm-daemon-api-edge` is false and the worktree config carries
+no `.ralph` entry (`.opencode/opencode.json`, the main tree's, does — :11).
+Reproduced red and green: the new test
+`PoolTests.test_resumed_lane_is_refreshed_onto_the_base` errors
+`FileNotFoundError: …/harness.txt` without the `run_lane` block and passes
+with it; `python3 scripts/tests/ralph.py` is 38/38. Also fixed in the same
+commit: three lane fakes passed `lambda cwd: …` to `session_for`, which gained
+`env=` with the per-lane cargo lock — the Pool lane tests had been erroring
+before this change (`TypeError: … unexpected keyword argument 'env'`).
+
+**Falsified by.** A wave that runs on the refreshed worktree and still ends
+without its marker, with no auto-reject in its `.out` — then the failure is the
+row (size/atomicity) or the model, and the next decision is to split it (the
+mesh entry's fallback) or raise the lane timeout. Also falsified if the
+refresh damages `dm-rename-fabric` (it must not: `--ff-only` refuses a diverged
+branch).
+
+**REVIEW-AFTER:** the charter covers row/execution defects and the harness
+fix, but not the lane wall-clock budget. Every wave ended well inside the
+7,200s session (`ps` on the live pool: `--session-timeout 7200`), so the
+budget was never the binding constraint; if a refreshed lane times out rather
+than finishes, that is a budget call for the operator.
+
+**Landed in.** this commit — `scripts/ralph.py` (the `run_lane` refresh),
+`scripts/tests/ralph.py` (the new test and the three fakes) and this entry;
+`ralph/NEEDS_HUMAN.md` removed. `git revert <sha>` reverts it alone.
