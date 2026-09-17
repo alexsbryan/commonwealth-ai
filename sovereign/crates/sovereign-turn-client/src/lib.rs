@@ -73,6 +73,17 @@ pub mod reach;
 // is unchanged — see `mesh.rs` for why it is not in this file.
 mod mesh;
 
+// The client family's other members — HTTP clients of the daemon's own
+// surface, each implementing a `sovereign-contracts` provider trait. Moved
+// here from `sovereign-mesh` by domains `REVIEW-build-mesh-client-pair`
+// (`quality/DAEMON_CORE.md` §4.3: "the client family beside
+// `sovereign-turn-client`"; both modules are tagged `kernel` in
+// `quality/DOMAINS.toml`). They speak the daemon's knowledge surface, not the
+// turn protocol, but share this crate's contract-layer budget: protocol types
+// plus the client that speaks them.
+pub mod knowledge_client;
+pub mod landscape_digest_client;
+
 #[cfg(feature = "bundled-backend")]
 pub use reach::BundledBackend;
 pub use reach::{NotReachable, Reached, ServingHost, CAN_BRING_UP_A_BACKEND};

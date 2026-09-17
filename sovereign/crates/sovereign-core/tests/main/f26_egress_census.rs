@@ -344,8 +344,13 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-mesh/src/join.rs", Class::Mesh, 2),
     ("sovereign/crates/sovereign-mesh/src/daemon.rs", Class::Mesh, 2),
     ("sovereign/crates/sovereign-mesh/src/auto_ingest.rs", Class::Mesh, 2),
-    ("sovereign/crates/sovereign-mesh/src/landscape_digest_client.rs", Class::Mesh, 1),
-    ("sovereign/crates/sovereign-mesh/src/knowledge_client.rs", Class::Mesh, 1),
+    // Re-keyed 2026-09-16: the two knowledge-surface clients moved to the
+    // client family, `sovereign-turn-client` (domains
+    // REVIEW-build-mesh-client-pair, DAEMON_CORE.md §4.3). Class and count
+    // unchanged — the one `reqwest::Client` each file constructs still posts
+    // to the daemon's own surface.
+    ("sovereign/crates/sovereign-turn-client/src/landscape_digest_client.rs", Class::Mesh, 1),
+    ("sovereign/crates/sovereign-turn-client/src/knowledge_client.rs", Class::Mesh, 1),
     ("sovereign/crates/sovereign-mesh/src/gossip.rs", Class::Mesh, 1),
     ("sovereign/crates/sovereign-mesh/src/canonical_pull.rs", Class::Mesh, 1),
 

@@ -12664,6 +12664,7 @@ dependencies = [
  "sovereign-store",
  "sovereign-time",
  "sovereign-tools",
+ "sovereign-turn-client",
  "sovereign-work-atlas",
  "tempfile",
  "thiserror 2.0.18",
@@ -13079,7 +13080,10 @@ dependencies = [
 name = "sovereign-turn-client"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "axum",
  "futures",
+ "oicp-types",
  "reqwest 0.12.28",
  "serde",
  "serde_json",

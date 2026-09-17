@@ -525,18 +525,6 @@ lines = 704
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/knowledge_client.rs"
-context = "kernel"
-lines = 209
-note = "client for a peer's knowledge search; the question it asks is Retrieval's; was retrieval; client of the daemon's own surface; the client family — DAEMON_CORE.md §4.3 (2026-09-14)"
-
-[[module]]
-path = "sovereign/crates/sovereign-mesh/src/landscape_digest_client.rs"
-context = "kernel"
-lines = 281
-note = "was understanding; client of the daemon's own surface; the client family — DAEMON_CORE.md §4.3 (2026-09-14)"
-
-[[module]]
 path = "sovereign/crates/sovereign-mesh/src/landscape_digest_http.rs"
 context = "host"
 lines = 107
@@ -15688,6 +15676,18 @@ path = "sovereign/crates/sovereign-tools/src/wikipedia_fetch.rs"
 context = "unknown"
 lines = 128
 note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-turn-client/src/knowledge_client.rs"
+context = "kernel"
+lines = 209
+note = "client for a peer's knowledge search; the question it asks is Retrieval's; was retrieval; client of the daemon's own surface; the client family — DAEMON_CORE.md §4.3 (2026-09-14); moved from sovereign-mesh 2026-09-16 by domains REVIEW-build-mesh-client-pair"
+
+[[module]]
+path = "sovereign/crates/sovereign-turn-client/src/landscape_digest_client.rs"
+context = "kernel"
+lines = 281
+note = "was understanding; client of the daemon's own surface; the client family — DAEMON_CORE.md §4.3 (2026-09-14); moved from sovereign-mesh 2026-09-16 by domains REVIEW-build-mesh-client-pair"
 
 [[module]]
 path = "sovereign/crates/sovereign-turn-client/src/lib.rs"

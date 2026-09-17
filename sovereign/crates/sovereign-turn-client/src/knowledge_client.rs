@@ -23,7 +23,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use oicp_types::{KnowledgeSearchRequest, KnowledgeSearchResponse};
-use sovereign_core::traits::{
+use sovereign_contracts::traits::{
     CorpusUnavailable, MeshKnowledgeSource, MeshScoredChunk, MeshSearchOutcome,
     UnavailabilityReason,
 };

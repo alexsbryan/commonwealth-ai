@@ -13,6 +13,14 @@ rust-version.workspace = true
 sovereign-contracts = { workspace = true }
 
 futures = { workspace = true }
+# The knowledge wire types the two client-family modules speak
+# (`KnowledgeSearchRequest/Response`, `LandscapeDigestRequest/Response`), and
+# the only other in-repo edge this crate carries — a contract-layer sibling,
+# not a serving host's world (domains REVIEW-build-mesh-client-pair).
+oicp-types = { workspace = true }
+# `knowledge_client` and `landscape_digest_client` implement
+# `sovereign-contracts` provider traits as HTTP clients.
+async-trait = { workspace = true }
 # Leaf, same tier as serde_json beside it: the CRUD envelopes below are
 # Deserialize-only parse shapes over the wire bytes serde_json already reads.
 serde = { workspace = true, features = ["derive"] }
@@ -21,6 +29,10 @@ tokio = { workspace = true }
 tokio-tungstenite = "0.29"
 tracing = { workspace = true }
 reqwest = { workspace = true }
+
+[dev-dependencies]
+# `landscape_digest_client`'s tests stand up a hand-rolled axum server.
+axum = { workspace = true }
 
 [features]
 default = []

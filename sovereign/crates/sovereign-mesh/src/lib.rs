@@ -64,8 +64,8 @@ pub mod iroh_watchdog;
 /// six routes (ARCH principle 8).
 pub mod job_registry;
 pub mod join;
-pub mod knowledge_client;
-pub mod landscape_digest_client;
+pub use sovereign_turn_client::knowledge_client; // shim: moved by domains REVIEW-build-mesh-client-pair
+pub use sovereign_turn_client::landscape_digest_client; // shim: moved by domains REVIEW-build-mesh-client-pair
 pub mod landscape_digest_http;
 pub mod lc_http;
 pub mod local_only;
