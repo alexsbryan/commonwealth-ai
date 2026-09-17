@@ -11586,6 +11586,7 @@ dependencies = [
 name = "serving-policy"
 version = "0.7.0"
 dependencies = [
+ "oicp-types",
  "serde",
  "toml 0.8.2",
 ]

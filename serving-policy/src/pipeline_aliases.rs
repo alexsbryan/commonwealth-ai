@@ -17,7 +17,15 @@
 
 use std::collections::HashMap;
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+
+/// Inline context-injection settings that travel with a resolved pipeline.
+///
+/// Re-exported from `oicp-types`, where it moved on 2026-09-16 so the
+/// middleware seam in `sovereign-contracts` can name it without a
+/// `sovereign-contracts → serving-policy` edge (domains
+/// `REVIEW-build-middleware-seam`). The old path is preserved here.
+pub use oicp_types::pipeline_context::PipelineContextConfig;
 
 /// Resolved pipeline: everything the middleware executor needs to
 /// run a request against the concrete model.
@@ -27,30 +35,6 @@ pub struct PipelineResolution {
     pub model_id: String,
     pub middleware: Vec<String>,
     pub context: PipelineContextConfig,
-}
-
-/// Inline context-injection settings that travel with the pipeline
-/// and are consumed by `ContextInjector`. Kept as data on the
-/// pipeline so different aliases can share the same `ContextInjector`
-/// impl while producing different preambles.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct PipelineContextConfig {
-    pub inject_notes: bool,
-    pub inject_spec: bool,
-    /// When true, the spec.md injection is limited to the
-    /// `## Invariants` section only (red-team case).
-    pub inject_invariants_only: bool,
-}
-
-impl Default for PipelineContextConfig {
-    fn default() -> Self {
-        Self {
-            inject_notes: true,
-            inject_spec: true,
-            inject_invariants_only: false,
-        }
-    }
 }
 
 /// Lookup table over pipeline aliases. Exact-name match only — no

@@ -118,6 +118,20 @@ pub use sovereign_contracts::self_claims;
 // that a contracts module is reachable at its `sovereign_core::` path.
 pub use sovereign_contracts::peer;
 
+// The middleware seam, at `sovereign_core::middleware`. Added 2026-09-16 for
+// `sovereign-api` and `sovereign-atos`, which name `Middleware`,
+// `PipelineContext`, `MiddlewareSession`, `MiddlewareError`, `ResponseView` and
+// the `ArtifactDelta` payload the session carries (domains
+// `REVIEW-build-middleware-seam`). The seam lives in `sovereign-contracts`
+// because the Workspace decision extractor's home (`corpus-engine-notes`) may
+// name only that one sovereign crate (`quality/DAEMON_CORE.md` §4.2 "Risks
+// carried"); naming it directly from `sovereign-api`/`sovereign-atos` would
+// grow that crate's fan-in and `cargo xtask layer-gate` refuses it — the same
+// refusal the `identity` block above records — while this re-export costs no
+// new edge, following the rule that a contracts module is reachable at its
+// `sovereign_core::` path.
+pub use sovereign_contracts::middleware;
+
 // Re-export commonly used items at the crate root.
 //
 // `traits::*` / `types::*` are BOUNDED globs (quality program R1,

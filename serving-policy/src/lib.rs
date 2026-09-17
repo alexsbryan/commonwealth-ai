@@ -18,10 +18,14 @@
 //! them — the layer map's direction of travel is fewer `[[exception]]` rows,
 //! and this one asks for none.
 //!
-//! The empty in-repo dependency list is the contract, not an accident. A
-//! `commonwealth-*` or `sovereign-*` dep here would restore exactly the edges
-//! the crate was minted to delete, so `quality/ARCH_LAYERS.toml` carries a
-//! `[[forbid]]` block in each direction and boundary-gate pins the closure.
+//! The in-repo dependency list is the contract, not an accident: this crate
+//! names only `oicp-types`, the family-neutral floor. A `commonwealth-*` or
+//! `sovereign-*` dep here would restore exactly the edges the crate was minted
+//! to delete, so `quality/ARCH_LAYERS.toml` carries a `[[forbid]]` block in
+//! each direction and boundary-gate pins the closure. (`PipelineContextConfig`
+//! moved DOWN to `oicp-types` on 2026-09-16 so the middleware seam in
+//! `sovereign-contracts` can name it; `pipeline_aliases` re-exports it at the
+//! old path.)
 
 pub mod fair_sched;
 pub mod pipeline_aliases;

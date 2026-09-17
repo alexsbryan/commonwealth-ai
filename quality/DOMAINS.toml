@@ -1100,7 +1100,7 @@ note = "extracts agent decisions from responses; the note store's question, not 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/middleware/mod.rs"
 context = "host"
-lines = 727
+lines = 588
 note = ""
 
 [[module]]
@@ -7772,7 +7772,7 @@ note = ""
 [[module]]
 path = "oicp-types/src/lib.rs"
 context = "kernel"
-lines = 113
+lines = 119
 note = ""
 
 [[module]]
@@ -7791,6 +7791,12 @@ note = ""
 path = "oicp-types/src/origin.rs"
 context = "kernel"
 lines = 328
+note = ""
+
+[[module]]
+path = "oicp-types/src/pipeline_context.rs"
+context = "kernel"
+lines = 67
 note = ""
 
 [[module]]
@@ -7898,7 +7904,7 @@ note = ""
 [[module]]
 path = "serving-policy/src/pipeline_aliases.rs"
 context = "serving"
-lines = 228
+lines = 212
 note = ""
 
 [[module]]
@@ -8360,7 +8366,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-atos/src/session.rs"
 context = "unknown"
-lines = 418
+lines = 405
 note = ""
 
 [[module]]
@@ -11484,6 +11490,12 @@ lines = 164
 note = ""
 
 [[module]]
+path = "sovereign/crates/sovereign-contracts/src/env.rs"
+context = "kernel"
+lines = 25
+note = ""
+
+[[module]]
 path = "sovereign/crates/sovereign-contracts/src/error.rs"
 context = "kernel"
 lines = 237
@@ -11552,7 +11564,7 @@ note = "LocalInferenceService split out of traits.rs (REVIEW-audit-6); re-export
 [[module]]
 path = "sovereign/crates/sovereign-contracts/src/lib.rs"
 context = "kernel"
-lines = 159
+lines = 168
 note = ""
 
 [[module]]
@@ -11566,6 +11578,12 @@ path = "sovereign/crates/sovereign-contracts/src/memory_config.rs"
 context = "kernel"
 lines = 91
 note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/middleware.rs"
+context = "kernel"
+lines = 225
+note = "the middleware seam (Answering's port) lifted out of sovereign-api by REVIEW-build-middleware-seam"
 
 [[module]]
 path = "sovereign/crates/sovereign-contracts/src/mobile_host.rs"
@@ -11948,7 +11966,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-core/src/lib.rs"
 context = "unknown"
-lines = 127
+lines = 152
 note = ""
 
 [[module]]

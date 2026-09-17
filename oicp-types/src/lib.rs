@@ -41,6 +41,11 @@ pub mod manifest;
 pub mod model_aliases;
 pub mod openai_types;
 pub mod origin;
+/// Per-pipeline context-injection flags carried by a resolved pipeline alias —
+/// moved down from `serving-policy` so the middleware seam can name it without
+/// a `sovereign-contracts → serving-policy` edge (domains
+/// `REVIEW-build-middleware-seam`).
+pub mod pipeline_context;
 pub mod registry;
 pub mod requirements;
 pub mod response;
@@ -97,6 +102,7 @@ pub use manifest::{
     ProviderModel, ProviderType,
 };
 pub use model_aliases::{AliasResolution, ModelAlias, ModelAliasConfig, ModelAliasTable};
+pub use pipeline_context::PipelineContextConfig;
 pub use registry::{ExtensionRegistry, ExtensionStats};
 pub use requirements::{InferenceRequirements, PrivacyRequirements, ShardingPrivacy};
 pub use response::{MatchQuality, OicpResponseMeta};

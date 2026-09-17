@@ -33,30 +33,17 @@ use tokio::sync::Mutex;
 /// because app_ids appear in the gossip protocol frames.
 pub const ATOS_SESSIONS_APP_ID: &str = "atos-sessions";
 
-/// What changed between the previous turn and now — staged by
-/// `ArtifactSurface`'s post_process, rendered by `ContextInjector`'s
-/// process on the next request. Pops on render so the preamble only
-/// shows it once.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct ArtifactDelta {
-    /// Number of notes written this turn, grouped by kind.
-    pub notes_by_kind: std::collections::BTreeMap<String, u32>,
-    /// Up to 5 recent note ids per kind — surfaced so the agent can
-    /// reference them by `[note:<id>]` in its next turn.
-    pub recent_note_ids: std::collections::BTreeMap<String, Vec<String>>,
-    /// Milestones whose `stop_passed` flipped true since
-    /// `last_seen_at`. One entry per newly-passing milestone.
-    pub milestones_passed: Vec<MilestonePassEvent>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MilestonePassEvent {
-    pub feature_id: String,
-    pub ordinal: i64,
-    /// Relative path to the rendered artifact, e.g.
-    /// `.sovereign/features/<id>/milestone-2.md`.
-    pub artifact_path: String,
-}
+/// What changed between the previous turn and now — staged by the artifact
+/// surface's post_process, rendered by the context injector's process on the
+/// next request. Pops on render so the preamble only shows it once.
+///
+/// Re-exported from the middleware seam, which moved to `sovereign-contracts`
+/// on 2026-09-16 so it can name it without a `sovereign-contracts ->
+/// sovereign-atos` edge (domains `REVIEW-build-middleware-seam`). Named through
+/// `sovereign_core`, which re-exports the contracts module, to keep
+/// `sovereign-contracts`' fan-in within its layer-gate cap. The old path is
+/// preserved here.
+pub use sovereign_core::middleware::{ArtifactDelta, MilestonePassEvent};
 
 /// Mutable state threaded through the middleware chain. One row per
 /// opencode session id.

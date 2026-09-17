@@ -395,8 +395,10 @@ reason = "the OICP client meets the runtime at the contracts seam only; the infe
 # commonwealth-core, and `fair_sched` was the ONLY reason sovereign-inference
 # and sovereign-server depended on the mesh foundation at all. A dep in EITHER
 # direction here restores exactly the edges the move deleted, so both are
-# forbidden with no `except`. Its `[dependencies]` is serde + toml and nothing
-# in-repo; that is the contract, stated in its lib.rs and pinned here.
+# forbidden with no `except`. Its `[dependencies]` names only `oicp-types`,
+# the family-neutral floor, and nothing else in-repo (restated 2026-09-16 when
+# `PipelineContextConfig` moved down to `oicp-types`); that is the contract,
+# stated in its lib.rs and pinned here.
 [[forbid]]
 from = "serving-policy"
 to = "sovereign-*"

@@ -41,9 +41,6 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
-
 use crate::openai_types::ChatCompletionRequest;
 
 #[cfg(feature = "atos")]
@@ -69,154 +66,16 @@ pub use decision_extractor::DecisionExtractor;
 pub use session_briefing::SessionBriefing;
 pub use tool_injector::ToolInjector;
 
-/// Everything a middleware might need to know about the request that
-/// isn't in `ChatCompletionRequest` itself — resolved pipeline config,
-/// feature id lifted from `X-Feature-Id`, session id, etc.
-///
-/// Immutable for the duration of a request. Mutable state lives on
-/// [`MiddlewareSession`].
-#[derive(Debug, Clone)]
-pub struct PipelineContext {
-    /// Pipeline name (e.g., "sovereign-coder").
-    pub pipeline_name: String,
-    /// The concrete model the pipeline resolves to (e.g., "qwen-27b-coder").
-    pub model_id: String,
-    /// Per-pipeline context-injection flags loaded from the alias
-    /// table. ContextInjector reads this.
-    pub context_config: serving_policy::pipeline_aliases::PipelineContextConfig,
-    /// Feature the session is currently working on. Extracted from
-    /// the `X-Feature-Id` request header; `None` if the plugin
-    /// didn't inject one (ambiguous branch, or client isn't ATOS).
-    pub feature_id: Option<String>,
-    /// Opencode session id extracted from `X-Session-Id`. `None` if
-    /// the client didn't send one.
-    pub session_id: Option<String>,
-    /// Repo root the Commonwealth daemon is anchored to — the
-    /// directory that contains `.sovereign/features/`. Used by
-    /// ApprovalGate for git lookups and by ContextInjector for
-    /// reading spec.md.
-    pub repo_root: std::path::PathBuf,
-}
-
-/// Mutable session state handed to each middleware. The executor
-/// loads this from `MeshStore` on request entry and persists it on
-/// exit. Mirrors the subset of [`sovereign_atos::session::AtosSessionState`]
-/// middleware actually touch.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct MiddlewareSession {
-    pub feature_id: Option<String>,
-    pub approval_validated: bool,
-    pub spec_content_hash: Option<String>,
-    pub pending_deviation_ack: bool,
-    pub deviation_note_id: Option<String>,
-    /// Populated by `ArtifactSurface.post_process` on turn N;
-    /// consumed by `ContextInjector.process` on turn N+1. Optional
-    /// so fresh sessions don't have to seed an empty delta. ATOS-only.
-    #[cfg(feature = "atos")]
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pending_artifact_delta: Option<sovereign_atos::session::ArtifactDelta>,
-    /// Unix-second timestamp of the *previous* turn. Post-path
-    /// middleware use this to scope queries ("notes written since
-    /// last turn"). Set by the handler before running middleware
-    /// so all middleware see a consistent baseline.
-    #[serde(default)]
-    pub last_seen_at: i64,
-    /// Phase 7.2: a candidate decision sentence that
-    /// `decision_extractor.post_process` mined from the previous
-    /// turn's assistant response. `decision_extractor.process` on
-    /// the NEXT turn either:
-    ///
-    /// 1. Detects a correction phrase in the user's latest message
-    ///    (e.g. "actually, that's not a decision") → drops the
-    ///    candidate without persisting it, or
-    /// 2. Persists it as a `source='extracted'` note and injects
-    ///    `[Noted: "<snippet>". Auto-recording unless corrected.]`
-    ///    into the system prompt so the agent sees the audit
-    ///    trail.
-    ///
-    /// Cleared after use either way. `None` when no candidate is
-    /// pending — the steady-state for sessions that aren't
-    /// surfacing decisions.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pending_decision: Option<String>,
-}
-
-/// Errors a middleware can raise. The handler pattern-matches on
-/// these to pick the right HTTP status + OpenAI error envelope.
-#[derive(Debug, thiserror::Error)]
-pub enum MiddlewareError {
-    /// The feature hasn't been approved and the request would
-    /// trigger a write-intent tool. Includes a human-readable hint
-    /// so opencode surfaces something actionable.
-    #[error("feature '{feature_id}' is not approved: {hint}")]
-    ApprovalRequired { feature_id: String, hint: String },
-
-    /// The request is structurally incompatible with the pipeline
-    /// (e.g., a red-team session containing a write tool call that
-    /// the read-only enforcer blocked).
-    #[error("pipeline rejected request: {0}")]
-    PipelineRejected(String),
-
-    /// Infrastructure error — MeshStore unavailable, git lookup
-    /// failed, etc. These surface as 500s, not 403s.
-    #[error("middleware infrastructure error: {0}")]
-    Infra(String),
-}
-
-/// Read-only view handed to post-path middleware. Assembles the
-/// model output from whichever path produced it (non-streaming =
-/// `choices[0].message.content`; streaming = concatenated SSE
-/// deltas). Middleware observe via this view and stage mutations
-/// on `session`; they do NOT mutate the response bytes that reach
-/// the client.
-///
-/// `finish_reason` is `Some("stop")` on clean completion,
-/// `Some("tool_calls")` when the model asked for tool execution,
-/// or `None` when the adapter couldn't reconstruct one (usually a
-/// streaming error).
-#[derive(Debug)]
-pub struct ResponseView<'a> {
-    pub content: &'a str,
-    pub finish_reason: Option<&'a str>,
-    pub tool_calls_emitted: usize,
-}
-
-/// The contract every middleware in the pipeline implements.
-#[async_trait]
-pub trait Middleware: Send + Sync {
-    /// Short identifier matching the string in `default_pipelines.toml`.
-    /// Used by the executor to look up a middleware by name when
-    /// assembling the pipeline from a resolution.
-    fn id(&self) -> &'static str;
-
-    /// Process a request. Implementations mutate `request` and
-    /// `session` in place; return `Ok(())` to continue the chain or
-    /// `Err(MiddlewareError)` to short-circuit.
-    async fn process(
-        &self,
-        request: &mut ChatCompletionRequest,
-        session: &mut MiddlewareSession,
-        ctx: &PipelineContext,
-    ) -> Result<(), MiddlewareError>;
-
-    /// Post-inference hook. Default impl is a no-op so existing
-    /// middleware don't have to re-implement. Called AFTER the
-    /// model response has been assembled. For streaming requests,
-    /// called from a detached `tokio::spawn` at stream-end so the
-    /// client never waits on it.
-    ///
-    /// Errors from post_process are **logged, not propagated** —
-    /// the response has already gone to the client, and post-path
-    /// work is best-effort telemetry. See `Pipeline::run_post`.
-    async fn post_process(
-        &self,
-        _response: &ResponseView<'_>,
-        _session: &mut MiddlewareSession,
-        _ctx: &PipelineContext,
-    ) -> Result<(), MiddlewareError> {
-        Ok(())
-    }
-}
+// The seam — Answering's port, lifted to `sovereign-contracts` by domains
+// REVIEW-build-middleware-seam and re-exported here so the five middleware
+// impls and every `crate::middleware::{...}` import keep compiling. Named
+// through `sovereign_core`, which re-exports the contracts module (naming
+// `sovereign-contracts` directly would grow its fan-in past the layer-gate
+// cap). Only the composition (`Pipeline`, `MiddlewareRegistry`) stays host
+// code (`quality/DAEMON_CORE.md` §4.2 "Risks carried").
+pub use sovereign_core::middleware::{
+    Middleware, MiddlewareError, MiddlewareSession, PipelineContext, ResponseView,
+};
 
 /// Ordered chain of middleware. Built once per request from a
 /// [`PipelineResolution`] + a registry of available middleware.
@@ -357,6 +216,8 @@ impl MiddlewareRegistry {
 
 #[cfg(test)]
 mod tests {
+    use async_trait::async_trait;
+
     use super::shared::fixtures::{ctx_with, request_with_messages};
     use super::*;
     use crate::openai_types::ChatCompletionRequest;
