@@ -62,7 +62,7 @@ pub struct IngestPart {
     /// glassbox "re-checked N chunks — all matched" line.
     pub verify_reports: RwLock<HashMap<HandoffId, VerifyReport>>,
     /// Mesh quiesce flag. When `true`, the auto-collaborate loop
-    /// (`sovereign-mesh::auto_ingest`) skips peer-pull discovery and
+    /// (`sovereign-daemon::auto_ingest`) skips peer-pull discovery and
     /// dispatch on every tick — this node neither pulls work assigned
     /// by other coordinators nor dispatches its own queue to peers.
     /// Initial value is set from the `SOVEREIGN_DISABLE_AUTO_COLLAB`

@@ -60,7 +60,7 @@ use std::sync::Arc;
 use corpus_engine::{CorpusEngine, EmbedFn};
 use sovereign_core::traits::StateStore;
 use sovereign_daemon::lc_http::lc_router;
-use sovereign_mesh::watched_folder_runtime;
+use sovereign_daemon::watched_folder_runtime;
 use sovereign_store::memory::InMemoryStateStore;
 use sovereign_tools::local_corpus::config::LocalCorpusConfig;
 use sovereign_tools::local_corpus::watched::registry::WatchedFolderRegistry;

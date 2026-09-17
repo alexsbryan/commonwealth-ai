@@ -40,6 +40,10 @@
 pub mod admin_http;
 pub mod assets_http;
 pub mod atlas_http;
+/// The auto-collaborate pull loop and its heartbeat verdict — ingest run as
+/// background work (DAEMON_CORE.md §3.2, `jobs`).
+pub mod auto_ingest;
+pub mod auto_resume;
 pub mod corpus_catalog_http;
 pub mod corpus_watch_http;
 pub mod daemon;
@@ -49,9 +53,15 @@ pub mod enrich_http;
 pub mod features_http;
 pub mod governance_http;
 pub mod http_response;
+/// The `ingest:v1` `JobExecutor` — one corpus partition per unit
+/// (DAEMON_CORE.md §3.2, `jobs`).
+pub mod ingest_executor;
 /// The daemon's insight surface (sv-surface rung 6): clip/list/search/delete
 /// over the `InsightService` the commissioning host built.
 pub mod insight_http;
+/// The table every long-running route keeps its jobs in — one form,
+/// six routes (ARCH principle 8).
+pub mod job_registry;
 pub mod landscape_digest_http;
 pub mod lc_http;
 pub mod local_only;
@@ -76,10 +86,20 @@ pub mod rpc_warm_http;
 /// bundled manifest; supplied to the serving host's inference adapter and
 /// self-manifest advertisement (domains REVIEW-build-serving-move-adapter).
 pub mod slot_manifest;
+/// The panic-boundary supervisor every long-running watcher runs under
+/// (DAEMON_CORE.md §3.2, `jobs`).
+pub mod supervised_task;
 pub mod turn_extras_http;
 pub mod turn_http;
 pub mod types;
 pub mod venue_host;
+/// The watched-folder scheduler's process-wide singleton and its installer
+/// (DAEMON_CORE.md §3.2, `jobs`).
+pub mod watched_folder_runtime;
+pub mod watched_folder_setup;
+/// The `work` donor loop — the node's own lease-and-run half of the work
+/// plane (DAEMON_CORE.md §3.2, `jobs`).
+pub mod work_donor;
 
 // Re-exports the moved modules reached through the mesh crate root, so their
 // own `crate::` paths keep resolving here (the leaves live in the serving host

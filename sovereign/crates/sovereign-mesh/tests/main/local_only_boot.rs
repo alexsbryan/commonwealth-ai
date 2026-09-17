@@ -188,15 +188,15 @@ async fn a_local_only_daemon_does_not_donate() {
     // `process:v1` donation row in `sovereign/DEFAULTS_LEDGER.md`; that row
     // graduating and this control staying in its negative form is the thing
     // to catch.
-    let resolved = sovereign_mesh::work_donor::resolve_offer(
+    let resolved = sovereign_daemon::work_donor::resolve_offer(
         &cfg_donating(39661, 39662, false).compute.work_offer,
-        &sovereign_mesh::work_donor::donor_registry(
+        &sovereign_daemon::work_donor::donor_registry(
             None,
             commonwealth_work::sandbox::Sandbox::Direct,
         ),
         "linux",
         "x86_64",
-        sovereign_mesh::work_donor::DONOR_ISOLATION,
+        sovereign_daemon::work_donor::DONOR_ISOLATION,
     )
     .expect("the floor drops the kind rather than taking the daemon down");
     assert_eq!(

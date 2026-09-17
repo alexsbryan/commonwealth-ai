@@ -13,11 +13,12 @@
 //!
 //! The mesh host cluster — `daemon`, `daemon_services`, the 21 route shells,
 //! the edge leaves and the MCP mount — moved to `sovereign-daemon` at
-//! `dm-daemon-mesh-edge` (2026-09-17; ralph/DECISIONS.md). Fabric keeps its
-//! own modules here; the host observes them through readers.
+//! `dm-daemon-mesh-edge` (2026-09-17; ralph/DECISIONS.md), and the `jobs`
+//! family (the auto-collaborate loop, the resume sweep, the ingest executor,
+//! the watched-folder scheduler, the job table, the watcher supervisor and the
+//! work donor) followed at `dm-daemon-mesh-jobs` (2026-09-17). Fabric keeps
+//! its own modules here; the host observes them through readers.
 
-pub mod auto_ingest;
-pub mod auto_resume;
 pub mod canonical_pull;
 pub mod capabilities;
 pub mod commit_harvest;
@@ -43,15 +44,11 @@ pub use sovereign_serving_host::guest_lender; // shim: moved by domains REVIEW-b
 pub mod guest_source;
 pub mod guest_tunnel;
 pub use sovereign_serving_host::inference_adapter; // shim: moved by domains REVIEW-build-serving-move-adapter
-pub mod ingest_executor;
 /// Dial-by-key mesh access over iroh (Track W, W1). Server half: binds
 /// the daemon's identity endpoint and routes by ALPN to the local
 /// internal + client listeners. Runtime-gated by `[iroh] enabled`.
 pub mod iroh_access;
 pub mod iroh_watchdog;
-/// The table every long-running route keeps its jobs in — one form,
-/// six routes (ARCH principle 8).
-pub mod job_registry;
 pub mod join;
 pub use sovereign_turn_client::knowledge_client; // shim: moved by domains REVIEW-build-mesh-client-pair
 pub use sovereign_turn_client::landscape_digest_client; // shim: moved by domains REVIEW-build-mesh-client-pair
@@ -92,7 +89,6 @@ pub mod ring_sync;
 pub(crate) use sovereign_scheduler::scheduler_core; // shim: moved by domains REVIEW-build-sched-move
 pub use sovereign_scheduler::slot_aliases; // shim: moved by domains dm-sched-move-slot-aliases
 pub mod state;
-pub mod supervised_task;
 /// Capability bands — the tier floor of `SCHEDULER_QUALITY.md` §4.1:
 /// capability filters the candidate set, predicted cost ranks what
 /// survives.
@@ -100,10 +96,7 @@ pub use sovereign_scheduler::tier;
 pub use sovereign_serving_host::throughput_tracking; // shim: moved by domains REVIEW-build-serving-move-throughput-guest
 
 pub use sovereign_core::turn_approval; // shim: moved by domains dm-mesh-move-turn-approval
-pub mod watched_folder_runtime;
-pub mod watched_folder_setup;
 pub mod work_atlas_broadcaster;
-pub mod work_donor;
 pub use sovereign_serving_host::worker_eligibility; // shim: moved by domains dm-serving-move-leaves
                                                     // Ephemeral worker pods — owner-initiated TLS-pinned transport that
                                                     // replaces the full-mesh-pod path. Pods become single-owner workers,

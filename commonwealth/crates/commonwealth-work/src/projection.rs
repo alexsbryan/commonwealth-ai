@@ -410,7 +410,7 @@ pub struct ReapStats {
 /// This is not a hypothetical. cw-lift 5f wrote a second donor — a lifted peer
 /// — and the first version of it collapsed this to a bool, so a single
 /// unreadable heartbeat cancelled a running unit. The decider existed at the
-/// time, in `sovereign-mesh::work_donor`, where a package consumer could not
+/// time, in `sovereign-daemon::work_donor`, where a package consumer could not
 /// reach it; 5f recorded that as a hole in this crate's surface and the peer's
 /// own comment named the repair. This is it.
 #[derive(Debug, Clone, PartialEq, Eq)]

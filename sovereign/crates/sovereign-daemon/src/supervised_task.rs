@@ -32,7 +32,7 @@ use futures::FutureExt;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
-use crate::projects::{ProjectState, WatcherKind, WatcherStatus};
+use sovereign_mesh::projects::{ProjectState, WatcherKind, WatcherStatus};
 
 /// Crash count past which the supervisor stops auto-restarting.
 /// Five gives room for the typical "I just changed my script and

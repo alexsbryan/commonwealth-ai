@@ -326,13 +326,13 @@ lines = 772
 note = "daemon handler; the read model it serves is Understanding's"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/auto_ingest.rs"
+path = "sovereign/crates/sovereign-daemon/src/auto_ingest.rs"
 context = "host"
 lines = 1476
 note = "was ingest; jobs — DAEMON_CORE.md §3.2, §4.3 (2026-09-14)"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/auto_resume.rs"
+path = "sovereign/crates/sovereign-daemon/src/auto_resume.rs"
 context = "host"
 lines = 384
 note = "was ingest; jobs — DAEMON_CORE.md §3.2, §4.3 (2026-09-14)"
@@ -482,7 +482,7 @@ lines = 27
 note = "inference_adapter's guard tests, split out (REVIEW-audit-6, ARCH §3.1); moved host-side by REVIEW-build-serving-move-adapter"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/ingest_executor.rs"
+path = "sovereign/crates/sovereign-daemon/src/ingest_executor.rs"
 context = "host"
 lines = 736
 note = "was ingest; jobs — DAEMON_CORE.md §3.2, §4.3 (2026-09-14)"
@@ -507,7 +507,7 @@ lines = 1043
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/job_registry.rs"
+path = "sovereign/crates/sovereign-daemon/src/job_registry.rs"
 context = "host"
 lines = 253
 note = ""
@@ -832,7 +832,7 @@ note = ""
 
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/supervised_task.rs"
+path = "sovereign/crates/sovereign-daemon/src/supervised_task.rs"
 context = "host"
 lines = 346
 note = ""
@@ -888,13 +888,13 @@ lines = 140
 note = "the daemon-side serving ports: the EmbeddedDaemon VenueSource/VenueHost impls and the DeferredDaemon handle, split out of peer_inference.rs (REVIEW-audit-6); the ports themselves moved to sovereign-serving-host by REVIEW-build-serving-move-peer, and this half stays because it names commonwealth_core/state and EmbeddedDaemon — retagged host at dm-daemon-mesh-edge (2026-09-17): the file rode the mesh host cluster's move (E0116, impl EmbeddedDaemon) and splits back to Fabric by REVIEW-build-daemon-embedded-split"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/watched_folder_runtime.rs"
+path = "sovereign/crates/sovereign-daemon/src/watched_folder_runtime.rs"
 context = "host"
 lines = 86
 note = "was ingest; jobs — DAEMON_CORE.md §3.2, §4.3 (2026-09-14)"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/watched_folder_setup.rs"
+path = "sovereign/crates/sovereign-daemon/src/watched_folder_setup.rs"
 context = "host"
 lines = 221
 note = "was ingest; jobs — DAEMON_CORE.md §3.2, §4.3 (2026-09-14)"
@@ -906,7 +906,7 @@ lines = 246
 note = "was workspace; adapter — DAEMON_CORE.md §4.3 (2026-09-14)"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/work_donor.rs"
+path = "sovereign/crates/sovereign-daemon/src/work_donor.rs"
 context = "host"
 lines = 1194
 note = "was compute; jobs — DAEMON_CORE.md §3.2, §4.3 (2026-09-14)"
@@ -966,19 +966,19 @@ lines = 238
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/auto_ingest/heartbeat_verdict.rs"
+path = "sovereign/crates/sovereign-daemon/src/auto_ingest/heartbeat_verdict.rs"
 context = "host"
 lines = 110
 note = "was ingest; jobs — DAEMON_CORE.md §3.2, §4.3 (2026-09-14)"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/auto_ingest/heartbeat_verdict/tests.rs"
+path = "sovereign/crates/sovereign-daemon/src/auto_ingest/heartbeat_verdict/tests.rs"
 context = "host"
 lines = 96
 note = "was ingest; jobs — DAEMON_CORE.md §3.2, §4.3 (2026-09-14)"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/ingest_executor/tests.rs"
+path = "sovereign/crates/sovereign-daemon/src/ingest_executor/tests.rs"
 context = "host"
 lines = 318
 note = "was ingest; jobs — DAEMON_CORE.md §3.2, §4.3 (2026-09-14)"
@@ -1026,7 +1026,7 @@ lines = 207
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/work_donor/tests.rs"
+path = "sovereign/crates/sovereign-daemon/src/work_donor/tests.rs"
 context = "host"
 lines = 718
 note = "was compute; jobs — DAEMON_CORE.md §3.2, §4.3 (2026-09-14)"

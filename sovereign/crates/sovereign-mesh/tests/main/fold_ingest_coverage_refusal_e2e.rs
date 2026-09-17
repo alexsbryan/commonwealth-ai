@@ -58,7 +58,7 @@ use sovereign_api::auto_recover::{
     merge_from_fold_coverage, try_recover_stranded_partitions, RecoveryOutcome,
 };
 use sovereign_api::state::AppState;
-use sovereign_mesh::ingest_executor::fold_coverage_for;
+use sovereign_daemon::ingest_executor::fold_coverage_for;
 use tempfile::TempDir;
 
 use crate::common::corpus_at;
@@ -434,7 +434,8 @@ async fn the_folds_refusal_is_final_and_the_disk_path_never_runs() {
         .finish();
     let _guard = tracing::subscriber::set_default(subscriber);
 
-    let _loop_handle = sovereign_mesh::auto_ingest::spawn_auto_collaborate_loop(state, daemon_port);
+    let _loop_handle =
+        sovereign_daemon::auto_ingest::spawn_auto_collaborate_loop(state, daemon_port);
 
     let captured = || String::from_utf8_lossy(&buf.lock().expect("capture").clone()).into_owned();
     let saw_refusal = within(std::time::Duration::from_secs(60), || {
@@ -495,7 +496,8 @@ async fn without_a_fold_the_same_tick_publishes_the_partial_canonical() {
         "the control's premise: this node has no `work` journal to fold",
     );
 
-    let _loop_handle = sovereign_mesh::auto_ingest::spawn_auto_collaborate_loop(state, daemon_port);
+    let _loop_handle =
+        sovereign_daemon::auto_ingest::spawn_auto_collaborate_loop(state, daemon_port);
 
     let appeared = within(std::time::Duration::from_secs(60), || {
         corpus_at(&dir, CORPUS).is_installed()

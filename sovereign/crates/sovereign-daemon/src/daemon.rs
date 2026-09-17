@@ -352,7 +352,7 @@ enum DaemonState {
         /// `tokio::spawn` in a stray three-line diff and stay silent about it
         /// for five weeks (`ec7ca66c`, 2026-07-21 — see
         /// `auto_ingest::CollaborateHandle`).
-        _collaborate_handle: Option<sovereign_mesh::auto_ingest::CollaborateHandle>,
+        _collaborate_handle: Option<crate::auto_ingest::CollaborateHandle>,
         /// Aborts the ring-journal anti-entropy loop on Drop. Its own handle
         /// and its own cadence rather than a step inside gossip — see
         /// [`sovereign_mesh::ring_sync`] for the bandwidth arithmetic that forces it.
@@ -367,7 +367,7 @@ enum DaemonState {
         /// runs and reports other people's units (cw-lift 5d). `None` on a
         /// local-only daemon AND on a node whose `[compute.work_offer]` names
         /// no kind; `running_services` is what tells those two apart.
-        _work_donor_handle: Option<sovereign_mesh::work_donor::WorkDonorHandle>,
+        _work_donor_handle: Option<crate::work_donor::WorkDonorHandle>,
         /// The network posture this boot resolved, and what it produced.
         /// Read by [`EmbeddedDaemon::running_services`] — the boot
         /// assertion's instrument (ARCH §18.1).
@@ -2906,13 +2906,13 @@ impl EmbeddedDaemon {
             // of a misconfiguration nobody finds (ARCH §18.3, §9.1).
             match &why {
                 Some(reason) => tracing::warn!(
-                    target: sovereign_mesh::work_donor::TRACE_TARGET,
+                    target: crate::work_donor::TRACE_TARGET,
                     provides = ?sandbox.provides(),
                     why = %reason,
                     "work donor: no boundary on this host, so it will offer no kind that needs one"
                 ),
                 None => tracing::info!(
-                    target: sovereign_mesh::work_donor::TRACE_TARGET,
+                    target: crate::work_donor::TRACE_TARGET,
                     provides = ?sandbox.provides(),
                     "work donor: boundary ready"
                 ),
@@ -2923,11 +2923,11 @@ impl EmbeddedDaemon {
             // said `std::env::consts` until 2026-09-10, which refused a
             // macOS host's perfectly runnable Linux work on `Os`.
             let (provides, (os, arch)) = (sandbox.provides(), sandbox.platform());
-            work_registry = std::sync::Arc::new(sovereign_mesh::work_donor::donor_registry(
+            work_registry = std::sync::Arc::new(crate::work_donor::donor_registry(
                 corpus_engine.clone(),
                 sandbox,
             ));
-            sovereign_mesh::work_donor::resolve_offer(
+            crate::work_donor::resolve_offer(
                 &c.compute.work_offer,
                 &work_registry,
                 &os,
@@ -2939,7 +2939,7 @@ impl EmbeddedDaemon {
         // Assigned inside the networked branch below. A `mut` binding rather
         // than a fifth tuple element so the gate stays the SAME `if` the four
         // loops already sit in without re-indenting sixty lines of it.
-        let mut work_donor_handle: Option<sovereign_mesh::work_donor::WorkDonorHandle> = None;
+        let mut work_donor_handle: Option<crate::work_donor::WorkDonorHandle> = None;
         // What this boot actually spawns, recorded at each spawn site and
         // stored on the Running variant. The profile's claim is about this
         // list, and a list is falsifiable where a config value is not
@@ -3830,7 +3830,7 @@ impl EmbeddedDaemon {
                 );
                 running_services.record(crate::local_only::MeshService::Gossip);
 
-                let collaborate_handle = sovereign_mesh::auto_ingest::spawn_auto_collaborate_loop(
+                let collaborate_handle = crate::auto_ingest::spawn_auto_collaborate_loop(
                     app_state.clone(),
                     internal_port,
                 );
@@ -3864,12 +3864,12 @@ impl EmbeddedDaemon {
                 // then by the offer: a node whose `[compute.work_offer]` names
                 // no kind spawns nothing, which is the shipped posture.
                 work_donor_handle = work_offer.map(|offer| {
-                    let handle = sovereign_mesh::work_donor::spawn_work_donor(
+                    let handle = crate::work_donor::spawn_work_donor(
                         app_state.clone(),
                         offer,
                         std::sync::Arc::clone(&work_registry),
-                        self.data_dir.join(sovereign_mesh::work_donor::DONOR_DIR),
-                        sovereign_mesh::work_donor::DONOR_POLL_INTERVAL,
+                        self.data_dir.join(crate::work_donor::DONOR_DIR),
+                        crate::work_donor::DONOR_POLL_INTERVAL,
                     );
                     running_services.record(crate::local_only::MeshService::WorkDonor);
                     handle
@@ -3890,7 +3890,7 @@ impl EmbeddedDaemon {
         // Without this hook the on-disk state stays "in progress"
         // forever and the desktop banner pretends progress is happening
         // while the embed slot is idle. See `auto_resume.rs` docstring.
-        sovereign_mesh::auto_resume::spawn_resume_in_progress_ingests(app_state.clone());
+        crate::auto_resume::spawn_resume_in_progress_ingests(app_state.clone());
 
         // Hourly StorageSnapshot ledger emission. Without this, the
         // dimensional ledger has no signal for "what corpora is each

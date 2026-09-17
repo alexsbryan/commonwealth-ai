@@ -33,7 +33,7 @@
 2	sovereign/crates/sovereign-desktop/src-tauri/src/commands/corpus_install.rs
 2	sovereign/crates/sovereign-desktop/src-tauri/src/import_commands.rs
 8	sovereign/crates/sovereign-grants/src/shard_manager.rs
-1	sovereign/crates/sovereign-mesh/src/auto_resume.rs
+1	sovereign/crates/sovereign-daemon/src/auto_resume.rs
 3	sovereign/crates/sovereign-daemon/src/reading_http.rs
 1	sovereign/crates/sovereign-meshapp/src/wrapped.rs
 1	sovereign/crates/sovereign-meshapp/src/wrapped/tests.rs

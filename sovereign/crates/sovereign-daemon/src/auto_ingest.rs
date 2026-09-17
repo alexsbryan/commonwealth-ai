@@ -37,7 +37,7 @@ const COOLDOWN: Duration = Duration::from_secs(30 * 60);
 /// called. That handler checks `active_ingests` itself and skips the
 /// local partition spawn while still dispatching work to the new peer.
 /// Handle to the spawned auto-collaborate task. Aborts the task when dropped,
-/// exactly like [`crate::gossip::GossipHandle`] beside it, so stopping the
+/// exactly like [`sovereign_mesh::gossip::GossipHandle`] beside it, so stopping the
 /// daemon tears this loop down with everything else.
 ///
 /// # Why this function returns a value at all
@@ -350,7 +350,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
                     chunk_count = lead.chunk_count,
                     "auto_ingest: peer has healthier canonical — attempting pull"
                 );
-                match crate::canonical_pull::pull_canonical_from_peer(
+                match sovereign_mesh::canonical_pull::pull_canonical_from_peer(
                     &lead.candidate_urls,
                     corpus_id,
                     engine.index_dir(),

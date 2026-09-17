@@ -9,8 +9,8 @@ use async_trait::async_trait;
 use sovereign_core::model_family::ModelFamily;
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::InferenceProvider;
-use sovereign_inference::embedded::EmbeddedLlamaCpp;
 use sovereign_daemon::admin_http::ProviderFactory;
+use sovereign_inference::embedded::EmbeddedLlamaCpp;
 
 /// Rebuilds the embedded llama.cpp provider from a fresh `SetupConfig`,
 /// wrapped in the same `InferenceRouter` used at cold start so

@@ -73,9 +73,9 @@ use sovereign_core::deep_research::launch::{self, LaunchOptions};
 use sovereign_core::deep_research::{resume, run, SearchSource};
 
 use crate::http_response::{json_error, Absence};
+use crate::job_registry::JobRegistry;
 use crate::loopback_guard::{LocalOnly, LoopbackRouter};
 use crate::research_run_dir::{build_report, list_runs, DrLiveSnapshot, RunDirPoller};
-use sovereign_mesh::job_registry::JobRegistry;
 
 pub use sovereign_contracts::daemon_wire::{
     ResearchAbortAck, ResearchActiveRun, ResearchAlignment, ResearchBudget, ResearchCapabilities,

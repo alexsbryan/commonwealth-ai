@@ -198,7 +198,7 @@ pub enum MeshService {
     RingSync,
     /// The mesh-store outbox pump that signs local writes onto their rings.
     RailKvPump,
-    /// The work-plane donor loop (`sovereign_mesh::work_donor`) — this node running
+    /// The work-plane donor loop (`crate::work_donor`) — this node running
     /// other people's units. Spawned only when `[compute.work_offer]` names a
     /// kind, so its ABSENCE from the census is two different facts (local-only,
     /// or an inert offer) and the boot trace names which.

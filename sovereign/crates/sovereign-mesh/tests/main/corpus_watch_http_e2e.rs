@@ -39,7 +39,7 @@ use std::sync::{Arc, OnceLock};
 use corpus_engine::{CorpusEngine, EmbedFn};
 use sovereign_core::traits::StateStore;
 use sovereign_daemon::corpus_watch_http::corpus_watch_router;
-use sovereign_mesh::watched_folder_runtime;
+use sovereign_daemon::watched_folder_runtime;
 use sovereign_store::memory::InMemoryStateStore;
 use sovereign_tools::local_corpus::watched::registry::WatchedFolderRegistry;
 use sovereign_tools::local_corpus::LocalCorpusManager;

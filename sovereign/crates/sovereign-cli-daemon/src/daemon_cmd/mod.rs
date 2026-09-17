@@ -1108,7 +1108,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     //     name a caller returns `None`, and that turn REFUSES
     //     (`PrincipalScope::Unresolved`) instead of seeing every corpus.
     let sensitive_corpora: Option<Arc<dyn sovereign_core::traits::SensitiveCorpusOracle>> =
-        sovereign_mesh::watched_folder_runtime::manager()
+        sovereign_daemon::watched_folder_runtime::manager()
             .map(|m| m as Arc<dyn sovereign_core::traits::SensitiveCorpusOracle>);
     if sensitive_corpora.is_none() {
         // Named, not silent: the subsystem failed to install above, so there is

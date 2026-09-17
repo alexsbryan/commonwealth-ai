@@ -15,7 +15,7 @@
 //! from the machine actually running. It exists because there were three
 //! fillers and they were drifting apart:
 //!
-//! - `sovereign-mesh::work_donor::attribution` — what the donor ran at.
+//! - `sovereign-daemon::work_donor::attribution` — what the donor ran at.
 //! - `sovereign-cli::quality_check_cmd::distribute::local_attribution` — what
 //!   a local run would have been attributed to, the reference every donor's
 //!   `provenance` is checked against.

@@ -2,7 +2,7 @@
 //! Per-project state machine for the daemon's reindexer + watchers.
 //!
 //! `ProjectState` holds the live, read-mostly state that
-//! `supervised_task::supervise` writes and MCP tools /
+//! `sovereign_daemon::supervised_task::supervise` writes and MCP tools /
 //! HTTP endpoints read. One instance per registered project.
 //!
 //! This module intentionally carries no IO (registry load/save,

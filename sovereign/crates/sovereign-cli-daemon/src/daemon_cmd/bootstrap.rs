@@ -21,8 +21,8 @@ use sovereign_core::model_family::{
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::ToolRegistry;
-use sovereign_inference::embedded::EmbeddedLlamaCpp;
 use sovereign_daemon::EmbeddedDaemon;
+use sovereign_inference::embedded::EmbeddedLlamaCpp;
 
 /// Resolve this node's persistent id using the same precedence
 /// `EmbeddedDaemon::start_daemon` applies on resume: the `node_id` file, then
@@ -2024,7 +2024,7 @@ pub(super) async fn setup_watched_folders(
     atlas_builder: Option<
         Arc<dyn sovereign_tools::local_corpus::watched::enrich::AtlasBuildRunner>,
     >,
-) -> Option<sovereign_mesh::watched_folder_setup::WatchedSubsystem> {
+) -> Option<sovereign_daemon::watched_folder_setup::WatchedSubsystem> {
     // ── Watched-folder reconciliation scheduler ─────────────────
     //
     // Constructs the LocalCorpusManager + per-corpus registry,
@@ -2046,7 +2046,7 @@ pub(super) async fn setup_watched_folders(
     // Watched-folder reconciliation subsystem. The full wiring (build
     // registry → resume corpora → install runtime singleton → mount
     // HTTP routes → spawn scheduler) is factored into
-    // `sovereign_mesh::watched_folder_setup` so the desktop's
+    // `sovereign_daemon::watched_folder_setup` so the desktop's
     // embedded daemon can call the same path.
     // Critical: pass the same `recipes_dir` the `CorpusEngine`
     // was constructed with (see the `let recipes_dir = …` block
@@ -2154,7 +2154,7 @@ pub(super) async fn setup_watched_folders(
                 )),
             ));
             Some(
-                sovereign_mesh::watched_folder_setup::WatchedSubsystem::install(
+                sovereign_daemon::watched_folder_setup::WatchedSubsystem::install(
                     Arc::clone(&engine),
                     Arc::new(manager),
                     config.watched_folders.max_concurrent_sweeps,
