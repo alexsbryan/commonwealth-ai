@@ -492,8 +492,8 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         let _ = std::fs::create_dir_all(parent);
     }
     let atlas_mesh_store = Arc::new(
-        sovereign_mesh::peer_adapter::MeshPeerStore::open(&atlas_mesh_db)
-            .or_else(|_| sovereign_mesh::peer_adapter::MeshPeerStore::in_memory())
+        sovereign_mesh::peer_adapter::MeshReplicatedKv::open(&atlas_mesh_db)
+            .or_else(|_| sovereign_mesh::peer_adapter::MeshReplicatedKv::in_memory())
             .expect("work atlas mesh store"),
     );
     let atlas_node_id = crate::atlas_identity::atlas_node_id();

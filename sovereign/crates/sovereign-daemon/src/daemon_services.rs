@@ -286,7 +286,7 @@ pub struct ServingProfile {
 /// bootstrap names no `commonwealth-*` type at all (cw-lift 3b).
 pub struct HeadlessRails {
     pub provider_factory: Arc<dyn ProviderFactory>,
-    pub mesh_store: Arc<sovereign_mesh::peer_adapter::MeshPeerStore>,
+    pub mesh_store: Arc<sovereign_mesh::peer_adapter::MeshReplicatedKv>,
     pub convergence_recorder: Arc<sovereign_mesh::peer_adapter::MeshConvergence>,
 }
 
@@ -828,7 +828,7 @@ pub(crate) mod fixtures {
             rails: HeadlessRails {
                 provider_factory,
                 mesh_store: Arc::new(
-                    sovereign_mesh::peer_adapter::MeshPeerStore::in_memory()
+                    sovereign_mesh::peer_adapter::MeshReplicatedKv::in_memory()
                         .expect("in-memory MeshStore"),
                 ),
                 convergence_recorder: Arc::new(sovereign_mesh::peer_adapter::MeshConvergence::new()),
@@ -856,7 +856,7 @@ mod tests {
             rails: HeadlessRails {
                 provider_factory: std::sync::Arc::new(fixtures::NullFactory),
                 mesh_store: Arc::new(
-                    sovereign_mesh::peer_adapter::MeshPeerStore::in_memory()
+                    sovereign_mesh::peer_adapter::MeshReplicatedKv::in_memory()
                         .expect("in-memory MeshStore"),
                 ),
                 convergence_recorder: Arc::new(sovereign_mesh::peer_adapter::MeshConvergence::new()),

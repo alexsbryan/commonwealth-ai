@@ -4406,7 +4406,7 @@ impl EmbeddedDaemon {
             // Takes the endpoint as an argument because the watchdog swaps its
             // handle on rebuild and must judge the one it is holding.
             let paths_state = app_state.clone();
-            let peer_paths: sovereign_mesh::iroh_watchdog::PeerPathsFn = Arc::new(move |ep| {
+            let peer_paths: sovereign_mesh::iroh_watchdog::ReachPathsFn = Arc::new(move |ep| {
                 let app_state = paths_state.clone();
                 Box::pin(async move {
                     sovereign_mesh::iroh_access::observe_peer_paths(
@@ -4420,7 +4420,7 @@ impl EmbeddedDaemon {
                         Box<
                             dyn std::future::Future<
                                     Output = Vec<
-                                        sovereign_mesh::iroh_watchdog::PeerPathObservation,
+                                        sovereign_mesh::iroh_watchdog::ReachPathObservation,
                                     >,
                                 > + Send,
                         >,

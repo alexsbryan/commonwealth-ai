@@ -8,7 +8,7 @@
 //! of records per node.
 //!
 //! **Every drop here goes through `PeerStore::delete`, and that is what makes
-//! it stick.** On a meshed node the port is `MeshPeerStore`, whose store is a
+//! it stick.** On a meshed node the port is `MeshReplicatedKv`, whose store is a
 //! PROJECTION of the ring journal: `delete` queues a tombstone, so the fold
 //! carries the removal, while a sweep of the same rows would leave no act
 //! anywhere and the next round would put them back. That is not hypothetical —

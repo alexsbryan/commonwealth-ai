@@ -17,7 +17,7 @@
 //! Both adapters own the underlying handle rather than borrowing it, because
 //! two consumers must reach the SAME instance: the daemon's own note pipeline
 //! (through the port) and the gossip/`/status` surfaces inside this crate
-//! (through [`MeshPeerStore::inner`] / [`MeshConvergence::inner`], which are
+//! (through [`MeshReplicatedKv::inner`] / [`MeshConvergence::inner`], which are
 //! crate-private on purpose). A second store would gossip nothing and a second
 //! recorder would make `/status` report a liveness that no writer stamps.
 
@@ -35,20 +35,20 @@ use sovereign_contracts::peer::{
 /// A thin projection: four of the store's methods, which is what the port's
 /// consumers call. The rest — `append`, `merge_entry`, `apply_projection`, the
 /// outbox pair, the four `gc_*` — are the mesh's own business and stay
-/// reachable through [`MeshPeerStore::inner`] inside this crate.
+/// reachable through [`MeshReplicatedKv::inner`] inside this crate.
 #[derive(Clone)]
-pub struct MeshPeerStore {
+pub struct MeshReplicatedKv {
     inner: Arc<MeshStore>,
 }
 
-impl std::fmt::Debug for MeshPeerStore {
+impl std::fmt::Debug for MeshReplicatedKv {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // `MeshStore` has no Debug; name the shape rather than the contents.
-        f.write_str("MeshPeerStore { .. }")
+        f.write_str("MeshReplicatedKv { .. }")
     }
 }
 
-impl MeshPeerStore {
+impl MeshReplicatedKv {
     /// An in-memory mesh store.
     ///
     /// This is what the daemon's work atlas and notes rail run on: the
@@ -62,7 +62,7 @@ impl MeshPeerStore {
 
     /// Open (or create) the store at `path`.
     ///
-    /// The persisted counterpart of [`MeshPeerStore::in_memory`], for the CLI
+    /// The persisted counterpart of [`MeshReplicatedKv::in_memory`], for the CLI
     /// surfaces that read a workstation's `mesh.db` rather than the daemon's
     /// live in-memory one.
     pub fn open(path: &std::path::Path) -> Result<Self, PeerStoreError> {
@@ -96,7 +96,7 @@ fn to_port_entry(e: commonwealth_state::StoreEntry) -> PeerEntry {
     }
 }
 
-impl PeerStore for MeshPeerStore {
+impl PeerStore for MeshReplicatedKv {
     fn get(&self, app_id: &str, key: &str) -> Result<Option<PeerEntry>, PeerStoreError> {
         self.inner
             .get(app_id, key)
@@ -153,7 +153,7 @@ impl MeshConvergence {
     }
 
     /// The underlying record, for installation onto `AppState`. Public for the
-    /// same reason as [`MeshPeerStore::inner`]: the composition root in
+    /// same reason as [`MeshReplicatedKv::inner`]: the composition root in
     /// `sovereign-daemon` is the one caller.
     pub fn inner(&self) -> Arc<ConvergenceRecord> {
         Arc::clone(&self.inner)
@@ -183,7 +183,7 @@ mod tests {
     /// name, and a consumer written against one would misread the other.
     #[test]
     fn mesh_peer_store_agrees_with_the_solo_answers() {
-        let store = MeshPeerStore::in_memory().expect("in-memory store");
+        let store = MeshReplicatedKv::in_memory().expect("in-memory store");
         let origin = NodeId::from_u128(3);
 
         assert_eq!(store.get("notes", "k").unwrap(), None);
