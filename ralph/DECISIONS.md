@@ -1356,3 +1356,26 @@ the god-crate the campaign is decomposing).
 
 **Landed in.** `a23d8b663` (the move) and this commit (the row correction, this
 entry, and `ralph/lanes/dm-mesh-workbench-move-watchers.done`).
+
+## 2026-09-17 · HUMAN-forbid-harness-except · approved — the harness may name sovereign-scheduler
+
+**Fork.** `HUMAN-forbid-harness-except` (STATE.md:216): widen `[[forbid]] from
+= "sovereign-mesh-test-harness" to = "sovereign-*"`
+(`quality/ARCH_LAYERS.toml:759-762`) to except `sovereign-scheduler`, so the
+Tier-1 simulator can name the routing records it replays — or leave the forbid
+and drop the mesh-sim move's premise.
+
+**Choice.** Approved by the operator 2026-09-17: the except gains
+`sovereign-scheduler`. An operator-only act (widening an `except`, PROMPT §7 /
+charter); it unblocks `dm-harness-except` → `dm-mesh-sim-move` → the
+mesh-lines bar (with the merged workbench row, sovereign-mesh lands ~12.8k).
+
+**Evidence.** The row; `quality/ARCH_LAYERS.toml:759-762`; the harness's
+`Cargo.toml` and `src/simulated_node.rs` naming the scheduler's records (the
+`REVIEW-build-mesh-sim-decouple` range).
+
+**Falsified by.** A harness use of a `sovereign-scheduler` surface beyond the
+routing records it replays; or the simulator ceasing to need them.
+
+**Landed in.** this commit — `quality/ARCH_LAYERS.toml` (the except), the row
+`[x]`, and this entry.

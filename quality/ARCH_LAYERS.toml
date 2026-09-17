@@ -759,7 +759,7 @@ reason = "the harness simulates a node against the OICP/contracts seam, not the 
 [[forbid]]
 from = "sovereign-mesh-test-harness"
 to = "sovereign-*"
-except = ["sovereign-contracts", "sovereign-grants", "sovereign-meshapp-registry"]
+except = ["sovereign-contracts", "sovereign-grants", "sovereign-meshapp-registry", "sovereign-scheduler"]
 # TRANSLATED at the domains-2 move (2026-09-11), not deleted. The crate was
 # `commonwealth-test-harness` in `commonwealth/crates/`; it is now
 # `sovereign-mesh-test-harness` beside its only consumer. Deleting the row
