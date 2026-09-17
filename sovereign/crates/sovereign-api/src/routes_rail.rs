@@ -223,6 +223,11 @@ pub async fn append(
     };
     match appended {
         Ok((op, retired)) => {
+            // The write is on disk; ask the ring round to run NOW rather than
+            // at its sixty-second tick. Same door the KV pump and the work
+            // donor use (`sovereign-mesh/src/work_donor.rs:1184`) — this
+            // route does not talk to a peer, it asks `ring_sync` to.
+            state.ring_write_nudge().notify_one();
             let mut out = serde_json::json!({
                 "id": op.id,
                 "seq": op.kind.seq,

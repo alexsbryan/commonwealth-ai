@@ -143,6 +143,8 @@ mod replication_sender_census;
 mod research_surface_e2e;
 #[path = "main/responses_adapter_e2e.rs"]
 mod responses_adapter_e2e;
+#[path = "main/ring_append_nudges_sync.rs"]
+mod ring_append_nudges_sync;
 #[path = "main/rotate_pre_split_guard.rs"]
 mod rotate_pre_split_guard;
 #[path = "main/scheduler_decision_records.rs"]
