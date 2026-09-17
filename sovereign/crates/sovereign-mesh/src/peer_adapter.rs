@@ -27,10 +27,10 @@ use bytes::Bytes;
 use commonwealth_state::MeshStore;
 use kernel_types::NodeId;
 use sovereign_contracts::peer::{
-    Convergence, ConvergenceRecord, PeerEntry, PeerStore, PeerStoreError,
+    Convergence, ConvergenceRecord, ReplicatedKv, ReplicatedKvEntry, ReplicatedKvError,
 };
 
-/// [`PeerStore`] backed by the ring-projected [`MeshStore`].
+/// [`ReplicatedKv`] backed by the ring-projected [`MeshStore`].
 ///
 /// A thin projection: four of the store's methods, which is what the port's
 /// consumers call. The rest — `append`, `merge_entry`, `apply_projection`, the
@@ -54,7 +54,7 @@ impl MeshReplicatedKv {
     /// This is what the daemon's work atlas and notes rail run on: the
     /// atlas-relevant records have TTLs measured in hours and long-term
     /// persistence is the mesh itself, so restart cost is acceptable.
-    pub fn in_memory() -> Result<Self, PeerStoreError> {
+    pub fn in_memory() -> Result<Self, ReplicatedKvError> {
         MeshStore::in_memory()
             .map(|s| Self { inner: Arc::new(s) })
             .map_err(to_port_error)
@@ -65,7 +65,7 @@ impl MeshReplicatedKv {
     /// The persisted counterpart of [`MeshReplicatedKv::in_memory`], for the CLI
     /// surfaces that read a workstation's `mesh.db` rather than the daemon's
     /// live in-memory one.
-    pub fn open(path: &std::path::Path) -> Result<Self, PeerStoreError> {
+    pub fn open(path: &std::path::Path) -> Result<Self, ReplicatedKvError> {
         MeshStore::open(path)
             .map(|s| Self { inner: Arc::new(s) })
             .map_err(to_port_error)
@@ -82,12 +82,12 @@ impl MeshReplicatedKv {
     }
 }
 
-fn to_port_error(e: commonwealth_state::error::Error) -> PeerStoreError {
-    PeerStoreError::Backend(e.to_string())
+fn to_port_error(e: commonwealth_state::error::Error) -> ReplicatedKvError {
+    ReplicatedKvError::Backend(e.to_string())
 }
 
-fn to_port_entry(e: commonwealth_state::StoreEntry) -> PeerEntry {
-    PeerEntry {
+fn to_port_entry(e: commonwealth_state::StoreEntry) -> ReplicatedKvEntry {
+    ReplicatedKvEntry {
         app_id: e.app_id,
         key: e.key,
         value: e.value,
@@ -96,8 +96,8 @@ fn to_port_entry(e: commonwealth_state::StoreEntry) -> PeerEntry {
     }
 }
 
-impl PeerStore for MeshReplicatedKv {
-    fn get(&self, app_id: &str, key: &str) -> Result<Option<PeerEntry>, PeerStoreError> {
+impl ReplicatedKv for MeshReplicatedKv {
+    fn get(&self, app_id: &str, key: &str) -> Result<Option<ReplicatedKvEntry>, ReplicatedKvError> {
         self.inner
             .get(app_id, key)
             .map(|o| o.map(to_port_entry))
@@ -110,17 +110,21 @@ impl PeerStore for MeshReplicatedKv {
         key: &str,
         value: Bytes,
         origin: NodeId,
-    ) -> Result<bool, PeerStoreError> {
+    ) -> Result<bool, ReplicatedKvError> {
         self.inner
             .set(app_id, key, value, origin)
             .map_err(to_port_error)
     }
 
-    fn delete(&self, app_id: &str, key: &str) -> Result<bool, PeerStoreError> {
+    fn delete(&self, app_id: &str, key: &str) -> Result<bool, ReplicatedKvError> {
         self.inner.delete(app_id, key).map_err(to_port_error)
     }
 
-    fn scan(&self, app_id: &str, prefix: &str) -> Result<Vec<PeerEntry>, PeerStoreError> {
+    fn scan(
+        &self,
+        app_id: &str,
+        prefix: &str,
+    ) -> Result<Vec<ReplicatedKvEntry>, ReplicatedKvError> {
         self.inner
             .scan(app_id, prefix)
             .map(|v| v.into_iter().map(to_port_entry).collect())
