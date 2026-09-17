@@ -46,6 +46,13 @@ prompt="${1:-}"
 
 args=(-p --settings "$settings" --output-format stream-json --verbose)
 [ -n "$model" ] && args+=(--model "$model")
+# The directories .opencode/opencode.json's external_directory already
+# granted: /run (the PROMPT's containerenv premise check), /tmp (the cargo
+# lock), and ralph's own state under ~/.svrnmesh. Anything else outside the
+# repo still asks.
+for d in /run /tmp "$HOME/.svrnmesh/ralph"; do
+    [ -d "$d" ] && args+=(--add-dir "$d")
+done
 
 # The gray zone — a call the settings neither allow nor deny — bubbles to the
 # operator through scripts/ralph-permission-bridge.py (ralph/PERMISSION_REQUEST.md,
