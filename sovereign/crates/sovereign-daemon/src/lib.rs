@@ -31,6 +31,9 @@
 //! four files carrying the daemon's `impl EmbeddedDaemon` (`media_reach`,
 //! `origin_fanout`, `roster_repair`, `venue_host`) — one strongly-connected
 //! component, so it moved in one commit (ralph/DECISIONS.md 2026-09-17).
+//! Its `jobs` family followed at `dm-daemon-mesh-jobs` and its two `adapters`
+//! (`newsworthy_host`, `work_atlas_broadcaster`) at `dm-daemon-mesh-adapters`
+//! (2026-09-17).
 //! `REVIEW-build-daemon-embedded-split` splits `daemon.rs` by owner next,
 //! moving Fabric's membership operations back to `sovereign-mesh`. Its
 //! consumers are `sovereign-cli-daemon`, `sovereign-cli-llm` for the
@@ -71,6 +74,10 @@ pub mod mcp_router;
 pub mod media_reach;
 pub mod mesh_http;
 pub mod meshapp_http;
+/// `corpus-engine`'s `NewsworthyHost` implemented over the roster, the
+/// identity watch, the KV store and the engine handle (DAEMON_CORE.md §4.3,
+/// `adapters`).
+pub mod newsworthy_host;
 pub mod notes_http;
 pub mod origin_fanout;
 #[cfg(feature = "treesitter")]
@@ -97,6 +104,9 @@ pub mod venue_host;
 /// (DAEMON_CORE.md §3.2, `jobs`).
 pub mod watched_folder_runtime;
 pub mod watched_folder_setup;
+/// `sovereign-work-atlas`'s `ClaimBroadcaster` over the rail — the adapter
+/// that hurries a claim onto the ring (DAEMON_CORE.md §4.3, `adapters`).
+pub mod work_atlas_broadcaster;
 /// The `work` donor loop — the node's own lease-and-run half of the work
 /// plane (DAEMON_CORE.md §3.2, `jobs`).
 pub mod work_donor;

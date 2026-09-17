@@ -615,7 +615,7 @@ lines = 614
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/newsworthy_host.rs"
+path = "sovereign/crates/sovereign-daemon/src/newsworthy_host.rs"
 context = "host"
 lines = 647
 note = "was understanding; adapter — DAEMON_CORE.md §4.3 (2026-09-14)"
@@ -900,7 +900,7 @@ lines = 221
 note = "was ingest; jobs — DAEMON_CORE.md §3.2, §4.3 (2026-09-14)"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/work_atlas_broadcaster.rs"
+path = "sovereign/crates/sovereign-daemon/src/work_atlas_broadcaster.rs"
 context = "host"
 lines = 246
 note = "was workspace; adapter — DAEMON_CORE.md §4.3 (2026-09-14)"

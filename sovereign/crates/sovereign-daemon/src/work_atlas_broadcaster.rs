@@ -2,9 +2,9 @@
 //! `MeshBroadcaster` — the production implementation of
 //! [`sovereign_work_atlas::tools::ClaimBroadcaster`].
 //!
-//! Lives in `sovereign-mesh` (not in `sovereign-work-atlas`) so the
+//! Lives in `sovereign-daemon` (not in `sovereign-work-atlas`) so the
 //! trait surface stays free of `AppState`. The dep direction is
-//! work-atlas → (nothing extra); mesh → work-atlas. That keeps
+//! work-atlas → (nothing extra); daemon → work-atlas. That keeps
 //! work-atlas re-usable from contexts where AppState isn't in scope
 //! (the CLI tools registry uses `NullBroadcaster` for the same
 //! reason).
@@ -52,7 +52,7 @@ use async_trait::async_trait;
 use sovereign_api::state::AppState;
 use sovereign_work_atlas::tools::ClaimBroadcaster;
 
-use crate::rail_kv_pump;
+use sovereign_mesh::rail_kv_pump;
 
 /// Wraps `AppState` so the work-atlas tools can hurry a claim onto the ring
 /// without taking a direct dep on `AppState`. `AppState` is `Clone` over an
@@ -110,7 +110,7 @@ mod tests {
     /// A node whose rail derives its roster from its own membership — the same
     /// three calls `ring_sync`'s tests make and the daemon makes.
     fn node(dir: &std::path::Path, key: &SigningKey, id: NodeId) -> AppState {
-        use crate::ring_roster::tests::{member, mesh_of, pubkey_of};
+        use sovereign_mesh::ring_roster::tests::{member, mesh_of, pubkey_of};
         let rail = Arc::new(RingRail::new(dir, Arc::new(key.clone())));
         let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric(
             id,
@@ -124,7 +124,7 @@ mod tests {
                 ..Default::default()
             },
         );
-        crate::ring_roster::MeshRosterSource::install(
+        sovereign_mesh::ring_roster::MeshRosterSource::install(
             &rail,
             &state.inner.fabric.mesh,
             &state.inner.fabric.identity,

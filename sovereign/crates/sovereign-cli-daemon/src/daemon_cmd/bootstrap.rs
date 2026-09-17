@@ -2358,8 +2358,9 @@ pub(super) fn finalize_work_atlas(
             let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
             loop {
                 if let Some(state) = daemon_for_atlas.app_state().await {
-                    let real: Box<dyn sovereign_work_atlas::tools::ClaimBroadcaster> =
-                        Box::new(sovereign_mesh::MeshBroadcaster::new(state));
+                    let real: Box<dyn sovereign_work_atlas::tools::ClaimBroadcaster> = Box::new(
+                        sovereign_daemon::work_atlas_broadcaster::MeshBroadcaster::new(state),
+                    );
                     broadcaster_for_atlas.set(real);
                     tracing::info!("work_atlas: real broadcaster wired (peer fan-out active)");
                     return;

@@ -27,6 +27,7 @@ sovereign-api = { path = "../../../sovereign/crates/sovereign-api" }
 sovereign-meshapp-registry = { workspace = true }
 sovereign-serving-host = { path = "../sovereign-serving-host" }
 sovereign-scheduler = { workspace = true }
+sovereign-work-atlas = { workspace = true }
 sovereign-core = { workspace = true }
 sovereign-time = { workspace = true }
 sovereign-inference = { workspace = true }
@@ -40,6 +41,7 @@ corpus-engine = { workspace = true }
 corpus-engine-notes = { workspace = true }
 
 async-trait = { workspace = true }
+bytes = { workspace = true }
 futures = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
