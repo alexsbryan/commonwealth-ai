@@ -1178,3 +1178,68 @@ cut (the `ring_sync.rs`/`scoring.rs` split-out audit-daemon-1 used) and
 **Landed in.** this commit — `ralph/STATE.md` (the row's `depends`, the
 line-sum clause, the CORRECTED note) and this entry. `git revert <sha>` reverts
 it alone.
+
+## 2026-09-17 · REVIEW-audit-daemon-2 · director: the api cluster is wave 1's, and the approach-band red is cut, not banked
+
+**Fork.** The worker corrected the row's `depends` to
+`[dm-daemon-api-edge, dm-daemon-cli-composition]` (`7b2e304b8`) and left the
+package. Two forks are the director's. (1) Does the api host cluster belong to
+`REVIEW-audit-daemon-2` (wave 1) or to `REVIEW-audit-wave-2` (wave 2)? (2) The
+`PREPUSH` red — `arch-gate`'s approach band grew 202,703 -> 202,846 (+143)
+since `abd718469` — cut it in the audit, or accept the growth and re-baseline?
+
+**Choice.** (1) Confirm the correction; the row's `depends`, not its text, was
+wrong. `quality/DOMAINS.toml:4632` names the api host cluster (`api-9  host
+(18,930), frontdoor.rs included, whole -> sovereign-daemon. LAST. INTERLEAVE:
+with dm-mesh-host; the two host clusters land in ONE crate`) and `:4650` calls
+`api-9` "the wave's verdict rung" whose close retires the three `[[exception]]`
+rows; `quality/DAEMON_CORE.md:302` lists the same cluster as what the daemon
+holds. The daemon host crate is the union of the mesh host and api host
+clusters, so `REVIEW-audit-daemon-2` audits both; re-scoping the api clause to
+`REVIEW-audit-wave-2` would move a wave-1 verdict into wave 2. (2) The growth is
+not accepted and the baseline must not rise: `--update-baseline` is forbidden
+(`PROMPT §7`), and raising a counter ratchet is the bar-weakening the charter
+leaves to the operator. The audit cuts a band file back under 800 (the
+`ring_sync.rs`/`scoring.rs` pattern `REVIEW-audit-daemon-1` used). The +143 is
+real accretion, not a move artifact — the moves are net −71 and the shared band
+files grew +214.
+
+**Evidence** (reproduced this session, on `701b67453`).
+- `./target/debug/xtask arch-gate` -> `207 file(s) / 202846 lines in the
+  800-1200 approach band`; `✗ size: approach band GREW: lines 202703 -> 202846
+  (+143)`; baseline `quality/baselines/approach_band.txt` = `207 files` /
+  `202703 lines`.
+- Per-file band diff vs `abd718469`: 14 files added / 14 removed (all moves,
+  ~equal size), net −71; shared-file delta +214, led by
+  `sovereign-serving-host/src/admission.rs` 800 -> 922 (+122).
+- `python3 scripts/domains-census.py crate-lines --crate sovereign-api` ->
+  `value: 39953 lines`, 52 `host` rows; `--crate sovereign-mesh` -> 20,990,
+  zero `host`; `--crate sovereign-daemon` -> 44,676. The api cluster is unmoved.
+- `quality/DOMAINS.toml:4632,:4650`; `quality/DAEMON_CORE.md:302`.
+- The pool skips the row with the corrected `depends`:
+  `Queue('ralph/STATE.md').first_ready_review()` -> `None`; `pick_wave(2)` ->
+  `['dm-mesh-workbench-move-scip', 'dm-vocab-compile-fail-test']`. Removing the
+  package resumes the campaign.
+- ARCH-3 doc drift reproduced: `git grep -nE 'daemon_cmd/(bootstrap|solve_http|
+  solve_tools|provider|worker|...)'` finds 55 live references (the package's ~30
+  plus `HISTORY.md`, `.canon/sources/`, `quality/campaigns/`, `research/`). It is
+  the audit's, recorded not fixed.
+
+**Falsified by.** A tree where `sovereign-api` holds zero `host` rows (the audit
+could run as minted); or a doc putting the api host cluster in wave 2 rather than
+`DOMAINS.toml api-9`; or an `arch-gate` run whose band reads <= 202,703 on this
+tree (then the red is stale); or a band delta that is entirely move artifacts
+(then a path re-key, `PROMPT §3a.6`, clears it without a split).
+
+**REVIEW-AFTER:** the `PREPUSH` ruling. "Fixing the code the gate names" is the
+director's and "weakening a pass bar" is the operator's, so the cut is decidable
+here — but declining to re-baseline is the operator's standing policy, so the
+morning should confirm it. Also noted, no change made: the review lane has no
+distinct terminal state for a review whose premise is false and whose `depends`
+cannot be corrected; the worker's §6 correction plus the package is the intended
+path (correct -> deps unmet -> skip; no correctable dep -> package -> director),
+so the "no terminal state" is escalation, not a defect.
+
+**Landed in.** this commit — `ralph/STATE.md` (the row's `DIRECTOR` clause),
+`ralph/DECISIONS.md` (this entry), `ralph/NEEDS_HUMAN.md` removed. `git revert
+<sha>` reverts it alone.
