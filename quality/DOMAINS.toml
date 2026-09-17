@@ -11555,7 +11555,7 @@ note = ""
 path = "sovereign/crates/sovereign-contracts/src/env.rs"
 context = "kernel"
 lines = 25
-note = ""
+note = "the workspace's one truthiness rule (`truthy`), created here by REVIEW-build-mesh-host-decouple (ralph/DECISIONS.md 2026-09-16) because its two readers may not name each other: sovereign-mesh's auto_resume (bound for sovereign-daemon) and the corpus reindexer (bound for a corpus-engine crate). The row itself was added by REVIEW-build-middleware-seam to close the coverage hole"
 
 [[module]]
 path = "sovereign/crates/sovereign-contracts/src/error.rs"

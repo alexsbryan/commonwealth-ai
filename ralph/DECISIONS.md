@@ -940,6 +940,43 @@ falsified premise recorded; `dm-daemon-api-edge` (a) corrected to the four-item
 list with the Join/Gossip repoint) and this entry; `ralph/NEEDS_HUMAN.md`
 removed. `git revert <sha>` reverts it alone.
 
+## 2026-09-17 · dm-misnamed-coverage · the coverage hole was already closed; only the note was owed
+
+**Fork.** `dm-misnamed-coverage` (STATE.md:212) states two premises: the
+`[[module]]` row for `sovereign/crates/sovereign-contracts/src/env.rs` must be
+added, and `sovereign/crates/sovereign-mesh/src/lib.rs` must be re-tagged
+`host -> fabric`, so `misnamed`/`crate-lines`/`queue` stop exiting 4 on the
+coverage assertion. Both were false on the tree as found.
+
+**Choice.** Make the one delta the row still owed — the `env.rs` note naming
+`REVIEW-build-mesh-host-decouple` — and record the two premises as already
+satisfied rather than re-do them.
+
+**Evidence.**
+
+- `git log -L '11549,11552:quality/DOMAINS.toml'` → the `env.rs` row
+  (`path`/`lines = 25`/`context = "kernel"`) was added by
+  `7ea3d6aae REVIEW-build-middleware-seam`, with `note = ""`; the file was
+  created by `REVIEW-build-mesh-host-decouple` (`sovereign-contracts/src/env.rs`
+  doc comment, line 13).
+- `git log -L '540,543:quality/DOMAINS.toml'` → `cafc95dd7
+  REVIEW-audit-daemon-1` retagged the `lib.rs` row `host -> fabric` and
+  re-measured it at 105 lines.
+- `python3 scripts/domains-census.py misnamed` → exit 0;
+  `crate-lines --crate sovereign-contracts` → exit 0; `queue` → exit 0.
+- `wc -l sovereign/crates/sovereign-contracts/src/env.rs` → 25.
+
+**Falsified by.** A tree where `misnamed`/`crate-lines`/`queue` still exit 4
+(a coverage hole), or where the `lib.rs` row reads `host`, or where the
+`env.rs` row is absent — then the row's original two edits are genuinely owed.
+
+**REVIEW-AFTER:** none — the row's stated outcome holds; the note is the only
+content this unit added. `DEMO-d5-misnamed` still reads `sovereign-mesh` at
+62.4% fabric, which is the leavers' business, not this row's.
+
+**Landed in.** this commit — `quality/DOMAINS.toml` (the `env.rs` note),
+`ralph/STATE.md` (the `CORRECTED` clause on the row) and this entry.
+`git revert <sha>` reverts it alone.
 ## 2026-09-17 · dm-daemon-cli-composition · the row's six-file move set is four false premises; the composition is 17 files and two reaches must come down first
 
 **Fork.** The row says MOVE six files plus "the `run_daemon` half" of
@@ -1012,3 +1049,53 @@ left alone — consolidating them is a noun-convergence row, not this one.
 
 **Landed in.** this commit — `ralph/STATE.md` (the row `[~]`, corrected) and this
 entry. `git revert <sha>` reverts it alone.
+
+## 2026-09-17 · dm-misnamed-coverage · the merge conflict is two append-only DECISIONS entries; keep both and complete the merge
+
+**Fork.** The pool halted on `merge conflict merging ralph/dm-misnamed-coverage —
+resolve in the main tree, then resume` (`ralph/NEEDS_HUMAN.md`). The lane (based
+on `7c9f6c27a`) and the main tree (which merged `dm-daemon-cli-composition`,
+`b7b64e617`) each appended a `## 2026-09-17` entry to the end of
+`ralph/DECISIONS.md`; that file is the merge's only conflict. Options: (a) drop
+one entry to make the merge trivial; (b) keep both, in commit order, and complete
+the merge; (c) re-run the lane on the current base instead of merging.
+
+**Choice.** (b). `ralph/DECISIONS.md` is append-only (its header, line 3): both
+entries are real decisions, neither supersedes the other, and dropping one loses
+exactly the record this file exists to keep. The entries go in commit order —
+`dm-misnamed-coverage` (13:48) before `dm-daemon-cli-composition` (13:53) —
+matching the append-at-end convention. The merge is then completed by hand,
+including the pool's immediate bookkeeping (row `[x]`, lane worktree removed,
+branch deleted): leaving the row `[ ]` for the pool to re-run would resume a
+finished lane on a base (`7c9f6c27a`) that no longer matches main, which is the
+condition that produced this conflict.
+
+**Evidence** (reproduced in this session).
+- `git merge-tree --write-tree --name-only HEAD ralph/dm-misnamed-coverage` →
+  conflict in `ralph/DECISIONS.md` only; `quality/DOMAINS.toml` and
+  `ralph/STATE.md` auto-merge.
+- `git log --oneline ralph/dm-misnamed-coverage` → `0430732ae`, `8eb5d1742` on
+  base `7c9f6c27a`; main carries `b7b64e617 dm-daemon-cli-composition: merged
+  (pool)`.
+- The lane's premises re-verified on the MERGED tree, not trusted from the lane:
+  `python3 scripts/domains-census.py --self-test` exit 0 (11 axes, 11/11
+  positives caught, 11/11 negatives refused); `misnamed` exit 0 with
+  `sovereign-mesh  fabric  13100 / 20990  62.4%`; `crate-lines --crate
+  sovereign-contracts` exit 0 (env.rs 25 lines, context `kernel`); `queue` exit 0.
+- `quality/DOMAINS.toml:11555-11558` (the env.rs note) and `:539-543`
+  (`sovereign-mesh/src/lib.rs`, `fabric`, 105 lines) present after the merge.
+
+**Falsified by.** A `ralph/DECISIONS.md` conflict that is not two appends (then a
+content decision, not an ordering one); or the merged tree failing the lane's own
+checks (`misnamed`/`crate-lines`/`queue` non-zero), which would make its premises
+false on the post-merge base; or the pool re-running the lane despite the `[x]`.
+
+**REVIEW-AFTER:** none — the charter covers resolving the halt ("apply the
+smallest change that makes the campaign flow"). The one judgment call is
+completing the pool's bookkeeping by hand instead of leaving the lane to be
+re-run; recorded here so the morning sees it.
+
+**Landed in.** this commit — `ralph/DECISIONS.md` (both entries, ordered),
+`quality/DOMAINS.toml`, `ralph/STATE.md` (the row `[x]`),
+`ralph/lanes/dm-misnamed-coverage.done`, and `ralph/NEEDS_HUMAN.md` removed.
+`git revert -m 1 <sha>` reverts the merge.

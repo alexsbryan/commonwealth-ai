@@ -1,0 +1,18 @@
+unit: dm-misnamed-coverage
+commits: 8eb5d1742 (the env.rs note + the row's premise correction)
+what: the row's two premises were already satisfied on the tree as found, so
+  this unit's delta is the one thing it still owed — the
+  sovereign/crates/sovereign-contracts/src/env.rs [[module]] note naming
+  REVIEW-build-mesh-host-decouple (the unit that created the file; its doc
+  comment at env.rs:13 says so). The row itself already exists with the right
+  path/lines=25/context="kernel", added by 7ea3d6aae REVIEW-build-middleware-seam
+  to close the coverage hole; sovereign-mesh/src/lib.rs is already `fabric`,
+  retagged host -> fabric by cafc95dd7 REVIEW-audit-daemon-1 (105 lines).
+  Recorded as a CORRECTED clause on the row (ralph/STATE.md) and a
+  ralph/DECISIONS.md entry. No cargo work — python/TOML only.
+checks: TOML exit=0; CENSUS --self-test exit=0 (11 axes, 11/11 positives
+  caught, 11/11 negatives refused); misnamed exit=0; crate-lines exit=0;
+  queue exit=0.
+misnamed: sovereign-mesh  fabric  13100 / 20990  62.4%   (no MISNAMED flag;
+  the remaining non-fabric lines are the leavers' business, not this row's —
+  DEMO-d5-misnamed owns 100%).
