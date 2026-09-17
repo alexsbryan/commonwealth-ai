@@ -470,3 +470,52 @@ crate contract (serving-policy's "ZERO in-repo deps" → "names only
 `oicp-types`, the family-neutral floor"). If the operator reads that contract
 as absolute, take option 3 (seam + `dm-decision-extractor-move` to
 `sovereign-core`) instead.
+
+## 2026-09-16 · REVIEW-build-next-edit-crate · the tree-sitter registry is package-illegal; the stub lands and the move row resolves it
+
+**Fork.** The row creates `code-next-edit` in the code-intel package and lists
+`corpus-engine` among its deps (`next_edit_symbols.rs:197,:237`;
+`next_edit_syntax.rs:111` — `corpus_engine::extractors::code::language_for_extension`).
+But the row's own DT pointer says the package may name only its own crates plus
+`oicp-types` / `sovereign-contracts` / `oicp-client`, and the campaign forbids a
+new `[[exception]]`. Declare `corpus-engine` and boundary-gate goes red; carve
+the tree-sitter registry into a leaf now and the CREATE row grows a design; or
+land the stub with no deps and hand the resolution to `dm-next-edit-move`.
+
+**Choice.** The stub. `code-next-edit` is created at the repo root beside
+`corpus-engine-notes` with an empty `[dependencies]` (as `sovereign-daemon` and
+`sovereign-scheduler` were), added to the root workspace members, the code-intel
+`[[package]]` and the `knowledge` layer, and one `SYSTEM_OVERVIEW.md` line. Its
+`src/lib.rs` records the placement decision — the five pure modules in
+(`next_edit`, `next_edit_model`, `next_edit_symbols`, `next_edit_syntax`,
+`next_edit_journal`); `routes_edit_predictions.rs` to `sovereign-daemon` per
+DC §4.1's placement test — and the one reach the move must resolve before
+`next_edit_symbols.rs` / `next_edit_syntax.rs` land: the tree-sitter registry is
+`corpus-engine`'s, and `corpus-engine` is not a package crate.
+
+A second, smaller wrinkle is recorded for the same row: `next_edit_journal.rs`
+carries one route shell (`OutcomeWire` + `edit_prediction_outcome`, registered
+at `server.rs:175`), which DC §4.1's placement test would send to the daemon;
+the move either splits it or takes an `axum` dependency.
+
+**Evidence.** Reproduced red AND green with a one-line manifest experiment.
+Adding `corpus-engine = { workspace = true }` to `code-next-edit/Cargo.toml`
+printed `✗ [code-intel] code-next-edit → corpus-engine: a normal dependency
+leaves the package closure` and `boundary-gate FAILED (1 violation(s))` (exit 1);
+removing it printed `✓ every declared package reaches only itself + the shared
+leaves` (exit 0). The rule is `quality/arch-layers/src/packages.rs:188`
+(`evaluate_packages`); `corpus-engine` is neither a code-intel crate nor a
+`[[package_leaf]]` (ARCH_LAYERS.toml:938-963, the leaf list). The row's DT
+pointer is `quality/DOMAINS.toml`'s workbench cluster note. Green after the
+revert: LINT exit=0, LAYER exit=0, BOUNDARY exit=0, DOCS exit=0, TOML exit=0.
+
+**Falsified by.** An operator approval of an `[[exception]]` carrying
+`package = "code-intel"` for `code-next-edit → corpus-engine` (then the crate may
+name it and the stub may declare it); or a showing that the tree-sitter registry
+is already reachable from a package crate (`corpus-engine-scip` does not export
+`language_for_extension` / `LanguageConfig` today).
+
+**Landed in.** this commit — `code-next-edit/` (the stub), the root
+`Cargo.toml` member, `quality/ARCH_LAYERS.toml` (package + layer),
+`sovereign/SYSTEM_OVERVIEW.md` (the §1 crate line) and `Cargo.lock`. The worker
+implements `dm-next-edit-move` against the corrected dep constraint next.
