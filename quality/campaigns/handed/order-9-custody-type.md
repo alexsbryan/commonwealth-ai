@@ -50,13 +50,31 @@ recorded in campaign.md.
     `fn default_mesh_sharing() -> bool { true }` at :49-51, which a
     `git grep default_true` cannot see.
 
+## Cap basis (re-priced at round 3; cap 5 in STATE.md, was 3)
+
+Measured 2026-09-17. The E0063 subject is small — `CorpusMeta` struct literals are
+**5 sites / 3 files** (`git grep -nE 'CorpusMeta \{'`). The cost is the field going
+private: `.mesh_sharing` is read at **29 sites / 15 files / 6 crates** (16 sites / 8
+files inside corpus-engine/src, 13 / 7 outside), and the `IndexMeta` share of those
+is OUT of scope — an installed index keeps its stamp (`[[ability]] custody`
+`not_covered`), so resolve each access by receiver before repointing it.
+
+1 row for the type, 2 for the accessor and the ~15 files of readers at ~10 a row, 1
+for the 5 literals plus the decision on the two second readers above, 1 for the
+plant — **4-5 rows**. Past 5, PROMPT §4 applies: write `ralph/NEEDS_HUMAN.md` with
+the measured count and stop. Do not count the 156 repo-wide `mesh_sharing` mentions
+as the subject; most are `IndexMeta`, fixtures and serde attributes.
+
 ## Steps
 
 1. Mint the policy type in corpus-engine beside `CorpusMeta`: no `Default`, no
    `Deserialize` shortcut that invents a value.
 2. Make the field private with one accessor that resolves absence to private and
    warns once per corpus, naming the recipe.
-3. Repoint the in-repo constructors; each must state a policy.
+3. Repoint the in-repo constructors (each must state a policy) AND every READER the private
+   field breaks: `.mesh_sharing` is read at 29 sites / 15 files / 6 crates, 13 of those sites
+   out of crate. Resolve each by receiver first — an `IndexMeta` read is out of scope (an
+   installed index keeps its stamp) and must not be repointed.
 4. PLANT: construct a corpus meta literal without the policy; LINT reports E0063.
    Revert, LINT green.
 5. Append every row you mint to the `depends` of `REVIEW-DEMO-hd-7-bench` and of

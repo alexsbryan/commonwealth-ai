@@ -8,7 +8,7 @@ serves: handed
 campaign: handed
 lane: structural — the gate's one funnel stamps its judgement, serve.rs projects it, and `TurnFrame::Complete` cannot be built without one (E0063)
 engine: ralph pool; REVIEW-build rows the stronger model
-budget: 3 rows (4 at round 1; `hd-1-surfaces-print` cut at round 2); TEST on all three; covered by REVIEW-audit-hd-1
+budget: 2 rows (4 at round 1; `hd-1-surfaces-print` cut at round 2, `hd-1-refined` at round 3); TEST on both; covered by REVIEW-audit-hd-1
 ---
 
 # Order: handed-1-render — every turn's terminal value carries a verdict
@@ -23,8 +23,7 @@ only as `metadata: Option<TurnMetadata>` whose `grounding_gate` is an untyped `V
 stamps `episode_id` into the outcome meta, which the daemon persists with the message row; this order adds
 `judgement` beside it, makes the post-gate stages that REPLACE gated text overwrite it, and makes
 `Complete.judgement` a required field that `serve.rs` builds from one projection — the stamped judgement,
-or `never_ran` naming the routed intent. A third row carries the same verdict on `MessageRefined`, which
-swaps the answer's text after `Complete`.
+or `never_ran` naming the routed intent.
 
 Cut at round 1 (2026-09-17): the `template:<id>` `Attribution` substitution (a new kernel semantics for 14
 exits), the `Response` and `StreamHandle` carriers and the two ~1,000-line spawn rows (a second carrier of
@@ -38,6 +37,26 @@ surface renders the turn verdict after this rung.** `svrn chat ask --format json
 ask.rs:393-412) and the desktop `message-complete` payload (`MessageCompletePayload` chat.rs:29-35, emitted
 from the `Complete` arm at :777) both still drop it. That is recorded in
 `quality/campaigns/handed.toml` `[[ability]] render` `not_covered` as a fact, not an exception.
+
+Cut at round 3 (2026-09-17): step 3, `REVIEW-build-hd-1-refined` — the `MessageRefinedPayload` row. Two
+reasons. (a) `ApprovalChannel::emit_message_refined` has a no-op default body
+(sovereign-contracts/src/traits.rs:2008) and only `SocketApprovalChannel` overrides it
+(sovereign-core/src/turn_approval.rs:298); of the three production impls — `AutoApprovalChannel`
+(sovereign-core/src/executor.rs:235), `SocketApprovalChannel` (turn_approval.rs:221) and
+`ServerApprovalChannel` (sovereign-server/src/approval.rs:103); every other `impl ApprovalChannel for` in
+the tree is `#[cfg(test)]` — two take the default, so the field would reach ONE socket channel and be
+rendered by nothing. That is the same argument that cut `hd-1-surfaces-print` at round 2. (b) The operator
+chose at round 3 to give released-turn verdicts their OWN type with a private constructor (rung hd-10), so a
+`judgement: Judgement` field added here would be re-typed by hd-10 — double work on the one file in the
+package with zero line headroom (`collaboration.rs` is 885 lines against arch-gate's no-slack 800-1200
+approach band; `wc -l`).
+The work moved whole to rung hd-10, `quality/campaigns/handed/order-10-verified.md` (its premises carry both
+holes at :75-80, step 6 at :121-122 closes them). What stays unfixed in the meantime: `MessageRefined`
+carries no verdict at all, and the PERSISTED refined row keeps the pre-refinement gate meta
+(collaboration.rs:693 writes `metadata: original_metadata`), so history, a desktop reload and a json replay
+show refined text under the previous turn's verdict. Both are `quality/campaigns/handed.toml`
+`[[ability]] render` `not_covered` clauses — that record's "hd-1-refined fixes the live notice only"
+sentence is now stale and is handed.toml's own row to correct.
 
 ## Premises (verified 2026-09-17, file:line)
 
@@ -88,7 +107,9 @@ from the `Complete` arm at :777) both still drop it. That is recorded in
   `send_message` builds a `TurnOutcome` from `MessageResponseWire` (:722-738; the wire struct :3707-3720).
 - `MessageResponse`: sovereign-daemon/src/turn_http.rs:326 (filled at :597-602 from a `CollectedTurn`),
   sovereign-server/src/routes.rs:55 (filled at :320-325 from a `CollectedTurn`).
-- **`MessageRefined`.** `MessageRefinedPayload { conversation_id, message_id, new_content }` —
+- **`MessageRefined`** — step 3's subject, cut at round 3; kept here as the evidence rung hd-10 inherits, and
+  as the anchor for the two `not_covered` clauses under Seams.
+  `MessageRefinedPayload { conversation_id, message_id, new_content }` —
   sovereign-contracts/src/types/mod.rs:450-457; `TurnNotice::MessageRefined(MessageRefinedPayload)`
   types/turn.rs:377. **Three** production emit sites, all in
   sovereign-core/src/runtime/collaboration.rs — :679 (re-gate rejected the refinement, the original text is
@@ -113,8 +134,10 @@ from the `Complete` arm at :777) both still drop it. That is recorded in
   approach band is a COUNTER ratchet with **no slack** (corpus-engine/xtask/src/arch_gate.rs:14, :34, :38,
   :291-313); baseline `quality/baselines/approach_band.txt` = 207 files / 202,703 lines. `arch-gate` is
   `enforcement = "hard"`, `runs_in = ["prepush", …]` (quality/instruments.toml:200-211) and the `prepush`
-  trigger is `on_fail = "block"` (:2473). Of every file these rows touch, **exactly one is inside the band**:
-  `collaboration.rs` at 885. The rest are either under 800 (gate.rs 688, serve.rs 645, types/turn.rs 610,
+  trigger is `on_fail = "block"` (:2473). With step 3 cut, **no file the two surviving rows touch is inside
+  the band** — `collaboration.rs` at 885 was the only one, and it is now hd-10's
+  (`wc -l sovereign/crates/sovereign-core/src/runtime/collaboration.rs` = 885, re-checked 2026-09-17).
+  The rest are either under 800 (gate.rs 688, serve.rs 645, types/turn.rs 610,
   routes.rs 673, ask.rs 512, simple.rs 380, turn_approval.rs 747, turn_wire_form.rs 696, mobile
   stream.rs 458 / turn_wire.rs 598) or already oversized with slack — streaming.rs 4,673 vs baseline 4,689;
   knowledge_query.rs 2,131 vs 2,127; grounding/tests.rs 2,944 vs 2,944; types/mod.rs 1,796 vs 1,796;
@@ -177,30 +200,14 @@ from the `Complete` arm at :777) both still drop it. That is recorded in
    - Extend sovereign-mesh/tests/main/turn_surface.rs:104 to assert the frame's judgement, and add one turn
      over `install_corpus` (:176-190) asserting a retrieving turn's verdict is NOT `never-ran`.
    - One sentence on the `sovereign-turn-client` line of sovereign/SYSTEM_OVERVIEW.md (:251).
-3. **`MessageRefined` carries it** (`REVIEW-build-hd-1-refined`).
-   `MessageRefinedPayload` gains `judgement: Judgement` (required). Without it, refined text is shown under
-   a verdict describing text the reader no longer sees. At the three production sites:
-   - :679 and :729 re-send the ORIGINAL content, so the honest verdict is the one that content already
-     carried: `project_judgement(&original_metadata)` (step 2's projector — one decider), falling back to
-     `never_ran("answer", Reason::literal("the original answer was released without a gate on this turn"))`.
-   - :705 is the refined text. Bind `let mut refined_judgement: Option<Judgement> = None;` before the
-     `if let Some(guard) = grounding_guard` at :594 and set it from `outcome.answer.judgement().clone()`
-     right where `action` is read (:665) — the re-gate outcome that is dropped today. When no guard was
-     carried the re-gate did not run: `never_ran("answer", Reason::literal("post-stream refinement re-synthesised the answer with no re-gate on this path"))`.
-   **Line budget: `collaboration.rs` ends at ≤ 885 lines.** It is the ONE file these three rows touch that
-   sits inside arch-gate's 800-1200 approach band, and that band has no slack. The way to pay it is the
-   mechanism itself: one local closure or a `MessageRefinedPayload::new(conversation_id, message_id,
-   content, judgement)` constructor in types/mod.rs (50 lines of slack there) collapses the three 5-line
-   struct literals. If it cannot be met without deleting code this row does not own, that is §6 — the
-   answer is an accepted raise ledgered in SYSTEM_OVERVIEW §10 with an `origin/main` re-pin, which is the
-   operator's call, not a worker's `--update-baseline`.
 
 ## Seams
 
 - Does NOT touch: `TurnMetadata` / the `grounding_gate` block's existing keys, `GateOutcome`, the four gate
   door bodies (`release_as` / `release_held` / `release_flawed` / `abstain`), `Judgement::roll_up`,
   `kernel_types::Answer`, the epistemic ledger, or any rendering. No new door, no new type, no census change.
-- **Verdict holes named here, closed by no row in this order.** Each was verified at round 2, and each is a
+- **Verdict holes named here, closed by no row in this order.** Each was verified at round 2 and re-checked
+  at round 3 (the `impl ApprovalChannel for` sweep and collaboration.rs:693), and each is a
   clause in `quality/campaigns/handed.toml` `[[ability]] render` `not_covered` — without them `render`'s
   promise overclaims.
   - A THIRD `MessageResponse`, the desktop's own:
@@ -212,15 +219,17 @@ from the `Complete` arm at :777) both still drop it. That is recorded in
     sovereign-contracts/src/traits.rs:2008 (the trait is at :1983). Only `SocketApprovalChannel` overrides
     it (sovereign-core/src/turn_approval.rs:298); `AutoApprovalChannel`
     (sovereign-core/src/executor.rs:235) and `ServerApprovalChannel`
-    (sovereign-server/src/approval.rs:103) take the default, so on those two surfaces step 3's refined
-    notice — judgement and all — is discarded. Deleting that default is a rung of its own: it is the same
+    (sovereign-server/src/approval.rs:103) take the default, so on those two surfaces the refined notice is
+    discarded whole. That is reason (a) for cutting step 3 at round 3: a verdict on that payload reaches one
+    socket channel and is rendered by nothing. Deleting the default is a rung of its own — it is the same
     defect hd-4 deletes 200 lines up the same file.
-  - **The PERSISTED refined row keeps the PRE-refinement verdict, and step 3 does NOT fix it.**
-    sovereign-core/src/runtime/collaboration.rs:693 writes the rewritten `Message` with
-    `metadata: original_metadata` — the gate meta from before the refinement — so every later read
-    (history, a desktop reload, a json replay) shows refined text under the previous turn's verdict. Step 3
-    fixes the LIVE notice only. Its line budget is 885/885, inside arch-gate's 800-1200 approach band which
-    has no slack, so there is no headroom here for the store-side fix; O10's premises carry it.
+  - **The LIVE refined notice carries no verdict and the PERSISTED refined row keeps the PRE-refinement
+    one.** `MessageRefinedPayload` (sovereign-contracts/src/types/mod.rs:450-457) has no judgement field
+    after the round-3 cut, and sovereign-core/src/runtime/collaboration.rs:693 writes the rewritten
+    `Message` with `metadata: original_metadata` — the gate meta from before the refinement — so every later
+    read (history, a desktop reload, a json replay) shows refined text under the previous turn's verdict.
+    `collaboration.rs` is 885/885, inside arch-gate's 800-1200 approach band which has no slack, so neither
+    half is affordable here. Rung hd-10 owns both (order-10-verified.md premises :75-80, step 6 :121-122).
   - `TurnFrame::StreamError` (sovereign-contracts/src/types/turn.rs:147-153) is a fourth terminal with no
     judgement slot, and no row in this campaign touches it. `TurnSettled`'s doc (:350-351) says `Complete`
     and `StreamError` both settle.
@@ -246,7 +255,7 @@ from the `Complete` arm at :777) both still drop it. That is recorded in
   first, step 2's edit there is a field on the same struct, no conflict);
   `sovereign-mesh/tests/main/turn_surface.rs:181` passes `mesh_sharing` to `CorpusIndex::create`, whose
   signature hd-5 does not change (hd-5 changes a serde default, not the constructor).
-- Peer state: with step 3 cut, the only file these rows share with a peer is `sovereign/SYSTEM_OVERVIEW.md`
+- Peer state: with both cut rows gone, the only file these rows share with a peer is `sovereign/SYSTEM_OVERVIEW.md`
   (step 2's one sentence) — no surviving row touches
   `sovereign/crates/sovereign-desktop/src-tauri/src/commands/chat.rs`. Both were dirty when this order was
   drafted and both are clean as of 2026-09-17. `git merge` refuses to overwrite a locally modified file and
@@ -262,8 +271,7 @@ from the `Complete` arm at :777) both still drop it. That is recorded in
   step 1 — delete the `m.insert("judgement", …)` line → `TEST(sovereign-core)` red on
   `the_gate_funnel_stamps_the_judgement_it_released`;
   step 2 — (a) write `judgement: hint.clone()` in serve.rs's graceful-guard `Complete` → LINT red **E0308**,
-  (b) delete `judgement` from `drive_stream_handle`'s `Complete` → LINT red **E0063**;
-  step 3 — delete `judgement` from the `MessageRefinedPayload` at collaboration.rs:705 → LINT red **E0063**.
+  (b) delete `judgement` from `drive_stream_handle`'s `Complete` → LINT red **E0063**.
 - `./scripts/sovereign-lint.sh --human --full` and `./scripts/sovereign-test.sh --human` exit 0.
 - The ambient path is gone — each returns NOTHING:
   - `rg -U --type rust 'TurnFrame::Complete \{[^}]*\}' sovereign/crates/sovereign-core/src/runtime/serve.rs | rg -v judgement`
@@ -272,7 +280,10 @@ from the `Complete` arm at :777) both still drop it. That is recorded in
 - These FIND their subject (a required field is proven by its presence, not its absence):
   `git grep -n 'judgement: Judgement' -- sovereign/crates/sovereign-contracts/src/types/turn.rs sovereign/crates/sovereign-contracts/src/types/mod.rs`
   and `git grep -n '"judgement"' -- sovereign/crates/sovereign-core/src/runtime/grounding/gate.rs`.
-- `cd corpus-engine && cargo xtask arch-gate` exits 0 (the `collaboration.rs` budget in step 3).
+- `cd corpus-engine && cargo xtask arch-gate` exits 0. With step 3 cut, no surviving row touches
+  `collaboration.rs` and no file these rows touch is inside the no-slack 800-1200 band (Premises, Size);
+  what this gate still judges is the growth of the already-oversized files against
+  `quality/baselines/oversized.txt`.
 
 ## Kill
 
@@ -281,6 +292,4 @@ from the `Complete` arm at :777) both still drop it. That is recorded in
   `hd-structural`'s kill in spirit and the only judgment step 1 carries.
 - The stamped judgement cannot be read back at `serve.rs` for a turn the gate DID run — i.e. a handler
   persists `grounding_gate` without the funnel's meta: the funnel is not the funnel. Stop and name the site.
-- `collaboration.rs` cannot carry the verdict within its line budget without deleting code this order does
-  not own: stop, and hand the operator the accepted-raise decision (§Steps 3).
 - More than 3 turn exits need a verdict `kernel_types::Verdict` lacks (HT bar `hd-structural` kill).

@@ -32,8 +32,26 @@ and the orders that served them close, so the boot block and
   `quality/campaigns/closed/` would be a citation edit with no bearing on the
   objective.
 - `scripts/co-lineage.py` accepts `active | staged | closed` (03155d6c6).
-- 48 orders under `.sovereign/features/` read `status: open|approved`
-  (gitignored, per-host); `scripts/co-order.sh close <id> abandoned` closes one. These files are gitignored, so this step is only correct in the MAIN workdir — a pool lane's worktree has no `.sovereign/`.
+- **The open-order census, measured 2026-09-17.** 55 orders under `.sovereign/features/`
+  read `status: open|approved` — 52 `open` plus 3 `approved` (`nc-2c-backflow-tail`,
+  `nc-6-atom`, `nc-7-note`); `list` filters on `status = "open"` exactly
+  (co-order.sh:193), so it prints those 52 (plus two mesh shadows, next premise).
+  Resolving every one's `serves:`/`campaign:` frontmatter, **49 of the 52 are in step 2's
+  verb**: 13 serve one of the thirteen (refactor-factory 3, ring-apps 3, warrant 3,
+  conformance 2, domains 1, financial-corpora 1) · 16 serve `cw-lift` (already closed —
+  `quality/campaigns/closed/cw-lift.toml`) · 3 serve `noun-convergence`
+  (`status = "closed"`) · 1 serves `recursion-as-workflow` (`rec-1-explicit-stack`; its
+  `campaign: recursion` has no campaign file) · 10 are unattributed (`serves:` absent or
+  `(unattributed…)`, 6 of them under a `campaign: quality-surface` that has no file
+  either) · 6 are the stale `handed-*` dirs. The **other 3** name a campaign this order
+  does not adopt and are not unattributed, so no verb here reaches them:
+  `rel-1-release-path` (`campaign: release-hygiene`), `tn-1-terminal-honesty` and
+  `tn-2-one-decider-per-turn` (`campaign: (none)`, prose `serves:`).
+- `scripts/co-order.sh close <id> abandoned` closes one and needs a LOCAL file
+  (`[ -e "$F" ] || … exit 2`, co-order.sh:407). Two rows `list` prints have none and so
+  cannot be closed by this step: `--help` (a mesh note shadow stamped to this machine)
+  and `ring-doc-week1` (peer RuggedFox). The order files are gitignored, so this step is
+  only correct in the MAIN workdir — a pool lane's worktree has no `.sovereign/`.
 
 ## Steps
 
@@ -68,9 +86,32 @@ because nothing else measures the campaign. Must not touch any OTHER line of
 
 ## Done when
 
-`python3 scripts/co-lineage.py list` prints `handed` as the only non-closed
-campaign, `handed` reads `status = "active"`, and `scripts/co-order.sh list`
-prints nothing.
+`python3 scripts/co-lineage.py list` prints `handed` as the only non-closed campaign and
+`handed` reads `status = "active"`.
+
+`bash scripts/co-order.sh list` is then EMPTY OF STEP 2's SCOPE — no printed row whose
+`serves:`/`campaign:` names one of the thirteen, `handed`, `cw-lift`, `noun-convergence`
+or `recursion`/`recursion-as-workflow`, and none whose `serves:` is absent or begins
+`(unattributed`. `list` prints only id + title (co-order.sh:195), so the predicate is
+checked against the frontmatter, not the output — one loop, and it must print nothing:
+
+```sh
+bash scripts/co-order.sh list | awk '{print $1}' | while read -r id; do
+  f=".sovereign/features/$id/order.md"; [ -e "$f" ] || continue
+  v="$(sed -n 's/^serves: *//p;s/^campaign: *//p' "$f")"
+  case "$v" in ""|"(unattributed"*|*handed*|*cw-lift*|*noun-convergence*|*recursion*|\
+*conformance*|*deletion*|*domains*|*drb1-race*|*epistemic-index*|*financial-corpora*|\
+*hot-path-reuse*|*house-mesh*|*refactor-factory*|*ring-apps*|*sv-surface*|*verifier-loop*|\
+*warrant*) echo "STILL IN SCOPE: $id" ;; esac
+done
+```
+
+**49 of today's 52 close** (`co-order.sh close … abandoned`, `handed-*` included), and the
+6 `handed-*` directories go after that. A residual row is NOT a failure; today there are
+five, and they are the predicate's complement: `rel-1-release-path`,
+`tn-1-terminal-honesty` and `tn-2-one-decider-per-turn` serve a campaign this order does
+not adopt, and `--help` and `ring-doc-week1` are mesh shadows with no local file, which
+`close` refuses by construction (co-order.sh:407).
 
 ## Kill
 

@@ -78,9 +78,17 @@ this rung's); both HUMAN rows (both are approval-time decisions with `depends []
   with a TODO — they write nothing.
 - **The raw handle.** `pub fn connection(&self) -> &lancedb::Connection` index/mod.rs:975 and
   `pub fn table(&self) -> &lancedb::Table` :980, under the comment "Access for sharding module".
-  Every caller outside `corpus-engine/src/index/` (`git grep -n '\.table()\|\.connection()' -- '*.rs'`,
-  minus `StateStore::connection()` in sovereign-store/-cli-daemon/-mesh tests and
-  `job_registry::table()` in sovereign-daemon, which are different types):
+  Every caller outside `corpus-engine/src/index/` — 38 hits from
+  `git grep -n '\.table()\|\.connection()' -- '*.rs'` (re-run 2026-09-17), minus two DIFFERENT types with
+  different return values, enumerated by file because neither is crate-shaped:
+  `SqliteStateStore::connection() -> Arc<Mutex<rusqlite::Connection>>` (sovereign-store/src/sqlite.rs:130),
+  called at sovereign-store/src/insight_store.rs:337,:355,:369,:382,:398,
+  sovereign-cli-daemon/src/daemon_cmd/mod.rs:1143, sovereign-mesh/tests/main/loopback_parity.rs:1591,:1679
+  and **sovereign-tools/tests/main/knowledge_view_e2e.rs:384,:413** — the last two are in a crate this rung
+  DOES change, which is why the exclusion below names files, not crates; and
+  `job_registry::table() -> &Mutex<HashMap<String, Arc<J>>>` (sovereign-daemon/src/job_registry.rs:73),
+  called only inside its own file at :83,:98,:128,:151,:164,:200. 38 − 3 inside `index/` − 16 of the other two
+  types leaves the 19 below:
   - corpus-engine/src/sharding.rs — READS :483, :552, :805, :1002, :1604; WRITES `.table().add(..)`
     at :564, :938, :1179, :1722 (four, not one).
   - corpus-engine/src/alignment_projector.rs:104 — read, inside the crate, unaffected by `pub(crate)`.
@@ -194,7 +202,15 @@ this rung's); both HUMAN rows (both are approval-time decisions with `depends []
   (`[[:space:]]`, not `\s`: under POSIX ERE the `\s` form matched nothing on the tree
   BEFORE the work, so that Done-when bullet was satisfied by a broken pattern rather
   than by a closed handle. With the class it finds index/mod.rs:975 and :980 today.)
-  `git grep -n '\.table()\|\.connection()' -- '*.rs' | grep -vE '^corpus-engine/src/(index/|sharding|alignment_projector)|sovereign-(store|daemon|cli-daemon|mesh)/'`
+  `git grep -n '\.table()\|\.connection()' -- '*.rs' | grep -vE '^corpus-engine/src/(index/|sharding|alignment_projector)|/(sovereign-store/src/insight_store|sovereign-daemon/src/job_registry|sovereign-cli-daemon/src/daemon_cmd/mod|sovereign-mesh/tests/main/loopback_parity|sovereign-tools/tests/main/knowledge_view_e2e)\.rs:'`
+  (the second alternative names FILES, not crates. The round-2 form excluded
+  `sovereign-(store|daemon|cli-daemon|mesh)/` crate-wide and omitted sovereign-tools, so
+  `StateStore::connection()` at sovereign-tools/tests/main/knowledge_view_e2e.rs:384,:413 survived every
+  run — a different type, not this rung's subject — and the bullet could never reach empty. Excluding
+  sovereign-tools crate-wide would have hidden the rung's own work instead, since code_search.rs:173 and
+  code/mod.rs:383 are two of the readers step 3 moves.) Run today it prints **9** lines and each is step 3's:
+  examples/dump_code_index.rs:34,:45,:97,:133 (deleted), tests/main/watcher_e2e.rs:190,:316,:443 and
+  sovereign-tools code_search.rs:173 / code/mod.rs:383 (moved to the `query()` accessor). Empty is reachable.
 - LINT, TEST(corpus-engine), TEST(sovereign-contracts), TEST(sovereign-tools), TOML exit 0 at the
   last row; the audit re-runs the four PLANTs.
 

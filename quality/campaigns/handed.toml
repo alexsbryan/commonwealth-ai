@@ -37,14 +37,15 @@ not_covered = "sovereign-server is converted in place; whether it should exist a
 id          = "render"
 rungs       = ["hd-1", "hd-10"]
 promise     = "every released text carries a verdict from a verifier that ran on it"
-enforced_by = "Complete.judgement is required and serve.rs is its only builder (E0063); every exit names a GateSurface and every surface has a verifier; Judgement's constructors are private behind a receipt only a verifier mints, so an exit cannot hand-roll a verdict (rung hd-10)"
+enforced_by = "Complete.judgement is required and serve.rs is its only builder (E0063); a released-turn verdict is then its OWN type whose constructor is private behind a receipt only a verifier can mint, and one exhaustive Intent mapping (13 arms, no `_`) makes an exit with no named verifier E0004 (rung hd-10). `Judgement` itself is untouched: of its 159 construction sites (30 files, 9 crates) only 2 are in sovereign-core, so 157 judge subsystems rather than released text and closing ONE constructor for both populations would have forced a cheap escape hatch every reporting caller could reach — the operator split the type at round 3 instead"
 today       = "the gate outcome rides `metadata: Option<TurnMetadata>`; MessageRefined swaps the answer text after Complete at three production sites (collaboration.rs:679,:705,:729) plus three test constructions"
 not_covered = """
 no user-facing surface renders the verdict: `hd-1-surfaces-print` was cut at round 2 (no plant, no test, nothing read either field), so `--format json` and the desktop `message-complete` payload still drop it, EpistemicFooter.svelte:10-21 reads the epistemic ledger instead, render.rs:281 renders provenance, and mobile renders nothing. A candidate rung, not funded here.
 `could_not_judge` still ships text: a verifier that RAN and abstained is not one that never ran, and which verdicts force a rewrite is turn policy, enforced at runtime.
 A THIRD MessageResponse — the desktop's own, sovereign-desktop/src-tauri/src/commands/mod.rs:13 — carries `metadata: Option<Value>` (:19), an untyped blob the compiler will NOT name when the daemon's and the server's are converted, so it ships with no verdict.
+`MessageRefined` carries no verdict at all until hd-10: the row that would have added one (`REVIEW-build-hd-1-refined`) was cut at round 3, because the field would have reached one socket channel rendered by nothing and would then have been RE-typed by hd-10's split — double work on the package's only zero-headroom file. hd-10 step 6 owns it, together with the persisted-meta hole below.
 `ApprovalChannel::emit_message_refined` has a no-op default body (sovereign-contracts/src/traits.rs:2008) and only SocketApprovalChannel overrides it (turn_approval.rs:298); AutoApprovalChannel (executor.rs:235) and ServerApprovalChannel (sovereign-server/src/approval.rs:103) discard the notice, judgement and all. Deleting that default is a rung of its own — it is hd-4's defect 200 lines up the same file.
-The PERSISTED refined row keeps the pre-refinement verdict: collaboration.rs:693 writes `metadata: original_metadata`, so history, a desktop reload and a json replay all show refined text under the previous turn's verdict. hd-1-refined fixes the live notice only (885/885 lines, arch-gate's no-slack band); hd-10 owns the fix.
+The PERSISTED refined row keeps the pre-refinement verdict: collaboration.rs:693 writes `metadata: original_metadata`, so history, a desktop reload and a json replay all show refined text under the previous turn's verdict. no row fixes it before hd-10 (collaboration.rs is 885/885, inside arch-gate's no-slack band, so the row that touches it pays for its lines or stops); hd-10 step 6 owns it.
 `TurnFrame::StreamError` (sovereign-contracts/src/types/turn.rs:147-153) is a fourth terminal — the contract at :350-351 says Complete and StreamError both settle — with no judgement slot and no row touching it.
 """
 
@@ -52,7 +53,7 @@ The PERSISTED refined row keeps the pre-refinement verdict: collaboration.rs:693
 id          = "writers"
 rungs       = ["hd-3", "hd-8"]
 promise     = "a second PROCESS writing one index, atlas or config is refused by name"
-enforced_by = "`table()`/`connection()` pub(crate) so an out-of-crate write is E0624; the mutating methods move behind a CorpusWriter facade that acquires the flock, so an in-crate write without it is E0599 (rung hd-8); a per-corpus flock (the `.rebuild.lock` precedent, corpus-engine-scip/src/scip_graph.rs:483-500) and a flock inside SetupConfig::save_to"
+enforced_by = "`table()`/`connection()` pub(crate) so an out-of-crate write is E0624; the mutating methods move ONTO a CorpusWriter facade that acquires the flock — moved, leaving no method of that name on the index, which is what makes an in-crate write without it E0599 rather than a still-legal pub(crate) call (rung hd-8); a per-corpus flock (the `.rebuild.lock` precedent, corpus-engine-scip/src/scip_graph.rs:483-500) and a flock inside SetupConfig::save_to"
 today       = "no lock on the corpus index; TOPOLOGY.toml has 4 of 7 invariants false; SetupConfig::save_to is a plain fs::write"
 not_covered = """
 two write paths inside ONE process share the claim by design: the `Weak` map is what lets eleven nested writes (maintain.rs:374, create.rs:854/:917, write.rs:75, mod.rs:806-807 and seven `mark_*` helpers) run at all, since RunLock refuses a second same-process acquire on one path (run_lock.rs:210-222). `two_handles_in_one_process_both_write` pins the sharing. In-process exclusion would need an owned Mutex, not a shared Weak — hd-8 makes the door compile-enforced, not exclusive.
@@ -139,7 +140,7 @@ floor_basis  = "2026-09-17: six ability rows, none with a watched plant"
 target       = 0.0
 direction    = "lower_is_better"
 instrument   = '''python3 -c "import tomllib;d=tomllib.load(open('quality/campaigns/handed.toml','rb'));s={r['id']:r['status'] for r in d['rung']};print(sum(1 for a in d['ability'] if any(s.get(x)!='done' for x in a['rungs'])))"'''
-goodhart     = "a PLANT can go red for the wrong reason — a typo, an unrelated error. The audit re-runs each PLANT and checks the error code the row names: E0063, E0624, E0433, E0046, E0004, E0308, E0603/E0425, and hd-8's E0599. Five of the plants assert in a TEST rather than in rustc — for those the audit checks the failing assertion is the named test's, not an unrelated one. A rung whose status is flipped without that re-run makes this bar read lower than the truth, which is the one way to cheat it"
+goodhart     = "a PLANT can go red for the wrong reason — a typo, an unrelated error. The audit re-runs each PLANT and checks the error code the row names: E0063 (a required field deleted), E0624 (a private method reached from outside), E0433 (an unreachable crate), E0046 (a trait impl missing methods), E0004 (a non-exhaustive match), E0599 (hd-8: a method MOVED off the index — E0624 there means it was only made private, the wrong mechanism), E0603 (hd-10: a closed constructor). Two plants were cut at round 3 for failing this clause rather than passing it: an E0308 that watched the type system on a field its own row declares, and one whose expected code was written \"E0603 or E0425\" — a plant naming two codes cannot be checked against the code it names. Five of the plants assert in a TEST rather than in rustc — for those the audit checks the failing assertion is the named test's, not an unrelated one. A rung whose status is flipped without that re-run makes this bar read lower than the truth, which is the one way to cheat it"
 kill         = "the seal cannot be minted without a new layer-gate key, or a row needs an adapter in both directions: stop and redraw"
 status       = "open"
 
@@ -238,10 +239,10 @@ note   = "closes the code half at compile time; the TOML half stays a named reso
 
 [[rung]]
 id     = "hd-10"
-title  = "render: nothing ships unverified — every exit names a surface, every surface has a verifier, Judgement is minted only by one"
+title  = "render: nothing ships unverified — a released verdict is its own type, minted only by a verifier"
 status = "open"
 demo   = "D1"
-note   = "the sentence docs/ARCHITECTURE_TOUR.md:61 already claims; TARGET_ARCHITECTURE.md §2 specified the receipt and it was never built"
+note   = "the sentence docs/ARCHITECTURE_TOUR.md:61 already claims; TARGET_ARCHITECTURE.md §2 specified the receipt and it was never built. Operator decision 2026-09-17 (round 3): SPLIT THE TYPE rather than close Judgement's own constructors, which reach 159 sites in 30 files across 9 crates with only 2 on the turn path. Also absorbs the two render holes hd-1 leaves, cut from hd-1-refined at round 3"
 
 [[rung]]
 id     = "hd-7"
