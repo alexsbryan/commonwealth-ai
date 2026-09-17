@@ -42,6 +42,7 @@ mod model_files;
 mod newsworthy_status;
 mod peer_preference;
 mod pipeline_pause;
+mod ring_live;
 mod ring_sync;
 mod rpc_warm;
 
@@ -56,6 +57,7 @@ pub use corpus_ingest::{
     ProgressSnapshotResponse,
 };
 pub use guest_grant::{guest_grant_issue, guest_grant_list, guest_grant_revoke};
+pub use ring_live::ring_live;
 pub use ring_sync::{ring_sync, RingSyncRequest, RingSyncResponse, RING_SYNC_OPS_BUDGET_BYTES};
 // Crate-internal: the OICP ingest routes (`routes_oicp_ingest`) reuse the
 // same progress→fraction projection so the two surfaces can't diverge.

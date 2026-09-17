@@ -745,6 +745,17 @@ pub struct AppStateInner {
     /// costs nothing, so there is no `Option` and no "the daemon has not
     /// installed it yet" branch to get wrong.
     pub ring_write_nudge: Arc<tokio::sync::Notify>,
+    /// The ring rail's LIVE lane: what peers have pushed ephemerally and
+    /// nobody has drained yet. Bounded, in memory, and the only place a live
+    /// payload ever sits — see [`crate::routes_rail_live`].
+    ///
+    /// Beside `ring_write_nudge` rather than inside `ring_rail` because the
+    /// two answer opposite questions. `ring_rail` is `Option` because a
+    /// journal needs somewhere on disk to be and a daemon with no data
+    /// directory must REFUSE rather than answer from memory; this lane has
+    /// nowhere on disk by design, so it is always present and there is no
+    /// "not installed yet" branch to get wrong.
+    pub rail_live_buffer: Arc<crate::routes_rail_live::LiveBuffer>,
     /// Bearer token required of non-loopback callers on the client API
     /// (`:9741`). `None` (the default) means "no token configured" —
     /// the [`crate::client_auth`] layer then admits ONLY loopback
@@ -1450,6 +1461,13 @@ impl AppState {
         Arc::clone(&self.inner.ring_write_nudge)
     }
 
+    /// The live lane's arrived-payload buffer. ONE accessor for ONE buffer
+    /// (ARCH §7.5): the internal receiver pushes through it and the client
+    /// drain empties it, and nothing else may hold a second one.
+    pub fn rail_live_buffer(&self) -> Arc<crate::routes_rail_live::LiveBuffer> {
+        Arc::clone(&self.inner.rail_live_buffer)
+    }
+
     /// Install the ring rail's storage. The daemon calls this at startup with
     /// its data directory and a signer built from the node `SigningKey`.
     pub fn install_ring_rail(&self, rail: Arc<commonwealth_rail::RingRail>) {
@@ -1772,6 +1790,7 @@ impl AppState {
                 self_dial_signer: std::sync::RwLock::new(None),
                 ring_rail: std::sync::RwLock::new(None),
                 ring_write_nudge: Arc::new(tokio::sync::Notify::new()),
+                rail_live_buffer: Arc::new(crate::routes_rail_live::LiveBuffer::default()),
                 client_token: std::sync::RwLock::new(None),
                 peer_transport: std::sync::RwLock::new(Arc::new(
                     commonwealth_transport::IpTransport::default(),

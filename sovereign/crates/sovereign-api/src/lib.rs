@@ -46,6 +46,7 @@ pub mod routes_oicp;
 pub mod routes_oicp_ingest;
 pub mod routes_ollama;
 pub mod routes_rail;
+pub mod routes_rail_live;
 pub mod routes_responses;
 pub mod routes_status;
 pub mod server;
