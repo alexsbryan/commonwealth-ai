@@ -783,6 +783,19 @@ class Pool:
                 say("pool: operator STOP — leaving the review")
                 return 0
             say(f"pool: serial review {review.id} (main tree) attempt {attempt}")
+            note = (f"Your unit: {review.id} — the pool selected it as the ready review "
+                    "row. Open only that row in ralph/STATE.md; do not scan the queue for "
+                    "another.\n\n")
+            if attempt > 1:
+                # A retried review re-derived its whole analysis every attempt
+                # until 2026-09-17 (REVIEW-audit-daemon-1, four hours): the
+                # delta was in the tree, the session started from scratch. On a
+                # retry, say so.
+                note += (f"This is attempt {attempt}: the prior attempt(s) left their work "
+                         "uncommitted in the tree (the note above lists it). Finish it — "
+                         "run the row's checks, fix only what is red, commit the delta BY "
+                         "NAME, record what you have, mark [x]. Do not re-derive the "
+                         "analysis.\n\n")
             session.run(model_args, note + self._prompt_text(), log)
             if self.paths.p(self.paths.stop).exists():
                 say("pool: operator STOP — leaving the review")

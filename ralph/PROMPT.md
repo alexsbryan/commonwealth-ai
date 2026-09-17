@@ -73,7 +73,9 @@ What the id prefix tells you:
 
 Commit as soon as a coherent piece compiles. You can be killed at any moment;
 a killed session with commits resumes, one holding an hour of uncommitted work
-is lost.
+is lost. A `[~]` row whose delta is already in the tree is a resume: the prior
+session did the analysis — verify with the row's checks, commit the delta by
+name, record what you have, mark it; do not re-derive.
 
 ### 3a. MOVE `<file>` -> `<crate>` — the only move recipe
 
