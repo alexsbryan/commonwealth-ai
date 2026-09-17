@@ -399,3 +399,74 @@ removes the need for the state dissolution to carry them.
 **Landed in.** `0cb82a426` (code + DT; `fba39af69` is its rustfmt) and the
 `ralph: REVIEW-build-api-host-decouple done` commit (`ralph/STATE.md` + this
 entry). `git revert 0cb82a426` reverts the code half alone.
+
+## 2026-09-16 · REVIEW-build-middleware-seam · the seam stays in sovereign-contracts; the pipeline config moves to oicp-types
+
+**Fork.** The row lifts the middleware seam into `sovereign-contracts` and says
+`PipelineContext.context_config: serving_policy::pipeline_aliases::PipelineContextConfig`
+is "legal from sovereign-contracts" because serving-policy is contract layer.
+The lift as implemented is layer-gate-red: `sovereign-contracts → serving-policy`
+propagates into BOTH thin surfaces. Where does `PipelineContextConfig` live so
+the seam can name it? Three options were packaged: (1) move it to `oicp-types`,
+relaxing serving-policy's documented zero-dep; (2) grandfather
+desktop/mobile → serving-policy with an `[[exception]]`; (3) move the seam to
+`sovereign-core`.
+
+**Choice.** Option 1. Keep the seam in `sovereign-contracts`; move
+`PipelineContextConfig` DOWN to `oicp-types`, re-exported by `serving-policy`;
+land the `SERVING_BOUNDARY.md` / `serving-policy/Cargo.toml` doc change in the
+same commit (principle 3).
+
+Why not 2: adding an `[[exception]]` is operator-only (charter, "Leave these"),
+and the thin-surface rule's own header says the denied set is the crates that
+can assemble or HOST a backend (ARCH_LAYERS.toml:1126) — serving-policy cannot,
+so the fix is to remove the edge, not grandfather it.
+
+Why not 3: the seam must be nameable by every `Middleware` implementor, and DT
+tags `decision_extractor` `workspace` (DOMAINS.toml:1095-1098), whose home is
+`corpus-engine-notes` — a knowledge-layer crate that may name only the leaves
+(`[[forbid]] corpus-engine* → sovereign-* except sovereign-contracts`,
+ARCH_LAYERS.toml:350-354). `sovereign-core` is not a leaf, so a seam there
+closes the workspace adapter's path and needs `dm-decision-extractor-move`
+re-scoped too — a larger change than this fork requires.
+
+Why option 1 is smallest and keeps the property: `oicp-types` is on `may_reach`
+(ARCH_LAYERS.toml:1179-1187), so the closure stays clean; `sovereign-contracts`
+already names `oicp-types` (Cargo.toml:22), so the seam gains no new edge;
+`serving-policy → oicp-types` is not caught by its two `[[forbid]]` rows
+(`sovereign-*`, `commonwealth-*`; ARCH_LAYERS.toml:400-408), so the property
+they pin — no cross-family edge — is unchanged; and `oicp-types` already holds
+the sibling `model_aliases` table, whose header states the rule ("a mapping
+from a name ... belongs to the protocol rather than to any one runtime",
+oicp-types/src/model_aliases.rs:5-9). Only serving-policy's "empty in-repo dep
+list" letter changes, and the row now says so.
+
+**Evidence.** Reproduced red AND green with a two-line manifest experiment
+(unused deps; layer-gate reads the declared graph). Adding
+`sovereign-contracts → serving-policy` + `serving-policy → oicp-types` printed
+the exact two violations the package reports — desktop via sovereign-contracts,
+mobile via sovereign-turn-client → sovereign-contracts. Removing only the
+`sovereign-contracts → serving-policy` edge printed "✓ ... no thin surface
+reaches a backend it could become". Baseline was green; the experiment was
+reverted (`git checkout -- serving-policy/Cargo.toml
+sovereign/crates/sovereign-contracts/Cargo.toml Cargo.lock`). Glob facts:
+ARCH_LAYERS.toml:400-408, :1179-1187, :350-354, :1126; DOMAINS.toml:1095-1104.
+The row's second premise was ALSO false and is corrected: `routes_inference.rs:19-21`
+names the seam (`MiddlewareError, MiddlewareSession, PipelineContext,
+ResponseView`), not only `MiddlewareRegistry`.
+
+**Falsified by.** A showing that `decision_extractor` does not need the seam —
+that its `Middleware` impl can leave sovereign-api without naming the trait —
+which would let the seam live in `sovereign-core` (DAEMON_CORE.md:350,419-421)
+and keep serving-policy's empty dep list; or an operator decision to
+grandfather the thin-surface closure instead (option 2).
+
+**Landed in.** this commit — `ralph/STATE.md` (row `[~]`→`[ ]` and the
+corrected resolution), this entry, and the removal of `ralph/NEEDS_HUMAN.md`.
+The worker implements the corrected row next.
+
+**REVIEW-AFTER:** the charter does not clearly cover relaxing a documented
+crate contract (serving-policy's "ZERO in-repo deps" → "names only
+`oicp-types`, the family-neutral floor"). If the operator reads that contract
+as absolute, take option 3 (seam + `dm-decision-extractor-move` to
+`sovereign-core`) instead.
