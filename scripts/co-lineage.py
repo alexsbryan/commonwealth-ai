@@ -80,7 +80,8 @@ VERDICTS = ("met", "met-floor", "failed", "could-not-judge")
 NEVER = "never-attempted"          # structurally the ABSENCE of rows, never written
 DIRECTIONS = ("higher_is_better", "lower_is_better", "near_zero")
 BAR_STATUS = ("open", "deferred", "descoped")
-CAMPAIGN_STATUS = ("active", "closed")
+# staged: approved to run next (ralph/next/<id>/); listed, never measured.
+CAMPAIGN_STATUS = ("active", "staged", "closed")
 REF_SOURCES = ("head", "artifact", "unattributed")
 # reason: "" unless could-not-judge; then exactly one of these shapes.
 REASON_RE = re.compile(
