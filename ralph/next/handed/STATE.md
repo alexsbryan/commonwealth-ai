@@ -14,7 +14,10 @@ O1 = `quality/campaigns/handed/order-1-render.md` ·
 O3 = `quality/campaigns/handed/order-3-writers.md` ·
 O5 = `quality/campaigns/handed/order-5-custody.md` ·
 O6 = `quality/campaigns/handed/order-6-principal.md` ·
-O7 = `quality/campaigns/handed/order-7-surfaces.md`
+O7 = `quality/campaigns/handed/order-7-surfaces.md` ·
+O8 = `quality/campaigns/handed/order-8-writer-door.md` ·
+O9 = `quality/campaigns/handed/order-9-custody-type.md` ·
+O10 = `quality/campaigns/handed/order-10-verified.md`
 
 ## hd-0 — adopt
 
@@ -57,7 +60,21 @@ O7 = `quality/campaigns/handed/order-7-surfaces.md`
 
 - [ ] REVIEW-audit-hd-2 — depends [REVIEW-build-hd-5-default-private, REVIEW-build-hd-3-close-raw, hd-3-config-lock, REVIEW-audit-hd-1] — AUDIT rungs hd-5 and hd-3, re-run each PLANT it covers and check the error code the row names, then flip the `status` of those rungs and any bar they move in quality/campaigns/handed.toml — read: HT; the orders those rows point at — check: TESTALL; PREPUSH; TOML
 
+## hd-8 — writers: the in-crate door (compile-enforced)
+
+- [ ] REVIEW-mint-hd-8-writer-door — depends [REVIEW-audit-hd-2] — cap: 5 rows — MINT the rows that move corpus-engine's mutating methods behind a `CorpusWriter` facade, after COUNTING the in-crate callers (the "50+ files" figure was for the rejected lease design and includes readers) — read: O8; HT [[ability]] writers; quality/TOPOLOGY.md:284-287 — check: TOML
+
+## hd-9 — custody: the policy type (compile-enforced code half)
+
+- [ ] REVIEW-mint-hd-9-custody-type — depends [REVIEW-audit-hd-2] — cap: 3 rows — MINT the rows that give the sharing policy a type with no `Default`, a private field and one resolving accessor that warns by name — read: O9; HT [[ability]] custody — check: TOML
+
+## hd-10 — render: nothing ships unverified
+
+- [ ] REVIEW-mint-hd-10-verified — depends [REVIEW-audit-hd-2] — cap: 15 rows — MINT the rows that give every turn exit a GateSurface, every surface a verifier, and Judgement a receipt only a verifier can mint; read the Kill FIRST — read: O10; HT [[ability]] render; TARGET_ARCHITECTURE.md §2 (the Judgement receipt); sovereign-core runtime grounding config.rs (GateSurface) — check: TOML
+
+- [ ] REVIEW-audit-hd-3 — depends [REVIEW-mint-hd-8-writer-door, REVIEW-mint-hd-9-custody-type, REVIEW-mint-hd-10-verified] — AUDIT rungs hd-8, hd-9 and hd-10 and everything their mints produced, re-run each PLANT and check the error code the row names, then flip those rungs' `status` in quality/campaigns/handed.toml — read: HT; O8; O9; O10 — check: TESTALL; PREPUSH; TOML
+
 ## hd-7 — surfaces (predicate half 2)
 
-- [ ] REVIEW-DEMO-hd-7-bench — depends [REVIEW-build-hd-1-complete, REVIEW-build-hd-2-commission] — RUN the in-process bench over a two-question scratch bank and paste the three trace lines: (1) write `target/ralph/hd7-bank.toml` exactly as O7 step 1 gives it; (2) `./scripts/with-cargo-lock.sh ./scripts/dev-build.sh > target/ralph/hd7-build.log 2>&1; echo exit=$?` — CLEAN's `--gate-only` skips the build when the debug target is under 50G (scripts/dev-build.sh:104-120) and LINT is only `cargo check`, so the binaries are built HERE; (3) `RUST_LOG=turn.verdict=info,capability=info target/debug/sovereign-cli bench chaos-monkey run --bank target/ralph/hd7-bank.toml --corpus chaos-saltgrass --out target/ralph/hd7-bench.jsonl > target/ralph/hd7-bench.log 2>&1; echo exit=$?`; (4) paste `grep -nE 'turn\.verdict: serve_turn complete|runtime: commissioned' target/ralph/hd7-bench.log`. Expected exactly three lines — one `runtime: commissioned launch=…`, then the grounded turn `verdict=passed|failed source=gate` and the generative turn `verdict=never-ran source=absent`. The bench's own `exit=` is recorded but not gated (it calls a judge model this row does not read); a missing line, or any other verdict pair, is §6 — read: O7 (whole, it is one page); quality/campaigns/handed/order-1-render.md step 2 (the `turn.verdict` message text); quality/campaigns/handed/order-2-assemble.md step 4 (the `capability` trace it emits); sovereign/bench/chaos_monkey/saltgrass.toml:16-27 — check: premise `curl -s -m 3 -o /dev/null -w '%{http_code}' 127.0.0.1:9741/status` prints 200 and `ls -d ~/.svrnmesh/indexes/chaos-saltgrass` succeeds (the daemon is NOT restarted — ralph/PROMPT.md §7); CLEAN; paste as stated
+- [ ] REVIEW-DEMO-hd-7-bench — depends [REVIEW-build-hd-1-complete, REVIEW-build-hd-2-commission, REVIEW-audit-hd-3] — RUN the in-process bench over a two-question scratch bank and paste the three trace lines: (1) write `target/ralph/hd7-bank.toml` exactly as O7 step 1 gives it; (2) `./scripts/with-cargo-lock.sh ./scripts/dev-build.sh > target/ralph/hd7-build.log 2>&1; echo exit=$?` — CLEAN's `--gate-only` skips the build when the debug target is under 50G (scripts/dev-build.sh:104-120) and LINT is only `cargo check`, so the binaries are built HERE; (3) `RUST_LOG=turn.verdict=info,capability=info target/debug/sovereign-cli bench chaos-monkey run --bank target/ralph/hd7-bank.toml --corpus chaos-saltgrass --out target/ralph/hd7-bench.jsonl > target/ralph/hd7-bench.log 2>&1; echo exit=$?`; (4) paste `grep -nE 'turn\.verdict: serve_turn complete|runtime: commissioned' target/ralph/hd7-bench.log`. Expected exactly three lines — one `runtime: commissioned launch=…`, then the grounded turn `verdict=passed|failed source=gate` and the generative turn `verdict=never-ran source=absent`. The bench's own `exit=` is recorded but not gated (it calls a judge model this row does not read); a missing line, or any other verdict pair, is §6 — read: O7 (whole, it is one page); quality/campaigns/handed/order-1-render.md step 2 (the `turn.verdict` message text); quality/campaigns/handed/order-2-assemble.md step 4 (the `capability` trace it emits); sovereign/bench/chaos_monkey/saltgrass.toml:16-27 — check: premise `curl -s -m 3 -o /dev/null -w '%{http_code}' 127.0.0.1:9741/status` prints 200 and `ls -d ~/.svrnmesh/indexes/chaos-saltgrass` succeeds (the daemon is NOT restarted — ralph/PROMPT.md §7); CLEAN; paste as stated
 

@@ -34,17 +34,17 @@ not_covered = "sovereign-server is converted in place; whether it should exist a
 
 [[ability]]
 id          = "render"
-promise     = "every turn's terminal value — Complete, MessageResponse, MessageRefined — carries a verdict"
-enforced_by = "Complete.judgement is a required field and serve.rs is its only builder (E0063); the gate's one funnel stamps the judgement into the persisted meta and serve.rs projects it, absent meaning never_ran(reason)"
+promise     = "every released text carries a verdict from a verifier that ran on it"
+enforced_by = "Complete.judgement is required and serve.rs is its only builder (E0063); every exit names a GateSurface and every surface has a verifier; Judgement's constructors are private behind a receipt only a verifier mints, so an exit cannot hand-roll a verdict (rung hd-10)"
 today       = "the gate outcome rides `metadata: Option<TurnMetadata>`; `Draft::release_ungated` has 0 callers; MessageRefined swaps the answer text after Complete at five sites"
-not_covered = "no user-facing surface renders the verdict except `--format json` and the desktop payload — the desktop footer reads the epistemic ledger (EpistemicFooter.svelte:10-21), `svrn chat` text mode renders provenance (render.rs:281), mobile renders nothing"
+not_covered = "no user-facing surface renders the verdict except `--format json` and the desktop payload (EpistemicFooter.svelte:10-21 reads the epistemic ledger, render.rs:281 renders provenance, mobile renders nothing) — a candidate rung, not funded here. `could_not_judge` still ships text: a verifier that RAN and abstained is not a verifier that never ran, and which verdicts force a rewrite is turn policy, enforced at runtime"
 
 [[ability]]
 id          = "writers"
 promise     = "no two in-process write paths mutate one index, atlas or config at once, and a second process is refused by name"
-enforced_by = "a per-corpus flock taken inside the write path (the `.rebuild.lock` precedent, corpus-engine-scip/src/scip_graph.rs:483-500), `table()`/`connection()` pub(crate) (E0624), and a flock inside SetupConfig::save_to"
+enforced_by = "`table()`/`connection()` pub(crate) so an out-of-crate write is E0624; the mutating methods move behind a CorpusWriter facade that acquires the flock, so an in-crate write without it is E0599 (rung hd-8); a per-corpus flock (the `.rebuild.lock` precedent, corpus-engine-scip/src/scip_graph.rs:483-500) and a flock inside SetupConfig::save_to"
 today       = "no lock on the corpus index; TOPOLOGY.toml has 4 of 7 invariants false; SetupConfig::save_to is a plain fs::write"
-not_covered = "whole-directory replace bypasses every write path — canonical_pull.rs:292, restore_snapshot_archive, the desktop's import remove_dir_all, writeback.rs:383, project_init/mod.rs:463"
+not_covered = "whole-directory replace bypasses every write path — canonical_pull.rs:292, restore_snapshot_archive, the desktop's import remove_dir_all, local_corpus/writeback.rs:383, project_init/mod.rs:463. Cross-process exclusion is a runtime refusal by construction: another process is not in this compilation unit"
 
 [[ability]]
 id          = "ledger"
@@ -56,9 +56,9 @@ not_covered = "six production `tool.execute(` sites never reach the executor —
 [[ability]]
 id          = "custody"
 promise     = "a corpus whose recipe states no sharing policy is private"
-enforced_by = "`mesh_sharing` takes serde's `default` (false) instead of `default_true`, with a test pinning a policy-less recipe as private"
+enforced_by = "`mesh_sharing` takes serde's `default` instead of `default_true`; the policy becomes a type with no `Default` impl behind a private field and one accessor, so in-repo code that omits it is E0063 and no second reader can resolve absence its own way (rung hd-9)"
 today       = "`#[serde(default = \"default_true\")]` at corpus-engine/src/recipe.rs:790; two shipped recipes and two generators state nothing; `scope` carries a doc comment claiming a structural guarantee it does not have"
-not_covered = "prompt content routed to a peer for inference reads no sharing flag (sovereign-serving-host peer_inference select_peers_ranked); indexes already installed keep the mesh_sharing stamped in their IndexMeta"
+not_covered = "prompt content routed to a peer for inference reads no sharing flag (sovereign-serving-host peer_inference select_peers_ranked); indexes already installed keep the mesh_sharing stamped in their IndexMeta. TOML authorship cannot be compile-enforced — a recipe is data, so absence resolves to Private through the one accessor with a named warn; refusing at parse instead is the approval-time decision"
 
 [[ability]]
 id          = "principal"
@@ -188,6 +188,27 @@ id     = "hd-6"
 title  = "principal: watch the exhaustive Scope decider refuse a new variant"
 status = "open"
 demo   = "none"
+
+[[rung]]
+id     = "hd-8"
+title  = "writers: the in-crate door — an unguarded write does not compile"
+status = "open"
+demo   = "none"
+note   = "lifts writers from flock-only to E0599 inside corpus-engine; cross-process stays a runtime refusal"
+
+[[rung]]
+id     = "hd-9"
+title  = "custody: the policy has no Default and one accessor — code cannot omit it"
+status = "open"
+demo   = "none"
+note   = "closes the code half at compile time; the TOML half stays a named resolution or a parse refusal (approval decision)"
+
+[[rung]]
+id     = "hd-10"
+title  = "render: nothing ships unverified — every exit names a surface, every surface has a verifier, Judgement is minted only by one"
+status = "open"
+demo   = "hd-surfaces"
+note   = "the sentence docs/ARCHITECTURE_TOUR.md:61 already claims; TARGET_ARCHITECTURE.md §2 specified the receipt and it was never built"
 
 [[rung]]
 id     = "hd-7"
