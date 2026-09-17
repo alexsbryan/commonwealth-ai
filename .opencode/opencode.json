@@ -7,7 +7,8 @@
       "/run/*": "allow",
       "/Users/alexsbryan/.svrnmesh/ralph/*": "allow",
       "/Users/alexsbryan/dev/commonwealth-ai/ralph/*": "allow",
-      "/Users/alexsbryan/dev/commonwealth-ai/.git/info/*": "allow"
+      "/Users/alexsbryan/dev/commonwealth-ai/.git/info/*": "allow",
+      "/Users/alexsbryan/dev/commonwealth-ai/.ralph/*": "allow"
     }
   },
   "plugin": [

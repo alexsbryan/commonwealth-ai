@@ -64,7 +64,10 @@ What the id prefix tells you:
    attempts at the same failure and still red: §6.
 6. Commit: `git add` the paths you changed, by name — never `git add -A`, never
    `target/` or `ralph/log*`. Message `<unit-id>: <one line>`; body = the
-   `exit=` lines and anything the row says to paste.
+   `exit=` lines and anything the row says to paste. In a POOL LANE, use
+   absolute paths under your worktree in shell commands — a compound
+   `cd A && cat ../B` is path-checked against the session's cwd, not `A`, and
+   auto-rejects a path that does not exist (2026-09-17).
 7. Mark the row `- [x] <unit-id> <short-hash> — depends [...] — ...`, keeping
    the unit id immediately after the checkbox; the dependency parser reads that
    position. Commit `ralph/STATE.md` alone as
