@@ -569,3 +569,70 @@ is already reachable from a package crate (`corpus-engine-scip` does not export
 `Cargo.toml` member, `quality/ARCH_LAYERS.toml` (package + layer),
 `sovereign/SYSTEM_OVERVIEW.md` (the §1 crate line) and `Cargo.lock`. The worker
 implements `dm-next-edit-move` against the corrected dep constraint next.
+
+## 2026-09-17 · dm-daemon-mesh-edge · the mesh host cluster is one atomic unit; two rows fold into one
+
+**Fork.** `dm-daemon-mesh-edge` cannot execute as written. It moves ten modules
+(`local_only`, `loopback_guard`, `http_response`, `types`, `slot_manifest`,
+`mcp_router`, `mcp_config_http`, `features_http`, `enrich_http`,
+`landscape_digest_http`) and repoints "their consumers (cli-daemon, cli-llm,
+cli-dev) in the same commit". But six of the ten sit inside one
+strongly-connected component with `daemon.rs` and the 21 route shells, and 24
+mesh files that STAY reference them. Repointing a staying mesh file at
+`sovereign_daemon::…` is `[[forbid]] sovereign-mesh -> sovereign-daemon`
+(`quality/ARCH_LAYERS.toml:749-752`, no `except`). The row's three-wave lane
+never reached the move — it hit the harness's external-directory wall (fixed in
+`2882c79a2`) — but the wall behind it is the forbid, not the harness.
+
+**Choice.** The cluster is atomic; fold the rows the design already says move
+together. `dm-daemon-mesh-edge` becomes the ONE commit that moves the whole
+mesh host cluster: the 34-module must-move-together closure (28,791 lines) plus
+the three pure leaves it already named (`http_response` 120, `types` 13,
+`slot_manifest` 35) — 37 files / 28,959 lines. `dm-daemon-mesh-http-a` and
+`-http-b` are absorbed (marked `[x]`; every shell is in the SCC) and
+`daemon_services.rs` moves out of `dm-daemon-mesh-jobs` (it is in the SCC). The
+2026-09-16 re-sequence (`3bf3ce35d`, "the shells move first") is withdrawn:
+`daemon.rs` mounts every shell (`crate::mesh_http::mesh_router` … `:3385-3517`),
+so the shells cannot leave before the type and the type cannot leave before the
+shells. `REVIEW-build-daemon-embedded-split` keeps its position (after
+`dm-daemon-mesh-jobs` + `REVIEW-build-daemon-parts`) and now splits the
+daemon-resident `daemon.rs` by owner, moving Fabric's membership operations
+back to `sovereign-mesh` (DC §4.1).
+
+**Evidence.** Reproduced 2026-09-17 by Tarjan SCC over the `crate::` module
+graph of `sovereign/crates/sovereign-mesh/src`: the SCC containing `daemon` is
+31 modules; the closure under "references a member" is 34 modules / 28,791
+lines (30 host-tagged, 4 fabric-tagged — `venue_host`, `media_reach`,
+`origin_fanout`, `roster_repair`, each carrying an `impl EmbeddedDaemon`,
+E0116); no module outside it references a member. The cycle edges: `daemon.rs`
+mounts the 21 shells and the four cyclic leaves (`mcp_router`,
+`mcp_config_http`, `features_http`, `enrich_http`); the shells hold
+`Arc<EmbeddedDaemon>`; those four hold `EmbeddedDaemon`. The forbid is read at
+`quality/ARCH_LAYERS.toml:749-752` and has no exception
+(`grep -n sovereign-daemon quality/ARCH_LAYERS.toml` hits :307, :735, :744,
+:751, :756, :974 — :735/:744/:974 are comments; the only live rows are the
+layer list at :307 and the two forbids at :751 and :756). Same shape as
+`dm-daemon-api-edge` (`9a0ebfcb9`), folded hours earlier for the same reason.
+
+**Falsified by.** A cycle break that lets a subset compile: a registry or port
+that removes `daemon.rs`'s mount-list reach into the shells (and its three
+shell-type reaches — `admin_http::{ConfigDiff,ReloadResponse}`,
+`rpc_warm_http::MeshRpcShardWarmer`), so the shells can move first; or the
+operator widening the `sovereign-mesh -> sovereign-daemon` forbid with an
+`except` that makes a partial move legal.
+
+**REVIEW-AFTER:** two things the charter did not clearly cover. (1) The fold
+makes one row 28,959 lines — larger than the api fold's ~19k and likely past
+one lane session, so it may fail its three waves too. The alternative is a
+`REVIEW-build` row that breaks the `daemon.rs` <-> shells cycle first (a
+mount-list registry plus the three shell types), which would let the move
+chunk; the docs do not specify it, and DC §4.1 says the shells move with the
+type, so the fold is the doc-backed reading. (2) The whole-then-split shape:
+`daemon.rs` lands in `sovereign-daemon` with Fabric's membership operations
+still on it, and `REVIEW-build-daemon-embedded-split` moves them back — the
+same shape the api fold used for `state.rs` (`9a0ebfcb9`).
+
+**Landed in.** this commit — `ralph/STATE.md` (the re-scoped `dm-daemon-mesh-edge`,
+two ABSORBED marks, `dm-daemon-mesh-jobs`'s dep + `daemon_services` note, the
+`REVIEW-build-daemon-embedded-split` note) and this entry. `git revert <sha>`
+reverts it alone.
