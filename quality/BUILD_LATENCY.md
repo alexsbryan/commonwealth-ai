@@ -247,6 +247,35 @@ campaign ladder ranks them accordingly.
 What is not on the list: opt-level, codegen-units, `debug = 0` (already set),
 linker (mold is in place), sccache. None of them shortens a serial chain.
 
+## Baseline (2026-09-17, HEAD bf5669d3a, `quality/build-probe/2026-09-17-baseline/`)
+
+The table the campaign will be judged against. Seconds; warm = scoped lint +
+focused test; fresh = first focused test on a full-gates-only target dir;
+build = `cargo build --workspace`.
+
+| file | warm | fresh | build |
+|---|---|---|---|
+| sovereign-core `deep_research/mod.rs` | 33.5 | 193.7 | 24.5 |
+| sovereign-mesh `daemon.rs` | 24.1 | 248.0 | 15.8 |
+| sovereign-cli-llm `lib.rs` | 17.7 | 228.1 | 12.4 |
+| corpus-engine `engine/mod.rs` | 41.4 | 139.8 | 41.1 |
+| sovereign-desktop `state.rs` | 8.1 | 42.0 | 11.3 |
+| sovereign-contracts `setup_config.rs` | 29.9 | 13.9 | 33.7 |
+| sovereign-cli-daemon `daemon_cmd/mod.rs` | 10.6 | 74.1 | 4.4 |
+| sovereign-turn-client `lib.rs` | 11.8 | 14.6 | 12.0 |
+| sovereign-tools `local_corpus/manager.rs` | 20.9 | 171.7 | 20.7 |
+| sovereign-core `tests/main/f26_egress_census.rs` | 3.0 | – | – |
+| kernel-types `quality/instruments.rs` | 26.5 | 4.3 | 34.7 |
+| **sum** | **227.5** | **1130.2** | **210.6** |
+
+A/A on the warm column: 229.0 vs 227.5, band 0.66%, largest per-file
+difference 1.3 s; the bank band is 3%. The cold full gates that precede the
+fresh column cost lint 226 s, test 473 s, build 226 s. The fresh column is
+the tail the census is made of: opening mesh, cli-llm, core or tools for
+the first time costs 170–250 s before the first test runs, and contracts,
+turn-client and kernel-types cost 4–15 s because their scoped closure
+resolves the same units the workspace did.
+
 ## The loop this became
 
 Operator direction 2026-09-17: run this as a campaign shaped like a while
