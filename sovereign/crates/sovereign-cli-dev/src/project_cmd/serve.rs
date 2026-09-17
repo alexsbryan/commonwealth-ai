@@ -498,7 +498,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     );
     let atlas_node_id = crate::atlas_identity::atlas_node_id();
     let atlas_store = Arc::new(sovereign_work_atlas::WorkAtlasStore::new(
-        Arc::clone(&atlas_mesh_store) as Arc<dyn sovereign_work_atlas::PeerStore>,
+        Arc::clone(&atlas_mesh_store) as Arc<dyn sovereign_work_atlas::ReplicatedKv>,
         atlas_node_id,
     ));
     let atlas_cfg_path = sovereign_cli_shared::dirs::work_atlas_toml();

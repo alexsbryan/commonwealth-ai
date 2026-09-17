@@ -14,7 +14,7 @@ use crate::EmbeddedDaemon;
 use corpus_engine::{CorpusEngine, EmbedFn};
 use corpus_engine_notes::{NodeRoster, NotePropagationEvent, NoteStore, RosterEntry};
 use kernel_types::NodeId;
-use sovereign_contracts::peer::{Convergence, PeerStore};
+use sovereign_contracts::peer::{Convergence, ReplicatedKv};
 use sovereign_core::model_family::{
     EmbedModelInfo, ModelFamily, NormalizationStrategy, PoolingStrategy,
 };
@@ -1326,7 +1326,7 @@ pub fn reconcile_local_measurements(daemon: Arc<EmbeddedDaemon>) {
 /// Wire NoteStore's outbound propagation sink to publish notes via the mesh store.
 pub fn wire_note_propagation_sink(
     notes_store: Arc<NoteStore>,
-    peer_store: Arc<dyn PeerStore>,
+    peer_store: Arc<dyn ReplicatedKv>,
     self_node_id: NodeId,
     convergence: Arc<dyn Convergence>,
 ) {
@@ -1521,7 +1521,7 @@ pub fn spawn_notes_tier_backfill(notes_store: Arc<NoteStore>) {
 
 /// Spawn the poller that bridges inbound gossip note entries into `NoteStore`.
 pub fn spawn_notes_ingest_poller(
-    peer_store: Arc<dyn PeerStore>,
+    peer_store: Arc<dyn ReplicatedKv>,
     notes_store: Arc<NoteStore>,
     self_node_id: NodeId,
     convergence: Arc<dyn Convergence>,
@@ -2526,7 +2526,7 @@ pub fn setup_watchers_and_work_atlas(
     // so `WorkAtlasStore::node_id` matches the daemon's `self_id`.
     let work_atlas_node_id = resolve_self_node_id(data_dir);
     let work_atlas_store = Arc::new(sovereign_work_atlas::WorkAtlasStore::new(
-        Arc::clone(&work_atlas_mesh_store) as Arc<dyn PeerStore>,
+        Arc::clone(&work_atlas_mesh_store) as Arc<dyn ReplicatedKv>,
         work_atlas_node_id,
     ));
     // Deferred broadcaster — `MeshBroadcaster` needs `AppState`, which

@@ -233,7 +233,7 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     // (2026-07-31).
     let node_id = crate::atlas_identity::atlas_node_id();
     let atlas_store = Arc::new(sovereign_work_atlas::WorkAtlasStore::new(
-        Arc::clone(&mesh_store) as Arc<dyn sovereign_work_atlas::PeerStore>,
+        Arc::clone(&mesh_store) as Arc<dyn sovereign_work_atlas::ReplicatedKv>,
         node_id,
     ));
     let atlas_cfg = sovereign_work_atlas::WorkAtlasConfig::defaults();

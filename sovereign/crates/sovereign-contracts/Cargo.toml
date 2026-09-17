@@ -20,7 +20,7 @@ kernel-types = { workspace = true }
 # so `peer.rs` stops carrying a private fifth copy of `unix_now_u64`.
 sovereign-time = { workspace = true }
 oicp-types = { workspace = true }
-# `peer::PeerEntry.value`. A leaf third-party crate with no in-repo edges, so
+# `peer::ReplicatedKvEntry.value`. A leaf third-party crate with no in-repo edges, so
 # it costs the contract seam nothing — and it keeps the port's payload the
 # SAME type the mesh store already speaks, so an adapter is a move, not a copy.
 bytes = { workspace = true }
