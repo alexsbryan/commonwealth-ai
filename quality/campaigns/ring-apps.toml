@@ -4,18 +4,112 @@
 # committed artifact: the `[[rung]]` table owns rung STATUS and the `[[bar]]`
 # rows own the numbers. The rationale lives in campaign.md.
 id        = "ring-apps"
-objective = "Commonwealth is a pure substrate for ring-scale applications - commerce and social realized over the ring rail, where the ledger, the namespace and the ordering are handed out separately instead of fused in a platform. The first rung makes the NAMESPACE half honest: a person in a ring can be traced to the member who vouched for them and the act they vouched on, without asking anyone what they remember"
-spec      = "docs/internal/RING_APPLICATIONS.md (GITIGNORED, per-host) - the vision, the borrow-and-refuse table, and the substrate assessment S1-S8. Its first draft claimed rings were mesh-wide and singular; that was the exception generalised into the rule and is corrected in the doc under 'What a ring is today'. Read the CORRECTED section, not a memory of the claim."
+objective = "A way to BUILD robust applications and DISTRIBUTE them on a mesh the way AWS lets a builder ship to the internet - identity, an ordered log, blobs, a live lane, discovery, availability and a deploy verb handed out as primitives the app never re-derives - such that the end user barely feels the infrastructure: an average urban person joins by one QR code with no account, lives on the ring apps for a fortnight, and on day fourteen does not want the old way back. The first rungs made the NAMESPACE half honest (a person traces to who vouched and on what act); the ladder now converges on the complete primitive set, sequenced by the day a person hits each thing"
+spec      = "docs/internal/RING_APPLICATIONS.md (GITIGNORED, per-host) - the vision, the borrow-and-refuse table, and the substrate assessment S1-S8. Its first draft claimed rings were mesh-wide and singular; that was the exception generalised into the rule and is corrected in the doc under 'What a ring is today'. Read the CORRECTED section, not a memory of the claim. REFRAMED 2026-09-17 by operator direction (the AWS-shaped builder proposition + the fortnight); the rationale, the demo days and the ambiguity policy live in .sovereign/features/ring-apps/campaign.md on this host."
 declared  = "2026-09-13"
 status    = "active"
 
+# ── THE PRIMITIVE SET (the second axis) ──────────────────────────────────────
+# Sorted by what a BUILDER reaches for, named by the thing they already know.
+# `rides` is what the bytes move on: journal | blob | gossip | direct. A rung
+# declares one row; the campaign converges when every row a reference app needs
+# has a rung that landed. DATA, not prose (ARCH 9): adding a primitive is a diff
+# a reviewer reads. Readers use .get() on rows, so this table is inert to
+# co-resume/co-ladder/co-lineage (checked 2026-09-17).
+[[primitive]]
+id = "identity"
+builders_know_it_as = "IAM + KMS"
+rides = "journal"
+on_the_ring = "roster, vouch chain, device link, recovery, retired keys; the node key signs"
+rungs = ["ra-1", "ra-5"]
+
+[[primitive]]
+id = "record"
+builders_know_it_as = "an ordered log"
+rides = "journal"
+on_the_ring = "the rail: signed, total order, corrections, seal, gaps"
+rungs = []
+
+[[primitive]]
+id = "content"
+builders_know_it_as = "S3"
+rides = "blob"
+on_the_ring = "content-addressed, encrypted before coded, k-of-n shares, hot copies, range audits"
+rungs = ["ra-3"]
+
+[[primitive]]
+id = "live"
+builders_know_it_as = "SNS/SQS"
+rides = "gossip"
+on_the_ring = "presence, chat delivery, typing - nothing durable rides here"
+rungs = ["ra-6"]
+
+[[primitive]]
+id = "direct"
+builders_know_it_as = "a socket"
+rides = "direct"
+on_the_ring = "a QUIC stream between two members - calls, games, device control"
+rungs = []
+
+[[primitive]]
+id = "discovery"
+builders_know_it_as = "Route53 + CloudFront"
+rides = "journal"
+on_the_ring = "computed catalogue, never_asked rows, curated by vouch chain, any holder serves"
+rungs = ["ra-4"]
+
+[[primitive]]
+id = "availability"
+builders_know_it_as = "availability zones"
+rides = "blob"
+on_the_ring = "a keeper role that holds and never authors; k from the worst observed hour"
+rungs = ["ra-7"]
+
+[[primitive]]
+id = "compute"
+builders_know_it_as = "Lambda / EC2"
+rides = "direct"
+on_the_ring = "a page over rails by default; server-side compute is a declared escalation; hubs named"
+rungs = ["ra-10", "ra-12"]
+
+[[primitive]]
+id = "guarantees"
+builders_know_it_as = "CloudWatch + SLA"
+rides = "journal"
+on_the_ring = "gaps, audits, and a sheet computed from n, k and m that names what is NOT protected"
+rungs = ["ra-8"]
+
+[[primitive]]
+id = "commons"
+builders_know_it_as = "billing"
+rides = "journal"
+on_the_ring = "GB-hours proven by audit, weighted by scarcity; norms and priority, never a price"
+rungs = ["ra-9"]
+
+[[primitive]]
+id = "deployment"
+builders_know_it_as = "CloudFormation"
+rides = "journal"
+on_the_ring = "manifest + static page + rail scopes; `svrn ring deploy`; appears on peers uninstalled"
+rungs = ["ra-10"]
+
+[[primitive]]
+id = "membership"
+builders_know_it_as = "an org / an account"
+rides = "journal"
+on_the_ring = "join by QR with no account; the phone is the wallet; Carry across rings"
+rungs = ["ra-11", "ra-2"]
+
 # ── THE PREDICATE ────────────────────────────────────────────────────────────
-# TWO-SIDED. The affirmative half alone passes vacuously: a roster with one row
-# that carries a warrant proves nothing about a roster that can also REFUSE.
-# The negative half is the refusal this repo already holds and must keep
-# holding - an op arriving over the wire moves no roster, ever.
+# TWO-SIDED since the 2026-09-17 reframe, and the BUILDER side is the one a
+# program judges. The user side (the fortnight) is the demo gate in campaign.md.
+# `check` today decides only the record leg - the rail's own tests, which hold
+# the two refusals ra-1 depends on (a roster row resolves to its warrant; an op
+# arriving over the wire moves no roster). The diff-free-build leg and the
+# partition drill are OWED instruments and read could-not-judge until they
+# exist; nothing here fabricates a verdict for them (ARCH 5, ARCH 6).
 [predicate]
-statement = "A key in a ring's roster resolves to the signed op that introduced it and to the member who signed that op, and an `Introduce` op arriving from a peer over ring-sync changes no roster row on the receiving node"
+statement = "A ring app is a manifest plus a static page over the rails: a builder who is not the rail's author ships the next reference app from the docs with zero diffs under commonwealth/crates/commonwealth-rail*, distributes it with one verb, and it survives the partition drill; every surface a joined person touches renders a person, never a key; and the two ra-1 refusals hold - a roster key resolves to the signed op that introduced it and its signer, and an `Introduce` arriving over ring-sync changes no roster row"
 check     = "./scripts/sovereign-test.sh --human --package commonwealth-rail --package commonwealth-rail-core"
 
 # ── BARS ─────────────────────────────────────────────────────────────────────
@@ -88,10 +182,56 @@ instrument_note = "The same four daemons, `svrn mesh offers --why`. ONE run cont
 goodhart     = "1.0 with every row reading `unknown` is a perfect score for a join that never ran. At least one row must name a person and an op id. And per the ra-1 worker's finding, a caller must never fall back to its OWN roster file for a remote seller's warrant - that is the substitution ARCH 6 refuses, and `ring roster show` already guards the local version of it by warning and exiting 1."
 status       = "open"
 
+[[bar]]
+id           = "ra-linked-device-is-legible"
+demo         = "Alex's second laptop reads as Alex's, linked by Alex - not vouched for by a stranger"
+rung         = "ra-5"
+one_line     = "CLAIM: every roster row whose introducer is the same PERSON renders 'linked device', and every row whose introducer is another person renders 'vouched by <name>' - never the wrong one, never blank"
+derives_from = "the mechanism already exists and is pinned: a key in the roster introducing a second key for the same person resolves to `Traced` today (commonwealth-rail-core/src/introduce.rs:191-193, asserted at tests_introduce.rs:256-259). What is missing is the SURFACE: the roster has no per-key metadata beyond one vouch (lib.rs:170, :188), and nothing computes whether `by_actor` belongs to the row's own person - `trace_op` compares keys only (introduce.rs:338), so same-person vs other-person is a distinction no reader makes today (verified 2026-09-17)."
+floor        = 1.0
+floor_basis  = "structural: FRACTION of roster rows with a resolved vouch whose rendering matches `roster.person_for(by_actor) == row.person` - 'linked device' when equal, 'vouched by' when not. Both classes seeded in one run, because a run with only one class cannot tell a working classifier from a constant."
+target       = 1.0
+direction    = "higher_is_better"
+# instrument   = (none yet) — owed in the shape of ra-4's `scripts/ring-offers-demo.sh verdict <bar-id>`.
+instrument_note = "`svrn ring roster show --why` over a roster seeded with BOTH a same-person link and a cross-person vouch, resolved against a real admission. Distinctness is computed via `person_for`, never read off the op - the op's `person` field is what the WRITER claims and is exactly the field ARCH §18.1 says not to assert on."
+goodhart     = "1.0 over a roster holding only cross-person vouches is a constant function scoring perfectly. Seed both classes. And a self-vouch (signer key == introduced key) must still render `SelfVouch`, unchanged (introduce.rs:249-253) - this bar adds a class, it does not relax one."
+status       = "open"
+
+[[bar]]
+id           = "ra-recovery-names-m-people"
+demo         = "Alex's phone died; the replacement key shows three housemates by name, and 'Alex' on every past expense is untouched"
+rung         = "ra-5"
+one_line     = "CLAIM: a key admitted as a RECOVERY carries m or more vouches that resolve to m DISTINCT PEOPLE, and a person's earlier ops fold identically before and after the recovery"
+derives_from = "the largest code change in the rung, and the first draft did not acknowledge it: `Roster.vouches` is `BTreeMap<String, Vouch>` - exactly one vouch per key (lib.rs:188); `bind_key` takes `Option<Vouch>`, singular (lib.rs:206); `svrn ring roster add` takes one `--on <op-id>` (sovereign-cli-llm/src/ring_cmd/mod.rs:313-322). m-of-n needs the field to become a collection and `trace`/`trace_op` (introduce.rs:274, :310) to return per-vouch statuses. Nothing today checks that two introducers are different PEOPLE (worker finding 2026-09-17): distinctness is `person_for(by_actor)`, computed, asserted."
+floor        = 1.0
+floor_basis  = "structural: FRACTION of rows marked recovered whose vouches resolve, via `person_for`, to at least m distinct people, where m is the ring's declared quorum (default 1 for a house; a ring raises it in its own config). AND the reference app's balances over the same acts are byte-identical before and after the row is added - the no-re-division test (ring_cmd/templates/expenses.test.mjs:120-128) re-run unchanged with a recovery in the roster."
+target       = 1.0
+direction    = "higher_is_better"
+# instrument   = (none yet) — owed.
+instrument_note = "seed three introductions for one new key from three keys belonging to three people, and a control of three introductions from three keys belonging to ONE person (three laptops). The first resolves recovered; the second resolves to one person and does not meet m=3. A run without the control has not shown that people are counted rather than keys."
+goodhart     = "three laptops of one person is one person. A quorum satisfied by keys rather than people is the Sybil hole the pasted design names as the main attack on bigger scrip systems, and known membership is only a defence if the count is over PEOPLE. Also: the derived-roster namespaces refuse `roster add` and `ring introduce` today (`refuse_derived_roster`, ring_cmd/mod.rs:149) and must refuse the recovery verb too, or ra-5 reopens the hole §7.1 closed."
+status       = "open"
+
+[[bar]]
+id           = "ra-retired-key-is-refused"
+demo         = "The old laptop cannot sign any more, and everything it signed before still counts"
+rung         = "ra-5"
+one_line     = "CLAIM: ops under a retired key at seq > retired_at are reported as a gap and never admitted, and ops at seq <= retired_at are admitted exactly as before"
+derives_from = "admission holds the roster as a parameter and has `op.actor` and `op.kind.seq` in hand at the membership check (commonwealth-rail-core/src/admit.rs:339, :349) and implements no seq-bounded membership of any kind - grep for retire/revoke/expire/since finds only Seal prose. Retirement is therefore ROSTER METADATA on the row (retired_at seq), operator-written like every roster fact, consulted by admit - and NOT an op: an act that changes what admission admits is the rail learning meaning, which introduce.rs:33-38 refuses, and it makes membership a function of the log, which lib.rs:151-160 refuses and the no-re-division test pins. NOT `Seal` either: a seal retires the signer's OWN history BEFORE its seq and cannot name another key (lib.rs:265-282, sync.rs:115-122) - the opposite direction on both axes."
+floor        = 0.0
+floor_basis  = "structural: COUNT of ops admitted whose actor is retired in the roster and whose seq exceeds that key's retired_at. Zero, as a new `RailGap` variant (name it `RetiredSigner`; `Retire` and `Recovery` are free nouns, converge-checked 2026-09-17) - membership and authenticity are the rail's half of the cut (lib.rs module docs) so a gap variant is legitimate where an act variant is not."
+target       = 0.0
+direction    = "near_zero"
+# instrument   = (none yet) — owed.
+instrument_note = "one actor, two ops: seq 3 before retirement and seq 4 after, retired_at = 3. The run must show seq 3 ADMITTED and seq 4 in the gap list under the new variant, with the test watched failing before the variant exists (ARCH 5). Then `compact`/sealed floors re-run unchanged, because retirement must not move where hole-reporting begins (admit.rs:404-416)."
+goodhart     = "zero is the expected good result and proves nothing alone (ARCH 5): a retired key that never signed anything scores zero perfectly. The same run must carry the positive control - the pre-retirement op admitted and folded. And a retirement that also dropped the key's EARLIER ops would re-divide history, which is the exact failure the roster/op-set separation exists to prevent."
+status       = "open"
+
 # ── THE LADDER ───────────────────────────────────────────────────────────────
 
 [[rung]]
 id     = "ra-1"
+primitive = "identity"
 title  = "ring-1-introduce: a roster row carries its warrant, and an act is the evidence"
 status = "open"
 demo   = "D1"
@@ -100,6 +240,7 @@ note   = "S1 + S2 from RING_APPLICATIONS.md, landed together: provenance with no
 
 [[rung]]
 id     = "ra-4"
+primitive = "discovery"
 title  = "an Offer origin kind, the computed catalogue, and the vouch join"
 status = "open"
 demo   = "D4"
@@ -107,7 +248,17 @@ moves  = ["ra-offers-catalogue-computed", "ra-seller-carries-their-vouch"]
 note   = "S6, FUNDED 2026-09-13 and lands NEXT despite the id — ids are identity, not position. Promoted ahead of ra-2 because ra-1's worker found the campaign's byproduct stop condition unmet: an Introduce cannot ride a transaction when no transaction act exists, so `svrn ring introduce` is the separate civic act the spec named as the PGP failure mode. This rung builds the first transaction vocabulary, which is what an introduction can later be a byproduct OF. Building Carry (ra-2) on an attestation nobody writes would be building on the rot."
 
 [[rung]]
+id     = "ra-5"
+primitive = "identity"
+title  = "your keys survive your devices - linked devices legible, recovery by m people, retired keys refused"
+status = "open"
+demo   = "D5"
+moves  = ["ra-linked-device-is-legible", "ra-recovery-names-m-people", "ra-retired-key-is-refused"]
+note   = "The pick on 2026-09-17 for what an END USER feels most: a house on this for a year loses a laptop with certainty, and 'no password reset' is the failure that makes key-based systems unusable by ordinary people; every local-first tool that solves it does so with a server holding the recovery. Sequenced after ra-4 because it reuses the trace join. Three corrections from the citation pass shape it: linking is landed and only needs a surface; recovery needs `vouches` to become a collection; retirement is roster metadata read by admit, never an op and never Seal."
+
+[[rung]]
 id     = "ra-2"
+primitive = "membership"
 title  = "standalone op verification, and Carry across rings"
 status = "open"
 demo   = "D2"
@@ -116,9 +267,72 @@ note   = "S3. DEFERRED behind ra-4, see that rung's note. Verify a foreign op's 
 
 [[rung]]
 id     = "ra-3"
-title  = "blob distribution — iroh-blobs for the bytes an act references"
+primitive = "content"
+title  = "blob distribution - encrypt, code k-of-n, tier hot copies, audit by range; the bytes an act references"
 status = "open"
 demo   = "D3"
 moves  = []
-note   = "S5. Independent of ra-1 and ra-2 and can run in parallel with a different pair of hands. Nothing visual works in either domain while a photo radiates from one node's first hop. Names no bar yet."
+note   = "S5. Independent of ra-1/ra-2/ra-5 and can run in parallel with a different pair of hands. Inventory 2026-09-17 says the earlier note was understated: a photo cannot be referenced by a ring act AT ALL today - the rail has no blob/attachment noun, `Payload` is capped at 64 KiB precisely to refuse files (rail-core/src/payload.rs:55-61), `iroh-blobs` is absent from Cargo.lock, and no erasure code exists anywhere. NEW, on existing seams: `TrafficClass::ModelTransfer` is the declared iroh-blobs slot (TRANSPORT_MIGRATION.md:393, :530 - for GGUFs, a different question, reusable as the transport seam) and model_files.rs already parses RFC-7233 ranges and serves 206 with a whole-file X-Sha256 (:189-195, :273-308) - a RANGED verification hash is the genuinely new part. Recipe: encrypt on device before coding (coding is not secrecy - k-1 shares leak); one share per member; hot full copies on keepers, more for recent items; repair only after a member has been absent past a stated window. k is MEASURED from the worst observed hour, not the average, and no presence history exists today (MemberRecord.last_seen is a single LWW scalar, commonwealth-core/src/mesh/mod.rs:207) - a sampler is owed BEFORE k can be declared; until then the guarantees sheet renders k as could-not-judge. NOUN: `Share` sits inside the shared-model kin family (SharedModelFleet etc.) - converge a different word. Names no bar yet; the first to declare is the negative leg: with n-k members offline the blob still fetches, and with n-k+1 it reports NOT HELD rather than hanging."
 
+[[rung]]
+id     = "ra-6"
+primitive = "live"
+title  = "the live lane - presence and chat delivery in under a second, nothing durable on it"
+status = "open"
+demo   = "D6"
+moves  = []
+note   = "The rail syncs by digest with a 60s ceiling on idleness (sovereign-mesh/src/ring_sync.rs:87, :19-24) and cannot carry chat. The old 10s full-snapshot push is GONE (deleted at cw-lift 2e; gossip.rs:22-37) and `/internal/ring/sync` is pinned as the ONE sender of replicated state by tests/main/replication_sender_census.rs - so a live lane must be PROVABLY non-durable or it trips that census, which is the structural version of the line this rung draws: gossip is ephemeral, the rail is the record. NEW: `iroh-gossip` is absent (the one hit is a test mock, commonwealth-transport/src/routed.rs:312); nearest existing thing is the `TrafficClass::Gossip` seam plus `announce_presence_change`'s event-driven push-to-all (gossip.rs:925-970), which carries DURABLE membership and is not pub-sub. One topic per ring; message HISTORY is ordinary rail acts of kind `message`. `Presence` bare noun is free (kin: PresenceChange). Ahead of ra-3 because chat is what a person touches every hour. Names no bar yet - the negative leg to declare first: a message that only ever rode gossip is NOT in the history, and the census stays green."
+
+[[rung]]
+id     = "ra-7"
+primitive = "availability"
+title  = "the keeper role - an always-on member that holds the journal and blobs and never authors"
+status = "open"
+demo   = "D7"
+moves  = []
+note   = "REUSE ring_sync + the roster; extend nothing structural. A peer holding everything and authoring nothing is already the designed case: republish is author-blind (commonwealth-rail/src/lib.rs:482-487), an empty digest asks for everything (sovereign-api/src/routes_internal/ring_sync.rs:89-92), and a fresh node catches up in one exchange (ring_sync.rs:1203-1257). What the rung adds is AVAILABILITY for blobs (ra-3) and a closed enum on the roster row - member | keeper - so a keeper's ops are gaps and it can never introduce: 'still just a peer, not an authority' as a property of the roster. Two honesties: after a seal a rejoiner catches up to COMPACTED state, not full history (ring_sync.rs:1426-1443), and the demo says so; and `Anchor` is TAKEN twice - corpus-engine meta_atlas AND the live gossiped mesh noun `AnchorProfile.can_anchor` meaning tensor-split worker (commonwealth-core/src/capabilities.rs:148-156, MemberDto.can_anchor) - converge `Keeper` before minting. Names no bar yet - the demo is every laptop closed and a rejoining one catching up from the keeper alone."
+
+[[rung]]
+id     = "ra-8"
+primitive = "guarantees"
+title  = "`svrn ring guarantees` - a sheet computed from n, k and m that names what is not protected"
+status = "open"
+demo   = "D8"
+moves  = []
+note   = "Three tiers from the ring's real numbers: guaranteed by math on the device (confidentiality if encrypted before coding, integrity, transport, audits); guaranteed up to a stated threshold (n-k+1 must refuse to censor a blob; more than m colluders rewrite the roster); not protected (who talks to whom via relays, deletion beyond crypto-shredding, a compromised device). REUSE `kernel_types::Judgement` rows through posture_cmd.rs's `sources()` registry + render_rows + honesty_footer (sovereign-cli/src/posture_cmd.rs:48-60, :546, :570) - four verdicts, a reason that cannot be omitted; its module doc is the argument against a seventh renderer. docs/THREAT_MODEL.md is the prose to cite FROM (its rule: every claim pinned to code, gaps listed not embellished, :15-24), not a computation. Two inputs are NOT measurable today and render could-not-judge, never a number (ARCH 6): k has no presence history (see ra-3), and m does not exist - the only `quorum` in the tree is the unrelated tensor-split gate SOVEREIGN_RPC_QUORUM_ANCHORS (rpc_distribution.rs:1422), a name collision to avoid. Equivocation is ALREADY detected as `RailGap::SequenceFork` (admit.rs:369-392, both ops excluded) - the sheet cites it. `svrn ring` has verbs new|roster|introduce|dev|log|seal (ring_cmd/mod.rs:69-76); this adds one. Names no bar yet."
+
+[[rung]]
+id     = "ra-9"
+primitive = "commons"
+title  = "the commons ledger - GB-hours proven by audit, weighted by scarcity, folded like balances"
+status = "open"
+demo   = "D9"
+moves  = []
+note   = "After ra-3. EXTEND, do not mint: `LedgerEventKind::StorageSnapshot { corpora: Vec<(String, f64)> }` on an hourly tick folding to `CorpusHosting.size_gb` IS already GB-hours (commonwealth-core/src/contributions.rs:107-112, :200-206; emitter commonwealth-state/src/contributions.rs:161-191), replicates on the ring via DAEMON_OWN_NAMESPACES (ring_roster.rs:258), and is read cross-peer by newsworthy_host.rs:35-42; `svrn mesh balance` renders it. Two gaps: per-NODE not per-person (the roster join from ra-1 closes that) and its unit is corpus_id not a blob share. The module's own principle - dimensions are plural and incommensurable (:9) - and the JobUnitCompleted precedent (:113-137) say: a fifth variant in its own units, never folded into corpora_hosted. Reward storage PROVEN (an audit act from ra-3), never storage offered. No spendable credit at ring scale: the only graduated response is hot-copy priority, admission is never touched; a norm of giving roughly what you take, with room for phones. `Commons` has zero definitions and the converge tool says it needs a home crate. Names no bar yet."
+
+[[rung]]
+id     = "ra-10"
+primitive = "deployment"
+title  = "the builder leg - `svrn ring deploy`, and a second app built by someone else with zero rail diffs"
+status = "open"
+demo   = "D10"
+moves  = []
+note   = "This is the ring-deploy order (.sovereign/features/ring-deploy/order.md, draft 2026-08-30) adopted as a rung rather than left as a parallel draft: the rail listener (M1), identity-is-the-namespace (M2), the grant vocabulary (M3), page-over-rails (M4), the append_key promotion (M5). Its clause 3 - a housemate who is not the author builds the lending board from the docs in an evening with no rail change - is the campaign's builder-side predicate. Names no bar yet; the order's Done-when 5, 6 and 9 are the three negative legs to declare."
+
+[[rung]]
+id     = "ra-11"
+primitive = "membership"
+title  = "day zero - join by one QR code on a phone, no account, and see a name not a key"
+status = "open"
+demo   = "D0"
+moves  = []
+note   = "An average urban person does not carry a laptop to the corner shop. The ring-deploy order named the phone as a gap to measure before paying for; under the fortnight predicate it is day zero and is paid for. The guest-grant deep link already carries the QR shape (deep_link.rs); the phone key is a linked device (ra-5) so the phone IS the wallet. Mobile transport is unverified on this host (memory: mobile Tauri WS down). Names no bar yet."
+
+[[rung]]
+id     = "ra-12"
+primitive = "compute"
+title  = "hubs named honestly - search and shared inference live on one machine, and every answer says which"
+status = "open"
+demo   = "D12"
+moves  = []
+note   = "Search has no central index and a shared local AI is a server wherever the GPU is; the honest answer is a hub-like peer, attributed. docs/LAZY_INFERENCE_ON_THE_RAIL.md already treats the GPU node as the seam. Every hub-served answer carries the same kind of row ra-4 carries: which single node this depended on. Off the first ladder by the pasted argument (availability and trust are the hard problems on a peer network; the AI is not). Names no bar yet."
