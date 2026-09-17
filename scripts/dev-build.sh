@@ -27,6 +27,7 @@
 #
 # Usage:
 #   scripts/dev-build.sh                      # full workspace, debug
+#   scripts/dev-build.sh --clean              # clean the debug profile first
 #   scripts/dev-build.sh -p sovereign-cli-dev # one crate, same features
 #   scripts/dev-build.sh --release            # forwarded verbatim
 
@@ -66,6 +67,57 @@ if ! command -v clang >/dev/null 2>&1; then
         echo "  scripts/sovereign-test.sh."
     } >&2
     exit 2
+fi
+
+# ── --clean: the campaign's build-hygiene entry. ────────────────────────────
+#
+# Workers accumulate build assets across units: measured 2026-09-15, target/
+# was 100G (47G incremental, 35G deps) with 503 crates holding more than one
+# rlib from differing feature sets, and the disk ceiling took the loop down
+# twice. But an UNCONDITIONAL clean costs a full rebuild every unit — measured
+# the same day: 7.2m of a 30m unit, on top of checks that are cold anyway
+# (TESTALL 20.8m), because `cargo clean --profile dev` re-runs every build
+# script (llama.cpp) and every scoped compile.
+#
+# So the clean is CONDITIONAL: the debug profile is cleaned only when it has
+# grown past RALPH_CLEAN_MB (default 50G), which bounds the disk without
+# paying the rebuild on every unit. Force it with RALPH_CLEAN_MB=0.
+# `--gate-only` runs the same size gate and stops before the build: the unit
+# loop calls it as CLEAN (2026-09-16 speed order — the build that used to ride
+# CLEAN was a second full pass; LINT is the unit's first build now).
+gate_only=0
+for arg in "$@"; do
+    [[ "$arg" == "--gate-only" ]] && gate_only=1
+done
+if [[ "${1:-}" == "--clean" || "${1:-}" == "--gate-only" ]]; then
+    shift
+    # `--clean --gate-only` is the campaign loop's CLEAN form (RALPH PROMPT
+    # §5): both flags mean the same gate, and only one is consumed by the
+    # `shift` above. Drop the second so it never reaches cargo — it leaked
+    # until 2026-09-17, so the COLD path (clean fired, build follows) died
+    # with `unexpected argument '--gate-only'` instead of building, while
+    # the warm path exited 0 and hid it.
+    [[ "${1:-}" == "--gate-only" ]] && shift
+    # `|| true`: with the debug profile absent `du` exits non-zero, and
+    # `pipefail` turned that into a silent `set -e` exit before the size gate
+    # could decide. The empty `size_mb` is already handled below.
+    size_mb=$(du -sm target/debug 2>/dev/null | cut -f1 || true)
+    limit_mb="${RALPH_CLEAN_MB:-51200}"
+    if [[ -n "${size_mb:-}" && "$size_mb" -ge "$limit_mb" ]]; then
+        echo "dev-build: debug target is $((size_mb / 1024))G (>= $((limit_mb / 1024))G) — cleaning" >&2
+        cargo clean --profile dev
+        cleaned=1
+    else
+        echo "dev-build: debug target is $(( ${size_mb:-0} / 1024 ))G (under $((limit_mb / 1024))G) — keeping the cache" >&2
+        cleaned=0
+    fi
+    # After a clean the build runs even in gate-only mode: the clean removes
+    # the CLI binaries the loop's checks and premise tools call (sovereign,
+    # sovereign-cli-dev), and nothing else rebuilds them (2026-09-16).
+    if [[ "$gate_only" == "1" && "$cleaned" == "0" ]]; then
+        echo "dev-build: gate-only — skipping the build" >&2
+        exit 0
+    fi
 fi
 
 FEATURES="corpus-engine/treesitter,sovereign-cli/dev-tools"
