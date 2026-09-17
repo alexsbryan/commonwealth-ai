@@ -4,7 +4,8 @@ You are a worker executing ONE unit of the `ring-doc` campaign
 (`quality/campaigns/ring-doc.toml`, child of `ring-apps`). The order it executes
 is `.sovereign/features/ring-doc-week1/order.md`; its Demo section is the
 definition of done and the rows below are its Steps, one commit each. A fresh session starts every iteration: this
-file, `ralph/STATE.md` and the repo are your whole memory. Do exactly what your
+file, `ralph/next/ring-doc/STATE.md` and the repo are your whole memory. `ralph/STATE.md`
+is ANOTHER campaign's queue (domains) - never open it, never mark it. Do exactly what your
 unit's row says. Do not design anything — every design decision already lives
 in the files the row points at. When a row and the tree disagree, you stop
 (§6); you never improvise around it.
@@ -15,12 +16,12 @@ comment beyond the one the row asks for (ARCH principle 2).
 
 ## 1. Pick your unit
 
-1. Open `ralph/STATE.md`. If a row is `[~]`, that is your unit — a previous
+1. Open `ralph/next/ring-doc/STATE.md`. If a row is `[~]`, that is your unit — a previous
    session was killed in the middle of it. Continue it.
 2. Otherwise your unit is the FIRST `[ ]` row, top to bottom, whose
    `depends [...]` ids are all `[x]`.
 3. If this prompt opens with a `POOL LANE` note, the note names your unit and
-   you do not edit `ralph/STATE.md` at all.
+   you do not edit `ralph/next/ring-doc/STATE.md` at all.
 4. If the loop told you the tree holds uncommitted work, it belongs to the
    `[~]` unit: read `git status` and `git diff`, keep what is right, continue.
 5. If the loop's note names your unit (`Your unit: <id>`), open only that row.
@@ -30,7 +31,7 @@ comment beyond the one the row asks for (ARCH principle 2).
 `- [ ] <id> — depends [<ids>] — <VERB> <what> — read: <pointers> — check: <checks>`
 
 - **read:** the only files you read, besides the files you edit. Pointer keys
-  are defined at the top of `ralph/STATE.md`. `O2 step 3` means item 3 under
+  are defined at the top of `ralph/next/ring-doc/STATE.md`. `O2 step 3` means item 3 under
   `## Steps` in that order file.
 - **check:** named checks from §5, run in the order written. All must pass.
   "paste X" means put X's output (trimmed) in the commit body.
@@ -47,7 +48,7 @@ comment beyond the one the row asks for (ARCH principle 2).
 
 ## 3. Building a unit
 
-1. Mark the row `[~]` in `ralph/STATE.md`. Do not commit that edit on its own.
+1. Mark the row `[~]` in `ralph/next/ring-doc/STATE.md`. Do not commit that edit on its own.
 2. **Premise check before any edit.** The row states facts — a path, a symbol,
    a count. Verify each with `ls`, `git grep` or `grep` first. If one is
    false, stop: §6, with what you found.
@@ -60,7 +61,7 @@ comment beyond the one the row asks for (ARCH principle 2).
    the `exit=` lines, every PLANT's red line, and anything the row says to
    paste.
 7. Mark the row `- [x] <unit-id> <short-hash> — depends [...] — ...`, keeping
-   the unit id immediately after the checkbox. Commit `ralph/STATE.md` alone
+   the unit id immediately after the checkbox. Commit `ralph/next/ring-doc/STATE.md` alone
    as `ralph: <unit-id> done`. In a POOL LANE, write
    `ralph/lanes/<unit-id>.done` and commit that instead.
 
@@ -76,7 +77,7 @@ premise a worker can verify with grep, and names §5 checks. **The row's `cap`
 is a hard limit.** If the work needs more rows than the cap, do not mint them:
 write `ralph/NEEDS_HUMAN.md` with the count you measured and why, and stop —
 growth past a cap is a design finding, never a queue edit. Commit
-`ralph/STATE.md` as `REVIEW-mint-rd-<x>: <n> rows minted`, then mark the mint
+`ralph/next/ring-doc/STATE.md` as `REVIEW-mint-rd-<x>: <n> rows minted`, then mark the mint
 row `[x]`.
 
 **`REVIEW-audit-rd-<n>`.** Run TESTALL and PREPUSH. Read `git log` and
@@ -115,7 +116,7 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
   (d) "edit or mark the row in ralph/STATE.md, then
   `rm ralph/STOP ralph/NEEDS_HUMAN.md`". Leave the tree compiling. Commit
   nothing broken. Then stop.
-- **`ralph/DONE`** — only when every row in `ralph/STATE.md` is `[x]`.
+- **`ralph/DONE`** — only when every row in `ralph/next/ring-doc/STATE.md` is `[x]`.
 
 ## 7. Hard rules
 
