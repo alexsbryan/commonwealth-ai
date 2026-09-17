@@ -636,3 +636,66 @@ same shape the api fold used for `state.rs` (`9a0ebfcb9`).
 two ABSORBED marks, `dm-daemon-mesh-jobs`'s dep + `daemon_services` note, the
 `REVIEW-build-daemon-embedded-split` note) and this entry. `git revert <sha>`
 reverts it alone.
+
+## 2026-09-17 · dm-daemon-api-edge · re-sequence after the mesh adapters; the crate's own tests are consumers
+
+**Fork.** `dm-daemon-api-edge` still cannot execute, and the package's reason
+(`ralph/NEEDS_HUMAN.md`, 2026-09-17) is directionally right but its evidence is
+stale. Written at `c69405292`, it names five `host`-tagged mesh modules that
+stay in `sovereign-mesh` and take `sovereign_api::state::AppState` in
+production, so the moment `state.rs` lands in the daemon `LINT` goes red and
+`[[forbid]] sovereign-mesh -> sovereign-daemon` (`quality/ARCH_LAYERS.toml:749-752`,
+no `except`) blocks the repoint. Reproduced at HEAD `480b4a2b2`: only TWO of
+those five remain — `newsworthy_host.rs:32` and `work_atlas_broadcaster.rs:52`
+— because `dm-daemon-mesh-jobs` has since landed (`480b4a2b2`) and moved
+`auto_ingest`/`auto_resume`/`work_donor` into the daemon. Both survivors are
+`dm-daemon-mesh-adapters`'s (`ralph/STATE.md:181`). That row is not this row's
+dependency and `dm-daemon-mesh-jobs` is now `[x]`, so the pool dispatches this
+one first (`its depends are met`) and it cannot compile.
+
+**Choice.** Option 1 of the package, not its option 2. Add
+`dm-daemon-mesh-adapters` to this row's `depends` (transitively `-jobs` and
+`dm-daemon-mesh-edge`, both `[x]`), and extend (c) to name the crate's OWN
+integration tests as consumers. The fuse (`dm-daemon-api-edge` + the three mesh
+rows into one commit, ~54k lines) is api-9's literal reading but one lane
+cannot finish it and the mesh side has already landed separately; the
+re-sequence is the smaller reversible step and keeps the row's scope.
+
+**Evidence.** `git grep -n 'sovereign_api::' sovereign/crates/sovereign-mesh/src`
+at `480b4a2b2` hits only the three fabric loops (`gossip.rs:45`, `ring_sync.rs:83`,
+`rail_kv_pump.rs:108`), the two adapters, and `join.rs` — the loops are this
+row's own (a)+(b), the adapters are `dm-daemon-mesh-adapters`. The tests:
+`git grep -l 'sovereign_api::' -- sovereign/crates/sovereign-mesh/tests/main/`
+is 29 files, all naming `state::{AppState, FabricSeed, MeshMutationHook,
+NodeSeed, LocalInferenceService}`, `server::{internal_router, client_router}`,
+`headers::parse_x_node_id`, `routes_inference`, `routes_status` — the items this
+row moves — while 50 files already name `sovereign_daemon` (the mesh-edge
+repoint). The dev edge the tests need is ALREADY in HEAD:
+`sovereign/crates/sovereign-mesh/Cargo.toml`'s `[dev-dependencies] sovereign-daemon`
+(added by `dm-daemon-mesh-edge`), and dev edges are never layer-enforced
+(`DepKind::Dev`, `quality/arch-layers/src/lib.rs:166-172`), so this is a
+repoint, not a new edge. The placement is the docs': `quality/DAEMON_CORE.md`
+§4.2:412-415 ("Tests build the node the way production does: the 63 test sites
+that construct `AppState` directly … move to a test node produced by the same
+assembly") and §4.1:294-297 (the host sits at tier 5, not in `sovereign-cli-daemon`,
+so "`sovereign-mesh`'s own tests could not reach it" does not bite). The
+`sovereign_api::auto_recover::*` refs in the same files are `dm-auto-recover-move`'s
+and are left for it.
+
+**Falsified by.** An `except` on the `sovereign-mesh -> sovereign-daemon` forbid
+that makes a partial move legal (then `dm-daemon-mesh-adapters` need not
+precede this row); or a showing that the two adapter modules are not
+`sovereign-mesh`'s to move (they are tagged `host`, `quality/DOMAINS.toml`).
+The row's own scope (a)-(c) is unchanged otherwise.
+
+**REVIEW-AFTER:** the charter clearly covers row order and re-scoping, but two
+judgement calls are worth the morning's eye. (1) The package's option 1 offered
+"repoint the tests at a dev-dep"; the dev-dep already exists, so this became a
+pure repoint — I did not verify that all 29 files' non-`auto_recover` refs are
+this row's rather than another row's beyond the grep above. (2) `dm-daemon-mesh-adapters`
+was left as its own row rather than folded in; if it fails its waves for the
+same E0116/atomicity reason the mesh cluster did, the fallback is to fold it.
+
+**Landed in.** this commit — `ralph/STATE.md` (the `dm-daemon-api-edge` depends,
+its (c) test list, the RE-SEQUENCED note) and this entry; `ralph/NEEDS_HUMAN.md`
+removed. `git revert <sha>` reverts it alone.
