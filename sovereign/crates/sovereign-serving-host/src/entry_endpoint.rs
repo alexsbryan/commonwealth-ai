@@ -164,10 +164,10 @@ mod tests {
     use sovereign_scheduler::venue::InferenceVenue;
 
     /// A mesh view with a fixed peer set.
-    struct Peers(Vec<InferenceVenue>);
+    struct FixedVenues(Vec<InferenceVenue>);
 
     #[async_trait]
-    impl VenueSource for Peers {
+    impl VenueSource for FixedVenues {
         async fn candidates(&self) -> Vec<InferenceVenue> {
             self.0.clone()
         }
@@ -188,7 +188,7 @@ mod tests {
     }
 
     fn source(peers: Vec<InferenceVenue>) -> Arc<dyn VenueSource> {
-        Arc::new(Peers(peers))
+        Arc::new(FixedVenues(peers))
     }
 
     /// The whole point: the address comes from the mesh at call time, so the

@@ -894,7 +894,7 @@ impl InferenceRouter {
     /// route on a live daemon.
     pub async fn observation_snapshot(&self) -> decision_log::FleetSnapshot {
         use sovereign_scheduler::decision_log::{
-            FleetSnapshot, LocalObservationRecord, PeerObservationRecord,
+            FleetSnapshot, LocalObservationRecord, VenueObservationRecord,
         };
         use sovereign_scheduler::decision_trace::TRACE_SCHEMA;
         let now = Self::now_unix_secs();
@@ -913,12 +913,12 @@ impl InferenceRouter {
         // would misstate the composition the sim is meant to
         // reproduce.
         let endpoints = self.mesh.candidates().await;
-        let mut peers: Vec<PeerObservationRecord> = endpoints
+        let mut peers: Vec<VenueObservationRecord> = endpoints
             .into_iter()
             .map(|p| {
                 let (quarantined, consecutive_failures, cooldown_remaining_secs) =
                     health.get(&p.name).copied().unwrap_or((false, 0, 0));
-                PeerObservationRecord {
+                VenueObservationRecord {
                     observations: peer_obs.get(&p.name).cloned().unwrap_or_default(),
                     node_id: Some(p.node_id.to_hex()),
                     benchmark: p.benchmark.clone(),
@@ -2736,7 +2736,7 @@ impl InferenceRouter {
                             RouteDecision::Peer {
                                 peer,
                                 peer_cand,
-                                disposition: PeerFailureDisposition::Soft,
+                                disposition: VenueFailureDisposition::Soft,
                                 pinned_model_id: Some(model_id.clone()),
                             },
                             RouteDecision::LocalFallback { total },
@@ -2755,7 +2755,7 @@ impl InferenceRouter {
                             RouteDecision::Peer {
                                 peer,
                                 peer_cand,
-                                disposition: PeerFailureDisposition::Soft,
+                                disposition: VenueFailureDisposition::Soft,
                                 pinned_model_id: Some(model_id.clone()),
                             },
                             RouteDecision::LocalNamed {
@@ -2768,7 +2768,7 @@ impl InferenceRouter {
                             peer,
                             peer_cand,
                             pinned_model_id: Some(model_id.clone()),
-                            disposition: PeerFailureDisposition::Hard { model_id },
+                            disposition: VenueFailureDisposition::Hard { model_id },
                         }]))
                     }
                 }
@@ -2889,7 +2889,7 @@ impl InferenceRouter {
             steps.push(RouteDecision::Peer {
                 peer,
                 peer_cand,
-                disposition: PeerFailureDisposition::Soft,
+                disposition: VenueFailureDisposition::Soft,
                 // Ranked/OICP: the peer picks from the envelope.
                 pinned_model_id: None,
             });
@@ -2951,7 +2951,7 @@ impl InferenceRouter {
 /// error path inside the route-cascade loop in
 /// `complete_stream_with_id{,_and_finish}`.
 #[derive(Clone)]
-enum PeerFailureDisposition {
+enum VenueFailureDisposition {
     /// Explicit named-peer route — when every base_url fails, return
     /// a `Routing` error naming the model and peer.
     Hard { model_id: String },
@@ -3001,7 +3001,7 @@ enum RouteDecision {
     Peer {
         peer: InferenceVenue,
         peer_cand: ModelCandidate,
-        disposition: PeerFailureDisposition,
+        disposition: VenueFailureDisposition,
         /// Model id to PIN on the outgoing request, when this route
         /// came from resolving a NAME (an explicit `model_id`, or a
         /// configured shared primary). `None` on ranked/OICP routes,
@@ -3508,10 +3508,10 @@ mod tests {
         }
     }
 
-    struct NoPeers;
+    struct NoVenues;
 
     #[async_trait]
-    impl VenueSource for NoPeers {
+    impl VenueSource for NoVenues {
         async fn candidates(&self) -> Vec<InferenceVenue> {
             Vec::new()
         }
@@ -3520,7 +3520,7 @@ mod tests {
     /// Test host half: no identity, no ledger. Passed wherever a test builds a
     /// `InferenceRouter` from a stub source.
     #[async_trait]
-    impl VenueHost for NoPeers {}
+    impl VenueHost for NoVenues {}
 
     /// A manifest reader that knows nothing. The stub model ids these tests
     /// use are absent from `DEFAULT_MANIFEST`, so this is what the real
@@ -3581,7 +3581,7 @@ mod tests {
             "a pinned pod is not a mesh member and must not emit"
         );
 
-        let bare: Arc<dyn VenueHost> = Arc::new(NoPeers);
+        let bare: Arc<dyn VenueHost> = Arc::new(NoVenues);
         assert!(
             ledger_emitter_for_venue(&bare, &mesh_peer).await.is_none(),
             "a host with no ledger reports absence, never a defaulting emitter"
@@ -3595,8 +3595,8 @@ mod tests {
         });
         let mip = InferenceRouter::with_peer_source(
             local,
-            Arc::new(NoPeers),
-            Arc::new(NoPeers),
+            Arc::new(NoVenues),
+            Arc::new(NoVenues),
             Arc::new(NoManifest),
         );
         (serving, mip)
@@ -3864,17 +3864,17 @@ mod tests {
         }
     }
 
-    struct OnePeer(InferenceVenue);
+    struct OneVenue(InferenceVenue);
 
     #[async_trait]
-    impl VenueSource for OnePeer {
+    impl VenueSource for OneVenue {
         async fn candidates(&self) -> Vec<InferenceVenue> {
             vec![self.0.clone()]
         }
     }
 
     #[async_trait]
-    impl VenueHost for OnePeer {}
+    impl VenueHost for OneVenue {}
 
     /// A peer at an address nothing listens on. Every attempt fails at
     /// connect, which is all these tests need — the fallback keys on
@@ -3940,8 +3940,8 @@ mod tests {
         let peer = dead_peer();
         let mip = InferenceRouter::with_peer_source(
             local,
-            Arc::new(OnePeer(peer.clone())),
-            Arc::new(NoPeers),
+            Arc::new(OneVenue(peer.clone())),
+            Arc::new(NoVenues),
             Arc::new(NoManifest),
         );
         mip.peer_cache.write().await.insert(
@@ -4013,8 +4013,8 @@ mod tests {
     fn forwarder(locus: ServingLocus) -> InferenceRouter {
         InferenceRouter::with_peer_source(
             Arc::new(Forwarder(locus)),
-            Arc::new(NoPeers),
-            Arc::new(NoPeers),
+            Arc::new(NoVenues),
+            Arc::new(NoVenues),
             Arc::new(NoManifest),
         )
     }
@@ -4050,7 +4050,7 @@ mod tests {
     }
 
     /// A weightless node whose peer DOES advertise the name — the shape
-    /// `forwarder()` cannot express, because `NoPeers` is the un-joined case.
+    /// `forwarder()` cannot express, because `NoVenues` is the un-joined case.
     ///
     /// `rtt_ms: 1` is the point: this peer is as Near as a peer gets, which is
     /// precisely the configuration that beat the bound node on RuggedFox.
@@ -4058,8 +4058,8 @@ mod tests {
         let peer = dead_peer();
         let mip = InferenceRouter::with_peer_source(
             Arc::new(Forwarder(locus)),
-            Arc::new(OnePeer(peer.clone())),
-            Arc::new(NoPeers),
+            Arc::new(OneVenue(peer.clone())),
+            Arc::new(NoVenues),
             Arc::new(NoManifest),
         );
         mip.peer_cache.write().await.insert(
@@ -4125,7 +4125,7 @@ mod tests {
     /// **The §10.6 bar: joining the mesh must not move a terminal's chat.**
     ///
     /// This is the one that names what was actually wrong. The un-joined path
-    /// (`NoPeers`) forwarded to the binding and the joined path routed to a
+    /// (`NoVenues`) forwarded to the binding and the joined path routed to a
     /// peer, so the same node answered "where does my chat go" differently
     /// depending on gossip state — while its embeddings answered the same way
     /// throughout. Two deciders for one question.
@@ -4223,8 +4223,8 @@ mod tests {
         });
         let mip = InferenceRouter::with_peer_source(
             local,
-            Arc::new(NoPeers),
-            Arc::new(NoPeers),
+            Arc::new(NoVenues),
+            Arc::new(NoVenues),
             Arc::new(NoManifest),
         );
         match mip
@@ -4418,8 +4418,8 @@ mod tests {
         let sink = Arc::new(decision_log::CaptureDecisionSink::new());
         let mip = InferenceRouter::with_peer_source(
             local,
-            Arc::new(NoPeers),
-            Arc::new(NoPeers),
+            Arc::new(NoVenues),
+            Arc::new(NoVenues),
             Arc::new(NoManifest),
         );
         let mip = mip.with_decision_sink(sink.clone());
@@ -4470,7 +4470,7 @@ mod tests {
             .expect("a route plan");
         match plan.steps.as_slice() {
             [RouteDecision::Peer {
-                disposition: PeerFailureDisposition::Soft,
+                disposition: VenueFailureDisposition::Soft,
                 ..
             }, RouteDecision::LocalNamed { attribution, .. }] => {
                 assert_eq!(
@@ -4495,7 +4495,7 @@ mod tests {
             .expect("a route plan");
         match plan.steps.as_slice() {
             [RouteDecision::Peer {
-                disposition: PeerFailureDisposition::Hard { model_id },
+                disposition: VenueFailureDisposition::Hard { model_id },
                 ..
             }] => {
                 assert_eq!(model_id, "peer-only");
@@ -4527,8 +4527,8 @@ mod tests {
         });
         let mip = InferenceRouter::with_peer_source(
             local,
-            Arc::new(NoPeers),
-            Arc::new(NoPeers),
+            Arc::new(NoVenues),
+            Arc::new(NoVenues),
             Arc::new(NoManifest),
         );
         mip.set_shared_model_id(Some("shared-model".into()));
@@ -4593,7 +4593,7 @@ mod tests {
     // was scored. The three tests below hold the fix in place from both
     // sides: the gate is gone, and N=1 did not move.
 
-    // The N=1 mesh uses the module's existing `NoPeers` source (:3761).
+    // The N=1 mesh uses the module's existing `NoVenues` source (:3761).
 
     /// The thin-client shape: no `model`, no `oicp`.
     fn bare() -> CompletionRequest {
@@ -4645,8 +4645,8 @@ mod tests {
         });
         let mip = InferenceRouter::with_peer_source(
             local,
-            Arc::new(NoPeers),
-            Arc::new(NoPeers),
+            Arc::new(NoVenues),
+            Arc::new(NoVenues),
             Arc::new(NoManifest),
         );
 

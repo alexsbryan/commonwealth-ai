@@ -297,7 +297,7 @@ mod tests {
     use super::*;
     use crate::decision_log::{
         CandidateInputs, CandidateKind, CandidateRecord, DecisionBuilder, DecisionPath, LoadSource,
-        LocalObservationRecord, PeerObservationRecord, RequestFacts, ScoreRecord, ServedBy,
+        LocalObservationRecord, RequestFacts, ScoreRecord, ServedBy, VenueObservationRecord,
         Verdict,
     };
     use oicp_types::NodeObservations;
@@ -410,7 +410,7 @@ mod tests {
                 in_flight_published: 0,
             },
             peers: vec![
-                PeerObservationRecord {
+                VenueObservationRecord {
                     name: "hub".into(),
                     node_id: None,
                     observations: NodeObservations {
@@ -425,7 +425,7 @@ mod tests {
                     consecutive_failures: 0,
                     cooldown_remaining_secs: 0,
                 },
-                PeerObservationRecord {
+                VenueObservationRecord {
                     name: "laptop".into(),
                     node_id: None,
                     observations: NodeObservations {
@@ -440,7 +440,7 @@ mod tests {
                     consecutive_failures: 0,
                     cooldown_remaining_secs: 0,
                 },
-                PeerObservationRecord {
+                VenueObservationRecord {
                     name: "desktop".into(),
                     node_id: None,
                     observations: NodeObservations::default(),

@@ -9,8 +9,8 @@
 //! (which owns the `EmbeddedDaemon`) implements them.
 //!
 //! [`VenueSource`](sovereign_scheduler::venue::VenueSource) carries only the
-//! candidate list. The two facts the old `PeerEndpointSource` also carried are
-//! host concerns and ride here instead:
+//! candidate list. The two facts the legacy port also carried are host
+//! concerns and ride here instead:
 //!
 //! - the local node id, Fabric's identity READER (`quality/DAEMON_CORE.md`
 //!   §4.2 "Identity is a reader" — join adoption swaps the id inside a running
