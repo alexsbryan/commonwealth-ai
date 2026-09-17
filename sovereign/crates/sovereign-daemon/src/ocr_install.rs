@@ -58,7 +58,7 @@ use sovereign_tools::local_corpus::LocalCorpusManager;
 ///
 /// Never fatal. A daemon with no OCR is a supported posture; a daemon that
 /// refuses to boot because an optional asset is missing is not.
-pub(super) async fn install_ocr_ctx(
+pub async fn install_ocr_ctx(
     manager: &LocalCorpusManager,
     data_dir: &Path,
     daemon_base_url: String,

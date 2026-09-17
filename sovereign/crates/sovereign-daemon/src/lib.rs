@@ -42,15 +42,27 @@
 
 pub mod admin_http;
 pub mod assets_http;
+pub mod atlas_builder;
 pub mod atlas_http;
 /// The auto-collaborate pull loop and its heartbeat verdict — ingest run as
 /// background work (DAEMON_CORE.md §3.2, `jobs`).
 pub mod auto_ingest;
 pub mod auto_resume;
+/// The composition half of `sovereign-cli-daemon`'s `daemon_cmd`
+/// (DAEMON_CORE.md §4.1 row 4), moved whole at domains
+/// `dm-daemon-cli-composition` (2026-09-17): the bootstrap phases, the
+/// build/preflight pair, the tool registry, the solve surface, the
+/// work-atlas wiring and the runtime-support leaves. `run_daemon` itself
+/// stays with the binary — it owns log rotation, the memory watchdog and
+/// the process exit code (DC §4 preamble), and calls these.
+pub mod bootstrap;
+pub mod build;
 pub mod corpus_catalog_http;
+pub mod corpus_maintenance;
 pub mod corpus_watch_http;
 pub mod daemon;
 pub mod daemon_services;
+pub mod discovery_policy;
 pub mod documents_http;
 pub mod enrich_http;
 pub mod features_http;
@@ -67,6 +79,7 @@ pub mod insight_http;
 pub mod job_registry;
 pub mod landscape_digest_http;
 pub mod lc_http;
+pub mod listener_watch;
 pub mod local_only;
 pub mod loopback_guard;
 pub mod mcp_config_http;
@@ -79,9 +92,12 @@ pub mod meshapp_http;
 /// `adapters`).
 pub mod newsworthy_host;
 pub mod notes_http;
+pub mod ocr_install;
 pub mod origin_fanout;
+pub mod principal;
 #[cfg(feature = "treesitter")]
 pub mod project_http;
+pub mod provider;
 pub mod publish_http;
 pub mod reading_http;
 pub mod recipe_http;
@@ -93,9 +109,14 @@ pub mod rpc_warm_http;
 /// bundled manifest; supplied to the serving host's inference adapter and
 /// self-manifest advertisement (domains REVIEW-build-serving-move-adapter).
 pub mod slot_manifest;
+pub mod solve_http;
+pub mod solve_tools;
+pub mod startup;
+pub mod supervise;
 /// The panic-boundary supervisor every long-running watcher runs under
 /// (DAEMON_CORE.md §3.2, `jobs`).
 pub mod supervised_task;
+pub mod tool_registry;
 pub mod turn_extras_http;
 pub mod turn_http;
 pub mod types;
@@ -104,12 +125,16 @@ pub mod venue_host;
 /// (DAEMON_CORE.md §3.2, `jobs`).
 pub mod watched_folder_runtime;
 pub mod watched_folder_setup;
+pub mod watcher_supervisor;
 /// `sovereign-work-atlas`'s `ClaimBroadcaster` over the rail — the adapter
 /// that hurries a claim onto the ring (DAEMON_CORE.md §4.3, `adapters`).
 pub mod work_atlas_broadcaster;
 /// The `work` donor loop — the node's own lease-and-run half of the work
 /// plane (DAEMON_CORE.md §3.2, `jobs`).
 pub mod work_donor;
+pub mod worker;
+pub mod workflow_trigger;
+pub mod workspace;
 
 // Re-exports the moved modules reached through the mesh crate root, so their
 // own `crate::` paths keep resolving here (the leaves live in the serving host

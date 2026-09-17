@@ -3,8 +3,6 @@
 //! start / stop / restart / reload / status, the pidfile + port-probe
 //! plumbing, and graceful-shutdown signal handling.
 
-use super::sovereign_root;
-
 /// The port this host's daemon is actually configured to serve on.
 ///
 /// Every lifecycle verb in this file used to hardcode `9741`, so an operator
@@ -903,8 +901,14 @@ fn parse_ready_timeout(raw: Option<&str>) -> std::time::Duration {
 }
 
 /// Path to the pidfile written by `daemon start`.
+///
+/// The body moved to `sovereign-daemon::bootstrap` at domains
+/// `dm-daemon-cli-composition` (2026-09-17) because the library's
+/// `write_pidfile` needs the same path and a library may not reach up into its
+/// host. This stays as the binary's accessor so the lifecycle verbs keep one
+/// derivation.
 pub(super) fn daemon_pid_path() -> std::path::PathBuf {
-    sovereign_root().join("daemon.pid")
+    sovereign_daemon::startup::daemon_pid_path()
 }
 
 /// Read the pidfile and return its pid if the process is still alive.

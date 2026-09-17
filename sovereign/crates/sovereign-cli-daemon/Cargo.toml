@@ -132,7 +132,11 @@ libc = "0.2"
 # registers the ATOS code-intel tools (project_context, design_signals) on its
 # MCP surface. The experimental ATOS subsystem is otherwise reached via the
 # `sovereign-cli-dev` workbench (`sovereign atos …`).
-atos = ["sovereign-tools/atos", "sovereign-mesh/atos"]
+#
+# Forwards to `sovereign-daemon` since the composition half moved there at
+# domains `dm-daemon-cli-composition` (2026-09-17) — the `#[cfg(feature =
+# "atos")]` gate is on the library's `tool_registry` now.
+atos = ["sovereign-daemon/atos"]
 
 # Bench/measurement-only: see sovereign-mesh's feature of the same name.
 iroh-relay-only = ["sovereign-mesh/iroh-relay-only"]
@@ -165,7 +169,7 @@ windows-cuda = ["sovereign-inference/windows-cuda"]
 # `WatchedFolderState.failed_files` with reason `scanned_no_text`.
 #
 # See sovereign/deploy/onprem/README.md and the DEFAULTS_LEDGER row.
-ocr = ["sovereign-tools/paddle-ocr"]
+ocr = ["sovereign-daemon/ocr"]
 
 [lints]
 workspace = true

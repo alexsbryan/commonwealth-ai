@@ -974,7 +974,7 @@ pub(super) async fn check_daemon_memory(client_url: &str) -> CheckResult {
 /// It calls the same pure predicate the boot guard enforces, so doctor and the
 /// daemon can never disagree about what is safe.
 pub(super) fn check_distributed_primary_contained() -> CheckResult {
-    use crate::daemon_cmd::build::containment::{
+    use sovereign_daemon::build::containment::{
         classify_containment, ContainmentVerdict, OVERRIDE_ENV,
     };
 
@@ -993,7 +993,7 @@ pub(super) fn check_distributed_primary_contained() -> CheckResult {
         config.compute.enabled && config.compute.distributed_primary,
         config.shared_model.role,
         false, // self node id is not resolved here; the role term carries it
-        crate::daemon_cmd::bootstrap::rpc_discovery_armed(),
+        sovereign_daemon::bootstrap::rpc_discovery_armed(),
         std::env::var(OVERRIDE_ENV).is_ok(),
     );
 

@@ -84,7 +84,7 @@ fn strict_vram_check() -> bool {
 
 /// Returns `true` to proceed with daemon startup, `false` to refuse
 /// (caller returns exit code 1). See the module docs for the posture.
-pub(crate) fn check_vram(config: &SetupConfig) -> bool {
+pub fn check_vram(config: &SetupConfig) -> bool {
     check_vram_reporting(config, &SetupConfig::default_path())
 }
 
@@ -94,7 +94,7 @@ pub(crate) fn check_vram(config: &SetupConfig) -> bool {
 /// so a daemon started with `--config <path>` told the operator to fix a
 /// file it had not read (observed 2026-08-30 during the remote-engine
 /// bring-up).
-pub(crate) fn check_vram_reporting(config: &SetupConfig, config_path: &std::path::Path) -> bool {
+pub fn check_vram_reporting(config: &SetupConfig, config_path: &std::path::Path) -> bool {
     // The preflight asks "do the GGUF slots fit in this machine's VRAM?" —
     // a question only the llama engine can be asked. An engine that holds
     // no local weights has no slots to size, and `[models]` is then just

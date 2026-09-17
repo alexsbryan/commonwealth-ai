@@ -1081,7 +1081,7 @@ Two surfaces, one implementation (`corpus_engine::index::maintain`):
   fragments/versions/indices/GB plus `unindexed_rows_before`, and says
   so out loud when a REQUESTED prune reclaimed nothing (it could
   previously exit 0 having deleted zero bytes while the directory grew).
-- **The daemon sweep** (`sovereign-cli-daemon/src/corpus_maintenance.rs`),
+- **The daemon sweep** (`sovereign-daemon/src/corpus_maintenance.rs`),
   spawned supervised right after `build_corpus_engine`. This is the one
   that matters for the product: the person who most needs a healthy
   corpus is a desktop user who will never open a terminal. Cheap-check,
@@ -7866,7 +7866,7 @@ object — `{live, reason, configured, heartbeat_age_secs, hint}`. When
 `watcher_down` (never `fresh_*`), so a stale run can't masquerade as
 current — the failure mode behind "the watcher silently goes stale."
 A daemon-side `WatcherSupervisor`
-(`sovereign-cli-daemon/src/watcher_supervisor.rs`) owns the coordinator
+(`sovereign-daemon/src/watcher_supervisor.rs`) owns the coordinator
 and restarts it (bounded backoff) when the loop task dies or its
 heartbeat freezes; `svrn doctor`'s `watcher_live` check probes the
 same signal, catching configured-but-dead — which a config-presence

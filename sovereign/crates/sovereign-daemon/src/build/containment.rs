@@ -39,11 +39,11 @@ use sovereign_core::setup_config::{SetupConfig, SharedModelRole};
 /// Environment override: proceed with an in-process distributed primary anyway.
 ///
 /// Named like the other deliberate-risk escapes (`SOVEREIGN_SKIP_VRAM_CHECK`).
-pub(crate) const OVERRIDE_ENV: &str = "SOVEREIGN_ALLOW_INPROCESS_DISTRIBUTED_PRIMARY";
+pub const OVERRIDE_ENV: &str = "SOVEREIGN_ALLOW_INPROCESS_DISTRIBUTED_PRIMARY";
 
 /// What the boot guard decided about running a distributed primary in-process.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ContainmentVerdict {
+pub enum ContainmentVerdict {
     /// Not a distributing node — nothing to say.
     NotApplicable,
     /// `[compute] distributed_primary` is on: the abort lands in the child.
@@ -60,7 +60,7 @@ pub(crate) enum ContainmentVerdict {
 
 impl ContainmentVerdict {
     /// Whether the daemon may continue booting.
-    pub(crate) fn proceeds(self) -> bool {
+    pub fn proceeds(self) -> bool {
         !matches!(self, ContainmentVerdict::Refuse)
     }
 }
@@ -80,7 +80,7 @@ impl ContainmentVerdict {
 /// memory: none of them changes whether the RPC client is in this process.
 /// Four booleans and an enum is the whole rule, and that legibility is the
 /// point — a guard nobody can reason about is a guard that gets disabled.
-pub(crate) fn classify_containment(
+pub fn classify_containment(
     child_owns_primary: bool,
     role: SharedModelRole,
     pinned_host_is_self: bool,
@@ -133,7 +133,7 @@ pub(crate) fn classify_containment(
 /// That is the right direction for a boot guard: refuse on a KNOWN hazard,
 /// never on an unknown — the same posture the VRAM preflight takes when its
 /// sensor is unreadable.
-pub(crate) fn check_containment(config: &SetupConfig, self_node_id: Option<&str>) -> bool {
+pub fn check_containment(config: &SetupConfig, self_node_id: Option<&str>) -> bool {
     let child_owns_primary = config.compute.enabled && config.compute.distributed_primary;
     let pinned_host_is_self = match (config.shared_model.host_node_id.as_deref(), self_node_id) {
         (Some(pin), Some(me)) => pin.eq_ignore_ascii_case(me),
@@ -143,7 +143,7 @@ pub(crate) fn check_containment(config: &SetupConfig, self_node_id: Option<&str>
         child_owns_primary,
         config.shared_model.role,
         pinned_host_is_self,
-        crate::daemon_cmd::bootstrap::rpc_discovery_armed(),
+        crate::bootstrap::rpc_discovery_armed(),
         std::env::var(OVERRIDE_ENV).is_ok(),
     );
 

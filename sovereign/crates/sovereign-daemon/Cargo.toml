@@ -39,6 +39,22 @@ sovereign-store = { workspace = true }
 sovereign-authoring-harness = { workspace = true }
 corpus-engine = { workspace = true }
 corpus-engine-notes = { workspace = true }
+# The composition half of `sovereign-cli-daemon`'s `daemon_cmd` (domains
+# `dm-daemon-cli-composition`, DAEMON_CORE.md §4.1 row 4) reaches these
+# directly now: the solve surface (`sovereign-tdd`), the compute-child
+# supervisor (`sovereign-compute`), the watched-folder lint/test stores
+# (`corpus-engine-watchers`), the ephemeral worker pod (`sovereign-pods`), the
+# watched-folder workflow runtime (`sovereign-workflow`,
+# `sovereign-workflow-host`) and the in-process atlas build
+# (`sovereign-enrichment-build`). All at `capabilities`/`runtime`/`knowledge`,
+# below this crate's `mesh-api`.
+sovereign-tdd = { workspace = true }
+sovereign-compute = { workspace = true }
+corpus-engine-watchers = { workspace = true }
+sovereign-pods = { path = "../sovereign-pods" }
+sovereign-workflow = { workspace = true }
+sovereign-workflow-host = { workspace = true }
+sovereign-enrichment-build = { workspace = true }
 
 async-trait = { workspace = true }
 bytes = { workspace = true }
@@ -60,6 +76,11 @@ if-addrs = "0.13"
 chrono = { workspace = true }
 tempfile = "3"
 
+# `listener_watch`'s self-SIGTERM on a lost client listener (moved here with
+# the composition half at domains `dm-daemon-cli-composition`).
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [features]
 default = []
 # Enables `project_http` — the SCIP-graph route shell, which reads
@@ -67,11 +88,18 @@ default = []
 # default so binaries that never serve the project surface don't drag in
 # `corpus-engine`'s 5 tree-sitter grammar crates.
 treesitter = ["sovereign-mesh/treesitter"]
+# The daemon's ATOS code-intel tools on the MCP surface and the headless OCR
+# installer. Both cfg gates moved here with the composition half (domains
+# `dm-daemon-cli-composition`); the binary's features forward to these.
+atos = ["sovereign-tools/atos", "sovereign-mesh/atos"]
+ocr = ["sovereign-tools/paddle-ocr"]
 
 [dev-dependencies]
 # `project_http`'s test module builds a `Reindexer` over a real `ScipGraph`.
 arc-swap = { workspace = true }
 corpus-engine-scip = { workspace = true }
+# `solve_http`'s route test drives the router with `tower::ServiceExt`.
+tower = { workspace = true, features = ["util"] }
 
 [lints]
 workspace = true

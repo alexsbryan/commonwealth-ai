@@ -48,6 +48,7 @@ pub mod error;
 pub mod fim;
 pub mod frame;
 pub mod gguf_validator;
+pub mod git;
 pub mod health;
 /// This node's identity, published as a watch over `kernel_types::NodeId` —
 /// a reader a consumer holds rather than a value it copies, because

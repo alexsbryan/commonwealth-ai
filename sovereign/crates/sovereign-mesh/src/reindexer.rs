@@ -30,7 +30,12 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use arc_swap::ArcSwap;
-use corpus_engine_scip::ScipGraph;
+/// Re-exported (not just imported) so a consumer that already depends on this
+/// crate can name the graph type without adding its own `corpus-engine-scip`
+/// edge — the fan-in ratchet counts that edge, and the daemon's merged-graph
+/// builder (`sovereign_daemon::tool_registry`) needs the type, not the crate
+/// (domains `dm-daemon-cli-composition`, 2026-09-17).
+pub use corpus_engine_scip::ScipGraph;
 use futures::future::BoxFuture;
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Serialize;

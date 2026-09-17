@@ -24,7 +24,7 @@ use sovereign_core::traits::PrincipalResolver;
 /// A named constant, not a literal at the call site: the resolver, the ceiling
 /// comparison and any future host that reads the owner must spell the SAME
 /// fact (ARCH principle 8 — one decider, one name).
-pub(crate) const LOCAL_OWNER: &str = "local-owner";
+pub const LOCAL_OWNER: &str = "local-owner";
 
 /// Resolves every conversation this daemon serves to the local owner.
 ///
@@ -34,7 +34,7 @@ pub(crate) const LOCAL_OWNER: &str = "local-owner";
 /// resolver that genuinely cannot attribute a caller returns `None`, and
 /// `build_context` then REFUSES that turn (`PrincipalScope::Unresolved`) rather
 /// than defaulting it to every corpus.
-pub(crate) struct LocalOwnerPrincipal;
+pub struct LocalOwnerPrincipal;
 
 impl PrincipalResolver for LocalOwnerPrincipal {
     fn principal_for(&self, _conversation_id: &str) -> Option<String> {

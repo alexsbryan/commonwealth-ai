@@ -111,7 +111,7 @@ fn keep_versions() -> Option<usize> {
 /// it prevents produces no error, only gradual slowness, so a dead sweep looks
 /// exactly like a healthy one (DAEMON_RESILIENCE.md P0.4). Each cycle is
 /// independent and idempotent, so a restart loses nothing.
-pub(crate) fn spawn(engine: Arc<CorpusEngine>) {
+pub fn spawn(engine: Arc<CorpusEngine>) {
     crate::supervise::spawn_supervised("corpus_maintenance_sweep", move || {
         let engine = Arc::clone(&engine);
         async move {

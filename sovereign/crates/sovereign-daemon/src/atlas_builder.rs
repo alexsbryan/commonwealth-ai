@@ -67,7 +67,7 @@ impl sovereign_tools::local_corpus::watched::enrich::AtlasBuildRunner for InProc
     }
 }
 
-pub(super) fn in_process_atlas_builder(
+pub fn in_process_atlas_builder(
     provider: Arc<dyn InferenceProvider>,
 ) -> Arc<dyn sovereign_tools::local_corpus::watched::enrich::AtlasBuildRunner> {
     Arc::new(InProcessAtlasBuilder { provider })
