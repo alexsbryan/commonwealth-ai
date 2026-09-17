@@ -1,0 +1,11 @@
+unit: dm-daemon-mesh-edge
+commits: 87f650f69 (the move), 2f1a968cc (the variant census + dev-dep treesitter)
+what: sovereign-mesh's host cluster (37 files / 28,959 lines — daemon,
+  daemon_services, the 21 route shells, local_only, loopback_guard,
+  http_response, types, slot_manifest, mcp_router, mcp_config_http and the
+  four impl-EmbeddedDaemon files) moved to sovereign-daemon in one commit;
+  every external consumer repointed to sovereign_daemon::…; mesh's own
+  integration tests stay in mesh behind a test-only dev-dependency.
+checks: CLEAN exit=0; LINT --full exit=0; LAYER exit=0; TOML exit=0;
+  CENSUS exit=0; TEST(sovereign-daemon) exit=0 (112 pass); TEST(sovereign-mesh)
+  exit=0 (694 pass).
