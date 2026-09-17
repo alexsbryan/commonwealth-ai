@@ -1,0 +1,17 @@
+[package]
+name = "code-next-edit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The code-intel package's next-edit crate: the pure rule/model/symbol/syntax lanes + the journal policy, split out of sovereign-api's workbench cluster (docs/CODE_TOOLING_BOUNDARY.md §2; the package's tenth crate)."
+
+# Nothing has moved in yet — this is the stub so the boundary has a crate to
+# name, exactly as sovereign-daemon and sovereign-scheduler were created. The
+# five modules and their dependency lines arrive with `dm-next-edit-move`; see
+# src/lib.rs for the placement decision and the one reach that move must
+# resolve before it can land.
+
+[dependencies]
+
+[lints]
+workspace = true

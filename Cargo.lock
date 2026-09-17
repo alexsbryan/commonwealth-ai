@@ -1849,6 +1849,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "code-next-edit"
+version = "0.7.0"
+
+[[package]]
 name = "codepage"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

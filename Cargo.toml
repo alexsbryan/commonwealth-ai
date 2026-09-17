@@ -40,6 +40,12 @@ members = [
     # NoteStore + project_docs + notes_sync. Step 3 of the corpus-engine
     # decomposition. notes.rs (2781 LOC) cleared from the §3.1 list.
     "corpus-engine-notes",
+    # The code-intel package's next-edit crate (docs/CODE_TOOLING_BOUNDARY.md
+    # §2; domains REVIEW-build-next-edit-crate). A root sibling of the package's
+    # carve-outs, holding the pure rule/model/symbol/syntax lanes + the journal
+    # policy split out of sovereign-api's workbench cluster. A stub until
+    # dm-next-edit-move lands the modules.
+    "code-next-edit",
     # Git archaeology — commit-history mining, rough-edge surfacing,
     # atom-provenance evaluation. Step 4 of the decomposition.
     "corpus-engine-archaeology",

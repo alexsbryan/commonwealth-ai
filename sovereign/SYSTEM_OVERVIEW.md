@@ -31,6 +31,7 @@ commonwealth-ai/
 ├── corpus-engine/             # Knowledge layer (LanceDB + Tantivy)
 ├── corpus-engine-scip/        # SCIP call graph + per-language exporter dispatch
 ├── corpus-engine-notes/       # NoteStore + project_docs index (carved out of corpus-engine)
+├── code-next-edit/            # The code-intel package's next-edit crate (docs/CODE_TOOLING_BOUNDARY.md §2) — the pure rule/model/symbol/syntax lanes + the journal policy split out of sovereign-api's workbench cluster. A stub until dm-next-edit-move lands the modules
 ├── corpus-engine-atos/        # ATOS feature store + plan items + design signals (carved out) — opt-in behind `--features atos`
 ├── corpus-engine-archaeology/ # Git archaeology + rough-edges + atom-provenance (carved out)
 ├── corpus-engine-yield/       # YieldHook cooperative-yield contract (Tier-0 leaf shared by the data plane + watchers)

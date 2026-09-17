@@ -150,7 +150,15 @@ crates = [
 # here (noun-convergence rung 2).
 [[layer]]
 name = "knowledge"
-crates = ["corpus-engine", "corpus-engine-*"]
+crates = ["corpus-engine", "corpus-engine-*",
+    # The code-intel package's next-edit crate (domains
+    # REVIEW-build-next-edit-crate). It sits in the knowledge layer beside its
+    # package siblings — the `corpus-engine-*` carve-outs — because it is a
+    # package crate of the same family and reaches corpus-engine-scip. The
+    # package's own boundary (its crates + the shared leaves) is what keeps it
+    # liftable; the layer entry is what keeps the edge direction honest.
+    "code-next-edit",
+]
 
 # Commonwealth mesh internals BELOW the runtime: shared mesh types + state +
 # transport + discovery + scheduling + app platform. These must stay
@@ -958,6 +966,13 @@ crates = [
     "corpus-engine-notes",
     "corpus-engine-watchers",
     "corpus-engine-archaeology",
+    # The package's TENTH crate and the first §2's table does not name — the
+    # next-edit half of sovereign-api's workbench cluster (domains
+    # REVIEW-build-next-edit-crate; `quality/DOMAINS.md` §4 calls next-edit
+    # "Workbench's clearest lost child"). A stub until dm-next-edit-move lands
+    # the five pure modules; `routes_edit_predictions.rs` is a route shell and
+    # goes to sovereign-daemon instead (DAEMON_CORE.md §4.1).
+    "code-next-edit",
 ]
 
 [[package]]
