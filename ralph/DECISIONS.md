@@ -793,3 +793,83 @@ than finishes, that is a budget call for the operator.
 **Landed in.** this commit — `scripts/ralph.py` (the `run_lane` refresh),
 `scripts/tests/ralph.py` (the new test and the three fakes) and this entry;
 `ralph/NEEDS_HUMAN.md` removed. `git revert <sha>` reverts it alone.
+
+## 2026-09-17 · REVIEW-build-mesh-loops-decouple · the row is api-edge's consequence, not its prerequisite; absorb it
+
+**Fork.** The row cannot execute as written. Its MOVE (`state/fabric.rs` →
+`sovereign-mesh/src/fabric.rs`) is blocked by the holder: `sovereign-api` may not
+name `sovereign-mesh` (`quality/ARCH_LAYERS.toml:711-712`) and holds the part at
+`state.rs:325`, so the file cannot leave until `AppState` does; but the row that
+moves `AppState` (`dm-daemon-api-edge`) depends on this one — a cycle. The
+package's three options: (1) absorb into `dm-daemon-api-edge` (b); (2) re-scope
+as a post-api-edge mint that declares the port; (3) approve a new leaf for
+Fabric's vocabulary.
+
+**Choice.** Option 1, absorb. `dm-daemon-api-edge` (b) already carries this
+row's MOVE and its loop repoint, and api-edge runs *after* the holder move,
+where the MOVE is legal. The MOVE is also **forced** there, not merely
+convenient: `sovereign-mesh` may not name the daemon's `AppState`
+(`[[forbid]] from = "sovereign-mesh" to = "sovereign-daemon"`,
+`quality/ARCH_LAYERS.toml:749-752`, no except), so the three loops must be
+repointed in the same commit that moves `state.rs`, and they can only take
+Fabric's own state — which must therefore be in `sovereign-mesh` by then
+(DC §4.2:347 already names `sovereign-mesh` as Fabric's home). Absorbing adds
+no work to api-edge; it removes a row that could never run before it.
+Option 2's port has no legal home, reproduced: Fabric's vocabulary is
+`commonwealth-{core,state,rail,transport}` plus `sovereign-meshapp-registry`,
+and `commonwealth-core` sits above `sovereign-contracts`' layer-0, so a port
+payload there is the upward edge the layer gate refuses; a port declared in
+`sovereign-mesh` needs a `sovereign-daemon` newtype adapter for `AppState` (the
+orphan rule) — more work than the move, for a seam DC §4.2 does not ask for
+(principle 11). Option 3 is an operator-scale design decision the docs do not
+imply.
+
+Also corrected the two collateral claims the package named. (i) The check
+`git grep -n 'sovereign_api::' sovereign/crates/sovereign-mesh/src` → 0 is not
+one row's: of the 16 sites, 3 are the loops (api-edge (b)), 3 are the wire
+types (`REVIEW-build-peer-wire`), and 10 are tests (api-edge (c)); api-edge (b)
+and the absorbed row now say so, so no worker tries to close a check
+`peer-wire` owns. (ii) `REVIEW-build-daemon-parts` no longer claims the
+`state/fabric.rs` relocation: it depended on api-edge and would have found the
+part already moved; its fabric clause is now a pointer to api-edge (b), leaving
+the other five parts to that row.
+
+**Evidence** (all reproduced in this session).
+- `git grep -n 'inner\.fabric' -- sovereign/crates/sovereign-api/src | wc -l`
+  = **66**, across **17** files; `sovereign-api/src/state.rs:325`
+  `pub fabric: fabric::FabricPart`.
+- `quality/ARCH_LAYERS.toml:711-712` (`from = "sovereign-api" to = "sovereign-*"`,
+  `except` without `sovereign-mesh`); `:749-752` (mesh → daemon, no `except`).
+- `ralph/STATE.md:183` (`dm-daemon-api-edge`) depends on the row, and its (b)
+  already reads "move `state/fabric.rs` -> sovereign-mesh and repoint the three
+  loops … (closing REVIEW-build-mesh-api-decouple's check)".
+- `git grep -n 'sovereign_api::' -- sovereign/crates/sovereign-mesh/src` = 16
+  sites: `gossip.rs:45,1049`, `join.rs:47`, `rail_kv_pump.rs:108`,
+  `rail_kv_pump/tests.rs:95,187`, `ring_sync.rs:80,83`,
+  `ring_sync/{tests.rs:17,27,116,252,364,projection_tests.rs:9,61,snapshot_tests.rs:9}`.
+- `ls sovereign/crates/sovereign-mesh/src/daemon.rs` → **No such file**; the
+  loops' callers are `sovereign-daemon/src/daemon.rs:1057,1465,1753,2126` and
+  `sovereign-daemon/src/work_atlas_broadcaster.rs:84` (`dm-daemon-mesh-edge`).
+- `quality/DAEMON_CORE.md:347` (Fabric's home `sovereign-mesh`), `:381-388`
+  (`SelfClaims` is the only new port; hosted corpora is not one).
+- `python3 scripts/ralph.py plan` after the edit → head
+  `REVIEW-build-harness-oicp-seam`; the campaign flows.
+
+**Falsified by.** A working split that lets the three loops compile while
+`AppState` still lives in `sovereign-api` after api-edge (then a port exists and
+a separate post-api-edge row is the answer, option 2); or an operator widening
+api's `except` or the mesh→daemon forbid, which would make a partial move legal.
+
+**REVIEW-AFTER:** the charter clearly covers folding and re-scoping, but two
+calls are worth the morning's eye. (1) I corrected `REVIEW-build-daemon-parts`
+too — the package named only the loops row, and the two rows' fabric claims were
+the same work in two names (principle 8). (2) api-edge (b) now carries the
+loops' full detail, growing a row that has already failed waves; the alternative
+was a new post-api-edge row, which would re-claim work api-edge must do to
+compile.
+
+**Landed in.** this commit — `ralph/STATE.md` (the row `[x]` ABSORBED with the
+cycle recorded; `dm-daemon-api-edge`'s `depends` drops the row and its (b)/(c)
+gain the loop sites, the callers and the `peer-wire` caveat;
+`REVIEW-build-daemon-parts` points its fabric clause at api-edge) and this
+entry; `ralph/NEEDS_HUMAN.md` removed. `git revert <sha>` reverts it alone.
