@@ -14008,7 +14008,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-mesh-test-harness/src/fixtures.rs"
 context = "back-of-house"
-lines = 191
+lines = 197
 note = ""
 
 [[module]]
@@ -14026,13 +14026,13 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-mesh-test-harness/src/simulated_mesh.rs"
 context = "back-of-house"
-lines = 264
+lines = 199
 note = ""
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh-test-harness/src/simulated_node.rs"
 context = "back-of-house"
-lines = 254
+lines = 250
 note = ""
 
 [[module]]

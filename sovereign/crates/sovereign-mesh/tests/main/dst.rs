@@ -34,8 +34,10 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use commonwealth_core::ids::{NodeId, NodePubkey};
-use commonwealth_core::mesh::{aliased_endpoint_keys, EndpointClaim, NodeStatus};
+use commonwealth_core::mesh::{aliased_endpoint_keys, EndpointClaim, Mesh, NodeStatus};
 use commonwealth_core::{partition, TestClock};
+use sovereign_api::server::{client_router, internal_router};
+use sovereign_api::state::AppState;
 use sovereign_mesh_test_harness::fault::{shared_policy, FaultProxy, FaultTransport, SharedPolicy};
 use sovereign_mesh_test_harness::simulated_mesh::SimulatedMesh;
 use sovereign_mesh_test_harness::simulated_node::SimulatedNodeBuilder;
@@ -45,6 +47,17 @@ use sovereign_mesh::gossip;
 // Re-export the fault-authoring types so tests need only depend on
 // `sovereign_mesh` (with `--features dst`), not the harness crate directly.
 pub use sovereign_mesh_test_harness::fault::{FaultEvent, FaultSchedule, WireFault};
+
+/// The node-state factory the simulated nodes are built with — the harness's
+/// node is generic over its state (the OICP/contracts seam).
+fn app_state(id: NodeId, mesh: Mesh) -> AppState {
+    AppState::new(id, mesh)
+}
+
+/// The routers the simulated servers mount, built from a node's state.
+fn app_routers(state: &AppState) -> (axum::Router, axum::Router) {
+    (client_router(state.clone()), internal_router(state.clone()))
+}
 
 /// Offline threshold used for DST rounds. Large relative to the [`TestClock`]
 /// base so the harness's epoch-0 member records don't decay spuriously; a
@@ -67,7 +80,7 @@ pub enum Quiescence {
 
 /// A fault-injecting driver over a [`SimulatedMesh`].
 pub struct DstMesh {
-    sim: SimulatedMesh,
+    sim: SimulatedMesh<AppState>,
     policy: SharedPolicy,
     clock: TestClock,
     /// Per-node typed transport handles (parallel to `sim.nodes`), so a
@@ -87,13 +100,15 @@ impl DstMesh {
     pub async fn start(n: usize) -> Self {
         let mut sim = SimulatedMesh::new("dst");
         for i in 0..n {
-            sim.add_node(SimulatedNodeBuilder::new(
-                (i as u128) + 1,
-                &format!("node-{i}"),
-            ));
+            sim.add_node(
+                SimulatedNodeBuilder::new((i as u128) + 1, &format!("node-{i}")),
+                app_state,
+            );
         }
-        let addrs = sim.start_all().await;
-        sim.sync_mesh_state().await;
+        let addrs = sim.start_all(app_routers).await;
+        for node in &sim.nodes {
+            *node.state.inner.fabric.mesh.write().await = sim.mesh_state.clone();
+        }
 
         let policy = shared_policy();
         let clock = TestClock::new(DST_CLOCK_BASE_SECS);

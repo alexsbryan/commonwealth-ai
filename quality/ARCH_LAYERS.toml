@@ -1248,11 +1248,12 @@ reason = "`kickstart_daemon` — `id -u`, then `launchctl kickstart -k gui/<uid>
 
 # ── Grandfathered violations (the burn-down list) ────────────────────────────
 
-[[exception]]
-from = "sovereign-mesh-test-harness"
-to = "sovereign-api"
-reason = "R6 debt the domains-1 move EXPOSED rather than created. The harness has always depended on the API it simulates against; while both were `commonwealth-*` the edge was intra-family and no rule looked at it. `commonwealth-api` became `sovereign-api` on 2026-09-11 and the same edge is now cross-family, which is what R6 has always said it is. Nothing about the code changed — only whether a gate could see it."
-tracking = "domains-2 MOVED the harness (commonwealth/crates/commonwealth-test-harness -> sovereign/crates/sovereign-mesh-test-harness, 2026-09-11) and this row was RENAMED with it, not deleted. The removal condition written here before the move — `from` stops matching — was the wrong one: it would have retired a live grandfathering by renaming its subject, which is the debt disappearing from the burn-down without anyone paying it. The real condition is R6: this row goes when the harness stands up a simulated node against oicp-types alone and no longer names sovereign-api. `grep -rn sovereign_api sovereign/crates/sovereign-mesh-test-harness/src/` is the check."
+# `sovereign-mesh-test-harness -> sovereign-api` retired at
+# REVIEW-build-harness-oicp-seam (2026-09-17). The harness's simulated node is
+# now generic over the node state (the OICP/contracts seam) and its `src/`
+# names no host, so the edge is gone and the row above would be STALE. The
+# integration tests that assemble the real node bind `AppState` through a
+# test-only (dev) edge, which layer-gate never enforces.
 
 [[exception]]
 package = "corpus-mcp"

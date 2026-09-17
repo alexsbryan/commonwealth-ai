@@ -12749,19 +12749,14 @@ version = "0.7.0"
 dependencies = [
  "async-trait",
  "axum",
- "bytes",
  "commonwealth-core",
  "commonwealth-discovery",
  "commonwealth-state",
  "commonwealth-transport",
- "http-body-util",
  "oicp-types",
- "serde",
  "serde_json",
  "sovereign-api",
- "sovereign-meshapp-registry",
  "tokio",
- "tower",
  "tracing",
 ]
 

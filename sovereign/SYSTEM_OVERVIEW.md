@@ -313,7 +313,7 @@ consumers named:
 
 | Was | Is | Why there |
 |---|---|---|
-| `commonwealth-test-harness` | `sovereign-mesh-test-harness`, at [`sovereign/crates/sovereign-mesh-test-harness`](../sovereign/crates/sovereign-mesh-test-harness) | `SimulatedMesh`, `SimulatedNode`, `MockLlamaServer`, fault injection. Its only consumer in the repo is `sovereign-mesh`, behind that crate's `dst` feature, so it now sits beside it and is named for it |
+| `commonwealth-test-harness` | `sovereign-mesh-test-harness`, at [`sovereign/crates/sovereign-mesh-test-harness`](../sovereign/crates/sovereign-mesh-test-harness) | `SimulatedMesh<S>`, `SimulatedNode<S>`, `MockLlamaServer`, fault injection. The node is generic over its state — the OICP/contracts seam — so the harness's library names no host. Its only consumer in the repo is `sovereign-mesh`, behind that crate's `dst` feature, so it now sits beside it and is named for it |
 | `oicp-conformance` | same name, at [`oicp-conformance`](../oicp-conformance) — a repo-root sibling | `oicp-types` and `oicp-client`, the two crates it certifies against, are root siblings too. Its dependency budget (oicp-types + serde/reqwest/tokio) was always the point; sitting under `commonwealth/` only implied a mesh it does not need. `commonwealth/docs/ARCHITECTURE_REVIEW_2026-08-05.md:421` asked for exactly this move |
 
 Neither move changed logic and the package's own boundary held —
@@ -6675,8 +6675,11 @@ a chat every 30 seconds.
 `sovereign-mesh-test-harness` (`commonwealth-test-harness` until the
 `domains-2` move, 2026-09-11):
 
-- `SimulatedMesh` — orchestrates many `SimulatedNode`s in-process,
-  each with its own `AppState` and HTTP listeners on random ports.
+- `SimulatedMesh<S>` — orchestrates many `SimulatedNode<S>`s in-process,
+  each with its own state `S` and HTTP listeners on random ports. `S` is a
+  type parameter (the OICP/contracts seam): the harness's library names no
+  host, and the caller binds it — `AppState` in `sovereign-mesh`'s tests,
+  supplied through the `dst` feature's dev edge.
 - `SimulatedNodeBuilder` — fluent hardware-profile builder.
 - `MockLlamaServer` — Axum responding to `/v1/chat/completions` and
   `/health` with canned responses; request counting via

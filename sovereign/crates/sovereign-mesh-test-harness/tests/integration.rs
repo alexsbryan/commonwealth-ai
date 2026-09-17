@@ -16,6 +16,35 @@ use sovereign_mesh_test_harness::mock_llama::MockLlamaServer;
 use sovereign_mesh_test_harness::simulated_mesh::SimulatedMesh;
 use sovereign_mesh_test_harness::simulated_node::SimulatedNodeBuilder;
 
+// The harness's node is generic over its state (the OICP/contracts seam), so
+// these tests — which assemble the real host node — bind `AppState` here.
+use sovereign_api::server::{client_router, internal_router};
+use sovereign_api::state::AppState;
+
+/// The node-state factory the simulated nodes are built with.
+fn app_state(id: NodeId, mesh: Mesh) -> AppState {
+    AppState::new(id, mesh)
+}
+
+/// The routers the simulated servers mount, built from a node's state.
+fn app_routers(state: &AppState) -> (axum::Router, axum::Router) {
+    (client_router(state.clone()), internal_router(state.clone()))
+}
+
+/// Set a node's inference plan (the harness's own delegation, now that the
+/// node does not name the host).
+fn set_inference_plan(state: &AppState, plan: InferencePlan) {
+    state.inner.serving.inference_store.set_plan(&plan);
+}
+
+/// Broadcast the mesh roster to every node's fabric (the harness's own
+/// `sync_mesh_state`, now that the mesh does not name the host).
+async fn sync_mesh_state(mesh: &SimulatedMesh<AppState>) {
+    for node in &mesh.nodes {
+        *node.state.inner.fabric.mesh.write().await = mesh.mesh_state.clone();
+    }
+}
+
 // ============================================================================
 // Scenario: Mesh Formation (Phase 2)
 // Init mesh, nodes join, verify member state converged.
@@ -99,32 +128,40 @@ async fn inference_e2e_with_mock_llama_server() {
 
     // Build a single-node mesh with the model registered.
     let mut mesh = SimulatedMesh::new("E2E Test");
-    mesh.add_node(SimulatedNodeBuilder::new(1, "Test Node").gpu("RTX 4090", 24, ComputeType::Cuda));
+    mesh.add_node(
+        SimulatedNodeBuilder::new(1, "Test Node").gpu("RTX 4090", 24, ComputeType::Cuda),
+        app_state,
+    );
 
-    let addrs = mesh.start_all().await;
+    let addrs = mesh.start_all(app_routers).await;
     let client_addr = addrs[0].0;
 
     // Register model and point to mock llama-server.
     let model = coding_model(1);
     let model_id = model.id;
-    mesh.nodes[0].register_model(model.clone());
-    mesh.nodes[0].set_llama_server_address(model_id, mock_addr);
+    mesh.nodes[0].state.register_model(model.clone());
+    mesh.nodes[0]
+        .state
+        .set_llama_server_address(model_id, mock_addr);
 
     // Set an inference plan so the model is "loaded".
-    mesh.nodes[0].set_inference_plan(InferencePlan {
-        model_plans: vec![ShardPlan {
-            model: model_id,
-            entry_node: NodeId::from_u128(1),
-            assignments: vec![ShardAssignment {
-                node_id: NodeId::from_u128(1),
-                layers: LayerRange::new(0, 64),
-                gpu_index: 0,
-                rpc_address: "127.0.0.1:50051".parse().unwrap(),
+    set_inference_plan(
+        &mesh.nodes[0].state,
+        InferencePlan {
+            model_plans: vec![ShardPlan {
+                model: model_id,
+                entry_node: NodeId::from_u128(1),
+                assignments: vec![ShardAssignment {
+                    node_id: NodeId::from_u128(1),
+                    layers: LayerRange::new(0, 64),
+                    gpu_index: 0,
+                    rpc_address: "127.0.0.1:50051".parse().unwrap(),
+                }],
+                estimated_tokens_per_sec: 45.0,
+                estimated_ttft_ms: 1100,
             }],
-            estimated_tokens_per_sec: 45.0,
-            estimated_ttft_ms: 1100,
-        }],
-    });
+        },
+    );
 
     // Give server a moment to start.
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
@@ -149,8 +186,11 @@ async fn inference_e2e_with_mock_llama_server() {
 #[tokio::test]
 async fn inference_e2e_rejects_local_only_privacy() {
     let mut mesh = SimulatedMesh::new("Privacy Test");
-    mesh.add_node(SimulatedNodeBuilder::new(1, "Node").gpu("GPU", 24, ComputeType::Cuda));
-    let addrs = mesh.start_all().await;
+    mesh.add_node(
+        SimulatedNodeBuilder::new(1, "Node").gpu("GPU", 24, ComputeType::Cuda),
+        app_state,
+    );
+    let addrs = mesh.start_all(app_routers).await;
     let client_addr = addrs[0].0;
 
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
@@ -174,9 +214,9 @@ async fn inference_e2e_rejects_local_only_privacy() {
 
 #[tokio::test]
 async fn status_endpoint_reflects_mesh_state() {
-    let mut mesh = architecture_five_node_mesh();
-    mesh.sync_mesh_state().await;
-    let addrs = mesh.start_all().await;
+    let mut mesh = architecture_five_node_mesh(app_state);
+    sync_mesh_state(&mesh).await;
+    let addrs = mesh.start_all(app_routers).await;
     let client_addr = addrs[0].0;
 
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
@@ -190,12 +230,15 @@ async fn status_endpoint_reflects_mesh_state() {
 #[tokio::test]
 async fn oicp_capabilities_returns_registered_models() {
     let mut mesh = SimulatedMesh::new("OICP Test");
-    mesh.add_node(SimulatedNodeBuilder::new(1, "Node").gpu("GPU", 24, ComputeType::Cuda));
-    let addrs = mesh.start_all().await;
+    mesh.add_node(
+        SimulatedNodeBuilder::new(1, "Node").gpu("GPU", 24, ComputeType::Cuda),
+        app_state,
+    );
+    let addrs = mesh.start_all(app_routers).await;
     let client_addr = addrs[0].0;
 
     // Register a model.
-    mesh.nodes[0].register_model(coding_model(1));
+    mesh.nodes[0].state.register_model(coding_model(1));
 
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
@@ -211,12 +254,15 @@ async fn oicp_capabilities_returns_registered_models() {
 #[tokio::test]
 async fn models_endpoint_lists_registered_models() {
     let mut mesh = SimulatedMesh::new("Models Test");
-    mesh.add_node(SimulatedNodeBuilder::new(1, "Node").gpu("GPU", 24, ComputeType::Cuda));
-    let addrs = mesh.start_all().await;
+    mesh.add_node(
+        SimulatedNodeBuilder::new(1, "Node").gpu("GPU", 24, ComputeType::Cuda),
+        app_state,
+    );
+    let addrs = mesh.start_all(app_routers).await;
     let client_addr = addrs[0].0;
 
-    mesh.nodes[0].register_model(coding_model(1));
-    mesh.nodes[0].register_model(general_model(2));
+    mesh.nodes[0].state.register_model(coding_model(1));
+    mesh.nodes[0].state.register_model(general_model(2));
 
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
@@ -232,8 +278,11 @@ async fn models_endpoint_lists_registered_models() {
 #[tokio::test]
 async fn internal_gossip_endpoint_accepts_payload() {
     let mut mesh = SimulatedMesh::new("Internal Test");
-    mesh.add_node(SimulatedNodeBuilder::new(1, "Node").gpu("GPU", 24, ComputeType::Cuda));
-    let addrs = mesh.start_all().await;
+    mesh.add_node(
+        SimulatedNodeBuilder::new(1, "Node").gpu("GPU", 24, ComputeType::Cuda),
+        app_state,
+    );
+    let addrs = mesh.start_all(app_routers).await;
     let internal_addr = addrs[0].1;
 
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
@@ -262,8 +311,11 @@ async fn internal_gossip_endpoint_accepts_payload() {
 #[tokio::test]
 async fn internal_latency_probe_responds() {
     let mut mesh = SimulatedMesh::new("Probe Test");
-    mesh.add_node(SimulatedNodeBuilder::new(1, "Node").gpu("GPU", 24, ComputeType::Cuda));
-    let addrs = mesh.start_all().await;
+    mesh.add_node(
+        SimulatedNodeBuilder::new(1, "Node").gpu("GPU", 24, ComputeType::Cuda),
+        app_state,
+    );
+    let addrs = mesh.start_all(app_routers).await;
     let internal_addr = addrs[0].1;
 
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
@@ -290,29 +342,37 @@ async fn internal_latency_probe_responds() {
 #[tokio::test]
 async fn inference_503_retry_after_on_backend_failure() {
     let mut mesh = SimulatedMesh::new("503 Test");
-    mesh.add_node(SimulatedNodeBuilder::new(1, "Node").gpu("GPU", 24, ComputeType::Cuda));
-    let addrs = mesh.start_all().await;
+    mesh.add_node(
+        SimulatedNodeBuilder::new(1, "Node").gpu("GPU", 24, ComputeType::Cuda),
+        app_state,
+    );
+    let addrs = mesh.start_all(app_routers).await;
     let client_addr = addrs[0].0;
 
     // Register model pointing to a non-existent llama-server address.
     let model = coding_model(1);
     let model_id = model.id;
-    mesh.nodes[0].register_model(model);
-    mesh.nodes[0].set_llama_server_address(model_id, "127.0.0.1:1".into()); // Nothing listening.
-    mesh.nodes[0].set_inference_plan(InferencePlan {
-        model_plans: vec![ShardPlan {
-            model: model_id,
-            entry_node: NodeId::from_u128(1),
-            assignments: vec![ShardAssignment {
-                node_id: NodeId::from_u128(1),
-                layers: LayerRange::new(0, 64),
-                gpu_index: 0,
-                rpc_address: "127.0.0.1:50051".parse().unwrap(),
+    mesh.nodes[0].state.register_model(model);
+    mesh.nodes[0]
+        .state
+        .set_llama_server_address(model_id, "127.0.0.1:1".into()); // Nothing listening.
+    set_inference_plan(
+        &mesh.nodes[0].state,
+        InferencePlan {
+            model_plans: vec![ShardPlan {
+                model: model_id,
+                entry_node: NodeId::from_u128(1),
+                assignments: vec![ShardAssignment {
+                    node_id: NodeId::from_u128(1),
+                    layers: LayerRange::new(0, 64),
+                    gpu_index: 0,
+                    rpc_address: "127.0.0.1:50051".parse().unwrap(),
+                }],
+                estimated_tokens_per_sec: 40.0,
+                estimated_ttft_ms: 1000,
             }],
-            estimated_tokens_per_sec: 40.0,
-            estimated_ttft_ms: 1000,
-        }],
-    });
+        },
+    );
 
     tokio::time::sleep(Duration::from_millis(50)).await;
 
@@ -344,8 +404,11 @@ async fn oicp_routing_selects_correct_model() {
     let mock_general = MockLlamaServer::start().await;
 
     let mut mesh = SimulatedMesh::new("OICP Routing Test");
-    mesh.add_node(SimulatedNodeBuilder::new(1, "Node").gpu("GPU", 48, ComputeType::Cuda));
-    let addrs = mesh.start_all().await;
+    mesh.add_node(
+        SimulatedNodeBuilder::new(1, "Node").gpu("GPU", 48, ComputeType::Cuda),
+        app_state,
+    );
+    let addrs = mesh.start_all(app_routers).await;
     let client_addr = addrs[0].0;
 
     // Register both models.
@@ -354,42 +417,49 @@ async fn oicp_routing_selects_correct_model() {
     let coder_id = coder.id;
     let general_id = general.id;
 
-    mesh.nodes[0].register_model(coder);
-    mesh.nodes[0].register_model(general);
+    mesh.nodes[0].state.register_model(coder);
+    mesh.nodes[0].state.register_model(general);
 
     // Point each to its own mock server.
-    mesh.nodes[0].set_llama_server_address(coder_id, mock_coder.address_string());
-    mesh.nodes[0].set_llama_server_address(general_id, mock_general.address_string());
+    mesh.nodes[0]
+        .state
+        .set_llama_server_address(coder_id, mock_coder.address_string());
+    mesh.nodes[0]
+        .state
+        .set_llama_server_address(general_id, mock_general.address_string());
 
     // Set inference plan with both models.
-    mesh.nodes[0].set_inference_plan(InferencePlan {
-        model_plans: vec![
-            ShardPlan {
-                model: coder_id,
-                entry_node: NodeId::from_u128(1),
-                assignments: vec![ShardAssignment {
-                    node_id: NodeId::from_u128(1),
-                    layers: LayerRange::new(0, 64),
-                    gpu_index: 0,
-                    rpc_address: "127.0.0.1:50051".parse().unwrap(),
-                }],
-                estimated_tokens_per_sec: 45.0,
-                estimated_ttft_ms: 1100,
-            },
-            ShardPlan {
-                model: general_id,
-                entry_node: NodeId::from_u128(1),
-                assignments: vec![ShardAssignment {
-                    node_id: NodeId::from_u128(1),
-                    layers: LayerRange::new(0, 64),
-                    gpu_index: 0,
-                    rpc_address: "127.0.0.1:50052".parse().unwrap(),
-                }],
-                estimated_tokens_per_sec: 38.0,
-                estimated_ttft_ms: 1300,
-            },
-        ],
-    });
+    set_inference_plan(
+        &mesh.nodes[0].state,
+        InferencePlan {
+            model_plans: vec![
+                ShardPlan {
+                    model: coder_id,
+                    entry_node: NodeId::from_u128(1),
+                    assignments: vec![ShardAssignment {
+                        node_id: NodeId::from_u128(1),
+                        layers: LayerRange::new(0, 64),
+                        gpu_index: 0,
+                        rpc_address: "127.0.0.1:50051".parse().unwrap(),
+                    }],
+                    estimated_tokens_per_sec: 45.0,
+                    estimated_ttft_ms: 1100,
+                },
+                ShardPlan {
+                    model: general_id,
+                    entry_node: NodeId::from_u128(1),
+                    assignments: vec![ShardAssignment {
+                        node_id: NodeId::from_u128(1),
+                        layers: LayerRange::new(0, 64),
+                        gpu_index: 0,
+                        rpc_address: "127.0.0.1:50052".parse().unwrap(),
+                    }],
+                    estimated_tokens_per_sec: 38.0,
+                    estimated_ttft_ms: 1300,
+                },
+            ],
+        },
+    );
 
     tokio::time::sleep(Duration::from_millis(50)).await;
 
@@ -446,8 +516,11 @@ async fn oicp_routing_selects_correct_model() {
 #[tokio::test]
 async fn knowledge_search_returns_results_for_assigned_corpora() {
     let mut mesh = SimulatedMesh::new("Knowledge Test");
-    mesh.add_node(SimulatedNodeBuilder::new(1, "Node").gpu("GPU", 24, ComputeType::Cuda));
-    let addrs = mesh.start_all().await;
+    mesh.add_node(
+        SimulatedNodeBuilder::new(1, "Node").gpu("GPU", 24, ComputeType::Cuda),
+        app_state,
+    );
+    let addrs = mesh.start_all(app_routers).await;
     let client_addr = addrs[0].0;
 
     // No knowledge-plan setup: the `knowledge` MeshStore namespace and
@@ -481,8 +554,11 @@ async fn knowledge_search_returns_results_for_assigned_corpora() {
 #[tokio::test]
 async fn knowledge_search_empty_when_no_shards() {
     let mut mesh = SimulatedMesh::new("Empty Knowledge Test");
-    mesh.add_node(SimulatedNodeBuilder::new(1, "Node").gpu("GPU", 24, ComputeType::Cuda));
-    let addrs = mesh.start_all().await;
+    mesh.add_node(
+        SimulatedNodeBuilder::new(1, "Node").gpu("GPU", 24, ComputeType::Cuda),
+        app_state,
+    );
+    let addrs = mesh.start_all(app_routers).await;
     let client_addr = addrs[0].0;
 
     // No knowledge plan set — should return 503.
@@ -514,8 +590,11 @@ async fn omo_model_alias_routes_to_coding_model() {
     let mock_general = MockLlamaServer::start().await;
 
     let mut mesh = SimulatedMesh::new("OmO Alias Test");
-    mesh.add_node(SimulatedNodeBuilder::new(1, "Node").gpu("GPU", 48, ComputeType::Cuda));
-    let addrs = mesh.start_all().await;
+    mesh.add_node(
+        SimulatedNodeBuilder::new(1, "Node").gpu("GPU", 48, ComputeType::Cuda),
+        app_state,
+    );
+    let addrs = mesh.start_all(app_routers).await;
     let client_addr = addrs[0].0;
 
     // Register both models.
@@ -524,40 +603,47 @@ async fn omo_model_alias_routes_to_coding_model() {
     let coder_id = coder.id;
     let general_id = general.id;
 
-    mesh.nodes[0].register_model(coder);
-    mesh.nodes[0].register_model(general);
-    mesh.nodes[0].set_llama_server_address(coder_id, mock_coder.address_string());
-    mesh.nodes[0].set_llama_server_address(general_id, mock_general.address_string());
+    mesh.nodes[0].state.register_model(coder);
+    mesh.nodes[0].state.register_model(general);
+    mesh.nodes[0]
+        .state
+        .set_llama_server_address(coder_id, mock_coder.address_string());
+    mesh.nodes[0]
+        .state
+        .set_llama_server_address(general_id, mock_general.address_string());
 
     // Set inference plan with both models.
-    mesh.nodes[0].set_inference_plan(InferencePlan {
-        model_plans: vec![
-            ShardPlan {
-                model: coder_id,
-                entry_node: NodeId::from_u128(1),
-                assignments: vec![ShardAssignment {
-                    node_id: NodeId::from_u128(1),
-                    layers: LayerRange::new(0, 64),
-                    gpu_index: 0,
-                    rpc_address: "127.0.0.1:50051".parse().unwrap(),
-                }],
-                estimated_tokens_per_sec: 45.0,
-                estimated_ttft_ms: 1100,
-            },
-            ShardPlan {
-                model: general_id,
-                entry_node: NodeId::from_u128(1),
-                assignments: vec![ShardAssignment {
-                    node_id: NodeId::from_u128(1),
-                    layers: LayerRange::new(0, 64),
-                    gpu_index: 0,
-                    rpc_address: "127.0.0.1:50052".parse().unwrap(),
-                }],
-                estimated_tokens_per_sec: 38.0,
-                estimated_ttft_ms: 1300,
-            },
-        ],
-    });
+    set_inference_plan(
+        &mesh.nodes[0].state,
+        InferencePlan {
+            model_plans: vec![
+                ShardPlan {
+                    model: coder_id,
+                    entry_node: NodeId::from_u128(1),
+                    assignments: vec![ShardAssignment {
+                        node_id: NodeId::from_u128(1),
+                        layers: LayerRange::new(0, 64),
+                        gpu_index: 0,
+                        rpc_address: "127.0.0.1:50051".parse().unwrap(),
+                    }],
+                    estimated_tokens_per_sec: 45.0,
+                    estimated_ttft_ms: 1100,
+                },
+                ShardPlan {
+                    model: general_id,
+                    entry_node: NodeId::from_u128(1),
+                    assignments: vec![ShardAssignment {
+                        node_id: NodeId::from_u128(1),
+                        layers: LayerRange::new(0, 64),
+                        gpu_index: 0,
+                        rpc_address: "127.0.0.1:50052".parse().unwrap(),
+                    }],
+                    estimated_tokens_per_sec: 38.0,
+                    estimated_ttft_ms: 1300,
+                },
+            ],
+        },
+    );
 
     tokio::time::sleep(Duration::from_millis(50)).await;
 
@@ -610,28 +696,36 @@ async fn unknown_model_name_falls_through_to_default() {
     let mock = MockLlamaServer::start().await;
 
     let mut mesh = SimulatedMesh::new("Fallthrough Test");
-    mesh.add_node(SimulatedNodeBuilder::new(1, "Node").gpu("GPU", 24, ComputeType::Cuda));
-    let addrs = mesh.start_all().await;
+    mesh.add_node(
+        SimulatedNodeBuilder::new(1, "Node").gpu("GPU", 24, ComputeType::Cuda),
+        app_state,
+    );
+    let addrs = mesh.start_all(app_routers).await;
     let client_addr = addrs[0].0;
 
     let model = general_model(1);
     let model_id = model.id;
-    mesh.nodes[0].register_model(model);
-    mesh.nodes[0].set_llama_server_address(model_id, mock.address_string());
-    mesh.nodes[0].set_inference_plan(InferencePlan {
-        model_plans: vec![ShardPlan {
-            model: model_id,
-            entry_node: NodeId::from_u128(1),
-            assignments: vec![ShardAssignment {
-                node_id: NodeId::from_u128(1),
-                layers: LayerRange::new(0, 64),
-                gpu_index: 0,
-                rpc_address: "127.0.0.1:50051".parse().unwrap(),
+    mesh.nodes[0].state.register_model(model);
+    mesh.nodes[0]
+        .state
+        .set_llama_server_address(model_id, mock.address_string());
+    set_inference_plan(
+        &mesh.nodes[0].state,
+        InferencePlan {
+            model_plans: vec![ShardPlan {
+                model: model_id,
+                entry_node: NodeId::from_u128(1),
+                assignments: vec![ShardAssignment {
+                    node_id: NodeId::from_u128(1),
+                    layers: LayerRange::new(0, 64),
+                    gpu_index: 0,
+                    rpc_address: "127.0.0.1:50051".parse().unwrap(),
+                }],
+                estimated_tokens_per_sec: 38.0,
+                estimated_ttft_ms: 1300,
             }],
-            estimated_tokens_per_sec: 38.0,
-            estimated_ttft_ms: 1300,
-        }],
-    });
+        },
+    );
 
     tokio::time::sleep(Duration::from_millis(50)).await;
 
@@ -655,8 +749,11 @@ async fn unknown_model_name_falls_through_to_default() {
 #[tokio::test]
 async fn node_activity_endpoint_returns_204_for_all_known_levels() {
     let mut mesh = SimulatedMesh::new("Activity Test");
-    mesh.add_node(SimulatedNodeBuilder::new(1, "Dev Node").gpu("RTX 4090", 24, ComputeType::Cuda));
-    let addrs = mesh.start_all().await;
+    mesh.add_node(
+        SimulatedNodeBuilder::new(1, "Dev Node").gpu("RTX 4090", 24, ComputeType::Cuda),
+        app_state,
+    );
+    let addrs = mesh.start_all(app_routers).await;
     let internal_addr = addrs[0].1;
 
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
@@ -680,8 +777,11 @@ async fn node_activity_hot_then_idle_reflected_in_gossip_response() {
     // request back to node A (with a matching mesh snapshot) and checking the
     // round-trip succeeds — a proxy for "the state machine is live".
     let mut mesh = SimulatedMesh::new("Activity Gossip Test");
-    mesh.add_node(SimulatedNodeBuilder::new(1, "Node A").gpu("GPU", 24, ComputeType::Cuda));
-    let addrs = mesh.start_all().await;
+    mesh.add_node(
+        SimulatedNodeBuilder::new(1, "Node A").gpu("GPU", 24, ComputeType::Cuda),
+        app_state,
+    );
+    let addrs = mesh.start_all(app_routers).await;
     let internal_addr = addrs[0].1;
 
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
