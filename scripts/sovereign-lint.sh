@@ -71,6 +71,8 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ADAPTER="${SCRIPT_DIR}/../sovereign/crates/sovereign-tools/src/code/test_adapters/sovereign-cargo-check-adapter"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+# shellcheck source=lib/cargo-scope.sh
+source "${SCRIPT_DIR}/lib/cargo-scope.sh"
 
 # resolve_cargo_jobs — the concurrency budget, shared with sovereign-test.sh
 # so both gates throttle by the same rule. See lib/cargo-jobs.sh.
@@ -363,33 +365,20 @@ cargo_args+=(--all-targets)
 # dispatcher — llama.cpp, the grammars, arrow — but this same workspace run
 # already builds every one of those for the sibling binary. What is genuinely
 # new is awareness_cmd's 7,526 lines, and it is paid once.
-features="corpus-engine/treesitter"
+# Feature resolution is SHARED with sovereign-test.sh: `resolve_features` in
+# scripts/lib/cargo-scope.sh. It is closure-aware — a `<pkg>/<feature>` flag
+# is emitted only when <pkg> is reachable from the scope AND nameable (a
+# direct dep of a selected package; cargo rejects the flag otherwise). Until
+# 2026-09-17 this script carried its own inline copy that started from
+# `corpus-engine/treesitter` unconditionally, so a scope whose closure has
+# no corpus-engine (sovereign-desktop alone: 409 file-edits in the 30 days
+# before) failed in 32 ms with cargo's "package does not contain this
+# feature" and was reported as a Fedora-host toolchain failure
+# (quality/BUILD_LATENCY.md, D2). One resolver, one list.
 if (( escalate_to_workspace )) || [[ ${#crates[@]} -eq 0 ]]; then
-    features+=",sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli/awareness,sovereign-mesh/mesh-sim,sovereign-mesh/dst,sovereign-turn-client/bundled-backend"
+    features="$(resolve_features)"
 else
-    for c in "${crates[@]}"; do
-        if [[ "$c" == "sovereign-cli" ]]; then
-            features+=",sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli/awareness"
-        fi
-        if [[ "$c" == "sovereign-turn-client" ]]; then
-            # Kept in step with scripts/lib/cargo-scope.sh — same value in
-            # both gates, so no fingerprint flip. Without it the reach
-            # module's bring-up half is never compiled by any check.
-            features+=",sovereign-turn-client/bundled-backend"
-        fi
-        if [[ "$c" == "sovereign-mesh" ]]; then
-            # `treesitter` too — kept in step with scripts/lib/cargo-scope.sh
-            # (see its note): a scoped mesh run without it compiles the
-            # crate's treesitter-gated integration files to nothing.
-            features+=",sovereign-mesh/mesh-sim,sovereign-mesh/dst,sovereign-mesh/treesitter"
-        fi
-        if [[ "$c" == "commonwealth-transport" ]]; then
-            # `fanout` — kept in step with scripts/lib/cargo-scope.sh: a solo
-            # transport run would otherwise compile the fan-out module and
-            # its tests to nothing.
-            features+=",commonwealth-transport/fanout"
-        fi
-    done
+    features="$(resolve_features "${crates[@]}")"
 fi
 if [[ ! -x "$ADAPTER" ]]; then
     echo "sovereign-lint: adapter not found at $ADAPTER — running raw cargo check ($label)" >&2
