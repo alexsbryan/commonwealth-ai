@@ -5,7 +5,7 @@
 //! ## Why this exists
 //!
 //! The reindexer has had two tiers and a gap between them. The tree-sitter
-//! overlay ([`super::reindexer::run_overlay_merge`]) refreshes symbol
+//! overlay (`reindexer::run_overlay_merge`) refreshes symbol
 //! DEFINITIONS on every save in milliseconds, but it parses one file at a
 //! time and can never see that `a()` calls `b()` in another crate. The full
 //! `rust-analyzer scip` export sees everything and costs a cold analysis of
@@ -62,7 +62,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
 
-use corpus_engine_scip::{ScipGraph, ScipRefRecord};
+use crate::{ScipGraph, ScipRefRecord};
 use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
@@ -95,7 +95,7 @@ impl LspTier {
     /// Resolve, spawn and handshake. `Err` when there is no analyzer, it
     /// cannot be started, or it does not answer `initialize` in time.
     pub async fn connect(root: &Path) -> Result<Self> {
-        let resolved = corpus_engine_scip::tool_path::resolve("rust-analyzer")
+        let resolved = crate::tool_path::resolve("rust-analyzer")
             .ok_or_else(|| "rust-analyzer not found on PATH or in any toolchain dir".to_string())?;
 
         // No arguments. That is what makes this LSP stdio mode, and — when the
@@ -103,7 +103,7 @@ impl LspTier {
         // private one.
         let mut child = Command::new(&resolved.path)
             .current_dir(root)
-            .env("PATH", corpus_engine_scip::tool_path::augmented_path_env())
+            .env("PATH", crate::tool_path::augmented_path_env())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
