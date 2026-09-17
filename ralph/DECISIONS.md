@@ -873,3 +873,69 @@ cycle recorded; `dm-daemon-api-edge`'s `depends` drops the row and its (b)/(c)
 gain the loop sites, the callers and the `peer-wire` caveat;
 `REVIEW-build-daemon-parts` points its fabric clause at api-edge) and this
 entry; `ralph/NEEDS_HUMAN.md` removed. `git revert <sha>` reverts it alone.
+
+## 2026-09-17 · REVIEW-build-peer-wire · the un-absorb's independence premise is false; the CREATE is api-edge (a)'s
+
+**Fork.** `REVIEW-build-peer-wire` (`ralph/STATE.md:188`) was un-absorbed from
+`dm-daemon-api-edge` 2026-09-17 (the lane's package, item 3) as "independent,
+runs now", carrying the four-item correction. The package
+(`ralph/NEEDS_HUMAN.md`) shows the row cannot run: the four items live in
+`sovereign-api` (`routes_internal/ring_sync.rs:81-120`, `server.rs:39`) and
+`sovereign-api` may not name the new leaf — `[[forbid]] from = "sovereign-api"
+to = "sovereign-*"` (`quality/ARCH_LAYERS.toml:711-714`) matches
+`sovereign-peer-wire` and its `except` omits it, and a `[[forbid]]` outranks
+every allowance (`quality/arch-layers/src/lib.rs:268-274`, `forbidden_by` runs
+before package membership). The package's two options: (1) widen the `except`
+to add `sovereign-peer-wire`; (2) re-sequence onto `dm-daemon-api-edge` and fold
+the CREATE into it.
+
+**Choice.** Option 2, in the stronger form — re-absorb, not merely re-sequence.
+Option 1 is the charter's operator-only list verbatim ("widening an `except`
+list", `ralph/CHARTER.md` "Leave these for the operator"): the `except` is where
+R6's own ledger lives (the comment at `:715-738` distinguishes the
+contract-family leaves "never part of R6's measurement" from
+`sovereign-serving-host`, "the R6 ledger gaining one entry"), so widening it for
+a `mesh-api` peer wire leaf would move R6's number — a gate-measurement decision
+the charter reserves. Option 2 is charter-covered ("Row order, re-scoping,
+splitting, folding"). Re-sequence alone would leave a row with nothing to do —
+`dm-daemon-api-edge` (a) already carries the CREATE — the same work in two names
+(principle 8), so `REVIEW-build-peer-wire` is marked `[x]` ABSORBED into
+`dm-daemon-api-edge` (a), matching the fold already applied to
+`dm-daemon-api-state`, `dm-daemon-api-http-a/b1/b2` and
+`REVIEW-build-mesh-loops-decouple`. The row's own four-item correction is now
+api-edge (a)'s text, so nothing is lost: the leaf holds FOUR items
+(`RingSyncRequest`/`RingSyncResponse` + `RING_SYNC_OPS_BUDGET_BYTES` +
+`MAX_REQUEST_BODY_BYTES`), and `sovereign-mesh/src/{join.rs:47,gossip.rs:1049}`
+repoint at `commonwealth_core::mesh::wire`, not at the leaf.
+
+**Evidence** (reproduced in this session).
+- `ls sovereign/crates/ | grep -i 'peer\|wire'` → empty.
+- `grep -rn 'struct RingSyncRequest\|struct RingSyncResponse\|pub const
+  RING_SYNC_OPS_BUDGET_BYTES\|pub const MAX_REQUEST_BODY_BYTES' --include='*.rs'
+  sovereign/` → `routes_internal/ring_sync.rs:81,84,99` and `server.rs:39` only.
+- `grep -rn 'struct JoinRequest\|struct GossipResponse' --include='*.rs'
+  commonwealth/` → all four in
+  `commonwealth/crates/commonwealth-core/src/mesh/wire.rs:30,57,73,91`;
+  `ls sovereign/crates/sovereign-api/src/routes_internal/` → no `join.rs`.
+- `quality/ARCH_LAYERS.toml:711-714` (`from = "sovereign-api" to =
+  "sovereign-*"`, `except = [contracts, serving-host, grants,
+  meshapp-registry, time]`); `quality/arch-layers/src/lib.rs:268-274`.
+- `git grep -n 'sovereign_api::' sovereign/crates/sovereign-mesh/src | grep
+  routes_internal` → `gossip.rs:1049`, `join.rs:47`, `ring_sync.rs:80`.
+- `ralph/STATE.md:183` (a) already creates the leaf; `ralph/DECISIONS.md:280-284`
+  and `:363-374` are the prior fold; `:418-420` is the un-absorb.
+
+**Falsified by.** A route or a loop that can name the leaf without the
+`sovereign-api` forbid applying (then the row is independent and the un-absorb
+was right); or the operator widening the `except` at `:714` (option 1), which
+would make the row runnable now and is theirs to take.
+
+**REVIEW-AFTER:** the charter covers the fold, but the operator may prefer
+option 1 — widening the `except` so the leaf is created by a row that runs now —
+which is a gate decision reserved to them; this entry takes option 2 and leaves
+that alternative named rather than taken.
+
+**Landed in.** this commit — `ralph/STATE.md` (the row `[x]` ABSORBED with the
+falsified premise recorded; `dm-daemon-api-edge` (a) corrected to the four-item
+list with the Join/Gossip repoint) and this entry; `ralph/NEEDS_HUMAN.md`
+removed. `git revert <sha>` reverts it alone.
