@@ -1181,7 +1181,13 @@ def cmd_report(args):
     current = queue.current()
     print(f"current: {current.id if current else 'none'}")
     for d in staged_campaigns(paths):
-        print(f"next up: {d.name} ({len(Queue(d / 'STATE.md').rows)} rows, staged in {STAGED_DIR})")
+        try:
+            rows = f"{len(Queue(d / 'STATE.md').rows)} rows"
+        except ValueError as e:
+            # A staged queue that does not parse is a finding, not a crash: the
+            # report is how the operator learns it before `promote` refuses.
+            rows = f"DOES NOT PARSE — {e}"
+        print(f"next up: {d.name} ({rows}, staged in {STAGED_DIR})")
     markers =[m for m in ("DONE", "STOP", "NEEDS_HUMAN.md") if paths.p(f"ralph/{m}").exists()]
     print(f"markers: {', '.join(markers) if markers else 'none'}")
     decisions = paths.p("ralph/DECISIONS.md")

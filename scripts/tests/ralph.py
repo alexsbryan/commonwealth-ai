@@ -173,6 +173,17 @@ class PromoteTests(unittest.TestCase):
             self.assertEqual((archive / "DECISIONS.md").read_text(), "- old decision\n")
             self.assertTrue((archive / "lanes/dm-a.done").exists())
 
+    def test_report_names_a_staged_queue_that_does_not_parse(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.active_and_staged(tmp)
+            write(tmp, "ralph/next/handed/STATE.md",
+                  "- [ ] h-a — depends [nope] — do a\n")
+            subprocess.run(["git", "init", "-q", tmp], check=True)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                ralph.main(["report", "--workdir", tmp])
+            self.assertIn("DOES NOT PARSE", buf.getvalue())
+
     def test_report_names_the_next_campaign(self):
         with tempfile.TemporaryDirectory() as tmp:
             self.active_and_staged(tmp)
