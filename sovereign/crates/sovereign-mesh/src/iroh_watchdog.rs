@@ -36,7 +36,7 @@
 //!      now" — a node whose peers are all legitimately asleep has no path
 //!      either, and rebuilding for that is the same trap `relays_expected`
 //!      exists for one layer up. The gate is also ONE-SHOT: a rebuild re-arms
-//!      it (`PeerPathHealth::rearm`), so a loss event can drive the ladder at
+//!      it (`ReachPathHealth::rearm`), so a loss event can drive the ladder at
 //!      most once until a real path is observed again.
 //!
 //! Escalation (each step only after a grace window LONGER than iroh's own 15s
@@ -77,11 +77,11 @@ pub type RebuildFn = Arc<
 >;
 
 /// One peer's live path as the daemon sees it, injected once per poll via
-/// [`PeerPathsFn`]. The watchdog stays transport-mechanism-only: it does not
+/// [`ReachPathsFn`]. The watchdog stays transport-mechanism-only: it does not
 /// know what a mesh member is, only that something out there was reachable and
 /// now is not.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PeerPathObservation {
+pub struct ReachPathObservation {
     /// Short node id — for the log line, and the key the term folds on.
     pub node_id: String,
     /// Display name, for the same log line.
@@ -97,7 +97,7 @@ pub struct PeerPathObservation {
     pub path: Option<PeerPath>,
 }
 
-impl PeerPathObservation {
+impl ReachPathObservation {
     fn active_path(&self) -> Option<PeerPath> {
         self.path.filter(|p| p.is_active())
     }
@@ -116,8 +116,8 @@ impl PeerPathObservation {
 /// must judge the endpoint it is actually holding. Supplied by the daemon (it
 /// owns the membership list), same injection shape as [`RebuildFn`]. `None` at
 /// spawn disables the term entirely — no observations, never wedged.
-pub type PeerPathsFn = Arc<
-    dyn Fn(Endpoint) -> Pin<Box<dyn std::future::Future<Output = Vec<PeerPathObservation>> + Send>>
+pub type ReachPathsFn = Arc<
+    dyn Fn(Endpoint) -> Pin<Box<dyn std::future::Future<Output = Vec<ReachPathObservation>> + Send>>
         + Send
         + Sync,
 >;
@@ -126,7 +126,7 @@ pub type PeerPathsFn = Arc<
 /// in place, so the fold below is a pure function with failing inputs a test
 /// can name (ARCH §18.1) and all the tracing stays in [`run`].
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-struct PeerPathVerdict {
+struct ReachPathVerdict {
     /// The health term: we HELD an active path, hold none now, and have held
     /// none for `peer_path_bad_streak` consecutive polls.
     wedged: bool,
@@ -161,7 +161,7 @@ struct PeerPathVerdict {
 /// observing a real active path, and a rebuild disarms it again — which makes
 /// it one-shot per loss event and structurally unable to rebuild-loop.
 #[derive(Debug, Default)]
-struct PeerPathHealth {
+struct ReachPathHealth {
     /// Last ACTIVE path per peer, so a loss can report what died.
     last_active: std::collections::HashMap<String, PeerPath>,
     /// An active path has been observed since the term was last armed.
@@ -170,10 +170,10 @@ struct PeerPathHealth {
     bad_run: u32,
 }
 
-impl PeerPathHealth {
+impl ReachPathHealth {
     /// Fold one poll's observations into the term.
-    fn observe(&mut self, obs: &[PeerPathObservation], streak: u32) -> PeerPathVerdict {
-        let mut v = PeerPathVerdict {
+    fn observe(&mut self, obs: &[ReachPathObservation], streak: u32) -> ReachPathVerdict {
+        let mut v = ReachPathVerdict {
             total: obs.len(),
             ..Default::default()
         };
@@ -339,7 +339,7 @@ impl WatchdogHandle {
 pub fn spawn(
     endpoint: Endpoint,
     rebuild: RebuildFn,
-    peer_paths: Option<PeerPathsFn>,
+    peer_paths: Option<ReachPathsFn>,
     cfg: WatchdogConfig,
 ) -> WatchdogHandle {
     let status = Arc::new(RwLock::new(ReachabilityStatus::default()));
@@ -401,7 +401,7 @@ async fn bounce_relays(endpoint: &Endpoint, relays: &[RelayStatus]) {
 async fn run(
     mut endpoint: Endpoint,
     rebuild: RebuildFn,
-    peer_paths: Option<PeerPathsFn>,
+    peer_paths: Option<ReachPathsFn>,
     cfg: WatchdogConfig,
     status: Arc<RwLock<ReachabilityStatus>>,
 ) {
@@ -425,7 +425,7 @@ async fn run(
     let mut next_probe = Instant::now() + cfg.health_poll; // first probe shortly after start
     let mut cached_discovery_ok: Option<bool> = None;
     let mut next_chaos = cfg.chaos_drop_interval.map(|d| Instant::now() + d);
-    let mut peer_path_health = PeerPathHealth::default();
+    let mut peer_path_health = ReachPathHealth::default();
     // CHAOS/soak only: a simulated discovery-side wedge (see below).
     let mut chaos_unhealthy = false;
 
@@ -482,7 +482,7 @@ async fn run(
         // decays over minutes leaves no trace in a signal sampled only when
         // something is already wrong, and the 2026-09-09 capture had to be
         // reconstructed from gossip timings for exactly that reason.
-        let mut peer_verdict = PeerPathVerdict::default();
+        let mut peer_verdict = ReachPathVerdict::default();
         if let Some(observe) = peer_paths.as_ref() {
             let obs = observe(endpoint.clone()).await;
             peer_verdict = peer_path_health.observe(&obs, cfg.peer_path_bad_streak);
@@ -640,7 +640,7 @@ async fn run(
                                                  // must be re-armed or it would read "had a path, has
                                                  // none" forever and drive the next rebuild, and the
                                                  // next. This is what makes the term one-shot per loss
-                                                 // event (see `PeerPathHealth::rearm`).
+                                                 // event (see `ReachPathHealth::rearm`).
                         peer_path_health.rearm();
                         record_recovery(&status, "endpoint_rebuild", true).await;
                         info!(
@@ -789,8 +789,8 @@ mod tests {
     // real. A gate whose failing input nobody can name is not a gate
     // (ARCH §18.1), so each test names one.
 
-    fn obs(node: &str, believed_online: bool, path: Option<PeerPath>) -> PeerPathObservation {
-        PeerPathObservation {
+    fn obs(node: &str, believed_online: bool, path: Option<PeerPath>) -> ReachPathObservation {
+        ReachPathObservation {
             node_id: node.to_string(),
             name: node.to_string(),
             believed_online,
@@ -803,7 +803,7 @@ mod tests {
     /// The term must stay silent forever, however long that runs.
     #[test]
     fn a_path_never_held_is_never_a_wedge() {
-        let mut h = PeerPathHealth::default();
+        let mut h = ReachPathHealth::default();
         for _ in 0..50 {
             let v = h.observe(&[obs("mac", true, None), obs("pi", false, None)], 3);
             assert!(!v.wedged, "no path was ever held — nothing decayed");
@@ -814,7 +814,7 @@ mod tests {
     /// Wedged only after the streak, never on the first poll.
     #[test]
     fn a_held_path_that_dies_is_wedged_after_the_streak() {
-        let mut h = PeerPathHealth::default();
+        let mut h = ReachPathHealth::default();
         let live = [obs("mac", true, Some(PeerPath::Relayed))];
         let dead = [obs("mac", true, None)];
         assert!(!h.observe(&live, 3).wedged);
@@ -835,7 +835,7 @@ mod tests {
     /// NOT gated on — this asserts that.
     #[test]
     fn membership_going_offline_does_not_blind_the_term() {
-        let mut h = PeerPathHealth::default();
+        let mut h = ReachPathHealth::default();
         assert!(
             !h.observe(&[obs("mac", true, Some(PeerPath::Direct))], 2)
                 .wedged
@@ -851,7 +851,7 @@ mod tests {
     /// cannot launder a real wedge into health.
     #[test]
     fn no_peers_is_never_a_wedge() {
-        let mut h = PeerPathHealth::default();
+        let mut h = ReachPathHealth::default();
         h.observe(&[obs("mac", true, Some(PeerPath::Direct))], 2);
         h.observe(&[obs("mac", true, None)], 2);
         let empty = h.observe(&[], 2);
@@ -867,7 +867,7 @@ mod tests {
     /// a green light.
     #[test]
     fn an_idle_record_is_not_an_active_path() {
-        let mut h = PeerPathHealth::default();
+        let mut h = ReachPathHealth::default();
         h.observe(&[obs("mac", true, Some(PeerPath::Mixed))], 1);
         let v = h.observe(&[obs("mac", true, Some(PeerPath::Idle))], 1);
         assert!(v.wedged);
@@ -885,7 +885,7 @@ mod tests {
     /// fires only on the endpoint-wide symptom.
     #[test]
     fn one_live_peer_keeps_the_endpoint_healthy() {
-        let mut h = PeerPathHealth::default();
+        let mut h = ReachPathHealth::default();
         for _ in 0..10 {
             let v = h.observe(
                 &[
@@ -903,7 +903,7 @@ mod tests {
     /// leave the term primed to fire on the next single blip.
     #[test]
     fn a_recovered_path_resets_the_run() {
-        let mut h = PeerPathHealth::default();
+        let mut h = ReachPathHealth::default();
         h.observe(&[obs("mac", true, Some(PeerPath::Direct))], 3);
         h.observe(&[obs("mac", true, None)], 3);
         h.observe(&[obs("mac", true, None)], 3);
@@ -923,7 +923,7 @@ mod tests {
     /// home for the night.
     #[test]
     fn a_rebuild_disarms_the_term_until_a_path_returns() {
-        let mut h = PeerPathHealth::default();
+        let mut h = ReachPathHealth::default();
         h.observe(&[obs("mac", true, Some(PeerPath::Direct))], 1);
         assert!(h.observe(&[obs("mac", true, None)], 1).wedged);
         h.rearm(); // what the ladder does after an endpoint rebuild
@@ -943,7 +943,7 @@ mod tests {
     /// first? `direct → relayed → gone` is the shape to look for.
     #[test]
     fn the_verdict_reports_the_path_at_the_moment_of_death() {
-        let mut h = PeerPathHealth::default();
+        let mut h = ReachPathHealth::default();
         h.observe(&[obs("mac", true, Some(PeerPath::Direct))], 1);
         let migrated = h.observe(&[obs("mac", true, Some(PeerPath::Relayed))], 1);
         assert_eq!(
@@ -991,18 +991,18 @@ mod tests {
         // the captured shape, compressed.
         let polls = Arc::new(AtomicUsize::new(0));
         let polls_c = polls.clone();
-        let peer_paths: PeerPathsFn = Arc::new(move |_ep| {
+        let peer_paths: ReachPathsFn = Arc::new(move |_ep| {
             let n = polls_c.fetch_add(1, Ordering::SeqCst);
             Box::pin(async move {
                 let path = if n < 2 { Some(PeerPath::Relayed) } else { None };
-                vec![PeerPathObservation {
+                vec![ReachPathObservation {
                     node_id: "mac".into(),
                     name: "mac".into(),
                     believed_online: n < 4,
                     path,
                 }]
             })
-                as Pin<Box<dyn std::future::Future<Output = Vec<PeerPathObservation>> + Send>>
+                as Pin<Box<dyn std::future::Future<Output = Vec<ReachPathObservation>> + Send>>
         });
 
         let cfg = WatchdogConfig {

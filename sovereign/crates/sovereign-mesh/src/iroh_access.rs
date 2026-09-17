@@ -233,7 +233,7 @@ pub async fn observe_peer_paths(
     mesh: &tokio::sync::RwLock<commonwealth_core::mesh::Mesh>,
     self_id: commonwealth_core::ids::NodeId,
     endpoint: &Endpoint,
-) -> Vec<crate::iroh_watchdog::PeerPathObservation> {
+) -> Vec<crate::iroh_watchdog::ReachPathObservation> {
     // Clone the members out before awaiting — the codebase's
     // clone-out-then-await rule; `peer_path_snapshot` awaits per peer.
     let members: Vec<commonwealth_core::mesh::MemberRecord> = {
@@ -270,7 +270,7 @@ pub async fn observe_peer_paths(
                 None
             }
         };
-        out.push(crate::iroh_watchdog::PeerPathObservation {
+        out.push(crate::iroh_watchdog::ReachPathObservation {
             node_id: m.node_id.to_string(),
             name: m.name.clone(),
             believed_online: m.status != commonwealth_core::mesh::NodeStatus::Offline,

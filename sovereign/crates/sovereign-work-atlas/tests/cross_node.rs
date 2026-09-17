@@ -35,7 +35,7 @@ use sovereign_work_atlas::WorkAtlasStore;
 /// the projection it applies are the mesh's own, and the privacy invariant is
 /// only worth asserting against them.
 ///
-/// This is the same delegation `sovereign_mesh::peer_adapter::MeshPeerStore`
+/// This is the same delegation `sovereign_mesh::peer_adapter::MeshReplicatedKv`
 /// performs, and it is repeated here because this crate cannot reach that one:
 /// `sovereign-mesh` sits in the `mesh-api` layer, above `capabilities`, and
 /// the arrow only points down. Twenty lines in a test file is the cheaper

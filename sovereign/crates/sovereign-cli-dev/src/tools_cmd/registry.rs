@@ -222,8 +222,8 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
         let _ = std::fs::create_dir_all(parent);
     }
     let mesh_store = Arc::new(
-        sovereign_mesh::peer_adapter::MeshPeerStore::open(&mesh_db)
-            .or_else(|_| sovereign_mesh::peer_adapter::MeshPeerStore::in_memory())
+        sovereign_mesh::peer_adapter::MeshReplicatedKv::open(&mesh_db)
+            .or_else(|_| sovereign_mesh::peer_adapter::MeshReplicatedKv::in_memory())
             .map_err(|e| format!("work atlas mesh store: {e}"))?,
     );
     // Identity MUST come from the ROOT data dir with the daemon's full

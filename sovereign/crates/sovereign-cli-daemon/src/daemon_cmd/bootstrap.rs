@@ -2478,7 +2478,7 @@ pub(super) struct WatcherAtlasSetup {
     pub(super) watched_lint_scope: Option<String>,
     pub(super) watched_test_scope: Option<String>,
     pub(super) watcher_monitor: Option<tokio::task::JoinHandle<()>>,
-    pub(super) work_atlas_mesh_store: Arc<sovereign_mesh::peer_adapter::MeshPeerStore>,
+    pub(super) work_atlas_mesh_store: Arc<sovereign_mesh::peer_adapter::MeshReplicatedKv>,
     pub(super) work_atlas_store: Arc<sovereign_work_atlas::WorkAtlasStore>,
     pub(super) work_atlas_broadcaster: Arc<sovereign_work_atlas::tools::DeferredBroadcaster>,
     pub(super) work_atlas_cfg: sovereign_work_atlas::WorkAtlasConfig,
@@ -2523,8 +2523,8 @@ pub(super) fn setup_watchers_and_work_atlas(
     // In-memory is intentional — matches the daemon's existing
     // long-term-persistence-via-mesh.json design. The atlas-relevant
     // records have TTLs measured in hours; restart cost is acceptable.
-    let work_atlas_mesh_store: Arc<sovereign_mesh::peer_adapter::MeshPeerStore> = Arc::new(
-        sovereign_mesh::peer_adapter::MeshPeerStore::in_memory()
+    let work_atlas_mesh_store: Arc<sovereign_mesh::peer_adapter::MeshReplicatedKv> = Arc::new(
+        sovereign_mesh::peer_adapter::MeshReplicatedKv::in_memory()
             .expect("in-memory MeshStore for work atlas"),
     );
     // Node identity — same resolution order EmbeddedDaemon uses when
