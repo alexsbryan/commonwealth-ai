@@ -177,14 +177,16 @@ Never print a whole log into the session; grep it.
 **A row whose premises fail is yours to correct (2026-09-17, operator
 direction).** When the row's own facts prove false — a dependency it does not
 name, a cycle, a count, a scope that cannot compile — do not stop. Correct the
-row in `ralph/STATE.md` (its `depends`, its scope, its text, its `check`),
-record the correction in the row itself (`CORRECTED <date>
-(ralph/DECISIONS.md): <what was false, what you verified>`), add an entry to
-`ralph/DECISIONS.md` (fork, choice, evidence, falsifier), commit it, and
-proceed on the corrected row. In a POOL LANE this is the one edit you make to
-the main tree's `ralph/STATE.md` (§1.3). Four things still stop you: weakening
-a pass bar, adding or widening an `[[exception]]`/`except`, touching a `HUMAN-`
-row, pushing — and any correction whose evidence you cannot reproduce.
+row in `ralph/STATE.md` (its `depends`, its scope, its text, its `check`) and,
+when the correction needs it, the rows it collides with: re-order them, fold
+one into another, re-scope a neighbour — recording in `ralph/DECISIONS.md` what
+moved and why. Record the correction in the row itself (`CORRECTED <date>
+(ralph/DECISIONS.md): <what was false, what you verified>`), add the
+DECISIONS entry (fork, choice, evidence, falsifier), commit it, and proceed on
+the corrected row. In a POOL LANE this is the one edit you make to the main
+tree's `ralph/STATE.md` (§1.3). Four things still stop you: weakening a pass
+bar, adding or widening an `[[exception]]`/`except`, touching a `HUMAN-` row,
+pushing — and any correction whose evidence you cannot reproduce.
 
 - **`ralph/NEEDS_HUMAN.md`** — a decision package, not a question:
   (a) the unit id and its row; (b) the exact commands you ran and their ACTUAL
