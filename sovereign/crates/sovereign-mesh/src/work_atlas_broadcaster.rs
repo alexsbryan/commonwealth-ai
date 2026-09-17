@@ -129,7 +129,8 @@ mod tests {
             &state.inner.fabric.mesh,
             &state.inner.fabric.identity,
             state.self_node_pubkey(),
-        ).unwrap();
+        )
+        .unwrap();
         state
     }
 
