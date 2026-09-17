@@ -1,0 +1,5 @@
+# At most ONE of these per wave.
+REVIEW-build-hd-1-complete
+REVIEW-build-hd-2-commission
+hd-2-seal-core
+REVIEW-build-hd-3-guard

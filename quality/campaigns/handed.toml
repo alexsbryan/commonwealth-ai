@@ -1,0 +1,196 @@
+# Flight rules — read raw. Verdicts come from measurement rows, never prose here.
+# The ladder is the [[rung]] table (scripts/co-ladder.py schema); the rationale and
+# the decisions are .sovereign/features/handed/campaign.md; the orders are
+# quality/campaigns/handed/order-<n>-*.md (COMMITTED: a pool lane is a worktree and
+# cannot read .sovereign/, which is gitignored).
+id        = "handed"
+objective = "Nothing can do anything it was not handed: the abilities that carry the product's promises are minted in one place and a violation does not compile"
+# spec: §3 ("the profile is the constructor"; "capabilities are tokens, not booleans") and §3.5.
+spec      = "quality/TOPOLOGY.md"
+declared  = "2026-09-17"
+status    = "staged"   # next up after domains; `scripts/ralph.py promote handed`
+
+# ── THE PREDICATE ────────────────────────────────────────────────────────────
+# Two halves. The first passes vacuously for a profile that holds nothing, so the
+# second is the load-bearing one.
+[predicate]
+statement = "Every [[ability]] below is structural — the planted violation its rung names goes red, and the tree is green — and the bench serves one grounded and one generative turn in-process, pasting both verdicts and the commission trace line"
+check     = "./scripts/sovereign-lint.sh --human --full && (cd corpus-engine && cargo xtask layer-gate) && ./scripts/sovereign-test.sh --human"
+
+# ── THE SCOREBOARD ───────────────────────────────────────────────────────────
+# A row is structural in the commit that lands its enforced_by AND deletes the
+# ambient path. Nothing here is baselined, so nothing can be re-pinned.
+#
+# `promise` is what the row makes true — narrowed 2026-09-17 to what its rung
+# actually delivers. `not_covered` is the rest, named rather than implied
+# (principle 6). Widening a promise is a ladder edit, not a wording edit.
+
+[[ability]]
+id          = "assemble"
+promise     = "a Runtime exists only through `commission`, and `commission` names the profile it is built for"
+enforced_by = "RuntimeParts requires a CommissionSeal that only sovereign-runtime-recipe can mint (E0433 anywhere else); layer-gate forbids any other crate depending on the seal crate"
+today       = "three hosts build RuntimeParts by struct-update on common.parts; 21 RuntimeParts::new calls in 12 files (20 of them tests); `commission` exists (sovereign-runtime-recipe/src/lib.rs:385) and decides nothing"
+not_covered = "sovereign-server is converted in place; whether it should exist at all is a separate decision"
+
+[[ability]]
+id          = "render"
+promise     = "every turn's terminal value — Complete, MessageResponse, MessageRefined — carries a verdict"
+enforced_by = "Complete.judgement is a required field and serve.rs is its only builder (E0063); the gate's one funnel stamps the judgement into the persisted meta and serve.rs projects it, absent meaning never_ran(reason)"
+today       = "the gate outcome rides `metadata: Option<TurnMetadata>`; `Draft::release_ungated` has 0 callers; MessageRefined swaps the answer text after Complete at five sites"
+not_covered = "no user-facing surface renders the verdict except `--format json` and the desktop payload — the desktop footer reads the epistemic ledger (EpistemicFooter.svelte:10-21), `svrn chat` text mode renders provenance (render.rs:281), mobile renders nothing"
+
+[[ability]]
+id          = "writers"
+promise     = "no two in-process write paths mutate one index, atlas or config at once, and a second process is refused by name"
+enforced_by = "a per-corpus flock taken inside the write path (the `.rebuild.lock` precedent, corpus-engine-scip/src/scip_graph.rs:483-500), `table()`/`connection()` pub(crate) (E0624), and a flock inside SetupConfig::save_to"
+today       = "no lock on the corpus index; TOPOLOGY.toml has 4 of 7 invariants false; SetupConfig::save_to is a plain fs::write"
+not_covered = "whole-directory replace bypasses every write path — canonical_pull.rs:292, restore_snapshot_archive, the desktop's import remove_dir_all, writeback.rs:383, project_init/mod.rs:463"
+
+[[ability]]
+id          = "ledger"
+promise     = "a ComplexTask step that goes through the executor runs exactly once across crash and replay"
+enforced_by = "StepExecutionStore has no default method bodies, so an empty impl is E0046"
+today       = "all four methods default to no-ops (sovereign-contracts/src/traits.rs:1805); 4 impls, one of them an empty MockStore"
+not_covered = "six production `tool.execute(` sites never reach the executor — mcp_router.rs:579, routes_mcp.rs:378, handlers/document_op.rs:252, handlers/recipe_author.rs:336, workflow steps.rs:285, registry.rs:312"
+
+[[ability]]
+id          = "custody"
+promise     = "a corpus whose recipe states no sharing policy is private"
+enforced_by = "`mesh_sharing` takes serde's `default` (false) instead of `default_true`, with a test pinning a policy-less recipe as private"
+today       = "`#[serde(default = \"default_true\")]` at corpus-engine/src/recipe.rs:790; two shipped recipes and two generators state nothing; `scope` carries a doc comment claiming a structural guarantee it does not have"
+not_covered = "prompt content routed to a peer for inference reads no sharing flag (sovereign-serving-host peer_inference select_peers_ranked); indexes already installed keep the mesh_sharing stamped in their IndexMeta"
+
+[[ability]]
+id          = "principal"
+promise     = "a guest link reaches exactly the scopes it names"
+enforced_by = "Scope's decider matches exhaustively with no `_` arm, so a new variant is E0004 at guest_grant.rs:103 and client_auth.rs:446"
+today       = "already true in the code and never watched failing — rung hd-6 is the plant, not a change"
+not_covered = "a mesh member on CLIENT_ALPN is admitted by membership and reaches every /v1, /api and /oicp route; Limits covers guest links only (warrant wr-2, parked)"
+
+# ── EXCLUDED, PRICED (principle 6: absence is named, never silent) ──────────
+# Abilities the commitment names that this campaign does NOT make structural.
+# Adding one back is a ladder edit.
+[[excluded]]
+id     = "egress and model-reach"
+size   = "293 reqwest client constructors in 150 files, 40 crates; peer providers minted per request"
+reason = "custody is enforced at the corpus policy, not at every client; ~15-30 atoms. This is the gap named under the custody ability's not_covered"
+
+[[excluded]]
+id     = "compose"
+size   = "87 dyn InferenceProvider sites in 24 runtime files; 74 ScoredChunk literals"
+reason = "the grounding gate already verifies claims against the seal; a sealed-only composer is defense in depth; ~10-18 atoms"
+
+[[excluded]]
+id     = "host-endpoints"
+size   = "146 bind/serve sites in 48 files"
+reason = "the desktop's thinness is already layer-gated (4 in-repo deps, ARCH_LAYERS.toml:1169-1204)"
+
+[[excluded]]
+id     = "enrich, dispatch, registries, jobs, corpus-read, spawn, approval-effect"
+size   = "see .sovereign/features/handed/campaign.md Decisions"
+reason = "none crosses a promise this campaign's predicate names; each is banked with its evidence"
+
+# ── BARS ─────────────────────────────────────────────────────────────────────
+
+[[bar]]
+id           = "hd-structural"
+one_line     = "abilities whose enforced_by has not been watched red then green"
+derives_from = "predicate half 1; TOPOLOGY.md §3 technique 4 (capabilities are tokens, not booleans); principle 5 (a gate you have not watched fail is not a gate) — principal counts until its plant runs, though its code already holds"
+floor        = 6.0
+floor_basis  = "2026-09-17: six ability rows, none with a watched plant"
+target       = 0.0
+direction    = "lower_is_better"
+instrument   = "per row: the PLANT line its rung's landing commit pastes, and the same gate green on the tree"
+goodhart     = "a PLANT can go red for the wrong reason — a typo, an unrelated error. The audit re-runs each PLANT and checks the error code the row names (E0063, E0624, E0433, E0046, E0004), not merely that something was red"
+kill         = "the seal cannot be minted without a new layer-gate key, or a row needs an adapter in both directions: stop and redraw"
+status       = "open"
+
+[[bar]]
+id           = "hd-surfaces"
+one_line     = "surfaces serving a grounded and a generative turn with a verdict on the terminal frame"
+derives_from = "predicate half 2; principle 5 (a verdict that never ran is not a pass)"
+floor        = 0.0
+floor_basis  = "2026-09-17: the gate outcome is optional on the wire, so no surface can show one"
+target       = 1.0
+direction    = "higher_is_better"
+instrument   = "the bench DEMO row, in-process, pasting both turns' verdicts and the commission trace"
+goodhart     = "never_ran on both turns satisfies the shape; the grounded turn must read passed or failed, and the judge failing open reads could-not-judge — the row names the short probe that avoids it"
+kill         = "more than 3 turn exits need a verdict kernel_types::Verdict lacks"
+status       = "open"
+
+# ── ADOPTED (operator 2026-09-17: every active campaign is adopted) ─────────
+# Dispositions taken against the tree by three read-only sweeps, 2026-09-17.
+# NECESSARY rows became rungs; the rest are parked or cut, with the costs of
+# parking named in campaign.md Decisions.
+[[adopted]]
+campaign  = "domains"
+necessary = []
+note      = "0 of 58 rows: the desktop links none of sovereign-api/-mesh/-daemon, so no crate move is needed for any forbid; the two heavy rows had 0 commits; dm-daemon-cli-composition would move code hd-2 rewrites"
+
+[[adopted]]
+campaign  = "warrant"
+necessary = ["wr-kinds-are-read (as a plant, not a change)"]
+
+[[adopted]]
+campaign  = "topology"
+necessary = ["phase 6a", "9.2 tail", "writer-lease invariant", "writes-only-what-granted invariant"]
+
+[[adopted]]
+campaign  = "deletion"
+necessary = ["p2 dead examples that construct an ability"]
+
+[[adopted]]
+campaign  = "sv-surface, conformance, verifier-loop, drb1-race, epistemic-index, financial-corpora, hot-path-reuse, house-mesh, refactor-factory, ring-apps"
+necessary = []
+
+# ── LADDER ───────────────────────────────────────────────────────────────────
+# Each REVIEW-audit row flips the `status` of the rungs it covers and the bars
+# they move; no other row edits this file.
+
+[[rung]]
+id     = "hd-0"
+title  = "adopt: the thirteen active campaigns close into handed; their orders close"
+status = "open"
+demo   = "none"
+
+[[rung]]
+id     = "hd-1"
+title  = "render: the gate stamps the judgement, serve.rs projects it, Complete requires it"
+status = "open"
+demo   = "hd-surfaces"
+
+[[rung]]
+id     = "hd-2"
+title  = "assemble: RuntimeParts needs a seal only the recipe can mint"
+status = "open"
+demo   = "hd-surfaces"
+
+[[rung]]
+id     = "hd-3"
+title  = "writers: a flock inside the write path, and the raw handle closes"
+status = "open"
+demo   = "none"
+
+[[rung]]
+id     = "hd-4"
+title  = "ledger: StepExecutionStore has no defaults"
+status = "open"
+demo   = "none"
+
+[[rung]]
+id     = "hd-5"
+title  = "custody: a recipe that states no policy is private"
+status = "open"
+demo   = "none"
+
+[[rung]]
+id     = "hd-6"
+title  = "principal: watch the exhaustive Scope decider refuse a new variant"
+status = "open"
+demo   = "none"
+
+[[rung]]
+id     = "hd-7"
+title  = "surfaces: one in-process bench turn pair with verdicts"
+status = "open"
+demo   = "hd-surfaces"
