@@ -113,7 +113,7 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
 - **`ralph/NEEDS_HUMAN.md`** — a decision package, not a question: (a) the
   unit id and its row; (b) the exact commands you ran and their ACTUAL output,
   trimmed; (c) what the operator must decide, numbered, with file:line;
-  (d) "edit or mark the row in ralph/STATE.md, then
+  (d) "edit or mark the row in ralph/next/ring-doc/STATE.md, then
   `rm ralph/STOP ralph/NEEDS_HUMAN.md`". Leave the tree compiling. Commit
   nothing broken. Then stop.
 - **`ralph/DONE`** — only when every row in `ralph/next/ring-doc/STATE.md` is `[x]`.
