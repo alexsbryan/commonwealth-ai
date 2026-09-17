@@ -75,6 +75,20 @@ growth past a cap is a design finding, never a queue edit. Commit
 `ralph/STATE.md` as `REVIEW-mint-hd-<x>: <n> rows minted`, then mark the mint
 row `[x]`.
 
+Three queue duties come with every mint, in the same commit as the rows:
+
+1. Append each row you mint to the `depends` of `REVIEW-DEMO-hd-7-bench` and of
+   `REVIEW-audit-hd-2`. `first_ready_review` (`scripts/ralph.py:256-261`) takes
+   the first READY review in FILE order, so without this the bench and the final
+   audit run before the rows they are meant to cover.
+2. Add a `conflicts.txt` pair for any two rows IN THE QUEUE that edit one file —
+   not just two of yours. `pick_wave` will otherwise put both in the same wave, and
+   two mints can land on one file without either seeing the other: hd-8 and hd-9 both
+   rewrite `corpus-engine/src/index/create.rs`'s `create_with_sharing`.
+3. Prove the queue still parses: `python3 scripts/ralph.py report` must print its
+   `queue:` line with your rows counted. A typo in a `depends` id leaves the
+   queue unreadable and the pool SLEEPS instead of failing.
+
 **`REVIEW-audit-hd-<n>`.** Run TESTALL and PREPUSH. Read `git log` and
 `git diff` since the previous audit against `sovereign/ARCH_PRINCIPLES.md`
 ("The twelve"). Fix what you find, behaviour-preserving, and record each finding in

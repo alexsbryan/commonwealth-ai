@@ -50,13 +50,13 @@ chose at round 3 to give released-turn verdicts their OWN type with a private co
 `judgement: Judgement` field added here would be re-typed by hd-10 — double work on the one file in the
 package with zero line headroom (`collaboration.rs` is 885 lines against arch-gate's no-slack 800-1200
 approach band; `wc -l`).
-The work moved whole to rung hd-10, `quality/campaigns/handed/order-10-verified.md` (its premises carry both
-holes at :75-80, step 6 at :121-122 closes them). What stays unfixed in the meantime: `MessageRefined`
-carries no verdict at all, and the PERSISTED refined row keeps the pre-refinement gate meta
+The work moved whole to rung hd-10, `quality/campaigns/handed/order-10-verified.md` — its Premises' last
+bullet names both holes as inherited, and its step 6 closes them. What stays unfixed in the meantime:
+`MessageRefined` carries no verdict at all, and the PERSISTED refined row keeps the pre-refinement gate meta
 (collaboration.rs:693 writes `metadata: original_metadata`), so history, a desktop reload and a json replay
-show refined text under the previous turn's verdict. Both are `quality/campaigns/handed.toml`
-`[[ability]] render` `not_covered` clauses — that record's "hd-1-refined fixes the live notice only"
-sentence is now stale and is handed.toml's own row to correct.
+show refined text under the previous turn's verdict. Both are named as facts, not exceptions, in
+`quality/campaigns/handed.toml` `[[ability]] render` `not_covered` (the `MessageRefined` clause and the
+PERSISTED-row clause, both pointing at hd-10 step 6).
 
 ## Premises (verified 2026-09-17, file:line)
 
@@ -229,7 +229,7 @@ sentence is now stale and is handed.toml's own row to correct.
     `Message` with `metadata: original_metadata` — the gate meta from before the refinement — so every later
     read (history, a desktop reload, a json replay) shows refined text under the previous turn's verdict.
     `collaboration.rs` is 885/885, inside arch-gate's 800-1200 approach band which has no slack, so neither
-    half is affordable here. Rung hd-10 owns both (order-10-verified.md premises :75-80, step 6 :121-122).
+    half is affordable here. Rung hd-10 owns both (order-10-verified.md — its Premises' last bullet, step 6).
   - `TurnFrame::StreamError` (sovereign-contracts/src/types/turn.rs:147-153) is a fourth terminal with no
     judgement slot, and no row in this campaign touches it. `TurnSettled`'s doc (:350-351) says `Complete`
     and `StreamError` both settle.
@@ -270,8 +270,10 @@ sentence is now stale and is handed.toml's own row to correct.
 - Every landing row's commit body pastes its PLANT red and the same gate green after `git checkout --`:
   step 1 — delete the `m.insert("judgement", …)` line → `TEST(sovereign-core)` red on
   `the_gate_funnel_stamps_the_judgement_it_released`;
-  step 2 — (a) write `judgement: hint.clone()` in serve.rs's graceful-guard `Complete` → LINT red **E0308**,
-  (b) delete `judgement` from `drive_stream_handle`'s `Complete` → LINT red **E0063**.
+  step 2 — delete `judgement` from `drive_stream_handle`'s `Complete` → LINT red **E0063**.
+  (The E0308 plant — `judgement: hint.clone()` in serve.rs's graceful-guard `Complete` — was CUT at
+  round 3: a type error on a field this step itself declares `Judgement` watches the compiler rather
+  than the design, and it deletes no ambient path. One plant on this step, not two.)
 - `./scripts/sovereign-lint.sh --human --full` and `./scripts/sovereign-test.sh --human` exit 0.
 - The ambient path is gone — each returns NOTHING:
   - `rg -U --type rust 'TurnFrame::Complete \{[^}]*\}' sovereign/crates/sovereign-core/src/runtime/serve.rs | rg -v judgement`

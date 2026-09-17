@@ -30,9 +30,27 @@ recorded in campaign.md.
 
 - hd-5 has landed: `mesh_sharing` takes `#[serde(default)]`, the shipped recipes and
   the two generators state their values, and the `scope` doc comment is corrected.
-- The in-repo constructors of the corpus meta: the KnowledgeView recipe literals
-  (sovereign-tools knowledge_view/recipes.rs), governance_http.rs:942-956,
-  sovereign-server/src/corpus_upload.rs:141, the local_corpus template.
+- **All four `CorpusMeta` struct literals are OUT OF CRATE, which changes the error code
+  and therefore the mechanism** (verified 2026-09-17, round 4: `git grep -nE 'CorpusMeta
+  \{'` minus the definition at corpus-engine/src/recipe.rs:783): sovereign-tools
+  knowledge_view/recipes.rs:41, :136, :260 and catalog_ingest.rs:860. corpus-engine
+  itself has ZERO. A private field plus an out-of-crate literal is **E0451** ("field is
+  private"), not E0063 ("missing field") — the repo already has the stderr for exactly
+  this shape at kernel-types/tests/ui/citation_without_a_seal.stderr. So the mechanism is
+  a CONSTRUCTOR: `CorpusMeta` gains one that takes the policy by value, the field goes
+  private, and the four out-of-crate literals must call it. The plant is then E0451 at a
+  literal (the field cannot be named from outside) or E0061 at the constructor (the
+  policy argument removed) — the row names which one it runs, and the audit checks that
+  code. What is NOT available is an in-crate E0063 plant: there is no in-crate literal to
+  plant on.
+- **Three sites an earlier draft listed are NOT E0063 sites and are not this rung's.**
+  `render_governance_recipe` (sovereign-daemon governance_http.rs:942),
+  `private_corpus_recipe_toml` (sovereign-server corpus_upload.rs:141) and the
+  local_corpus template (local_corpus/config.rs:65) generate TOML *text* with `format!`
+  — there is no struct literal for a missing field to be missing from. All three are
+  already decided and priced by hd-5 (order-5 step 3), which this rung depends on. If
+  the accessor changes what they must emit, that is a string edit in hd-5's files, not
+  an E0063.
 - Whether `query_sharing: Option<bool>` folds into the same type or stays: the mint
   decides from the readers (sovereign-mesh capabilities.rs ~:269).
 - **The two SECOND readers this rung must absorb.** hd-5 flips neither, and both keep a
@@ -52,16 +70,19 @@ recorded in campaign.md.
 
 ## Cap basis (re-priced at round 3; cap 5 in STATE.md, was 3)
 
-Measured 2026-09-17. The E0063 subject is small — `CorpusMeta` struct literals are
-**5 sites / 3 files** (`git grep -nE 'CorpusMeta \{'`). The cost is the field going
+Measured 2026-09-17, corrected at round 4. The E0063 subject is small — `CorpusMeta`
+struct literals are **4 sites / 2 files**; the "5 / 3" an earlier draft carried counted
+`pub struct CorpusMeta {` at recipe.rs:783, the definition itself. The cost is the field going
 private: `.mesh_sharing` is read at **29 sites / 15 files / 6 crates** (16 sites / 8
 files inside corpus-engine/src, 13 / 7 outside), and the `IndexMeta` share of those
 is OUT of scope — an installed index keeps its stamp (`[[ability]] custody`
 `not_covered`), so resolve each access by receiver before repointing it.
 
 1 row for the type, 2 for the accessor and the ~15 files of readers at ~10 a row, 1
-for the 5 literals plus the decision on the two second readers above, 1 for the
-plant — **4-5 rows**. Past 5, PROMPT §4 applies: write `ralph/NEEDS_HUMAN.md` with
+for the 4 literals plus the decision on the two second readers above — **4 rows**. The
+plant is NOT a row of its own: every landing row in this campaign carries its PLANT in
+its `check:` list (the one standalone plant row, hd-6, is a rung whose whole content IS
+the plant). Cap 5 leaves one row of slack. Past 5, PROMPT §4 applies: write `ralph/NEEDS_HUMAN.md` with
 the measured count and stop. Do not count the 156 repo-wide `mesh_sharing` mentions
 as the subject; most are `IndexMeta`, fixtures and serde attributes.
 
@@ -75,13 +96,13 @@ as the subject; most are `IndexMeta`, fixtures and serde attributes.
    field breaks: `.mesh_sharing` is read at 29 sites / 15 files / 6 crates, 13 of those sites
    out of crate. Resolve each by receiver first — an `IndexMeta` read is out of scope (an
    installed index keeps its stamp) and must not be repointed.
-4. PLANT: construct a corpus meta literal without the policy; LINT reports E0063.
-   Revert, LINT green.
-5. Append every row you mint to the `depends` of `REVIEW-DEMO-hd-7-bench` and of
-   `REVIEW-audit-hd-2` in `ralph/next/handed/STATE.md` (or `ralph/STATE.md` once
-   promoted), in the same commit that mints them. Without it the pool's
-   `first_ready_review` (scripts/ralph.py:256-261) can run the bench and the final
-   audit before the rows they are meant to cover.
+4. PLANT: name `CorpusMeta`'s now-private policy field in one of the four out-of-crate
+   literals -> LINT red **E0451**; or drop the policy argument at a call of the new
+   constructor -> LINT red **E0061**. The row names which, and only that one, because the
+   audit checks the code the row names. Revert, LINT green. E0063 is NOT available here:
+   every literal is out of crate (Premises).
+5. Do the mint's three queue duties (PROMPT §4): the two `depends` lists, a
+   `conflicts.txt` pair per shared file, and `ralph.py report` proving the queue parses.
 
 ## Kill
 

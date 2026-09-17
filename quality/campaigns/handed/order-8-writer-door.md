@@ -40,7 +40,6 @@ compilation unit — and TOPOLOGY.md:284-287 says so.
   exists, and the per-corpus flock is taken at the index mutation sites.
 - The write methods live on `CorpusIndex` (corpus-engine/src/index/), with the raw
   lancedb mutations in write.rs, create.rs, maintain.rs, raptor.rs, mod.rs.
-- The atlas writers take an `atlas_dir: &Path` and are guarded by hd-3's second row.
 - The mint must COUNT BOTH populations before minting rows — the round-3 review
   found this order telling it to census in-crate only, which priced the work at
   about 38% of what it is. Measured 2026-09-17 over the eleven distinctively-named
@@ -66,23 +65,35 @@ compilation unit — and TOPOLOGY.md:284-287 says so.
 1. MOVE the mutating methods onto `impl CorpusWriter`, obtained from
    `CorpusIndex::writer()`, which acquires the flock. No method of the same name is
    left on `CorpusIndex` — that absence is what makes step 3's plant E0599.
+   **Two members of the census set are NOT methods and do not belong in the facade**
+   (verified 2026-09-17, round 4): `build_raptor_index` is a FREE function at column 0
+   (corpus-engine/src/index/raptor.rs:260), so calling it after a move is E0425
+   ("cannot find function"), not E0599 — move it or leave it, but do not count it as a
+   facade method; and `create_with_sharing` (create.rs:172) is the constructor that
+   CREATES the index, so it cannot be reached from `writer()`, which needs an index to
+   exist. Name both exclusions in the row with what guards them instead (the flock
+   inside the method, hd-3). The plant goes on a genuine moved method — `insert_batch`
+   is the one the campaign's other rows already name.
 2. Repoint the in-crate callers. Mechanical; group by module, at most ~10 files a row.
 3. PLANT: call a mutating method on a bare `CorpusIndex` inside corpus-engine; LINT
    must report **E0599** naming the method. Revert, LINT green. If the plant reports
    E0624 instead, the method was made private rather than moved — that is the wrong
-   mechanism, not a passing plant.
-4. Append every row you mint to the `depends` of `REVIEW-DEMO-hd-7-bench` and of
-   `REVIEW-audit-hd-2` in `ralph/next/handed/STATE.md` (or `ralph/STATE.md` once
-   promoted), in the same commit that mints them. Without it the pool's
-   `first_ready_review` (scripts/ralph.py:256-261) can run the bench and the final
-   audit before the rows they are meant to cover.
+   mechanism, not a passing plant. E0624 is also not available as a fallback for a
+   method that stays visible on `CorpusIndex`: a visible method cannot produce it. If a
+   method must stay, it is out of the facade set and the row says which guard covers it.
+4. Do the mint's three queue duties (PROMPT §4): the two `depends` lists, a
+   `conflicts.txt` pair per shared file, and `ralph.py report` proving the queue parses.
 
-## Cap basis (re-priced at round 3; cap 9 in STATE.md, was 5)
+## Cap basis (re-priced at round 3, tightened at round 4; cap 8 in STATE.md, was 5 then 9)
 
 1 row for the facade and `writer()`; 2 for corpus-engine/src's 14 files at ~10 a row;
-3 for the 29 out-of-crate files; 1 for the 5 test/example files; 1 for the plant and
-the `handed.toml` `enforced_by` update — **7-9 rows**. Past 9, PROMPT §4 applies:
-write `ralph/NEEDS_HUMAN.md` with the measured count and stop.
+3 for the 29 out-of-crate files; 1 for the 5 test/example files — **7 rows, cap 8**.
+Round 4 removed the plant row this basis used to charge for: every landing row in this
+campaign carries its PLANT in its own `check:` list (the one standalone plant row,
+hd-6, is a rung whose whole content IS the plant), and the other half of that row —
+"the `handed.toml` `enforced_by` update" — was already written and committed at
+f1d0aa9ad, where `[[ability]] writers` states this rung's post-rung mechanism. Past 8,
+PROMPT §4 applies: write `ralph/NEEDS_HUMAN.md` with the measured count and stop.
 
 ## Kill
 
