@@ -14,6 +14,7 @@ only. Run it serially (cargo is one worker at a time), in place — this queue i
 NOT promoted over `ralph/STATE.md`, which the domains branch owns:
 
 ```
+RALPH_OPENCODE_BIN=$PWD/scripts/ralph-claude-shim.sh \
 nohup python3 scripts/ralph.py supervise --workdir . --label ring-doc \
   --prompt ralph/next/ring-doc/PROMPT.md --state ralph/next/ring-doc/STATE.md \
   --charter ralph/next/ring-doc/CHARTER.md \
@@ -22,7 +23,9 @@ nohup python3 scripts/ralph.py supervise --workdir . --label ring-doc \
   --max-stall 3 >> ralph/log-ring-doc.txt 2>&1 &
 ```
 
-On the Halo: `toolbox enter sovereign-vulkan` first (`opencode` on PATH).
+On the Halo: `toolbox enter sovereign-vulkan` first. The worker is `claude -p` on the
+logged-in plan via `scripts/ralph-claude-shim.sh` (permissions: `ralph/claude-settings.json`;
+the gray zone asks you through `ralph/PERMISSION_REQUEST.md` → answer in `ralph/PERMISSION_ANSWER`).
 Models: `python3 scripts/ralph.py models --model <W> --review-model <R> --label ring-doc`.
 Control files (`ralph/STOP`, `ralph/NEEDS_HUMAN.md`, `ralph/DONE`, `ralph/.heartbeat`)
 are shared with any other loop on this host — run one loop per checkout.
