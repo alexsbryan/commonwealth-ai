@@ -96,7 +96,9 @@
       "Bash(curl -sS http://127.0.0.1*)",
       "Bash(curl -sS http://localhost*)",
       "Bash(scripts/ralph-check.sh *)",
-      "Bash(./scripts/ralph-check.sh *)"
+      "Bash(./scripts/ralph-check.sh *)",
+      "Bash(scripts/ralph-mark.sh *)",
+      "Bash(./scripts/ralph-mark.sh *)"
     ],
     "deny": [
       "Agent",

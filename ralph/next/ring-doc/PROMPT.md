@@ -57,13 +57,17 @@ comment beyond the one the row asks for (ARCH principle 2).
 5. Run the row's checks. On a failure: read the log, fix, re-run. Two honest
    attempts at the same failure and still red: §6.
 6. Commit: `git add` the paths you changed, by name — never `git add -A`,
-   never `target/` or `ralph/log*`. Message `<unit-id>: <one line>`; body =
-   the `exit=` lines, every PLANT's red line, and anything the row says to
-   paste.
-7. Mark the row `- [x] <unit-id> <short-hash> — depends [...] — ...`, keeping
-   the unit id immediately after the checkbox. Commit `ralph/next/ring-doc/STATE.md` alone
-   as `ralph: <unit-id> done`. In a POOL LANE, write
-   `ralph/lanes/<unit-id>.done` and commit that instead.
+   never `target/` or `ralph/log*`. Write the message to
+   `target/ralph/commit-msg.txt` with the Write tool, then
+   `git commit -F target/ralph/commit-msg.txt` — not a heredoc, not `git -c`
+   (neither matches the allowlist; both ask the operator). Message
+   `<unit-id>: <one line>`; body = the `exit=` lines, every PLANT's red line,
+   and anything the row says to paste.
+7. Mark the row and commit the queue with ONE command:
+   `scripts/ralph-mark.sh <unit-id> <short-hash>` — it rewrites the row to
+   `- [x] <unit-id> <short-hash> — depends [...] — ...` and commits
+   `ralph/next/ring-doc/STATE.md` alone as `ralph: <unit-id> done`. In a POOL
+   LANE, write `ralph/lanes/<unit-id>.done` and commit that instead.
 
 Commit as soon as a coherent piece compiles. A killed session with commits
 resumes; one holding an hour of uncommitted work is lost.
