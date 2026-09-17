@@ -276,7 +276,7 @@ Two additional structural scans that don't need an LLM:
   principle (`ARCH_PRINCIPLES.md` §9.1) says every non-obvious
   decision in production code should emit a tracing event;
   pure-data files (no `fn`/`impl`) are exempt by the gate. The
-  reference of compliance is `sovereign-mesh/src/auto_ingest.rs`
+  reference of compliance is `sovereign-daemon/src/auto_ingest.rs`
   (47 events / 1236 LOC).
 
 Both scans skip `tests/` and `examples/` directories — test fixtures

@@ -13,7 +13,7 @@
 //! guard dark, linux-peer merged 17 of 38 wikipedia partitions into a
 //! canonical that then advertised itself as complete on gossip — "every
 //! peer ends up with a different 'complete' canonical and they fight
-//! forever" (`sovereign-mesh/src/auto_ingest.rs`). A subset merge is a
+//! forever" (`sovereign-daemon/src/auto_ingest.rs`). A subset merge is a
 //! refusal, not a result.
 //!
 //! Lives at the public-API layer because the second caller is in another

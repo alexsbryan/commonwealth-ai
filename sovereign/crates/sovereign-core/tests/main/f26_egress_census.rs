@@ -192,7 +192,10 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // onto the ring rail, taking one construction site with it. A DECREMENT
     // is registered for the same reason an increment is — the census is a
     // count, and an unexplained fall hides a capability that left.
-    ("sovereign/crates/sovereign-mesh/src/mesh_http.rs", Class::Mesh, 16),
+    // Re-keyed 2026-09-17 (REVIEW-audit-daemon-1): the mesh host cluster moved
+    // to `sovereign-daemon` (domains dm-daemon-mesh-edge/jobs/adapters). Path
+    // only — every count below is unchanged, the sites travelled with the file.
+    ("sovereign/crates/sovereign-daemon/src/mesh_http.rs", Class::Mesh, 16),
     // NEW (2026-09-04, cw-lift 2f, bc600f424): the ring rail's anti-entropy
     // sender. `exchange` POSTs a RingSyncRequest to `/internal/ring/sync` on
     // each online peer, plus the inline `#[cfg(test)]` module that binds a
@@ -224,8 +227,22 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // two-node reproduction — a sweep on A, then B's next projection round —
     // over the same loopback `internal_router`. One more `exchange` client in
     // this file's test module; class unchanged.
-    ("sovereign/crates/sovereign-mesh/src/ring_sync.rs", Class::Mesh, 16),
-    ("sovereign/crates/sovereign-mesh/src/rpc_warm_http.rs", Class::Mesh, 7),
+    // Split 2026-09-17 (REVIEW-audit-daemon-1, ARCH 3.1): the 16 sites above
+    // were one file's; the parent grew past arch-gate's slack and its test
+    // module was split three ways. Same sites, same class, same total — the
+    // census keys by path, so the row re-keys with them.
+    ("sovereign/crates/sovereign-mesh/src/ring_sync/tests.rs", Class::Mesh, 9),
+    (
+        "sovereign/crates/sovereign-mesh/src/ring_sync/projection_tests.rs",
+        Class::Mesh,
+        4,
+    ),
+    (
+        "sovereign/crates/sovereign-mesh/src/ring_sync/snapshot_tests.rs",
+        Class::Mesh,
+        3,
+    ),
+    ("sovereign/crates/sovereign-daemon/src/rpc_warm_http.rs", Class::Mesh, 7),
     // 5 -> 7 (2026-08-23): the two reload-diff regression tests
     // (`reload_applies_a_context_size_change_without_a_restart`,
     // `reload_applies_a_code_slot_change_without_a_restart`) each build a
@@ -263,7 +280,7 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // loopback in the same process. `Class::Mesh` is unchanged and correct:
     // no third-party host is dialed, and no estate content crosses a
     // boundary — there is no boundary to cross.
-    ("sovereign/crates/sovereign-mesh/src/admin_http.rs", Class::Mesh, 13),
+    ("sovereign/crates/sovereign-daemon/src/admin_http.rs", Class::Mesh, 13),
     // NEW ROW 2026-09-12 (sv-surface svt-7). `assets_http.rs` is the daemon's
     // weights surface — hardware / catalog / slot / NER reads plus the one
     // asset-download job. All five constructions are inside its
@@ -286,10 +303,10 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // PREFIXED forms). Recorded rather than "corrected" — widening the
     // detector is a change to every row's number and belongs to whoever
     // re-baselines the whole file, not to a row being added.
-    ("sovereign/crates/sovereign-mesh/src/assets_http.rs", Class::Mesh, 4),
-    ("sovereign/crates/sovereign-mesh/src/project_http.rs", Class::Mesh, 4),
+    ("sovereign/crates/sovereign-daemon/src/assets_http.rs", Class::Mesh, 4),
+    ("sovereign/crates/sovereign-daemon/src/project_http.rs", Class::Mesh, 4),
     ("sovereign/crates/sovereign-serving-host/src/model_fetch.rs", Class::Mesh, 4),
-    ("sovereign/crates/sovereign-mesh/src/loopback_guard.rs", Class::Mesh, 3),
+    ("sovereign/crates/sovereign-daemon/src/loopback_guard.rs", Class::Mesh, 3),
     ("sovereign/crates/sovereign-serving-host/src/peer_inference.rs", Class::Mesh, 2),
     // setup_cmd/terminal.rs (2026-08-30, the `terminal` node class; 1 -> 3 on
     // 2026-08-31 when `--terminal` learned to take a join link). THREE clients,
@@ -342,8 +359,8 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // `/v1/models` is still the only construction site.
     ("sovereign/crates/sovereign-serving-host/src/guest_lender.rs", Class::Mesh, 1),
     ("sovereign/crates/sovereign-mesh/src/join.rs", Class::Mesh, 2),
-    ("sovereign/crates/sovereign-mesh/src/daemon.rs", Class::Mesh, 2),
-    ("sovereign/crates/sovereign-mesh/src/auto_ingest.rs", Class::Mesh, 2),
+    ("sovereign/crates/sovereign-daemon/src/daemon.rs", Class::Mesh, 2),
+    ("sovereign/crates/sovereign-daemon/src/auto_ingest.rs", Class::Mesh, 2),
     // Re-keyed 2026-09-16: the two knowledge-surface clients moved to the
     // client family, `sovereign-turn-client` (domains
     // REVIEW-build-mesh-client-pair, DAEMON_CORE.md §4.3). Class and count

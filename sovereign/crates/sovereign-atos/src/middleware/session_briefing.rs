@@ -35,7 +35,6 @@
 //! doesn't need a re-orientation.
 
 use std::path::Path;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 
@@ -100,10 +99,7 @@ fn is_session_start(last_seen_at: i64) -> bool {
     if last_seen_at == 0 {
         return true;
     }
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
+    let now = sovereign_core::time::unix_now();
     now.saturating_sub(last_seen_at) > STALE_THRESHOLD_SECS
 }
 
@@ -254,20 +250,14 @@ mod tests {
 
     #[test]
     fn recent_session_skips_briefing() {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
+        let now = sovereign_core::time::unix_now();
         assert!(!is_session_start(now - 60));
         assert!(!is_session_start(now - 30 * 60));
     }
 
     #[test]
     fn stale_session_triggers_briefing() {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
+        let now = sovereign_core::time::unix_now();
         // 3 hours ago — past the 2h threshold.
         assert!(is_session_start(now - 3 * 60 * 60));
     }
@@ -286,10 +276,7 @@ mod tests {
     async fn mid_session_skips_briefing() {
         let mw = SessionBriefing::new();
         let mut req = minimal_request();
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
+        let now = sovereign_core::time::unix_now();
         let mut session = MiddlewareSession {
             last_seen_at: now - 60,
             ..Default::default()

@@ -54,7 +54,7 @@ fn err(status: StatusCode, msg: impl Into<String>) -> Response {
 /// the sentence would send a person to a door that will not open. On a derived
 /// namespace the condition is not "you forgot to add yourself", it is "this
 /// node is not in a mesh" — the same words the mesh's own publish route
-/// already gives for the same condition, `sovereign-mesh/src/mesh_http.rs:715`
+/// already gives for the same condition, `sovereign-daemon/src/mesh_http.rs:715`
 /// (ARCH §10.6: one condition, one thing said about it).
 ///
 /// The origin is asked of the rail, never inferred from the namespace's name

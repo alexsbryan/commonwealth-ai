@@ -1131,7 +1131,7 @@ pub async fn cancel_stream(
     //
     // sv-surface svt-3b: there is no local pair to fall back to, and losing
     // it costs nothing. The daemon's `TurnRequest::Cancel` arm
-    // (`sovereign-mesh/src/turn_http.rs:1433-1449`) runs the SAME two
+    // (`sovereign-daemon/src/turn_http.rs:1433-1449`) runs the SAME two
     // operations this used to run in-process — `sessions
     // .latest_for_conversation(..).cancel.cancel()` and
     // `sessions.cancel_preparing(..)` — plus one this never did:
@@ -1213,7 +1213,7 @@ pub async fn redirect_turn(
         // fallback could only ever return the same refusal this does.
         //
         // The daemon serves no replacement, and that is a DECISION rather
-        // than a gap: `sovereign-mesh/src/turn_extras_http.rs:22` says so by
+        // than a gap: `sovereign-daemon/src/turn_extras_http.rs:22` says so by
         // name — "NOT here: the session -> conversation lookup — the surface
         // already learns that pairing from the routing cards it receives".
         // Its only `sessions.get` in an HTTP file is an ownership GUARD that

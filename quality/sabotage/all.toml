@@ -936,7 +936,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-16-rotate_refuses_while_an_unconfirmed_peer"
 requirement = "FE-16"
-target = "sovereign/crates/sovereign-mesh/src/daemon.rs"
+target = "sovereign/crates/sovereign-daemon/src/daemon.rs"
 find = "                    match generation {\n                        Some(true) => {}\n                        Some(false) => pre_split.push(m.name.clone()),\n                        None => unconfirmed.push(m.name.clone()),\n                    }"
 replace = "                    if let Some(false) = generation {\n                        pre_split.push(m.name.clone());\n                    }\n                    // Treat unknown/unconfirmed as confirmed to avoid false positives\n                    // on nodes that haven't gossiped yet, effectively ignoring the\n                    // requirement for local observation of confirmation status.\n                    else { /* assume safe */ }"
 mustFail = ["rotate_refuses_while_an_unconfirmed_peer_is_online"]
@@ -1116,7 +1116,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-43-enforce_localhost_accepts_loopback_rejec"
 requirement = "FE-43"
-target = "sovereign/crates/sovereign-mesh/src/loopback_guard.rs"
+target = "sovereign/crates/sovereign-daemon/src/loopback_guard.rs"
 find = "pub(crate) fn enforce_localhost(addr: &SocketAddr) -> Result<(), Response> {\n    if addr.ip().is_loopback() {\n        Ok(())\n    } else {\n        Err((\n            StatusCode::FORBIDDEN,\n            Json(serde_json::json!({ \"error\": \"local-only\" })),\n        )\n            .into_response())\n    }\n}"
 replace = "pub(crate) fn enforce_localhost(_addr: &SocketAddr) -> Result<(), Response> {\n    // Mutation: Always allow, bypassing the loopback check.\n    Ok(())\n}"
 mustFail = ["enforce_localhost_accepts_loopback_rejects_others"]

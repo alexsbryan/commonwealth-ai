@@ -49,5 +49,5 @@ asserts = 4
 requirement = "IN-27"
 test = "sovereign-api::next_edit_journal::tests::the_outcome_route_answers_204_or_400_and_never_5xx"
 file = "sovereign/crates/sovereign-api/src/next_edit_journal.rs"
-line = 191
+line = 185
 asserts = 3

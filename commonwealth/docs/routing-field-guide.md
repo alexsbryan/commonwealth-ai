@@ -27,7 +27,7 @@ never arrive, and the headless cloud-peer case it claimed to serve is
 actually `sovereign-cli daemon run --worker-mode`).
 
 Every daemon is now embedded: `sovereign-mesh::EmbeddedDaemon` is the
-host, wired in `sovereign-mesh/src/daemon.rs::start_daemon`, and
+host, wired in `sovereign-daemon/src/daemon.rs::start_daemon`, and
 `state.local_inference` is set unconditionally to
 `Some(SovereignInferenceAdapter)`. Chat completes in-process — the
 adapter wraps `MeshInferenceProvider`, which wraps the local

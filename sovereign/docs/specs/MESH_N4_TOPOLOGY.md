@@ -647,7 +647,7 @@ then queue **silently** inside `Semaphore::new(1)` on the slot
 > ceiling does **not** default to `usize::MAX` in practice: `state.rs:370` is a
 > pre-configuration constant, and its own doc (`:362-369`) says the daemon
 > always applies a finite ceiling at boot, which it does
-> (`sovereign-mesh/src/daemon.rs:2441-2447`, default **1** at
+> (`sovereign-daemon/src/daemon.rs:2441-2447`, default **1** at
 > `setup_config.rs:1069`). Confirmed live on RuggedFox:
 > `/v1/mesh/status` reports `peer_inflight_ceiling: 1`.
 >

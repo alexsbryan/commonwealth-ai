@@ -297,7 +297,7 @@ crate       = "sovereign-mesh"
 census      = "sovereign/crates/sovereign-mesh/tests/main/loopback_parity.rs"
 mustFail    = ["every_router_refuses_a_request_no_handler_of_ours_can_refuse"]
 breaks      = "a loopback-only router wired without the guard middleware — the LAN-reachable admin surface"
-target      = "sovereign/crates/sovereign-mesh/src/mesh_http.rs"
+target      = "sovereign/crates/sovereign-daemon/src/mesh_http.rs"
 guard_paths = [
     "sovereign/crates/sovereign-mesh/tests/main.rs",
     "sovereign/crates/sovereign-mesh/tests/main/common/mod.rs",

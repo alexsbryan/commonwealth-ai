@@ -92,11 +92,11 @@ use sovereign_daemon::notes_http::notes_router;
 use sovereign_daemon::project_http::project_router;
 use sovereign_daemon::reading_http::reading_router;
 use sovereign_daemon::recipe_project_http::recipe_project_router;
-use sovereign_mesh::reindexer::Reindexer;
 use sovereign_daemon::turn_http::{
     turn_router, ConversationListEntry, ConversationListResponse, ConversationResponse,
     MessageEntry,
 };
+use sovereign_mesh::reindexer::Reindexer;
 
 /// Outer middleware that overrides `ConnectInfo<SocketAddr>` on the
 /// request to a *non-loopback* LAN address. Wraps a real router via

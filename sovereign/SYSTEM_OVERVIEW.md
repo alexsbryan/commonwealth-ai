@@ -5525,7 +5525,7 @@ an explicit `[daemon] client_bind`, or the `client-exposed` marker
 `expose_client_api` writes on `mesh create`/`join` (federated inference
 needs peer reachability). An ENCRYPTED mesh forces it back to loopback
 whatever the config says: the iroh acceptor is the sole ingress. The one
-decider is `sovereign-mesh::daemon::resolve_client_bind_posture`.
+decider is `sovereign_daemon::daemon::resolve_client_bind_posture`.
 
 A non-loopback bind carries a bearer token or serves nobody — the token
 chain is env → `[daemon] client_token` → generate-and-persist, and when
@@ -6355,7 +6355,7 @@ historical per-session-cert/`TrustStore` mTLS scaffolding was removed
 | `POST /internal/scheduling/intent`  | Scheduling decision notification |
 | `POST /internal/scheduling/plan`    | New shard plan distribution      |
 | `POST /internal/model/transfer`     | Model file transfer (peer-to-peer) |
-| `POST /internal/rpc-warm`           | Distributed inference: host asks a worker to seed its RPC tensor-cache shard before a distributed load (auto-warm). `serve_model_file` honors `Range` for shard-only fetch. The host distributes only to ELIGIBLE workers (`sovereign-mesh::worker_eligibility` — settle + flap-quarantine, surfaced in `svrn mesh status`); a remote crash mid-compute `GGML_ABORT`s the host, so distributed inference requires host supervision. See `docs/RPC_DISTRIBUTED_INFERENCE.md`. |
+| `POST /internal/rpc-warm`           | Distributed inference: host asks a worker to seed its RPC tensor-cache shard before a distributed load (auto-warm). `serve_model_file` honors `Range` for shard-only fetch. The host distributes only to ELIGIBLE workers (`sovereign_serving_host::worker_eligibility` — settle + flap-quarantine, surfaced in `svrn mesh status`); a remote crash mid-compute `GGML_ABORT`s the host, so distributed inference requires host supervision. See `docs/RPC_DISTRIBUTED_INFERENCE.md`. |
 | `POST /internal/index/transfer`     | Corpus shard upload (push)       |
 | `GET  /internal/index/serve`        | Corpus shard download (pull)     |
 | `POST /internal/knowledge/search`   | Inter-node shard query (fan-out target) |
@@ -7430,7 +7430,7 @@ work pins the GPU while the user is chatting. Components:
   `ConvergenceRecord` (named on the daemon's
   `DaemonServices::Headless` rails and installed into
   `AppStateInner.fabric.convergence` at AppState construction in
-  `sovereign-mesh::start_daemon`), the notes publish sink stamps
+  `sovereign_daemon::start_daemon`), the notes publish sink stamps
   `last_outbound_publish_at` on every successful `set()`, and the
   notes ingest poller stamps `last_inbound_ingest_at` on every
   applied peer batch — so `/status` reads the writers' own stamps,
@@ -7704,7 +7704,7 @@ Any OpenAI-compatible client points at it. Knowledge ingest uses
 still indexes via the engine.
 
 **Sovereign + cmnwlth (integrated)** —
-`sovereign-mesh::EmbeddedDaemon` runs cmnwlth in-process.
+`sovereign_daemon::EmbeddedDaemon` runs cmnwlth in-process.
 Runtime inference is wrapped in `InferenceRouter`, which
 OICP-routes synthesis to peers when scoring favours them. Both
 sides share `sovereign_scheduler::oicp_select` so Joiner's selected
@@ -7722,7 +7722,7 @@ preceded since svt-1 by one `serving_host::ensure_reachable()` that brings the
 bundled `sovereign-cli-daemon` sidecar up when nothing answers (§10.1h);
 on success it enters Attach mode: inference flows through
 `RemoteApiProvider`, mesh mutations go over HTTP via
-`sovereign-mesh::mesh_http`, and `commands::save_config` POSTs
+`sovereign_daemon::mesh_http`, and `commands::save_config` POSTs
 `/v1/admin/reload` so the daemon swaps its `InferenceProvider` in
 place. Smoke test at `sovereign/scripts/smoke-attach-mode.sh`.
 
@@ -8106,7 +8106,7 @@ Default ports:
 | Run the long-running Sovereign daemon            | `sovereign-cli-daemon/src/daemon_cmd/` + `contrib/launchd` + `contrib/systemd` |
 | Rotate daemon logs                               | `sovereign-cli-daemon/src/log_rotation.rs`                          |
 | Understand the loopback guard                    | `sovereign-daemon/src/loopback_guard.rs` + `admin_http::tests::loopback_guard_works_under_production_listener_shape` |
-| Serve something a desktop command used to compute in-process | the client-router families in `sovereign-mesh/src/{reading,atlas,meshapp,lc,governance,insight,notes,features,recipe_project,mcp_config,turn_extras}_http.rs` — table in §5, "What the host mounts on that router"; parity audited by `sovereign-mesh/tests/loopback_parity.rs` |
+| Serve something a desktop command used to compute in-process | the client-router families in `sovereign-daemon/src/{reading,atlas,meshapp,lc,governance,insight,notes,features,recipe_project,mcp_config,turn_extras}_http.rs` — table in §5, "What the host mounts on that router"; parity audited by `sovereign-mesh/tests/loopback_parity.rs` |
 | Know what an attached desktop still constructs   | `sovereign-desktop/src-tauri/tests/attach_construction_census.rs` (floor 12) + §6 "Desktop attach mode" |
 | Prove a deleted twin cannot come back            | `scripts/twin-census.py` over `quality/twin-plants.toml` (19 families) — plant, watch the family census name its own rule, restore byte-for-byte |
 | Prove the desktop and the CLI answer one question the same way | `sovereign-desktop/tests/e2e/real/journeys/surface-parity.journey.spec.ts` + `…/journeys/cli-surface.ts` — routed intent, source set as `(corpus_id, chunk_id)` handles and gate action asserted identical on the real harness, with a negative control first |

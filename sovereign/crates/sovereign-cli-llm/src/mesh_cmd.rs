@@ -8,8 +8,8 @@
 use std::path::PathBuf;
 
 use sovereign_cli_shared::dirs::sovereign_root;
-use sovereign_mesh::deep_link::{build_https_join_link, parse_join_argument};
 use sovereign_daemon::EmbeddedDaemon;
+use sovereign_mesh::deep_link::{build_https_join_link, parse_join_argument};
 
 /// The `SetupConfig` a `svrn mesh` one-shot binds with.
 ///

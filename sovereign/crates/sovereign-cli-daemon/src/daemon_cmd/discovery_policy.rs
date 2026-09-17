@@ -11,7 +11,7 @@
 //! So the decision is extracted here and the effects stay in `bootstrap`. The
 //! precedent is [`sovereign_mesh`]'s `reaffirm_plan` / `sticky_endpoint`, split
 //! out of `discover_rpc_workers` for exactly this reason — see the doc comment
-//! at `sovereign-mesh/src/daemon.rs:3544`.
+//! at `sovereign-daemon/src/daemon.rs:3544`.
 //!
 //! Scope note: this covers the CHILD arm only (`[compute] distributed_primary`).
 //! The in-process arm stays inline in `bootstrap` on purpose — its consequences

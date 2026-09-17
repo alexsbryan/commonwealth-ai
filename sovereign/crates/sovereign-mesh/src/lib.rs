@@ -53,7 +53,6 @@ pub mod iroh_access;
 pub mod iroh_watchdog;
 pub mod join;
 pub use sovereign_turn_client::knowledge_client; // shim: moved by domains REVIEW-build-mesh-client-pair
-pub use sovereign_turn_client::landscape_digest_client; // shim: moved by domains REVIEW-build-mesh-client-pair
 #[cfg(feature = "treesitter")]
 pub mod lsp_tier;
 pub mod measurements_rail;
@@ -64,8 +63,8 @@ pub mod mesh_discovery;
 /// rationale.
 #[cfg(feature = "mesh-sim")]
 pub mod mesh_sim;
-pub(crate) use sovereign_scheduler::oicp_select;
-pub use sovereign_serving_host::model_fetch; // shim: moved by domains dm-serving-move-leaves // shim: moved by domains REVIEW-build-sched-move
+pub(crate) use sovereign_scheduler::oicp_select; // shim: moved by domains REVIEW-build-sched-move
+pub use sovereign_serving_host::model_fetch; // shim: moved by domains dm-serving-move-leaves
 /// The mesh implementations of `sovereign-contracts::peer`'s two ports — the
 /// N>1 half of what the daemon speaks to its peers through (cw-lift 3b).
 pub mod peer_adapter;
@@ -82,21 +81,16 @@ pub mod rail_kv_pump;
 pub use corpus_engine_vocab::reading_formatters; // shim: moved by domains dm-mesh-move-reading-formatters
 #[cfg(feature = "treesitter")]
 pub mod reindexer;
-pub use sovereign_core::deep_research::research_run_dir; // shim: moved by domains REVIEW-build-research-run-dir
 pub mod ring_roster;
 pub mod ring_sync;
 /// The routing decision as a pure function — shared by the production
 /// selector and the Tier-1 simulator (`SCHEDULER_QUALITY.md` §5).
 pub(crate) use sovereign_scheduler::scheduler_core; // shim: moved by domains REVIEW-build-sched-move
-pub use sovereign_scheduler::slot_aliases; // shim: moved by domains dm-sched-move-slot-aliases
 pub mod state;
 /// Capability bands — the tier floor of `SCHEDULER_QUALITY.md` §4.1:
 /// capability filters the candidate set, predicted cost ranks what
 /// survives.
 pub use sovereign_scheduler::tier;
-pub use sovereign_serving_host::throughput_tracking; // shim: moved by domains REVIEW-build-serving-move-throughput-guest
-
-pub use sovereign_core::turn_approval; // shim: moved by domains dm-mesh-move-turn-approval
 pub use sovereign_serving_host::worker_eligibility; // shim: moved by domains dm-serving-move-leaves
                                                     // Ephemeral worker pods — owner-initiated TLS-pinned transport that
                                                     // replaces the full-mesh-pod path. Pods become single-owner workers,

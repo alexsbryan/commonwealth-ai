@@ -255,7 +255,7 @@ id = "UI-22"
 family = "UI"
 status = "landed"
 clause = '''Secure by default: bind to the loopback interface, and refuse at start-up a non-loopback bind with authentication disabled, with an explicit opt-out.'''
-target = '''sovereign/crates/sovereign-mesh/src/daemon.rs:2418::start_daemon'''
+target = '''sovereign/crates/sovereign-daemon/src/daemon.rs:2831::start_daemon'''
 asserts = '''with a non-loopback client_bind and no resolvable token, startup either refuses to bind or installs no token layer and every remote request 401s.'''
 catches = '''an edit flipping the loopback branch shipping an unauthenticated non-loopback listener. The entire posture lives inline in a ~4700-line async fn with no extracted decision function and zero tests — extracting it is part of this spec.'''
 destination = '''sovereign/crates/sovereign-mesh/tests/main/loopback_parity.rs'''
@@ -414,7 +414,7 @@ id = "FE-10"
 family = "FE"
 status = "landed"
 clause = '''Leaving MUST clear the pointer *and* remove the departed membership. Leaving a pointer naming deleted state reads as healthy at boot while making that membership permanently unforgettable.'''
-target = '''sovereign/crates/sovereign-mesh/src/daemon.rs:1459::stop_inner'''
+target = '''sovereign/crates/sovereign-daemon/src/daemon.rs:1805::stop_inner'''
 existing = '''sovereign/crates/sovereign-mesh/tests/main/mesh_switch.rs:179::leaving_clears_the_active_pointer_rather_than_stranding_it'''
 landed = '''sovereign-mesh::main::mesh_switch::leaving_clears_the_active_pointer_rather_than_stranding_it'''
 
@@ -493,7 +493,7 @@ id = "FE-15"
 family = "FE"
 status = "landed"
 clause = '''Credential rotation MUST be refused while the fleet is mixed, and the refusal MUST distinguish **two populations** with different remedies: a peer that authorises on the legacy predicate needs *upgrading*; a peer simply not yet observed since start-up needs one *round*. Collapsing them tells operators their fleet is un-migrated when it is not.'''
-target = '''sovereign/crates/sovereign-mesh/src/daemon.rs:1763::rotate_invite'''
+target = '''sovereign/crates/sovereign-daemon/src/daemon.rs:2106::rotate_invite'''
 existing = '''sovereign/crates/sovereign-mesh/tests/main/rotate_pre_split_guard.rs:112::the_refusal_tells_an_unconfirmed_peer_apart_from_an_old_build'''
 landed = '''sovereign-mesh::main::rotate_pre_split_guard::the_refusal_tells_an_unconfirmed_peer_apart_from_an_old_build'''
 
@@ -511,7 +511,7 @@ id = "FE-17"
 family = "FE"
 status = "landed"
 clause = '''Because that observation is in memory, the rotation refusal MUST run at least one round before it is willing to refuse. **It must never report a verdict from an instrument it has not run.**'''
-target = '''sovereign/crates/sovereign-mesh/src/daemon.rs:1763::rotate_invite'''
+target = '''sovereign/crates/sovereign-daemon/src/daemon.rs:2106::rotate_invite'''
 existing = '''sovereign/crates/sovereign-mesh/tests/main/rotate_pre_split_guard.rs:86::rotate_refuses_while_an_unconfirmed_peer_is_online'''
 landed = '''sovereign-mesh::main::rotate_pre_split_guard::rotate_refuses_while_an_unconfirmed_peer_is_online'''
 
@@ -615,7 +615,7 @@ id = "FE-43"
 family = "FE"
 status = "exists-untagged"
 clause = '''Control-plane and administrative routes MUST be local-only, defended in **three layers**: router middleware, per-handler check, and a pinned test asserting the guard under the *production listener shape*.'''
-target = '''sovereign/crates/sovereign-mesh/src/loopback_guard.rs:71::loopback_only'''
+target = '''sovereign/crates/sovereign-daemon/src/loopback_guard.rs:159::loopback_only'''
 existing = '''sovereign/crates/sovereign-mesh/tests/main/loopback_parity.rs:134::admin_http_rejects_non_loopback_via_admin_reload'''
 
 [[spec]]
@@ -641,7 +641,7 @@ id = "FE-7"
 family = "FE"
 status = "landed"
 clause = '''A node MUST be able to belong to **many** trust rings and be active in exactly one. Parked memberships MUST retain their full roster and credentials, so returning to one is a **resume** — no handshake, no key redeemed.'''
-target = '''sovereign/crates/sovereign-mesh/src/daemon.rs:1062::join_mesh'''
+target = '''sovereign/crates/sovereign-daemon/src/daemon.rs:1405::join_mesh'''
 existing = '''sovereign/crates/sovereign-mesh/tests/main/join_parks_not_leaves.rs:89::same_mesh_id_survives_a_failed_join_from_a_solo_mesh'''
 landed = '''sovereign-mesh::main::join_parks_not_leaves::same_mesh_id_survives_a_failed_join_from_a_solo_mesh'''
 

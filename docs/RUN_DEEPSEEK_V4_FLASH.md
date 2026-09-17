@@ -197,7 +197,7 @@ No download. This stage exists to protect the download.
 > all sources" — and because warm failure is never-wedge safe, it presented not as
 > an error but as a large model mysteriously refusing to distribute. Every earlier
 > acceptance masked it by having all shards already on every node. Fixed via
-> `servable_model_files` (`sovereign-mesh/src/daemon.rs`); the three copies of the
+> `servable_model_files` (`sovereign-daemon/src/daemon.rs`); the three copies of the
 > shard-name parser were also collapsed into one `split_shard_names`
 > (`rpc_warm_cache.rs`), since readers disagreeing about what "the whole model"
 > means is the bug class. See note `31f00cd1`.
@@ -805,7 +805,7 @@ good *fast local provider* — just decoupled from the distribution goal.
   MXFP4, MLA KV 2.89 GB @32k; reconstruction 155.09 vs actual 155.10 GB.
 - **2026-07-31** — Found and fixed the multi-shard serving break: the host
   advertised only shard 1, stranding any worker that didn't already hold the whole
-  model. `servable_model_files` (`sovereign-mesh/src/daemon.rs`) now expands slot
+  model. `servable_model_files` (`sovereign-daemon/src/daemon.rs`) now expands slot
   paths to the full shard set, and the three copies of the shard-name parser
   collapsed into one `split_shard_names`. Tests added for both, plus the
   never-guess case. Note `31f00cd1`.

@@ -6,7 +6,7 @@
 //! node's id inside a running daemon, rebuilding nothing. A consumer that
 //! copies the id at construction keeps the placeholder the daemon generated
 //! for mDNS — the incident the swap site's own comment records
-//! (`sovereign-mesh/src/daemon.rs`, the `local node not found in mesh` 500s
+//! (`sovereign-daemon/src/daemon.rs`, the `local node not found in mesh` 500s
 //! and ten-second gossip log spam). Holding this handle instead means every
 //! read observes the swap.
 //!

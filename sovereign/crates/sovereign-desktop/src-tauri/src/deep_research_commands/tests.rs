@@ -2,7 +2,7 @@
 //! Tests for the deep-research desktop client.
 //!
 //! The run-dir readers' tests (snapshot, stage, constitution, consent
-//! class) moved with the readers to `sovereign-mesh/src/research_http.rs`
+//! class) moved with the readers to `sovereign-daemon/src/research_http.rs`
 //! on 2026-09-11; what stays here is what the client still owns — the
 //! demo override, and the two structural scans.
 

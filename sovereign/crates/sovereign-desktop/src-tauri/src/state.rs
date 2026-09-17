@@ -598,7 +598,7 @@ pub async fn bootstrap_with_progress(
     // `mark_vector_index_built` when LanceDB reports a complete index the
     // meta had not recorded — and its ONE reader in the workspace is
     // `corpus_catalog_http::catalog`, which prefers exactly that meta field
-    // (`sovereign-mesh/src/corpus_catalog_http.rs:420-427`). Sweep and reader
+    // (`sovereign-daemon/src/corpus_catalog_http.rs:420-427`). Sweep and reader
     // now run in one process over one engine.
     //
     // It was MOVED, not deleted, and the difference is user-visible: with no

@@ -91,7 +91,17 @@ for arg in "$@"; do
 done
 if [[ "${1:-}" == "--clean" || "${1:-}" == "--gate-only" ]]; then
     shift
-    size_mb=$(du -sm target/debug 2>/dev/null | cut -f1)
+    # `--clean --gate-only` is the campaign loop's CLEAN form (RALPH PROMPT
+    # §5): both flags mean the same gate, and only one is consumed by the
+    # `shift` above. Drop the second so it never reaches cargo — it leaked
+    # until 2026-09-17, so the COLD path (clean fired, build follows) died
+    # with `unexpected argument '--gate-only'` instead of building, while
+    # the warm path exited 0 and hid it.
+    [[ "${1:-}" == "--gate-only" ]] && shift
+    # `|| true`: with the debug profile absent `du` exits non-zero, and
+    # `pipefail` turned that into a silent `set -e` exit before the size gate
+    # could decide. The empty `size_mb` is already handled below.
+    size_mb=$(du -sm target/debug 2>/dev/null | cut -f1 || true)
     limit_mb="${RALPH_CLEAN_MB:-51200}"
     if [[ -n "${size_mb:-}" && "$size_mb" -ge "$limit_mb" ]]; then
         echo "dev-build: debug target is $((size_mb / 1024))G (>= $((limit_mb / 1024))G) — cleaning" >&2

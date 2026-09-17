@@ -3,7 +3,7 @@
 //! at-least-once delivery.**
 //!
 //! `IngestExecutor` declares [`Idempotency::Idempotent`] for `ingest:v1`
-//! (`sovereign-mesh/src/ingest_executor.rs`), and its module docs say why in
+//! (`sovereign-daemon/src/ingest_executor.rs`), and its module docs say why in
 //! plain words: "the merge step dedupes: `merge_shards` keys on
 //! `content_hash` and on `(unit_id, source_doc_id)`
 //! (`corpus-engine/src/sharding.rs`)". Until this file that was an assertion

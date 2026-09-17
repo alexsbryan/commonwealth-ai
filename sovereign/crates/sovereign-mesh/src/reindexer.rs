@@ -79,8 +79,8 @@ impl RebuildReason {
 /// Note on isolation: the Reindexer worker handles *our* code
 /// (SCIP export, DB rename, git poll) — not user-authored scripts.
 /// A panic inside it is a bug we want to see, not a fault to
-/// auto-recover from, so we don't wrap it in a
-/// `sovereign_daemon::supervised_task::SupervisedTask`. Test/lint runners
+/// auto-recover from, so we don't wrap it in the daemon's
+/// `supervised_task::SupervisedTask`. Test/lint runners
 /// (the user-script surface) are supervised separately in a later
 /// step.
 pub struct ProjectHandle {

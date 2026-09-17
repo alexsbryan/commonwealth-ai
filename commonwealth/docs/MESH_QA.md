@@ -37,7 +37,7 @@ cargo test -p sovereign-mesh --features dst,treesitter --test main dst_scenarios
 ```
 
 Each of the six invariants carries a **falsifier** in
-`sovereign-mesh/src/dst.rs` (`mod invariant_tests`) proving it can fail, and
+`sovereign-mesh/tests/main/dst.rs` (`mod invariant_tests`) proving it can fail, and
 `every_invariant_in_the_pack_has_a_falsifier` is set-equality in both
 directions — a seventh invariant added without a falsifier turns the build red,
 and so does a falsifier left behind for a retired one. Until 2026-08-31 the
@@ -46,7 +46,7 @@ never been watched fail.
 
 - Harness: `sovereign-mesh-test-harness/src/fault/` (FaultTransport, FaultProxy,
   FaultPolicy, seeded FaultSchedule) + `MockLlamaServer` knobs.
-- Driver + invariant pack: `sovereign-mesh/src/dst.rs` (`DstMesh`). Wire-fault
+- Driver + invariant pack: `sovereign-mesh/tests/main/dst.rs` (`DstMesh`). Wire-fault
   catalog: `slow_peer` / `truncate_stream` (throttle / cut a gossip edge) +
   `clock_jump_back` (non-monotonic wall clock), on top of `crash` / `skew_node` /
   `partition` / `clear_faults`. Assert on outcome **class** (reconverges once

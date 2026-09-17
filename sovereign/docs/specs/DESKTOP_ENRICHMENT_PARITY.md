@@ -140,7 +140,7 @@ Surfacing gaps beyond seams:
 - **Attach-mode landscape digests rely on a maybe-unmounted endpoint** —
   desktop attach wires `MeshLandscapeDigestClient` → daemon
   `/v1/knowledge/landscape_digest` (`state.rs:1401-1421`). Handler exists
-  (`sovereign-mesh/src/landscape_digest_http.rs:50-79`).
+  (`sovereign-daemon/src/landscape_digest_http.rs:50-79`).
 
 ## Plan (phased)
 
@@ -211,7 +211,7 @@ unit test: desktop wired-seam set ⊇ bench's.
 - field_model surface: `sovereign-tools/src/knowledge_view/{digest.rs,
   manager.rs}`, `sovereign-core/src/runtime/{turn.rs, streaming.rs,
   system_message.rs}`.
-- Attach endpoint: `sovereign-mesh/src/landscape_digest_http.rs`.
+- Attach endpoint: `sovereign-daemon/src/landscape_digest_http.rs`.
 - Flags/docs: `sovereign-core/src/runtime/{retrieval.rs, retrieval_pipeline.rs}`,
   `sovereign/docs/retrieval-pipeline.md`.
 

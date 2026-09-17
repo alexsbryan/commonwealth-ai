@@ -20,9 +20,9 @@ kernel-types = { workspace = true }
 # dm-wire-repoint-mesh).
 oicp-types = { workspace = true }
 # The client family (domains REVIEW-build-mesh-client-pair): the knowledge and
-# landscape-digest HTTP clients moved to `sovereign-turn-client`, and this
-# crate keeps their `sovereign_mesh::knowledge_client` /
-# `sovereign_mesh::landscape_digest_client` paths as shims.
+# landscape-digest HTTP clients moved to `sovereign-turn-client`; this crate
+# keeps `sovereign_mesh::knowledge_client` as a shim (the digest client's shim
+# was dead and went at REVIEW-audit-daemon-1).
 sovereign-turn-client = { workspace = true }
 # `features = ["iroh"]`: the daemon's dial-by-key binding (W1 of
 # TRANSPORT_MIGRATION.md) is compiled into the default build —

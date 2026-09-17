@@ -195,10 +195,10 @@ kind = "supporting"
 question = "what is in this codebase?"
 owns = ["Symbol", "CallGraph", "Edit", "NextEdit"]
 package = "code-intel"
-crates = ["corpus-engine-scip", "corpus-engine-sections"]   # + the code-intel package crates CODE_TOOLING_BOUNDARY.md §2 names as they are created
+crates = ["corpus-engine-scip", "corpus-engine-sections", "code-next-edit"]   # + the code-intel package crates CODE_TOOLING_BOUNDARY.md §2 names as they are created; `code-next-edit` is the TENTH and §2's table does not name it (REVIEW-build-next-edit-crate)
 lift = ""             # no lift script yet; the package row is gated, not lifted
 applicable_as = "a code-intelligence MCP server; next-edit is its clearest lost child (sovereign/docs/NEXT_EDIT.md)"
-roots = ["corpus-engine-scip", "corpus-engine-sections", "corpus-engine/src/enrichment/code_intel"]
+roots = ["corpus-engine-scip", "corpus-engine-sections", "corpus-engine/src/enrichment/code_intel", "code-next-edit"]
 status = "kept"
 
 [[context]]
@@ -334,7 +334,7 @@ note = "was ingest; jobs — DAEMON_CORE.md §3.2, §4.3 (2026-09-14)"
 [[module]]
 path = "sovereign/crates/sovereign-daemon/src/auto_resume.rs"
 context = "host"
-lines = 384
+lines = 372
 note = "was ingest; jobs — DAEMON_CORE.md §3.2, §4.3 (2026-09-14)"
 
 [[module]]
@@ -370,13 +370,13 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-daemon/src/daemon.rs"
 context = "host"
-lines = 5619
+lines = 5642
 note = "composition root; the MemberRecord -> InferenceVenue translation (:2280-2345); re-exports the scheduler's InferenceVenue (:25)"
 
 [[module]]
 path = "sovereign/crates/sovereign-daemon/src/daemon_services.rs"
 context = "host"
-lines = 1084
+lines = 1086
 note = ""
 
 [[module]]
@@ -497,7 +497,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/iroh_access.rs"
 context = "fabric"
-lines = 1614
+lines = 1611
 note = ""
 
 [[module]]
@@ -531,10 +531,16 @@ lines = 914
 note = ""
 
 [[module]]
+path = "code-next-edit/src/lib.rs"
+context = "workbench"
+lines = 63
+note = "the code-intel package's next-edit stub crate root (REVIEW-build-next-edit-crate); nothing has moved in yet. The row was missing, so crate-lines/misnamed/queue exited 4 on a coverage hole (REVIEW-audit-daemon-1)"
+
+[[module]]
 path = "sovereign/crates/sovereign-mesh/src/lib.rs"
-context = "host"
-lines = 168
-note = ""
+context = "fabric"
+lines = 105
+note = "the crate root; Fabric's own modules plus shims to the modules that left (host at dm-daemon-mesh-edge/jobs/adapters, serving and scheduler earlier). Retagged host -> fabric by REVIEW-audit-daemon-1: after the host cluster left, no host module remains here and the crate is Fabric's home (DAEMON_CORE.md §4.2)"
 
 [[module]]
 path = "sovereign/crates/sovereign-serving-host/src/local_inflight.rs"
@@ -575,7 +581,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/measurements_rail.rs"
 context = "fabric"
-lines = 309
+lines = 313
 note = ""
 
 [[module]]
@@ -593,7 +599,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-daemon/src/mesh_http.rs"
 context = "host"
-lines = 1825
+lines = 1838
 note = "membership routes - the mesh's own; was fabric; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
@@ -647,7 +653,7 @@ note = "retagged host at dm-daemon-mesh-edge (2026-09-17): the file rode the mes
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/peer_adapter.rs"
 context = "fabric"
-lines = 239
+lines = 243
 note = ""
 
 [[module]]
@@ -701,7 +707,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-daemon/src/project_http.rs"
 context = "host"
-lines = 498
+lines = 500
 note = ""
 
 [[module]]
@@ -731,7 +737,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/rail_kv_pump.rs"
 context = "fabric"
-lines = 1011
+lines = 1015
 note = ""
 
 [[module]]
@@ -779,14 +785,32 @@ note = "was understanding; reads the research loop's own run artifacts — DAEMO
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/ring_roster.rs"
 context = "fabric"
-lines = 311
+lines = 334
 note = ""
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/ring_sync.rs"
 context = "fabric"
-lines = 2072
+lines = 597
 note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/ring_sync/tests.rs"
+context = "fabric"
+lines = 516
+note = "split out of ring_sync.rs at REVIEW-audit-daemon-1 (ARCH 3.1: the file had grown past arch-gate's slack). Same tests, same fixtures; the parent declares `#[cfg(test)] mod tests;`."
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/ring_sync/projection_tests.rs"
+context = "fabric"
+lines = 520
+note = "split out of ring_sync.rs at REVIEW-audit-daemon-1 (ARCH 3.1); the store-as-projection half, with the shared helpers re-exported from `tests`."
+
+[[module]]
+path = "sovereign/crates/sovereign-mesh/src/ring_sync/snapshot_tests.rs"
+context = "fabric"
+lines = 490
+note = "split out of ring_sync.rs at REVIEW-audit-daemon-1 (ARCH 3.1); the snapshot/retention half."
 
 [[module]]
 path = "sovereign/crates/sovereign-daemon/src/roster_repair.rs"
@@ -797,7 +821,7 @@ note = "retagged host at dm-daemon-mesh-edge (2026-09-17): the file rode the mes
 [[module]]
 path = "sovereign/crates/sovereign-daemon/src/rpc_warm_http.rs"
 context = "host"
-lines = 1224
+lines = 1225
 note = "*_http but the decision is Serving's - distributed-inference auto-warm orchestration; was serving; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
@@ -827,7 +851,7 @@ note = "the daemon's SlotManifest port impl over sovereign-core's bundled manife
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/state.rs"
 context = "fabric"
-lines = 182
+lines = 184
 note = ""
 
 
@@ -902,7 +926,7 @@ note = "was ingest; jobs — DAEMON_CORE.md §3.2, §4.3 (2026-09-14)"
 [[module]]
 path = "sovereign/crates/sovereign-daemon/src/work_atlas_broadcaster.rs"
 context = "host"
-lines = 246
+lines = 252
 note = "was workspace; adapter — DAEMON_CORE.md §4.3 (2026-09-14)"
 
 [[module]]
@@ -1016,7 +1040,7 @@ note = "reads decision_log::{DecisionEvent,RoutingDecision,RoutingOutcome,Served
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/rail_kv_pump/tests.rs"
 context = "fabric"
-lines = 295
+lines = 313
 note = ""
 
 [[module]]
@@ -1115,7 +1139,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-atos/src/middleware/session_briefing.rs"
 context = "answering"
-lines = 356
+lines = 343
 note = ""
 
 [[module]]
@@ -1145,7 +1169,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-api/src/next_edit_journal.rs"
 context = "workbench"
-lines = 389
+lines = 381
 note = ""
 
 [[module]]
@@ -1211,7 +1235,7 @@ note = "was serving; route shell — DAEMON_CORE.md §4 placement test (2026-09-
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_edit_predictions.rs"
 context = "workbench"
-lines = 1459
+lines = 1458
 note = ""
 
 [[module]]
@@ -1495,7 +1519,7 @@ note = "the GuestLenderSource port and its four published types (REVIEW-build-se
 [[module]]
 path = "sovereign/crates/sovereign-serving-host/src/throughput_tracking.rs"
 context = "serving"
-lines = 323
+lines = 268
 note = "the TTFT / token-rate stream observer; moved out of sovereign-mesh by REVIEW-build-serving-move-throughput-guest (2026-09-15) — its consumers are peer_inference/pinned_worker_source"
 
 [[module]]
@@ -7846,8 +7870,14 @@ note = ""
 [[module]]
 path = "oicp-types/src/scoring.rs"
 context = "kernel"
-lines = 1269
+lines = 650
 note = ""
+
+[[module]]
+path = "oicp-types/src/scoring/tests.rs"
+context = "kernel"
+lines = 661
+note = "split out of scoring.rs at REVIEW-audit-daemon-1 (ARCH 3.1: the EWMA moved in at REVIEW-build-mesh-sim-decouple pushed the file past arch-gate's slack). Same tests; the parent declares `#[cfg(test)] mod tests;`."
 
 [[module]]
 path = "oicp-types/src/slot.rs"
@@ -7924,7 +7954,7 @@ note = ""
 [[module]]
 path = "serving-policy/src/lib.rs"
 context = "serving"
-lines = 27
+lines = 31
 note = ""
 
 [[module]]
@@ -8440,7 +8470,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs"
 context = "host"
-lines = 2864
+lines = 2869
 note = ""
 
 [[module]]
@@ -11440,7 +11470,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-contracts/src/daemon_wire/mesh.rs"
 context = "kernel"
-lines = 484
+lines = 485
 note = ""
 
 [[module]]
@@ -11632,7 +11662,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-contracts/src/peer.rs"
 context = "kernel"
-lines = 272
+lines = 340
 note = ""
 
 [[module]]
@@ -11884,7 +11914,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-daemon/src/lib.rs"
 context = "host"
-lines = 30
+lines = 132
 note = "the node's host crate root (DAEMON_CORE.md §4.1); a stub until the host modules move in (REVIEW-mint-daemon-move); the `host` context names it (dm-daemon-registry)"
 
 [[module]]
@@ -15730,7 +15760,7 @@ note = "was understanding; client of the daemon's own surface; the client family
 [[module]]
 path = "sovereign/crates/sovereign-turn-client/src/lib.rs"
 context = "kernel"
-lines = 4800
+lines = 4811
 note = ""
 
 [[module]]
@@ -15796,7 +15826,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-work-atlas/src/tools/broadcast.rs"
 context = "unknown"
-lines = 98
+lines = 99
 note = ""
 
 [[module]]

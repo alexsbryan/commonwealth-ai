@@ -284,7 +284,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-16-rotate_refuses_while_an_unconfirmed_peer"
 requirement = "FE-16"
-target = "sovereign/crates/sovereign-mesh/src/daemon.rs"
+target = "sovereign/crates/sovereign-daemon/src/daemon.rs"
 find = "                    match generation {\n                        Some(true) => {}\n                        Some(false) => pre_split.push(m.name.clone()),\n                        None => unconfirmed.push(m.name.clone()),\n                    }"
 replace = "                    // BUG: Treat unknown (None) as confirmed to silence the guard.\n                    // This violates FE-16 by allowing rotation when a peer's status is\n                    // not locally observed, causing the test `rotate_refuses_while_an_unconfirmed_peer_is_online`\n                    // to pass incorrectly or misclassify peers in other scenarios.\n                    match generation {\n                        Some(true) | None => {},\n                        Some(false) => pre_split.push(m.name.clone()),\n                    }"
 mustFail = ["rotate_refuses_while_an_unconfirmed_peer_is_online"]
@@ -404,7 +404,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "dst-fe137-no-split-brain"
 requirement = "FE-137"
-target = "sovereign/crates/sovereign-mesh/src/dst.rs"
+target = "sovereign/crates/sovereign-mesh/tests/main/dst.rs"
 find = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        let mut leader: Option<Option<NodeId>> = None;\n        let mut owner: Option<Option<NodeId>> = None;\n        for v in &snap.views {\n            let live: Vec<NodeId> = v\n                .members\n                .iter()\n                .filter(|(_, m)| m.live)\n                .map(|(k, _)| *k)\n                .collect();\n            let l = partition::elect_leader(&live);\n            let o = partition::rendezvous_owner(\"dst-probe\", &live);\n            match leader {\n                None => leader = Some(l),\n                Some(prev) if prev != l => {\n                    return Err(Violation {\n                        invariant: \"no_split_brain\",\n                        detail: format!(\n                            \"leader disagreement: {prev:?} vs {l:?} (node {})\",\n                            v.self_id\n                        ),\n                    });\n                }\n                _ => {}\n            }\n            match owner {\n                None => owner = Some(o),\n                Some(prev) if prev != o => {\n                    return Err(Violation {\n                        invariant: \"no_split_brain\",\n                        detail: format!(\n                            \"owner disagreement: {prev:?} vs {o:?} (node {})\",\n                            v.self_id\n                        ),\n                    });\n                }\n                _ => {}\n            }\n        }\n        Ok(())\n    }"
 replace = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        let _ = snap;\n        Ok(())\n    }"
 mustFail = ["no_split_brain_falsifier_disjoint_live_sets_elect_different_leaders"]
@@ -414,7 +414,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "dst-fe138-no-split-brain"
 requirement = "FE-138"
-target = "sovereign/crates/sovereign-mesh/src/dst.rs"
+target = "sovereign/crates/sovereign-mesh/tests/main/dst.rs"
 find = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        let mut leader: Option<Option<NodeId>> = None;\n        let mut owner: Option<Option<NodeId>> = None;\n        for v in &snap.views {\n            let live: Vec<NodeId> = v\n                .members\n                .iter()\n                .filter(|(_, m)| m.live)\n                .map(|(k, _)| *k)\n                .collect();\n            let l = partition::elect_leader(&live);\n            let o = partition::rendezvous_owner(\"dst-probe\", &live);\n            match leader {\n                None => leader = Some(l),\n                Some(prev) if prev != l => {\n                    return Err(Violation {\n                        invariant: \"no_split_brain\",\n                        detail: format!(\n                            \"leader disagreement: {prev:?} vs {l:?} (node {})\",\n                            v.self_id\n                        ),\n                    });\n                }\n                _ => {}\n            }\n            match owner {\n                None => owner = Some(o),\n                Some(prev) if prev != o => {\n                    return Err(Violation {\n                        invariant: \"no_split_brain\",\n                        detail: format!(\n                            \"owner disagreement: {prev:?} vs {o:?} (node {})\",\n                            v.self_id\n                        ),\n                    });\n                }\n                _ => {}\n            }\n        }\n        Ok(())\n    }"
 replace = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        let _ = snap;\n        Ok(())\n    }"
 mustFail = ["no_split_brain_falsifier_disjoint_live_sets_elect_different_leaders"]
@@ -424,7 +424,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "dst-fe19-convergence"
 requirement = "FE-19"
-target = "sovereign/crates/sovereign-mesh/src/dst.rs"
+target = "sovereign/crates/sovereign-mesh/tests/main/dst.rs"
 find = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        let mut iter = snap.views.iter();\n        let Some(first) = iter.next() else {\n            return Ok(());\n        };\n        let key0: BTreeSet<NodeId> = first.members.keys().copied().collect();\n        for v in iter {\n            let key: BTreeSet<NodeId> = v.members.keys().copied().collect();\n            if key != key0 {\n                return Err(Violation {\n                    invariant: \"convergence\",\n                    detail: format!(\n                        \"node {} knows {:?}; node {} knows {:?}\",\n                        first.self_id, key0, v.self_id, key\n                    ),\n                });\n            }\n        }\n        Ok(())\n    }"
 replace = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        let _ = snap;\n        Ok(())\n    }"
 mustFail = ["convergence_falsifier_two_nodes_know_different_member_sets"]
@@ -434,7 +434,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "dst-fe96-admission-safety"
 requirement = "FE-96"
-target = "sovereign/crates/sovereign-mesh/src/dst.rs"
+target = "sovereign/crates/sovereign-mesh/tests/main/dst.rs"
 find = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        for v in &snap.views {\n            if v.peer_inflight > v.inflight_ceiling {\n                return Err(Violation {\n                    invariant: \"admission_safety\",\n                    detail: format!(\n                        \"node {}: peer_inflight {} > ceiling {}\",\n                        v.self_id, v.peer_inflight, v.inflight_ceiling\n                    ),\n                });\n            }\n            if v.peer_inflight != 0 {\n                return Err(Violation {\n                    invariant: \"admission_safety\",\n                    detail: format!(\n                        \"node {}: peer_inflight {} != 0 at quiescence (guard leak?)\",\n                        v.self_id, v.peer_inflight\n                    ),\n                });\n            }\n        }\n        Ok(())\n    }"
 replace = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        let _ = snap;\n        Ok(())\n    }"
 mustFail = ["admission_safety_falsifier_inflight_over_the_ceiling", "admission_safety_falsifier_a_leaked_guard_at_quiescence"]
@@ -444,7 +444,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "dst-fe80-liveness"
 requirement = "FE-80"
-target = "sovereign/crates/sovereign-mesh/src/dst.rs"
+target = "sovereign/crates/sovereign-mesh/tests/main/dst.rs"
 find = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        for v in &snap.views {\n            for truth in &snap.online_truth {\n                match v.members.get(truth) {\n                    Some(m) if m.live => {}\n                    _ => {\n                        return Err(Violation {\n                            invariant: \"liveness\",\n                            detail: format!(\n                                \"node {} does not see up node {} as live\",\n                                v.self_id, truth\n                            ),\n                        });\n                    }\n                }\n            }\n        }\n        Ok(())\n    }"
 replace = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        let _ = snap;\n        Ok(())\n    }"
 mustFail = ["liveness_falsifier_an_up_node_is_not_seen_at_all"]
@@ -454,7 +454,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "dst-fe8-unique-endpoint-key"
 requirement = "FE-8"
-target = "sovereign/crates/sovereign-mesh/src/dst.rs"
+target = "sovereign/crates/sovereign-mesh/tests/main/dst.rs"
 find = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        for v in &snap.views {\n            // Delegate, don't re-derive. `aliased_endpoint_keys` is the ONE\n            // implementation of this rule; the admission guard in\n            // `merge_from_authenticated` asks the same function. A checker and\n            // an admitter with separate opinions is the §10.6 duplicated\n            // decider, and this is the last place you want a second one.\n            let claims = v.members.iter().map(|(id, m)| EndpointClaim {\n                node_id: *id,\n                name: String::new(),\n                node_pubkey: m.node_pubkey,\n                active: m.active,\n            });\n            if let Some(alias) = aliased_endpoint_keys(claims).into_iter().next() {\n                let ids: Vec<NodeId> = alias.members.iter().map(|(id, _)| *id).collect();\n                return Err(Violation {\n                    invariant: \"unique_endpoint_key\",\n                    detail: format!(\n                        \"node {:?} sees {} ACTIVE members claiming endpoint key {}: {:?} \\\n                         — a cloned node identity; their liveness is split across rows \\\n                         and neither will read online\",\n                        v.self_id,\n                        ids.len(),\n                        &alias.node_pubkey.to_string()[..16],\n                        ids\n                    ),\n                });\n            }\n        }\n        Ok(())\n    }"
 replace = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        let _ = snap;\n        Ok(())\n    }"
 mustFail = ["a_cloned_node_identity_is_caught"]

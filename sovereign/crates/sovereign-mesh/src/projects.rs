@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-project state machine for the daemon's reindexer + watchers.
 //!
-//! `ProjectState` holds the live, read-mostly state that
-//! `sovereign_daemon::supervised_task::supervise` writes and MCP tools /
-//! HTTP endpoints read. One instance per registered project.
+//! `ProjectState` holds the live, read-mostly state that the daemon's
+//! `supervised_task::supervise` writes and MCP tools / HTTP endpoints read.
+//! One instance per registered project.
 //!
 //! This module intentionally carries no IO (registry load/save,
 //! HTTP) — those live alongside in `project_http.rs` and a follow-up

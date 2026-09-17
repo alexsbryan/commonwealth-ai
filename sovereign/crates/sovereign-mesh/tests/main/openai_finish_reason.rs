@@ -22,8 +22,8 @@ use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{
     CompletionRequest, CompletionResponse, Depth, FinishReason, ProviderCapabilities, Speed,
 };
-use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
 use sovereign_daemon::slot_manifest::CoreSlotManifest;
+use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
 
 /// Reports exactly the finish reason it was built with, so the test
 /// asserts on the ADAPTER's translation and nothing else.
