@@ -259,9 +259,12 @@ class Queue:
                 return r
         return None
 
-    def pick_wave(self, lanes, conflicts):
+    def pick_wave(self, lanes, conflicts, heavy=frozenset()):
         """Ready non-review units, up to `lanes`, no conflicting pair.
-        `[~]` rows are resumable lanes: a killed session leaves one behind."""
+        `[~]` rows are resumable lanes: a killed session leaves one behind.
+        At most ONE heavy row (ralph/heavy.txt, loaded by the Pool) per wave —
+        the big moves run sequentially (2026-09-17, operator direction: derisk
+        first); the other lane takes non-heavy rows."""
         wave = []
         for r in self.rows:
             if len(wave) >= lanes:
@@ -270,7 +273,11 @@ class Queue:
                 continue
             if r.id.startswith("REVIEW-"):
                 continue
+            if r.id.startswith("HUMAN-"):
+                continue          # operator-only; the run loop asks for it
             if not self.deps_met(r):
+                continue
+            if r.id in heavy and any(w in heavy for w in wave):
                 continue
             if any(frozenset((r.id, w)) in conflicts for w in wave):
                 continue
@@ -690,6 +697,18 @@ class Pool:
                     pairs.add(frozenset(parts[:2]))
         return pairs
 
+    def _heavy(self):
+        """The heavy rows (ralph/heavy.txt): at most one per wave."""
+        p = self.paths.p("ralph/heavy.txt")
+        if not p.exists():
+            return set()
+        out = set()
+        for line in p.read_text().splitlines():
+            line = line.split("#")[0].strip()
+            if line:
+                out.add(line)
+        return out
+
     def _halt(self, reason):
         halt(self.paths, reason, notifier=self.notifier, notify_enabled=self.notify_enabled)
         return 3
@@ -723,13 +742,16 @@ class Pool:
             if marker == "wait":
                 self.sleep(self.wait_poll)
                 continue
+            unit = queue.current()
+            if unit is not None and unit.id.startswith("HUMAN-"):
+                return self._halt(f"operator approval required: {unit.id}")
             review = queue.first_ready_review()
             if review is not None:
                 result = self.run_review(review)
                 if result is not None:
                     return result
                 continue
-            wave = queue.pick_wave(self.lanes, self._conflict_pairs())
+            wave = queue.pick_wave(self.lanes, self._conflict_pairs(), self._heavy())
             if not wave:
                 say("pool: no ready unit and no ready review — waiting (dependencies unmet?)")
                 self.sleep(60)
