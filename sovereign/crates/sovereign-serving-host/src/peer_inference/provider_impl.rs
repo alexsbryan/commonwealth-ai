@@ -185,7 +185,7 @@ impl InferenceProvider for InferenceRouter {
                         yield_retry_after_secs: decision_log::parse_yield_refusal(&err_text),
                     });
                     match disposition {
-                        PeerFailureDisposition::Hard { model_id } => {
+                        VenueFailureDisposition::Hard { model_id } => {
                             // Terminal: the peer is the only holder, so no
                             // later step can serve the name that was asked
                             // for. This is where the join closes.
@@ -207,7 +207,7 @@ impl InferenceProvider for InferenceRouter {
                                 model_id, peer.name, err_text
                             )));
                         }
-                        PeerFailureDisposition::Soft => {
+                        VenueFailureDisposition::Soft => {
                             tracing::info!(
                                 peer = %peer.name,
                                 shed,
@@ -486,7 +486,7 @@ impl InferenceProvider for InferenceRouter {
                         yield_retry_after_secs: decision_log::parse_yield_refusal(&step_err),
                     });
                     match disposition {
-                        PeerFailureDisposition::Hard { model_id } => {
+                        VenueFailureDisposition::Hard { model_id } => {
                             // Terminal: no further step will serve, so
                             // this is where the join closes.
                             self.outcome_ctx(
@@ -509,7 +509,7 @@ impl InferenceProvider for InferenceRouter {
                                 last_transport_err.unwrap_or_else(|| "unreachable".into())
                             )));
                         }
-                        PeerFailureDisposition::Soft => {
+                        VenueFailureDisposition::Soft => {
                             tracing::info!(
                                 peer = %peer.name,
                                 "mesh-inference: typed peer failed, falling through to next route"

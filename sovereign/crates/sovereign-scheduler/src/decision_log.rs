@@ -111,7 +111,7 @@ impl DecisionEvent {
 
 /// Everything one node observed about one peer at snapshot time.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct PeerObservationRecord {
+pub struct VenueObservationRecord {
     pub name: String,
     pub node_id: Option<String>,
     /// This node's observations of the peer — latency and throughput
@@ -158,7 +158,7 @@ pub struct FleetSnapshot {
     pub schema: String,
     pub captured_at_unix: u64,
     pub local: LocalObservationRecord,
-    pub peers: Vec<PeerObservationRecord>,
+    pub peers: Vec<VenueObservationRecord>,
 }
 
 impl FleetSnapshot {

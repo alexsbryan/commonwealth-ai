@@ -60,9 +60,9 @@ pub struct InferenceVenue {
 
 /// The one port the roster crosses into Serving through.
 ///
-/// Was `PeerEndpointSource` (registry `[[noun]]`, decided 2026-09-14). The
-/// two Fabric leaks that rode the old trait — `local_node_id` and
-/// `ledger_emission_for` — are gone; see the module doc.
+/// The registry `[[noun]]` decided the name 2026-09-14. The two Fabric leaks
+/// that rode the legacy trait — `local_node_id` and `ledger_emission_for` —
+/// are gone; see the module doc.
 #[async_trait]
 pub trait VenueSource: Send + Sync {
     /// Everything routable right now. No filtering, ranking or ordering
