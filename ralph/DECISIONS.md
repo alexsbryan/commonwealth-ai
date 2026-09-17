@@ -939,3 +939,76 @@ that alternative named rather than taken.
 falsified premise recorded; `dm-daemon-api-edge` (a) corrected to the four-item
 list with the Join/Gossip repoint) and this entry; `ralph/NEEDS_HUMAN.md`
 removed. `git revert <sha>` reverts it alone.
+
+## 2026-09-17 · dm-daemon-cli-composition · the row's six-file move set is four false premises; the composition is 17 files and two reaches must come down first
+
+**Fork.** The row says MOVE six files plus "the `run_daemon` half" of
+`mod.rs`/`lifecycle.rs` into `sovereign-daemon`. Measured, four of its facts are
+false, and each one alone breaks §3a or LAYER. Options: (a) execute the row as
+written and hit the first red; (b) correct the row — enlarge the move set,
+exclude `vram_plan.rs`, relocate the two `sovereign-cli-shared` reaches, and
+drop the `run_daemon` split — then execute the corrected row.
+
+**Choice.** (b). §6 (2026-09-17) makes a false premise mine to correct; the
+correction changes the scope and the text, keeps the unit id, and takes no gate
+decision (no `except`, no pass bar, no `HUMAN-` row).
+
+**Evidence** (reproduced in this session, all paths under
+`sovereign/crates/sovereign-cli-daemon/`).
+- (1) `grep -n 'crate::' daemon_cmd/{bootstrap.rs,mod.rs}` and
+  `grep -n 'super::' daemon_cmd/bootstrap.rs` name `crate::supervise` (bootstrap
+  :633,:1163,:1223,:1459,:1486,:1547,:1663,:1688,:1730; mod.rs :305,:326,:1421),
+  `crate::watcher_supervisor` (bootstrap :2682), `crate::listener_watch`
+  (mod.rs :1422,:1529), `crate::corpus_maintenance` (mod.rs :771),
+  `super::ocr_install` (bootstrap :2137), `super::workflow_trigger`
+  (bootstrap :2151), `super::warn_orphaned_indexes` (bootstrap :13,:2011),
+  `super::lifecycle::daemon_pid_path` (bootstrap :12,:2456). §3a step 1 requires
+  each to be in the destination or named; none is. The move set becomes
+  bootstrap, build/, discovery_policy, tool_registry, solve_http, solve_tools,
+  ocr_install, workflow_trigger, atlas_builder, principal, provider, worker,
+  workspace + supervise, watcher_supervisor, listener_watch, corpus_maintenance
+  = 17 files, `wc -l` 8,875 — DC §4.1 row 4's "≈ 9,000".
+- (2) `grep -n 'sovereign_cli_shared' daemon_cmd/vram_plan.rs` → :24,:128,:129,
+  :171,:179; `python3` over quality/ARCH_LAYERS.toml places `sovereign-cli*` in
+  `hosts` (layer 6) and `sovereign-daemon` in `mesh-api` (layer 5);
+  `quality/arch-layers/src/lib.rs:367` emits `UpwardEdge` for `ti > fi` and
+  `:350` has no `[[forbid]]`/`[[exception]]` covering it. `vram_plan.rs` is a CLI
+  verb (its `HELP` and `wants_help`) and stays with the binary.
+- (3) `grep -n 'sovereign_cli_shared' daemon_cmd/bootstrap.rs` → :2630
+  `sovereign_cli_shared::repo::current_branch`; same forbid. `sovereign-contracts`
+  is already a dep of BOTH crates, so the function moves there (a new `git`
+  module beside `rebrand`/`run_lock`, which are the same class of dependency-free
+  behaviour) and `sovereign-cli-shared::repo::current_branch` delegates, keeping
+  its three `sovereign-cli-dev` callers (code_cmd.rs:659,:984;
+  project_cmd/serve.rs:533) compiling. `daemon_cmd/workspace.rs:8` names
+  `super::sovereign_root`; that wrapper's body is
+  `sovereign_contracts::rebrand::svrnmesh_root()` verbatim
+  (`sovereign-cli-shared/src/dirs.rs:22-24`, whose doc forbids re-deriving it), so
+  workspace.rs calls the SSOT directly.
+- (4) `daemon_cmd/mod.rs` `run_daemon` spawns `crate::log_rotation` (:294,:305)
+  and `crate::memory_watch` (:326) and reads both for its exit code (:1526-1536);
+  DC §4 preamble: "the memory watchdog, log files … stay with the binary". A
+  `run_daemon` split therefore needs a seam (`assemble(...) -> RunningDaemon`
+  plus a process wrapper) that this row does not describe, so the assembly
+  sequence stays in the binary's `run_daemon` and only its callees move. The
+  seam is named in this entry as the follow-on, not silently dropped.
+- The `depends [dm-daemon-api-http-b2]` is spurious: `grep -rn 'sovereign_api'
+  sovereign/crates/sovereign-cli-daemon/src` → 1 hit, lib.rs:59's tracing filter.
+  Left as-is because it is already `[x]`.
+
+**Falsified by.** A tree where the composition names none of those eight source
+modules (then the six-file move set is right); or `sovereign-cli-shared` sits at
+`mesh-api` or below (then `vram_plan.rs` and `current_branch` move as written);
+or `run_daemon` does not touch the watchdog/rotation/exit code (then its half
+moves too).
+
+**REVIEW-AFTER:** (3) picks `sovereign-contracts` for `current_branch` on edge
+cost — `sovereign-work-atlas` is the semantic consumer but would add a
+capabilities dep to every CLI binary that links `sovereign-cli-shared`; a
+reviewer may prefer the semantic home. The four duplicate `current_branch`
+implementations (`sovereign-cli-dev/src/tools_cmd/registry.rs:254`,
+`sovereign-cli-llm/src/claim_cmd.rs:842`, `sovereign-tdd`'s `git` module) are
+left alone — consolidating them is a noun-convergence row, not this one.
+
+**Landed in.** this commit — `ralph/STATE.md` (the row `[~]`, corrected) and this
+entry. `git revert <sha>` reverts it alone.
