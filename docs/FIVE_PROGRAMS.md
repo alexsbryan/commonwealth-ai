@@ -27,11 +27,94 @@ build detail, not architecture.
 | `svrn code` | LSP for agents | MCP `symbols`, `callers`, `blast`, …; HTTP `/v1/completions` (FIM) | SCIP index, notes | `sovereign/crates/sovereign-tools/src/code/`, `corpus-engine-scip`, `corpus-engine-notes`, `packages/vscode-sovereign/` |
 | `svrn bench` | evaluator | none; dials a URL | banks, baselines, verdict tables | `sovereign/bench/` lanes, `sovereign-eval` minus its product links |
 
-Clients are not programs. The desktop, the phone, a coding harness, Open WebUI
-and `curl` are all clients of the two wires and are built and prioritised as
-clients. The desktop already links only `sovereign-contracts`, `sovereign-time`,
-`sovereign-tools-base` and `sovereign-turn-client` (its `Cargo.toml`,
-2026-09-17); it is the reference client, not the product.
+Clients are not programs. A browser, a coding harness, Open WebUI and `curl`
+are all clients of the two wires and are built and prioritised as clients. The
+reference client is the browser (§2a); the Tauri desktop, which already links
+only `sovereign-contracts`, `sovereign-time`, `sovereign-tools-base` and
+`sovereign-turn-client` (its `Cargo.toml`, 2026-09-17), becomes an optional
+native shell around it.
+
+## 2a. The reference client is the browser
+
+`svrn` serves its own UI. One static-file route in the daemon serves the built
+SPA (today's Svelte under `sovereign/crates/sovereign-desktop/src` and
+`packages/chat-ui`, 83k lines, unchanged in volume), and `svrn open` opens
+`http://localhost:9741/`. The page talks HTTP and SSE to the daemon that
+served it, same origin, no CORS, no second process holding state. Attach mode
+ceases to exist because there is one mode.
+
+What changes in the UI, measured 2026-09-17: 226 `invoke` sites become fetch
+and SSE calls against daemon routes; the native surface behind them is 15
+dialog calls, 25 event subscriptions and 4 others, so the Tauri command layer
+(261 commands, 26k lines of Rust) goes to zero. Two `WebSocketUpgrade` sites
+become SSE; SSE is already the transport on completions and inference.
+Reload mid-turn resumes from the daemon's conversation stream route. Files
+upload as multipart to the existing ingest job routes.
+
+A native shell is optional and does only what a browser tab cannot: tray and
+autostart, a global hotkey with a quick-ask panel, folder drop with a real
+path, notifications, keychain, updater. Six commands, on the order of 2k
+lines, built after the browser client is complete and only if a local user
+wants them. Mobile (`sovereign-mobile`, 3.6k lines) is the same served UI in
+a webview over the tailnet or iroh.
+
+Embeddedness is three things and none of them is a window: the daemon is an
+OS service (`install_service_cmd.rs`, `sovereign-service`) and is present
+when no window is; the daemon is an MCP server, so Claude Desktop, Cursor,
+VS Code and every coding harness mount `ask` inside their own surface; and
+the FIM endpoint puts `svrn code` in the editor.
+
+## 2b. The hosted case — one daemon per organisation, SSO at the edge
+
+The same binary and the same UI run inside an organisation's compute
+boundary. What differs is who is on the other end of the wire.
+
+**Identity.** SSO is not in the daemon. An identity-aware proxy (oauth2-proxy,
+Pomerium, Cloudflare Access, Tailscale, Caddy) does OIDC or SAML and forwards
+a signed JWT carrying `sub`, `email` and `groups`. The daemon validates it
+against the issuer's JWKS and maps it to a third `Principal` arm,
+`Asserted { sub, groups }`, beside today's `LocalOwner` and `RemoteClient`
+(`sovereign/crates/sovereign-contracts/src/principal.rs`).
+
+**The loopback trap.** Loopback is an authentication signal at roughly 400
+sites across `sovereign-api` and `sovereign-daemon`, and `LocalOwner` is
+derived from it: the owner's own chat, always admitted. Behind a proxy every
+request arrives from loopback or the proxy's address, so a hosted daemon
+under today's rule admits every SSO user as the owner. Decision: when an
+issuer is configured, loopback grants nothing, the owner is a role claim, and
+`LocalOwner` is reachable only in a process with no issuer. The test
+`a_principal_key_is_never_derived_from_the_connection_address` already states
+the rule; the arm has to obey it.
+
+**Tenancy.** One daemon per organisation, one data directory, inside their
+boundary. A second organisation is a second container. Groups within the
+organisation are corpus grants: each corpus carries the group claims allowed
+to read it, checked in one place at the retrieval boundary, so a corpus the
+caller cannot read never enters a prompt and the absence is reported as a
+verdict. Today's `enabled_corpora` (347 sites) is a per-conversation
+preference, not an access control, and stays one.
+
+**Deployment.** `sovereign/container/Containerfile` (ROCm base) plus a proxy
+and a TLS terminator in one compose file, a GPU device, and two volumes:
+models and data. Ingest is a mounted volume plus a recipe, or an acquirer
+(`corpus-engine/src/acquirers/`: local file, HTTP API, Hugging Face, bulk
+download). Egress such as web search is the daemon's job under the
+organisation's proxy policy; the custody rule that kept it in the app no
+longer applies because there is no app.
+
+**What this deletes.** `sovereign-server` (7k lines, 26 routes re-implementing
+conversations, corpora, documents, search and MCP for a tenant model, with
+its own `TenantPrincipalResolver`) is a second host for one idea. The daemon
+is the server. The resolver's job moves into the `Asserted` arm and the crate
+goes.
+
+**Sequence.** (1) the static route and `svrn open`; (2) the 226 `invoke`
+sites to fetch and SSE, adding the routes that are missing; (3) `Asserted`,
+JWKS validation, the loopback-grants-nothing mode, corpus grants as one
+decider; (4) the compose file, deployed once inside a friendly
+organisation's boundary as the journey that proves it; (5) delete
+`sovereign-server`, attach mode, and the Tauri command layer. Each step is
+usable on its own.
 
 ## 3. The verdict is a schema
 
@@ -69,7 +152,8 @@ Deleted, not migrated: the in-process daemon; the two-name state database;
 the work atlas, claims, orders, campaigns, cursors, journals and demos under
 `.sovereign/features/`; the canon store; notes injection; the ten-context
 registry `quality/DOMAINS.toml` and its census script; `sovereign-server` as a
-second host (the phone dials `svrn`); `studio` and `atos` unless a journey in
+second host (§2b; the phone and the browser dial `svrn`); the Tauri command
+layer and attach mode (§2a); `studio` and `atos` unless a journey in
 §7 reaches them. Each program gets one README under 500 lines. The gates that
 survive are the ones with a fix command: size, boundary, layer, lock, env,
 concept, and the two build scripts.
@@ -139,6 +223,8 @@ exited 0 and every bench lane reports `passed` or `failed`, not
 | mesh join | `scripts/mesh-soak.sh` |
 | install and stale-lock start | `scripts/install-journey-nightly.sh`, then a start against a held run lock |
 | migration | boot against a `pre-cut` data directory |
+| browser client | the desktop chaos and persona soaks driven through `http://localhost:9741/` with no Tauri process |
+| hosted | the same soak against the compose deployment through the proxy, as an `Asserted` principal in two groups with disjoint corpus grants |
 
 **Step 4 — report and bar.**
 ```
@@ -201,6 +287,8 @@ after is net negative or its body names what the lines bought.
 - `sovereign-mesh` after the cut and split is under 25k lines, of which
   membership and reach are the majority.
 - The `code/` lift needs no change to the twelve MCP tools it serves.
+- The browser client reaches parity with the desktop soaks with fewer than
+  20 routes added to the daemon.
 
 A prediction that misses is recorded in this file with the number, and the
 step it invalidates is re-decided by the operator, not the agent.
