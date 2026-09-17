@@ -237,7 +237,7 @@ O10 = `.sovereign/features/domains-10-serving-extract/order.md`
 
 ## Wave 2 — sovereign-api dissolves
 
-- [~] REVIEW-mint-wave-2 — depends [REVIEW-mint-daemon-move] — MINT what is left of sovereign-api after wave 1 took its host modules and route shells: workspace's decision_extractor, answering's ATOS inversion, workbench's next-edit crate, auto_recover into sovereign-grants, and its three [[exception]] rows to zero — read: DT `plan."sovereign-api"`; DC §4.1 and §4.3; `python3 scripts/domains-census.py plan --crate sovereign-api`
+- [x] REVIEW-mint-wave-2 37b1726dd — depends [REVIEW-mint-daemon-move] — MINT what is left of sovereign-api after wave 1 took its host modules and route shells: workspace's decision_extractor, answering's ATOS inversion, workbench's next-edit crate, auto_recover into sovereign-grants, and its three [[exception]] rows to zero — read: DT `plan."sovereign-api"`; DC §4.1 and §4.3; `python3 scripts/domains-census.py plan --crate sovereign-api`
 
 ### Minted 2026-09-16 — sovereign-api's remainder (wave 2)
 
