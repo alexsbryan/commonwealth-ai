@@ -3,7 +3,7 @@
 //! atoms-delta merge into an EXISTING referential atlas.
 //!
 //! The referential/LLM analogue of the structural `apply_incremental`
-//! (`sovereign-mesh/src/newsworthy_host.rs`). It enriches ONLY the
+//! (`sovereign-daemon/src/newsworthy_host.rs`). It enriches ONLY the
 //! `--chapters` subset, resolves the result into a throwaway staging
 //! dir, content-hashes the staged atoms with the real corpus_id, and
 //! merges them into the live atlas via the additive `apply_atom_delta`

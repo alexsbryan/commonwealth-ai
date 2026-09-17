@@ -2,7 +2,8 @@
 //! Indirection seam for the work atlas's "make this claim visible now"
 //! requirement (§7 of the spec).
 //!
-//! The implementation lives in `sovereign-mesh::MeshBroadcaster` and needs
+//! The implementation lives in
+//! `sovereign_daemon::work_atlas_broadcaster::MeshBroadcaster` and needs
 //! `AppState`, which would create a circular crate-dep if the work-atlas tools
 //! called it directly. This trait lets the daemon wire the real one in from
 //! the outside while tests and standalone callers use [`NullBroadcaster`].

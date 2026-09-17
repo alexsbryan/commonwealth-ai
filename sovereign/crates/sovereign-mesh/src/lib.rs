@@ -16,8 +16,10 @@
 //! `dm-daemon-mesh-edge` (2026-09-17; ralph/DECISIONS.md), and the `jobs`
 //! family (the auto-collaborate loop, the resume sweep, the ingest executor,
 //! the watched-folder scheduler, the job table, the watcher supervisor and the
-//! work donor) followed at `dm-daemon-mesh-jobs` (2026-09-17). Fabric keeps
-//! its own modules here; the host observes them through readers.
+//! work donor) followed at `dm-daemon-mesh-jobs` (2026-09-17), and its two
+//! adapters (`newsworthy_host`, `work_atlas_broadcaster`) at
+//! `dm-daemon-mesh-adapters` (2026-09-17). Fabric keeps its own modules here;
+//! the host observes them through readers.
 
 pub mod canonical_pull;
 pub mod capabilities;
@@ -62,9 +64,8 @@ pub mod mesh_discovery;
 /// rationale.
 #[cfg(feature = "mesh-sim")]
 pub mod mesh_sim;
-pub use sovereign_serving_host::model_fetch; // shim: moved by domains dm-serving-move-leaves
-pub mod newsworthy_host;
-pub(crate) use sovereign_scheduler::oicp_select; // shim: moved by domains REVIEW-build-sched-move
+pub(crate) use sovereign_scheduler::oicp_select;
+pub use sovereign_serving_host::model_fetch; // shim: moved by domains dm-serving-move-leaves // shim: moved by domains REVIEW-build-sched-move
 /// The mesh implementations of `sovereign-contracts::peer`'s two ports — the
 /// N>1 half of what the daemon speaks to its peers through (cw-lift 3b).
 pub mod peer_adapter;
@@ -96,7 +97,6 @@ pub use sovereign_scheduler::tier;
 pub use sovereign_serving_host::throughput_tracking; // shim: moved by domains REVIEW-build-serving-move-throughput-guest
 
 pub use sovereign_core::turn_approval; // shim: moved by domains dm-mesh-move-turn-approval
-pub mod work_atlas_broadcaster;
 pub use sovereign_serving_host::worker_eligibility; // shim: moved by domains dm-serving-move-leaves
                                                     // Ephemeral worker pods — owner-initiated TLS-pinned transport that
                                                     // replaces the full-mesh-pod path. Pods become single-owner workers,
@@ -109,4 +109,3 @@ pub use sovereign_serving_host::pinned_pod_snapshot; // shim: moved by domains R
 pub use sovereign_serving_host::pinned_worker_source; // shim: moved by domains REVIEW-build-serving-move-peer
 
 pub use state::MeshState;
-pub use work_atlas_broadcaster::MeshBroadcaster;

@@ -4060,7 +4060,7 @@ impl EmbeddedDaemon {
                     corpus_engine::update::newsworthy_watcher::NewsworthyConfig::default();
                 let host: std::sync::Arc<
                     dyn corpus_engine::update::newsworthy_watcher::NewsworthyHost,
-                > = std::sync::Arc::new(sovereign_mesh::newsworthy_host::MeshNewsworthyHost::new(
+                > = std::sync::Arc::new(crate::newsworthy_host::MeshNewsworthyHost::new(
                     app_state.clone(),
                     newsworthy_config.corpus_id.clone(),
                 ));

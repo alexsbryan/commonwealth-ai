@@ -1,0 +1,25 @@
+unit: dm-daemon-mesh-adapters
+commits: b6335cfaf (the move + repoints + re-keys)
+what: sovereign-mesh's two `adapters` (DC §4.3) moved to sovereign-daemon per
+  §3a — newsworthy_host.rs (647 lines, `corpus-engine`'s `NewsworthyHost` over
+  roster/identity/KV/engine) and work_atlas_broadcaster.rs (246 code / 252 raw,
+  `sovereign-work-atlas`'s `ClaimBroadcaster` over the rail). No shims:
+  `[[forbid]] sovereign-mesh -> sovereign-daemon` (quality/ARCH_LAYERS.toml, no
+  except) closes the shim direction, so every consumer repointed in the same
+  commit and mesh dropped the two `pub mod` lines and its
+  `pub use work_atlas_broadcaster::MeshBroadcaster`. Moved files' reaches to
+  modules that stay in mesh (`rail_kv_pump`, `ring_roster`) became
+  `sovereign_mesh::`; daemon.rs repointed to `crate::newsworthy_host::`;
+  sovereign-cli-daemon's bootstrap.rs to
+  `sovereign_daemon::work_atlas_broadcaster::MeshBroadcaster`. Doc mentions
+  repointed in corpus-engine (newsworthy_watcher.rs, INCREMENTAL_ATLAS.md,
+  ENRICHMENT_RATCHET.md), sovereign-work-atlas broadcast.rs,
+  sovereign/docs/WORK_ATLAS.md and SYSTEM_OVERVIEW §2. daemon Cargo.toml gained
+  `bytes` + `sovereign-work-atlas`; Cargo.lock follows. Registry re-keys: DT
+  `[[module]]` rows x2 (path only, counts unchanged); no baseline names either
+  file.
+checks: CLEAN exit=0 (5G, under 50G); LINT exit=0 (0 errors); LAYER exit=0
+  (380 internal edges, all down/sideways); DOCS exit=0 (1115 cited paths
+  resolve); TOML exit=0; CENSUS --self-test exit=0 (11/11);
+  TEST(sovereign-daemon) exit=0 (158 pass); TEST(sovereign-mesh) exit=0
+  (648 pass).
