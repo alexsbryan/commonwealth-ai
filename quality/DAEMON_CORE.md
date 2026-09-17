@@ -199,7 +199,7 @@ it.
 
 **Wired 2026-09-16 (Wave 0, `REVIEW-build-corpus-ceiling`).** The daemon now commissions its
 `Runtime` with `sensitive_corpora` = its own `LocalCorpusManager` and `corpus_principal` =
-`LocalOwnerPrincipal` (`sovereign-cli-daemon/src/daemon_cmd/principal.rs`), so the turn's ceiling is
+`LocalOwnerPrincipal` (`sovereign-daemon/src/principal.rs`), so the turn's ceiling is
 a resolved `Some(..)` rather than an absent `None`. `build_context` now takes a `PrincipalScope`
 and distinguishes "no resolver on this host" (`Unscoped`, single-user, ceiling absent) from "a
 resolver that could not name the caller" (`Unresolved`, ceiling `Some(empty)` — it refuses). The

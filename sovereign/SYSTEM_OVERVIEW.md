@@ -240,7 +240,7 @@ precision ride the baseline — no decider offers nanos.
 ```
 crates/
 ├── sovereign-core           # Traits, runtime, planner, executor, router, memory
-├── sovereign-inference      # llama.cpp slots, remote OpenAI-compat, hybrid w/ failover. **Residency became a policy at sv-surface (2026-09-11)**: `embedded/idle_slot.rs` is the one idleness decider — `IdleSlot<T>` holds a slot's weights in a cell that `sweep` may empty and `acquire` refills, with `slot_is_idle` the single predicate and `spawn_idle_monitor` the single loop, rather than a third and fourth inline copy of the primary monitor's (ARCH principle 8). It exists because the operator settled that the daemon is a MESH NODE and must stay available to peers while the app is closed, which makes an idle-EXIT policy impossible and idle-UNLOAD the only answer to resident RAM: `fast` (9B, 6.8 GB) and `embed` (0.6B, 1.1 GB) were pinned from boot with no monitor at all, ~8 GB held by a process nobody was using (note `f6e74737` measured it in 2026-05 and deferred it as F-LAZY). `[daemon] fast_idle_secs` / `embed_idle_secs` default to 900s — 15 minutes outlasts an in-session pause and is ~10x the worst observed cold load, deliberately clear of the thrash band that bit `primary_idle_secs=60` (note `419e273c`: 7 reload cycles a day, one of them an unload and reload 1s apart); `0` restores the pinned behaviour. THE UNIT OF RESIDENCY IS THE FAMILY, NOT THE SLOT, and that is the whole design problem: `fast`'s `Arc<LlamaModel>` is shared with `fast_short` (`from_existing_model`), with the coalescer's drain task, and with `primary` itself in alias mode — so dropping the slot frees a KV cache and leaves the weights. In alias mode the GB return only after BOTH `fast_idle_secs` and `primary_idle_secs` have fired, which means "fast unloaded" in the log is not yet "memory returned"; it is documented at the config field rather than left to be discovered. Two consequences worth knowing: `/status` now READS residency instead of reporting `resident: true` unconditionally (the same class of reporting lie `loaded_models: []` was), and `count_tokens` falls back to the project-wide ~4-chars/token heuristic while `fast` is cold rather than forcing a multi-GB synchronous load to count tokens — a substitution, named in a `tracing::debug!` and over-estimating, which is the safe direction for a budget (ARCH principle 6). The hot-reload path (`daemon_cmd/provider.rs`) arms the monitors too, and a census test pins that: a reloaded daemon that skipped them would silently re-acquire the pinned-forever footprint.
+├── sovereign-inference      # llama.cpp slots, remote OpenAI-compat, hybrid w/ failover. **Residency became a policy at sv-surface (2026-09-11)**: `embedded/idle_slot.rs` is the one idleness decider — `IdleSlot<T>` holds a slot's weights in a cell that `sweep` may empty and `acquire` refills, with `slot_is_idle` the single predicate and `spawn_idle_monitor` the single loop, rather than a third and fourth inline copy of the primary monitor's (ARCH principle 8). It exists because the operator settled that the daemon is a MESH NODE and must stay available to peers while the app is closed, which makes an idle-EXIT policy impossible and idle-UNLOAD the only answer to resident RAM: `fast` (9B, 6.8 GB) and `embed` (0.6B, 1.1 GB) were pinned from boot with no monitor at all, ~8 GB held by a process nobody was using (note `f6e74737` measured it in 2026-05 and deferred it as F-LAZY). `[daemon] fast_idle_secs` / `embed_idle_secs` default to 900s — 15 minutes outlasts an in-session pause and is ~10x the worst observed cold load, deliberately clear of the thrash band that bit `primary_idle_secs=60` (note `419e273c`: 7 reload cycles a day, one of them an unload and reload 1s apart); `0` restores the pinned behaviour. THE UNIT OF RESIDENCY IS THE FAMILY, NOT THE SLOT, and that is the whole design problem: `fast`'s `Arc<LlamaModel>` is shared with `fast_short` (`from_existing_model`), with the coalescer's drain task, and with `primary` itself in alias mode — so dropping the slot frees a KV cache and leaves the weights. In alias mode the GB return only after BOTH `fast_idle_secs` and `primary_idle_secs` have fired, which means "fast unloaded" in the log is not yet "memory returned"; it is documented at the config field rather than left to be discovered. Two consequences worth knowing: `/status` now READS residency instead of reporting `resident: true` unconditionally (the same class of reporting lie `loaded_models: []` was), and `count_tokens` falls back to the project-wide ~4-chars/token heuristic while `fast` is cold rather than forcing a multi-GB synchronous load to count tokens — a substitution, named in a `tracing::debug!` and over-estimating, which is the safe direction for a budget (ARCH principle 6). The hot-reload path (`sovereign-daemon/src/provider.rs`) arms the monitors too, and a census test pins that: a reloaded daemon that skipped them would silently re-acquire the pinned-forever footprint.
 ├── sovereign-store          # SQLite + Postgres + in-memory StateStore
 ├── sovereign-tools          # Built-in tools (search, knowledge, docs, web, MCP, code-intel)
 ├── sovereign-gliner         # GLiNER (ONNX) per-chunk entity extraction — own crate to keep the ONNX dep off the shared sovereign-tools. Two backends (v1 gline-rs, GLiNER2 bare-ort) behind `LabeledEntityExtractor`; `load_labeled_extractor` is the one selector
@@ -442,7 +442,7 @@ The catalog (`registry.toml`) lists 27 recipes: `wikipedia`,
 figures, installed BY TICKER under its own id: `[parameters.ticker]`
 feeds the `sec_edgar` custom acquirer in
 `sovereign-tools/src/sec_edgar.rs`, registered on the engine at
-`daemon_cmd/bootstrap.rs::build_corpus_engine`, which resolves
+`sovereign-daemon/src/bootstrap.rs::build_corpus_engine`, which resolves
 ticker -> CIK, selects the 10-K NAMING every in-window filing it skips,
 fetches the bytes, and then CALLS the decider (step 6) — `render` with
 `fiscal_years: None`, whose outputs `place_rendered` writes: `docs/facts/*.txt`
@@ -4637,7 +4637,7 @@ detected framework/test-command/model), `GET .../{id}` (state +
 rounds + result), `GET .../{id}/events` (SSE round/done), `DELETE`
 (cancel). Loopback-only; 1 job per workdir, 2 global; backend = the
 daemon's own `/v1/chat/completions`. Job host:
-`sovereign-cli-daemon/src/daemon_cmd/solve_http.rs`; MCP tools
+`sovereign-daemon/src/solve_http.rs`; MCP tools
 `solve` / `solve_status` / `solve_cancel` in `solve_tools.rs`; CLI
 `svrn solve <workdir> "goal" [--watch]`
 (`sovereign-cli-llm/src/solve_cmd.rs`). The synchronous
@@ -7194,7 +7194,7 @@ work pins the GPU while the user is chatting. Components:
   `src-tauri/Cargo.toml`, and the **attach construction floor goes 3 -> 0**
   (`tests/attach_construction_census.rs`). What went is one thing wearing three
   names: a full in-process `CorpusEngine` whose builder chain paired `.with_*`
-  for `.with_*` against `sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs`, over
+  for `.with_*` against `sovereign-daemon/src/bootstrap.rs`, over
   the same `~/.svrnmesh/{recipes,indexes}` root — the same recipes dir, indexes
   dir, embedding-model name, tiered provider, GLiNER extractor and `sec_edgar`
   acquirer as the daemon builds for itself.
@@ -7269,7 +7269,7 @@ work pins the GPU while the user is chatting. Components:
   **First run had to be measured before it could be designed, and the answer
   was not a route.** The sidecar cannot serve HTTP unconfigured: it exits 1
   with no config off a TTY (`daemon_cmd/mod.rs`), refuses a config with no
-  `[models]` (`daemon_cmd/build/inference.rs`), and the app reaches it only
+  `[models]` (`sovereign-daemon/src/build/inference.rs`), and the app reaches it only
   after the wizard wrote config (`serving_host::ensure_reachable`). Operator
   call: the wizard SPAWNS the sidecar's own `setup` verb, which links nothing.
   `svrn setup --plan --json` prints `{hardware, profile, catalog, fast, embed}`
@@ -8098,7 +8098,7 @@ Default ports:
 | Understand index storage on disk                 | `corpus-engine/src/index/mod.rs`                                    |
 | Understand the v2 atlas pipeline                 | [`corpus-engine/ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md) + `corpus-engine/src/enrichment/pipeline/mod.rs` |
 | Drive v2 enrichment from the CLI                 | `sovereign-cli-llm/src/enrich_cmd/`                                 |
-| Run an atlas build INSIDE the daemon (a shipped desktop has no CLI on PATH) | `enrich_now` (`sovereign-tools/src/local_corpus/atlas_dispatch.rs`) resolves the recipe's `[enrichment] type` through `EnrichmentPassRegistry` and routes the `atlas` pass to `EnrichmentDriver::start_atlas_build` → the host-installed `watched::enrich::AtlasBuildRunner` (`sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs::in_process_atlas_builder`, which links `sovereign-cli-llm` as a library); progress lands in `_enrichment_state.json`. `tiered` and recipe-less folders keep `start_tiered_build`. The subprocess runner (`sovereign-tools/src/enrich.rs`) is the fallback where no builder is installed. (ontology-v1 P0.4) |
+| Run an atlas build INSIDE the daemon (a shipped desktop has no CLI on PATH) | `enrich_now` (`sovereign-tools/src/local_corpus/atlas_dispatch.rs`) resolves the recipe's `[enrichment] type` through `EnrichmentPassRegistry` and routes the `atlas` pass to `EnrichmentDriver::start_atlas_build` → the host-installed `watched::enrich::AtlasBuildRunner` (`sovereign-daemon/src/atlas_builder.rs::in_process_atlas_builder`, which links `sovereign-cli-llm` as a library); progress lands in `_enrichment_state.json`. `tiered` and recipe-less folders keep `start_tiered_build`. The subprocess runner (`sovereign-tools/src/enrich.rs`) is the fallback where no builder is installed. (ontology-v1 P0.4) |
 | Understand the recipe registry                   | `corpus-engine/src/registry.rs` (+ `recipe.rs::bundled_recipe_toml`) |
 | Understand delta updates                         | `corpus-engine/src/update/delta.rs`                                 |
 | Understand scope expansion (filter delta)        | `corpus-engine/src/engine/expand.rs`                                |
@@ -8667,7 +8667,7 @@ What the re-freeze accepted, all of it already on `origin/main`:
 | RPC distribution | `sovereign-inference/src/embedded/rpc_distribution.rs` (3,154 → 3,388) | ggml-RPC-over-iroh is still open (§10.1c, 122B row); the seam moves with it. |
 | Refactor detector | `sovereign-cli-dev/src/refactor_cmd/detector.rs` (1,485 → 1,682) | Detector families (size/fan-in/duplication) grew as one pass; splits per family once the detector set stops growing. |
 | CLI-contract machinery | `sovereign-cli-shared/src/cli_contract.rs` (1,473 → 1,607) | Existing §10.1c row; the experience-axis work (`needs`/`--lacks` partition) is mid-flight. |
-| Daemon bootstrap | `sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs` (2,672 → 2,786) | Child-process supervision + RPC-worker spawn + manifest refresh cohere as one startup state machine; splits when the compute-child boundary takes the worker half. |
+| Daemon bootstrap | `sovereign-daemon/src/bootstrap.rs` (2,672 → 2,786) | Child-process supervision + RPC-worker spawn + manifest refresh cohere as one startup state machine; splits when the compute-child boundary takes the worker half. |
 | corpus-engine engine | `corpus-engine/src/engine/mod.rs` (3,804 → 3,879) | Under the 10-crate decomposition (`corpus-engine/DECOMPOSITION.md`); this file shrinks by carve-out, not by a local split. |
 | Newly oversized, no prior row | `sovereign-api/src/server.rs` (1,253), `sovereign-cli-daemon/src/setup_cmd/mod.rs` (1,287), `sovereign-serving-host/src/oicp_synthesis.rs` (1,266), `sovereign-cli/tests/main/cli_contract_journeys.rs` (1,201) | Four files crossed 1,200 during the 2026-08 arcs. All are within 90 lines of the ceiling and each splits along an obvious seam (route families, setup targets, synthesis stages, journey families) — first candidates when the queue is worked. |
 

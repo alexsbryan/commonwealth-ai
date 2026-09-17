@@ -8470,7 +8470,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-daemon/src/bootstrap.rs"
 context = "host"
-lines = 2869
+lines = 2861
 note = ""
 
 [[module]]
@@ -8500,7 +8500,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-daemon/src/discovery_policy.rs"
 context = "host"
-lines = 693
+lines = 689
 note = ""
 
 [[module]]
@@ -8552,6 +8552,12 @@ lines = 171
 note = ""
 
 [[module]]
+path = "sovereign/crates/sovereign-daemon/src/startup.rs"
+context = "host"
+lines = 77
+note = ""
+
+[[module]]
 path = "sovereign/crates/sovereign-daemon/src/tool_registry.rs"
 context = "host"
 lines = 433
@@ -8578,7 +8584,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-daemon/src/workspace.rs"
 context = "host"
-lines = 223
+lines = 230
 note = ""
 
 [[module]]
@@ -11561,6 +11567,12 @@ note = ""
 path = "sovereign/crates/sovereign-contracts/src/fim.rs"
 context = "kernel"
 lines = 842
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/git.rs"
+context = "kernel"
+lines = 35
 note = ""
 
 [[module]]
