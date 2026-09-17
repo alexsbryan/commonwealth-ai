@@ -50,7 +50,7 @@ use crate::common::TestProvider;
 // `RoutingOutcome` and hands it here, where it lands on a real
 // ContributionEmitter. After the stream drops, the emitter's MeshStore
 // retains the event for the assertion to read back.
-struct StubPeerSource {
+struct StubVenueSource {
     peers: Vec<InferenceVenue>,
     emitter: ContributionEmitter,
 }
@@ -70,14 +70,14 @@ impl LedgerEmitter for TestLedger {
 }
 
 #[async_trait]
-impl VenueSource for StubPeerSource {
+impl VenueSource for StubVenueSource {
     async fn candidates(&self) -> Vec<InferenceVenue> {
         self.peers.clone()
     }
 }
 
 #[async_trait]
-impl VenueHost for StubPeerSource {
+impl VenueHost for StubVenueSource {
     async fn ledger_emitter(&self) -> Option<Arc<dyn LedgerEmitter>> {
         Some(Arc::new(TestLedger {
             emitter: self.emitter.clone(),
@@ -210,7 +210,7 @@ async fn peer_routed_stream_emits_inference_received_on_drop() {
         gossip_last_seen_unix: 0,
         pinned_transport: false,
     }];
-    let peer_source = Arc::new(StubPeerSource {
+    let peer_source = Arc::new(StubVenueSource {
         peers,
         emitter: emitter.clone(),
     });
@@ -342,7 +342,7 @@ async fn peer_route_failure_without_chunks_does_not_emit_ledger_event() {
         gossip_last_seen_unix: 0,
         pinned_transport: false,
     }];
-    let peer_source = Arc::new(StubPeerSource {
+    let peer_source = Arc::new(StubVenueSource {
         peers: dead_peer,
         emitter: emitter.clone(),
     });

@@ -62,19 +62,19 @@ use crate::common::TestProvider;
 
 // ── Harness ─────────────────────────────────────────────────────
 
-struct StubPeerSource {
+struct StubVenueSource {
     peers: Vec<InferenceVenue>,
 }
 
 #[async_trait]
-impl VenueSource for StubPeerSource {
+impl VenueSource for StubVenueSource {
     async fn candidates(&self) -> Vec<InferenceVenue> {
         self.peers.clone()
     }
 }
 
 #[async_trait]
-impl VenueHost for StubPeerSource {}
+impl VenueHost for StubVenueSource {}
 
 const PEER_TEXT: &str = "Answer from the peer slot.";
 
@@ -266,10 +266,10 @@ fn build(peers: Vec<InferenceVenue>) -> (InferenceRouter, Arc<CaptureDecisionSin
     let sink: Arc<dyn DecisionSink> = capture.clone();
     let provider = InferenceRouter::with_peer_source(
         weak_local(),
-        Arc::new(StubPeerSource {
+        Arc::new(StubVenueSource {
             peers: peers.clone(),
         }) as Arc<dyn VenueSource>,
-        Arc::new(StubPeerSource { peers }) as Arc<dyn VenueHost>,
+        Arc::new(StubVenueSource { peers }) as Arc<dyn VenueHost>,
         Arc::new(sovereign_daemon::slot_manifest::CoreSlotManifest),
     )
     .with_decision_sink(sink);
@@ -633,10 +633,10 @@ async fn jsonl_capture_loads_back_as_a_replayable_trace() {
     let sink: Arc<dyn DecisionSink> = Arc::new(TracingDecisionSink::to_path(&path).unwrap());
     let provider = InferenceRouter::with_peer_source(
         weak_local(),
-        Arc::new(StubPeerSource {
+        Arc::new(StubVenueSource {
             peers: vec![peer_endpoint("hub", addr, 14)],
         }) as Arc<dyn VenueSource>,
-        Arc::new(StubPeerSource {
+        Arc::new(StubVenueSource {
             peers: vec![peer_endpoint("hub", addr, 14)],
         }) as Arc<dyn VenueHost>,
         Arc::new(sovereign_daemon::slot_manifest::CoreSlotManifest),
@@ -714,10 +714,10 @@ async fn the_sink_does_not_change_the_routing_decision() {
     let (with_capture, _) = build(vec![peer_endpoint("hub", addr, 11)]);
     let silent = InferenceRouter::with_peer_source(
         weak_local(),
-        Arc::new(StubPeerSource {
+        Arc::new(StubVenueSource {
             peers: vec![peer_endpoint("hub", addr, 11)],
         }) as Arc<dyn VenueSource>,
-        Arc::new(StubPeerSource {
+        Arc::new(StubVenueSource {
             peers: vec![peer_endpoint("hub", addr, 11)],
         }) as Arc<dyn VenueHost>,
         Arc::new(sovereign_daemon::slot_manifest::CoreSlotManifest),
@@ -1013,10 +1013,10 @@ async fn the_local_candidate_is_scored_on_this_nodes_real_in_flight_count() {
         let publisher = Arc::new(AtomicU32::new(0));
         let provider = InferenceRouter::with_peer_source_and_publisher(
             weak_local(),
-            Arc::new(StubPeerSource {
+            Arc::new(StubVenueSource {
                 peers: vec![peer_endpoint("hub", addr, 12)],
             }) as Arc<dyn VenueSource>,
-            Arc::new(StubPeerSource {
+            Arc::new(StubVenueSource {
                 peers: vec![peer_endpoint("hub", addr, 12)],
             }) as Arc<dyn VenueHost>,
             Arc::new(sovereign_daemon::slot_manifest::CoreSlotManifest),
