@@ -23,7 +23,7 @@
 
 pub mod canonical_pull;
 pub mod capabilities;
-pub mod commit_harvest;
+pub use corpus_engine_watchers::commit_harvest; // shim: moved by domains dm-mesh-workbench-move-watchers
 /// Routing decision records — Phase 0 (P1/P2) of
 /// `docs/specs/SCHEDULER_QUALITY.md`. One structured record per
 /// routing decision (full candidate set, every scorer input stamped

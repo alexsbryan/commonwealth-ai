@@ -1296,3 +1296,63 @@ retired. The morning should read this entry first.
 **Landed in.** this commit — `ralph/DECISIONS.md` (this entry) and
 `ralph/NEEDS_HUMAN.md` restored (untracked; `.git/info/exclude:21`). `git
 revert <sha>` reverts the record alone; the package is a file, not a commit.
+
+## 2026-09-17 · dm-mesh-workbench-move-watchers · two of the three files need an operator-only gate decision; commit_harvest lands, the other two defer
+
+**Fork.** The row moves `commit_harvest.rs` (481), `projects.rs` (674) and
+`reindexer.rs` (2,150) into `corpus-engine-watchers`. Measured, two of the three
+cannot land and each resolution is a gate decision the charter leaves to the
+operator: (a) do the full move and land three red gates; (b) move the one legal
+file now and record the ask; (c) stop with a package.
+
+**Choice.** (b). §6 (2026-09-17) makes a false premise mine to correct, and this
+correction takes no gate decision — no `except`, no pass bar, no `HUMAN-` row —
+so `commit_harvest.rs` moves (it adds no dependency: corpus-engine-notes,
+tracing and tempfile are already carried) and the other two defer with the
+decision recorded here. Their resolution IS an operator act: §7 forbids
+re-baselining a ratchet and §6's hard stops name an `[[exception]]`, so this
+entry states the ask instead of guessing it.
+
+**Evidence** (reproduced this session; paths under the worktree root).
+- The row calls `corpus_engine::facts` a *test* reach; it is production:
+  `grep -n 'corpus_engine::' sovereign/crates/sovereign-mesh/src/reindexer.rs`
+  → `:650 use corpus_engine::facts::{...}` and `:708
+  corpus_engine::facts_store::FactStore::open`, both inside `run_overlay_merge`
+  (a plain `async fn`); the `#[cfg(test)] mod tests` starts at `:1517`.
+- `corpus-engine-watchers` is a code-intel `[[package]]` crate
+  (`quality/ARCH_LAYERS.toml:963-976`). Adding `corpus-engine` to it prints
+  `✗ [code-intel] corpus-engine-watchers → corpus-engine: a normal dependency
+  leaves the package closure (docs/CODE_TOOLING_BOUNDARY.md)` and
+  `boundary-gate FAILED (1 violation(s))` (exit 1) — reproduced with a one-line
+  manifest experiment, then reverted. Clean tree: exit 0.
+- The full move also fails the fan-in ratchet twice: `✗ fan-in of
+  sovereign-contracts grew 31 → 32` (from `projects.rs:364
+  sovereign_contracts::rebrand::projects_json()`) and `✗ fan-in of
+  corpus-engine grew 20 → 21` (from `reindexer.rs`). `quality/baselines/fan_in.tsv`
+  caps sovereign-contracts at `31` (`:11`) and corpus-engine at `20` (`:4`).
+- No re-export reaches either fact (the ARCH-11 move): `corpus-engine-yield`'s
+  `[dependencies]` is empty by contract, and `corpus-engine-notes` names
+  neither `corpus-engine` nor `sovereign-contracts`.
+- Landed: `CLEAN exit=0`; `LINT exit=0` (11 crates, 0 errors); `LAYER exit=0`
+  (fan-in within caps).
+
+**Falsified by.** An operator `[[exception]]` carrying `package = "code-intel"`
+for `corpus-engine-watchers -> corpus-engine` plus a `fan_in.tsv` raise
+(corpus-engine 20→21, sovereign-contracts 31→32) — then the row executes whole;
+or a showing that `corpus_engine::facts` is reachable from a package crate today
+(it is not: `corpus-engine-scip` exports no facts, and a
+`corpus-engine-scip -> corpus-engine` edge is a CYCLE, because
+`corpus-engine/treesitter` depends on `corpus-engine-scip`).
+
+**REVIEW-AFTER:** the destination itself. `corpus-engine-watchers` is in the
+`build-feedback` context (`quality/DOMAINS.toml:216-229`, `package = ""`) yet
+`quality/ARCH_LAYERS.toml:963-976` puts it in the code-intel `[[package]]`; the
+workbench cluster's dest is the watchers crate while the workbench context's
+crates are `corpus-engine-scip`/`-sections`/`code-next-edit`. A reviewer may
+prefer the whole cluster wait for the `code-facts` carve-out
+(`docs/CODE_TOOLING_BOUNDARY.md` §2) that would make `facts` package-legal, or
+send `reindexer.rs` to `corpus-engine` (ratchet- and package-legal, but it grows
+the god-crate the campaign is decomposing).
+
+**Landed in.** `a23d8b663` (the move) and this commit (the row correction, this
+entry, and `ralph/lanes/dm-mesh-workbench-move-watchers.done`).

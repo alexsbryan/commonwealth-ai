@@ -108,6 +108,11 @@ sovereign-serving-host = { path = "../sovereign-serving-host" }
 # gossip, etc.) don't pull the 5 tree-sitter grammar crates.
 corpus-engine = { workspace = true }
 corpus-engine-notes = { workspace = true }
+# `commit_harvest` moved to the watchers crate (domains
+# dm-mesh-workbench-move-watchers); the lib.rs shim re-exports it so
+# `sovereign_mesh::commit_harvest::*` keeps resolving, and `reindexer` reads
+# `crate::commit_harvest::harvest_between` through it.
+corpus-engine-watchers = { workspace = true }
 # SCIP call graph + exporter dispatch. Carved out of corpus-engine
 # 2026-05-23 — reindexer.rs uses ScipGraph + scip_export directly.
 corpus-engine-scip = { workspace = true }
