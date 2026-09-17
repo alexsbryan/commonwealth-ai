@@ -268,6 +268,17 @@ build = `cargo build --workspace`.
 | kernel-types `quality/instruments.rs` | 26.5 | 4.3 | 34.7 |
 | **sum** | **227.5** | **1130.2** | **210.6** |
 
+The file inside a crate barely matters, which is why the ruler's unit is
+the crate: a second file in the same crate, measured the same way, gives
+mesh `turn_http.rs` 8.6 + 12.3 s against `daemon.rs` 9.1 + 15.0, and core
+`runtime/grounding/mod.rs` 17.4 + 14.7 s against `deep_research/mod.rs`
+17.7 + 15.8. Lint is identical to the band; the focused test moves by up
+to 3 s with what incremental codegen happens to reuse. The ten crates of
+the first table cover 66% of the 30 days' `.rs` file-edits and 60% of
+crate-commits; the ruler is extended by `scripts/build-probe/probes.py` to
+the crates that carry 92% of file-edits, mechanically, and the eleven
+original rows are kept verbatim.
+
 A/A on the warm column: 229.0 vs 227.5, band 0.66%, largest per-file
 difference 1.3 s; the bank band is 3%. The cold full gates that precede the
 fresh column cost lint 226 s, test 473 s, build 226 s. The fresh column is
