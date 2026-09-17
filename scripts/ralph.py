@@ -43,6 +43,9 @@ def say(msg: str) -> None:
 
 
 def notify(title: str, body: str, enabled: bool = True) -> None:
+    """Titles carry the tier so a popup says who must act (2026-09-17):
+    "OPERATOR — …" a human act is required; "auto — …" the loop is handling it
+    (a director dispatch, a retry); "DONE" / "stopped" are terminal."""
     if not enabled:
         return
     try:
@@ -84,10 +87,10 @@ def halt(paths, reason, *, notifier=notify, notify_enabled=True):
                    f"{paths.stop} {paths.needs_human}\n")
     if not pkg.stat().st_size:
         say(f"HALT could not write {pkg} (disk full?) — no decision package exists")
-        notifier("halt-unwritable", reason, notify_enabled)
+        notifier("OPERATOR — halt unwritable", reason, notify_enabled)
     paths.p(paths.stop).write_text(f"halt: {reason}\n")
     say(f"HALT: {reason}")
-    notifier("HALT", reason, notify_enabled)
+    notifier("auto — halted, director next", reason, notify_enabled)
     return Result(Outcome.HALT, reason)
 
 
@@ -431,7 +434,7 @@ class Session:
                 break
         if proc.poll() is None:
             say(f"session exceeded {self.timeout}s — killing its group")
-            self.notifier("timeout", f"killed at {self.timeout}s", self.notify_enabled)
+            self.notifier("auto — session timeout", f"killed at {self.timeout}s", self.notify_enabled)
             self._kill(proc)
         rc = proc.wait()
         self.heartbeat(f"session-end {self.paths.workdir.name}")
@@ -441,7 +444,7 @@ class Session:
             rejects = 0
         if rejects:
             say(f"WARNING: {rejects} permission auto-rejections — extend opencode.json")
-            self.notifier("permissions", f"{rejects} auto-rejections", self.notify_enabled)
+            self.notifier("auto — permission rejects", f"{rejects} auto-rejections", self.notify_enabled)
         _ACTIVE_SESSIONS.discard(proc)
         return rc
 
@@ -578,7 +581,7 @@ class Supervisor:
     def terminal_stop(self):
         if self.paths.p(self.paths.done).exists():
             say("supervisor: campaign DONE")
-            self.notifier("DONE", "campaign complete", self.notify_enabled)
+            self.notifier("DONE — campaign complete", "every row is [x]", self.notify_enabled)
             return 0
         stop = self.paths.p(self.paths.stop)
         pkg = self.paths.p(self.paths.needs_human)
@@ -587,7 +590,7 @@ class Supervisor:
         # the supervisor dispatching resolutions (2026-09-16).
         if stop.exists() and not stop.stat().st_size:
             say("supervisor: operator STOP — leaving it stopped")
-            self.notifier("STOP", "operator stop preserved", self.notify_enabled)
+            self.notifier("stopped — operator stop preserved", self.paths.stop, self.notify_enabled)
             return 0
         if stop.exists() and stop.stat().st_size and not (pkg.exists() and pkg.stat().st_size):
             pkg.write_text(f"{stop.read_text()}\nresolve by hand, then remove "
@@ -597,7 +600,7 @@ class Supervisor:
         unit = queue.current() if queue else None
         if unit is not None and unit.id.startswith("HUMAN-"):
             say(f"supervisor: operator approval required — {unit.id} (no resolution session)")
-            self.notifier("NEEDS_HUMAN", f"approval required: {unit.id}", self.notify_enabled)
+            self.notifier("OPERATOR — approval required", f"{unit.id} is a HUMAN row at the head; approve or mark it", self.notify_enabled)
             return 2
         return None
 
@@ -623,7 +626,8 @@ class Supervisor:
             if attempt > self.resolve_max:
                 say(f"supervisor: {self.resolve_max} resolution attempts did not clear it "
                     "— leaving it to the operator")
-                self.notifier("supervisor", f"unresolved after {self.resolve_max}: {reason}",
+                self.notifier("OPERATOR — unresolved after "
+                              f"{self.resolve_max} resolutions", reason,
                               self.notify_enabled)
                 return 2
             pkg_before = file_hash(pkg)
@@ -632,7 +636,7 @@ class Supervisor:
             if pkg.exists() and pkg.stat().st_size:
                 stop_file.unlink(missing_ok=True)
             say(f"supervisor: dispatching resolution session {attempt} — {reason}")
-            self.notifier("resolving", f"attempt {attempt}: {reason}", self.notify_enabled)
+            self.notifier("auto — resolving", f"attempt {attempt}: {reason}", self.notify_enabled)
             self.resolver_run(attempt, reason)
             head_after = head_of(self.paths.workdir)
             if head_after and head_after != head_before:
@@ -645,7 +649,7 @@ class Supervisor:
             if pkg.exists() and pkg.stat().st_size:
                 if file_hash(pkg) == pkg_before and head_of(self.paths.workdir) == head_before:
                     say(f"supervisor: resolution {attempt} changed nothing — escalating")
-                    self.notifier("escalate", f"resolution achieved nothing: {reason}",
+                    self.notifier("OPERATOR — resolution achieved nothing", reason,
                                   self.notify_enabled)
                     return 2
                 say(f"supervisor: resolution {attempt} left NEEDS_HUMAN — retrying")
@@ -740,7 +744,7 @@ class Pool:
             if queue.all_done():
                 self.paths.p(self.paths.done).write_text("")
                 say("pool: DONE — all units [x]")
-                self.notifier("DONE", "pool complete", self.notify_enabled)
+                self.notifier("DONE — pool complete", "every row is [x]", self.notify_enabled)
                 return 0
             marker = wait_for_marker(self.paths, self.marker_timeout)
             if marker is not None and marker != "wait":
@@ -810,7 +814,7 @@ class Pool:
             pkg = self.paths.p(self.paths.needs_human)
             if pkg.exists() and pkg.stat().st_size:
                 say(f"pool: review {review.id} left NEEDS_HUMAN.md — stopping for the director")
-                self.notifier("NEEDS_HUMAN", first_line(pkg), self.notify_enabled)
+                self.notifier("auto — halt package, director next", first_line(pkg), self.notify_enabled)
                 return 3
             marker = wait_for_marker(self.paths, self.marker_timeout)
             if marker == "wait":
@@ -883,7 +887,7 @@ class Pool:
                 main_pkg.write_text(f"# lane {unit} left this package "
                                     f"({lane_pkg})\n\n" + lane_pkg.read_text())
                 say(f"pool: lane {unit} left NEEDS_HUMAN.md — stopping for the director")
-                self.notifier("NEEDS_HUMAN", first_line(lane_pkg), self.notify_enabled)
+                self.notifier("auto — halt package, director next", first_line(lane_pkg), self.notify_enabled)
                 return 3
             if not (wt / "ralph" / "lanes" / f"{unit}.done").exists():
                 # A lane that keeps ending without its marker would otherwise be
@@ -982,8 +986,14 @@ class Watch:
             return None
         cond, body = condition
         if cond != last_cond or now - last_ts >= nag_secs:
-            title = {"needs-human": "needs human", "down": "loop down",
-                     "stalled": "loop stalled", "disk-low": "disk low"}[cond.split(":")[0]]
+            base = cond.split(":")[0]
+            if base == "needs-human" and not self.running():
+                title = "OPERATOR — halt package, loop down"
+            else:
+                title = {"needs-human": "auto — halt package (loop running)",
+                         "down": "OPERATOR — loop down",
+                         "stalled": "auto — no heartbeat",
+                         "disk-low": "OPERATOR — disk low"}[base]
             if self.dry:
                 print(f"notify: {title}: {body}")
             else:
