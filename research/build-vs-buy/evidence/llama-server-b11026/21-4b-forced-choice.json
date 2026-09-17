@@ -1,0 +1,463 @@
+{
+ "native_default": {
+  "http": 200,
+  "content": "A",
+  "completion_probabilities": [
+   {
+    "id": 32,
+    "token": "A",
+    "bytes": [
+     65
+    ],
+    "logprob": -13.896711349487305,
+    "top_logprobs": [
+     {
+      "id": 248068,
+      "token": "<think>",
+      "bytes": [
+       60,
+       116,
+       104,
+       105,
+       110,
+       107,
+       62
+      ],
+      "logprob": -2.1219479094725102e-05
+     },
+     {
+      "id": 248069,
+      "token": "</think>",
+      "bytes": [
+       60,
+       47,
+       116,
+       104,
+       105,
+       110,
+       107,
+       62
+      ],
+      "logprob": -12.030538558959961
+     },
+     {
+      "id": 16,
+      "token": "1",
+      "bytes": [
+       49
+      ],
+      "logprob": -12.043964385986328
+     },
+     {
+      "id": 760,
+      "token": "The",
+      "bytes": [
+       84,
+       104,
+       101
+      ],
+      "logprob": -13.479974746704102
+     },
+     {
+      "id": 27,
+      "token": "<",
+      "bytes": [
+       60
+      ],
+      "logprob": -13.529376983642578
+     },
+     {
+      "id": 32,
+      "token": "A",
+      "bytes": [
+       65
+      ],
+      "logprob": -13.896711349487305
+     },
+     {
+      "id": 332,
+      "token": "**",
+      "bytes": [
+       42,
+       42
+      ],
+      "logprob": -13.920784950256348
+     },
+     {
+      "id": 1,
+      "token": "\"",
+      "bytes": [
+       34
+      ],
+      "logprob": -14.274083137512207
+     },
+     {
+      "id": 17,
+      "token": "2",
+      "bytes": [
+       50
+      ],
+      "logprob": -14.493449211120605
+     },
+     {
+      "id": 26,
+      "token": ";",
+      "bytes": [
+       59
+      ],
+      "logprob": -14.54332160949707
+     }
+    ]
+   }
+  ],
+  "top_level_keys": [
+   "completion_probabilities",
+   "content",
+   "generation_settings",
+   "has_new_line",
+   "id_slot",
+   "index",
+   "model",
+   "prompt",
+   "stop",
+   "stop_type",
+   "stopping_word",
+   "timings",
+   "tokens",
+   "tokens_cached",
+   "tokens_evaluated",
+   "tokens_predicted",
+   "truncated"
+  ]
+ },
+ "native_post_sampling_probs": {
+  "http": 200,
+  "content": "A",
+  "completion_probabilities": [
+   {
+    "id": 32,
+    "token": "A",
+    "bytes": [
+     65
+    ],
+    "prob": 1.0,
+    "top_probs": [
+     {
+      "id": 32,
+      "token": "A",
+      "bytes": [
+       65
+      ],
+      "prob": 1.0
+     }
+    ]
+   }
+  ],
+  "top_level_keys": [
+   "completion_probabilities",
+   "content",
+   "generation_settings",
+   "has_new_line",
+   "id_slot",
+   "index",
+   "model",
+   "prompt",
+   "stop",
+   "stop_type",
+   "stopping_word",
+   "timings",
+   "tokens",
+   "tokens_cached",
+   "tokens_evaluated",
+   "tokens_predicted",
+   "truncated"
+  ]
+ },
+ "native_no_grammar": {
+  "http": 200,
+  "content": "<think>",
+  "completion_probabilities": [
+   {
+    "id": 248068,
+    "token": "<think>",
+    "bytes": [
+     60,
+     116,
+     104,
+     105,
+     110,
+     107,
+     62
+    ],
+    "logprob": -2.1219479094725102e-05,
+    "top_logprobs": [
+     {
+      "id": 248068,
+      "token": "<think>",
+      "bytes": [
+       60,
+       116,
+       104,
+       105,
+       110,
+       107,
+       62
+      ],
+      "logprob": -2.1219479094725102e-05
+     },
+     {
+      "id": 248069,
+      "token": "</think>",
+      "bytes": [
+       60,
+       47,
+       116,
+       104,
+       105,
+       110,
+       107,
+       62
+      ],
+      "logprob": -12.030538558959961
+     },
+     {
+      "id": 16,
+      "token": "1",
+      "bytes": [
+       49
+      ],
+      "logprob": -12.043964385986328
+     },
+     {
+      "id": 760,
+      "token": "The",
+      "bytes": [
+       84,
+       104,
+       101
+      ],
+      "logprob": -13.479974746704102
+     },
+     {
+      "id": 27,
+      "token": "<",
+      "bytes": [
+       60
+      ],
+      "logprob": -13.529376983642578
+     },
+     {
+      "id": 32,
+      "token": "A",
+      "bytes": [
+       65
+      ],
+      "logprob": -13.896711349487305
+     },
+     {
+      "id": 332,
+      "token": "**",
+      "bytes": [
+       42,
+       42
+      ],
+      "logprob": -13.920784950256348
+     },
+     {
+      "id": 1,
+      "token": "\"",
+      "bytes": [
+       34
+      ],
+      "logprob": -14.274083137512207
+     },
+     {
+      "id": 17,
+      "token": "2",
+      "bytes": [
+       50
+      ],
+      "logprob": -14.493449211120605
+     },
+     {
+      "id": 26,
+      "token": ";",
+      "bytes": [
+       59
+      ],
+      "logprob": -14.54332160949707
+     }
+    ]
+   }
+  ],
+  "top_level_keys": [
+   "completion_probabilities",
+   "content",
+   "generation_settings",
+   "has_new_line",
+   "id_slot",
+   "index",
+   "model",
+   "prompt",
+   "stop",
+   "stop_type",
+   "stopping_word",
+   "timings",
+   "tokens",
+   "tokens_cached",
+   "tokens_evaluated",
+   "tokens_predicted",
+   "truncated"
+  ]
+ },
+ "chat_logprobs_grammar": {
+  "http": 200,
+  "message": {
+   "role": "assistant",
+   "content": "",
+   "reasoning_content": "A"
+  },
+  "logprobs": {
+   "content": [
+    {
+     "id": 32,
+     "token": "A",
+     "bytes": [
+      65
+     ],
+     "logprob": -8.128730773925781,
+     "top_logprobs": [
+      {
+       "id": 9764,
+       "token": "Let",
+       "bytes": [
+        76,
+        101,
+        116
+       ],
+       "logprob": -0.8296259045600891
+      },
+      {
+       "id": 760,
+       "token": "The",
+       "bytes": [
+        84,
+        104,
+        101
+       ],
+       "logprob": -1.366641879081726
+      },
+      {
+       "id": 16,
+       "token": "1",
+       "bytes": [
+        49
+       ],
+       "logprob": -2.5164639949798584
+      },
+      {
+       "id": 40,
+       "token": "I",
+       "bytes": [
+        73
+       ],
+       "logprob": -2.8620336055755615
+      },
+      {
+       "id": 90700,
+       "token": "Thinking",
+       "bytes": [
+        84,
+        104,
+        105,
+        110,
+        107,
+        105,
+        110,
+        103
+       ],
+       "logprob": -2.8662469387054443
+      }
+     ]
+    }
+   ]
+  },
+  "error": null
+ },
+ "chat_logprobs_no_grammar": {
+  "http": 200,
+  "message": {
+   "role": "assistant",
+   "content": "",
+   "reasoning_content": "Let"
+  },
+  "logprobs": {
+   "content": [
+    {
+     "id": 9764,
+     "token": "Let",
+     "bytes": [
+      76,
+      101,
+      116
+     ],
+     "logprob": -0.8296259045600891,
+     "top_logprobs": [
+      {
+       "id": 9764,
+       "token": "Let",
+       "bytes": [
+        76,
+        101,
+        116
+       ],
+       "logprob": -0.8296259045600891
+      },
+      {
+       "id": 760,
+       "token": "The",
+       "bytes": [
+        84,
+        104,
+        101
+       ],
+       "logprob": -1.366641879081726
+      },
+      {
+       "id": 16,
+       "token": "1",
+       "bytes": [
+        49
+       ],
+       "logprob": -2.5164639949798584
+      },
+      {
+       "id": 40,
+       "token": "I",
+       "bytes": [
+        73
+       ],
+       "logprob": -2.8620336055755615
+      },
+      {
+       "id": 90700,
+       "token": "Thinking",
+       "bytes": [
+        84,
+        104,
+        105,
+        110,
+        107,
+        105,
+        110,
+        103
+       ],
+       "logprob": -2.8662469387054443
+      }
+     ]
+    }
+   ]
+  },
+  "error": null
+ }
+}

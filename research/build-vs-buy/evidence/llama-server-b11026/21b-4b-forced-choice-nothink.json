@@ -1,0 +1,400 @@
+{
+ "native_pre_grammar_default_temp0": {
+  "http": 200,
+  "content": "B",
+  "completion_probabilities": [
+   {
+    "id": 33,
+    "token": "B",
+    "bytes": [
+     66
+    ],
+    "logprob": -0.26706916093826294,
+    "top_logprobs": [
+     {
+      "id": 33,
+      "token": "B",
+      "bytes": [
+       66
+      ],
+      "logprob": -0.26706916093826294
+     },
+     {
+      "id": 332,
+      "token": "**",
+      "bytes": [
+       42,
+       42
+      ],
+      "logprob": -2.6045591831207275
+     },
+     {
+      "id": 32,
+      "token": "A",
+      "bytes": [
+       65
+      ],
+      "logprob": -2.911510705947876
+     },
+     {
+      "id": 760,
+      "token": "The",
+      "bytes": [
+       84,
+       104,
+       101
+      ],
+      "logprob": -3.528883218765259
+     },
+     {
+      "id": 57590,
+      "token": "Paris",
+      "bytes": [
+       80,
+       97,
+       114,
+       105,
+       115
+      ],
+      "logprob": -4.099489688873291
+     },
+     {
+      "id": 248068,
+      "token": "<think>",
+      "bytes": [
+       60,
+       116,
+       104,
+       105,
+       110,
+       107,
+       62
+      ],
+      "logprob": -4.492868900299072
+     },
+     {
+      "id": 27,
+      "token": "<",
+      "bytes": [
+       60
+      ],
+      "logprob": -4.915050506591797
+     },
+     {
+      "id": 2665,
+      "token": "No",
+      "bytes": [
+       78,
+       111
+      ],
+      "logprob": -4.9617695808410645
+     },
+     {
+      "id": 9764,
+      "token": "Let",
+      "bytes": [
+       76,
+       101,
+       116
+      ],
+      "logprob": -5.537777423858643
+     },
+     {
+      "id": 15666,
+      "token": "Answer",
+      "bytes": [
+       65,
+       110,
+       115,
+       119,
+       101,
+       114
+      ],
+      "logprob": -6.121602535247803
+     }
+    ]
+   }
+  ]
+ },
+ "native_post_sampling_temp1_open_samplers": {
+  "http": 200,
+  "content": "B",
+  "completion_probabilities": [
+   {
+    "id": 33,
+    "token": "B",
+    "bytes": [
+     66
+    ],
+    "prob": 0.7652451992034912,
+    "top_probs": [
+     {
+      "id": 33,
+      "token": "B",
+      "bytes": [
+       66
+      ],
+      "prob": 0.7652451992034912
+     },
+     {
+      "id": 332,
+      "token": "**",
+      "bytes": [
+       42,
+       42
+      ],
+      "prob": 0.07389950752258301
+     },
+     {
+      "id": 32,
+      "token": "A",
+      "bytes": [
+       65
+      ],
+      "prob": 0.05436685308814049
+     },
+     {
+      "id": 760,
+      "token": "The",
+      "bytes": [
+       84,
+       104,
+       101
+      ],
+      "prob": 0.029323292896151543
+     },
+     {
+      "id": 57590,
+      "token": "Paris",
+      "bytes": [
+       80,
+       97,
+       114,
+       105,
+       115
+      ],
+      "prob": 0.016573017463088036
+     },
+     {
+      "id": 248068,
+      "token": "<think>",
+      "bytes": [
+       60,
+       116,
+       104,
+       105,
+       110,
+       107,
+       62
+      ],
+      "prob": 0.01118302159011364
+     },
+     {
+      "id": 27,
+      "token": "<",
+      "bytes": [
+       60
+      ],
+      "prob": 0.007331753149628639
+     },
+     {
+      "id": 2665,
+      "token": "No",
+      "bytes": [
+       78,
+       111
+      ],
+      "prob": 0.006997101940214634
+     },
+     {
+      "id": 9764,
+      "token": "Let",
+      "bytes": [
+       76,
+       101,
+       116
+      ],
+      "prob": 0.003933337051421404
+     },
+     {
+      "id": 15666,
+      "token": "Answer",
+      "bytes": [
+       65,
+       110,
+       115,
+       119,
+       101,
+       114
+      ],
+      "prob": 0.002193861175328493
+     }
+    ]
+   }
+  ]
+ },
+ "native_post_sampling_temp0": {
+  "http": 200,
+  "content": "B",
+  "completion_probabilities": [
+   {
+    "id": 33,
+    "token": "B",
+    "bytes": [
+     66
+    ],
+    "prob": 1.0,
+    "top_probs": [
+     {
+      "id": 33,
+      "token": "B",
+      "bytes": [
+       66
+      ],
+      "prob": 1.0
+     }
+    ]
+   }
+  ]
+ },
+ "chat_logprobs_grammar_nothink": {
+  "http": 200,
+  "message": {
+   "role": "assistant",
+   "content": "",
+   "reasoning_content": "A"
+  },
+  "logprobs": {
+   "content": [
+    {
+     "id": 32,
+     "token": "A",
+     "bytes": [
+      65
+     ],
+     "logprob": -8.902609825134277,
+     "top_logprobs": [
+      {
+       "id": 9764,
+       "token": "Let",
+       "bytes": [
+        76,
+        101,
+        116
+       ],
+       "logprob": -0.6308771967887878
+      },
+      {
+       "id": 760,
+       "token": "The",
+       "bytes": [
+        84,
+        104,
+        101
+       ],
+       "logprob": -1.6760928630828857
+      },
+      {
+       "id": 16,
+       "token": "1",
+       "bytes": [
+        49
+       ],
+       "logprob": -2.380150556564331
+      },
+      {
+       "id": 40,
+       "token": "I",
+       "bytes": [
+        73
+       ],
+       "logprob": -2.972864866256714
+      },
+      {
+       "id": 1919,
+       "token": "This",
+       "bytes": [
+        84,
+        104,
+        105,
+        115
+       ],
+       "logprob": -2.9907901287078857
+      }
+     ]
+    }
+   ]
+  },
+  "error": null
+ },
+ "chat_logprobs_grammar_nothink_temp1": {
+  "http": 200,
+  "message": {
+   "role": "assistant",
+   "content": "",
+   "reasoning_content": "A"
+  },
+  "logprobs": {
+   "content": [
+    {
+     "id": 32,
+     "token": "A",
+     "bytes": [
+      65
+     ],
+     "logprob": -8.902609825134277,
+     "top_logprobs": [
+      {
+       "id": 9764,
+       "token": "Let",
+       "bytes": [
+        76,
+        101,
+        116
+       ],
+       "logprob": -0.6308771967887878
+      },
+      {
+       "id": 760,
+       "token": "The",
+       "bytes": [
+        84,
+        104,
+        101
+       ],
+       "logprob": -1.6760928630828857
+      },
+      {
+       "id": 16,
+       "token": "1",
+       "bytes": [
+        49
+       ],
+       "logprob": -2.380150556564331
+      },
+      {
+       "id": 40,
+       "token": "I",
+       "bytes": [
+        73
+       ],
+       "logprob": -2.972864866256714
+      },
+      {
+       "id": 1919,
+       "token": "This",
+       "bytes": [
+        84,
+        104,
+        105,
+        115
+       ],
+       "logprob": -2.9907901287078857
+      }
+     ]
+    }
+   ]
+  },
+  "error": null
+ }
+}

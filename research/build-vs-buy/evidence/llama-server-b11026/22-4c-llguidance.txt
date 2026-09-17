@@ -1,0 +1,13 @@
+### 4c llguidance via /completion grammar
+ [http=000]
+### 4c llguidance via chat grammar
+ [http=000]
+### control: same GBNF
+### apply-template
+
+### apply-template enable_thinking=false
+
+### 4c llguidance via /v1/chat/completions grammar field
+ [http=000] curl_exit=52
+server process gone
+/Users/runner/work/llama.cpp/llama.cpp/common/sampling.cpp:217: llguidance (cmake -DLLAMA_LLGUIDANCE=ON) is not enabled

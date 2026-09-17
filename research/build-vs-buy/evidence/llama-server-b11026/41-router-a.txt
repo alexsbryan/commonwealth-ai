@@ -1,0 +1,22 @@
+### T0 GET /models (full first entry for shape)
+{"id":"qwen35-2b","aliases":[],"tags":[],"object":"model","owned_by":"llamacpp","created":1789662751,"status":{"value":"unloaded","args":["$EVIDENCE/mac/llama-b11026/llama-server","--host","127.0.0.1","--metrics","--offline","--port","0","--sleep-idle-seconds","30","--alias","qwen35-2b","--ctx-size","4096","--model","$EVIDENCE/router-models/qwen35-2b.gguf","--n-gpu-layers","99","--parallel","1"],"preset":"[qwen35-2b]\nmetrics = 1\noffline = 1\nsleep-idle-seconds = 30\nctx-size = 4096\nmodel = $EVIDENCE/router-models/qwen35-2b.gguf\nn-gpu-layers = 99\nparallel = 1\n\n"},"architecture":{"input_modalities":["text"],"output_modalities":["text"]},"source":"models_dir","can_remove":false}
+### T0 status
+[{"id":"ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF:Q8_0","status":"unloaded","failed":null},{"id":"lrsbrgrn/HalluGuard-Qwen3-4B-GGUF:4B","status":"unloaded","failed":null},{"id":"qwen35-2b","status":"unloaded","failed":null},{"id":"sweep-1.5b","status":"unloaded","failed":null},{"id":"unsloth/Qwen3-8B-GGUF:Q4_K_M","status":"unloaded","failed":null}]
+### chat model=qwen35-2b
+{"choices":[{"finish_reason":"length","index":0,"message":{"role":"assistant","content":"","reasoning_content":"The user wants me to \"say hi"}}],"created":1789662773,"model":"qwen35-2b","system_fingerprint":"b11026-b49650adb","object":"chat.completion","usage":{"completion_tokens":8,"prompt_tokens":12,"total_tokens":20,"prompt_tokens_details":{"cached_tokens":0}},"id":"chatcmpl-8wWXaqKuddevS8HJ5SjtJM3V4lGyKCO8","timings":{"cache_n":0,"prompt_n":12,"prompt_ms":91.331,"prompt_per_token_ms":7.610916666666667,"prompt_per_second":131.39021799827003,"predicted_n":8,"predicted_ms":79.571,"predicted_per_token_ms":11.367285714285714,"predicted_per_second":87.97174850133842}} [http=200 t=21.695370s]
+### T1 status
+[{"id":"ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF:Q8_0","status":"unloaded","failed":null},{"id":"lrsbrgrn/HalluGuard-Qwen3-4B-GGUF:4B","status":"unloaded","failed":null},{"id":"qwen35-2b","status":"loaded","failed":null},{"id":"sweep-1.5b","status":"unloaded","failed":null},{"id":"unsloth/Qwen3-8B-GGUF:Q4_K_M","status":"unloaded","failed":null}]
+### chat model=sweep-1.5b
+{"choices":[{"finish_reason":"length","index":0,"message":{"role":"assistant","content":"Q:\nDo you have a favorite food"}}],"created":1789662774,"model":"sweep-1.5b","system_fingerprint":"b11026-b49650adb","object":"chat.completion","usage":{"completion_tokens":8,"prompt_tokens":10,"total_tokens":18,"prompt_tokens_details":{"cached_tokens":0}},"id":"chatcmpl-z6mVcEnViZ0j4Agmd6kZbNgpF7T7eb7r","timings":{"cache_n":0,"prompt_n":10,"prompt_ms":77.8,"prompt_per_token_ms":7.779999999999999,"prompt_per_second":128.53470437017995,"predicted_n":8,"predicted_ms":92.777,"predicted_per_token_ms":13.253857142857143,"predicted_per_second":75.44973430914989}} [http=200 t=1.258674s]
+### T2 status (expect qwen35-2b evicted, models-max=1)
+[{"id":"ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF:Q8_0","status":"unloaded","failed":null},{"id":"lrsbrgrn/HalluGuard-Qwen3-4B-GGUF:4B","status":"unloaded","failed":null},{"id":"qwen35-2b","status":"unloaded","failed":null},{"id":"sweep-1.5b","status":"loaded","failed":null},{"id":"unsloth/Qwen3-8B-GGUF:Q4_K_M","status":"unloaded","failed":null}]
+### missing model field
+{"error":{"code":400,"message":"model name is missing from the request","type":"invalid_request_error"}} [http=400]
+### unknown model
+{"error":{"code":400,"message":"model 'nope' not found","type":"invalid_request_error"}} [http=400]
+### router /v1/models
+[{"id":"ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF:Q8_0","status":"unloaded"},{"id":"lrsbrgrn/HalluGuard-Qwen3-4B-GGUF:4B","status":"unloaded"},{"id":"qwen35-2b","status":"unloaded"},{"id":"sweep-1.5b","status":"loaded"},{"id":"unsloth/Qwen3-8B-GGUF:Q4_K_M","status":"unloaded"}]
+### ps children
+  PID  PPID    RSS COMMAND
+13212     1  76368 $EVIDENCE/mac/llama-b11026/llama-server --models-dir $SCRATCH
+14450 13212 1692432 $EVIDENCE/mac/llama-b11026/llama-server --host 127.0.0.1 --metrics --offline --port 65355 --sleep-idle-seconds 30 --alias

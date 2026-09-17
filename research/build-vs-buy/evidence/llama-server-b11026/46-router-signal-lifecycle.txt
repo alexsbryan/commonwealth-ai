@@ -1,0 +1,13 @@
+### before SIGTERM
+  PID  PPID    RSS COMM
+13212     1  76560 $EVIDENCE/mac/llama-b11026/llama-server
+16141 13212 1738560 $EVIDENCE/mac/llama-b11026/llama-server
+### after SIGTERM to router (13212), 2s:
+no llama-server processes (children reaped)
+### restart router, load model, then SIGKILL router
+{"model":"sweep-1.5b"}
+  PID  PPID    RSS COMM
+16643 16620  75920 $EVIDENCE/mac/llama-b11026/llama-server
+16676 16643 1715520 $EVIDENCE/mac/llama-b11026/llama-server
+### after SIGKILL to router (16643):
+pgrep_exit=1

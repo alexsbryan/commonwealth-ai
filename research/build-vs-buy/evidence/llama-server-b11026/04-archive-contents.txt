@@ -1,0 +1,183 @@
+== macos-arm64
+drwxr-xr-x  0 runner staff       0 Sep 17 06:20 llama-b11026/
+-rwxr-xr-x  0 runner staff   75824 Sep 17 06:20 llama-b11026/llama-mtmd-debug
+-rwxr-xr-x  0 runner staff   58736 Sep 17 06:20 llama-b11026/llama-tokenize
+-rwxr-xr-x  0 runner staff   49960 Sep 17 06:20 llama-b11026/llama-cli
+-rwxr-xr-x  0 runner staff 2181384 Sep 17 06:19 llama-b11026/libggml-metal.0.24.0.dylib
+-rwxr-xr-x  0 runner staff   33488 Sep 17 06:20 llama-b11026/llama-batched-bench
+lrwxr-xr-x  0 runner staff       0 Sep 17 06:19 llama-b11026/libggml-rpc.0.dylib -> libggml-rpc.0.24.0.dylib
+-rwxr-xr-x  0 runner staff   35344 Sep 17 06:19 llama-b11026/llama-minicpmv-cli
+-rwxr-xr-x  0 runner staff  968688 Sep 17 06:19 llama-b11026/libggml-cpu.0.24.0.dylib
+-rwxr-xr-x  0 runner staff   60128 Sep 17 06:19 llama-b11026/libggml.0.24.0.dylib
+-rwxr-xr-x  0 runner staff 1378704 Sep 17 06:20 llama-b11026/libmtmd.0.4.1.dylib
+-rwxr-xr-x  0 runner staff 3132400 Sep 17 06:20 llama-b11026/libllama.0.4.1.dylib
+-rwxr-xr-x  0 runner staff 7618984 Sep 17 06:20 llama-b11026/libllama-common.0.4.1.dylib
+lrwxr-xr-x  0 runner staff       0 Sep 17 06:20 llama-b11026/libllama.0.dylib -> libllama.0.4.1.dylib
+-rwxr-xr-x  0 runner staff   58776 Sep 17 06:19 llama-b11026/libggml-blas.0.24.0.dylib
+-rwxr-xr-x  0 runner staff  191920 Sep 17 06:19 llama-b11026/libggml-rpc.0.24.0.dylib
+lrwxr-xr-x  0 runner staff       0 Sep 17 06:20 llama-b11026/libmtmd.0.dylib -> libmtmd.0.4.1.dylib
+-rw-r--r--  0 runner staff    1078 Sep 17 06:20 llama-b11026/LICENSE
+lrwxr-xr-x  0 runner staff       0 Sep 17 06:19 llama-b11026/libggml.dylib -> libggml.0.dylib
+lrwxr-xr-x  0 runner staff       0 Sep 17 06:19 llama-b11026/libggml.0.dylib -> libggml.0.24.0.dylib
+-rwxr-xr-x  0 runner staff   58784 Sep 17 06:20 llama-b11026/llama-results
+lrwxr-xr-x  0 runner staff       0 Sep 17 06:20 llama-b11026/libmtmd.dylib -> libmtmd.0.dylib
+-rwxr-xr-x  0 runner staff 8980232 Sep 17 06:20 llama-b11026/libllama-server-impl.dylib
+-rwxr-xr-x  0 runner staff   59952 Sep 17 06:20 llama-b11026/llama-gguf-split
+lrwxr-xr-x  0 runner staff       0 Sep 17 06:19 llama-b11026/libggml-base.dylib -> libggml-base.0.dylib
+-rwxr-xr-x  0 runner staff   33472 Sep 17 06:20 llama-b11026/llama-perplexity
+-rwxr-xr-x  0 runner staff  239712 Sep 17 06:20 llama-b11026/llama-imatrix
+-rwxr-xr-x  0 runner staff   33472 Sep 17 06:20 llama-b11026/llama-fit-params
+-rwxr-xr-x  0 runner staff  132288 Sep 17 06:20 llama-b11026/ggml-rpc-server
+-rwxr-xr-x  0 runner staff   35344 Sep 17 06:19 llama-b11026/llama-qwen2vl-cli
+lrwxr-xr-x  0 runner staff       0 Sep 17 06:19 llama-b11026/libggml-blas.dylib -> libggml-blas.0.dylib
+-rwxr-xr-x  0 runner staff   35344 Sep 17 06:19 llama-b11026/llama-gemma3-cli
+lrwxr-xr-x  0 runner staff       0 Sep 17 06:19 llama-b11026/libggml-metal.0.dylib -> libggml-metal.0.24.0.dylib
+-rwxr-xr-x  0 runner staff  103840 Sep 17 06:20 llama-b11026/libllama-completion-impl.dylib
+-rwxr-xr-x  0 runner staff  322040 Sep 17 06:20 llama-b11026/libllama-bench-impl.dylib
+lrwxr-xr-x  0 runner staff       0 Sep 17 06:20 llama-b11026/libllama-common.0.dylib -> libllama-common.0.4.1.dylib
+lrwxr-xr-x  0 runner staff       0 Sep 17 06:20 llama-b11026/libllama.dylib -> libllama.0.dylib
+-rwxr-xr-x  0 runner staff  155728 Sep 17 06:20 llama-b11026/libllama-perplexity-impl.dylib
+lrwxr-xr-x  0 runner staff       0 Sep 17 06:19 llama-b11026/libggml-cpu.dylib -> libggml-cpu.0.dylib
+-rwxr-xr-x  0 runner staff   85120 Sep 17 06:20 llama-b11026/llama-mtmd-cli
+-rwxr-xr-x  0 runner staff   87696 Sep 17 06:20 llama-b11026/ggml-metal-tuning
+lrwxr-xr-x  0 runner staff       0 Sep 17 06:19 llama-b11026/libggml-metal.dylib -> libggml-metal.0.dylib
+-rwxr-xr-x  0 runner staff  101800 Sep 17 06:20 llama-b11026/llama-cvector-generator
+-rwxr-xr-x  0 runner staff   96496 Sep 17 06:20 llama-b11026/libllama-quantize-impl.dylib
+-rwxr-xr-x  0 runner staff   33472 Sep 17 06:20 llama-b11026/llama-completion
+-rwxr-xr-x  0 runner staff   33464 Sep 17 06:20 llama-b11026/llama-bench
+-rwxr-xr-x  0 runner staff  237544 Sep 17 06:20 llama-b11026/libllama-cli-impl.dylib
+-rwxr-xr-x  0 runner staff   49984 Sep 17 06:20 llama-b11026/llama-server
+-rwxr-xr-x  0 runner staff   56224 Sep 17 06:20 llama-b11026/libllama-batched-bench-impl.dylib
+-rwxr-xr-x  0 runner staff  733208 Sep 17 06:19 llama-b11026/libggml-base.0.24.0.dylib
+-rwxr-xr-x  0 runner staff   35344 Sep 17 06:19 llama-b11026/llama-llava-cli
+lrwxr-xr-x  0 runner staff       0 Sep 17 06:20 llama-b11026/libllama-common.dylib -> libllama-common.0.dylib
+-rwxr-xr-x  0 runner staff   57384 Sep 17 06:20 llama-b11026/llama-tts
+-rwxr-xr-x  0 runner staff   33472 Sep 17 06:20 llama-b11026/llama-quantize
+-rwxr-xr-x  0 runner staff   99856 Sep 17 06:20 llama-b11026/llama-export-lora
+lrwxr-xr-x  0 runner staff       0 Sep 17 06:19 llama-b11026/libggml-base.0.dylib -> libggml-base.0.24.0.dylib
+-rwxr-xr-x  0 runner staff   55264 Sep 17 06:20 llama-b11026/libllama-fit-params-impl.dylib
+lrwxr-xr-x  0 runner staff       0 Sep 17 06:19 llama-b11026/libggml-blas.0.dylib -> libggml-blas.0.24.0.dylib
+lrwxr-xr-x  0 runner staff       0 Sep 17 06:19 llama-b11026/libggml-rpc.dylib -> libggml-rpc.0.dylib
+lrwxr-xr-x  0 runner staff       0 Sep 17 06:19 llama-b11026/libggml-cpu.0.dylib -> libggml-cpu.0.24.0.dylib
+-rwxr-xr-x  0 runner staff  107320 Sep 17 06:20 llama-b11026/llama
+== ubuntu-vulkan-x64
+drwxr-xr-x  0 runner runner      0 Sep 17 06:21 llama-b11026/
+-rwxr-xr-x  0 runner runner 1332192 Sep 17 06:19 llama-b11026/libggml-cpu-cooperlake.so
+-rwxr-xr-x  0 runner runner   85936 Sep 17 06:21 llama-b11026/libllama-quantize-impl.so
+-rwxr-xr-x  0 runner runner   15968 Sep 17 06:21 llama-b11026/llama-completion
+-rwxr-xr-x  0 runner runner   44840 Sep 17 06:21 llama-b11026/llama-tts
+-rwxr-xr-x  0 runner runner   15968 Sep 17 06:21 llama-b11026/llama-fit-params
+-rwxr-xr-x  0 runner runner   39632 Sep 17 06:21 llama-b11026/libllama-fit-params-impl.so
+-rw-r--r--  0 runner runner    1078 Sep 17 06:21 llama-b11026/LICENSE
+-rwxr-xr-x  0 runner runner 7203896 Sep 17 06:21 llama-b11026/libllama-server-impl.so
+-rwxr-xr-x  0 runner runner   16952 Sep 17 06:19 llama-b11026/llama-minicpmv-cli
+lrwxrwxrwx  0 runner runner       0 Sep 17 06:21 llama-b11026/libmtmd.so -> libmtmd.so.0
+-rwxr-xr-x  0 runner runner 1148832 Sep 17 06:19 llama-b11026/libggml-cpu-piledriver.so
+-rwxr-xr-x  0 runner runner  924176 Sep 17 06:19 llama-b11026/libggml-base.so.0.24.0
+-rwxr-xr-x  0 runner runner   54264 Sep 17 06:21 llama-b11026/llama-mtmd-debug
+-rwxr-xr-x  0 runner runner 1332192 Sep 17 06:19 llama-b11026/libggml-cpu-zen4.so
+-rwxr-xr-x  0 runner runner   16952 Sep 17 06:19 llama-b11026/llama-gemma3-cli
+-rwxr-xr-x  0 runner runner 6288416 Sep 17 06:21 llama-b11026/libllama-common.so.0.4.1
+-rwxr-xr-x  0 runner runner   40960 Sep 17 06:21 llama-b11026/llama-tokenize
+-rwxr-xr-x  0 runner runner   55184 Sep 17 06:20 llama-b11026/libggml.so.0.24.0
+-rwxr-xr-x  0 runner runner  118504 Sep 17 06:21 llama-b11026/libllama-completion-impl.so
+-rwxr-xr-x  0 runner runner 1878008 Sep 17 06:21 llama-b11026/libmtmd.so.0.4.1
+lrwxrwxrwx  0 runner runner       0 Sep 17 06:21 llama-b11026/libllama-common.so.0 -> libllama-common.so.0.4.1
+-rwxr-xr-x  0 runner runner   50120 Sep 17 06:21 llama-b11026/llama-results
+-rwxr-xr-x  0 runner runner   17864 Sep 17 06:21 llama-b11026/llama-server
+-rwxr-xr-x  0 runner runner  251224 Sep 17 06:19 llama-b11026/libggml-rpc.so
+-rwxr-xr-x  0 runner runner   15976 Sep 17 06:21 llama-b11026/llama-batched-bench
+-rwxr-xr-x  0 runner runner   16952 Sep 17 06:19 llama-b11026/llama-llava-cli
+lrwxrwxrwx  0 runner runner       0 Sep 17 06:21 llama-b11026/libllama.so -> libllama.so.0
+-rwxr-xr-x  0 runner runner 1195328 Sep 17 06:19 llama-b11026/libggml-cpu-alderlake.so
+-rwxr-xr-x  0 runner runner  940328 Sep 17 06:19 llama-b11026/libggml-cpu-sse42.so
+-rwxr-xr-x  0 runner runner   16952 Sep 17 06:19 llama-b11026/llama-qwen2vl-cli
+-rwxr-xr-x  0 runner runner 1199424 Sep 17 06:19 llama-b11026/libggml-cpu-haswell.so
+-rwxr-xr-x  0 runner runner  171400 Sep 17 06:21 llama-b11026/libllama-perplexity-impl.so
+-rwxr-xr-x  0 runner runner   62256 Sep 17 06:21 llama-b11026/llama
+-rwxr-xr-x  0 runner runner  259416 Sep 17 06:21 llama-b11026/libllama-cli-impl.so
+-rwxr-xr-x  0 runner runner 1336224 Sep 17 06:19 llama-b11026/libggml-cpu-cannonlake.so
+-rwxr-xr-x  0 runner runner  339464 Sep 17 06:21 llama-b11026/llama-imatrix
+lrwxrwxrwx  0 runner runner       0 Sep 17 06:20 llama-b11026/libggml.so.0 -> libggml.so.0.24.0
+-rwxr-xr-x  0 runner runner   15968 Sep 17 06:21 llama-b11026/llama-perplexity
+-rwxr-xr-x  0 runner runner 1598560 Sep 17 06:19 llama-b11026/libggml-cpu-sapphirerapids.so
+lrwxrwxrwx  0 runner runner       0 Sep 17 06:20 llama-b11026/libggml.so -> libggml.so.0
+lrwxrwxrwx  0 runner runner       0 Sep 17 06:21 llama-b11026/libmtmd.so.0 -> libmtmd.so.0.4.1
+lrwxrwxrwx  0 runner runner       0 Sep 17 06:21 llama-b11026/libllama-common.so -> libllama-common.so.0
+-rwxr-xr-x  0 runner runner 1458184 Sep 17 06:21 llama-b11026/llama-cli
+lrwxrwxrwx  0 runner runner       0 Sep 17 06:19 llama-b11026/libggml-base.so -> libggml-base.so.0
+-rwxr-xr-x  0 runner runner 1332128 Sep 17 06:19 llama-b11026/libggml-cpu-cascadelake.so
+-rwxr-xr-x  0 runner runner 1143616 Sep 17 06:19 llama-b11026/libggml-cpu-sandybridge.so
+-rwxr-xr-x  0 runner runner  481560 Sep 17 06:21 llama-b11026/libllama-bench-impl.so
+-rwxr-xr-x  0 runner runner 1152928 Sep 17 06:19 llama-b11026/libggml-cpu-ivybridge.so
+-rwxr-xr-x  0 runner runner   88200 Sep 17 06:21 llama-b11026/llama-mtmd-cli
+-rwxr-xr-x  0 runner runner  194744 Sep 17 06:20 llama-b11026/ggml-rpc-server
+lrwxrwxrwx  0 runner runner       0 Sep 17 06:21 llama-b11026/libllama.so.0 -> libllama.so.0.4.1
+-rwxr-xr-x  0 runner runner   48728 Sep 17 06:21 llama-b11026/libllama-batched-bench-impl.so
+-rwxr-xr-x  0 runner runner 4607392 Sep 17 06:21 llama-b11026/libllama.so.0.4.1
+-rwxr-xr-x  0 runner runner 1336224 Sep 17 06:19 llama-b11026/libggml-cpu-skylakex.so
+-rwxr-xr-x  0 runner runner   17864 Sep 17 06:21 llama-b11026/llama-quantize
+lrwxrwxrwx  0 runner runner       0 Sep 17 06:19 llama-b11026/libggml-base.so.0 -> libggml-base.so.0.24.0
+-rwxr-xr-x  0 runner runner 1332128 Sep 17 06:19 llama-b11026/libggml-cpu-icelake.so
+-rwxr-xr-x  0 runner runner 42818952 Sep 17 06:20 llama-b11026/libggml-vulkan.so
+-rwxr-xr-x  0 runner runner    48224 Sep 17 06:21 llama-b11026/llama-gguf-split
+-rwxr-xr-x  0 runner runner   940496 Sep 17 06:19 llama-b11026/libggml-cpu-x64.so
+-rwxr-xr-x  0 runner runner    17864 Sep 17 06:21 llama-b11026/llama-bench
+== win-vulkan-x64
+Archive:  llama-b11026-bin-win-vulkan-x64.zip
+  Length      Date    Time    Name
+---------  ---------- -----   ----
+ 43446272  09-17-2026 13:17   ggml-vulkan.dll
+    27136  09-17-2026 06:20   llama-minicpmv-cli.exe
+     9216  09-17-2026 06:20   llama-completion.exe
+    27136  09-17-2026 06:20   llama-gemma3-cli.exe
+  1231360  09-17-2026 06:20   ggml-cpu-alderlake.dll
+     9216  09-17-2026 06:20   llama-quantize.exe
+    41472  09-17-2026 06:20   llama-fit-params-impl.dll
+  1132544  09-17-2026 06:20   ggml-cpu-piledriver.dll
+   933376  09-17-2026 06:20   ggml-cpu-sse42.dll
+  1443328  09-17-2026 06:20   ggml-cpu-skylakex.dll
+  1108992  09-17-2026 06:20   ggml-cpu-sandybridge.dll
+    27136  09-17-2026 06:20   llama-llava-cli.exe
+   194048  09-17-2026 06:20   llama-perplexity-impl.dll
+  1435136  09-17-2026 06:20   ggml-cpu-cascadelake.dll
+  1712640  09-17-2026 06:20   ggml-cpu-sapphirerapids.dll
+   255488  09-17-2026 06:20   llama-imatrix.exe
+    19741  09-17-2026 06:20   LICENSE-LLVM-OpenMP
+     9216  09-17-2026 06:20   llama-fit-params.exe
+  1435648  09-17-2026 06:20   ggml-cpu-cooperlake.dll
+    79872  09-17-2026 06:20   ggml.dll
+   796672  09-17-2026 06:20   ggml-base.dll
+     9216  09-17-2026 06:20   llama-server.exe
+  3167232  09-17-2026 06:20   llama.dll
+    58368  09-17-2026 06:20   llama-tokenize.exe
+  3296768  09-17-2026 06:20   llama-cli-impl.dll
+   397824  09-17-2026 06:20   llama-bench-impl.dll
+  1449984  09-17-2026 06:20   ggml-cpu-cannonlake.dll
+   133632  09-17-2026 06:20   llama-completion-impl.dll
+    41472  09-17-2026 06:20   llama-tts.exe
+  1441792  09-17-2026 06:20   ggml-cpu-icelake.dll
+  7775744  09-17-2026 06:20   llama-common.dll
+   103936  09-17-2026 06:20   llama.exe
+  1236992  09-17-2026 06:20   ggml-cpu-haswell.dll
+     9216  09-17-2026 06:20   llama-bench.exe
+    27136  09-17-2026 06:20   llama-qwen2vl-cli.exe
+     9216  09-17-2026 06:20   llama-perplexity.exe
+   768000  09-17-2026 06:20   libomp.dll
+    46080  09-17-2026 06:20   llama-results.exe
+    90112  09-17-2026 06:20   llama-mtmd-cli.exe
+  1772032  09-17-2026 06:20   mtmd.dll
+    61440  09-17-2026 06:20   llama-batched-bench-impl.dll
+     9216  09-17-2026 06:20   llama-batched-bench.exe
+    60416  09-17-2026 06:20   llama-gguf-split.exe
+   168448  09-17-2026 06:20   ggml-rpc.dll
+   925184  09-17-2026 06:20   ggml-cpu-x64.dll
+  1442304  09-17-2026 06:20   ggml-cpu-zen4.dll
+    55296  09-17-2026 06:20   llama-mtmd-debug.exe
+   137216  09-17-2026 06:20   llama-quantize-impl.dll
+  8904704  09-17-2026 06:20   llama-server-impl.dll
+  1128448  09-17-2026 06:20   ggml-cpu-ivybridge.dll
+     9216  09-17-2026 06:20   llama-cli.exe
+   101376  09-17-2026 06:20   ggml-rpc-server.exe
+---------                     -------
+ 90213661                     52 files

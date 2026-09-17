@@ -1,0 +1,14 @@
+### round 1: 2 concurrent cold requests, different models, models-max 1
+r1b model=sweep-1.5b http=500 t=0.001819s
+r1a model=qwen35-2b http=200 t=1.423457s
+[{"id":"qwen35-2b","status":"loaded","failed":null},{"id":"sweep-1.5b","status":"unloaded","failed":null}]
+### round 2: 6 concurrent alternating
+r2q2 model=qwen35-2b http=200 t=0.044937s
+r2q1 model=qwen35-2b http=200 t=0.083150s
+r2q3 model=qwen35-2b http=200 t=0.118472s
+r2s2 model=sweep-1.5b http=200 t=1.167220s
+r2s3 model=sweep-1.5b http=200 t=1.183072s
+r2s1 model=sweep-1.5b http=200 t=1.208847s
+[{"id":"qwen35-2b","status":"unloaded","failed":null},{"id":"sweep-1.5b","status":"loaded","failed":null}]
+### follow-up serial request after concurrency
+r3 model=qwen35-2b http=200 t=0.892107s

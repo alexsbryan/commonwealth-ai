@@ -1,0 +1,11 @@
+### llguidance grammar to child via router
+proxy error: Failed to read connection [http=500 curl_exit_follows] curl_exit=0
+### router health
+{"status":"ok"} [http=200]
+[{"id":"qwen35-2b","status":"unloaded","failed":null,"exit_code":null},{"id":"sweep-1.5b","status":"unloaded","failed":true,"exit_code":1}]
+### processes
+  PID  PPID    RSS
+13212     1  76560
+### next request to same model
+{"choices":[{"finish_reason":"length","index":0,"message":{"role":"assistant","content":"hi.script\nhi"}}],"created":1789662850,"model":"sweep-1.5b","system_fingerprint":"b11026-b49650adb","object":"chat.completion","usage":{"completion_tokens":4,"prompt_tokens":9,"total_tokens":13,"prompt_tokens_de
+[{"id":"qwen35-2b","status":"unloaded","failed":null,"exit_code":null},{"id":"sweep-1.5b","status":"loaded","failed":null,"exit_code":null}]
