@@ -305,5 +305,9 @@ pub fn republish(
     out
 }
 
-#[cfg(test)]
-pub(crate) mod tests;
+// Test fixtures shared across the crate boundary: `mesh_http`'s endpoint
+// tests (now in `sovereign-daemon`) read the SAME measurement fixture this
+// module's own tests journal (ARCH §10.6). `#[test]` fns are stripped from
+// non-test builds, so this compiles into production as fixtures only.
+#[doc(hidden)]
+pub mod tests;

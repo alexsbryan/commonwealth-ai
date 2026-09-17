@@ -44,7 +44,7 @@ use sovereign_contracts::{
     CompletionRequest, CompletionResponse, Depth, InferenceProvider, ProviderCapabilities, Speed,
 };
 use sovereign_core::error::{Error, Result};
-use sovereign_mesh::daemon::InferenceVenue;
+use sovereign_daemon::daemon::InferenceVenue;
 use sovereign_serving_host::peer_inference::{InferenceRouter, VenueHost, VenueSource};
 
 /// The daemon binary — its `--compute-child` arm runs the mock child.
@@ -194,7 +194,7 @@ async fn a_named_request_for_the_distributed_primary_routes_once_the_child_serve
         facade,
         Arc::new(NoPeers),
         Arc::new(NoPeers),
-        Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest),
+        Arc::new(sovereign_daemon::slot_manifest::CoreSlotManifest),
     ));
 
     // The real wiring under test.

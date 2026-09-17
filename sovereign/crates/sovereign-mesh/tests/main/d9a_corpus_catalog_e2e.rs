@@ -54,8 +54,8 @@
 use std::sync::Arc;
 
 use sovereign_core::setup_config::SetupConfig;
-use sovereign_mesh::corpus_catalog_http::corpus_catalog_router;
-use sovereign_mesh::daemon::EmbeddedDaemon;
+use sovereign_daemon::corpus_catalog_http::corpus_catalog_router;
+use sovereign_daemon::daemon::EmbeddedDaemon;
 
 use crate::common::{desktop_services_with_engine, mesh_admin_services, spawn_router};
 

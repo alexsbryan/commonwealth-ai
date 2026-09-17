@@ -77,23 +77,23 @@ use sovereign_contracts::types::projection::{project_epistemic_state, project_me
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::StateStore;
 use sovereign_core::types::{Message, Role};
-use sovereign_mesh::admin_http::admin_router;
-use sovereign_mesh::atlas_http::atlas_router;
-use sovereign_mesh::corpus_watch_http::corpus_watch_router;
-use sovereign_mesh::daemon::EmbeddedDaemon;
-use sovereign_mesh::features_http::features_router;
-use sovereign_mesh::governance_http::governance_router;
-use sovereign_mesh::insight_http::insight_router;
-use sovereign_mesh::lc_http::lc_router;
-use sovereign_mesh::mcp_config_http::mcp_config_router;
-use sovereign_mesh::mesh_http::mesh_router;
-use sovereign_mesh::meshapp_http::meshapp_router;
-use sovereign_mesh::notes_http::notes_router;
-use sovereign_mesh::project_http::project_router;
-use sovereign_mesh::reading_http::reading_router;
-use sovereign_mesh::recipe_project_http::recipe_project_router;
+use sovereign_daemon::admin_http::admin_router;
+use sovereign_daemon::atlas_http::atlas_router;
+use sovereign_daemon::corpus_watch_http::corpus_watch_router;
+use sovereign_daemon::daemon::EmbeddedDaemon;
+use sovereign_daemon::features_http::features_router;
+use sovereign_daemon::governance_http::governance_router;
+use sovereign_daemon::insight_http::insight_router;
+use sovereign_daemon::lc_http::lc_router;
+use sovereign_daemon::mcp_config_http::mcp_config_router;
+use sovereign_daemon::mesh_http::mesh_router;
+use sovereign_daemon::meshapp_http::meshapp_router;
+use sovereign_daemon::notes_http::notes_router;
+use sovereign_daemon::project_http::project_router;
+use sovereign_daemon::reading_http::reading_router;
+use sovereign_daemon::recipe_project_http::recipe_project_router;
 use sovereign_mesh::reindexer::Reindexer;
-use sovereign_mesh::turn_http::{
+use sovereign_daemon::turn_http::{
     turn_router, ConversationListEntry, ConversationListResponse, ConversationResponse,
     MessageEntry,
 };
@@ -623,7 +623,7 @@ async fn every_router_refuses_a_request_no_handler_of_ours_can_refuse() {
     let (_t5b, d5b) = fresh_daemon();
     assert_the_guard_owns_the_method_fallback(
         "turn_extras_http",
-        sovereign_mesh::turn_extras_http::turn_extras_router(d5b),
+        sovereign_daemon::turn_extras_http::turn_extras_router(d5b),
         "/v1/skills",
     )
     .await;
@@ -631,7 +631,7 @@ async fn every_router_refuses_a_request_no_handler_of_ours_can_refuse() {
     let (_t5c, d5c) = fresh_daemon();
     assert_the_guard_owns_the_method_fallback(
         "documents_http",
-        sovereign_mesh::documents_http::documents_router(d5c),
+        sovereign_daemon::documents_http::documents_router(d5c),
         // NOT `/v1/documents/{id}`: DELETE is a real method there, and
         // `/v1/documents` registers GET only, so PUT reaches the
         // method fallback.
@@ -642,7 +642,7 @@ async fn every_router_refuses_a_request_no_handler_of_ours_can_refuse() {
     let (_t5d, d5d) = fresh_daemon();
     assert_the_guard_owns_the_method_fallback(
         "corpus_catalog_http",
-        sovereign_mesh::corpus_catalog_http::corpus_catalog_router(d5d),
+        sovereign_daemon::corpus_catalog_http::corpus_catalog_router(d5d),
         "/internal/corpus/catalog",
     )
     .await;
@@ -1854,14 +1854,14 @@ async fn insight_routes_clip_list_search_delete() {
         .unwrap();
     assert_eq!(resp.status(), 200);
     let served: serde_json::Value = resp.json().await.unwrap();
-    let expected = serde_json::to_value(sovereign_mesh::insight_http::InsightListResponse {
+    let expected = serde_json::to_value(sovereign_daemon::insight_http::InsightListResponse {
         insights: service
             .store
             .list(50)
             .await
             .unwrap()
             .into_iter()
-            .map(sovereign_mesh::insight_http::InsightEntry::from)
+            .map(sovereign_daemon::insight_http::InsightEntry::from)
             .collect(),
     })
     .unwrap();

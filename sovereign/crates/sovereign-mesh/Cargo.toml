@@ -309,6 +309,14 @@ iroh-experimental = ["commonwealth-transport/iroh"]
 iroh-relay-only = ["commonwealth-transport/iroh-relay-only"]
 
 [dev-dependencies]
+# The mesh host cluster moved to `sovereign-daemon` (domains
+# dm-daemon-mesh-edge). The integration tests still live in this crate and
+# name the moved surfaces, so this is a TEST-ONLY edge — layer-gate never
+# enforces dev edges (DepKind::Dev), and the production direction stays
+# `sovereign-daemon -> sovereign-mesh`. `treesitter` because
+# `loopback_parity` mounts `project_router`, which reads
+# `sovereign_mesh::reindexer`.
+sovereign-daemon = { path = "../sovereign-daemon", features = ["treesitter"] }
 tempfile = "3"
 # `ServiceExt::oneshot` lets the worker_http integration tests dispatch
 # a synthetic axum Request through the router without spinning up a

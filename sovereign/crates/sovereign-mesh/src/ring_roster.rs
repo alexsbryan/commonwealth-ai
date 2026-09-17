@@ -325,5 +325,10 @@ impl RosterSource for MeshRosterSource {
     }
 }
 
-#[cfg(test)]
-pub(crate) mod tests;
+// Test fixtures shared across the crate boundary: `mesh_http`'s endpoint
+// tests (now in `sovereign-daemon`) read the SAME roster fixtures this
+// module's own tests do, or neither proves anything about the same thing
+// (ARCH §10.6). `#[test]` fns are stripped from non-test builds, so this
+// compiles into production as fixtures only.
+#[doc(hidden)]
+pub mod tests;

@@ -5,7 +5,7 @@
 //! `mcp_router` / `mesh_http` / `admin_http`. All routes are
 //! loopback-only (see [`crate::loopback_guard`]) and intentionally
 //! thin — they translate JSON payloads into calls on the shared
-//! [`Reindexer`] and [`crate::projects::Registry`].
+//! [`Reindexer`] and [`sovereign_mesh::projects::Registry`].
 //!
 //! Routes:
 //! - `GET  /v1/projects`                              — list + per-watcher status
@@ -23,8 +23,10 @@ use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
 use crate::loopback_guard::{LocalOnly, LoopbackRouter};
-use crate::projects::{ProjectEntry, Registry, WatcherKind, WatcherStatus, WatcherToggles};
-use crate::reindexer::{RebuildReason, Reindexer};
+use sovereign_mesh::projects::{
+    ProjectEntry, Registry, WatcherKind, WatcherStatus, WatcherToggles,
+};
+use sovereign_mesh::reindexer::{RebuildReason, Reindexer};
 
 /// Build the project HTTP router. Merged into the daemon's client
 /// router next to `mesh_router`, `admin_router`, and `mcp_router`.
@@ -294,9 +296,9 @@ fn _keep_watcher_kind_in_scope() -> WatcherKind {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::projects::ProjectState;
     use arc_swap::ArcSwap;
     use corpus_engine_scip::ScipGraph;
+    use sovereign_mesh::projects::ProjectState;
     use std::net::SocketAddr;
 
     async fn spawn(reindexer: Arc<Reindexer>) -> String {

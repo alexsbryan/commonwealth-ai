@@ -316,6 +316,7 @@ sovereign-workflow-host = { path = "studio/crates/sovereign-workflow-host" }
 sovereign-studio = { path = "studio/crates/sovereign-studio" }
 sovereign-meshapp = { path = "sovereign/crates/sovereign-meshapp" }
 sovereign-mesh = { path = "sovereign/crates/sovereign-mesh" }
+sovereign-daemon = { path = "sovereign/crates/sovereign-daemon" }
 sovereign-compute = { path = "sovereign/crates/sovereign-compute" }
 sovereign-service = { path = "sovereign/crates/sovereign-service" }
 sovereign-atos = { path = "sovereign/crates/sovereign-atos" }

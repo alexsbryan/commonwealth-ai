@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Wire shapes of the mesh-app explorer routes —
-//! `GET /internal/meshapp/{corpus}/…` (`sovereign_mesh::meshapp_http`).
+//! `GET /internal/meshapp/{corpus}/…` (`sovereign_daemon::meshapp_http`).
 //!
 //! These are the "bundle contract": the DTOs a sandboxed explorer webview
 //! reads through `window.meshApp.*`. They were defined in

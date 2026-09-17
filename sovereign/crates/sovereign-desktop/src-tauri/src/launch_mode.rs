@@ -4,7 +4,7 @@
 //!
 //! **Only half of it survives svt-3, and the half that went is the reason it
 //! was written.** It existed so `state::bootstrap` could name a `Launch` when
-//! it commissioned the in-process daemon through `sovereign_mesh::assemble`,
+//! it commissioned the in-process daemon through `sovereign_daemon::assemble`,
 //! without either hardcoding `Launch::Desktop` at that site or running a
 //! second `Launch::parse` (the §10.6 duplicate `quality/TOPOLOGY.md` §1
 //! records). There is no commissioning site: the desktop assembles no daemon,

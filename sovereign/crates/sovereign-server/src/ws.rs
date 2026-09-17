@@ -115,7 +115,7 @@ async fn handle_ws(
     // ping with a 20s deadline) drops mid-answer — and a grounded turn over a
     // real corpus routinely runs minutes (235s, measured on the daemon's
     // equivalent route). The server's log shows the turn completing normally
-    // while the client saw a dead socket. Found on `sovereign_mesh::turn_http`,
+    // while the client saw a dead socket. Found on `sovereign_daemon::turn_http`,
     // which was written from this file; fixed in both.
     //
     // The scheduler permit moves INTO the task, so its lifetime is still

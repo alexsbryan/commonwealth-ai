@@ -486,12 +486,12 @@ fn the_in_process_daemon_is_gone() {
     let src = state_rs();
     const GONE: &[(&str, &str)] = &[
         (
-            "sovereign_mesh::assemble(",
+            "sovereign_daemon::assemble(",
             "the one exhaustive assembler — calling it is how a host declares \
              itself a daemon",
         ),
         (
-            "sovereign_mesh::EmbeddedDaemon::new(",
+            "sovereign_daemon::EmbeddedDaemon::new(",
             "the daemon itself, built over that assembly",
         ),
         (
@@ -524,7 +524,7 @@ fn the_in_process_daemon_is_gone() {
              does not own (sv-surface D0, structural here)",
         ),
         (
-            "sovereign_mesh::EmbedAdvertisement",
+            "sovereign_daemon::EmbedAdvertisement",
             "what a NODE tells peers about its embedding model; this process \
              is not a node",
         ),

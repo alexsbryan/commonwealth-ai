@@ -13,7 +13,7 @@
 //!
 //! All seven commands hold NO `RecipeProject`, no `NoteStore` and no
 //! `RecipeProjectStore`. Each is one call onto
-//! `sovereign_mesh::recipe_project_http`'s `/v1/recipe-projects` routes
+//! `sovereign_daemon::recipe_project_http`'s `/v1/recipe-projects` routes
 //! over [`ra_client`]. The composition — the row, the sidecar summary,
 //! the checkpoint list, the notes partition, the artifact tree under the
 //! data root — is the daemon's, over the stores it opened.
@@ -62,7 +62,7 @@ use crate::state::AppState;
 
 /// The wire types, re-exported rather than mirrored: field-for-field what
 /// this module used to declare, so the webview sees the same bytes. They
-/// are the route's (`sovereign_mesh::recipe_project_http` re-exports the
+/// are the route's (`sovereign_daemon::recipe_project_http` re-exports the
 /// same items), named from the contract crate so this app links no daemon.
 pub use sovereign_contracts::daemon_wire::{
     DashboardNoteEntry, RecipeProjectListEntry, RecipeValidationReport, RestoreCheckpointOutcome,

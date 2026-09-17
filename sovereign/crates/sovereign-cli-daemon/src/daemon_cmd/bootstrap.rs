@@ -22,7 +22,7 @@ use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::ToolRegistry;
 use sovereign_inference::embedded::EmbeddedLlamaCpp;
-use sovereign_mesh::EmbeddedDaemon;
+use sovereign_daemon::EmbeddedDaemon;
 
 /// Resolve this node's persistent id using the same precedence
 /// `EmbeddedDaemon::start_daemon` applies on resume: the `node_id` file, then
@@ -776,7 +776,7 @@ pub(super) fn spawn_rpc_worker_discovery(
                         );
                         // Publish for `/v1/mesh/status` so the mesh soak can assert
                         // the no-split-brain invariant (≤1 host across the fleet).
-                        sovereign_mesh::mesh_http::set_shared_model_host(am_host);
+                        sovereign_daemon::mesh_http::set_shared_model_host(am_host);
                         was_host = am_host;
                     }
 
@@ -1675,7 +1675,7 @@ pub(super) fn spawn_lazy_stamp_fingerprints(engine: Arc<CorpusEngine>) {
 /// `corpus_engine::index::create::is_vector_index_ready` calls
 /// `mark_vector_index_built` when LanceDB reports a complete index the meta
 /// had not recorded. The ONE reader of that field is
-/// `sovereign_mesh::corpus_catalog_http::catalog`, which prefers it over the
+/// `sovereign_daemon::corpus_catalog_http::catalog`, which prefers it over the
 /// state store's flag — so with no sweep, a corpus whose index finished but
 /// whose meta predates the field reports FTS-only forever.
 ///
@@ -1775,7 +1775,7 @@ pub(super) async fn advertise_embed_model(
     provider: Arc<dyn InferenceProvider>,
     config: &SetupConfig,
     resolved_embed_family: ModelFamily,
-) -> sovereign_mesh::EmbedAdvertisement {
+) -> sovereign_daemon::EmbedAdvertisement {
     // Publish this node's embed model fingerprint so peers can filter
     // us in/out of collaborative ingestion.
     //
@@ -1820,7 +1820,7 @@ pub(super) async fn advertise_embed_model(
             %reason,
             "embed model info: NOT advertising to mesh peers — this node holds no embed slot"
         );
-        return sovereign_mesh::EmbedAdvertisement::Unavailable { reason };
+        return sovereign_daemon::EmbedAdvertisement::Unavailable { reason };
     };
 
     match provider.embed("probe").await {
@@ -1885,15 +1885,15 @@ pub(super) async fn advertise_embed_model(
                 normalization = ?normalization,
                 "embed model info: advertising to mesh peers"
             );
-            sovereign_mesh::EmbedAdvertisement::Advertised(embed_info)
+            sovereign_daemon::EmbedAdvertisement::Advertised(embed_info)
         }
-        Err(e) => sovereign_mesh::EmbedAdvertisement::Unavailable {
+        Err(e) => sovereign_daemon::EmbedAdvertisement::Unavailable {
             reason: format!("embed probe failed: {e}"),
         },
     }
 }
 
-/// Build the `/mcp` mount for the daemon's [`sovereign_mesh::ServingCapability`].
+/// Build the `/mcp` mount for the daemon's [`sovereign_daemon::ServingCapability`].
 ///
 /// It used to also install the mesh, admin, reading and solve routers, the
 /// provider factory and the setup config — six separate calls, each of which a
@@ -1903,9 +1903,9 @@ pub(super) async fn advertise_embed_model(
 pub(super) fn build_mcp_surface(
     tools: ToolRegistry,
     notes_store: Arc<NoteStore>,
-) -> sovereign_mesh::McpSurface {
+) -> sovereign_daemon::McpSurface {
     let session_id = format!("daemon-{}", uuid::Uuid::new_v4());
-    sovereign_mesh::McpSurface::Mounted(sovereign_mesh::McpMount {
+    sovereign_daemon::McpSurface::Mounted(sovereign_daemon::McpMount {
         tools: Arc::new(tools),
         notes: notes_store,
         session_id,
@@ -1960,7 +1960,7 @@ pub(super) async fn start_freshness_pipeline(
         &mut reindexer,
         Arc::clone(&notes_store),
     );
-    let project_http = sovereign_mesh::project_http::project_router(Arc::clone(&reindexer));
+    let project_http = sovereign_daemon::project_http::project_router(Arc::clone(&reindexer));
 
     // Knowledge-view HTTP surface — POST /v1/knowledge/landscape_digest.
     //
@@ -1992,7 +1992,7 @@ pub(super) async fn start_freshness_pipeline(
         )
         .await,
     );
-    let knowledge_view_http = sovereign_mesh::landscape_digest_http::landscape_digest_router(
+    let knowledge_view_http = sovereign_daemon::landscape_digest_http::landscape_digest_router(
         Arc::clone(&knowledge_view_manager),
     );
 
@@ -2190,9 +2190,9 @@ pub(super) async fn setup_watched_folders(
 /// through a mesh view nobody ever binds (§10.6).
 pub(super) async fn build_mesh_provider(
     provider: Arc<dyn InferenceProvider>,
-    daemon: Arc<sovereign_mesh::DeferredDaemon>,
+    daemon: Arc<sovereign_daemon::DeferredDaemon>,
 ) -> (
-    Arc<sovereign_mesh::DeferredDaemon>,
+    Arc<sovereign_daemon::DeferredDaemon>,
     Arc<sovereign_serving_host::peer_inference::InferenceRouter>,
     sovereign_contracts::in_flight::LocalInFlightGauge,
 ) {
@@ -2314,7 +2314,7 @@ pub(super) async fn build_mesh_provider(
         sovereign_serving_host::peer_inference::InferenceRouter::builder(Arc::clone(&provider))
             .candidates(Arc::clone(&composite) as Arc<dyn sovereign_scheduler::venue::VenueSource>)
             .host(Arc::clone(&daemon) as Arc<dyn sovereign_serving_host::venue_host::VenueHost>)
-            .manifest(Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest))
+            .manifest(Arc::new(sovereign_daemon::slot_manifest::CoreSlotManifest))
             .in_flight(in_flight_gauge.arc())
             .build(),
     );
@@ -2856,11 +2856,11 @@ mod advertise_tests {
             ad.info().map(|i| i.model_id.clone()),
         );
         match ad {
-            sovereign_mesh::EmbedAdvertisement::Unavailable { reason } => assert!(
+            sovereign_daemon::EmbedAdvertisement::Unavailable { reason } => assert!(
                 reason.contains("terminal") && reason.contains("halo"),
                 "the absence must say WHY and name the entry node, got: {reason}"
             ),
-            sovereign_mesh::EmbedAdvertisement::Advertised(_) => {
+            sovereign_daemon::EmbedAdvertisement::Advertised(_) => {
                 unreachable!("asserted absent above")
             }
         }

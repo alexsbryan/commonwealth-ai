@@ -16,7 +16,7 @@
 //! # Where the browse half is decided (sv-surface D4)
 //!
 //! The six browse commands hold NO reader. Each is one call onto
-//! `sovereign_mesh::atlas_http`'s routes over `client_base_url()` — ONE
+//! `sovereign_daemon::atlas_http`'s routes over `client_base_url()` — ONE
 //! path in both boot modes, because Local means the daemon is in-process
 //! over this process's own `corpus_engine`. Their return types are
 //! passed through as `serde_json::Value`: the routes answer
@@ -186,7 +186,7 @@ pub async fn atlas_get_atom_detail(
 // Conv corpora never wrote atoms.json — their tiered enrichment lives
 // in the `conv_skeletons` / `conv_raptor_nodes` / `conv_motifs` SQLite
 // sidecar tables. These six commands hold NO reader either (sv-surface
-// D4 remainder): each is one call onto `sovereign_mesh::atlas_http`'s
+// D4 remainder): each is one call onto `sovereign_daemon::atlas_http`'s
 // `/internal/atlas/conv/` routes over `client_base_url()`, which read
 // the daemon's `runtime.lane_sources.conv_tiered`. ONE path in both
 // boot modes. AtlasIndex still calls BOTH atlas_list_corpora

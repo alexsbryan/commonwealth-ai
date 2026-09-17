@@ -10,7 +10,7 @@ use sovereign_core::model_family::ModelFamily;
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_inference::embedded::EmbeddedLlamaCpp;
-use sovereign_mesh::admin_http::ProviderFactory;
+use sovereign_daemon::admin_http::ProviderFactory;
 
 /// Rebuilds the embedded llama.cpp provider from a fresh `SetupConfig`,
 /// wrapped in the same `InferenceRouter` used at cold start so
@@ -29,7 +29,7 @@ pub(super) struct LlamaCppFactory {
     /// raw provider — without this, reload would drop the wrapper
     /// and `/v1/chat/completions` would silently start substituting
     /// for peer-only model names again.
-    pub(super) daemon: Arc<sovereign_mesh::DeferredDaemon>,
+    pub(super) daemon: Arc<sovereign_daemon::DeferredDaemon>,
 }
 
 #[async_trait]
@@ -116,7 +116,7 @@ impl ProviderFactory for LlamaCppFactory {
         let mut builder = sovereign_serving_host::peer_inference::InferenceRouter::builder(raw)
             .candidates(Arc::clone(&peer_source))
             .host(Arc::clone(&peer_host))
-            .manifest(Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest));
+            .manifest(Arc::new(sovereign_daemon::slot_manifest::CoreSlotManifest));
         // A reload must NOT mint a fresh publisher: live `LocalTotalGuard`s from
         // the old router hold a clone of the node's `Arc<AtomicU32>` and keep
         // decrementing it as their requests drain. The gauge exists from

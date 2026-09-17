@@ -43,8 +43,8 @@ use sovereign_core::conv_tiered::{
     ChunkEntityProgressRow, ChunkEntityRow, ConvRaptorNodeRow, ConvSkeletonRow, ConvTieredReader,
 };
 use sovereign_core::setup_config::SetupConfig;
-use sovereign_mesh::atlas_http::atlas_router;
-use sovereign_mesh::daemon::EmbeddedDaemon;
+use sovereign_daemon::atlas_http::atlas_router;
+use sovereign_daemon::daemon::EmbeddedDaemon;
 use sovereign_store::sqlite::SqliteStateStore;
 
 use crate::common;

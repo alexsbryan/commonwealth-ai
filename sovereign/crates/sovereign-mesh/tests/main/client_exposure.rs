@@ -21,7 +21,7 @@ use std::path::PathBuf;
 use sovereign_core::setup_config::{
     DaemonSection, DataSection, IrohSection, ModelsSection, SetupConfig,
 };
-use sovereign_mesh::daemon::EmbeddedDaemon;
+use sovereign_daemon::daemon::EmbeddedDaemon;
 
 fn cfg_with_ports(client_port: u16, internal_port: u16) -> SetupConfig {
     SetupConfig {

@@ -10,19 +10,17 @@
 //! - Parse `sovereign://join/...` deep links
 //! - Translate mesh state into UI-friendly representations
 //! - Expose mesh operations for both GUI and CLI
+//!
+//! The mesh host cluster — `daemon`, `daemon_services`, the 21 route shells,
+//! the edge leaves and the MCP mount — moved to `sovereign-daemon` at
+//! `dm-daemon-mesh-edge` (2026-09-17; ralph/DECISIONS.md). Fabric keeps its
+//! own modules here; the host observes them through readers.
 
-pub mod admin_http;
-pub mod assets_http;
-pub mod atlas_http;
 pub mod auto_ingest;
 pub mod auto_resume;
 pub mod canonical_pull;
 pub mod capabilities;
 pub mod commit_harvest;
-pub mod corpus_catalog_http;
-pub mod corpus_watch_http;
-pub mod daemon;
-pub mod daemon_services;
 /// Routing decision records — Phase 0 (P1/P2) of
 /// `docs/specs/SCHEDULER_QUALITY.md`. One structured record per
 /// routing decision (full candidate set, every scorer input stamped
@@ -39,20 +37,13 @@ pub use sovereign_scheduler::decision_replay; // shim: moved by domains REVIEW-b
 /// episode the Tier-1 simulator replays.
 pub use sovereign_scheduler::decision_trace; // shim: moved by domains REVIEW-build-sched-move
 pub mod deep_link;
-pub mod documents_http;
-pub mod enrich_http;
-pub mod features_http;
+pub use deep_link::{parse_deep_link, DeepLink};
 pub mod gossip;
-pub mod governance_http;
 pub use sovereign_serving_host::guest_lender; // shim: moved by domains REVIEW-build-serving-move-throughput-guest
 pub mod guest_source;
 pub mod guest_tunnel;
-pub mod http_response;
 pub use sovereign_serving_host::inference_adapter; // shim: moved by domains REVIEW-build-serving-move-adapter
 pub mod ingest_executor;
-/// The daemon's insight surface (sv-surface rung 6): clip/list/search/delete
-/// over the `InsightService` the commissioning host built.
-pub mod insight_http;
 /// Dial-by-key mesh access over iroh (Track W, W1). Server half: binds
 /// the daemon's identity endpoint and routes by ALPN to the local
 /// internal + client listeners. Runtime-gated by `[iroh] enabled`.
@@ -64,30 +55,19 @@ pub mod job_registry;
 pub mod join;
 pub use sovereign_turn_client::knowledge_client; // shim: moved by domains REVIEW-build-mesh-client-pair
 pub use sovereign_turn_client::landscape_digest_client; // shim: moved by domains REVIEW-build-mesh-client-pair
-pub mod landscape_digest_http;
-pub mod lc_http;
-pub mod local_only;
-pub mod loopback_guard;
 #[cfg(feature = "treesitter")]
 pub mod lsp_tier;
-pub mod mcp_config_http;
-pub mod mcp_router;
 pub mod measurements_rail;
-pub mod media_reach;
 pub mod mesh_discovery;
-pub mod mesh_http;
 /// Tier-1 scheduler simulator — `SCHEDULER_QUALITY.md` §5. Behind a
 /// feature flag beside `dst`: same crate (only this crate can name
 /// the scheduler's internals), same "never in a production build"
 /// rationale.
 #[cfg(feature = "mesh-sim")]
 pub mod mesh_sim;
-pub mod meshapp_http;
 pub use sovereign_serving_host::model_fetch; // shim: moved by domains dm-serving-move-leaves
 pub mod newsworthy_host;
-pub mod notes_http;
 pub(crate) use sovereign_scheduler::oicp_select; // shim: moved by domains REVIEW-build-sched-move
-pub mod origin_fanout;
 /// The mesh implementations of `sovereign-contracts::peer`'s two ports — the
 /// N>1 half of what the daemon speaks to its peers through (cw-lift 3b).
 pub mod peer_adapter;
@@ -98,32 +78,19 @@ pub mod persist;
 /// (`SCHEDULER_QUALITY.md` §4.1). Public because it is scored from a
 /// capture as well as from the live path.
 pub use sovereign_scheduler::predicted_time; // shim: moved by domains REVIEW-build-sched-move
-#[cfg(feature = "treesitter")]
-pub mod project_http;
 pub mod projects;
-pub mod publish_http;
 pub mod rail_bind;
 pub mod rail_kv_pump;
 pub use corpus_engine_vocab::reading_formatters; // shim: moved by domains dm-mesh-move-reading-formatters
-pub mod reading_http;
-pub mod recipe_http;
-pub mod recipe_project_http;
 #[cfg(feature = "treesitter")]
 pub mod reindexer;
-pub mod research_http;
 pub use sovereign_core::deep_research::research_run_dir; // shim: moved by domains REVIEW-build-research-run-dir
 pub mod ring_roster;
 pub mod ring_sync;
-pub mod roster_repair;
-pub mod rpc_warm_http;
 /// The routing decision as a pure function — shared by the production
 /// selector and the Tier-1 simulator (`SCHEDULER_QUALITY.md` §5).
 pub(crate) use sovereign_scheduler::scheduler_core; // shim: moved by domains REVIEW-build-sched-move
 pub use sovereign_scheduler::slot_aliases; // shim: moved by domains dm-sched-move-slot-aliases
-/// The daemon's `SlotManifest` port implementation over `sovereign-core`'s
-/// bundled manifest; supplied to the serving host's inference adapter and
-/// self-manifest advertisement (domains REVIEW-build-serving-move-adapter).
-pub mod slot_manifest;
 pub mod state;
 pub mod supervised_task;
 /// Capability bands — the tier floor of `SCHEDULER_QUALITY.md` §4.1:
@@ -133,10 +100,6 @@ pub use sovereign_scheduler::tier;
 pub use sovereign_serving_host::throughput_tracking; // shim: moved by domains REVIEW-build-serving-move-throughput-guest
 
 pub use sovereign_core::turn_approval; // shim: moved by domains dm-mesh-move-turn-approval
-pub mod turn_extras_http;
-pub mod turn_http;
-pub mod types;
-pub mod venue_host;
 pub mod watched_folder_runtime;
 pub mod watched_folder_setup;
 pub mod work_atlas_broadcaster;
@@ -152,15 +115,5 @@ pub use sovereign_contracts::worker_pod; // shim: moved by domains REVIEW-build-
 pub use sovereign_serving_host::pinned_pod_snapshot; // shim: moved by domains REVIEW-build-serving-move-peer
 pub use sovereign_serving_host::pinned_worker_source; // shim: moved by domains REVIEW-build-serving-move-peer
 
-pub use daemon::{ClientListener, EmbeddedDaemon};
-pub use daemon_services::{
-    assemble, AssemblyRefusal, DaemonServices, EmbedAdvertisement, HeadlessExtras, HeadlessRails,
-    HeadlessServices, LaunchParts, McpMount, McpSurface, MeshAdminWitness, ServingCapability,
-    ServingCore, ServingProfile,
-};
-pub use deep_link::{parse_deep_link, DeepLink};
-pub use local_only::{LocalOnlyProfile, LocalOnlySource, MeshService, RunningServices};
 pub use state::MeshState;
-pub use types::*;
-pub use venue_host::DeferredDaemon;
 pub use work_atlas_broadcaster::MeshBroadcaster;

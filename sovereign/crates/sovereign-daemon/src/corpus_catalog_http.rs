@@ -39,8 +39,8 @@ use sovereign_tools::local_corpus::config::{LocalCorpusConfig, LocalCorpusSource
 
 use crate::daemon::EmbeddedDaemon;
 use crate::http_response::{json_error, Absence};
-use crate::job_registry::JobRegistry;
 use crate::loopback_guard::{LocalOnly, LoopbackRouter};
+use sovereign_mesh::job_registry::JobRegistry;
 
 pub use sovereign_contracts::daemon_wire::{IndexBuildProgress, IndexBuildState, IngestJobAck};
 
@@ -195,7 +195,7 @@ struct IndexBuild {
 }
 
 /// The live builds, keyed by corpus id. One form, shared with the other five
-/// job routes — see `crate::job_registry` for what the shared `get` fixes
+/// job routes — see `sovereign_mesh::job_registry` for what the shared `get` fixes
 /// that five hand-rolled copies of this table did not.
 static INDEX_BUILDS: JobRegistry<IndexBuild> = JobRegistry::new("index_build");
 
@@ -518,7 +518,7 @@ async fn notebooks(
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
 ) -> Result<Response, Absence> {
     let engine = engine_for(&daemon)?;
-    let manager = match crate::watched_folder_runtime::manager() {
+    let manager = match sovereign_mesh::watched_folder_runtime::manager() {
         Some(m) => m,
         None => {
             return Ok(json_error(

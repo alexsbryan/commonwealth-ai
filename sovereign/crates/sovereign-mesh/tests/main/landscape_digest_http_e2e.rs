@@ -31,7 +31,7 @@
 use std::sync::Arc;
 
 use commonwealth_core::Result as CorpusResult;
-use sovereign_mesh::landscape_digest_http::landscape_digest_router;
+use sovereign_daemon::landscape_digest_http::landscape_digest_router;
 use sovereign_tools::knowledge_view::KnowledgeViewManager;
 
 use crate::common;

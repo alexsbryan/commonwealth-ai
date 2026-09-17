@@ -41,9 +41,9 @@ use std::sync::Arc;
 use corpus_engine::CorpusEngine;
 use corpus_engine_notes::NoteStore;
 use sovereign_core::setup_config::SetupConfig;
-use sovereign_mesh::daemon::EmbeddedDaemon;
-use sovereign_mesh::features_http::features_router;
-use sovereign_mesh::notes_http::notes_router;
+use sovereign_daemon::daemon::EmbeddedDaemon;
+use sovereign_daemon::features_http::features_router;
+use sovereign_daemon::notes_http::notes_router;
 use sovereign_store::recipe_project_store::RecipeProjectStore;
 
 use crate::common;

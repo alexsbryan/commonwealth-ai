@@ -24,7 +24,7 @@ use serde::Deserialize;
 // these ops (ARCH §10.6). This dev server used to re-inline the same five
 // literal pairs; a bound changed there and not here would have made the two
 // explorers disagree with nothing red.
-use sovereign_mesh::meshapp_http::{
+use sovereign_daemon::meshapp_http::{
     self, ENTITY_LIMIT_DEFAULT, ENTITY_LIMIT_MAX, FEED_DOCS_DEFAULT, FEED_DOCS_MAX, FEED_DOCS_MIN,
     GRAPH_LIMIT_DEFAULT, GRAPH_LIMIT_MAX, SUBGRAPH_LIMIT_DEFAULT, SUBGRAPH_LIMIT_MAX,
 };

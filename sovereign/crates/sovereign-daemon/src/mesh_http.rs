@@ -654,7 +654,7 @@ pub struct PeerMeasurementsResponse {
 /// round carries it to every peer — there is nothing to broadcast here and
 /// nothing to re-upload at boot, which is what the gossip KV store needed
 /// because it was an in-memory buffer that lost this node's history on every
-/// restart. See [`crate::measurements_rail`].
+/// restart. See [`sovereign_mesh::measurements_rail`].
 async fn publish_measurement(
     _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
@@ -688,8 +688,8 @@ async fn publish_measurement(
 
     // Derived here from membership this node already holds, and never accepted
     // over the wire — there is no roster route, and its absence is the safety
-    // property (ARCH §7.1). See `crate::ring_roster`.
-    let roster = crate::ring_roster::MeshRoster::from_membership(
+    // property (ARCH §7.1). See `sovereign_mesh::ring_roster`.
+    let roster = sovereign_mesh::ring_roster::MeshRoster::from_membership(
         &*app_state.inner.fabric.mesh.read().await,
         app_state.self_node_id(),
         app_state.self_node_pubkey(),
@@ -706,7 +706,12 @@ async fn publish_measurement(
                 .into(),
         );
     }
-    match crate::measurements_rail::publish(&journal, rail.signer(), roster.roster(), &record) {
+    match sovereign_mesh::measurements_rail::publish(
+        &journal,
+        rail.signer(),
+        roster.roster(),
+        &record,
+    ) {
         Ok(op) => {
             tracing::info!(
                 target = "mesh_measurements",
@@ -770,7 +775,7 @@ async fn peer_measurements(
             return empty();
         }
     };
-    let roster = crate::ring_roster::MeshRoster::from_membership(
+    let roster = sovereign_mesh::ring_roster::MeshRoster::from_membership(
         &*app_state.inner.fabric.mesh.read().await,
         app_state.self_node_id(),
         app_state.self_node_pubkey(),
@@ -797,7 +802,7 @@ async fn peer_measurements(
     // `None` drops the own-author filter entirely; see `include_self`.
     let mine = rail.signer().actor();
     let exclude = (!q.include_self).then_some(mine.as_str());
-    let seen = crate::measurements_rail::read(&admission, exclude);
+    let seen = sovereign_mesh::measurements_rail::read(&admission, exclude);
     (StatusCode::OK, Json(peer_view(seen, &roster))).into_response()
 }
 
@@ -806,8 +811,8 @@ async fn peer_measurements(
 /// reader is told about the lines that did not survive, and what order they
 /// come back in.
 fn peer_view(
-    seen: crate::measurements_rail::RailMeasurements,
-    roster: &crate::ring_roster::MeshRoster,
+    seen: sovereign_mesh::measurements_rail::RailMeasurements,
+    roster: &sovereign_mesh::ring_roster::MeshRoster,
 ) -> PeerMeasurementsResponse {
     // One count, not two. A line this build cannot decode and a line the rail
     // could not account for are both "your answer covers less than the ring
@@ -890,7 +895,7 @@ async fn mesh_create(
 /// guest link is not a join and previews as 400 — the conversion refuses
 /// it by construction.
 async fn mesh_join_preview(_: LocalOnly, Json(req): Json<JoinPreviewRequest>) -> impl IntoResponse {
-    let Some(link) = crate::deep_link::parse_join_argument(&req.link) else {
+    let Some(link) = sovereign_mesh::deep_link::parse_join_argument(&req.link) else {
         return (
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({
@@ -899,7 +904,7 @@ async fn mesh_join_preview(_: LocalOnly, Json(req): Json<JoinPreviewRequest>) ->
         )
             .into_response();
     };
-    match crate::deep_link::join_confirmation_from_link(&link) {
+    match sovereign_mesh::deep_link::join_confirmation_from_link(&link) {
         Some(confirmation) => (
             StatusCode::OK,
             Json(serde_json::to_value(confirmation).unwrap()),
@@ -921,7 +926,7 @@ async fn mesh_join(
 ) -> impl IntoResponse {
     // Accept bare key, https URL, or sovereign:// deep link — matches
     // what the CLI's `sovereign mesh join` takes.
-    let link = match crate::deep_link::parse_join_argument(&req.key_or_url) {
+    let link = match sovereign_mesh::deep_link::parse_join_argument(&req.key_or_url) {
         Some(l) => l,
         None => {
             return (
@@ -961,7 +966,7 @@ async fn mesh_join(
 
 /// Render the known-mesh list for `/v1/mesh/status`.
 fn known_mesh_dtos(daemon: &Arc<EmbeddedDaemon>) -> Vec<KnownMeshDto> {
-    let active = crate::persist::active_mesh_id(daemon.data_dir());
+    let active = sovereign_mesh::persist::active_mesh_id(daemon.data_dir());
     daemon
         .known_meshes()
         .into_iter()
@@ -1028,7 +1033,7 @@ async fn mesh_switch(
     // Resolve BEFORE detaching so a bad name is a 404 the caller can read,
     // rather than a 202 followed by silence.
     let known = daemon.known_meshes();
-    if crate::persist::resolve_known(&known, &req.mesh).is_none() {
+    if sovereign_mesh::persist::resolve_known(&known, &req.mesh).is_none() {
         return (
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({
@@ -1121,7 +1126,7 @@ async fn mesh_relay_candidates(_: LocalOnly) -> impl IntoResponse {
     // binds in start_daemon and what the gossip handshake targets).
     // Plumbing this through config is a follow-up; for now the
     // single source of truth lives next to the binder.
-    let candidates = crate::mesh_discovery::relay_candidates(9742);
+    let candidates = sovereign_mesh::mesh_discovery::relay_candidates(9742);
     (
         StatusCode::OK,
         Json(serde_json::json!({ "candidates": candidates })),
@@ -1658,7 +1663,7 @@ mod tests {
             .unwrap();
 
         let in_memory = live_invite_key_hash(&daemon).await;
-        let on_disk = crate::persist::load(tmp.path())
+        let on_disk = sovereign_mesh::persist::load(tmp.path())
             .expect("mesh.json readable")
             .expect("a mesh is persisted after create")
             .invite_key_hash;
@@ -1720,18 +1725,18 @@ mod tests {
 
     // -- Measurements -------------------------------------------------------
     //
-    // The namespace lives on the ring rail (`crate::measurements_rail`), so
+    // The namespace lives on the ring rail (`sovereign_mesh::measurements_rail`), so
     // the journal-level properties — self-exclusion, ordering, what an
     // undecodable line costs — are pinned there, against a real journal. What
     // is left here is the MAPPING: how an admitted op becomes the DTO the CLI
     // reads.
 
-    use crate::measurements_rail::{RailMeasurement, RailMeasurements};
-    use crate::ring_roster::tests::{key, member, mesh_of, pubkey_of};
-    use crate::ring_roster::MeshRoster;
     use commonwealth_rail::{Person, RingSigner};
+    use sovereign_mesh::measurements_rail::{RailMeasurement, RailMeasurements};
+    use sovereign_mesh::ring_roster::tests::{key, member, mesh_of, pubkey_of};
+    use sovereign_mesh::ring_roster::MeshRoster;
 
-    use crate::measurements_rail::tests::a_measurement;
+    use sovereign_mesh::measurements_rail::tests::a_measurement;
 
     fn node(b: u8) -> commonwealth_core::ids::NodeId {
         commonwealth_core::ids::NodeId::from_u128(u128::from(b))

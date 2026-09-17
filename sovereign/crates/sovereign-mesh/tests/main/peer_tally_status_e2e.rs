@@ -40,7 +40,7 @@ use sovereign_core::types::{
     CompletionRequest, CompletionResponse, ProviderCapabilities, Speed, StreamFrame,
 };
 use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
-use sovereign_mesh::slot_manifest::CoreSlotManifest;
+use sovereign_daemon::slot_manifest::CoreSlotManifest;
 use sovereign_meshapp_registry::registry::AppRegistry;
 
 use crate::common;

@@ -186,12 +186,12 @@ fn mdns_enabled_effective(profile: crate::local_only::LocalOnlyProfile, cfg_mdns
 
 use crate::admin_http::ConfigDiff;
 use crate::daemon_services::DaemonServices;
-use crate::deep_link::DeepLink;
-use crate::gossip::{self, GossipHandle};
 use crate::mcp_router;
-use crate::mesh_discovery::{local_ip_candidates, reachable_addresses};
-use crate::persist;
-use crate::state::MeshState;
+use sovereign_mesh::deep_link::DeepLink;
+use sovereign_mesh::gossip::{self, GossipHandle};
+use sovereign_mesh::mesh_discovery::{local_ip_candidates, reachable_addresses};
+use sovereign_mesh::persist;
+use sovereign_mesh::state::MeshState;
 
 /// The embedded Commonwealth daemon — the ONE daemon implementation, shared
 /// by `sovereign daemon run`, the desktop's Local mode, and `svrn mesh`.
@@ -352,22 +352,22 @@ enum DaemonState {
         /// `tokio::spawn` in a stray three-line diff and stay silent about it
         /// for five weeks (`ec7ca66c`, 2026-07-21 — see
         /// `auto_ingest::CollaborateHandle`).
-        _collaborate_handle: Option<crate::auto_ingest::CollaborateHandle>,
+        _collaborate_handle: Option<sovereign_mesh::auto_ingest::CollaborateHandle>,
         /// Aborts the ring-journal anti-entropy loop on Drop. Its own handle
         /// and its own cadence rather than a step inside gossip — see
-        /// [`crate::ring_sync`] for the bandwidth arithmetic that forces it.
-        _ring_sync_handle: Option<crate::ring_sync::RingSyncHandle>,
+        /// [`sovereign_mesh::ring_sync`] for the bandwidth arithmetic that forces it.
+        _ring_sync_handle: Option<sovereign_mesh::ring_sync::RingSyncHandle>,
         /// Aborts the mesh-store outbox pump on Drop — the loop that signs
         /// local store writes onto their ring journals and seals the daemon's
         /// own namespaces. Same pattern and the same second reason as
         /// `_collaborate_handle`: a spawner whose handle nobody holds can lose
         /// its `tokio::spawn` in a stray diff and stay silent about it.
-        _rail_kv_pump_handle: Option<crate::rail_kv_pump::RailKvPumpHandle>,
+        _rail_kv_pump_handle: Option<sovereign_mesh::rail_kv_pump::RailKvPumpHandle>,
         /// Aborts the work-plane donor loop on Drop — the loop that leases,
         /// runs and reports other people's units (cw-lift 5d). `None` on a
         /// local-only daemon AND on a node whose `[compute.work_offer]` names
         /// no kind; `running_services` is what tells those two apart.
-        _work_donor_handle: Option<crate::work_donor::WorkDonorHandle>,
+        _work_donor_handle: Option<sovereign_mesh::work_donor::WorkDonorHandle>,
         /// The network posture this boot resolved, and what it produced.
         /// Read by [`EmbeddedDaemon::running_services`] — the boot
         /// assertion's instrument (ARCH §18.1).
@@ -382,20 +382,20 @@ enum DaemonState {
         /// still-`LISTEN`ing socket and hits EADDRINUSE.
         serve_handle: tokio::task::JoinHandle<()>,
         /// Server-half iroh endpoint + acceptor (Track W, W1 — see
-        /// `crate::iroh_access`). `None` unless iroh is enabled
+        /// `sovereign_mesh::iroh_access`). `None` unless iroh is enabled
         /// (explicit config or mesh participation). Read live by
         /// invite generation (`create_mesh_with` / `current_invite`)
         /// for the dial string; its Drop ties the acceptor to the
         /// Running variant, so leaving the mesh / stopping the daemon
         /// also stops accepting dial-by-key traffic, same pattern as
         /// `_browse_handle`.
-        iroh_access: Option<crate::iroh_access::MeshIrohAccess>,
+        iroh_access: Option<sovereign_mesh::iroh_access::MeshIrohAccess>,
         /// Founder reachability watchdog (Track W hardening): polls relay-home +
         /// self-discovery health and self-heals (nudge → relay bounce → endpoint
         /// rebuild) with no daemon restart. `None` when iroh is disabled. Aborts
         /// its task on Drop (tied to the Running variant, like `_gossip_handle`);
         /// also read by `self_reachability()` for the status surface.
-        reachability_watchdog: Option<crate::iroh_watchdog::WatchdogHandle>,
+        reachability_watchdog: Option<sovereign_mesh::iroh_watchdog::WatchdogHandle>,
     },
 }
 
@@ -408,7 +408,7 @@ enum DaemonState {
 /// closure.
 pub(crate) fn install_iroh_access(
     app_state: &AppState,
-    access: &crate::iroh_access::MeshIrohAccess,
+    access: &sovereign_mesh::iroh_access::MeshIrohAccess,
     iroh_routed_classes: &[commonwealth_transport::TrafficClass],
     iroh_required_classes: &std::collections::HashSet<commonwealth_transport::TrafficClass>,
     ip_transport: &Arc<dyn commonwealth_transport::PeerTransport>,
@@ -491,7 +491,7 @@ pub struct IrohPeerPath {
     pub node_id: NodeId,
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub path: Option<crate::iroh_access::PeerTransportPath>,
+    pub path: Option<sovereign_mesh::iroh_access::PeerTransportPath>,
 }
 
 /// The founder's OWN iroh reachability (Track W hardening), for
@@ -1054,9 +1054,9 @@ impl EmbeddedDaemon {
         // "offline", not "departed" — a `removed_at` tombstone would read as a
         // leave, and we intend to come back.
         if let Some(app_state) = self.app_state().await {
-            crate::gossip::announce_presence_change(
+            sovereign_mesh::gossip::announce_presence_change(
                 &app_state,
-                crate::gossip::PresenceChange::Parked,
+                sovereign_mesh::gossip::PresenceChange::Parked,
             )
             .await;
         }
@@ -1263,7 +1263,7 @@ impl EmbeddedDaemon {
         // QUIC tunnel, never plaintext. Plaintext: the dial rides
         // `dial=` (no TTL) so a no-VPN joiner can reach this founder
         // by key, with IP/mDNS fallback intact.
-        let mut join_link = crate::deep_link::build_join_link(
+        let mut join_link = sovereign_mesh::deep_link::build_join_link(
             &join_key,
             None, // relay_hint — local network for now
             Some(mesh_name),
@@ -1309,7 +1309,7 @@ impl EmbeddedDaemon {
             }
             let dial = match &endpoint {
                 Some(ep) => {
-                    crate::iroh_access::MeshIrohAccess::wait_for_relay(
+                    sovereign_mesh::iroh_access::MeshIrohAccess::wait_for_relay(
                         ep,
                         std::time::Duration::from_secs(8),
                     )
@@ -1319,7 +1319,7 @@ impl EmbeddedDaemon {
             };
             match dial {
                 Some(dial) => {
-                    join_link = crate::deep_link::build_join_link(
+                    join_link = sovereign_mesh::deep_link::build_join_link(
                         &join_key,
                         None,
                         Some(mesh_name),
@@ -1462,9 +1462,9 @@ impl EmbeddedDaemon {
             // Say "offline", not "departed", before the listeners drop: a
             // `removed_at` tombstone would tell peers we left, and we have not.
             if let Some(app_state) = self.app_state().await {
-                crate::gossip::announce_presence_change(
+                sovereign_mesh::gossip::announce_presence_change(
                     &app_state,
-                    crate::gossip::PresenceChange::Parked,
+                    sovereign_mesh::gossip::PresenceChange::Parked,
                 )
                 .await;
             }
@@ -1588,7 +1588,7 @@ impl EmbeddedDaemon {
             // mesh. (The on-wire handshake is validated on two boxes.)
             // A plaintext invite's `dial=` takes the perform_join path
             // below — prefer-iroh, fail-soft (W2c).
-            crate::join::perform_encrypted_join(
+            sovereign_mesh::join::perform_encrypted_join(
                 dial,
                 &join_key,
                 node_name,
@@ -1600,7 +1600,7 @@ impl EmbeddedDaemon {
             )
             .await
         } else {
-            crate::join::perform_join(
+            sovereign_mesh::join::perform_join(
                 &mesh_name,
                 &join_key,
                 node_name,
@@ -1750,7 +1750,7 @@ impl EmbeddedDaemon {
         // (gossiped `removed_at`) instead of re-learning our stale live record on
         // their next round. Then tear down + clear local state.
         if let Some(app_state) = self.app_state().await {
-            crate::gossip::announce_departure(&app_state).await;
+            sovereign_mesh::gossip::announce_departure(&app_state).await;
         }
         self.stop_inner(StopMode::Leave).await
     }
@@ -1959,7 +1959,7 @@ impl EmbeddedDaemon {
     ///     a rotate to recover a link)
     ///
     /// The `join_link` is reconstructed on demand from the cached
-    /// key + the current mesh name via [`crate::deep_link::build_join_link`],
+    /// key + the current mesh name via [`sovereign_mesh::deep_link::build_join_link`],
     /// so a mesh rename (if we ever add it) is automatically picked
     /// up without invalidating the secret file.
     pub async fn current_invite(&self) -> Option<(String, String)> {
@@ -1986,8 +1986,8 @@ impl EmbeddedDaemon {
         // itself as the relay connects (and a rotated invite keeps its
         // no-VPN path; this closed the old rotation-loses-the-dial
         // wart). No relay wait here: polls repeat.
-        let dial =
-            endpoint.and_then(|ep| crate::iroh_access::MeshIrohAccess::dial_for_endpoint(&ep));
+        let dial = endpoint
+            .and_then(|ep| sovereign_mesh::iroh_access::MeshIrohAccess::dial_for_endpoint(&ep));
         // The exp param mirrors the armed expiry — read, never re-armed here,
         // or every status poll would extend the invite forever. Rotation is
         // what re-arms (see `rotate_invite`). Read from the mesh so a member
@@ -1997,7 +1997,7 @@ impl EmbeddedDaemon {
         } else {
             None
         };
-        let link = crate::deep_link::build_join_link(
+        let link = sovereign_mesh::deep_link::build_join_link(
             &key,
             None,
             Some(&mesh_name),
@@ -2037,7 +2037,9 @@ impl EmbeddedDaemon {
         let mut out = Vec::with_capacity(members.len());
         for m in members {
             let pubkey = m.node_pubkey.expect("filtered to Some above");
-            let path = crate::iroh_access::MeshIrohAccess::peer_path_on(&endpoint, &pubkey.0).await;
+            let path =
+                sovereign_mesh::iroh_access::MeshIrohAccess::peer_path_on(&endpoint, &pubkey.0)
+                    .await;
             out.push(IrohPeerPath {
                 node_id: m.node_id,
                 name: m.name.clone(),
@@ -2070,7 +2072,7 @@ impl EmbeddedDaemon {
         };
         let health = match status_arc {
             Some(arc) => arc.read().await.clone(),
-            None => crate::iroh_watchdog::ReachabilityStatus::default(),
+            None => sovereign_mesh::iroh_watchdog::ReachabilityStatus::default(),
         };
         Some(SelfReachability {
             dial,
@@ -2904,13 +2906,13 @@ impl EmbeddedDaemon {
             // of a misconfiguration nobody finds (ARCH §18.3, §9.1).
             match &why {
                 Some(reason) => tracing::warn!(
-                    target: crate::work_donor::TRACE_TARGET,
+                    target: sovereign_mesh::work_donor::TRACE_TARGET,
                     provides = ?sandbox.provides(),
                     why = %reason,
                     "work donor: no boundary on this host, so it will offer no kind that needs one"
                 ),
                 None => tracing::info!(
-                    target: crate::work_donor::TRACE_TARGET,
+                    target: sovereign_mesh::work_donor::TRACE_TARGET,
                     provides = ?sandbox.provides(),
                     "work donor: boundary ready"
                 ),
@@ -2921,11 +2923,11 @@ impl EmbeddedDaemon {
             // said `std::env::consts` until 2026-09-10, which refused a
             // macOS host's perfectly runnable Linux work on `Os`.
             let (provides, (os, arch)) = (sandbox.provides(), sandbox.platform());
-            work_registry = std::sync::Arc::new(crate::work_donor::donor_registry(
+            work_registry = std::sync::Arc::new(sovereign_mesh::work_donor::donor_registry(
                 corpus_engine.clone(),
                 sandbox,
             ));
-            crate::work_donor::resolve_offer(
+            sovereign_mesh::work_donor::resolve_offer(
                 &c.compute.work_offer,
                 &work_registry,
                 &os,
@@ -2937,7 +2939,7 @@ impl EmbeddedDaemon {
         // Assigned inside the networked branch below. A `mut` binding rather
         // than a fifth tuple element so the gate stays the SAME `if` the four
         // loops already sit in without re-indenting sixty lines of it.
-        let mut work_donor_handle: Option<crate::work_donor::WorkDonorHandle> = None;
+        let mut work_donor_handle: Option<sovereign_mesh::work_donor::WorkDonorHandle> = None;
         // What this boot actually spawns, recorded at each spawn site and
         // stored on the Running variant. The profile's claim is about this
         // list, and a list is falsifiable where a config value is not
@@ -3182,7 +3184,7 @@ impl EmbeddedDaemon {
         // nothing between the rail's construction and this line could have
         // read the wrong roster.
         if let Some(rail) = app_state.ring_rail() {
-            if let Err(e) = crate::ring_roster::MeshRosterSource::install(
+            if let Err(e) = sovereign_mesh::ring_roster::MeshRosterSource::install(
                 &rail,
                 &app_state.inner.fabric.mesh,
                 &app_state.inner.fabric.identity,
@@ -3607,8 +3609,8 @@ impl EmbeddedDaemon {
         };
 
         // The rail's own listener — `rail_bind` says why it is a separate one.
-        let rail_addr = crate::rail_bind::rail_addr(client_addr.port());
-        let rail_listener = crate::rail_bind::bind(rail_addr).await;
+        let rail_addr = sovereign_mesh::rail_bind::rail_addr(client_addr.port());
+        let rail_listener = sovereign_mesh::rail_bind::bind(rail_addr).await;
 
         // Spawn the API servers in the background. The JoinHandle is stored
         // in `DaemonState::Running` (not discarded) so `stop_inner` can await
@@ -3828,7 +3830,7 @@ impl EmbeddedDaemon {
                 );
                 running_services.record(crate::local_only::MeshService::Gossip);
 
-                let collaborate_handle = crate::auto_ingest::spawn_auto_collaborate_loop(
+                let collaborate_handle = sovereign_mesh::auto_ingest::spawn_auto_collaborate_loop(
                     app_state.clone(),
                     internal_port,
                 );
@@ -3842,16 +3844,16 @@ impl EmbeddedDaemon {
                 // journals on disk before its first drain, which is the boot
                 // half of "the journal is truth" — production `MeshStore` is
                 // `in_memory()`.
-                let ring_sync_handle = crate::ring_sync::spawn_ring_sync_loop(
+                let ring_sync_handle = sovereign_mesh::ring_sync::spawn_ring_sync_loop(
                     app_state.clone(),
-                    crate::ring_sync::DEFAULT_RING_SYNC_INTERVAL,
+                    sovereign_mesh::ring_sync::DEFAULT_RING_SYNC_INTERVAL,
                     Arc::clone(&ring_write_nudge),
                 );
                 running_services.record(crate::local_only::MeshService::RingSync);
 
-                let rail_kv_pump_handle = crate::rail_kv_pump::spawn_rail_kv_pump(
+                let rail_kv_pump_handle = sovereign_mesh::rail_kv_pump::spawn_rail_kv_pump(
                     app_state.clone(),
-                    crate::rail_kv_pump::RAIL_KV_PUMP_INTERVAL,
+                    sovereign_mesh::rail_kv_pump::RAIL_KV_PUMP_INTERVAL,
                     ring_write_nudge,
                 );
                 running_services.record(crate::local_only::MeshService::RailKvPump);
@@ -3862,12 +3864,12 @@ impl EmbeddedDaemon {
                 // then by the offer: a node whose `[compute.work_offer]` names
                 // no kind spawns nothing, which is the shipped posture.
                 work_donor_handle = work_offer.map(|offer| {
-                    let handle = crate::work_donor::spawn_work_donor(
+                    let handle = sovereign_mesh::work_donor::spawn_work_donor(
                         app_state.clone(),
                         offer,
                         std::sync::Arc::clone(&work_registry),
-                        self.data_dir.join(crate::work_donor::DONOR_DIR),
-                        crate::work_donor::DONOR_POLL_INTERVAL,
+                        self.data_dir.join(sovereign_mesh::work_donor::DONOR_DIR),
+                        sovereign_mesh::work_donor::DONOR_POLL_INTERVAL,
                     );
                     running_services.record(crate::local_only::MeshService::WorkDonor);
                     handle
@@ -3888,7 +3890,7 @@ impl EmbeddedDaemon {
         // Without this hook the on-disk state stays "in progress"
         // forever and the desktop banner pretends progress is happening
         // while the embed slot is idle. See `auto_resume.rs` docstring.
-        crate::auto_resume::spawn_resume_in_progress_ingests(app_state.clone());
+        sovereign_mesh::auto_resume::spawn_resume_in_progress_ingests(app_state.clone());
 
         // Hourly StorageSnapshot ledger emission. Without this, the
         // dimensional ledger has no signal for "what corpora is each
@@ -4058,7 +4060,7 @@ impl EmbeddedDaemon {
                     corpus_engine::update::newsworthy_watcher::NewsworthyConfig::default();
                 let host: std::sync::Arc<
                     dyn corpus_engine::update::newsworthy_watcher::NewsworthyHost,
-                > = std::sync::Arc::new(crate::newsworthy_host::MeshNewsworthyHost::new(
+                > = std::sync::Arc::new(sovereign_mesh::newsworthy_host::MeshNewsworthyHost::new(
                     app_state.clone(),
                     newsworthy_config.corpus_id.clone(),
                 ));
@@ -4142,7 +4144,7 @@ impl EmbeddedDaemon {
         // meshless daemon never contacts relays. The mesh-wide
         // encryption policy still FORCES iroh on: an encrypted mesh
         // must be dialable by key and must dial peers by key.
-        let iroh_enabled = crate::iroh_access::resolve_enabled(
+        let iroh_enabled = sovereign_mesh::iroh_access::resolve_enabled(
             local_only.is_local_only(),
             cfg_iroh_enabled,
             persist::client_exposed(&self.data_dir),
@@ -4152,7 +4154,7 @@ impl EmbeddedDaemon {
         // dial rather than a snapshot: a node that left must lose reachability
         // with its membership, and one that just joined must gain it without a
         // restart. `removed_at` tombstones are excluded here and nowhere else.
-        let member_check: crate::iroh_access::MemberCheck = {
+        let member_check: sovereign_mesh::iroh_access::MemberCheck = {
             let app_state = app_state.clone();
             Arc::new(move |dialer: commonwealth_core::ids::NodePubkey| {
                 let app_state = app_state.clone();
@@ -4161,7 +4163,7 @@ impl EmbeddedDaemon {
                     mesh.members
                         .values()
                         .find(|m| m.removed_at.is_none() && m.node_pubkey == Some(dialer))
-                        .map(|m| crate::iroh_access::MemberIdentity {
+                        .map(|m| sovereign_mesh::iroh_access::MemberIdentity {
                             name: m.name.clone(),
                             node_id: m.node_id,
                         })
@@ -4195,7 +4197,7 @@ impl EmbeddedDaemon {
         // media's reason: a node that cannot parse what it would serve must
         // not boot pretending to serve it, and a peer's `svrn mesh offers`
         // would then print a never_asked row blaming the wrong thing.
-        let offer: crate::iroh_access::OfferRoutes = {
+        let offer: sovereign_mesh::iroh_access::OfferRoutes = {
             let cfg = self.setup_config.read().await;
             let origin = match cfg.iroh.offer_origin.clone() {
                 None => None,
@@ -4210,7 +4212,7 @@ impl EmbeddedDaemon {
                     }
                 },
             };
-            crate::iroh_access::OfferRoutes {
+            sovereign_mesh::iroh_access::OfferRoutes {
                 origin,
                 allow: cfg.iroh.offer_allow.clone(),
             }
@@ -4219,7 +4221,7 @@ impl EmbeddedDaemon {
         // does not parse as an address is DROPPED with a warning naming it,
         // never silently: a typo'd port in one entry must not take the other
         // apps down with it, and must not read as "not published" in silence.
-        let apps: crate::iroh_access::AppRoutes = {
+        let apps: sovereign_mesh::iroh_access::AppRoutes = {
             let cfg = self.setup_config.read().await;
             let mut config_apps = std::collections::BTreeMap::new();
             for (name, target) in &cfg.iroh.apps {
@@ -4241,12 +4243,12 @@ impl EmbeddedDaemon {
             // the publish routes hand out claims in this same registry while
             // the acceptor below resolves dials against it.
             self.published_apps.set_config(config_apps);
-            crate::iroh_access::AppRoutes {
+            sovereign_mesh::iroh_access::AppRoutes {
                 apps: self.published_apps.clone(),
                 allow: cfg.iroh.app_allow.clone(),
             }
         };
-        let iroh_access = crate::iroh_access::MeshIrohAccess::start(
+        let iroh_access = sovereign_mesh::iroh_access::MeshIrohAccess::start(
             &self.data_dir,
             internal_port,
             peer_addr,
@@ -4278,7 +4280,7 @@ impl EmbeddedDaemon {
             )
         } else {
             (
-                crate::iroh_access::iroh_routed_classes(&iroh_transport_cfg),
+                sovereign_mesh::iroh_access::iroh_routed_classes(&iroh_transport_cfg),
                 std::collections::HashSet::new(),
             )
         };
@@ -4307,7 +4309,7 @@ impl EmbeddedDaemon {
                  refusing to start on a plaintext transport"
                     .into(),
             ));
-        } else if crate::iroh_access::has_explicit_iroh_routes(&iroh_transport_cfg) {
+        } else if sovereign_mesh::iroh_access::has_explicit_iroh_routes(&iroh_transport_cfg) {
             // Under opt-out semantics `iroh_routed_classes` is non-empty
             // even for an empty section, so this warning keys off
             // explicit `"iroh"` entries — someone wrote config that
@@ -4335,7 +4337,7 @@ impl EmbeddedDaemon {
             let required = iroh_required_classes.clone();
             let member_check = member_check.clone();
             let media_allow = media_allow.clone();
-            let rebuild: crate::iroh_watchdog::RebuildFn = Arc::new(move || {
+            let rebuild: sovereign_mesh::iroh_watchdog::RebuildFn = Arc::new(move || {
                 let state = state.clone();
                 let data_dir = data_dir.clone();
                 let relay_cfg = relay_cfg.clone();
@@ -4347,7 +4349,7 @@ impl EmbeddedDaemon {
                 let apps = apps.clone();
                 let offer = offer.clone();
                 Box::pin(async move {
-                    let new = crate::iroh_access::MeshIrohAccess::start(
+                    let new = sovereign_mesh::iroh_access::MeshIrohAccess::start(
                         &data_dir,
                         internal_port,
                         peer_addr,
@@ -4404,10 +4406,10 @@ impl EmbeddedDaemon {
             // Takes the endpoint as an argument because the watchdog swaps its
             // handle on rebuild and must judge the one it is holding.
             let paths_state = app_state.clone();
-            let peer_paths: crate::iroh_watchdog::PeerPathsFn = Arc::new(move |ep| {
+            let peer_paths: sovereign_mesh::iroh_watchdog::PeerPathsFn = Arc::new(move |ep| {
                 let app_state = paths_state.clone();
                 Box::pin(async move {
-                    crate::iroh_access::observe_peer_paths(
+                    sovereign_mesh::iroh_access::observe_peer_paths(
                         &app_state.inner.fabric.mesh,
                         app_state.inner.fabric.identity.current(),
                         &ep,
@@ -4417,19 +4419,21 @@ impl EmbeddedDaemon {
                     as std::pin::Pin<
                         Box<
                             dyn std::future::Future<
-                                    Output = Vec<crate::iroh_watchdog::PeerPathObservation>,
+                                    Output = Vec<
+                                        sovereign_mesh::iroh_watchdog::PeerPathObservation,
+                                    >,
                                 > + Send,
                         >,
                     >
             });
-            let mut cfg = crate::iroh_watchdog::WatchdogConfig::from_env();
+            let mut cfg = sovereign_mesh::iroh_watchdog::WatchdogConfig::from_env();
             cfg.self_probe = iroh_relay_cfg.n0_services;
             // Relay-home is a health signal only when this node actually uses a
             // relay (n0 or a configured one). A relay-less LAN/air-gapped node
             // (netns soak) is reachable by direct addrs — don't rebuild-loop it.
             cfg.relays_expected =
                 iroh_relay_cfg.n0_services || !iroh_relay_cfg.relay_urls.is_empty();
-            crate::iroh_watchdog::spawn(endpoint, rebuild, Some(peer_paths), cfg)
+            sovereign_mesh::iroh_watchdog::spawn(endpoint, rebuild, Some(peer_paths), cfg)
         });
         if reachability_watchdog.is_some() {
             running_services.record(crate::local_only::MeshService::IrohWatchdog);

@@ -31,7 +31,7 @@ use sovereign_core::types::{
     Effect, Idempotency, Latency, Scope, StepOutput, ToolContext, ToolDescriptor,
 };
 use sovereign_core::Tool;
-use sovereign_mesh::mcp_router::{mcp_router, FeatureRoot, McpNotifier};
+use sovereign_daemon::mcp_router::{mcp_router, FeatureRoot, McpNotifier};
 use sovereign_tools::spec_watcher::SpecWatcher;
 
 /// Tiny stub tool — not actually exercised over the wire in these

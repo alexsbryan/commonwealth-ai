@@ -8,7 +8,7 @@
 //!
 //! # Two ports, and it matters which
 //!
-//! `/v1/mesh/*` is the CLIENT port — `sovereign_mesh::mesh_http`'s router,
+//! `/v1/mesh/*` is the CLIENT port — `sovereign_daemon::mesh_http`'s router,
 //! mounted on the daemon's client listener. `/internal/*` is the INTERNAL
 //! port — `sovereign_api::routes_internal::mesh_admin`, loopback-only.
 //! A [`TurnClient`] carries one base URL, so a caller builds it from
@@ -122,7 +122,7 @@ impl TurnClient {
     //
     // These seven ride the CLIENT port (`/v1/mesh/*`), so construct the
     // client with `client_base_url()`, not the internal one. They are
-    // `sovereign_mesh::mesh_http`'s routes, which the daemon mounts on
+    // `sovereign_daemon::mesh_http`'s routes, which the daemon mounts on
     // its client listener whether it was started by the CLI, by a
     // service manager, or in-process by a Local-mode desktop — so one
     // path answers in every boot mode and the caller does not fork on
@@ -140,7 +140,7 @@ impl TurnClient {
     /// this node's own reachability.
     ///
     /// `T` is `sovereign_contracts::daemon_wire::MeshStatusSummary` (the
-    /// route's `sovereign_mesh::mesh_http::StatusResponse` for a caller
+    /// route's `sovereign_daemon::mesh_http::StatusResponse` for a caller
     /// that links the daemon). It is a READ and it always answers: a node in no mesh reports `running: false`
     /// with `mesh_name: None`, which is a fact and not an absence. An
     /// unreachable host is an `Err` (ARCH principle 6).

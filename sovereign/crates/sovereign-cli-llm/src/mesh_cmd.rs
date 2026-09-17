@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 use sovereign_cli_shared::dirs::sovereign_root;
 use sovereign_mesh::deep_link::{build_https_join_link, parse_join_argument};
-use sovereign_mesh::EmbeddedDaemon;
+use sovereign_daemon::EmbeddedDaemon;
 
 /// The `SetupConfig` a `svrn mesh` one-shot binds with.
 ///
@@ -23,7 +23,7 @@ use sovereign_mesh::EmbeddedDaemon;
 /// The `DaemonServices` a `svrn mesh create` / `svrn mesh join` one-shot
 /// assembles — obtained from THE assembler, not named here.
 ///
-/// `sovereign_mesh::assemble` is the one exhaustive match over `Launch` that
+/// `sovereign_daemon::assemble` is the one exhaustive match over `Launch` that
 /// constructs anything (`quality/TOPOLOGY.md` §10, Falsifier 3). These two
 /// sites used to name `DaemonServices::MeshAdmin` directly, which is a fourth
 /// place answering "what does this invocation assemble". They now supply
@@ -34,7 +34,7 @@ use sovereign_mesh::EmbeddedDaemon;
 /// `exec`d by the dispatcher and its argv IS the verb invocation; parse is the
 /// one sanctioned reader of that (Falsifier 1 forbids OTHER code deciding what
 /// the process is, not calling the decider).
-fn mesh_admin_services() -> sovereign_mesh::DaemonServices {
+fn mesh_admin_services() -> sovereign_daemon::DaemonServices {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let launch = sovereign_contracts::launch::Launch::parse(
         &args,
@@ -45,7 +45,7 @@ fn mesh_admin_services() -> sovereign_mesh::DaemonServices {
             args: args.clone(),
         },
     );
-    match sovereign_mesh::assemble(&launch, sovereign_mesh::LaunchParts::Admin) {
+    match sovereign_daemon::assemble(&launch, sovereign_daemon::LaunchParts::Admin) {
         Ok(services) => services,
         Err(refusal) => {
             eprintln!("error: {refusal}");
@@ -3148,7 +3148,7 @@ async fn cmd_status(args: &[String]) -> i32 {
         }
     };
 
-    let status: sovereign_mesh::mesh_http::StatusResponse = match serde_json::from_str(&body) {
+    let status: sovereign_daemon::mesh_http::StatusResponse = match serde_json::from_str(&body) {
         Ok(s) => s,
         Err(e) => {
             // Daemon version drift — fall back to raw JSON pass-through
@@ -3162,7 +3162,7 @@ async fn cmd_status(args: &[String]) -> i32 {
 
     // Filter to self when requested. Most addr-only / scripting uses
     // want exactly this node's address.
-    let members: Vec<&sovereign_mesh::mesh_http::MemberDto> = if self_only {
+    let members: Vec<&sovereign_daemon::mesh_http::MemberDto> = if self_only {
         status.members.iter().filter(|m| m.is_self).collect()
     } else {
         status.members.iter().collect()
@@ -3327,7 +3327,7 @@ async fn cmd_transport(args: &[String]) -> i32 {
             return 1;
         }
     };
-    let status: sovereign_mesh::mesh_http::StatusResponse = match serde_json::from_str(&body) {
+    let status: sovereign_daemon::mesh_http::StatusResponse = match serde_json::from_str(&body) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("mesh transport: response shape mismatch ({e}); printing raw JSON.");

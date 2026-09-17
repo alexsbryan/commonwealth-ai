@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Chat-activity rollup — the answer of `GET /v1/admin/chat-activity`
-//! (`sovereign_mesh::admin_http`).
+//! (`sovereign_daemon::admin_http`).
 //!
 //! Defined at this layer rather than in `sovereign-store`, where the three
 //! structs lived until 2026-09-12, for the reason the module header gives:

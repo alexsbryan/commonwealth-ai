@@ -33,7 +33,7 @@
 //!     .ok().flatten()` -> "not revised by you"), which is §18.3's
 //!     silent substitution with a UI in front of it.
 //!
-//! All four are now one call each onto `sovereign_mesh::{atlas_http,
+//! All four are now one call each onto `sovereign_daemon::{atlas_http,
 //! reading_http, meshapp_http}` over `client_base_url()`. Bring any back —
 //! a `FileAtlasReader` in a browse command, a `read_atlas_atoms` or a
 //! `sovereign_meshapp::load_graph` in the MeshApp bridge, a `sqlite_store`

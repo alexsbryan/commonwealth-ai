@@ -10,7 +10,7 @@ use crate::ring_roster::MeshRoster;
 /// The crate's ONE measurement fixture. `mesh_http`'s endpoint tests read the
 /// same record this module journals, or neither proves anything about the
 /// same thing (ARCH §10.6).
-pub(crate) fn a_measurement(tok_s: f64, at: u64) -> mm::MeasurementRecord {
+pub fn a_measurement(tok_s: f64, at: u64) -> mm::MeasurementRecord {
     let host = mm::HostIdentity::from_live_mesh(Some(0xf0f)).expect("a fingerprint is a host");
     mm::MeasurementRecord {
         key: mm::MeasurementKey::for_plan(

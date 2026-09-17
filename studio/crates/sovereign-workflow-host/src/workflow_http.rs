@@ -77,7 +77,7 @@ pub fn workflow_http_router(daemon_url: String, tool_feed: WorkflowToolFeed) -> 
 
 // ─── Loopback guard ───────────────────────────────────────────────
 //
-// Same contract as `sovereign_mesh::loopback_guard` (router-level middleware
+// Same contract as `sovereign_daemon::loopback_guard` (router-level middleware
 // that fails closed when `ConnectInfo` is missing), restated here because
 // this crate must not depend on the daemon crate and the daemon crate must
 // not own the only copy of a guard the desktop's embedded daemon also needs.
