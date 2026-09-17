@@ -28,7 +28,6 @@
 //! a new debug field is invisible to the journal until someone adds its
 //! name here, which is the review this design wants to force.
 
-use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
@@ -37,8 +36,6 @@ use sovereign_core::types::{
     journal_dir, JournalLine, JournalStream, NextEditEpisode, NextEditOutcome, NextEditOutcomeLine,
     NEXT_EDIT_STREAM,
 };
-
-use crate::state::AppState;
 
 /// Assemble the episode record for one prediction.
 ///
@@ -141,10 +138,7 @@ pub struct OutcomeWire {
 /// string quietly coerced to `dismissed` would corrupt the single number
 /// this whole subsystem exists to produce, so an unknown value is
 /// refused rather than substituted (ARCH §18.3).
-pub async fn edit_prediction_outcome(
-    State(_state): State<AppState>,
-    Json(wire): Json<OutcomeWire>,
-) -> Response {
+pub async fn edit_prediction_outcome(Json(wire): Json<OutcomeWire>) -> Response {
     let Some(outcome) = NextEditOutcome::from_wire(&wire.outcome) else {
         tracing::debug!(
             target: "next_edit",
@@ -195,12 +189,10 @@ mod tests {
         use axum::Router;
         use tower::ServiceExt;
 
-        let router = Router::new()
-            .route(
-                "/v1/edit_predictions/outcome",
-                post(edit_prediction_outcome),
-            )
-            .with_state(crate::state::test_app_state());
+        let router = Router::new().route(
+            "/v1/edit_predictions/outcome",
+            post(edit_prediction_outcome),
+        );
 
         async fn post_body(router: &Router, body: &str) -> StatusCode {
             router

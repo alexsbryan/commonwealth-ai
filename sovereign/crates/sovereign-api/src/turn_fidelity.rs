@@ -4,7 +4,7 @@
 //! `POST /v1/chat/completions` is advertised as OpenAI-compatible, and
 //! a client on that route is entitled to assume the conversation it
 //! sent is the conversation the model sees. Several passes in
-//! [`crate::frontdoor`] do not hold that assumption: some APPEND a
+//! `frontdoor` do not hold that assumption: some APPEND a
 //! synthetic message, one DELETES history and REPLACES the caller's
 //! system prompt, some REWRITE an emitted tool call, and one installs
 //! a token-level sampler constraint. Each was cut against a real
@@ -83,7 +83,7 @@ fn opt_in(raw: Option<&str>) -> bool {
 /// file to discover they exist. Every firing logs at INFO, so ON is
 /// auditable and OFF is total.
 ///
-/// NOT governed: [`crate::frontdoor::promote_in_content_tool_call`], which lifts a tool
+/// NOT governed: `frontdoor::promote_in_content_tool_call`, which lifts a tool
 /// call the model emitted as content into the structured field. That
 /// RECOVERS the model's intent rather than overriding it — off, the
 /// call is silently lost, which is less faithful, not more.

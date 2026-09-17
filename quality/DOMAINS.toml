@@ -1051,9 +1051,9 @@ note = "was compute; jobs — DAEMON_CORE.md §3.2, §4.3 (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/admission.rs"
-context = "serving"
+context = "host"
 lines = 1121
-note = "the daemon's side of admission since REVIEW-build-serving-move-admission (2026-09-15): the `Admission`/`AdmissionHost` impls over AppState, the RAII guards, and the re-exports of the host's surface. The decision, the two axum middlewares and the 503 renderer are `sovereign-serving-host/src/admission.rs`; SERVING_BOUNDARY.md (c)"
+note = "the daemon's side of admission since REVIEW-build-serving-move-admission (2026-09-15): the `Admission`/`AdmissionHost` impls over AppState, the RAII guards, and the re-exports of the host's surface. The decision, the two axum middlewares and the 503 renderer are `sovereign-serving-host/src/admission.rs`; SERVING_BOUNDARY.md (c). RETAGGED serving -> host at REVIEW-build-api-host-decouple (2026-09-16): the serving decision already moved, and what remains holds `Arc<AppStateInner>` and `impl Admission for AppState` (an inherent/trait impl that cannot leave the crate defining the type) — DAEMON_CORE.md §4.1's host `edge` family. It moves with `dm-daemon-api-edge`"
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/auto_recover.rs"
@@ -1183,9 +1183,9 @@ note = "the local inference service wire vocabulary (FIM request/stream, edit-sl
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/principal.rs"
-context = "serving"
+context = "host"
 lines = 502
-note = "the ONE resolver from a request to a fairness principal - admission's input"
+note = "the ONE resolver from a request to a fairness principal - admission's input. RETAGGED serving -> host at REVIEW-build-api-host-decouple (2026-09-16): the resolver is `impl AppState { fn resolve }` (an inherent impl cannot leave the crate defining `AppState`) and DAEMON_CORE.md §3.3 / SERVING_BOUNDARY.md (c) both call it the daemon's edge, where the axum middlewares stay host-side. It moves with `dm-daemon-api-edge`"
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/reshaping.rs"

@@ -31,7 +31,8 @@ use crate::next_edit_model::{self, Consult};
 use crate::next_edit_symbols;
 use crate::next_edit_syntax;
 use crate::openai_types::{ChatCompletionRequest, ErrorResponse, StreamFrame};
-use crate::state::{AppState, FimCompletionRequest};
+use crate::state::AppState;
+use oicp_types::FimCompletionRequest;
 
 /// Caps: a request past these is malformed, not merely large — the
 /// first-party client enforces the same limits before sending.
@@ -869,10 +870,10 @@ mod tests {
     use tower::ServiceExt;
 
     use crate::openai_types::{ChatChoice, ChatCompletionResponse, ChatMessage, StreamFrame};
-    use crate::state::{
-        test_app_state, test_app_state_with_inference, EditSlotStatus, LocalInferenceService,
-    };
+    use crate::state::{test_app_state, test_app_state_with_inference};
+    use oicp_types::EditSlotStatus;
     use sovereign_core::traits::InferenceProvider;
+    use sovereign_core::traits::LocalInferenceService;
     use sovereign_core::types::{CompletionRequest, CompletionResponse, ProviderCapabilities};
 
     async fn post_to(
@@ -942,7 +943,7 @@ mod tests {
         async fn chat_completion(
             &self,
             _r: crate::openai_types::ChatCompletionRequest,
-        ) -> Result<ChatCompletionResponse, crate::state::LocalInferenceError> {
+        ) -> Result<ChatCompletionResponse, oicp_types::LocalInferenceError> {
             Ok(ChatCompletionResponse {
                 id: "t".into(),
                 object: "chat.completion".into(),
@@ -961,7 +962,7 @@ mod tests {
             _r: crate::openai_types::ChatCompletionRequest,
         ) -> Result<
             Pin<Box<dyn Stream<Item = StreamFrame> + Send>>,
-            crate::state::LocalInferenceError,
+            oicp_types::LocalInferenceError,
         > {
             unimplemented!("streaming not used by the model lane")
         }
@@ -1377,7 +1378,7 @@ mod tests {
             async fn chat_completion(
                 &self,
                 _r: crate::openai_types::ChatCompletionRequest,
-            ) -> Result<ChatCompletionResponse, crate::state::LocalInferenceError> {
+            ) -> Result<ChatCompletionResponse, oicp_types::LocalInferenceError> {
                 tokio::time::sleep(std::time::Duration::from_millis(400)).await;
                 Err("slot still busy elsewhere".into())
             }
@@ -1386,7 +1387,7 @@ mod tests {
                 _r: crate::openai_types::ChatCompletionRequest,
             ) -> Result<
                 Pin<Box<dyn Stream<Item = StreamFrame> + Send>>,
-                crate::state::LocalInferenceError,
+                oicp_types::LocalInferenceError,
             > {
                 unimplemented!()
             }
