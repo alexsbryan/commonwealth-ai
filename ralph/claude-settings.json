@@ -111,7 +111,15 @@
       "Bash(sudo *)",
       "Bash(systemctl *)",
       "Bash(rm -rf /*)",
-      "Bash(rm -rf ~*)"
+      "Bash(rm -rf ~*)",
+      "Bash(git add -A*)",
+      "Bash(git add --all*)",
+      "Bash(git add -u*)",
+      "Bash(git add .*)",
+      "Bash(git add :/*)",
+      "Bash(git add *Cargo.lock*)",
+      "Bash(git commit -a*)",
+      "Bash(git commit --all*)"
     ]
   }
 }
