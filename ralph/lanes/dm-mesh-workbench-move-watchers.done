@@ -1,5 +1,6 @@
 unit: dm-mesh-workbench-move-watchers
-commits: a23d8b663 (the move), <this> (row correction + ralph/DECISIONS.md entry)
+commits: a23d8b663 (the move); row correction + ralph/DECISIONS.md entry in the
+  commit that adds this file
 what: MOVE sovereign/crates/sovereign-mesh/src/commit_harvest.rs (481) ->
   corpus-engine-watchers (§3a), home per the DT workbench cluster note. It adds
   no dependency (corpus-engine-notes, tracing and tempfile are already carried),
