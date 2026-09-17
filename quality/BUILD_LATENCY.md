@@ -178,7 +178,19 @@ edit), with 59 lines of tests. Only four of its fourteen large modules
 reference sovereign-mesh (awareness_cmd, mesh_cmd, corpus_cmd, chat_cmd —
 20k lines); bench_cmd (32k) and enrich_cmd (26k) do not. The same unit is
 why a one-line edit in the 6k-line sovereign-turn-client costs 13 s: seven
-cli-llm files use `TurnClient`, so all 146k lines recompile. As per-verb crates
+cli-llm files use `TurnClient`, so all 146k lines recompile.
+
+The end state is one binary, not a faster set of four. The dispatcher that
+execs `sovereign-cli-llm`, `-dev` and `-daemon` was cut on 2026-05-22 as
+"complete cli refactor to speed up builds" (de34eb36c); it bought parallel
+front-ends for four bin crates and paid with a runtime hazard — rebuild
+the wrong sibling and nothing changes — that AGENTS.md now spends three
+hundred words warning about (a reviewer's reading, 2026-09-17, and the
+commit agrees). Per-verb library crates give the same parallelism under a
+single thin binary; when they exist the exec paths, the sibling table and
+the warning are deleted, and the hazard becomes impossible rather than
+documented (ARCH 10). Bar for that rung: `sovereign` is one binary, and no
+`.claude`/AGENTS text names a sibling to rebuild. As per-verb crates
 under the dispatcher, a mesh edit recompiles ~20k lines in parallel rather
 than 146k serially, and a corpus-engine edit skips the verbs that never touch
 it. Bar: mesh edit, full build ≤ 10 s (from 15.8).
