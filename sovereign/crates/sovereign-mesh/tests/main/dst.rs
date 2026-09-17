@@ -2,16 +2,16 @@
 //! Deterministic-simulation (DST) mesh driver.
 //!
 //! Wraps a [`SimulatedMesh`] and drives the **real** gossip path
-//! ([`crate::gossip::run_one_round`]) against the live in-process axum servers,
+//! ([`sovereign_mesh::gossip::run_one_round`]) against the live in-process axum servers,
 //! through a per-node [`FaultTransport`], so partition / crash / wire faults
 //! from a seeded [`FaultSchedule`] actually affect convergence. This replaces
 //! the harness's `sync_mesh_state` broadcast shortcut with emergent
 //! anti-entropy — the same code the daemon runs every 10s.
 //!
-//! It lives in `sovereign-mesh` (not the test-harness crate) because only this
-//! crate can name `run_one_round`; the harness sits *below* it in the
-//! dependency graph. Gated behind the `dst` feature so production never links
-//! the harness.
+//! It lives in `sovereign-mesh`'s integration-test tree (not the test-harness
+//! crate) because only a test linked against this crate can name
+//! `run_one_round`; the harness sits *below* it in the dependency graph. Gated
+//! behind the `dst` feature so production never links the harness.
 //!
 //! ## Non-determinism discipline
 //! The harness is not bit-deterministic (real tokio + TCP + an unseeded gossip
@@ -40,7 +40,7 @@ use sovereign_mesh_test_harness::fault::{shared_policy, FaultProxy, FaultTranspo
 use sovereign_mesh_test_harness::simulated_mesh::SimulatedMesh;
 use sovereign_mesh_test_harness::simulated_node::SimulatedNodeBuilder;
 
-use crate::gossip;
+use sovereign_mesh::gossip;
 
 // Re-export the fault-authoring types so tests need only depend on
 // `sovereign_mesh` (with `--features dst`), not the harness crate directly.

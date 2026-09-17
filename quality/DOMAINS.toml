@@ -410,12 +410,6 @@ lines = 1172
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/dst.rs"
-context = "back-of-house"
-lines = 1026
-note = "cfg(feature=\"dst\") fabric fault-injection harness; never in a production build"
-
-[[module]]
 path = "sovereign/crates/sovereign-mesh/src/enrich_http.rs"
 context = "host"
 lines = 125

@@ -18,8 +18,13 @@ use std::task::{Context, Poll};
 use std::time::Instant;
 
 use futures::Stream;
-use oicp_types::{NodeObservations, THROUGHPUT_EWMA_ALPHA};
+use oicp_types::NodeObservations;
 use tokio::sync::RwLock;
+
+// The EWMA arithmetic lives on the leaf that owns `NodeObservations` so the
+// Tier-1 simulator can fold observations without naming this host (domains
+// REVIEW-build-mesh-sim-decouple). Re-exported here for existing callers.
+pub use oicp_types::apply_throughput_observation;
 
 /// Where a `ThroughputObservedStream` should write its measurements
 /// when it terminates: either onto the local-side single
@@ -259,65 +264,5 @@ where
                 }
             }
         });
-    }
-}
-
-/// EWMA update for the throughput-observation fields on
-/// [`NodeObservations`]. α follows
-/// [`THROUGHPUT_EWMA_ALPHA`] so this stays in lock-step with the
-/// latency probe and other observation paths.
-pub fn apply_throughput_observation(
-    obs: &mut NodeObservations,
-    ttft_ms: Option<f64>,
-    tg_tok_s: Option<f64>,
-) {
-    let alpha = THROUGHPUT_EWMA_ALPHA;
-    if let Some(ttft) = ttft_ms {
-        obs.ttft_ewma_ms = if obs.ttft_ewma_ms == 0.0 {
-            ttft
-        } else {
-            alpha * ttft + (1.0 - alpha) * obs.ttft_ewma_ms
-        };
-    }
-    if let Some(tg) = tg_tok_s {
-        obs.tg_tok_s_ewma = if obs.tg_tok_s_ewma == 0.0 {
-            tg
-        } else {
-            alpha * tg + (1.0 - alpha) * obs.tg_tok_s_ewma
-        };
-    }
-}
-
-#[cfg(test)]
-mod throughput_tests {
-    use super::*;
-
-    #[test]
-    fn ewma_seed_takes_first_value_when_zero() {
-        let mut obs = NodeObservations::default();
-        apply_throughput_observation(&mut obs, Some(120.0), Some(15.0));
-        assert!((obs.ttft_ewma_ms - 120.0).abs() < 1e-9);
-        assert!((obs.tg_tok_s_ewma - 15.0).abs() < 1e-9);
-    }
-
-    #[test]
-    fn ewma_blends_subsequent_samples_at_alpha() {
-        let mut obs = NodeObservations::default();
-        apply_throughput_observation(&mut obs, Some(100.0), Some(20.0));
-        apply_throughput_observation(&mut obs, Some(200.0), Some(10.0));
-        // alpha=0.3; 0.3*200 + 0.7*100 = 130
-        assert!((obs.ttft_ewma_ms - 130.0).abs() < 1e-9);
-        // 0.3*10 + 0.7*20 = 17
-        assert!((obs.tg_tok_s_ewma - 17.0).abs() < 1e-9);
-    }
-
-    #[test]
-    fn ewma_ignores_none_inputs() {
-        let mut obs = NodeObservations::default();
-        apply_throughput_observation(&mut obs, Some(100.0), None);
-        assert_eq!(obs.tg_tok_s_ewma, 0.0);
-        apply_throughput_observation(&mut obs, None, Some(15.0));
-        assert!((obs.ttft_ewma_ms - 100.0).abs() < 1e-9);
-        assert!((obs.tg_tok_s_ewma - 15.0).abs() < 1e-9);
     }
 }

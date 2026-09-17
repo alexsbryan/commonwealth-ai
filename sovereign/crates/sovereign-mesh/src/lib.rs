@@ -40,8 +40,6 @@ pub use sovereign_scheduler::decision_replay; // shim: moved by domains REVIEW-b
 pub use sovereign_scheduler::decision_trace; // shim: moved by domains REVIEW-build-sched-move
 pub mod deep_link;
 pub mod documents_http;
-#[cfg(feature = "dst")]
-pub mod dst;
 pub mod enrich_http;
 pub mod features_http;
 pub mod gossip;

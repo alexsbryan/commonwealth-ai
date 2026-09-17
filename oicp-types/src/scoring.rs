@@ -237,6 +237,40 @@ pub const THROUGHPUT_OBSERVATION_THRESHOLD: u32 = 5;
 /// signal sluggish, higher would make it jittery.
 pub const THROUGHPUT_EWMA_ALPHA: f64 = 0.3;
 
+/// EWMA update for the throughput-observation fields on [`NodeObservations`].
+///
+/// α follows [`THROUGHPUT_EWMA_ALPHA`] so this stays in lock-step with the
+/// latency probe and other observation paths. A zero field means "never
+/// observed", so the first sample seeds it rather than blending against zero;
+/// a `None` leaves its field untouched.
+///
+/// Lives here, on the leaf that owns `NodeObservations`, because both the
+/// serving host's stream observer and the Tier-1 mesh simulator fold
+/// observations through the same arithmetic (domains
+/// `REVIEW-build-mesh-sim-decouple`); one implementation, two callers
+/// (ARCH principle 8).
+pub fn apply_throughput_observation(
+    obs: &mut NodeObservations,
+    ttft_ms: Option<f64>,
+    tg_tok_s: Option<f64>,
+) {
+    let alpha = THROUGHPUT_EWMA_ALPHA;
+    if let Some(ttft) = ttft_ms {
+        obs.ttft_ewma_ms = if obs.ttft_ewma_ms == 0.0 {
+            ttft
+        } else {
+            alpha * ttft + (1.0 - alpha) * obs.ttft_ewma_ms
+        };
+    }
+    if let Some(tg) = tg_tok_s {
+        obs.tg_tok_s_ewma = if obs.tg_tok_s_ewma == 0.0 {
+            tg
+        } else {
+            alpha * tg + (1.0 - alpha) * obs.tg_tok_s_ewma
+        };
+    }
+}
+
 /// Blend a claim's self-reported `affinity` with observed node
 /// health.
 ///
@@ -1265,5 +1299,36 @@ mod tests {
         let best = best_claim_for_request(&manifest, &req).unwrap();
         // Specialist at exact-hint 0.95 beats generalist's 0.5-fallback path.
         assert_eq!(best.model_id, "coder");
+    }
+
+    // ───── throughput observation EWMA ────────────────────
+
+    #[test]
+    fn ewma_seed_takes_first_value_when_zero() {
+        let mut obs = NodeObservations::default();
+        apply_throughput_observation(&mut obs, Some(120.0), Some(15.0));
+        assert!((obs.ttft_ewma_ms - 120.0).abs() < 1e-9);
+        assert!((obs.tg_tok_s_ewma - 15.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn ewma_blends_subsequent_samples_at_alpha() {
+        let mut obs = NodeObservations::default();
+        apply_throughput_observation(&mut obs, Some(100.0), Some(20.0));
+        apply_throughput_observation(&mut obs, Some(200.0), Some(10.0));
+        // alpha=0.3; 0.3*200 + 0.7*100 = 130
+        assert!((obs.ttft_ewma_ms - 130.0).abs() < 1e-9);
+        // 0.3*10 + 0.7*20 = 17
+        assert!((obs.tg_tok_s_ewma - 17.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn ewma_ignores_none_inputs() {
+        let mut obs = NodeObservations::default();
+        apply_throughput_observation(&mut obs, Some(100.0), None);
+        assert_eq!(obs.tg_tok_s_ewma, 0.0);
+        apply_throughput_observation(&mut obs, None, Some(15.0));
+        assert!((obs.ttft_ewma_ms - 100.0).abs() < 1e-9);
+        assert!((obs.tg_tok_s_ewma - 15.0).abs() < 1e-9);
     }
 }

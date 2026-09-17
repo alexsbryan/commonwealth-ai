@@ -5,7 +5,7 @@
 //! same arrival stream, same answer. Nothing here depends on wall
 //! time, thread scheduling, or the host's hardware.
 
-use sovereign_core::oicp::{
+use oicp_types::{
     BenchmarkResult, CapabilityClaim, CapabilityHint, InferenceRequirements, LatencyClass,
     ModelStatus, ProviderManifest, ProviderModel, ShardingPrivacy, OICP_VERSION,
 };

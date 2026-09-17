@@ -51,6 +51,9 @@ mod d9a_documents_e2e;
 mod daemon_variant_census;
 #[path = "main/daemon_wiring.rs"]
 mod daemon_wiring;
+#[path = "main/dst.rs"]
+#[cfg(feature = "dst")]
+mod dst;
 #[path = "main/dst_scenarios.rs"]
 mod dst_scenarios;
 #[path = "main/embeddings_e2e.rs"]

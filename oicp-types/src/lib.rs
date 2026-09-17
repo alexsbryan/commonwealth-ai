@@ -101,13 +101,13 @@ pub use registry::{ExtensionRegistry, ExtensionStats};
 pub use requirements::{InferenceRequirements, PrivacyRequirements, ShardingPrivacy};
 pub use response::{MatchQuality, OicpResponseMeta};
 pub use scoring::{
-    best_claim_for_request, cold_start_weight, effective_affinity, hint_match_score,
-    latency_match_score, load_penalty, locality_bonus, pick_better, score_claim_for_request,
-    score_with_adjustments, throughput_factor, throughput_factor_source, BenchmarkResult,
-    NodeLocality, NodeObservations, ScoreBreakdown, ScoredClaim, COLD_START_MIN_WEIGHT,
-    COLD_START_SAMPLES, CONFIDENCE_SAMPLES, HINT_GENERAL_FALLBACK_SCORE, LATENCY_ADJACENT_SCORE,
-    LATENCY_TWO_CLASS_SCORE, LOAD_COEFFICIENT, LOCALITY_FAR_BONUS, LOCALITY_LOCAL_BONUS,
-    LOCALITY_NEAR_BONUS, SCORING_EPSILON, THROUGHPUT_EWMA_ALPHA, THROUGHPUT_FLOOR,
-    THROUGHPUT_OBSERVATION_THRESHOLD, THROUGHPUT_REFERENCE_TG_TOK_S,
+    apply_throughput_observation, best_claim_for_request, cold_start_weight, effective_affinity,
+    hint_match_score, latency_match_score, load_penalty, locality_bonus, pick_better,
+    score_claim_for_request, score_with_adjustments, throughput_factor, throughput_factor_source,
+    BenchmarkResult, NodeLocality, NodeObservations, ScoreBreakdown, ScoredClaim,
+    COLD_START_MIN_WEIGHT, COLD_START_SAMPLES, CONFIDENCE_SAMPLES, HINT_GENERAL_FALLBACK_SCORE,
+    LATENCY_ADJACENT_SCORE, LATENCY_TWO_CLASS_SCORE, LOAD_COEFFICIENT, LOCALITY_FAR_BONUS,
+    LOCALITY_LOCAL_BONUS, LOCALITY_NEAR_BONUS, SCORING_EPSILON, THROUGHPUT_EWMA_ALPHA,
+    THROUGHPUT_FLOOR, THROUGHPUT_OBSERVATION_THRESHOLD, THROUGHPUT_REFERENCE_TG_TOK_S,
 };
 pub use version::OICP_VERSION;

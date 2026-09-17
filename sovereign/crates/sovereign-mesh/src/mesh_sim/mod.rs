@@ -58,8 +58,9 @@ pub mod scoreboard;
 use std::collections::{BinaryHeap, HashMap, VecDeque};
 
 use commonwealth_core::peer_health::PeerHealthTracker;
-use sovereign_core::oicp::{
-    BenchmarkResult, InferenceRequirements, NodeObservations, ProviderManifest,
+use oicp_types::{
+    apply_throughput_observation, BenchmarkResult, InferenceRequirements, NodeObservations,
+    ProviderManifest,
 };
 
 use crate::decision_log::{
@@ -71,7 +72,6 @@ use crate::predicted_time;
 use crate::scheduler_core::{
     self, LocalCandidateView, RankInputs, RankObjective, RankResult, VenueManifestView, VenueView,
 };
-use crate::throughput_tracking::apply_throughput_observation;
 use crate::tier::TierFloor;
 
 use rng::Rng;
@@ -1395,7 +1395,7 @@ impl Sim {
                 // Production seeds local samples above the cold-start
                 // threshold: a node always knows itself.
                 local_obs: NodeObservations {
-                    samples: sovereign_core::oicp::COLD_START_SAMPLES * 2,
+                    samples: oicp_types::COLD_START_SAMPLES * 2,
                     ..Default::default()
                 },
                 // F7 arm: a warm-started decider begins already
@@ -1405,7 +1405,7 @@ impl Sim {
                 peer_obs: vec![
                     NodeObservations {
                         samples: if arm.warm_start() {
-                            sovereign_core::oicp::COLD_START_SAMPLES
+                            oicp_types::COLD_START_SAMPLES
                         } else {
                             0
                         },
@@ -1755,7 +1755,7 @@ impl Sim {
             // arithmetic and the only local signal that still moves.
             return NodeObservations {
                 in_flight: 0,
-                samples: sovereign_core::oicp::COLD_START_SAMPLES * 2,
+                samples: oicp_types::COLD_START_SAMPLES * 2,
                 recent_failure_rate: 0.0,
                 p50_latency_ms: 0,
                 p95_latency_ms: 0,

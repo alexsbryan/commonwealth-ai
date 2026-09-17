@@ -7,7 +7,7 @@
 //! `cargo test` neither compiles nor runs it.
 #![cfg(feature = "dst")]
 
-use sovereign_mesh::dst::{check_all, DstMesh, FaultSchedule, Quiescence};
+use crate::dst::{check_all, DstMesh, FaultSchedule, Quiescence};
 
 /// PR1 smoke test, **inverted at cw-lift rung 2e**: two nodes converge their
 /// MEMBER LISTS via the real gossip path (`run_one_round`) — not the

@@ -276,10 +276,10 @@ bytes = "1"
 
 [features]
 default = []
-# Deterministic-simulation mesh tests: compiles `dst.rs` (the `DstMesh` gossip
-# driver + invariant pack) and `tests/dst_scenarios.rs`. Pulls the test
-# harness. CI runs a fixed-seed set behind this flag; off by default so the
-# production build never links the harness.
+# Deterministic-simulation mesh tests: compiles `tests/main/dst.rs` (the
+# `DstMesh` gossip driver + invariant pack) and `tests/main/dst_scenarios.rs`.
+# Pulls the test harness. CI runs a fixed-seed set behind this flag; off by
+# default so the production build never links the harness.
 dst = ["dep:sovereign-mesh-test-harness"]
 # Tier-1 scheduler simulator (`SCHEDULER_QUALITY.md` §5): compiles
 # `mesh_sim.rs` + `tests/mesh_sim_scoreboard.rs`. Pure compute — no
