@@ -1,0 +1,39 @@
+unit: dm-harness-except
+commits: 8663a387d (the row corrections + the ARCH_LAYERS comment)
+what: the row's VERB is already satisfied on the tree as found — the harness
+  forbid `[[forbid]] from = "sovereign-mesh-test-harness" to = "sovereign-*"`
+  (quality/ARCH_LAYERS.toml:759-762) carries `sovereign-scheduler` in its
+  `except`, added by the human row's own commit (`9b0b65080`,
+  HUMAN-forbid-harness-except). This unit's delta is the row's conditional and
+  the premise it rests on, recorded in ralph/STATE.md and ralph/DECISIONS.md.
+
+  The conditional ("add `sovereign-serving-host` only if the decouple row left
+  that edge") resolves TRUE: `REVIEW-build-mesh-sim-decouple` (`7009cc569`)
+  cut the throughput-EWMA reach but left a SECOND host reach —
+  `sovereign_serving_host::recorder::new_decision_id()` at
+  `sovereign-mesh/src/mesh_sim/mod.rs:1541`, introduced by
+  `REVIEW-build-sched-split-sink` (`4ba55cbc6`, 2026-09-15), which the
+  2026-09-16 decouple row's premise never named.
+
+  But widening an `except` is operator-only (`ralph/CHARTER.md:34`; PROMPT
+  §6/§7), and both colliding rows state only `sovereign-scheduler` is owed
+  (HUMAN-forbid-harness-except: "the REVIEW-build row above removes … the
+  serving-host reach, so only sovereign-scheduler is owed"). So the reach is
+  CUT, not excepted: `dm-mesh-sim-move` is re-scoped to mint the simulator's
+  own deterministic id (`d-{oicp_request_id}`) in place of the host mint. The
+  id is a join key, never parsed — `mesh_sim/scoreboard.rs:539-547`
+  `origin_of` reads `oicp_request_id` (`sim-{origin}-{seq}`) — and the host
+  mint is random (`recorder.rs:263` `Uuid::new_v4`), so the cut also restores
+  the module's stated determinism.
+
+  `quality/ARCH_LAYERS.toml` gains a comment pinning the absence, so a future
+  reader does not "fix" it by widening. No code change in this unit: the file
+  is `dm-mesh-sim-move`'s to edit, and that row's own `LINT; LAYER` checks
+  cover the cut.
+checks: CLEAN exit=0 (debug target 0G, under 50G — cache kept); TOML exit=0
+  (DOMAINS.toml, campaigns/domains.toml, ARCH_LAYERS.toml parse); LAYER exit=0
+  (72 members, 387 internal edges, 7 layers, fan-in within caps); BOUNDARY
+  exit=0 (5 packages + 8 shared leaves, 34 crates, serving 3/3 present).
+evidence: grep -rn 'sovereign_serving_host' sovereign/crates/sovereign-mesh/src/mesh_sim/
+  → exactly one hit, mod.rs:1541; git blame dates it 4ba55cbc6.
+  sovereign-mesh-test-harness/Cargo.toml names no sovereign-serving-host.

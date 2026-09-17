@@ -760,6 +760,13 @@ reason = "the harness simulates a node against the OICP/contracts seam, not the 
 from = "sovereign-mesh-test-harness"
 to = "sovereign-*"
 except = ["sovereign-contracts", "sovereign-grants", "sovereign-meshapp-registry", "sovereign-scheduler"]
+# `sovereign-scheduler` gained at HUMAN-forbid-harness-except (2026-09-17,
+# 9b0b65080): the Tier-1 simulator replays the routing records, so it names them
+# directly. `sovereign-serving-host` is deliberately ABSENT (dm-harness-except,
+# 2026-09-17): the simulator's one host reach
+# (`sovereign_serving_host::recorder::new_decision_id`, mesh_sim/mod.rs:1541) is
+# CUT by dm-mesh-sim-move rather than excepted — the simulator mints its own
+# deterministic id, and widening an `except` is operator-only (ralph/CHARTER.md).
 # TRANSLATED at the domains-2 move (2026-09-11), not deleted. The crate was
 # `commonwealth-test-harness` in `commonwealth/crates/`; it is now
 # `sovereign-mesh-test-harness` beside its only consumer. Deleting the row
