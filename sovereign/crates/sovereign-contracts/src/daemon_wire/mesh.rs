@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Mesh wire shapes — `/v1/mesh/*` (`sovereign_mesh::mesh_http`), the
-//! UI-facing mesh view (`sovereign_mesh::types`), this node's own
-//! reachability record (`sovereign_mesh::{daemon, iroh_watchdog}`), and the
+//! Mesh wire shapes — `/v1/mesh/*` (`sovereign_daemon::mesh_http`), the
+//! UI-facing mesh view (`sovereign_daemon::types`), this node's own
+//! reachability record (`sovereign_daemon::daemon`, `sovereign_mesh::iroh_watchdog`),
+//! and the
 //! relay-candidate row (`sovereign_mesh::mesh_discovery`). Moved here at
 //! sv-surface svt-3 (2026-09-11) once `OriginKind` had a layer-0 home
 //! (`oicp_types::origin`); `sovereign-mesh` re-exports every item at its
@@ -22,7 +23,7 @@ fn default_true() -> bool {
     true
 }
 
-// ─── `sovereign_mesh::types` — the UI-facing mesh view ──────────
+// ─── `sovereign_daemon::types` — the UI-facing mesh view ──────────
 
 /// Mesh status as shown in the UI sidebar.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -245,7 +246,7 @@ pub struct JoinPreviewRequest {
     pub link: String,
 }
 
-// ─── `sovereign_mesh::{daemon, iroh_watchdog}` — own reachability ──
+// ─── `sovereign_daemon::daemon`, `sovereign_mesh::iroh_watchdog` — own reachability ──
 
 /// The founder's OWN iroh reachability (Track W hardening), for
 /// `/v1/mesh/status.self_reachability` and the desktop "Reachable /
@@ -310,7 +311,7 @@ pub struct RecoveryEvent {
     pub ok: bool,
 }
 
-// ─── `sovereign_mesh::mesh_http` — `/v1/mesh/status` rows ───────
+// ─── `sovereign_daemon::mesh_http` — `/v1/mesh/status` rows ───────
 
 /// One member row on `/v1/mesh/status`.
 #[derive(Debug, Serialize, Deserialize)]
@@ -387,7 +388,7 @@ pub struct KnownMeshDto {
 }
 
 /// The client's read of `GET /v1/mesh/status` — the fields a client that
-/// does not link the daemon reads off `sovereign_mesh::mesh_http::
+/// does not link the daemon reads off `sovereign_daemon::mesh_http::
 /// StatusResponse`, deserialised from the SAME bytes (serde ignores the
 /// rest).
 ///

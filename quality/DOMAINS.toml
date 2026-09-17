@@ -308,19 +308,19 @@ status = "kept"
 # Post-Serving: 88,255 - 24,307 = 63,948, still 3.2x the <=20,000 bar; fabric 16,028 (18pc) is the only name-matching slice.
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/admin_http.rs"
+path = "sovereign/crates/sovereign-daemon/src/admin_http.rs"
 context = "host"
 lines = 1308
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/assets_http.rs"
+path = "sovereign/crates/sovereign-daemon/src/assets_http.rs"
 context = "host"
 lines = 833
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/atlas_http.rs"
+path = "sovereign/crates/sovereign-daemon/src/atlas_http.rs"
 context = "host"
 lines = 772
 note = "daemon handler; the read model it serves is Understanding's"
@@ -356,25 +356,25 @@ lines = 481
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/corpus_catalog_http.rs"
+path = "sovereign/crates/sovereign-daemon/src/corpus_catalog_http.rs"
 context = "host"
 lines = 866
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/corpus_watch_http.rs"
+path = "sovereign/crates/sovereign-daemon/src/corpus_watch_http.rs"
 context = "host"
 lines = 1650
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/daemon.rs"
+path = "sovereign/crates/sovereign-daemon/src/daemon.rs"
 context = "host"
 lines = 5619
 note = "composition root; the MemberRecord -> InferenceVenue translation (:2280-2345); re-exports the scheduler's InferenceVenue (:25)"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/daemon_services.rs"
+path = "sovereign/crates/sovereign-daemon/src/daemon_services.rs"
 context = "host"
 lines = 1084
 note = ""
@@ -404,13 +404,13 @@ lines = 178
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/documents_http.rs"
+path = "sovereign/crates/sovereign-daemon/src/documents_http.rs"
 context = "host"
 lines = 1172
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/enrich_http.rs"
+path = "sovereign/crates/sovereign-daemon/src/enrich_http.rs"
 context = "host"
 lines = 125
 note = ""
@@ -422,7 +422,7 @@ lines = 305
 note = "third PeerEndpointSource impl (:170)"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/features_http.rs"
+path = "sovereign/crates/sovereign-daemon/src/features_http.rs"
 context = "host"
 lines = 221
 note = ""
@@ -440,7 +440,7 @@ lines = 1478
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/governance_http.rs"
+path = "sovereign/crates/sovereign-daemon/src/governance_http.rs"
 context = "host"
 lines = 1015
 note = "ring governance routes - the mesh's own; was fabric; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
@@ -458,7 +458,7 @@ lines = 134
 note = "was compute; reach — DOMAINS.md §11.2 (2026-09-14)"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/http_response.rs"
+path = "sovereign/crates/sovereign-daemon/src/http_response.rs"
 context = "host"
 lines = 120
 note = ""
@@ -489,7 +489,7 @@ note = "was ingest; jobs — DAEMON_CORE.md §3.2, §4.3 (2026-09-14)"
 
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/insight_http.rs"
+path = "sovereign/crates/sovereign-daemon/src/insight_http.rs"
 context = "host"
 lines = 346
 note = ""
@@ -519,13 +519,13 @@ lines = 704
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/landscape_digest_http.rs"
+path = "sovereign/crates/sovereign-daemon/src/landscape_digest_http.rs"
 context = "host"
 lines = 107
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/lc_http.rs"
+path = "sovereign/crates/sovereign-daemon/src/lc_http.rs"
 context = "host"
 lines = 914
 note = ""
@@ -543,13 +543,13 @@ lines = 66
 note = "the local in-flight RAII guards, split out of peer_inference.rs (REVIEW-audit-6)"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/local_only.rs"
+path = "sovereign/crates/sovereign-daemon/src/local_only.rs"
 context = "host"
 lines = 370
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/loopback_guard.rs"
+path = "sovereign/crates/sovereign-daemon/src/loopback_guard.rs"
 context = "host"
 lines = 353
 note = ""
@@ -561,13 +561,13 @@ lines = 761
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/mcp_config_http.rs"
+path = "sovereign/crates/sovereign-daemon/src/mcp_config_http.rs"
 context = "host"
 lines = 288
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/mcp_router.rs"
+path = "sovereign/crates/sovereign-daemon/src/mcp_router.rs"
 context = "host"
 lines = 686
 note = ""
@@ -579,10 +579,10 @@ lines = 309
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/media_reach.rs"
-context = "fabric"
+path = "sovereign/crates/sovereign-daemon/src/media_reach.rs"
+context = "host"
 lines = 219
-note = ""
+note = "retagged host at dm-daemon-mesh-edge (2026-09-17): the file rode the mesh host cluster's move (E0116, impl EmbeddedDaemon) and splits back to Fabric by REVIEW-build-daemon-embedded-split"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/mesh_discovery.rs"
@@ -591,13 +591,13 @@ lines = 475
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/mesh_http.rs"
+path = "sovereign/crates/sovereign-daemon/src/mesh_http.rs"
 context = "host"
 lines = 1825
 note = "membership routes - the mesh's own; was fabric; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/meshapp_http.rs"
+path = "sovereign/crates/sovereign-daemon/src/meshapp_http.rs"
 context = "host"
 lines = 587
 note = "app-registry explorer, not a membership/ring/rail route"
@@ -621,7 +621,7 @@ lines = 647
 note = "was understanding; adapter — DAEMON_CORE.md §4.3 (2026-09-14)"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/notes_http.rs"
+path = "sovereign/crates/sovereign-daemon/src/notes_http.rs"
 context = "host"
 lines = 396
 note = ""
@@ -639,10 +639,10 @@ lines = 1282
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/origin_fanout.rs"
-context = "fabric"
+path = "sovereign/crates/sovereign-daemon/src/origin_fanout.rs"
+context = "host"
 lines = 111
-note = ""
+note = "retagged host at dm-daemon-mesh-edge (2026-09-17): the file rode the mesh host cluster's move (E0116, impl EmbeddedDaemon) and splits back to Fabric by REVIEW-build-daemon-embedded-split"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/peer_adapter.rs"
@@ -699,7 +699,7 @@ lines = 1003
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/project_http.rs"
+path = "sovereign/crates/sovereign-daemon/src/project_http.rs"
 context = "host"
 lines = 498
 note = ""
@@ -717,7 +717,7 @@ lines = 519
 note = "its ONE import is oicp_types::openai_types (:48) - wire types the ranker should not own (repointed off sovereign_api by dm-wire-repoint-mesh, 2026-09-15)"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/publish_http.rs"
+path = "sovereign/crates/sovereign-daemon/src/publish_http.rs"
 context = "host"
 lines = 147
 note = "/v1/mesh/media + /v1/mesh/app - what this node offers the house; was fabric; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
@@ -741,19 +741,19 @@ lines = 137
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/reading_http.rs"
+path = "sovereign/crates/sovereign-daemon/src/reading_http.rs"
 context = "host"
 lines = 1065
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/recipe_http.rs"
+path = "sovereign/crates/sovereign-daemon/src/recipe_http.rs"
 context = "host"
 lines = 745
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/recipe_project_http.rs"
+path = "sovereign/crates/sovereign-daemon/src/recipe_project_http.rs"
 context = "host"
 lines = 825
 note = ""
@@ -765,7 +765,7 @@ lines = 2150
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/research_http.rs"
+path = "sovereign/crates/sovereign-daemon/src/research_http.rs"
 context = "host"
 lines = 651
 note = ""
@@ -789,13 +789,13 @@ lines = 2072
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/roster_repair.rs"
-context = "fabric"
+path = "sovereign/crates/sovereign-daemon/src/roster_repair.rs"
+context = "host"
 lines = 203
-note = ""
+note = "retagged host at dm-daemon-mesh-edge (2026-09-17): the file rode the mesh host cluster's move (E0116, impl EmbeddedDaemon) and splits back to Fabric by REVIEW-build-daemon-embedded-split"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/rpc_warm_http.rs"
+path = "sovereign/crates/sovereign-daemon/src/rpc_warm_http.rs"
 context = "host"
 lines = 1224
 note = "*_http but the decision is Serving's - distributed-inference auto-warm orchestration; was serving; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
@@ -819,7 +819,7 @@ lines = 551
 note = "was understanding; sovereign-serving-host — SERVING_BOUNDARY.md corrections (2026-09-14)"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/slot_manifest.rs"
+path = "sovereign/crates/sovereign-daemon/src/slot_manifest.rs"
 context = "host"
 lines = 35
 note = "the daemon's SlotManifest port impl over sovereign-core's bundled manifest, split out of inference_adapter when it moved host-side (REVIEW-build-serving-move-adapter)"
@@ -864,28 +864,28 @@ lines = 747
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/turn_extras_http.rs"
+path = "sovereign/crates/sovereign-daemon/src/turn_extras_http.rs"
 context = "host"
 lines = 294
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/turn_http.rs"
+path = "sovereign/crates/sovereign-daemon/src/turn_http.rs"
 context = "host"
 lines = 2105
 note = "the turn wire the daemon serves; Answering is what runs behind it"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/types.rs"
+path = "sovereign/crates/sovereign-daemon/src/types.rs"
 context = "host"
 lines = 13
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/venue_host.rs"
-context = "fabric"
+path = "sovereign/crates/sovereign-daemon/src/venue_host.rs"
+context = "host"
 lines = 140
-note = "the daemon-side serving ports: the EmbeddedDaemon VenueSource/VenueHost impls and the DeferredDaemon handle, split out of peer_inference.rs (REVIEW-audit-6); the ports themselves moved to sovereign-serving-host by REVIEW-build-serving-move-peer, and this half stays because it names commonwealth_core/state and EmbeddedDaemon"
+note = "the daemon-side serving ports: the EmbeddedDaemon VenueSource/VenueHost impls and the DeferredDaemon handle, split out of peer_inference.rs (REVIEW-audit-6); the ports themselves moved to sovereign-serving-host by REVIEW-build-serving-move-peer, and this half stays because it names commonwealth_core/state and EmbeddedDaemon — retagged host at dm-daemon-mesh-edge (2026-09-17): the file rode the mesh host cluster's move (E0116, impl EmbeddedDaemon) and splits back to Fabric by REVIEW-build-daemon-embedded-split"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/watched_folder_runtime.rs"

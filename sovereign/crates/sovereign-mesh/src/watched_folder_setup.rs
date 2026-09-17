@@ -54,7 +54,7 @@ impl WatchedSubsystem {
     /// **No longer takes the daemon.** It used to, purely so it could call
     /// `install_corpus_watch_http_router` — which meant the `/internal/corpus/
     /// watch/*` routes existed only when this subsystem happened to come up.
-    /// The router is now part of [`crate::ServingCapability`], mounted by
+    /// The router is now part of the daemon's `ServingCapability`, mounted by
     /// every serving daemon; when this singleton was never installed the
     /// handlers answer 503 with a named reason instead of 404 (ARCH §18.3).
     ///

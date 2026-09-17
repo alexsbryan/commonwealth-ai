@@ -68,6 +68,9 @@ sovereign-gliner = { workspace = true }
 sovereign-workflow = { workspace = true }
 sovereign-workflow-host = { workspace = true }
 sovereign-mesh = { workspace = true, features = ["treesitter"] }
+# The mesh host cluster (domains dm-daemon-mesh-edge): the assembly root, the
+# route shells and the edge.
+sovereign-daemon = { workspace = true }
 # The rented-pod modules lifted out of sovereign-mesh (domains REVIEW-audit-3);
 # reached directly rather than through sovereign-mesh's shim.
 sovereign-pods = { path = "../sovereign-pods" }

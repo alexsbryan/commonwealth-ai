@@ -25,7 +25,7 @@ use tracing::{info, warn};
 
 use crate::daemon::{EmbeddedDaemon, MeshError};
 use crate::loopback_guard::LocalOnly;
-use crate::persist;
+use sovereign_mesh::persist;
 
 /// What [`EmbeddedDaemon::forget_member`] retired.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

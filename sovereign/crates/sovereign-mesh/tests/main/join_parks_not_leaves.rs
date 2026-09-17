@@ -37,7 +37,7 @@ use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::{MemberRecord, NodeStatus};
 use commonwealth_discovery::membership;
 use sovereign_core::setup_config::SetupConfig;
-use sovereign_mesh::daemon::{EmbeddedDaemon, MeshError};
+use sovereign_daemon::daemon::{EmbeddedDaemon, MeshError};
 use sovereign_mesh::deep_link;
 use sovereign_mesh::persist;
 

@@ -21,7 +21,7 @@
 //! ## Rewritten 2026-08-25, because Phase 4b moved where the naming happens
 //!
 //! Hosts no longer name a variant. They hand `LaunchParts` to
-//! `sovereign_mesh::assemble` — the one exhaustive match over `Launch` — and
+//! `sovereign_daemon::assemble` — the one exhaustive match over `Launch` — and
 //! that match names the variant at its arm. The two halves of the claim did
 //! not change; the place each one is checkable did:
 //!
@@ -216,7 +216,7 @@ fn each_live_path_supplies_the_parts_for_its_variant() {
         assert!(
             body.contains("assemble("),
             "{rel} commissions a daemon without going through \
-             `sovereign_mesh::assemble` — the one exhaustive match over Launch \
+             `sovereign_daemon::assemble` — the one exhaustive match over Launch \
              (TOPOLOGY §10, Falsifier 3)"
         );
         assert!(

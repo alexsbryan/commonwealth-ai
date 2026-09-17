@@ -15,7 +15,7 @@
 //! `lc_incomplete_jobs`, `lc_check_git`, `lc_list_snapshots`,
 //! `lc_rollback`, `lc_clean`, `lc_search` (D5) and now `lc_ingest`,
 //! `lc_cancel` and `lc_ocr_available` (D8) are one call each onto
-//! `sovereign_mesh::lc_http`'s `/internal/corpus/local/` routes over
+//! `sovereign_daemon::lc_http`'s `/internal/corpus/local/` routes over
 //! [`lc_client`], and so are the config reads inside `lc_ingest` and
 //! `lc_enrich_now`. Return types are unchanged, so the webview sees the
 //! same bytes. Two defaults moved DOWN to the route: `lc_search`'s 10 and

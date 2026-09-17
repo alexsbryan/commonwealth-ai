@@ -14,7 +14,7 @@ use crate::common::mesh_admin_services;
 
 use commonwealth_core::mesh::Mesh;
 use sovereign_core::setup_config::SetupConfig;
-use sovereign_mesh::daemon::{EmbeddedDaemon, MeshError};
+use sovereign_daemon::daemon::{EmbeddedDaemon, MeshError};
 use sovereign_mesh::persist;
 
 /// Write a second, PARKED mesh straight to disk under `root`, leaving the

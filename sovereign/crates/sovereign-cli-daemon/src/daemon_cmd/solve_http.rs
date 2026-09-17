@@ -731,7 +731,7 @@ pub fn solve_router(jobs: Arc<SolveJobs>) -> Router {
         // The solver executes the workdir's test command — this
         // surface must never be reachable off-box.
         .layer(axum::middleware::from_fn(
-            sovereign_mesh::loopback_guard::loopback_only,
+            sovereign_daemon::loopback_guard::loopback_only,
         ))
         .layer(Extension(jobs))
 }

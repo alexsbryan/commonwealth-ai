@@ -700,7 +700,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     // spec-gated tools (`spec`, `drift`) when a spec exists. Cache
     // is process-global so repeated `tools/list` calls amortise the
     // stat against a 1-second TTL.
-    let feature_root = sovereign_mesh::mcp_router::FeatureRoot::new(Some(repo_root.clone()));
+    let feature_root = sovereign_daemon::mcp_router::FeatureRoot::new(Some(repo_root.clone()));
     // Phase 5b: build a notifier and wire it to a SpecWatcher rooted
     // at repo_root. The watcher's on_change closure publishes to the
     // notifier; the notifier fans the JSON-RPC frame out to every
@@ -709,7 +709,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     // every connected MCP agent sees `notifications/tools/list_changed`
     // within ~100ms and refetches `tools/list` — surfacing `spec` and
     // `drift` without a restart.
-    let notifier = sovereign_mesh::mcp_router::McpNotifier::new();
+    let notifier = sovereign_daemon::mcp_router::McpNotifier::new();
     let watcher_notifier = notifier.clone();
     let _spec_watcher =
         match sovereign_tools::spec_watcher::SpecWatcher::start(&repo_root, move || {
@@ -730,7 +730,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
                 None
             }
         };
-    let app = sovereign_mesh::mcp_router::mcp_router(
+    let app = sovereign_daemon::mcp_router::mcp_router(
         tools,
         Arc::clone(&notes_store),
         mcp_session_id,

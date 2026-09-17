@@ -59,7 +59,7 @@ use std::sync::Arc;
 
 use corpus_engine::{CorpusEngine, EmbedFn};
 use sovereign_core::traits::StateStore;
-use sovereign_mesh::lc_http::lc_router;
+use sovereign_daemon::lc_http::lc_router;
 use sovereign_mesh::watched_folder_runtime;
 use sovereign_store::memory::InMemoryStateStore;
 use sovereign_tools::local_corpus::config::LocalCorpusConfig;
@@ -504,7 +504,7 @@ async fn ingest_progress_follows_a_document_folder_to_its_terminal_stats() {
     );
 
     // (1) The route the ack used to name cannot serve this corpus kind.
-    let watch_addr = spawn_router(sovereign_mesh::corpus_watch_http::corpus_watch_router()).await;
+    let watch_addr = spawn_router(sovereign_daemon::corpus_watch_http::corpus_watch_router()).await;
     let (watch_status, watch_body) =
         get(watch_addr, &format!("/internal/corpus/watch/status/{id}")).await;
     assert_eq!(

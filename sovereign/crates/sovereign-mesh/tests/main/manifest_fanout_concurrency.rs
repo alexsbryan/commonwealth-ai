@@ -35,7 +35,7 @@ use sovereign_core::oicp::{
 };
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, Speed};
-use sovereign_mesh::daemon::InferenceVenue;
+use sovereign_daemon::daemon::InferenceVenue;
 use sovereign_mesh::peer_inference::{InferenceRouter, VenueHost, VenueSource};
 
 use crate::common;
@@ -185,7 +185,7 @@ fn build(peers: Vec<InferenceVenue>) -> InferenceRouter {
             peers: peers.clone(),
         }) as Arc<dyn VenueSource>,
         Arc::new(StubPeerSource { peers }) as Arc<dyn VenueHost>,
-        Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest),
+        Arc::new(sovereign_daemon::slot_manifest::CoreSlotManifest),
     )
 }
 

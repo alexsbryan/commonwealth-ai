@@ -229,7 +229,7 @@ fn env_kill_switch() -> bool {
 /// watchdog is holding, not against whatever the daemon state last recorded.
 /// Members without a pubkey are not iroh-dialable and are left out entirely —
 /// counting them would make an IP-only peer look like a lost path.
-pub(crate) async fn observe_peer_paths(
+pub async fn observe_peer_paths(
     mesh: &tokio::sync::RwLock<commonwealth_core::mesh::Mesh>,
     self_id: commonwealth_core::ids::NodeId,
     endpoint: &Endpoint,

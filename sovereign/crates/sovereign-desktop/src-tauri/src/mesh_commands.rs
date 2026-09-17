@@ -586,7 +586,7 @@ pub struct PeerPreferenceDto {
 /// in-process — two implementations of one answer, free to drift
 /// apart in window, shape and order (ARCH principle 8). The
 /// in-process daemon binds the SAME `/internal` router beside its
-/// client listener (`sovereign_mesh::daemon::start_daemon`), so Local
+/// client listener (`sovereign_daemon::daemon::start_daemon`), so Local
 /// mode reaches that one handler over loopback.
 ///
 /// Local mode still answers an EMPTY list, not an error, when no mesh

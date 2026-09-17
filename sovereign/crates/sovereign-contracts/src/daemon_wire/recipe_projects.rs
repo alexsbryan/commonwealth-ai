@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Recipe-author project wire shapes — `/v1/recipe-projects/…`
-//! (`sovereign_mesh::recipe_project_http`) and the two recipe-author nouns
+//! (`sovereign_daemon::recipe_project_http`) and the two recipe-author nouns
 //! those answers carry (`sovereign_recipe_author::project::{ArtifactKind,
 //! CheckpointMeta}`). Moved here at sv-surface svt-3 (2026-09-11); both
 //! owners re-export at the historical paths.
@@ -84,7 +84,7 @@ pub struct CheckpointMeta {
 }
 
 /// One project in the sidebar. `Deserialize` as well as `Serialize` for
-/// `sovereign_mesh::features_http`'s `ProjectEntry` reason: a caller parses
+/// `sovereign_daemon::features_http`'s `ProjectEntry` reason: a caller parses
 /// back into the struct the daemon emitted, never into a twin that can
 /// drift.
 #[derive(Debug, Clone, Serialize, Deserialize)]

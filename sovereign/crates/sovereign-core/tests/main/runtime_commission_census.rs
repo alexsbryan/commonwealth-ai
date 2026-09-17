@@ -120,7 +120,7 @@ const UNSHARED_RECIPES: &[&str] = &[
 /// Every process that commissions a `Runtime`, by either door.
 ///
 /// **Target: one — the daemon.** Every other entry is a host waiting to become
-/// a surface over the turn protocol (`sovereign_mesh::turn_http`), which since
+/// a surface over the turn protocol (`sovereign_daemon::turn_http`), which since
 /// 2026-08-25 exists and is driven end-to-end by
 /// `sovereign-mesh/tests/turn_surface.rs`.
 const COMMISSIONING_PROCESSES: &[&str] = &[
@@ -497,7 +497,7 @@ fn only_the_declared_processes_commission_a_runtime() {
         "a process that is not on the list commissions a `Runtime`:\n  {}\n\n\
          §3.5's target is that the DAEMON is the only process that assembles \
          one. Every other entry on that list is a host waiting to become a \
-         surface over `sovereign_mesh::turn_http`, so the list may SHRINK \
+         surface over `sovereign_daemon::turn_http`, so the list may SHRINK \
          freely — it must not grow without someone saying why. If this is a \
          genuinely new process, add it with a comment explaining what it does \
          that the turn protocol cannot.",

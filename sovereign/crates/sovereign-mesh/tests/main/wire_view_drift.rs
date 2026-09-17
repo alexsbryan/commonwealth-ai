@@ -17,9 +17,9 @@ use sovereign_contracts::daemon_wire::{
     DaemonIdentity, IngestProgressView, MeshStatusSummary, ReachabilityStatus, RecoveryEvent,
     SelfReachability,
 };
-use sovereign_mesh::corpus_watch_http::IngestOutcome;
-use sovereign_mesh::lc_http::IngestProgress;
-use sovereign_mesh::mesh_http::{KnownMeshDto, MemberDto, StatusResponse};
+use sovereign_daemon::corpus_watch_http::IngestOutcome;
+use sovereign_daemon::lc_http::IngestProgress;
+use sovereign_daemon::mesh_http::{KnownMeshDto, MemberDto, StatusResponse};
 
 fn full_status() -> StatusResponse {
     StatusResponse {

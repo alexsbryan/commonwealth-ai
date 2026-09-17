@@ -86,6 +86,9 @@ sovereign-tools = { workspace = true, features = [
 ], optional = true }
 sovereign-atos = { workspace = true, optional = true }
 sovereign-mesh = { workspace = true, features = ["treesitter"], optional = true }
+# The mesh host cluster (domains dm-daemon-mesh-edge): `project_cmd::serve`
+# mounts `mcp_router`, so it rides the same `workbench` gate as the mesh dep.
+sovereign-daemon = { workspace = true, optional = true }
 # `project_cmd::cmd_serve` registers work-atlas claim handlers when
 # the daemon comes up; pulled in directly here rather than via
 # sovereign-tools so the dep is visible in this crate's tree.
@@ -149,6 +152,7 @@ workbench = [
     "dep:sovereign-tools",
     "dep:sovereign-atos",
     "dep:sovereign-mesh",
+    "dep:sovereign-daemon",
     "dep:sovereign-work-atlas",
     "dep:commonwealth-state",
     "dep:commonwealth-core",

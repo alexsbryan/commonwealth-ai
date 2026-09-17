@@ -66,7 +66,7 @@ use sovereign_inference::embedded::EmbeddedLlamaCpp;
 /// its entry node unreachable and starts serving the moment it appears.
 pub(crate) fn load_provider(
     config: &SetupConfig,
-    mesh: Arc<sovereign_mesh::DeferredDaemon>,
+    mesh: Arc<sovereign_daemon::DeferredDaemon>,
 ) -> Result<
     (
         Arc<dyn InferenceProvider>,

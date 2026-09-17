@@ -1381,7 +1381,7 @@ pub struct DaemonSection {
     /// A `[discovery] join_key` is then a contradiction and the daemon
     /// refuses to boot rather than dialing a seed anyway.
     ///
-    /// Resolved once per boot by `sovereign_mesh::LocalOnlyProfile`, which is
+    /// Resolved once per boot by `sovereign_daemon::LocalOnlyProfile`, which is
     /// the ONE decider the mDNS and iroh gates also read. Env override in
     /// both directions: `SOVEREIGN_LOCAL_ONLY=1|0`.
     #[serde(default = "default_local_only")]

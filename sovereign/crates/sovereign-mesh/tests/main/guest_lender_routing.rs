@@ -27,7 +27,7 @@ use axum::{Json, Router};
 use sovereign_core::guest_link::{save_in, GuestLink};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::CompletionRequest;
-use sovereign_mesh::daemon::InferenceVenue;
+use sovereign_daemon::daemon::InferenceVenue;
 use sovereign_mesh::guest_source::stored_guest_source_in;
 use sovereign_mesh::peer_inference::{InferenceRouter, VenueHost, VenueSource};
 
@@ -131,7 +131,7 @@ fn provider_with_link(root: &std::path::Path) -> InferenceRouter {
         local_without_the_model(),
         Arc::new(NoPeers) as Arc<dyn VenueSource>,
         Arc::new(NoPeers) as Arc<dyn VenueHost>,
-        Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest),
+        Arc::new(sovereign_daemon::slot_manifest::CoreSlotManifest),
     );
     p.set_guest_source(stored_guest_source_in(root.to_path_buf()));
     p
@@ -289,7 +289,7 @@ fn provider_with_link_and_answering_local(root: &std::path::Path) -> InferenceRo
         local_that_answers(),
         Arc::new(NoPeers) as Arc<dyn VenueSource>,
         Arc::new(NoPeers) as Arc<dyn VenueHost>,
-        Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest),
+        Arc::new(sovereign_daemon::slot_manifest::CoreSlotManifest),
     );
     p.set_guest_source(stored_guest_source_in(root.to_path_buf()));
     p

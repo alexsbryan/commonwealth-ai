@@ -710,10 +710,11 @@ async fn orchestrate_warm(
     let (_client_port, internal_port) = daemon.resolved_ports().await;
     // The host's own reachable bases on the internal port — where workers fetch
     // the GGUF (or its ranges) back from.
-    let host_bases: Vec<String> = crate::mesh_discovery::reachable_addresses(internal_port)
-        .into_iter()
-        .map(|a| format!("http://{a}"))
-        .collect();
+    let host_bases: Vec<String> =
+        sovereign_mesh::mesh_discovery::reachable_addresses(internal_port)
+            .into_iter()
+            .map(|a| format!("http://{a}"))
+            .collect();
     if host_bases.is_empty() {
         return Err("host has no reachable internal-port address to serve the model from".into());
     }

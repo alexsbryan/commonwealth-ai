@@ -52,7 +52,7 @@ fn build_client() -> reqwest::Client {
 // webview, and nothing in this file reads a field of either. So the
 // types cross as `serde_json::Value` — the daemon's own bytes, forwarded —
 // rather than as the route's Rust types, which are
-// `sovereign_mesh::corpus_watch_http`'s and close over
+// `sovereign_daemon::corpus_watch_http`'s and close over
 // `sovereign_tools::local_corpus` (`WatchedFolderStatus`, `FailedFile`,
 // `WatchedIncompleteJob`, `WatchedFolderConfig`). Naming them here cost a
 // `sovereign-desktop -> sovereign-mesh` layer edge, and a thin client

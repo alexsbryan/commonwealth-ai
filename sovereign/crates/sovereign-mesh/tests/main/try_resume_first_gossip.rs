@@ -35,7 +35,7 @@ use crate::common::mesh_admin_services;
 use std::time::Duration;
 
 use sovereign_core::setup_config::SetupConfig;
-use sovereign_mesh::daemon::EmbeddedDaemon;
+use sovereign_daemon::daemon::EmbeddedDaemon;
 
 // Requires exclusive ownership of the daemon's bound ports
 // (`9741` / `9742` by default). When a local dev daemon is running

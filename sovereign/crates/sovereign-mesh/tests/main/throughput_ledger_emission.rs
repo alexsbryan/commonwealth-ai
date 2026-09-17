@@ -37,7 +37,7 @@ use sovereign_core::oicp::{
 };
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, Speed};
-use sovereign_mesh::daemon::InferenceVenue;
+use sovereign_daemon::daemon::InferenceVenue;
 use sovereign_mesh::peer_inference::{InferenceRouter, VenueHost, VenueSource};
 use sovereign_serving_host::ledger::LedgerEmitter;
 
@@ -222,7 +222,7 @@ async fn peer_routed_stream_emits_inference_received_on_drop() {
         local,
         peer_source.clone(),
         peer_source,
-        Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest),
+        Arc::new(sovereign_daemon::slot_manifest::CoreSlotManifest),
     );
 
     // 5. DeepQuery-shaped request opted into mesh routing.
@@ -352,7 +352,7 @@ async fn peer_route_failure_without_chunks_does_not_emit_ledger_event() {
         local,
         peer_source.clone(),
         peer_source,
-        Arc::new(sovereign_mesh::slot_manifest::CoreSlotManifest),
+        Arc::new(sovereign_daemon::slot_manifest::CoreSlotManifest),
     );
 
     let envelope = InferenceRequirements::new()

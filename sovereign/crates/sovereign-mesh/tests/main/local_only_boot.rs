@@ -44,7 +44,7 @@
 //!
 //! The mesh-of-one. `create_mesh` succeeds, the mesh persists with exactly
 //! one member, and `/v1/models` answers — the solo case is the honest N=1,
-//! never an `Option<Mesh>` (see `sovereign_mesh::local_only`). Both are
+//! never an `Option<Mesh>` (see `sovereign_daemon::local_only`). Both are
 //! asserted here, because a profile that made the daemon local-only by making
 //! it useless would satisfy the census and fail the product.
 //!
@@ -62,8 +62,8 @@ use sovereign_core::setup_config::{
     DaemonSection, DataSection, DiscoverySection, IrohSection, ModelsSection, SetupConfig,
     WorkOfferSection,
 };
-use sovereign_mesh::daemon::EmbeddedDaemon;
-use sovereign_mesh::local_only::MeshService;
+use sovereign_daemon::daemon::EmbeddedDaemon;
+use sovereign_daemon::local_only::MeshService;
 
 /// The four loops the profile newly gates, plus the two that already had
 /// runtime off-switches and now read the same decider.

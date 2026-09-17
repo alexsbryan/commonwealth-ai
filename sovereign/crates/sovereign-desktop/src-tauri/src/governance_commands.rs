@@ -7,7 +7,7 @@
 //! # Where governance is decided (sv-surface D8)
 //!
 //! Eight commands hold NO oplog, no atlas dir and no recipe reader. Each
-//! is one call onto `sovereign_mesh::governance_http`'s
+//! is one call onto `sovereign_daemon::governance_http`'s
 //! `/internal/governance/{corpus}` routes over [`gov_client`] — ONE path
 //! in both boot modes, because Local means the daemon is in-process over
 //! this process's own `corpus_engine`. The daemon appends to the SAME
@@ -63,7 +63,7 @@ use crate::state::AppState;
 
 // Everything the Conflicts panel renders for a corpus arrives in one call
 // as `serde_json::Value` — the ROUTE's bytes, forwarded. The route's type
-// (`sovereign_mesh::governance_http::GovernanceViewPayload`) closes over
+// (`sovereign_daemon::governance_http::GovernanceViewPayload`) closes over
 // `corpus_engine::enrichment`'s governance read-model and cannot live in
 // the contract crate; naming it here cost a `sovereign-desktop ->
 // sovereign-mesh` layer edge, and this command reads no field of it. A

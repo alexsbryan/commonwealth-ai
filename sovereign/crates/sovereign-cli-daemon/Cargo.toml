@@ -38,6 +38,10 @@ sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true, features = ["treesitter"] }
 sovereign-gliner = { workspace = true }
 sovereign-mesh = { workspace = true, features = ["treesitter"] }
+# The mesh host cluster (domains dm-daemon-mesh-edge): the assembly root, the
+# route shells and the edge. `treesitter` because `bootstrap.rs` mounts
+# `project_router`, which reads `sovereign_mesh::reindexer`.
+sovereign-daemon = { workspace = true, features = ["treesitter"] }
 # The rented-pod modules lifted out of sovereign-mesh (domains REVIEW-audit-3);
 # reached directly rather than through sovereign-mesh's shim.
 sovereign-pods = { path = "../sovereign-pods" }

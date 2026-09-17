@@ -280,14 +280,14 @@ pub struct ServingProfile {
 ///   sink, the ingest poller and `/status` all stamp and read. A second copy
 ///   would let the status section disagree with the sink.
 ///
-/// Both are the mesh ADAPTERS from [`crate::peer_adapter`], not the
+/// Both are the mesh ADAPTERS from [`sovereign_mesh::peer_adapter`], not the
 /// commonwealth types they wrap: the daemon builds them, hands them here, and
 /// talks to them through `sovereign-contracts::peer`'s ports, so its own
 /// bootstrap names no `commonwealth-*` type at all (cw-lift 3b).
 pub struct HeadlessRails {
     pub provider_factory: Arc<dyn ProviderFactory>,
-    pub mesh_store: Arc<crate::peer_adapter::MeshPeerStore>,
-    pub convergence_recorder: Arc<crate::peer_adapter::MeshConvergence>,
+    pub mesh_store: Arc<sovereign_mesh::peer_adapter::MeshPeerStore>,
+    pub convergence_recorder: Arc<sovereign_mesh::peer_adapter::MeshConvergence>,
 }
 
 // `DesktopServices` WAS HERE, and is deleted (daemon-convergence Phase 3).
@@ -828,9 +828,10 @@ pub(crate) mod fixtures {
             rails: HeadlessRails {
                 provider_factory,
                 mesh_store: Arc::new(
-                    crate::peer_adapter::MeshPeerStore::in_memory().expect("in-memory MeshStore"),
+                    sovereign_mesh::peer_adapter::MeshPeerStore::in_memory()
+                        .expect("in-memory MeshStore"),
                 ),
-                convergence_recorder: Arc::new(crate::peer_adapter::MeshConvergence::new()),
+                convergence_recorder: Arc::new(sovereign_mesh::peer_adapter::MeshConvergence::new()),
             },
             knowledge_view_http: axum::Router::new(),
             solve_http: axum::Router::new(),
@@ -855,9 +856,10 @@ mod tests {
             rails: HeadlessRails {
                 provider_factory: std::sync::Arc::new(fixtures::NullFactory),
                 mesh_store: Arc::new(
-                    crate::peer_adapter::MeshPeerStore::in_memory().expect("in-memory MeshStore"),
+                    sovereign_mesh::peer_adapter::MeshPeerStore::in_memory()
+                        .expect("in-memory MeshStore"),
                 ),
-                convergence_recorder: Arc::new(crate::peer_adapter::MeshConvergence::new()),
+                convergence_recorder: Arc::new(sovereign_mesh::peer_adapter::MeshConvergence::new()),
             },
             knowledge_view_http: axum::Router::new(),
             solve_http: axum::Router::new(),

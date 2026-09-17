@@ -484,7 +484,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     // exactly as a commissioned-but-stopped daemon until `bind` — no peers — so
     // a terminal booting ahead of gossip reports its entry node unreachable
     // rather than inventing an address for it.
-    let deferred_daemon = Arc::new(sovereign_mesh::DeferredDaemon::new());
+    let deferred_daemon = Arc::new(sovereign_daemon::DeferredDaemon::new());
     let (provider, raw_engine, resolved_embed_family, distributed_primary_slot) =
         match build::inference::load_provider(&config, Arc::clone(&deferred_daemon)) {
             Ok(t) => t,
@@ -1150,16 +1150,16 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     // ── Commission, through THE assembler ─────────────────────────────
     //
     // This bootstrap no longer names its own variant. It hands its parts to
-    // `sovereign_mesh::assemble`, the one exhaustive match over `Launch` that
+    // `sovereign_daemon::assemble`, the one exhaustive match over `Launch` that
     // constructs anything (`quality/TOPOLOGY.md` §10, Falsifier 3), and that
     // match decides what `sovereign daemon run` composes into. A refusal is
     // fatal and names both sides — a daemon that came up as the wrong shape is
     // the hazard, so there is nothing to degrade to (§18.3).
-    let services = match sovereign_mesh::assemble(
+    let services = match sovereign_daemon::assemble(
         launch,
-        sovereign_mesh::LaunchParts::Serving {
-            serving: sovereign_mesh::ServingProfile {
-                core: sovereign_mesh::ServingCore {
+        sovereign_daemon::LaunchParts::Serving {
+            serving: sovereign_daemon::ServingProfile {
+                core: sovereign_daemon::ServingCore {
                     // The engine the auto_ingest loop and the
                     // /internal/corpus/* surface both read.
                     corpus_engine: Arc::clone(&engine),
@@ -1184,10 +1184,10 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
                     // silently is not there.
                     features: features_store,
                 },
-                capability: sovereign_mesh::ServingCapability {
+                capability: sovereign_daemon::ServingCapability {
                     mcp: bootstrap::build_mcp_surface(tools, Arc::clone(&notes_store)),
                     project_http,
-                    corpus_watch_http: sovereign_mesh::corpus_watch_http::corpus_watch_router(),
+                    corpus_watch_http: sovereign_daemon::corpus_watch_http::corpus_watch_router(),
                     // sv-surface rung 5: workflow execution is a daemon job
                     // surface (`/internal/workflows/*`). The runtime routes
                     // `model:`/`embed:` steps back through this daemon's own
@@ -1200,8 +1200,8 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
                 },
                 advertise_embed,
             },
-            headless: Some(sovereign_mesh::HeadlessExtras {
-                rails: sovereign_mesh::HeadlessRails {
+            headless: Some(sovereign_daemon::HeadlessExtras {
+                rails: sovereign_daemon::HeadlessRails {
                     // Rebuilds the provider when `models.*` changes on disk. Holds
                     // the same deferred handle, bound below.
                     provider_factory: Arc::new(provider::LlamaCppFactory {
@@ -1226,7 +1226,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
             return 1;
         }
     };
-    let daemon = sovereign_mesh::EmbeddedDaemon::new(data_dir.clone(), config.clone(), services);
+    let daemon = sovereign_daemon::EmbeddedDaemon::new(data_dir.clone(), config.clone(), services);
     deferred_daemon.bind(Arc::clone(&daemon));
 
     // Host side of distributed-inference auto-warm. When this node distributes a
@@ -1236,7 +1236,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     // manual `SOVEREIGN_RPC_ASSUME_WARMED` for the common case. Installed
     // unconditionally (harmless on a node that never distributes) so both
     // auto-discovered and manual (`SOVEREIGN_RPC_WORKERS`) hosts auto-warm.
-    sovereign_mesh::rpc_warm_http::install_rpc_warm_orchestrator(Arc::clone(&daemon));
+    sovereign_daemon::rpc_warm_http::install_rpc_warm_orchestrator(Arc::clone(&daemon));
 
     // Must be installed BEFORE discovery starts spawning the child: the
     // manifest is a boot-time snapshot taken while the slot is still unspawned,
@@ -1274,7 +1274,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
             // here, loudly and by name, rather than letting the profile
             // quietly turn a fleet joiner into a split-brained solo node
             // (ARCH §18.3 — refuse, never silently substitute).
-            let profile = sovereign_mesh::LocalOnlyProfile::resolve(config.daemon.local_only);
+            let profile = sovereign_daemon::LocalOnlyProfile::resolve(config.daemon.local_only);
             if profile.is_local_only() && disc.join_key.is_some() {
                 eprintln!(
                     "error: [daemon] local_only is set (source: {}) but [discovery] \
@@ -1282,7 +1282,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
                      peer. Unset one of them: drop join_key to run a solo node, or \
                      unset local_only / {}=0 to join the fleet.",
                     profile.source().as_str(),
-                    sovereign_mesh::local_only::ENV_VAR,
+                    sovereign_daemon::local_only::ENV_VAR,
                 );
                 return 1;
             }
@@ -1384,12 +1384,12 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
         .client_listener(std::time::Duration::from_secs(60))
         .await
     {
-        sovereign_mesh::ClientListener::Bound(addr) => addr,
-        sovereign_mesh::ClientListener::Failed(e) => {
+        sovereign_daemon::ClientListener::Bound(addr) => addr,
+        sovereign_daemon::ClientListener::Failed(e) => {
             eprintln!("error: the client API is not listening — {e}");
             return 1;
         }
-        sovereign_mesh::ClientListener::Pending => {
+        sovereign_daemon::ClientListener::Pending => {
             eprintln!(
                 "error: the client API bind did not settle within 60s — \
                  refusing to report a daemon that may be serving nothing"
@@ -1460,7 +1460,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
 /// `0` on every deliberate shutdown. On macOS it `_exit`s to skip the
 /// ggml-metal destructor assertion (full rationale inline).
 async fn shutdown_daemon(
-    daemon: Arc<sovereign_mesh::EmbeddedDaemon>,
+    daemon: Arc<sovereign_daemon::EmbeddedDaemon>,
     pid_path: &std::path::Path,
     self_pid: u32,
 ) -> i32 {

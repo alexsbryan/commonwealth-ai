@@ -7,7 +7,7 @@
 //! from `GET /internal/corpus/{corpus}/atoms`. It is a projection over
 //! Question atoms, so it belongs with the other atom folds here, and the
 //! daemon serves it at `GET /internal/corpus/{corpus}/starter-questions`
-//! (`sovereign_mesh::enrich_http`). The answer type is the wire's
+//! (`sovereign_daemon::enrich_http`). The answer type is the wire's
 //! (`daemon_wire::StarterQuestion`) so a thin client parses it without
 //! naming this crate.
 //!

@@ -10,7 +10,7 @@
 //! sentence: [`sovereign_contracts::types::TurnRequest`] /
 //! [`sovereign_contracts::types::TurnFrame`] are the protocol,
 //! `sovereign_core::runtime::serve_turn` drives a turn, and
-//! `sovereign_mesh::turn_http` is the door the daemon opens.
+//! `sovereign_daemon::turn_http` is the door the daemon opens.
 //!
 //! Nothing spoke it. The only Rust code that had ever sent a `TurnRequest`
 //! was two integration tests, each with its own hand-rolled WebSocket dance —
@@ -307,7 +307,7 @@ pub struct SearchedMessage {
 
 /// One clipped insight as `GET /v1/insights*` serves it — the wire
 /// projection: every renderable field, embedding stripped, `created_at`
-/// RFC 3339. Mirrors `sovereign_mesh::insight_http::InsightEntry` (the
+/// RFC 3339. Mirrors `sovereign_daemon::insight_http::InsightEntry` (the
 /// envelope lives behind the route; the client parses the same bytes).
 #[derive(Debug, Clone, Deserialize)]
 pub struct InsightEntry {
@@ -328,7 +328,7 @@ pub struct InsightEntry {
 /// Mirrored here rather than made generic, unlike the atlas and meshapp
 /// families below: two fields over a three-field row is exactly the
 /// `InsightEntry` case this crate already resolves by mirroring, and a
-/// caller that had to name `sovereign_mesh::insight_http::
+/// caller that had to name `sovereign_daemon::insight_http::
 /// SinkStatusResponse` would be taking a dependency on the HOST to read
 /// its own settings pane.
 #[derive(Debug, Clone, Deserialize)]
@@ -359,7 +359,7 @@ pub const ATOMS_PAGE_REQUEST: usize = 1_000;
 /// real caller; this crate cannot name that type (see the note above
 /// [`TurnClient::corpus_atoms`]), so the caller supplies it.
 ///
-/// Mirrors `sovereign_mesh::reading_http::CorpusAtomsPage`. `total` and
+/// Mirrors `sovereign_daemon::reading_http::CorpusAtomsPage`. `total` and
 /// `next_offset` are the reason this is a struct rather than a bare
 /// `Vec`: a client must be able to tell a finished read from a clipped
 /// one without inferring it from a length (ARCH §18.3).
@@ -1266,13 +1266,13 @@ impl TurnClient {
 
     // ── The recipe-author project store (sv-surface D6) ──────────
     //
-    // Answers are `sovereign_mesh::features_http::ProjectEntry`.
+    // Answers are `sovereign_daemon::features_http::ProjectEntry`.
     // Generic over `T` for the family reason; the store's whole surface
     // is three methods, so these three routes are all of it.
 
     /// `GET /v1/features/projects?include_archived=` — every
     /// recipe-author project, newest-updated first. `T` is
-    /// `sovereign_mesh::features_http::ProjectEntry`.
+    /// `sovereign_daemon::features_http::ProjectEntry`.
     ///
     /// An empty vec is a real answer — a fresh install has no projects,
     /// and the Welcome pane branches on exactly that.
@@ -1290,7 +1290,7 @@ impl TurnClient {
     }
 
     /// `GET /v1/features/projects/{id}` — one project. `T` is
-    /// `sovereign_mesh::features_http::ProjectEntry`.
+    /// `sovereign_daemon::features_http::ProjectEntry`.
     ///
     /// `Ok(None)` for a 404, safe here for [`Self::note_get`]'s reason:
     /// this path has one 404 and it means "no such project". A daemon
@@ -1305,7 +1305,7 @@ impl TurnClient {
 
     /// `POST /v1/features/projects` — provision a project; answers the
     /// row that was written. `T` is
-    /// `sovereign_mesh::features_http::ProjectEntry`.
+    /// `sovereign_daemon::features_http::ProjectEntry`.
     ///
     /// `body` serialises to `{id, title, charter_md}`. The ID IS THE
     /// CALLER'S: `RecipeProject` mints it from the project's essence
@@ -1380,7 +1380,7 @@ impl TurnClient {
     /// `POST /v1/notes` — write one note; answers the id the store
     /// minted.
     ///
-    /// `body` serialises to `sovereign_mesh::notes_http::
+    /// `body` serialises to `sovereign_daemon::notes_http::
     /// CreateNoteRequest`: `kind`, `content`, `session_id`, `scope` and
     /// `source` are required, the rest default. `scope` and `source`
     /// are the enums' own strings and an unrecognised one is a 400 — the
@@ -2010,7 +2010,7 @@ impl TurnClient {
 
     /// `GET /internal/governance/{corpus}/view` — everything a Conflicts
     /// panel renders, in one call. `T` is
-    /// `sovereign_mesh::governance_http::GovernanceViewPayload`.
+    /// `sovereign_daemon::governance_http::GovernanceViewPayload`.
     ///
     /// A corpus with no atlas is an `Err` carrying the host's 404 words,
     /// never an empty view: "not enriched yet" and "no conflicts" are
@@ -2465,7 +2465,7 @@ impl TurnClient {
     /// `GET /internal/corpus/local/{corpus}/ingest/progress` — how far
     /// along an ingest is, and what it INDEXED once it is done. `T` is
     /// `sovereign_contracts::daemon_wire::IngestProgressView` (the
-    /// route's `sovereign_mesh::lc_http::IngestProgress` for a caller that
+    /// route's `sovereign_daemon::lc_http::IngestProgress` for a caller that
     /// links the daemon).
     ///
     /// This is the route [`Self::lc_ingest`]'s ack names, and the one to
@@ -2511,7 +2511,7 @@ impl TurnClient {
     /// `POST /internal/corpus/local/pre-scan` — register the corpus for a
     /// user-picked path on the daemon's manager and classify what an
     /// ingest would read. `body` serialises to
-    /// `sovereign_mesh::lc_http::PreScanRequest` (`path`, `source_type`,
+    /// `sovereign_daemon::lc_http::PreScanRequest` (`path`, `source_type`,
     /// optional `display_name`); `T` is `sovereign_contracts::daemon_wire::PreScanAnswerView`, whose
     /// `corpus_id` is the id the registry KEPT — use that one.
     pub async fn lc_pre_scan<B: serde::Serialize + ?Sized, T: serde::de::DeserializeOwned>(
@@ -2557,7 +2557,7 @@ impl TurnClient {
 
     /// `GET /internal/corpus/{corpus}/chunks/{chunk_id}/neighbors?radius=`
     /// — the center chunk with its prev/next siblings inside
-    /// `source_doc_id`. `T` is `sovereign_mesh::reading_http::NeighborWindowResponse`.
+    /// `source_doc_id`. `T` is `sovereign_daemon::reading_http::NeighborWindowResponse`.
     ///
     /// The center chunk carries `atom_spans` already detected against
     /// its own text, so a caller that wants both the window and the
@@ -2583,7 +2583,7 @@ impl TurnClient {
 
     /// `GET /internal/corpus/{corpus}/atoms/{atom_id}` — the one-hop
     /// card: surface fields, related edges, cross-corpus bridges. `T`
-    /// is `sovereign_mesh::reading_http::AtomCard`.
+    /// is `sovereign_daemon::reading_http::AtomCard`.
     ///
     /// `related` is UNCAPPED and resolved: the host drops an edge whose
     /// other end is not in this atlas, so `related.len()` counts rows a
@@ -2602,7 +2602,7 @@ impl TurnClient {
     /// `GET /internal/corpus/{corpus}/atoms/{atom_id}/elsewhere` — the
     /// sections this atom is evidenced in, each with a resolved
     /// `chunk_id` when the index carries one. `T` is
-    /// `sovereign_mesh::reading_http::AtomElsewhere`.
+    /// `sovereign_daemon::reading_http::AtomElsewhere`.
     ///
     /// A `SectionRef` with no `chunk_id` is the answer "this section is
     /// in the atom's evidence and no chunk claims it" — a legacy ingest
@@ -2802,7 +2802,7 @@ impl TurnClient {
 
     /// `GET /internal/corpus/catalog` — the built-in catalogue unioned
     /// with every installed index it does not name. `T` is
-    /// `sovereign_mesh::corpus_catalog_http::CatalogEntry`.
+    /// `sovereign_daemon::corpus_catalog_http::CatalogEntry`.
     ///
     /// The `"installing"` state the picker also renders is NOT here —
     /// the daemon's in-flight decider is `GET /internal/corpus/status`
@@ -2819,7 +2819,7 @@ impl TurnClient {
     }
 
     /// `GET /internal/corpus/notebooks` — the unified Library shelf.
-    /// `T` is `sovereign_mesh::corpus_catalog_http::NotebookRow`.
+    /// `T` is `sovereign_daemon::corpus_catalog_http::NotebookRow`.
     ///
     /// A 503 here means the daemon has no local-corpus registry, so it
     /// cannot say which rows are the user's own. That is an `Err`, not
@@ -3139,7 +3139,7 @@ impl TurnClient {
 
     /// `GET /internal/corpus/{corpus}/health` — enrichment health for
     /// one installed corpus. `T` is
-    /// `sovereign_mesh::corpus_catalog_http::CorpusHealth`.
+    /// `sovereign_daemon::corpus_catalog_http::CorpusHealth`.
     ///
     /// `Ok(None)` is the 404 and only the 404: no index for this
     /// corpus opened. "Installed but never enriched" comes back as an
@@ -3191,7 +3191,7 @@ impl TurnClient {
 
     /// `PUT /v1/skills/{id}/active` — put one skill in, or out of, the
     /// SERVING runtime's active set. `T` is
-    /// `sovereign_mesh::turn_extras_http::SkillWireEntry`.
+    /// `sovereign_daemon::turn_extras_http::SkillWireEntry`.
     ///
     /// Answers the registry's read-back, not the caller's request, so
     /// a surface renders what the daemon holds rather than what it

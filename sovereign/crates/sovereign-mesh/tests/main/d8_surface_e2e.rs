@@ -65,10 +65,10 @@ use sovereign_contracts::mcp_config::{McpAuthConfig, McpServerConfig, McpTranspo
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::types::{Effect, Idempotency, Latency, Scope, StepOutput, ToolDescriptor};
 use sovereign_core::{Tool, ToolContext, ToolRegistry};
-use sovereign_mesh::daemon::EmbeddedDaemon;
-use sovereign_mesh::governance_http::governance_router;
-use sovereign_mesh::mcp_config_http::mcp_config_router;
-use sovereign_mesh::recipe_project_http::recipe_project_router;
+use sovereign_daemon::daemon::EmbeddedDaemon;
+use sovereign_daemon::governance_http::governance_router;
+use sovereign_daemon::mcp_config_http::mcp_config_router;
+use sovereign_daemon::recipe_project_http::recipe_project_router;
 use sovereign_store::recipe_project_store::RecipeProjectStore;
 
 use crate::common;

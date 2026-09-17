@@ -5,6 +5,71 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+# Commonwealth crates (embedded as library)
+commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
+commonwealth-discovery = { path = "../../../commonwealth/crates/commonwealth-discovery" }
+commonwealth-media = { path = "../../../commonwealth/crates/commonwealth-media" }
+commonwealth-rail = { workspace = true }
+commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
+# `features = ["iroh"]`: the daemon's dial-by-key binding is compiled into the
+# default build — runtime-gated by `[iroh] enabled`, not cfg-gated. `fanout`
+# because `media_fanout` calls the fan-out core where it lives (ARCH §8.3).
+commonwealth-transport = { path = "../../../commonwealth/crates/commonwealth-transport", features = ["iroh", "fanout"] }
+commonwealth-work = { workspace = true, features = ["process"] }
+# Fabric's own crate — the host cluster names it for the state and the loops
+# that stay behind (DC §4.1; `[[forbid]] sovereign-mesh -> sovereign-daemon`
+# keeps the arrow one-way).
+sovereign-mesh = { workspace = true }
+sovereign-contracts = { workspace = true }
+kernel-types = { workspace = true }
+oicp-types = { workspace = true }
+sovereign-api = { path = "../../../sovereign/crates/sovereign-api" }
+sovereign-meshapp-registry = { workspace = true }
+sovereign-serving-host = { path = "../sovereign-serving-host" }
+sovereign-scheduler = { workspace = true }
+sovereign-core = { workspace = true }
+sovereign-time = { workspace = true }
+sovereign-inference = { workspace = true }
+sovereign-gliner = { workspace = true }
+sovereign-tools = { workspace = true }
+sovereign-enrichment-catalog = { workspace = true }
+sovereign-meshapp = { workspace = true }
+sovereign-store = { workspace = true }
+sovereign-authoring-harness = { workspace = true }
+corpus-engine = { workspace = true }
+corpus-engine-notes = { workspace = true }
+
+async-trait = { workspace = true }
+futures = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+axum = { workspace = true }
+tower-http = { workspace = true }
+thiserror = { workspace = true }
+toml = { workspace = true }
+uuid = { workspace = true }
+tracing = { workspace = true }
+hex = "0.4"
+hostname = { workspace = true }
+reqwest = { workspace = true }
+tokio-stream = { version = "0.1", features = ["sync"] }
+if-addrs = "0.13"
+chrono = { workspace = true }
+tempfile = "3"
+
+[features]
+default = []
+# Enables `project_http` — the SCIP-graph route shell, which reads
+# `sovereign_mesh::reindexer` and therefore mesh's `treesitter`. Off by
+# default so binaries that never serve the project surface don't drag in
+# `corpus-engine`'s 5 tree-sitter grammar crates.
+treesitter = ["sovereign-mesh/treesitter"]
+
+[dev-dependencies]
+# `project_http`'s test module builds a `Reindexer` over a real `ScipGraph`.
+arc-swap = { workspace = true }
+corpus-engine-scip = { workspace = true }
 
 [lints]
 workspace = true

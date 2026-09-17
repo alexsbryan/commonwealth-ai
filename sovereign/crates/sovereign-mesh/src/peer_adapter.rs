@@ -72,10 +72,12 @@ impl MeshPeerStore {
     }
 
     /// The underlying store, for the mesh-side machinery that needs the whole
-    /// surface (gossip enumeration, GC, merge). Crate-private: a consumer that
-    /// could reach through the port to the concrete store would make the port
-    /// decorative.
-    pub(crate) fn inner(&self) -> Arc<MeshStore> {
+    /// surface (gossip enumeration, GC, merge). Public only because the
+    /// composition root moved to `sovereign-daemon` (`dm-daemon-mesh-edge`):
+    /// `EmbeddedDaemon` builds `AppState` from the concrete store, and the
+    /// assembly is the one caller. A decision made through the port never
+    /// reaches here — that is what keeps the port from going decorative.
+    pub fn inner(&self) -> Arc<MeshStore> {
         Arc::clone(&self.inner)
     }
 }
@@ -150,9 +152,10 @@ impl MeshConvergence {
         }
     }
 
-    /// The underlying record, for installation onto `AppState`. Crate-private
-    /// for the same reason as [`MeshPeerStore::inner`].
-    pub(crate) fn inner(&self) -> Arc<ConvergenceRecord> {
+    /// The underlying record, for installation onto `AppState`. Public for the
+    /// same reason as [`MeshPeerStore::inner`]: the composition root in
+    /// `sovereign-daemon` is the one caller.
+    pub fn inner(&self) -> Arc<ConvergenceRecord> {
         Arc::clone(&self.inner)
     }
 }

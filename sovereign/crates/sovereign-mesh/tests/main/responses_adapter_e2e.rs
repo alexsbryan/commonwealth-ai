@@ -38,7 +38,7 @@ use sovereign_api::server::client_router;
 use sovereign_api::state::{AppState, LocalInferenceService, ServingSeed};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
-use sovereign_mesh::slot_manifest::CoreSlotManifest;
+use sovereign_daemon::slot_manifest::CoreSlotManifest;
 use sovereign_meshapp_registry::registry::AppRegistry;
 
 use crate::common;
