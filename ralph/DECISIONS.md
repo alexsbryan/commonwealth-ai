@@ -939,3 +939,41 @@ that alternative named rather than taken.
 falsified premise recorded; `dm-daemon-api-edge` (a) corrected to the four-item
 list with the Join/Gossip repoint) and this entry; `ralph/NEEDS_HUMAN.md`
 removed. `git revert <sha>` reverts it alone.
+
+## 2026-09-17 · dm-misnamed-coverage · the coverage hole was already closed; only the note was owed
+
+**Fork.** `dm-misnamed-coverage` (STATE.md:212) states two premises: the
+`[[module]]` row for `sovereign/crates/sovereign-contracts/src/env.rs` must be
+added, and `sovereign/crates/sovereign-mesh/src/lib.rs` must be re-tagged
+`host -> fabric`, so `misnamed`/`crate-lines`/`queue` stop exiting 4 on the
+coverage assertion. Both were false on the tree as found.
+
+**Choice.** Make the one delta the row still owed — the `env.rs` note naming
+`REVIEW-build-mesh-host-decouple` — and record the two premises as already
+satisfied rather than re-do them.
+
+**Evidence.**
+
+- `git log -L '11549,11552:quality/DOMAINS.toml'` → the `env.rs` row
+  (`path`/`lines = 25`/`context = "kernel"`) was added by
+  `7ea3d6aae REVIEW-build-middleware-seam`, with `note = ""`; the file was
+  created by `REVIEW-build-mesh-host-decouple` (`sovereign-contracts/src/env.rs`
+  doc comment, line 13).
+- `git log -L '540,543:quality/DOMAINS.toml'` → `cafc95dd7
+  REVIEW-audit-daemon-1` retagged the `lib.rs` row `host -> fabric` and
+  re-measured it at 105 lines.
+- `python3 scripts/domains-census.py misnamed` → exit 0;
+  `crate-lines --crate sovereign-contracts` → exit 0; `queue` → exit 0.
+- `wc -l sovereign/crates/sovereign-contracts/src/env.rs` → 25.
+
+**Falsified by.** A tree where `misnamed`/`crate-lines`/`queue` still exit 4
+(a coverage hole), or where the `lib.rs` row reads `host`, or where the
+`env.rs` row is absent — then the row's original two edits are genuinely owed.
+
+**REVIEW-AFTER:** none — the row's stated outcome holds; the note is the only
+content this unit added. `DEMO-d5-misnamed` still reads `sovereign-mesh` at
+62.4% fabric, which is the leavers' business, not this row's.
+
+**Landed in.** this commit — `quality/DOMAINS.toml` (the `env.rs` note),
+`ralph/STATE.md` (the `CORRECTED` clause on the row) and this entry.
+`git revert <sha>` reverts it alone.
