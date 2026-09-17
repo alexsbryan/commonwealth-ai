@@ -109,17 +109,17 @@ impl InferenceProvider for InProcessFastOnly {
     }
 }
 
-struct NoPeers;
+struct NoVenues;
 
 #[async_trait::async_trait]
-impl VenueSource for NoPeers {
+impl VenueSource for NoVenues {
     async fn candidates(&self) -> Vec<InferenceVenue> {
         Vec::new()
     }
 }
 
 #[async_trait::async_trait]
-impl VenueHost for NoPeers {}
+impl VenueHost for NoVenues {}
 
 async fn wait_serving(slot: &DynamicChildSlot, timeout: Duration) -> bool {
     let start = Instant::now();
@@ -192,8 +192,8 @@ async fn a_named_request_for_the_distributed_primary_routes_once_the_child_serve
     // but has never spawned. This is the exact ordering that produced the bug.
     let mip = Arc::new(InferenceRouter::with_peer_source(
         facade,
-        Arc::new(NoPeers),
-        Arc::new(NoPeers),
+        Arc::new(NoVenues),
+        Arc::new(NoVenues),
         Arc::new(sovereign_daemon::slot_manifest::CoreSlotManifest),
     ));
 

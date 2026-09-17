@@ -43,19 +43,19 @@ use crate::common::TestProvider;
 
 // ─── harness ────────────────────────────────────────────────────
 
-struct StubPeerSource {
+struct StubVenueSource {
     peers: Vec<InferenceVenue>,
 }
 
 #[async_trait]
-impl VenueSource for StubPeerSource {
+impl VenueSource for StubVenueSource {
     async fn candidates(&self) -> Vec<InferenceVenue> {
         self.peers.clone()
     }
 }
 
 #[async_trait]
-impl VenueHost for StubPeerSource {}
+impl VenueHost for StubVenueSource {}
 
 const PEER_TEXT: &str = "Answer from the peer slot.";
 
@@ -181,10 +181,10 @@ fn mesh_request() -> CompletionRequest {
 fn build(peers: Vec<InferenceVenue>) -> InferenceRouter {
     InferenceRouter::with_peer_source(
         weak_local(),
-        Arc::new(StubPeerSource {
+        Arc::new(StubVenueSource {
             peers: peers.clone(),
         }) as Arc<dyn VenueSource>,
-        Arc::new(StubPeerSource { peers }) as Arc<dyn VenueHost>,
+        Arc::new(StubVenueSource { peers }) as Arc<dyn VenueHost>,
         Arc::new(sovereign_daemon::slot_manifest::CoreSlotManifest),
     )
 }

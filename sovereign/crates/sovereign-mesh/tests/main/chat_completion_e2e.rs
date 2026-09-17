@@ -64,7 +64,7 @@ fn local_byom() -> Arc<dyn InferenceProvider> {
 // Provides a fixed peer list that `InferenceRouter` uses in
 // place of `EmbeddedDaemon::peer_inference_endpoints()`.
 
-struct StubPeerSource {
+struct StubVenueSource {
     peers: Vec<InferenceVenue>,
 }
 
@@ -75,14 +75,14 @@ struct StubPeerSource {
 const STUB_NODE_ID: u128 = 0x00C0_FFEE;
 
 #[async_trait]
-impl VenueSource for StubPeerSource {
+impl VenueSource for StubVenueSource {
     async fn candidates(&self) -> Vec<InferenceVenue> {
         self.peers.clone()
     }
 }
 
 #[async_trait]
-impl VenueHost for StubPeerSource {
+impl VenueHost for StubVenueSource {
     /// Overridden deliberately. The trait's default is `None`, and a
     /// `None` here would make every routing test in this file forward
     /// UNSTAMPED — i.e. would keep asserting the pre-M5 behaviour
@@ -99,7 +99,7 @@ fn mip_with_peers(
     local: Arc<dyn InferenceProvider>,
     peers: Vec<InferenceVenue>,
 ) -> InferenceRouter {
-    let src = Arc::new(StubPeerSource { peers });
+    let src = Arc::new(StubVenueSource { peers });
     InferenceRouter::with_peer_source(
         local,
         src.clone(),
@@ -483,7 +483,7 @@ async fn joiner_streams_through_mesh_and_attributes_peer() {
         gossip_last_seen_unix: 0,
         pinned_transport: false,
     }];
-    let peer_source = Arc::new(StubPeerSource { peers });
+    let peer_source = Arc::new(StubVenueSource { peers });
 
     // 3. Build the local-side provider: a BYOM-class 3B that
     //    cannot satisfy DeepQuery's preferred profile at score
@@ -768,7 +768,7 @@ async fn local_only_sharding_never_routes_to_peer() {
         gossip_last_seen_unix: 0,
         pinned_transport: false,
     }];
-    let peer_source = Arc::new(StubPeerSource { peers });
+    let peer_source = Arc::new(StubVenueSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
     let wrapper = InferenceRouter::with_peer_source(
         local,
@@ -825,7 +825,7 @@ async fn mesh_allowed_normal_latency_routes_to_peer_without_speed_signal() {
         gossip_last_seen_unix: 0,
         pinned_transport: false,
     }];
-    let peer_source = Arc::new(StubPeerSource { peers });
+    let peer_source = Arc::new(StubVenueSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
     let wrapper = InferenceRouter::with_peer_source(
         local,
@@ -884,7 +884,7 @@ async fn local_only_judge_shaped_request_stays_local() {
         gossip_last_seen_unix: 0,
         pinned_transport: false,
     }];
-    let peer_source = Arc::new(StubPeerSource { peers });
+    let peer_source = Arc::new(StubVenueSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
     let wrapper = InferenceRouter::with_peer_source(
         local,
@@ -933,7 +933,7 @@ async fn latency_fast_never_routes_even_when_mesh_allowed() {
         gossip_last_seen_unix: 0,
         pinned_transport: false,
     }];
-    let peer_source = Arc::new(StubPeerSource { peers });
+    let peer_source = Arc::new(StubVenueSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
     let wrapper = InferenceRouter::with_peer_source(
         local,
@@ -983,7 +983,7 @@ async fn forced_choice_sentinel_excludes_peer_without_feature() {
         gossip_last_seen_unix: 0,
         pinned_transport: false,
     }];
-    let peer_source = Arc::new(StubPeerSource { peers });
+    let peer_source = Arc::new(StubVenueSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
     let wrapper = InferenceRouter::with_peer_source(
         local,
@@ -1037,7 +1037,7 @@ async fn forced_choice_sentinel_routes_to_peer_advertising_feature() {
         gossip_last_seen_unix: 0,
         pinned_transport: false,
     }];
-    let peer_source = Arc::new(StubPeerSource { peers });
+    let peer_source = Arc::new(StubVenueSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
     let wrapper = InferenceRouter::with_peer_source(
         local,
@@ -1103,7 +1103,7 @@ async fn explicit_peer_model_id_routes_to_peer_without_oicp_envelope() {
         gossip_last_seen_unix: 0,
         pinned_transport: false,
     }];
-    let peer_source = Arc::new(StubPeerSource { peers });
+    let peer_source = Arc::new(StubVenueSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
     let wrapper = InferenceRouter::with_peer_source(
         local,
@@ -1157,7 +1157,7 @@ async fn explicit_unknown_model_id_errors_instead_of_silent_substitution() {
         gossip_last_seen_unix: 0,
         pinned_transport: false,
     }];
-    let peer_source = Arc::new(StubPeerSource { peers });
+    let peer_source = Arc::new(StubVenueSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
     let wrapper = InferenceRouter::with_peer_source(
         local,
@@ -1208,7 +1208,7 @@ async fn empty_model_id_falls_through_to_oicp_path() {
         gossip_last_seen_unix: 0,
         pinned_transport: false,
     }];
-    let peer_source = Arc::new(StubPeerSource { peers });
+    let peer_source = Arc::new(StubVenueSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
     let wrapper = InferenceRouter::with_peer_source(
         local,
@@ -1353,7 +1353,7 @@ async fn an_unnamed_ranked_dispatch_sends_a_model_the_peer_can_resolve() {
 
 /// What the resolving peer did, in arrival order.
 #[derive(Default)]
-struct PeerLedger {
+struct VenueLedger {
     bodies: Vec<serde_json::Value>,
     /// Requests this peer actually generated tokens for.
     served: usize,
@@ -1362,12 +1362,12 @@ struct PeerLedger {
     refused_unresolvable: usize,
 }
 
-type PeerLedgerHandle = Arc<std::sync::Mutex<PeerLedger>>;
+type VenueLedgerHandle = Arc<std::sync::Mutex<VenueLedger>>;
 
-struct ResolvingPeerState {
+struct ResolvingVenueState {
     manifest: ProviderManifest,
     advertised: Vec<String>,
-    ledger: PeerLedgerHandle,
+    ledger: VenueLedgerHandle,
 }
 
 /// `two_slot_manifest` plus the `primary` / `commonwealth/primary` alias
@@ -1424,13 +1424,13 @@ fn canned_sse_response() -> axum::response::Response {
 }
 
 async fn resolving_capabilities_handler(
-    axum::extract::State(state): axum::extract::State<Arc<ResolvingPeerState>>,
+    axum::extract::State(state): axum::extract::State<Arc<ResolvingVenueState>>,
 ) -> impl IntoResponse {
     Json(state.manifest.clone())
 }
 
 async fn resolving_chat_handler(
-    axum::extract::State(state): axum::extract::State<Arc<ResolvingPeerState>>,
+    axum::extract::State(state): axum::extract::State<Arc<ResolvingVenueState>>,
     Query(_q): Query<StreamQuery>,
     Json(body): Json<serde_json::Value>,
 ) -> axum::response::Response {
@@ -1497,11 +1497,11 @@ async fn resolving_chat_handler(
     canned_sse_response()
 }
 
-async fn spawn_resolving_peer() -> (SocketAddr, PeerLedgerHandle) {
+async fn spawn_resolving_peer() -> (SocketAddr, VenueLedgerHandle) {
     let manifest = aliased_manifest();
     let advertised: Vec<String> = manifest.models.iter().map(|m| m.id.clone()).collect();
-    let ledger: PeerLedgerHandle = Arc::new(std::sync::Mutex::new(PeerLedger::default()));
-    let state = Arc::new(ResolvingPeerState {
+    let ledger: VenueLedgerHandle = Arc::new(std::sync::Mutex::new(VenueLedger::default()));
+    let state = Arc::new(ResolvingVenueState {
         manifest,
         advertised,
         ledger: Arc::clone(&ledger),

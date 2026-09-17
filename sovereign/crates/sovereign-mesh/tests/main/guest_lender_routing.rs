@@ -54,17 +54,17 @@ const GRANTED: &str = "lender-only-model";
 const TOKEN: &str = "aa11bb22cc33dd44ee55ff66aa77bb88cc99dd00ee11ff22aa33bb44cc55dd66";
 
 #[derive(Debug)]
-struct NoPeers;
+struct NoVenues;
 
 #[async_trait]
-impl VenueSource for NoPeers {
+impl VenueSource for NoVenues {
     async fn candidates(&self) -> Vec<InferenceVenue> {
         Vec::new()
     }
 }
 
 #[async_trait]
-impl VenueHost for NoPeers {}
+impl VenueHost for NoVenues {}
 
 /// What the lender observed about the request it served.
 #[derive(Default)]
@@ -129,8 +129,8 @@ fn local_without_the_model() -> Arc<dyn InferenceProvider> {
 fn provider_with_link(root: &std::path::Path) -> InferenceRouter {
     let p = InferenceRouter::with_peer_source(
         local_without_the_model(),
-        Arc::new(NoPeers) as Arc<dyn VenueSource>,
-        Arc::new(NoPeers) as Arc<dyn VenueHost>,
+        Arc::new(NoVenues) as Arc<dyn VenueSource>,
+        Arc::new(NoVenues) as Arc<dyn VenueHost>,
         Arc::new(sovereign_daemon::slot_manifest::CoreSlotManifest),
     );
     p.set_guest_source(stored_guest_source_in(root.to_path_buf()));
@@ -287,8 +287,8 @@ fn local_that_answers() -> Arc<dyn InferenceProvider> {
 fn provider_with_link_and_answering_local(root: &std::path::Path) -> InferenceRouter {
     let p = InferenceRouter::with_peer_source(
         local_that_answers(),
-        Arc::new(NoPeers) as Arc<dyn VenueSource>,
-        Arc::new(NoPeers) as Arc<dyn VenueHost>,
+        Arc::new(NoVenues) as Arc<dyn VenueSource>,
+        Arc::new(NoVenues) as Arc<dyn VenueHost>,
         Arc::new(sovereign_daemon::slot_manifest::CoreSlotManifest),
     );
     p.set_guest_source(stored_guest_source_in(root.to_path_buf()));
