@@ -1379,3 +1379,48 @@ routing records it replays; or the simulator ceasing to need them.
 
 **Landed in.** this commit — `quality/ARCH_LAYERS.toml` (the except), the row
 `[x]`, and this entry.
+
+## 2026-09-17 · dm-harness-except · the simulator's host reach is CUT, not excepted
+
+**Fork.** `dm-harness-except` (STATE.md:218) directs adding
+`sovereign-serving-host` to the harness forbid's `except`
+(`quality/ARCH_LAYERS.toml:759-762`) "only if the decouple row left that
+edge". `REVIEW-build-mesh-sim-decouple` (`7009cc569`) cut the throughput-EWMA
+reach but LEFT a second one: `sovereign_serving_host::recorder::new_decision_id()`
+at `sovereign-mesh/src/mesh_sim/mod.rs:1541` (introduced by
+`REVIEW-build-sched-split-sink`, `4ba55cbc6`). So the conditional resolves
+TRUE — but the two rows it collides with say only `sovereign-scheduler` is owed
+(`HUMAN-forbid-harness-except`, STATE.md:216: "the REVIEW-build row above
+removes … the serving-host reach, so only sovereign-scheduler is owed"), and
+widening an `except` is operator-only (`ralph/CHARTER.md:34`; PROMPT §6/§7).
+
+**Choice.** Cut the reach; do not widen the `except`. The `except` keeps
+`sovereign-scheduler` (already added by the human row's commit, `9b0b65080`);
+`dm-mesh-sim-move` is re-scoped to mint the simulator's own deterministic id
+(`d-{oicp_request_id}`) in place of the host mint, so the moved simulator names
+only `sovereign-scheduler`. This is the smaller reversible step over the larger
+one and the existing surface over a new one (charter "Decide these"), and it
+honours the operator's stated design ("only sovereign-scheduler").
+
+**Evidence** (reproduced 2026-09-17).
+- `grep -rn 'sovereign_serving_host' sovereign/crates/sovereign-mesh/src/mesh_sim/`
+  → exactly one hit, `mod.rs:1541`; `git blame` dates it `4ba55cbc6`
+  (2026-09-15), so the 2026-09-16 decouple row's premise ("mesh_sim's
+  `throughput_tracking` reach is its serving-host reach") was incomplete.
+- The id is a join key, never parsed: `mesh_sim/scoreboard.rs:539-547`
+  `origin_of` reads `oicp_request_id` (`sim-{origin}-{seq}`), and the
+  scoreboard's own test mints `"d-sim-7-1234"` (`scoreboard.rs:804`) — the
+  shape the cut uses. The host mint is random (`recorder.rs:263`
+  `Uuid::new_v4`), so the cut also restores the module's stated determinism.
+- `sovereign-mesh-test-harness/Cargo.toml` names no `sovereign-serving-host`
+  today; after the move it would, and
+  `[[forbid]] sovereign-mesh-test-harness -> sovereign-*` has no except for it.
+- `quality/ARCH_LAYERS.toml:759-762`; `ralph/CHARTER.md:34`; STATE.md:216, :218, :220.
+
+**Falsified by.** The simulator needing a host surface other than the id mint
+after the move (then the widening is genuinely operator-only); or
+`origin_of`/the scoreboard starting to read the decision id's shape.
+
+**Landed in.** this commit — `ralph/STATE.md` (the two row corrections),
+`quality/ARCH_LAYERS.toml` (the comment pinning the absence) and this entry;
+the code cut lands in `dm-mesh-sim-move`.
