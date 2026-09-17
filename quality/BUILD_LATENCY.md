@@ -14,6 +14,38 @@ architecture — not profile knobs — can take off. The answer in one line: the
 cost of every edit is one serial chain of six large crates, and three build
 defects sit on top of it that cost more than the chain does.
 
+## The root problem, measured
+
+Operator, 2026-09-17: on a campaign of work orders an inordinate share of
+the time goes to checking quality — builds and tests — and slow checks get
+skipped. So the number this document serves is not the per-edit loop below
+but what sessions actually waited on gates. `scripts/build-probe/gate-census.py`
+pairs every gate command in the repo's session transcripts with its result:
+
+| shape | runs | hours | share | median s | p90 s | sessions |
+|---|---|---|---|---|---|---|
+| bare `cargo build/check/test … -p` | 1428 | 18.6 | 38% | 11 | 127 | 150 |
+| `sovereign-test.sh --package/--filter` | 621 | 10.3 | 21% | 25 | 171 | 112 |
+| `sovereign-test.sh` (full) | 263 | 6.3 | 13% | 2 | 271 | 94 |
+| `sovereign-lint.sh --full` | 313 | 5.7 | 12% | 15 | 175 | 96 |
+| `sovereign-lint.sh` (scoped) | 307 | 4.7 | 10% | 15 | 154 | 86 |
+| `cargo xtask …` | 302 | 1.7 | 4% | 3 | 19 | 68 |
+| `pre-push.sh` | 121 | 1.3 | 3% | 13 | 108 | 39 |
+
+30 days to 2026-09-17: 181 sessions, 3495 runs, 48.7 hours waited (a floor:
+background-launched runs are timed at zero). The medians are fine; the
+hours are in the tail — 68% of the time is the 475 runs over two minutes,
+82% is runs over one minute — and the tail is the same thing in every row:
+a configuration cargo had not built yet. Bare `cargo … -p <crate> --features …`
+is the largest bucket because every hand-picked `-p`/feature pair is a new
+resolution (D1). A scoped test run sampled at 123 s was 113 s of build and
+11 s of tests. That is the root the levers below serve. It is the motivation, not the
+score: the operator's definition of success is the per-file table — for
+each hot-spot file, seconds from a one-statement edit to green (warm,
+fresh-scope, full build), before and after, and the three sums
+(`quality/campaigns/build-latency.toml`, SUCCESS block;
+`scripts/build-probe/score.sh --compare`). Nothing composed, nothing weighted.
+
 ## Where the edits are
 
 1070 commits in 30 days; 596 touch Rust. By crate, in `.rs` file-edits:
@@ -117,7 +149,8 @@ which the script then reports as a Fedora-host toolchain failure. The test
 script already has the scope-aware `resolve_features` in
 `scripts/lib/cargo-scope.sh`; the lint script carries a second, inline copy
 (two implementations of one threshold). Fix: call the shared one. Bar: a
-desktop-only edit gets a green scoped lint in ≤ 5 s.
+desktop-only edit gets a green scoped lint in ≤ 5 s. **Landed 4f06edf82 and
+measured:** 2.9 s green (30.6 s the first time that scope is used — D1).
 
 **D3. sovereign-mesh's build script is permanently stale.** `build.rs` emits
 `cargo:rerun-if-changed=../../.git/HEAD`, which resolves to
@@ -199,8 +232,48 @@ in one binary; every focused test compiles all 35k lines and links the world
 once. `--filter` already locates the file by grep, so the script can pass
 `--test <bin>` when the tests are split. Bar: mesh focused test build ≤ 6 s.
 
+**Corrected by the model (2026-09-17, after the hand estimates above were
+written):** `scripts/build-probe/predict.py` computes the weighted longest
+path through the dependents of each probe crate from the measured warm
+durations. It agrees with A1 and A4 (−3.8 s and −3.2 s on a 29.0 s weighted
+chain; −7.0 together) and disagrees with A2 and A3: cutting tools→core (and
+tools→store, which also reaches core) moves the chain by 0.1 s, and taking
+corpus-engine off contracts by 0.4 s, because sovereign-api and sovereign-mesh
+depend on core and tools directly, so the longest path survives the cut. Those
+two remain worth doing for the cone *count* (tools leaves the core cone; the
+largest crate leaves the contracts cone) but not for the wall clock, and the
+campaign ladder ranks them accordingly.
+
 What is not on the list: opt-level, codegen-units, `debug = 0` (already set),
 linker (mold is in place), sccache. None of them shortens a serial chain.
+
+## The loop this became
+
+Operator direction 2026-09-17: run this as a campaign shaped like a while
+loop over an objective measure — one architecture move per step, each step
+banked only if the measure falls, until plateau. The campaign is
+`quality/campaigns/build-latency.toml` (ruler, bars, move set, run ledger)
+with its ladder in `.sovereign/features/build-latency/campaign.md`.
+
+The measure (`scripts/build-probe/score.sh`): expected seconds from edit to
+green scoped lint plus focused test, over the eleven probe files above,
+weighted by each crate's 30-day commit count frozen at 2026-09-17. A second
+number is the same weighting over `cargo build --workspace`. The instrument
+is validated before use: an A/A pair on the unchanged tree sets the band a
+move must clear (bar `bl-noise`, kill at 10%). A third instrument,
+`scripts/build-probe/scope-drift.py`, counts the units a `-p <crate>` run
+compiles that a `--workspace` run never does — the structural cause of D1 —
+and must read 0 before the campaign closes.
+
+Spiked, not landed: `cargo hakari` in a throwaway worktree wires a
+`workspace-hack` crate into 59 members (70 files, +275 lines) and takes
+scope drift from 316 to 41. The residual 41 are workspace-member features
+that vary by scope — `kernel-types/wire-fixture`, `sovereign-tools/{atos,
+dev-tools,treesitter}`, `commonwealth-rail-core/test-support`,
+`sovereign-cli-shared`, `sovereign-enrichment-build`,
+`sovereign-cli-llm/awareness` — the same list `scripts/lib/cargo-scope.sh`
+keeps by hand today. Pinning those from the crates that need them is the
+second build-graph rung and retires that list.
 
 ## Order
 

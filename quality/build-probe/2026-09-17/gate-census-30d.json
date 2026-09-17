@@ -1,0 +1,81 @@
+{
+ "days": 30,
+ "transcripts": 340,
+ "sessions_with_gates": 181,
+ "gate_runs": 3495,
+ "gate_seconds": 175388,
+ "shapes": {
+  "cargo-raw": {
+   "runs": 1428,
+   "seconds": 66820,
+   "median_s": 11.0,
+   "p90_s": 127.0,
+   "sessions": 150,
+   "share": 0.381
+  },
+  "test-scoped": {
+   "runs": 621,
+   "seconds": 37040,
+   "median_s": 25.0,
+   "p90_s": 171.0,
+   "sessions": 112,
+   "share": 0.211
+  },
+  "test-full": {
+   "runs": 263,
+   "seconds": 22798,
+   "median_s": 2.0,
+   "p90_s": 271.0,
+   "sessions": 94,
+   "share": 0.13
+  },
+  "lint-full": {
+   "runs": 313,
+   "seconds": 20389,
+   "median_s": 15.0,
+   "p90_s": 175.0,
+   "sessions": 96,
+   "share": 0.116
+  },
+  "lint-scoped": {
+   "runs": 307,
+   "seconds": 16752,
+   "median_s": 15.0,
+   "p90_s": 154.0,
+   "sessions": 86,
+   "share": 0.096
+  },
+  "xtask": {
+   "runs": 302,
+   "seconds": 6120,
+   "median_s": 3.0,
+   "p90_s": 19.0,
+   "sessions": 68,
+   "share": 0.035
+  },
+  "pre-push": {
+   "runs": 121,
+   "seconds": 4811,
+   "median_s": 13.0,
+   "p90_s": 108.0,
+   "sessions": 39,
+   "share": 0.027
+  },
+  "quality-check": {
+   "runs": 69,
+   "seconds": 543,
+   "median_s": 2.0,
+   "p90_s": 25.0,
+   "sessions": 14,
+   "share": 0.003
+  },
+  "bench": {
+   "runs": 71,
+   "seconds": 115,
+   "median_s": 1.0,
+   "p90_s": 2.0,
+   "sessions": 22,
+   "share": 0.001
+  }
+ }
+}

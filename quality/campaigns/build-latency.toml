@@ -1,0 +1,197 @@
+# Flight rules — read raw. Verdicts come from the instruments below, never
+# from prose. The one decider of the score is scripts/build-probe/score.sh;
+# it reads the [[probe]] rows here (file, crate, test) so the ruler is data.
+#
+# Prose, measurements and the lever list: quality/BUILD_LATENCY.md.
+# The loop this campaign runs (measure → one move → gates → re-measure →
+# bank or revert → until plateau) is in .sovereign/features/build-latency/campaign.md.
+id        = "build-latency"
+objective = "Quality checking on a campaign of work orders stops being the thing that gets skipped: the gate-seconds a session pays per order — scoped lint, focused test, full lint, full test, pre-push, in the multiplicities sessions actually run them — fall step by step through build-graph and architecture moves until the next move is inside the instrument's noise band. Measured 2026-09-17: 181 sessions waited 48.7 h on 3495 gate runs in 30 days, 68% of it in the 475 runs over two minutes."
+spec      = "quality/BUILD_LATENCY.md"
+declared  = "2026-09-17"
+status    = "active"
+
+# ── THE PREDICATE (structural check; success is the SUCCESS section) ────────
+# A structural statement a program decides. It is deliberately NOT "the score
+# is low": a score can fall through profile knobs, a faster machine, or a
+# cache that happened to be warm. The predicate is about the dependency
+# graph, which is what architecture actually changes: no crate whose 30-day
+# edit weight is in the top five sits on the critical chain of an edit in a
+# crate it does not use. Concretely, after an edit in sovereign-mesh the
+# workspace-build critical path (critpath.py over cargo --timings) contains no
+# unit of sovereign-cli-llm except the verb crates that import sovereign_mesh,
+# and after an edit in sovereign-core it contains no sovereign-tools unit.
+[predicate]
+statement = "After a body edit in sovereign-mesh/src/daemon.rs, the critical path of `cargo build --workspace` contains no sovereign-cli-llm library unit; after a body edit in sovereign-core/src/runtime/mod.rs it contains no sovereign-tools unit; and `scripts/build-probe/scope-drift.py` prints 0"
+check     = "scripts/build-probe/score.sh --predicate"
+
+# ── PROBES — the ruler, frozen ───────────────────────────────────────────────
+# One file per hot crate, the most-edited file with a function body. Weight =
+# commits touching the crate's .rs files, 2026-08-18..2026-09-17 (git log at
+# HEAD dcb65856d). Frozen for the campaign: a ruler that re-weights itself
+# every step cannot tell a real fall from a shift in where the edits went
+# (ARCH_PRINCIPLES 7). Re-freeze only at a declared campaign checkpoint, and
+# report both scores at that step. `test` names the focused test the
+# probe runs through sovereign-test.sh --package <crate> --filter <test>.
+[[probe]]
+file   = "sovereign/crates/sovereign-core/src/deep_research/mod.rs"
+crate  = "sovereign-core"
+weight = 148
+test   = "gates_require_both_absolute_and_margin"
+
+[[probe]]
+file   = "sovereign/crates/sovereign-mesh/src/daemon.rs"
+crate  = "sovereign-mesh"
+weight = 181
+test   = "partition_round_robin_balances"
+
+[[probe]]
+file   = "sovereign/crates/sovereign-cli-llm/src/lib.rs"
+crate  = "sovereign-cli-llm"
+weight = 140
+test   = "shard_index_and_count_read_the_convention"
+
+[[probe]]
+file   = "corpus-engine/src/engine/mod.rs"
+crate  = "corpus-engine"
+weight = 137
+test   = "stamp_then_load_round_trips"
+
+[[probe]]
+file   = "sovereign/crates/sovereign-desktop/src-tauri/src/state.rs"
+crate  = "sovereign-desktop"
+weight = 137
+test   = "deterministic_with_seed"
+
+[[probe]]
+file   = "sovereign/crates/sovereign-contracts/src/setup_config.rs"
+crate  = "sovereign-contracts"
+weight = 83
+test   = "noop_observer_is_send_sync"
+
+[[probe]]
+file   = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/mod.rs"
+crate  = "sovereign-cli-daemon"
+weight = 74
+test   = "restarts_on_panic_then_completes"
+
+[[probe]]
+file   = "sovereign/crates/sovereign-turn-client/src/lib.rs"
+crate  = "sovereign-turn-client"
+weight = 53
+test   = "the_default_ready_path_is_v1_models"
+
+[[probe]]
+file   = "sovereign/crates/sovereign-tools/src/local_corpus/manager.rs"
+crate  = "sovereign-tools"
+weight = 50
+test   = "is_pathological_all_zero"
+
+[[probe]]
+file   = "sovereign/crates/sovereign-core/tests/main/f26_egress_census.rs"
+crate  = "sovereign-core"
+weight = 37
+test   = "gates_require_both_absolute_and_margin"
+shapes = ["test"]
+
+[[probe]]
+file   = "kernel-types/src/quality/instruments.rs"
+crate  = "kernel-types"
+weight = 18
+test   = "hex_round_trips"
+
+# ── SUCCESS — one definition, no composition ────────────────────────────────
+# Operator 2026-09-17: the definition of success has zero room for debate.
+# It is a per-file table. For every [[probe]] file, three seconds-counts,
+# each the wall clock of a fixed command sequence on this host in the
+# sovereign-vulkan toolbox, after a one-statement edit in the first function
+# body of that file (never a comment):
+#   warm   = scoped lint (sovereign-lint.sh --human) + focused test
+#            (sovereign-test.sh --human --package <crate> --filter <test>),
+#            each the second of two runs (the first absorbs the previous
+#            probe's restore), on the shared target/.
+#   fresh  = the FIRST focused test for that crate on a target dir that has
+#            only ever run the three full-workspace gates (lint --full, test,
+#            build --workspace) from cold: what a session pays when it opens
+#            that crate. Measured in target/fresh-probe, wiped at the start.
+#   build  = cargo build --workspace after the edit, tree settled first.
+# The campaign number is the SUM of each column over the files, before and
+# after; the speed-up is before/after for each column and each file.
+# Weights on the probes are provenance (why the file is in the list), not
+# a factor in any sum. The census (quality/build-probe/2026-09-17/
+# gate-census-30d.json: 181 sessions, 48.7 h on gates, 68% in runs ≥ 120 s)
+# is the motivation and is never in the score.
+
+[[bar]]
+id           = "bl-noise"
+one_line     = "Two warm runs on an unchanged tree agree — the ruler can tell a move from nothing"
+derives_from = "ARCH_PRINCIPLES 7; measured 2026-09-17 (score-aa-partial.log): per-file pass-to-pass delta ≤ 0.9 s, sum delta 0.6%"
+status       = "met"
+target       = 0.03
+direction    = "lower_is_better"
+kill         = "a move is banked only if the warm sum falls by more than this band; if an A/A pair ever exceeds it, stop and fix the instrument before any move"
+instrument   = "scripts/build-probe/score.sh --aa"
+
+[[bar]]
+id           = "bl-warm"
+one_line     = "Σ over probe files of (scoped lint + focused test) seconds, steady state"
+status       = "open"
+direction    = "lower_is_better"
+instrument   = "scripts/build-probe/score.sh          # .warm_s in target/build-probe/score.json"
+
+[[bar]]
+id           = "bl-fresh"
+one_line     = "Σ over probe crates of the first focused test's seconds on a full-gates-only target dir"
+derives_from = "quality/BUILD_LATENCY.md D1; the tail of the census"
+status       = "open"
+direction    = "lower_is_better"
+instrument   = "scripts/build-probe/score.sh --fresh  # .fresh_s in target/build-probe/score.fresh.json; ~40 min, cold"
+
+[[bar]]
+id           = "bl-build"
+one_line     = "Σ over probe files of `cargo build --workspace` seconds after the edit"
+status       = "open"
+direction    = "lower_is_better"
+instrument   = "scripts/build-probe/score.sh --build  # .build_s in target/build-probe/score.build.json"
+
+[[bar]]
+id           = "bl-noop-floor"
+one_line     = "A full check with nothing edited is the fingerprint scan and nothing else"
+derives_from = "quality/BUILD_LATENCY.md D3 — 7.4 s → 0.8 s after the build.rs path fix (93eef92bf)"
+status       = "met"
+target       = 2.0
+direction    = "lower_is_better"
+instrument   = "scripts/build-probe/score.sh --noop"
+
+# Report: scripts/build-probe/score.sh --compare <before-dir> <after-dir>
+# prints the per-file table (warm / fresh / build, before → after, ×) and the
+# three sums. That table IS the campaign's result; nothing else is.
+# Snapshots: score.sh --snapshot quality/build-probe/<date>-<label>/
+
+# ── MOVE SET — the only kinds of step the loop may take ─────────────────────
+# One move per step, one dimension at a time (ARCH_PRINCIPLES 2). Each step
+# pre-registers its predicted bl-per-edit delta from the cone model in
+# BUILD_LATENCY.md BEFORE the diff, and is banked only if the measured delta
+# clears bl-noise; otherwise it is reverted in the same session.
+[[move]]
+kind = "edge-cut"
+one_line = "Remove one workspace dependency edge by moving the few items the dependent really uses below both crates"
+examples = ["sovereign-tools -> sovereign-core (22 files, 5 items)", "corpus-engine -> sovereign-contracts (14 files, 11 paths)"]
+
+[[move]]
+kind = "cohesion-split"
+one_line = "Split one crate along a hub so the hot half is a crate its consumers do not all depend on"
+examples = ["sovereign-cli-llm by verb", "sovereign-mesh at EmbeddedDaemon", "kernel-types::quality::instruments out"]
+
+[[move]]
+kind = "build-graph"
+one_line = "A change to Cargo.toml / build.rs / gate scripts with no source semantics"
+examples = ["workspace-hack crate (cargo hakari)", "build.rs rerun path (done, 93eef92bf)", "lint feature resolver (done, 4f06edf82)"]
+
+[[move]]
+kind = "test-layout"
+one_line = "Split an integration-test binary so a focused test compiles one area"
+examples = ["sovereign-mesh/tests/main.rs (72 modules) into per-area binaries + --test <bin> in sovereign-test.sh"]
+
+# ── LEDGER — snapshot directories under quality/build-probe/, one per
+# banked move: <date>-<label>/{score.json,score.fresh.json,score.build.json,HEAD}
