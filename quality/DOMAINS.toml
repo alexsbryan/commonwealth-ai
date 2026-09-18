@@ -1445,8 +1445,8 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-daemon/src/state.rs"
 context = "host"
-lines = 2116
-note = "the api-side god object, dissolving: the flat owner fields are six parts now (DC §4.2). Names commonwealth_core::mesh::Mesh (:10), commonwealth_state (:11-12), corpus_engine::CorpusEngine (:13), serving_policy::fair_sched (:15), sovereign_grants (:17), sovereign_serving_host::admission (:20)"
+lines = 2085
+note = "the api-side god object, dissolving: the flat owner fields are six parts plus the daemon's store part now (DC §4.2). Names commonwealth_core::mesh::Mesh (:10), commonwealth_state (:11-12), corpus_engine::CorpusEngine (:13), serving_policy::fair_sched (:15), sovereign_grants (:17), sovereign_serving_host::admission (:20); `PrincipalTally`/`RejectedNodeIdHeader` are re-exported from the host part (REVIEW-build-daemon-parts, 2026-09-18)"
 
 [[module]]
 path = "sovereign/crates/sovereign-daemon/src/state/answering.rs"
@@ -1475,8 +1475,14 @@ note = "The node's part (DC §4.2) with its construction seed; scaffolding until
 [[module]]
 path = "sovereign/crates/sovereign-daemon/src/state/serving.rs"
 context = "host"
-lines = 311
-note = "Serving's part (DC §4.2) with its construction seed and readers; scaffolding until REVIEW-mint-daemon-move relocates it to sovereign-serving-host"
+lines = 34
+note = "the shim at Serving's old path: re-exports the host part, its two readers and the two tally types, and keeps the daemon's `ServingSeed` (it carries the AppState-typed warmer). REVIEW-build-daemon-parts (2026-09-18)"
+
+[[module]]
+path = "sovereign/crates/sovereign-daemon/src/state/store.rs"
+context = "host"
+lines = 44
+note = "the three Serving fields the serving package may not name — the two commonwealth-state-backed stores and the AppState-typed RpcShardWarmer — held by the daemon; REVIEW-build-daemon-parts (2026-09-18)"
 
 [[module]]
 path = "sovereign/crates/sovereign-daemon/src/state/workbench.rs"
@@ -1507,8 +1513,14 @@ note = "the crate root; modules lifted out of sovereign-mesh across REVIEW-build
 [[module]]
 path = "sovereign/crates/sovereign-serving-host/src/lib.rs"
 context = "serving"
-lines = 32
+lines = 33
 note = "the host crate root; the host half arrives in rung domains-10 (2026-09-15)"
+
+[[module]]
+path = "sovereign/crates/sovereign-serving-host/src/state.rs"
+context = "serving"
+lines = 342
+note = "Serving's part (DC §4.2) with its two readers and the two tally types — moved out of sovereign-daemon by REVIEW-build-daemon-parts (2026-09-18). Three of Serving's twenty fields stay in the daemon (`sovereign_daemon::state::store::StorePart`): the two commonwealth-state-backed stores and the AppState-typed RpcShardWarmer cannot cross into the serving package"
 
 [[module]]
 path = "sovereign/crates/sovereign-serving-host/src/admission.rs"

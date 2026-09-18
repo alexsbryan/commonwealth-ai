@@ -416,10 +416,10 @@ pub async fn chat_completions(
 /// request — load/locality/cold-start/availability are peer-shaped
 /// signals that don't differentiate candidates sharing one host.
 fn route_with_oicp(state: &AppState, req: &InferenceRequirements) -> Option<ModelId> {
-    let models = state.inner.serving.inference_store.list_models();
+    let models = state.inner.store.inference_store.list_models();
     let plan = state
         .inner
-        .serving
+        .store
         .inference_store
         .get_plan()
         .unwrap_or_default();
@@ -490,7 +490,7 @@ fn synthesize_claims_for_model_info(
 }
 
 fn find_model_by_name(state: &AppState, name: &str) -> Option<ModelId> {
-    let models = state.inner.serving.inference_store.list_models();
+    let models = state.inner.store.inference_store.list_models();
     let name_lower = name.to_lowercase();
     models
         .values()
@@ -992,7 +992,7 @@ async fn store_rows(state: &AppState) -> Vec<ModelObject> {
 
     let plan = state
         .inner
-        .serving
+        .store
         .inference_store
         .get_plan()
         .unwrap_or_default();
@@ -1008,7 +1008,7 @@ async fn store_rows(state: &AppState) -> Vec<ModelObject> {
 
     let mut data: Vec<ModelObject> = state
         .inner
-        .serving
+        .store
         .inference_store
         .list_models_with_origins()
         .into_iter()
@@ -1016,7 +1016,7 @@ async fn store_rows(state: &AppState) -> Vec<ModelObject> {
             live_nodes.contains(origin)
                 || state
                     .inner
-                    .serving
+                    .store
                     .inference_store
                     .get_llama_address(model.id)
                     .is_some()
@@ -1025,7 +1025,7 @@ async fn store_rows(state: &AppState) -> Vec<ModelObject> {
             let shard_plan = plan.model_plans.iter().find(|p| p.model == model.id);
             let loaded = state
                 .inner
-                .serving
+                .store
                 .inference_store
                 .get_llama_address(model.id)
                 .is_some()

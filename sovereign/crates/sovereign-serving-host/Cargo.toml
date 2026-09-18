@@ -21,6 +21,10 @@ tracing = { workspace = true }
 # decision ids, and stamps them from the tier-0 `sovereign-time` leaf.
 sovereign-scheduler = { workspace = true }
 sovereign-time = { workspace = true }
+# `state.rs` holds Serving's part (DC §4.2), whose admission schedulers are
+# `serving_policy::fair_sched::SchedCore` — a member of the `serving` package,
+# so the edge stays inside the closure (domains REVIEW-build-daemon-parts).
+serving-policy = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }
 # `guest_lender.rs` publishes the `GuestLenderSource` port as an async trait

@@ -32,6 +32,7 @@ pub mod answering;
 pub mod ingest;
 pub mod node;
 pub mod serving;
+pub mod store;
 pub mod workbench;
 
 // Fabric's part moved to its owner, `sovereign-mesh`, at domains
@@ -46,8 +47,11 @@ pub use sovereign_mesh::fabric::{
     ClockReader, DialInfoReader, DialSigner, FabricPart, FabricSeed, MeshMutationHook,
     TransportReader,
 };
-// Serving's construction seed and its readers, for the same reason.
-pub use serving::{ServableModelFilesReader, ServingSeed, SlotAliasesReader};
+// Serving's construction seed, its readers and the two tally types, for the
+// same reason.
+pub use serving::{
+    PrincipalTally, RejectedNodeIdHeader, ServableModelFilesReader, ServingSeed, SlotAliasesReader,
+};
 // The node's construction seed, for the same reason.
 pub use node::NodeSeed;
 
@@ -217,57 +221,9 @@ pub trait RpcShardWarmer: Send + Sync {
 /// Moved to Fabric's own module with the part at domains
 /// `dm-daemon-api-edge` (b); re-exported at the top of this file.
 
-/// One principal's request tally on this daemon (order `seat-resource-commons`
-/// UC-R1) — the "who is my GPU serving right now?" answer `/status`
-/// publishes.
-///
-/// `active` counts requests whose response BODY is still streaming (the
-/// truthful in-flight window — scheduler slots release at headers time,
-/// so they cannot answer "serving right now" for streaming responses).
-/// `served_total` is cumulative since daemon start: the contamination-
-/// attribution witness (e.g. "BeefyMac's daemon served N requests during
-/// my soak window"). `last_request_at` is the unix-seconds admission
-/// time of the most recent request, so a reader can tell "actively
-/// serving" from "served before, idle since".
-///
-/// Keyed by the published [`Principal`] — the `Member` arm, built from the
-/// `X-Node-Id` header value (the ONLY peer attribution the daemon has; iroh
-/// tunnels raw-forward without identity). Only ADMITTED requests are tallied;
-/// rejections are not "serving". Converging this on `Principal` makes
-/// `X-Node-Id` a branch of the one key rather than a parallel identity scheme
-/// (ARCH principle 8; `DAEMON_CORE.md` §3.3).
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct PrincipalTally {
-    /// Requests whose response body is currently streaming.
-    pub active: u64,
-    /// Requests admitted since daemon start (cumulative, monotonic).
-    pub served_total: u64,
-    /// Unix seconds of the most recent admission.
-    pub last_request_at: i64,
-}
-
-/// A peer request whose `X-Node-Id` header was present but not the
-/// canonical wire form (32 lowercase hex chars — [`NodeId::to_hex`]).
-/// The request is still gated and tallied under the zero node; this
-/// record lets `/status` name the rejected value so a misconfigured
-/// peer's traffic is diagnosable, not opaque (fix 7).
-#[derive(Debug, Clone)]
-pub struct RejectedNodeIdHeader {
-    /// The raw header value as received. Capped for display safety —
-    /// a hostile or buggy peer can send an arbitrary-length header.
-    pub raw: String,
-    /// Unix seconds when the malformed value was last seen.
-    pub at_unix: i64,
-}
-
-impl RejectedNodeIdHeader {
-    /// The canonical wire form the header must match — the inverse of
-    /// `crate::headers::parse_x_node_id` (which accepts exactly this).
-    pub fn expected_wire_form() -> &'static str {
-        "exactly 32 lowercase hex chars — NodeId::to_hex(), e.g. \
-         0123456789abcdef0123456789abcdef"
-    }
-}
+// `PrincipalTally` and `RejectedNodeIdHeader` moved to Serving's owner,
+// `sovereign-serving-host::state`, with the part at `REVIEW-build-daemon-parts`;
+// re-exported through `serving` below so the in-crate callers are unchanged.
 
 /// The notes-rail convergence recorder, re-exported at its historical path.
 ///
@@ -334,13 +290,17 @@ pub struct AppStateInner {
     /// (they may not name this crate's `AppState`).
     pub fabric: std::sync::Arc<fabric::FabricPart>,
     /// Serving's part: the model, pipeline and slot aliases, the servable
-    /// model files, the local inference handle and RPC shard warmer, the
-    /// inference store, the peer and client admission schedulers with their
-    /// caps, switch, tallies, rejected-header record and reciprocity weights,
-    /// the contribution pause and yield-peers switch, the availability
-    /// composite, the in-flight gauge and the venue preferences. Held as a
-    /// part so route shells read it directly (DC §4.2).
+    /// model files, the local inference handle, the peer and client admission
+    /// schedulers with their caps, switch, tallies, rejected-header record and
+    /// reciprocity weights, the contribution pause and yield-peers switch, the
+    /// availability composite and the in-flight gauge. Moved to its owner,
+    /// `sovereign-serving-host::state`, at `REVIEW-build-daemon-parts` and held
+    /// here as a part so route shells read it directly (DC §4.2).
     pub serving: serving::ServingPart,
+    /// The three Serving fields the `serving` package may not name — the two
+    /// `commonwealth-state`-backed stores and the `AppState`-typed RPC shard
+    /// warmer. Held by the daemon; see [`store::StorePart`].
+    pub store: store::StorePart,
     /// The node's part: the client token, guest grants, start instant, the
     /// corpus-engine handle, the foreground-yield signal (last active, window,
     /// in-flight), the storage budget and usage, and the activity emitter.
@@ -1056,7 +1016,6 @@ impl AppState {
             inner: Arc::new(AppStateInner {
                 fabric: Arc::new(fabric),
                 serving: serving::ServingPart {
-                    inference_store,
                     model_aliases: ModelAliasTable::default_table(),
                     pipeline_aliases:
                         serving_policy::pipeline_aliases::PipelineAliasTable::default_table(),
@@ -1065,7 +1024,6 @@ impl AppState {
                     local_inference_availability: RwLock::new(1.0_f32),
                     activity_inference_availability: RwLock::new(1.0_f32),
                     local_inference: serving_seed.local_inference,
-                    rpc_shard_warmer: serving_seed.rpc_shard_warmer,
                     // usize::MAX = unlimited. The desktop overwrites this
                     // at boot with the user's persisted setting (default
                     // matched to their consent-dialog choice in W4);
@@ -1098,8 +1056,12 @@ impl AppState {
                     // the GPU is pinned by a peer's enrich job" failure
                     // mode is exactly what this prevents.
                     yield_peers_to_foreground: std::sync::atomic::AtomicBool::new(true),
-                    peer_preferences,
                     local_in_flight_gauge: in_flight_gauge,
+                },
+                store: store::StorePart {
+                    inference_store,
+                    peer_preferences,
+                    rpc_shard_warmer: serving_seed.rpc_shard_warmer,
                 },
                 node: node::NodePart {
                     client_token: node_seed.client_token,
@@ -1220,7 +1182,7 @@ impl AppState {
 
     /// Register a model as available on the mesh.
     pub fn register_model(&self, model: commonwealth_core::model::ModelInfo) {
-        self.inner.serving.inference_store.set_model_info(&model);
+        self.inner.store.inference_store.set_model_info(&model);
     }
 
     /// Set the address of a llama-server for a model (after orchestrator spawns it).
@@ -1230,7 +1192,7 @@ impl AppState {
         address: String,
     ) {
         self.inner
-            .serving
+            .store
             .inference_store
             .set_llama_address(model_id, &address);
     }
@@ -1240,16 +1202,13 @@ impl AppState {
         &self,
         model_id: commonwealth_core::ids::ModelId,
     ) -> Option<String> {
-        self.inner
-            .serving
-            .inference_store
-            .get_llama_address(model_id)
+        self.inner.store.inference_store.get_llama_address(model_id)
     }
 
     /// Get the default model (first in the inference plan).
     pub fn default_model_id(&self) -> Option<commonwealth_core::ids::ModelId> {
         self.inner
-            .serving
+            .store
             .inference_store
             .get_plan()
             .and_then(|p| p.model_plans.first().map(|mp| mp.model))
@@ -1885,7 +1844,7 @@ impl sovereign_core::self_claims::SelfClaims for AppState {
             availability,
             in_flight: self.current_local_in_flight(),
             storage_remaining: self.storage_remaining_bytes(),
-            embed_model: self.inner.serving.inference_store.get_local_embed_model(),
+            embed_model: self.inner.store.inference_store.get_local_embed_model(),
         }
     }
 

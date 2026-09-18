@@ -129,7 +129,7 @@ async fn x_node_id_with_set_preference_halves_all_claim_affinities() {
     // Set a half-strength preference for `target_peer`.
     state
         .inner
-        .serving
+        .store
         .peer_preferences
         .set(
             &target_peer,
@@ -180,7 +180,7 @@ async fn x_node_id_for_unmatched_peer_does_not_modify_affinities() {
     let state = build_state(self_id);
     state
         .inner
-        .serving
+        .store
         .peer_preferences
         .set(&stored_peer, PeerPreference::new(0.25, None).unwrap())
         .expect("set preference");
@@ -209,7 +209,7 @@ async fn no_header_does_not_pick_up_any_stored_preference() {
     let state = build_state(self_id);
     state
         .inner
-        .serving
+        .store
         .peer_preferences
         .set(&stored_peer, PeerPreference::new(0.1, None).unwrap())
         .expect("set preference");

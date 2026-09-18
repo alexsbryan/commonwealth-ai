@@ -64,7 +64,7 @@ fn resolve_local_model(state: &AppState, model_id: &str) -> Option<PathBuf> {
 /// `500` with `{ "error": … }` when warming fails; `200` with the warmer's stats
 /// on success.
 pub async fn rpc_warm(State(state): State<AppState>, Json(body): Json<Value>) -> Response {
-    let Some(warmer) = state.inner.serving.rpc_shard_warmer.clone() else {
+    let Some(warmer) = state.inner.store.rpc_shard_warmer.clone() else {
         return (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(json!({

@@ -132,7 +132,7 @@ pub async fn corpus_collaborate(
 
     let local_embed_model = state
         .inner
-        .serving
+        .store
         .inference_store
         .get_local_embed_model()
         .ok_or_else(|| {
@@ -997,7 +997,7 @@ pub async fn corpus_eligible_peers(
         .map(|r| r.corpus.grantable)
         .unwrap_or(false);
 
-    let local_embed_model = state.inner.serving.inference_store.get_local_embed_model();
+    let local_embed_model = state.inner.store.inference_store.get_local_embed_model();
 
     let mesh = state.inner.fabric.mesh.read().await;
     let self_id = state.inner.fabric.identity.current();

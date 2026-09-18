@@ -219,7 +219,7 @@ fn register_extras_in_store(
         supports_parallel_instances: false,
         supports_pipeline_shard: false,
     };
-    state.inner.serving.inference_store.set_model_info(&info);
+    state.inner.store.inference_store.set_model_info(&info);
 }
 
 fn deregister_extras_from_store(state: &AppState, model_id_str: &str) -> bool {
@@ -228,12 +228,12 @@ fn deregister_extras_from_store(state: &AppState, model_id_str: &str) -> bool {
     // `unload` request only carries the slot name), so we can't
     // recompute the deterministic id directly — name lookup is the
     // right path, and matches how `/v1/models` exposes the entries.
-    let models = state.inner.serving.inference_store.list_models();
+    let models = state.inner.store.inference_store.list_models();
     let target = models
         .into_iter()
         .find(|(_, info)| info.name == model_id_str);
     if let Some((id, _)) = target {
-        state.inner.serving.inference_store.remove_model_info(id);
+        state.inner.store.inference_store.remove_model_info(id);
         true
     } else {
         false

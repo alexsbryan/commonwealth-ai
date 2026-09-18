@@ -34,7 +34,7 @@ fn app_routers(state: &AppState) -> (axum::Router, axum::Router) {
 /// Set a node's inference plan (the harness's own delegation, now that the
 /// node does not name the host).
 fn set_inference_plan(state: &AppState, plan: InferencePlan) {
-    state.inner.serving.inference_store.set_plan(&plan);
+    state.inner.store.inference_store.set_plan(&plan);
 }
 
 /// Broadcast the mesh roster to every node's fabric (the harness's own

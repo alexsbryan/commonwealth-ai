@@ -3260,7 +3260,7 @@ impl EmbeddedDaemon {
         {
             app_state
                 .inner
-                .serving
+                .store
                 .inference_store
                 .set_local_embed_model(embed_info);
             info!(
@@ -4732,7 +4732,7 @@ fn register_local_model_slots(app_state: &AppState, cfg: &SetupConfig, node_id: 
         };
         app_state
             .inner
-            .serving
+            .store
             .inference_store
             .set_model_info(&info);
         info!(
@@ -5449,7 +5449,7 @@ mod tests {
 
         register_local_model_slots(&app_state, &cfg, node_id);
 
-        let models = app_state.inner.serving.inference_store.list_models();
+        let models = app_state.inner.store.inference_store.list_models();
         assert_eq!(
             models.len(),
             3,
@@ -5464,7 +5464,7 @@ mod tests {
         // Second call with the same config must not duplicate entries
         // (deterministic ModelId per slot + path).
         register_local_model_slots(&app_state, &cfg, node_id);
-        let models2 = app_state.inner.serving.inference_store.list_models();
+        let models2 = app_state.inner.store.inference_store.list_models();
         assert_eq!(
             models2.len(),
             3,

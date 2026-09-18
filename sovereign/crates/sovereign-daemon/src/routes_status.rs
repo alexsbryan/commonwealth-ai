@@ -14,7 +14,7 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
     let mesh = state.inner.fabric.mesh.read().await;
     let plan = state
         .inner
-        .serving
+        .store
         .inference_store
         .get_plan()
         .unwrap_or_default();
@@ -81,14 +81,14 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
             // against the ModelId's `model-<hex>` Display can never match.
             let name = state
                 .inner
-                .serving
+                .store
                 .inference_store
                 .get_model_info(p.model)
                 .map(|m| m.name);
             LoadedModelStatus {
                 loaded: state
                     .inner
-                    .serving
+                    .store
                     .inference_store
                     .get_llama_address(p.model)
                     .is_some()

@@ -76,7 +76,7 @@ pub async fn knowledge_search(
         };
         let prefix = state
             .inner
-            .serving
+            .store
             .inference_store
             .get_local_embed_model()
             .map(|e| e.query_instruction_prefix)

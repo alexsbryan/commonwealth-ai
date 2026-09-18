@@ -439,7 +439,7 @@ async fn models_load_registers_in_inference_store_for_v1_models() {
 
     // The store should now contain a ModelInfo whose name is
     // the model_id returned by the provider.
-    let models = state.inner.serving.inference_store.list_models();
+    let models = state.inner.store.inference_store.list_models();
     assert!(
         models.values().any(|m| m.name == "test-model"),
         "post-load: expected `test-model` in inference_store; got {:?}",
@@ -465,7 +465,7 @@ async fn models_unload_drops_from_inference_store() {
     );
     assert!(state
         .inner
-        .serving
+        .store
         .inference_store
         .list_models()
         .values()
@@ -484,7 +484,7 @@ async fn models_unload_drops_from_inference_store() {
     let response = app.oneshot(req).await.unwrap();
     assert_eq!(response.status(), HttpStatus::OK);
 
-    let models = state.inner.serving.inference_store.list_models();
+    let models = state.inner.store.inference_store.list_models();
     assert!(
         !models.values().any(|m| m.name == "Qwen3.5-9B.Q8_0"),
         "post-unload: model_id should no longer be in store; got {:?}",

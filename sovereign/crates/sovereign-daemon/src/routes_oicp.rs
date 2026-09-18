@@ -192,7 +192,7 @@ fn apply_v04_enrichment(state: &AppState, embedded: bool, manifest: &mut Provide
     // instruction prefix) already lives in the inference store, set by the
     // daemon at bootstrap; a client reconstructs bit-compatible query
     // embeddings from it for federated search.
-    let embed_model = state.inner.serving.inference_store.get_local_embed_model();
+    let embed_model = state.inner.store.inference_store.get_local_embed_model();
     if embed_model.is_some() || ingest.is_some() {
         match &mut manifest.knowledge {
             Some(k) => {
@@ -219,7 +219,7 @@ fn apply_v04_enrichment(state: &AppState, embedded: bool, manifest: &mut Provide
 ///
 /// Reads the optional `X-Node-Id` request header and, when present,
 /// applies any per-peer affinity multiplier from
-/// `state.inner.serving.peer_preferences` before serializing. This is the
+/// `state.inner.store.peer_preferences` before serializing. This is the
 /// single integration point for the Ostrom-style sanction (Mesh
 /// Health design §5): private adjustments live in the local
 /// preference store, ride through this multiplication step on every
@@ -258,10 +258,10 @@ pub async fn capabilities(
     }
 
     let mesh = state.inner.fabric.mesh.read().await;
-    let models = state.inner.serving.inference_store.list_models();
+    let models = state.inner.store.inference_store.list_models();
     let plan = state
         .inner
-        .serving
+        .store
         .inference_store
         .get_plan()
         .unwrap_or_default();
@@ -272,7 +272,7 @@ pub async fn capabilities(
             let shard_plan = plan.model_plans.iter().find(|p| p.model == model.id);
             let loaded = state
                 .inner
-                .serving
+                .store
                 .inference_store
                 .get_llama_address(model.id)
                 .is_some();
@@ -378,7 +378,7 @@ fn apply_peer_preference(
     let Some(requester_id) = requester else {
         return;
     };
-    let pref = match state.inner.serving.peer_preferences.get(requester_id) {
+    let pref = match state.inner.store.peer_preferences.get(requester_id) {
         Ok(Some(p)) => p,
         Ok(None) => return,
         Err(e) => {
@@ -501,7 +501,7 @@ mod tests {
         let target = nid(0x11);
         state
             .inner
-            .serving
+            .store
             .peer_preferences
             .set(&target, PeerPreference::new(0.5, None).unwrap())
             .unwrap();
@@ -517,7 +517,7 @@ mod tests {
         let state = crate::state::test_app_state();
         state
             .inner
-            .serving
+            .store
             .peer_preferences
             .set(&nid(0x11), PeerPreference::new(0.5, None).unwrap())
             .unwrap();
@@ -532,7 +532,7 @@ mod tests {
         let state = crate::state::test_app_state();
         state
             .inner
-            .serving
+            .store
             .peer_preferences
             .set(&nid(0x11), PeerPreference::new(0.5, None).unwrap())
             .unwrap();
@@ -557,7 +557,7 @@ mod tests {
         let state = crate::state::test_app_state();
         state
             .inner
-            .serving
+            .store
             .peer_preferences
             .set(&nid(0x33), PeerPreference::new(0.25, None).unwrap())
             .unwrap();

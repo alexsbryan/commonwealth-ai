@@ -13040,6 +13040,7 @@ dependencies = [
  "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "serving-policy",
  "sha2 0.10.9",
  "sovereign-contracts",
  "sovereign-scheduler",

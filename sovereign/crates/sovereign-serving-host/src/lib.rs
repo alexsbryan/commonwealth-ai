@@ -25,6 +25,7 @@ pub mod recorder;
 pub mod router_builder;
 pub mod slot_select;
 pub mod source_content_validator;
+pub mod state;
 pub mod throughput_tracking;
 pub mod tool_profile;
 pub mod venue_host;
