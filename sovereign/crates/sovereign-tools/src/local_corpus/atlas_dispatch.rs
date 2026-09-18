@@ -24,7 +24,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use corpus_engine::enrichment::pass::{self, EnrichmentPassRegistry};
+use corpus_engine::enrichment::pass;
 use corpus_engine::enrichment::pipeline::EnrichProgress;
 use corpus_engine::enrichment::state::{EnrichmentPhase, EnrichmentStateFile};
 use sovereign_core::error::{Error, Result};
@@ -57,7 +57,7 @@ impl LocalCorpusManager {
         };
         let pass = recipe_type
             .as_deref()
-            .and_then(|t| EnrichmentPassRegistry::builtin().get(t));
+            .and_then(|t| self.engine.enrichment_passes().get(t));
         let is_atlas = pass.as_ref().is_some_and(|p| p.id() == pass::ATLAS);
         tracing::info!(
             corpus_id = %corpus_id,
