@@ -2536,3 +2536,16 @@ why = "the same act as `fetch-desktop-binaries.sh` for the one sidecar this repo
 [[not_instrument]]
 key = "scripts/bump-desktop-version.sh"
 why = "edits version fields; `check-desktop-version` is the gate over its result"
+
+[[instrument]]
+id = "hakari-verify"
+kind = "gate"
+claim = "invariant"
+command = "cargo hakari verify"
+cost_secs = 3
+enforcement = "advisory"
+fidelity = "F0"
+baseline = { kind = "none" }
+negative_control = "none"
+runs_in = ["prepush"]
+doc = "quality/BUILD_LATENCY.md D1 — the workspace-hack crate keeps feature resolution scope-invariant; `cargo hakari generate` after any dependency change, or this reports drift. Advisory until a week of pushes shows no false positive (AGENTS.md §Definition of done); needs cargo-hakari installed (`cargo install cargo-hakari --locked`)."

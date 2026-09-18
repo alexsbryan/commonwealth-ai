@@ -33,6 +33,7 @@ chrono = { workspace = true }
 uuid = { workspace = true }
 sha2 = { workspace = true }
 rusqlite = { version = "0.35", features = ["bundled"] }
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 # NB: NO dep on `corpus-engine`. notes_sync (which is the only
 # bridge between this crate and corpus-engine's ExtractedDoc) lives

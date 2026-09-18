@@ -26,6 +26,7 @@ bytes = "1.0"
 # other first-party direct dependant (`sovereign-mesh`), so the workspace keeps
 # one version of it in the graph (ARCH §8.2).
 base64 = "0.22"
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
 # The rail's ONE set of op fixtures, from the crate that declares them. The

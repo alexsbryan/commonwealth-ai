@@ -30,6 +30,7 @@
 | `env-gate` | `cargo xtask env-gate` | hard | F0 | 3s | yes |
 | `feature-matrix` | `cargo hack check --each-feature --no-dev-deps` | advisory | F0 | unmeasured | **no** |
 | `feature-powerset` | `cargo hack check --feature-powerset --depth 2 --no-dev-deps` | advisory | F0 | unmeasured | **no** |
+| `hakari-verify` | `cargo hakari verify` | advisory | F0 | 3s | **no** |
 | `hook-wiring` | `bash .claude/hooks/tests/settings-wiring.sh` | hard | F0 | 0.30s | **no** |
 | `instrument-gate` | `cargo xtask instrument-gate` | hard | F0 | 0.04s | yes |
 | `judge-funnel-gate` | `cargo xtask judge-funnel-gate` | hard | F0 | 0.42s | yes |
@@ -160,7 +161,7 @@
 
 | | meaning | instruments |
 |---|---|---|
-| F0 | unit — no process boundary, no backend | `api-gate`, `arch-gate`, `bench-compile`, `boundary-gate`, `build-timings`, `check-desktop-version`, `clippy-json`, `clock-gate`, `co-lineage`, `co-sweep`, `concept-gate`, `daemon-concurrency-soak-selftest`, `daemon-soak-report`, `daemon-soak-report-selftest`, `deletion-manifest`, `desktop-check`, `desktop-invoke-coverage`, `desktop-invoke-coverage-gate`, `desktop-invoke-coverage-real`, `desktop-report-breaker`, `desktop-report-journeys`, `desktop-report-soak`, `desktop-report-ttfi`, `desktop-vitest`, `doc-coverage`, `docs-gate`, `env-gate`, `evidence-verdict`, `feature-matrix`, `feature-powerset`, `hook-selftests`, `hook-wiring`, `instrument-gate`, `judge-funnel-gate`, `judge-replay-bank`, `judge-replay-control`, `judge-replay-report`, `layer-gate`, `layout-gate`, `lifecycle-gate`, `lint-gate`, `lock-gate`, `mesh-soak-gate`, `module-cycles`, `nc-thesis`, `pre-commit`, `pre-push`, `run-if-stale`, `rustfmt`, `rustsec-advisories`, `sabotage`, `settings-wiring-self-test`, `shell-selftests`, `size-gate`, `sovereign-lint`, `sovereign-lint-scoped`, `sovereign-test`, `twin-census`, `windows-crosscheck`, `xtask-quality` |
+| F0 | unit — no process boundary, no backend | `api-gate`, `arch-gate`, `bench-compile`, `boundary-gate`, `build-timings`, `check-desktop-version`, `clippy-json`, `clock-gate`, `co-lineage`, `co-sweep`, `concept-gate`, `daemon-concurrency-soak-selftest`, `daemon-soak-report`, `daemon-soak-report-selftest`, `deletion-manifest`, `desktop-check`, `desktop-invoke-coverage`, `desktop-invoke-coverage-gate`, `desktop-invoke-coverage-real`, `desktop-report-breaker`, `desktop-report-journeys`, `desktop-report-soak`, `desktop-report-ttfi`, `desktop-vitest`, `doc-coverage`, `docs-gate`, `env-gate`, `evidence-verdict`, `feature-matrix`, `feature-powerset`, `hakari-verify`, `hook-selftests`, `hook-wiring`, `instrument-gate`, `judge-funnel-gate`, `judge-replay-bank`, `judge-replay-control`, `judge-replay-report`, `layer-gate`, `layout-gate`, `lifecycle-gate`, `lint-gate`, `lock-gate`, `mesh-soak-gate`, `module-cycles`, `nc-thesis`, `pre-commit`, `pre-push`, `run-if-stale`, `rustfmt`, `rustsec-advisories`, `sabotage`, `settings-wiring-self-test`, `shell-selftests`, `size-gate`, `sovereign-lint`, `sovereign-lint-scoped`, `sovereign-test`, `twin-census`, `windows-crosscheck`, `xtask-quality` |
 | F1 | mocked backend — real caller, fabricated answers | `cli-journey-selftest`, `desktop-a11y`, `desktop-e2e-synthetic`, `desktop-sabotage`, `desktop-ttfi`, `dst-scenarios` |
 | F2 | real binary against a fixture daemon | `arch-report`, `capability-map`, `desktop-e2e-real`, `desktop-journeys`, `enrichment-f1`, `pre-push-fail-closed`, `routing-replay` |
 | F3 | real daemon, real models | `chaos-monkey`, `chat-ask`, `ci-bench`, `cli-contract-live-verify`, `cli-journey-sandbox`, `cli-journey-verify`, `co-drift`, `co-liveness`, `contract-nightly`, `cw-work-lift`, `daemon-concurrency-soak`, `daemon-concurrency-soak-control`, `daemon-soak`, `desktop-breaker`, `desktop-chaos`, `desktop-demo`, `desktop-demo-export`, `desktop-judge-calibration`, `desktop-soak`, `desktop-soak-py`, `drift-detect`, `inner-chaos-calibrate`, `inner-chaos-soak`, `judge-replay`, `judge-replay-bank-feed`, `knowledge-gym`, `mesh-live-probe`, `mesh-soak`, `mtp-probe`, `oicp-conformance`, `quality-check`, `retrieval-prod`, `routing`, `smoke-attach-mode`, `synth`, `throughput`, `throughput-probe` |
@@ -275,7 +276,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 | `ci:suites` | `hook-selftests`, `pre-push-fail-closed`, `settings-wiring-self-test`, `shell-selftests` |
 | `ci:test` | `bench-compile`, `cli-journey-selftest`, `dst-scenarios`, `sovereign-test` |
 | `nightly` | `contract-nightly` |
-| `prepush` | `arch-gate`, `boundary-gate`, `clock-gate`, `concept-gate`, `deletion-manifest`, `docs-gate`, `env-gate`, `hook-wiring`, `instrument-gate`, `judge-funnel-gate`, `judge-replay-control`, `layer-gate`, `layout-gate`, `lifecycle-gate`, `lock-gate`, `rustfmt`, `size-gate`, `sovereign-lint-scoped` |
+| `prepush` | `arch-gate`, `boundary-gate`, `clock-gate`, `concept-gate`, `deletion-manifest`, `docs-gate`, `env-gate`, `hakari-verify`, `hook-wiring`, `instrument-gate`, `judge-funnel-gate`, `judge-replay-control`, `layer-gate`, `layout-gate`, `lifecycle-gate`, `lock-gate`, `rustfmt`, `size-gate`, `sovereign-lint-scoped` |
 | `run-if-stale` | `co-sweep`, `contract-nightly`, `daemon-concurrency-soak`, `daemon-concurrency-soak-control`, `daemon-concurrency-soak-selftest`, `daemon-soak-report`, `daemon-soak-report-selftest`, `judge-replay-bank`, `judge-replay-bank-feed`, `oicp-conformance` |
 | `smoke:0` | `desktop-check`, `desktop-e2e-synthetic`, `desktop-vitest`, `sovereign-lint`, `sovereign-test` |
 | `smoke:1` | `desktop-ttfi`, `mtp-probe`, `smoke-attach-mode`, `throughput-probe` |
@@ -292,7 +293,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 | `weekly:soak` | `mesh-soak`, `mesh-soak-gate` |
 | `weekly:timings` | `build-timings` |
 
-### What CI does not run (85 of 114)
+### What CI does not run (86 of 115)
 
 - `api-gate` — .github/workflows/weekly.yml (header) · runs in: weekly:api-surface
 - `arch-report` — sovereign/crates/sovereign-cli/src/posture_cmd.rs (arch_row) · runs in: by-hand
@@ -344,6 +345,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 - `evidence-verdict` — AGENTS.md §Code Intelligence (the tool table row: "Does the test my commit body cites actually SEE the change?") · runs in: by-hand
 - `feature-matrix` — .github/workflows/weekly.yml (header) · runs in: weekly:features
 - `feature-powerset` — .github/workflows/weekly.yml (header) · runs in: weekly:features
+- `hakari-verify` — quality/BUILD_LATENCY.md D1 — the workspace-hack crate keeps feature resolution scope-invariant; `cargo hakari generate` after any dependency change, or this reports drift. Advisory until a week of pushes shows no false positive (AGENTS.md §Definition of done); needs cargo-hakari installed (`cargo install cargo-hakari --locked`). · runs in: prepush
 - `hook-wiring` — .claude/hooks/tests/settings-wiring.sh · runs in: prepush
 - `inner-chaos-calibrate` — sovereign/crates/sovereign-desktop/tests/e2e/CHAOS_QA_METHODOLOGY.md · runs in: smoke:2
 - `inner-chaos-soak` — sovereign/bench/chaos_monkey/README.md · runs in: smoke:5
@@ -388,5 +390,5 @@ Nothing is on no map. Check that before believing it.
 
 ---
 
-**114 instruments, 13 with a negative control, 55 unmeasured cost, 43 by-hand only.** (0 run nowhere at all.)
+**115 instruments, 13 with a negative control, 55 unmeasured cost, 43 by-hand only.** (0 run nowhere at all.)
 

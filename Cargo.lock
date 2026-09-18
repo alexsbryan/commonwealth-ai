@@ -229,6 +229,7 @@ version = "0.7.0"
 dependencies = [
  "serde",
  "toml 0.8.2",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -1904,6 +1905,7 @@ dependencies = [
  "thiserror 2.0.18",
  "toml 0.8.2",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -1921,6 +1923,7 @@ dependencies = [
  "sysinfo 0.35.2",
  "tokio",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -1938,6 +1941,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -1949,6 +1953,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -1962,6 +1967,7 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -1985,6 +1991,7 @@ dependencies = [
  "toml 0.8.2",
  "tracing",
  "tracing-subscriber",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2001,6 +2008,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2020,6 +2028,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2036,6 +2045,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2306,6 +2316,7 @@ dependencies = [
  "uuid",
  "walkdir",
  "wiremock",
+ "workspace-hack",
  "zip 8.6.0",
  "zstd",
 ]
@@ -2322,6 +2333,7 @@ dependencies = [
  "toml 0.8.2",
  "tracing",
  "walkdir",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2339,6 +2351,7 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2359,6 +2372,7 @@ dependencies = [
  "toml 0.8.2",
  "tracing",
  "uuid",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2379,6 +2393,7 @@ dependencies = [
  "tokio",
  "tracing",
  "which",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2414,11 +2429,15 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
 name = "corpus-engine-yield"
 version = "0.7.0"
+dependencies = [
+ "workspace-hack",
+]
 
 [[package]]
 name = "corpus-mcp"
@@ -2439,6 +2458,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -8518,7 +8538,7 @@ version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "680998035259dcfcafe653688bf2aa6d3e2dc05e98be6ab46afb089dc84f1df8"
 dependencies = [
- "proc-macro-crate 1.3.1",
+ "proc-macro-crate 2.0.0",
  "proc-macro2",
  "quote",
  "syn 2.0.118",
@@ -8887,6 +8907,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -11586,6 +11607,7 @@ version = "0.7.0"
 dependencies = [
  "serde",
  "toml 0.8.2",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12002,6 +12024,7 @@ dependencies = [
  "toml 0.8.2",
  "tracing",
  "tracing-subscriber",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12017,6 +12040,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12068,6 +12092,7 @@ dependencies = [
  "tower-http",
  "tracing",
  "tree-sitter",
+ "workspace-hack",
  "zstd",
 ]
 
@@ -12092,6 +12117,7 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12102,6 +12128,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12147,6 +12174,7 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "which",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12195,6 +12223,7 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "which",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12241,6 +12270,7 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "which",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12307,6 +12337,7 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "which",
+ "workspace-hack",
  "zstd",
 ]
 
@@ -12334,6 +12365,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "which",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12354,6 +12386,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12416,6 +12449,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12456,6 +12490,7 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "walkdir",
+ "workspace-hack",
  "zip 8.6.0",
 ]
 
@@ -12478,6 +12513,7 @@ dependencies = [
  "tokio",
  "toml 0.8.2",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12490,6 +12526,7 @@ dependencies = [
  "sovereign-contracts",
  "tempfile",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12517,6 +12554,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12540,6 +12578,7 @@ dependencies = [
  "tokenizers",
  "tokio",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12559,6 +12598,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12590,6 +12630,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "tracing-subscriber",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12657,6 +12698,7 @@ dependencies = [
  "tracing-subscriber",
  "urlencoding",
  "uuid",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12679,6 +12721,7 @@ dependencies = [
  "tokio",
  "tower",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12694,6 +12737,7 @@ dependencies = [
  "sovereign-time",
  "tempfile",
  "tokio",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12707,6 +12751,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12729,6 +12774,7 @@ dependencies = [
  "tokio-tungstenite",
  "tracing",
  "uuid",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12750,6 +12796,7 @@ dependencies = [
  "toml 0.8.2",
  "tracing",
  "uuid",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12768,6 +12815,7 @@ dependencies = [
  "tokio",
  "toml 0.8.2",
  "uuid",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12783,6 +12831,7 @@ dependencies = [
  "sovereign-tools",
  "tokio",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12823,6 +12872,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12832,6 +12882,7 @@ dependencies = [
  "dirs 5.0.1",
  "libc",
  "sovereign-contracts",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12852,6 +12903,7 @@ dependencies = [
  "tokio-stream",
  "tokio-util",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12873,6 +12925,7 @@ dependencies = [
  "tokio-postgres",
  "tracing",
  "uuid",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12887,6 +12940,7 @@ dependencies = [
  "sovereign-workflow",
  "sovereign-workflow-host",
  "tokio",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12905,6 +12959,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12980,6 +13035,7 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "walkdir",
+ "workspace-hack",
  "zip 8.6.0",
 ]
 
@@ -13001,6 +13057,7 @@ dependencies = [
  "tokio",
  "toml 0.8.2",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -13015,6 +13072,7 @@ dependencies = [
  "tokio",
  "tokio-tungstenite",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -13039,6 +13097,7 @@ dependencies = [
  "toml 0.8.2",
  "tracing",
  "uuid",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -13056,6 +13115,7 @@ dependencies = [
  "tokio",
  "toml 0.8.2",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -13075,6 +13135,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -16382,6 +16443,152 @@ dependencies = [
 ]
 
 [[package]]
+name = "workspace-hack"
+version = "0.1.0"
+dependencies = [
+ "ahash",
+ "aho-corasick",
+ "arrayvec",
+ "axum",
+ "bitflags 2.11.1",
+ "block2",
+ "brotli",
+ "bytes",
+ "cc",
+ "chrono",
+ "cipher",
+ "crossbeam-epoch",
+ "data-encoding",
+ "deadpool",
+ "deadpool-runtime",
+ "der 0.7.10",
+ "deranged",
+ "derive_more 2.1.1",
+ "derive_more-impl",
+ "digest 0.10.7",
+ "digest 0.11.3",
+ "dispatch2",
+ "displaydoc",
+ "ed25519 2.2.3",
+ "ed25519-dalek 2.2.0",
+ "either",
+ "errno",
+ "fastrand",
+ "fixedbitset 0.5.7",
+ "flate2",
+ "foldhash 0.2.0",
+ "form_urlencoded",
+ "futures-channel",
+ "futures-core",
+ "futures-executor",
+ "futures-io",
+ "futures-sink",
+ "futures-task",
+ "futures-util",
+ "getrandom 0.2.17",
+ "getrandom 0.3.4",
+ "getrandom 0.4.2",
+ "h2",
+ "half",
+ "hashbrown 0.14.5",
+ "hashbrown 0.15.5",
+ "hashbrown 0.17.1",
+ "hyper",
+ "hyper-rustls",
+ "hyper-util",
+ "i_overlay",
+ "idna",
+ "inout",
+ "ipnet",
+ "lazy_static",
+ "libc",
+ "log",
+ "lopdf",
+ "lzma-rust2",
+ "matrixmultiply",
+ "memchr",
+ "miniz_oxide",
+ "mio",
+ "moka",
+ "num-bigint",
+ "num-complex",
+ "num-integer",
+ "num-iter",
+ "num-traits",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-core-foundation",
+ "objc2-foundation",
+ "objc2-security",
+ "objc2-system-configuration",
+ "once_cell",
+ "percent-encoding",
+ "petgraph 0.8.3",
+ "phf 0.13.1",
+ "phf_shared 0.10.0",
+ "phf_shared 0.13.1",
+ "pkcs8 0.10.2",
+ "portable-atomic",
+ "proc-macro2",
+ "prost",
+ "prost-types",
+ "quote",
+ "rand 0.8.6",
+ "rand_core 0.6.4",
+ "regex",
+ "regex-automata",
+ "regex-syntax",
+ "reqwest 0.12.28",
+ "ring",
+ "rustls",
+ "rustls-pemfile",
+ "rustls-pki-types",
+ "rustls-webpki",
+ "schemars 0.8.22",
+ "semver",
+ "serde",
+ "serde_core",
+ "serde_json",
+ "sevenz-rust2",
+ "sha2 0.10.9",
+ "sha2 0.11.0",
+ "signature 2.2.0",
+ "simd-adler32",
+ "simdutf8",
+ "slab",
+ "smallvec",
+ "spin 0.9.8",
+ "spki 0.7.3",
+ "stable_deref_trait",
+ "subtle",
+ "syn 1.0.109",
+ "syn 2.0.118",
+ "tauri",
+ "tauri-build",
+ "tauri-utils",
+ "time",
+ "time-macros",
+ "tokio",
+ "tokio-rustls",
+ "tokio-stream",
+ "tokio-util",
+ "toml 0.8.2",
+ "toml_datetime 0.6.11",
+ "toml_edit 0.20.2",
+ "tower",
+ "tower-http",
+ "tracing",
+ "tracing-core",
+ "tracing-subscriber",
+ "typenum",
+ "url",
+ "uuid",
+ "winnow 0.7.15",
+ "zerocopy",
+ "zeroize",
+]
+
+[[package]]
 name = "writeable"
 version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -16540,6 +16747,7 @@ dependencies = [
  "serde_json",
  "syn 2.0.118",
  "toml 0.8.2",
+ "workspace-hack",
 ]
 
 [[package]]

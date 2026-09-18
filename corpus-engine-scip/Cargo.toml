@@ -59,6 +59,7 @@ fs4 = "0.12"
 which = "7"
 glob = "0.3"
 tempfile = "3"
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 # Exporter niceness (unix): `libc::nice` in the pre_exec hook drops the
 # exporter subprocess priority so a multi-minute rust-analyzer pass

@@ -23,6 +23,7 @@ axum = { workspace = true }
 tower = "0.5"
 http-body-util = "0.1"
 async-trait = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [[test]]
 name = "integration"

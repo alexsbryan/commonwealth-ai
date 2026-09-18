@@ -35,6 +35,7 @@ sovereign-agent-tools = { workspace = true }
 # sovereign-tdd 2026-05-24 was phase 7b of the TDD machine
 # rollout (see `sovereign/docs/TDD_MACHINE_DESIGN.md`).
 sovereign-tdd = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
 tempfile = { workspace = true }

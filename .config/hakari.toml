@@ -1,0 +1,63 @@
+# This file contains settings for `cargo hakari`.
+# See https://docs.rs/cargo-hakari/latest/cargo_hakari/config for a full list of options.
+
+hakari-package = "workspace-hack"
+
+# Format version for hakari's output. Version 4 requires cargo-hakari 0.9.22 or above.
+dep-format-version = "4"
+
+# Setting workspace.resolver = "2" or higher in the root Cargo.toml is HIGHLY recommended.
+# Hakari works much better with the v2 resolver. (The v2 and v3 resolvers are identical from
+# hakari's perspective, so you're welcome to set either.)
+#
+# For more about the new feature resolver, see:
+# https://blog.rust-lang.org/2021/03/25/Rust-1.51.0.html#cargos-new-feature-resolver
+resolver = "2"
+
+# Add triples corresponding to platforms commonly used by developers here.
+# https://doc.rust-lang.org/rustc/platform-support.html
+# The two hosts that run the gates (RuggedFox / Strix Halo, and the macOS peer).
+# With no platform listed, hakari cannot unify a dependency a crate activates
+# under a target cfg — iroh's h2/stream, ipnet/serde, getrandom/sys_rng,
+# tokio-rustls/early-data — and every scoped build below iroh re-resolves them
+# (scope-drift.py 92 -> 167 measured 2026-09-17 with the list empty).
+platforms = [
+    "x86_64-unknown-linux-gnu",
+    "aarch64-apple-darwin",
+]
+
+# Write out exact versions rather than a semver range. (Defaults to false.)
+# exact-versions = true
+
+
+# The bundled llama.cpp bindings are path crates under vendor/, so hakari
+# treats them as packages to unify. Its union runs over --all-features, which
+# for these means cuda+metal+vulkan — a feature set no host builds — linked
+# into every member, corpus-mcp included (its closure test forbids them).
+# Their only dependent is sovereign-inference, one feature set per target
+# cfg, so there is nothing to unify: leave them out of the traversal.
+# NB: spelled as third-party path crates. They only become workspace members
+# (cargo auto-admits path deps under the root) while some member names them by
+# path — which is exactly what an un-excluded hack does — so the
+# `workspace-members` spelling resolves before generate and fails after.
+[traversal-excludes]
+# The shared leaves of the boundary contract (quality/ARCH_LAYERS.toml
+# [[package_leaf]]): each is budgeted to ZERO internal deps so a package lifts
+# against them alone, and boundary-gate counts an edge to the hack as one.
+# Their scoped builds were already 2-15 s (baseline-29), so unifying them buys
+# nothing the campaign measures; `cargo hakari manage-deps` keeps the hack out
+# of them. Measured cost on scope-drift.py: see the bl-hakari commit body.
+workspace-members = [
+    "oicp-types",
+    "kernel-types",
+    "corpus-engine-sections",
+    "corpus-engine-vocab",
+    "sovereign-time",
+    "oplog",
+    "oicp-client",
+    "sovereign-contracts",
+]
+third-party = [
+    { name = "llama-cpp-4", path = "vendor/llama-cpp-4" },
+    { name = "llama-cpp-sys-4", path = "vendor/llama-cpp-sys-4" },
+]

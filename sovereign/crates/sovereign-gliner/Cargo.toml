@@ -46,6 +46,7 @@ orp = { version = "0.9" }
 # precedent is `sovereign-tools` local_corpus/ocr/paddle/detect.rs.
 ort = { version = "=2.0.0-rc.9", features = ["ndarray"] }
 tokenizers = "0.21"
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

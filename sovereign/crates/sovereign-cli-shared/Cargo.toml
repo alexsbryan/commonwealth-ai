@@ -61,6 +61,7 @@ toml = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
 # `observation` + `project_toml` bring their own unit tests (they write and
@@ -71,7 +72,7 @@ tracing-subscriber = { workspace = true }
 tempfile = { workspace = true }
 
 [features]
-default = []
+default = ["scip", "mcp-client", "project-model", "code-index", "rail-client"]   # build-latency bl-member-features: same resolution the workspace build already has; scope-invariant on purpose
 # Enables `sovereign_cli_shared::scip` (merged SCIP graph loader).
 # Points at `corpus-engine-scip` directly post-carve-out (2026-05-23).
 scip = ["dep:corpus-engine-scip"]

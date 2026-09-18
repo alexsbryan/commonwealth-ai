@@ -26,6 +26,7 @@ oplog = { workspace = true }
 serde_json = { workspace = true }
 # Append, dedupe and batch-ingest decisions are traced at debug (ARCH §9.1).
 tracing = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
 # The rail's ONE set of op fixtures, from the crate that declares them.

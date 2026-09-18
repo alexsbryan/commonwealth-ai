@@ -223,6 +223,7 @@ corpus-engine-scip     = { workspace = true, optional = true }
 # so pull it back in behind the `stores` feature (same gate the modules
 # used to carry).
 corpus-engine-notes    = { workspace = true, optional = true }
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [features]
 # `stores` is in the default set because every downstream sovereign +

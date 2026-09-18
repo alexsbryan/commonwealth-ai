@@ -72,6 +72,7 @@ tracing = { workspace = true }
 # `test_env::scoped_home` only, behind `test-support`. NOT a runtime cost:
 # every non-test use of tempfile in the moved code sits after a `#[cfg(test)]`.
 tempfile = { workspace = true, optional = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
 tempfile = { workspace = true }

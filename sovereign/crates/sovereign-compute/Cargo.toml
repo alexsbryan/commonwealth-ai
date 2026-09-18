@@ -34,6 +34,7 @@ tracing-subscriber = { workspace = true }
 axum = { workspace = true }
 futures = { workspace = true }
 async-trait = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 # Graceful child termination: SIGTERM (so the compute child can run
 # `fast_exit_skip_destructors` and dodge the ggml teardown SIGABRT) before

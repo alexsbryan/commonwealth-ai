@@ -167,6 +167,7 @@ rand = "0.8"
 # the deps compile in release but the code path is unreachable there.
 axum = { workspace = true }
 tower-http = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../../../workspace-hack" }
 
 [features]
 # The `paddle-ocr` forward stood here and is GONE (svt-6). Its whole job was
