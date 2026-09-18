@@ -362,3 +362,15 @@ REVIEW-AFTER: Fork 3's "at least one sample" reading — a stricter "every sampl
 the roster diff the row forbids.
 
 Commit: the one that removes `ralph/NEEDS_HUMAN.md`.
+
+## 2026-09-18 · rd-1-three-containers · the seam is one door; the forwarder is the instrument's
+
+The worker's §6 (03:06Z) showed the row's premise false: `ring dev` binds loopback with no bind
+flag (dev.rs:93), the rail never leaves loopback (rail_bind.rs:62), operator routes admit
+loopback peers only (loopback_guard.rs:166). Decided by the seat: (1) no bind flag on
+`svrn ring dev` — a LAN-reachable dev proxy hands the grant it holds to the LAN; the host
+browser reaches a container's dev server through an in-container forwarder that is the
+instrument's own component and stands in for 'the browser on that machine'. (2) Every
+command that runs on or talks to a node goes through `sv`/`node_exec`/`node_curl`; the
+row's earlier four-function seam was a list, not a door. (3) A's join address is per
+backend. (4) `_cut`/`_heal` for phase 2; phase 4 keeps a real stop on both backends.
