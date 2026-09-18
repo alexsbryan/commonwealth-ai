@@ -803,7 +803,7 @@ pub async fn launch_tier2_extraction(
     .await
 }
 
-/// Variant that takes an optional [`PeerAtlasPullCandidate`]. Used
+/// Variant that takes an optional [`AtlasPullLead`]. Used
 /// by the post-install hook (which has access to mesh state) to
 /// short-circuit local extraction when a peer leads on Tier-2 by
 /// at least [`crate::atlas_peer_advice::MIN_PEER_LEAD`].
@@ -813,7 +813,7 @@ pub async fn launch_tier2_extraction_with_advice(
     cli_binary: PathBuf,
     enrichment_dir: PathBuf,
     indexes_dir: PathBuf,
-    peer_advice: Option<crate::atlas_peer_advice::PeerAtlasPullCandidate>,
+    peer_advice: Option<crate::atlas_peer_advice::AtlasPullLead>,
 ) -> Tier2LaunchOutcome {
     if let Some(advice) = peer_advice {
         return Tier2LaunchOutcome::DeferredToPeer {
