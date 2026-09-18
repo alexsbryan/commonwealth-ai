@@ -171,8 +171,13 @@ containers_up() {
   "${PODMAN[@]}" network create --subnet "$SUBNET" "$NET" >/dev/null || { echo "podman: could not create network $NET" >&2; return 1; }
   for n in a b c; do
     # label=disable, as the toolbox runs: relabelling a bind-mounted repo is not ours to do.
+    # HOME is the node's own data dir: with keep-id and no HOME the container resolved
+    # HOME to the workdir, and every binary's startup migrator renames $HOME/.sovereign
+    # to .svrnmesh (rebrand.rs) — on 2026-09-18 it renamed the REPO's tracked project dir
+    # (restored by hand). Note 746c91f2 carries the product-side guard.
     "${PODMAN[@]}" run -d --name "ring-doc-$n" --hostname "ring-doc-$n" --network "$NET" --ip "${IP[$n]}" \
       --init --userns=keep-id --security-opt label=disable -v "$REPO:$REPO" -w "$REPO" \
+      -e HOME="$D/$n" \
       -p "${DPORT[$n]}:${DPORT[$n]}" --pull=never "$IMAGE" sleep infinity >/dev/null \
       || { echo "podman: could not start ring-doc-$n" >&2; return 1; }
     start_forwarder "$n"
