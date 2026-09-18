@@ -42,11 +42,11 @@ fn cached_atoms(corpus_id: &str) -> Option<std::sync::Arc<AtomsFile>> {
     static CACHE: OnceLock<Cache> = OnceLock::new();
     let cache = CACHE.get_or_init(|| RwLock::new(std::collections::HashMap::new()));
 
-    let path = sovereign_contracts::rebrand::data_dir()
+    let atlas_dir = sovereign_contracts::rebrand::data_dir()
         .join("indexes")
         .join(corpus_id)
-        .join("atlas")
-        .join("atoms.json");
+        .join(corpus_engine_vocab::read::ATLAS_DIRNAME);
+    let path = atlas_dir.join("atoms.json");
     let mtime = std::fs::metadata(&path).ok()?.modified().ok()?;
 
     // Fast path: present and fresh (mtime unchanged since we parsed it).
@@ -58,8 +58,7 @@ fn cached_atoms(corpus_id: &str) -> Option<std::sync::Arc<AtomsFile>> {
         }
     }
     // Slow path: (re)parse and cache under the current mtime.
-    let text = std::fs::read_to_string(&path).ok()?;
-    let value = Arc::new(serde_json::from_str::<AtomsFile>(&text).ok()?);
+    let value = Arc::new(corpus_engine_vocab::read::read_atlas_atoms(&atlas_dir).ok()?);
     if let Ok(mut map) = cache.write() {
         map.insert(corpus_id.to_string(), (mtime, Arc::clone(&value)));
     }
