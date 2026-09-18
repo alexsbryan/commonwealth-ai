@@ -678,8 +678,13 @@ impl sovereign_core::traits::Router for KnowledgeRouter {
 /// Asserted on `provenance.sources[].from_peer`, which is written from the
 /// same `peer_attribution` the released citation's `member` is
 /// (rr-1-citation-member-on-released covers that projection at the gate).
+/// And the streaming ledger's per-claim holding names the member too
+/// (rr-1-pool-members-every-ledger): `SOVEREIGN_LONGFORM_CHARS=0` forces the
+/// per-claim gate, the mode whose holdings read null when streaming.rs left
+/// the pool's members on a default.
 #[tokio::test]
 async fn a_daemon_served_chat_turn_names_the_peer_whose_corpus_answered() {
+    std::env::set_var("SOVEREIGN_LONGFORM_CHARS", "0");
     const FACT: &str =
         "The Larkspur Lane cooperative keeps its bees in four hives painted teal, ochre, plum and slate.";
     // === Host (Bo): the corpus lives only here, behind its internal router ===
@@ -814,7 +819,13 @@ async fn a_daemon_served_chat_turn_names_the_peer_whose_corpus_answered() {
     })
     .await
     .expect("the turn completed within 60s");
-    let sovereign_contracts::types::TurnFrame::Complete { provenance, .. } = complete else {
+    std::env::remove_var("SOVEREIGN_LONGFORM_CHARS");
+    let sovereign_contracts::types::TurnFrame::Complete {
+        provenance,
+        epistemic_state,
+        ..
+    } = complete
+    else {
         unreachable!()
     };
     let sources = provenance
@@ -827,5 +838,18 @@ async fn a_daemon_served_chat_turn_names_the_peer_whose_corpus_answered() {
         "the answer's sources must name Bo as the machine serving `larkspur`; the asker \
          installs nothing, so a source list without it means the turn never fanned out. \
          Got: {sources:?}"
+    );
+    let members: Vec<Option<String>> = epistemic_state
+        .expect("the turn assembled a ledger")
+        .holdings
+        .iter()
+        .filter_map(|h| match &h.provenance {
+            sovereign_contracts::types::Provenance::Corpus { member, .. } => Some(member.clone()),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        !members.is_empty() && members.iter().all(|m| m.as_deref() == Some("Bo")),
+        "every per-claim corpus holding over an all-Bo pool must name Bo. Got: {members:?}"
     );
 }
