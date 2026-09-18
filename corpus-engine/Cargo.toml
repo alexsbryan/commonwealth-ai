@@ -33,6 +33,13 @@ understanding-vocab = { workspace = true }
 # in the monorepo changed when it was carved out (domains
 # REVIEW-build-index-read-port, DE "The read-port leaf, measured again").
 corpus-index = { workspace = true }
+# Understanding's pure tier — a temporary shim edge: the pure files that leave
+# `corpus-engine` for `understanding-atlas` are re-exported at their historical
+# paths here (domains REVIEW-build-understanding-crate-tree, §3a step 5) until
+# their in-engine importers repoint. The final audit deletes the shims, and the
+# edge with them (DE "Direction: Understanding reads Ingest and Retrieval,
+# never the reverse").
+understanding-atlas = { workspace = true }
 
 # What is LEFT of the sovereign edge after that move, and why it is left.
 # Census 2026-08-20, minus the descriptor const (removed 2026-09-16: it now

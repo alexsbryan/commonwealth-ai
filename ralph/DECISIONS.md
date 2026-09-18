@@ -2342,3 +2342,74 @@ the children carry the work. Parent marked `[x]` in the follow-up
 **Falsified by.** A file in the `pure` list whose `git grep -n 'crate::'` names a corpus-engine module after the shells split; or a file in the `host` list that moves to `understanding-atlas` without naming corpus-engine.
 
 **Landed in.** the `REVIEW-mint-understanding-tiers` mint commit; the move rows carry the work.
+
+## 2026-09-18 · REVIEW-build-understanding-crate-tree · the module tree is path-preserving, and the batch's "no corpus-engine reach" premise is false
+
+**Fork.** The row names one landing: split the two MIXED host shells
+(`enrichment/atlas/mod.rs`, `enrichment/ontology/mod.rs`), move `AtlasOntologyFile`
+to the language, wire both crates, keep `corpus-engine` compiling, and re-key its
+DT rows — "so the batch moves below are mechanical". The tree says the shell
+split cannot precede the files: a shell's `pub mod <m>;` declarations do not
+resolve until `<m>` is in the same crate, and the batch (which moves those
+files) DEPENDS on this row. The batch rows' premise — "`git grep -n 'crate::'`
+over them resolves only to the tier, the leaf shims, the `oplog` crate or
+vocab's `canonical`, and to no corpus-engine module" — is also false.
+
+**Choice.**
+
+1. **The tree PRESERVES the source paths.** A moved pure file lands at
+   `understanding-atlas/src/<same path under corpus-engine/src/` and a moved
+   host file at `understanding-host/src/<same path>`. An intra-tier
+   `crate::enrichment::<m>` / `crate::meta_atlas::<m>` / `crate::atlas_traversal::<m>`
+   reach then resolves UNCHANGED; only a host file's reach to a pure sibling
+   becomes `understanding_atlas::enrichment::<m>`. The alternative (a flat tree)
+   collides on `registry.rs` (atlas, pipeline), `signals.rs` (reconciliation,
+   bridge) and `classifier.rs` (atlas_traversal, meta_atlas), and §3a forbids
+   renames inside a move.
+2. **`understanding-atlas` gets the engine-leaf shims** — `pub use corpus_index::{error,types};`,
+   `pub use ::oplog;`, `pub use understanding_vocab::canonical as atlas_canonical;` —
+   plus `pub use understanding_vocab::articulation;` for the per-atom half of
+   `stream_axes`. These are the only non-tier reaches the production pure code has.
+3. **This row landed the landable split, not the shell moves.** `enrichment/ontology/mod.rs`'s
+   pure half is real: `clock.rs` + `type_index.rs` moved to
+   `understanding-atlas/src/enrichment/ontology/` and the engine's shell
+   re-exports them. `enrichment/atlas/mod.rs`'s pure half is the language
+   re-export surface, created in `understanding-atlas/src/enrichment/atlas.rs`;
+   its pure submodule declarations ride the batch rows (each moves its file and
+   adds `pub mod <name>;`). `AtlasOntologyFile` moved to
+   `understanding_vocab::ontology` (the ONE host type a pure file names).
+4. **The batch rows' rewrite clauses are corrected** (all 17, in place): the
+   path-preserving rule replaces the `crate::<m>` rewrite; `crate::stream_axes::<articulation>`
+   repoints to `crate::articulation::*`; and the four files with `#[cfg(test)]`
+   reaches the purity scan strips (`recipe_templates`, `extractors`, `recipe`,
+   `index`) carry a CORRECTED note naming the reach and its fix.
+5. **`understanding-host` names `corpus-engine`**, which turns the package's
+   grandfathered `[[exception]]` (ARCH_LAYERS.toml:1388-1393) from
+   STALE-by-construction to LIVE — `boundary-gate` goes green.
+
+**Rejected.** A `[dev-dependencies] corpus-engine` on `understanding-atlas` to
+absorb the test-only reaches: `boundary-gate` counts dev edges ("dep closure
+incl. dev+build edges") and failed with `[understanding] understanding-atlas →
+corpus-engine: a dev dependency leaves the package closure`. The test reaches
+must be repointed to leaf types or relocated to corpus-engine's tests.
+
+**Evidence** (reproduced this session, on `ralph/domains-campaign`).
+- LINT `exit=0`, scope WORKSPACE, `errors: 0`, `cargo exit: 0`.
+- LAYER `exit=0` — "every edge points down or sideways … fan-in within caps".
+- TOML `exit=0`.
+- TEST(understanding-atlas) `exit=0`, pass 14 fail 0 (clock 3 + type_index 10 + the scaffolding smoke test 1).
+- TEST(understanding-host) `exit=0`, pass 1 fail 0 (the exception-resolution smoke test).
+- BOUNDARY `exit=0` — `understanding 2/2 crates present`, "every declared package reaches only itself + the shared leaves" (before the `corpus-engine` dep it read the exception STALE and failed).
+- Non-tier reaches measured over the 96 pure files: `crate::enrichment` 256, `crate::error` 26, `crate::oplog` 16, `crate::recipe_templates` 8 (test-only), `crate::stream_axes` 8, `crate::types` 4, `crate::index` 3 (test-only), `crate::atlas_canonical` 2, `crate::extractors` 1 (test-only), `crate::recipe` 1 (test-only), `crate::atlas_traversal`/`crate::meta_atlas` 2.
+- The row's dep list omitted `chrono` (`enrichment/ontology/clock.rs:23 use chrono::NaiveDate`); added.
+
+**Falsified by.** A moved pure file whose `crate::` reach does not resolve under
+the path-preserving tree; or a `boundary-gate` that fails after the
+`corpus-engine` dep (it passed); or `clock`/`type_index` still present under
+`corpus-engine/src/enrichment/ontology/` (they are not).
+
+**Landed in.** the commit under `REVIEW-build-understanding-crate-tree`: the two
+moved files, the new `understanding-atlas` modules, `AtlasOntologyFile` in
+`understanding-vocab`, the two `Cargo.toml`s + root `[workspace.dependencies]`,
+`corpus-engine`'s re-export shims and dep, the DT tier/module re-keys, and
+`SYSTEM_OVERVIEW.md` §2.

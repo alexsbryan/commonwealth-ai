@@ -267,3 +267,60 @@ impl OntologyPolicies {
         }
     }
 }
+
+/// On-disk shape of `atlas/ontology.json` — the policies an atlas was
+/// extracted under, written beside the atoms so the atlas describes itself.
+///
+/// The atlas directory has to answer "what did this corpus declare" on its
+/// own: `corpus-engine` cannot read the enrich `config.json` (that type lives
+/// in `sovereign-enrichment-catalog`), and `_summary.json` is a derived cache
+/// that must be reproducible from the atlas dir alone. So the resolve step
+/// writes the policies down beside the atoms.
+///
+/// Written by EVERY pipeline since ei-2-map (`EPISTEMIC_INDEX.md` §1, Map
+/// row: an atlas that cannot describe itself is not an atlas) — a built-in
+/// genre writes its fixed vocabulary down through the same struct. Absent
+/// only for an atlas built before then; readers treat absence as "no
+/// declaration", never as an error.
+///
+/// Moved here from `corpus-engine`'s `enrichment/atlas/writer.rs` by domains
+/// `REVIEW-build-understanding-crate-tree`: it is the ONE host type a pure
+/// file names (`enrichment/pipeline/pipelines/declaration.rs`), and it is
+/// data, so it belongs with the language beside `AtomsFile`/`EdgesFile`. The
+/// engine's writer re-exports it at the historical path.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct AtlasOntologyFile {
+    pub schema_version: String,
+    /// The `[enrichment.ontology] version` the policies were parsed under —
+    /// or [`Self::BUILTIN_ONTOLOGY_VERSION`] for a built-in pipeline's map,
+    /// which is written in that language rather than parsed from a recipe.
+    #[serde(default)]
+    pub ontology_version: u32,
+    /// The pipeline that extracted under these policies, as the registry
+    /// spells it (`literary_atlas`, `custom_atlas`, …). Tells a reader
+    /// whether the map was DECLARED by an author (`custom_atlas`) or WRITTEN
+    /// DOWN by a genre. Empty on a file written before ei-2-map; readers
+    /// report that, never guess.
+    #[serde(default)]
+    pub pipeline_id: String,
+    /// What the pipeline read. Same struct the recipe parses into, so a
+    /// reader never re-derives it.
+    pub policies: OntologyPolicies,
+}
+
+impl AtlasOntologyFile {
+    pub const SCHEMA_VERSION: &'static str = "1.0";
+    /// File name under `atlas/`. The ONE spelling — the writer and the
+    /// summary reader below both go through it.
+    pub const FILE: &'static str = "ontology.json";
+    /// The declaration language a built-in pipeline's map is written in
+    /// (`pipelines/ontologies/*.toml` are version-1 block bodies). One number,
+    /// one home: the resolve step records it and `declaration.rs` parses under it.
+    pub const BUILTIN_ONTOLOGY_VERSION: u32 = 1;
+
+    /// Was this map declared by a recipe author, as opposed to written down
+    /// by a built-in genre? The custom pipeline reports `custom_atlas`.
+    pub fn is_author_declared(&self) -> bool {
+        self.pipeline_id == "custom_atlas"
+    }
+}

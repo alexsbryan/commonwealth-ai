@@ -3512,9 +3512,9 @@ note = "registry roots: understanding"
 [[module]]
 path = "corpus-engine/src/enrichment/ontology/"
 context = "understanding"
-lines = 1114
-files = 4
-note = "registry roots: understanding"
+lines = 503
+files = 2
+note = "registry roots: understanding; clock.rs + type_index.rs left for understanding-atlas at REVIEW-build-understanding-crate-tree"
 
 [[module]]
 path = "corpus-engine/src/enrichment/pipeline/"
@@ -4060,8 +4060,8 @@ paths = [
     "corpus-engine/src/enrichment/governance.rs",
     "corpus-engine/src/enrichment/investigation/aggregate.rs",
     "corpus-engine/src/enrichment/mod.rs",
-    "corpus-engine/src/enrichment/ontology/clock.rs",
-    "corpus-engine/src/enrichment/ontology/type_index.rs",
+    "understanding-atlas/src/enrichment/ontology/clock.rs",
+    "understanding-atlas/src/enrichment/ontology/type_index.rs",
     "corpus-engine/src/enrichment/pipeline/assemble.rs",
     "corpus-engine/src/enrichment/pipeline/atlas.rs",
     "corpus-engine/src/enrichment/pipeline/atlas_extensions.rs",
@@ -7658,14 +7658,44 @@ note = ""
 [[module]]
 path = "understanding-atlas/src/lib.rs"
 context = "understanding"
-lines = 11
-note = "Understanding's pure tier, created as a stub by domains REVIEW-build-understanding-tier-crates (DE Step 7, redrawn; `[[package]] understanding`). The arithmetic over the published language lands here once REVIEW-mint-understanding-tiers classifies the 170-file cluster."
+lines = 59
+note = "Understanding's pure tier, created as a stub by domains REVIEW-build-understanding-tier-crates (DE Step 7, redrawn; `[[package]] understanding`). REVIEW-build-understanding-crate-tree landed the module tree: the four engine-leaf shims (error/types/oplog/atlas_canonical), the articulation re-export, and the `enrichment` surface."
+
+[[module]]
+path = "understanding-atlas/src/enrichment.rs"
+context = "understanding"
+lines = 14
+note = "The pure enrichment surface; REVIEW-build-understanding-crate-tree."
+
+[[module]]
+path = "understanding-atlas/src/enrichment/atlas.rs"
+context = "understanding"
+lines = 22
+note = "The pure half of corpus-engine's host enrichment/atlas/mod.rs — the atoms/edges/stable_key language re-exports; REVIEW-build-understanding-crate-tree."
+
+[[module]]
+path = "understanding-atlas/src/enrichment/ontology.rs"
+context = "understanding"
+lines = 27
+note = "The pure half of corpus-engine's host enrichment/ontology/mod.rs — clock, type_index and the language re-exports; REVIEW-build-understanding-crate-tree."
+
+[[module]]
+path = "understanding-atlas/src/enrichment/ontology/clock.rs"
+context = "understanding"
+lines = 127
+note = "Axis-4 section clock, moved from corpus-engine by REVIEW-build-understanding-crate-tree."
+
+[[module]]
+path = "understanding-atlas/src/enrichment/ontology/type_index.rs"
+context = "understanding"
+lines = 492
+note = "Name -> declaration lookup, moved from corpus-engine by REVIEW-build-understanding-crate-tree."
 
 [[module]]
 path = "understanding-host/src/lib.rs"
 context = "understanding"
-lines = 10
-note = "Understanding's host tier, created as a stub by domains REVIEW-build-understanding-tier-crates (DE Step 7, redrawn; `[[package]] understanding`). The ports and the knot land here once REVIEW-mint-understanding-tiers classifies the 170-file cluster."
+lines = 26
+note = "Understanding's host tier, created as a stub by domains REVIEW-build-understanding-tier-crates (DE Step 7, redrawn; `[[package]] understanding`). REVIEW-build-understanding-crate-tree wired its Cargo.toml, naming corpus-engine so the package's grandfathered exception is LIVE."
 
 [[module]]
 path = "corpus-engine-watchers/src/error.rs"

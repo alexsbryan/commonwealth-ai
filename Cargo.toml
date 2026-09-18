@@ -309,6 +309,7 @@ corpus-engine-yield = { path = "corpus-engine-yield" }
 corpus-engine-watchers = { path = "corpus-engine-watchers" }
 corpus-engine-sections = { path = "corpus-engine-sections" }
 understanding-vocab = { path = "understanding-vocab" }
+understanding-atlas = { path = "understanding-atlas" }
 corpus-index = { path = "corpus-index" }
 arch-layers = { path = "quality/arch-layers" }
 sovereign-contracts = { path = "sovereign/crates/sovereign-contracts" }
