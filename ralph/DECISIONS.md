@@ -254,3 +254,27 @@ REVIEW-AFTER: whether the charter should name "a guest grant gains a path" as
 the operator's explicitly. It was read here from "behaviour a peer can observe".
 
 Commit: the one that removes `ralph/NEEDS_HUMAN.md`.
+
+## 2026-09-18 · HUMAN-rd-1-live-grant · the operator's two answers
+
+Weighed by the seat, decided by the operator in session ("sounds good").
+
+### The live-lane grant. Choice: (b) namespace the lane, then grant it. `rd-1-live-namespace`.
+
+A boundary question, held to the boundary the code already draws: the namespace lives on the
+grant and never in the request (`guest_grant.rs:81-88`), and append/log resolve it from the
+grant (`routes_rail.rs:85-99`). (a) would put an unscoped, destructively-drained route behind a
+scoped grant — a privacy hole and, with two apps on one daemon, a correctness bug (one app's
+poll eats the other's cursors). (c) moves trust into the dev proxy and leaves the route
+unscoped. (b) makes the lane the same shape as its siblings. Two refinements written into the
+row: an envelope for a namespace the daemon holds no grant for is refused with a reason, which
+is what bounds memory; and the mounted-paths test must see the new path.
+
+### The converge bar. Choice: no push tonight, no bar change; the instrument names the foreign commits. `rd-1-instrument-rail-diff`.
+
+A ruler question. The bar means "this campaign did not change the rail"; the leg measures the
+diff against origin/main, which conflates "changed by us" with "not yet pushed by anyone".
+Pushing 57 commits is a release of the shared branch and is decided on its own merits, not to
+clear a bar. The leg keeps its diff exactly as demanding and gains the four-verdict discipline:
+a non-empty diff made only of commits outside this campaign reads COULD-NOT-JUDGE naming them,
+never FAILED, and never PASSED.
