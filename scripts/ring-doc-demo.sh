@@ -733,11 +733,16 @@ for bar in pick:
     ok = ok and verdict == "PASSED"
     r.update(floor=b["floor"], verdict=verdict, topology=s.get("topology"), artifact=art)
     print(json.dumps(r))
-# `all` is the demo: exit 0 only when every row PASSED. One bar is co-lineage's
+# `all` is the demo, and it speaks four verdicts (ARCH 5): exit 0 when every
+# row PASSED; exit 1 when any row FAILED; exit 4 when nothing failed but some
+# row could not be judged (value None, e.g. the rail-diff leg naming commits
+# outside this campaign) — a could-not-judge is not a failure and not a pass,
+# and the caller reads the rows to see which. One bar is co-lineage's
 # instrument: a value is exit 0 whatever it reads (co-lineage judges it), no
 # value is exit 4, a could-not-judge.
 if want == "all":
-    sys.exit(0 if ok else 1)
+    verdicts = [r["verdict"] for r in rows.values()]
+    sys.exit(1 if "FAILED" in verdicts else (4 if "COULD-NOT-JUDGE" in verdicts else 0))
 sys.exit(4 if rows[want]["value"] is None else 0)
 PY
 }

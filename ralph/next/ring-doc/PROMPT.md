@@ -105,7 +105,7 @@ On Linux every check runs inside the `sovereign-vulkan` toolbox; if
 | DOCS | `scripts/ralph-check.sh docs` | exit=0 (rows that edit a doc) |
 | PLANT(x) | make the one-line violation `x` names, run the gate the row names (LINT or LAYER or TEST(c)), paste its red line, `git checkout --` the plant, run the gate again | red with the plant, exit=0 without it |
 | NODE(d) | `scripts/ralph-check.sh node d` (node 20 and npx are in the toolbox; pin every npm version the row names) | exit=0 |
-| DEMO | `scripts/ralph-check.sh demo` — starts and stops its OWN throwaway daemons under `SOVEREIGN_DATA_DIR`, never the deployed one | exit=0 and five rows reading PASSED |
+| DEMO | `scripts/ralph-check.sh demo` — starts and stops its OWN throwaway daemons under `SOVEREIGN_DATA_DIR`, never the deployed one | exit=0 and five rows reading PASSED; OR exit=4 where every non-PASSED row reads COULD-NOT-JUDGE naming only commits outside this campaign (the operator's 2026-09-18 no-push decision) — paste the rows either way. exit=1 (any FAILED) is §6 with the rows |
 | TESTALL | `scripts/ralph-check.sh testall` | exit=0 (audits only) |
 | PREPUSH | `scripts/ralph-check.sh prepush` | exit=0 (audits only) |
 
