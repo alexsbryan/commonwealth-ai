@@ -423,6 +423,9 @@ const SPLIT_S = 60;         // phase 2, C's daemon down
 const PANEL_SAMPLE_S = 5;   // gap panels sampled this often during the split
 const PRE_SPLIT_S = 12;     // and every 3 s for this long before it: they must be EMPTY
 const SEED = 17;
+// RING_DOC_PHASES (default all): phases 2 and 4 run only when listed; 1 and 3
+// always do. ring-room-demo.sh runs "1,3" — the drive and the attribution leg.
+const PHASES = new Set((process.env.RING_DOC_PHASES || "1,2,3,4").split(","));
 
 let rng = SEED;
 const rand = () => { rng = (rng + 0x6d2b79f5) | 0; let t = Math.imul(rng ^ (rng >>> 15), 1 | rng);
@@ -664,6 +667,7 @@ out.cursor = { samples: cur.length, p50: pct(cur, 0.5), p99: pct(cur, 0.99) };
 out.converge = { sv_equal: svs1.every((s) => s === svs1[0]), text_equal: all.every((p) => p.text() === pages.a.text()),
   union: unionCheck(p1tokens), tokens: p1tokens.length };
 
+if (PHASES.has("2")) {
 // ── phase 2: the split. All three type throughout, C included (its flushes
 // fail and are re-queued, as the page does).
 phase = 2;
@@ -712,6 +716,7 @@ out.partition = { sv_equal: svs2.every((s) => s === svs2[0]), text_equal: all.ev
   pre_split_examples: Object.fromEntries(Object.entries(prePanels).map(([n, xs]) => [n, (xs.find((g) => g.length) || []).slice(0, 2)])),
   names_c: Object.fromEntries(["a", "b"].map((n) => [n, panels[n].filter((g) => g.some((l) => l.includes("Cy"))).length])),
   panel_examples: Object.fromEntries(Object.entries(panels).map(([n, xs]) => [n, (xs.find((g) => g.length) || []).slice(0, 2)])) };
+}
 
 // ── phase 3: B's page announces A's Yjs clientID and appends that update.
 phase = 3;
@@ -754,6 +759,7 @@ out.attribution = { forged_act: forged ? forged[0] : null, forged_clients: forge
   forged_held_everywhere: !!forged && all.every((p) => p.applied.has(forged[0])),
   lines, right, wrong };
 
+if (PHASES.has("4")) {
 // ── phase 4: presence only, then B restarts. Nobody types.
 phase = 4;
 const j0 = await sh("_journals");
@@ -773,6 +779,7 @@ try { afterRestart = await pages.b.call("live-drain", {}); } catch (e) { afterRe
 const j1 = await sh("_journals");
 out.live = { cursor_p99: out.cursor.p99, delivered_to_b_before_stop: toB, drain_after_restart: afterRestart,
   journals_before: j0, journals_after: j1 };
+}
 
 writeFileSync(`${D}/session.json`, JSON.stringify(out, null, 2));
 process.exit(0);
@@ -914,6 +921,8 @@ sys.exit(4 if rows[want]["value"] is None else 0)
 PY
 }
 
+# Sourced (ring-room-demo.sh reuses the node door and backend): define only.
+[[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
 case "${1:-}" in
   up)   cmd_up ;;
   down) cmd_down; echo "stopped" ;;
