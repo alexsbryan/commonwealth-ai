@@ -1365,7 +1365,7 @@ fn spawn_heartbeat(
 /// means the peer's gossip carried no addresses, which is a
 /// degenerate case the caller should skip.
 #[derive(Debug, Clone)]
-pub(crate) struct PeerCanonicalLead {
+pub(crate) struct CanonicalAtlasLead {
     pub candidate_urls: Vec<String>,
     pub fingerprint: String,
     pub coverage_ratio: Option<f64>,
@@ -1394,10 +1394,10 @@ pub(crate) struct PeerCanonicalLead {
 async fn find_best_peer_canonical(
     state: &sovereign_api::state::AppState,
     corpus_id: &str,
-) -> Option<PeerCanonicalLead> {
+) -> Option<CanonicalAtlasLead> {
     let mesh = state.inner.fabric.mesh.read().await;
     let self_id = state.identity_reader().current();
-    let mut best: Option<PeerCanonicalLead> = None;
+    let mut best: Option<CanonicalAtlasLead> = None;
     for member in mesh.members.values() {
         // Skip ourselves — gossip echoes our own capability report.
         if member.node_id == self_id {
@@ -1444,7 +1444,7 @@ async fn find_best_peer_canonical(
                 continue;
             }
 
-            let candidate = PeerCanonicalLead {
+            let candidate = CanonicalAtlasLead {
                 candidate_urls,
                 fingerprint: fp.to_string(),
                 coverage_ratio: shard_info.coverage_ratio(),
