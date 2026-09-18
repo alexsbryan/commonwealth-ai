@@ -458,6 +458,7 @@ export interface CommandArgs {
   mesh_leave: Record<string, never>;
   mesh_list: Record<string, never>;
   mesh_list_peer_preferences: Record<string, never>;
+  mesh_media_offers: Record<string, never>;
   mesh_preview_join_link: {
     link: unknown;
   };

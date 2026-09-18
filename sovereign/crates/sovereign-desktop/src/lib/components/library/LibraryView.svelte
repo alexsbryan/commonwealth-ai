@@ -14,7 +14,8 @@
 -->
 <script lang="ts">
   import { onMount } from "svelte";
-  import { notebookList } from "../../api";
+  import { notebookList, meshMediaOffers, type MeshMediaOffer } from "../../api";
+  import { invokePlugin } from "../../invoke";
   import type { NotebookSummary, StarterQuestion } from "../../types";
   import NotebookKindIcon from "./NotebookKindIcon.svelte";
   import { kindLabel, kindTitle } from "./notebookKind";
@@ -57,8 +58,34 @@
     }
   }
 
+  // Libraries on the mesh — polled every `offers_poll_s` (the one knob
+  // ring-room §Tuning allows, 5–30 s).
+  const offers_poll_s = 10;
+  let offers = $state<MeshMediaOffer[]>([]);
+  let offersError = $state<string | null>(null);
+
+  async function reloadOffers() {
+    try {
+      offers = (await meshMediaOffers()) ?? [];
+      offersError = null;
+    } catch (e) {
+      offersError = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  async function play(o: MeshMediaOffer) {
+    if (o.player_url) await invokePlugin("plugin:shell|open", { path: o.player_url });
+  }
+
+  function offeredTo(o: MeshMediaOffer): string {
+    return o.offered_to.length === 0 ? "everyone here" : o.offered_to.join(", ");
+  }
+
   onMount(() => {
     void reload();
+    void reloadOffers();
+    const t = setInterval(() => void reloadOffers(), offers_poll_s * 1000);
+    return () => clearInterval(t);
   });
 
   function open(nb: NotebookSummary, tab: DetailTab) {
@@ -184,6 +211,36 @@
           {/each}
         </div>
       {/if}
+
+      <section class="mesh-libraries" data-testid="mesh-libraries">
+        <h2>Libraries on the mesh</h2>
+        {#if offersError}
+          <p class="error">Couldn't read the mesh's libraries: {offersError}</p>
+        {:else if offers.length === 0}
+          <p class="muted" data-testid="mesh-libraries-empty">no member is offering a library</p>
+        {:else}
+          <div class="shelf" role="list">
+            {#each offers as o (o.node_id)}
+              <div class="card" role="listitem" data-testid="mesh-library" data-peer={o.peer}>
+                <button
+                  class="card-open"
+                  onclick={() => play(o)}
+                  disabled={!o.player_url}
+                  title={o.unreachable ?? `Play from ${o.peer}'s library`}
+                >
+                  <div class="card-name">{o.peer}'s library</div>
+                  <div class="card-meta">
+                    <span class="chip">{o.status}</span>
+                  </div>
+                  <div class="card-fresh" data-testid="mesh-library-offered-to">
+                    offered to: {offeredTo(o)}
+                  </div>
+                </button>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </section>
     </div>
   </div>
 {/if}
@@ -345,6 +402,10 @@
   .empty-glyph { color: color-mix(in oklch, var(--accent) 60%, var(--text-muted)); margin-bottom: 12px; }
   .empty h2 { font-size: 1.1rem; font-weight: 640; color: var(--text-primary); margin: 0 0 8px; }
   .empty p { color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6; margin: 0 0 20px; }
+
+  .mesh-libraries { margin-top: 28px; }
+  .mesh-libraries h2 { font-size: 1rem; font-weight: 640; color: var(--text-primary); margin: 0 0 12px; }
+  .card-open:disabled { cursor: default; opacity: 0.6; }
 
   button.primary {
     font: inherit;

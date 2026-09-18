@@ -785,6 +785,7 @@ fn main() -> ExitCode {
                 mesh_commands::mesh_set_peer_preference,
                 mesh_commands::mesh_clear_peer_preference,
                 mesh_commands::mesh_list_peer_preferences,
+                mesh_commands::mesh_media_offers,
                 insight_commands::clip_insight,
                 insight_commands::list_insights,
                 insight_commands::search_insights,

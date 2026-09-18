@@ -311,4 +311,26 @@ impl TurnClient {
             .await?;
         Ok(body.candidates)
     }
+
+    /// `GET /v1/mesh/media` — the members offering a media origin, the
+    /// same read bare `svrn mesh media` prints. Nothing is dialed.
+    ///
+    /// `T` is `commonwealth_media::MediaOffer` or a parse shape of it.
+    pub async fn mesh_media_offers<T: serde::de::DeserializeOwned>(&self) -> Result<Vec<T>> {
+        #[derive(serde::Deserialize)]
+        struct Body<T> {
+            offering: Vec<T>,
+        }
+        let body: Body<T> = self.internal_get("/v1/mesh/media".to_string(), &[]).await?;
+        Ok(body.offering)
+    }
+
+    /// `GET /v1/mesh/media?peer=<name-or-id>` — the loopback URL that
+    /// reaches that member's media origin (`MediaReach`). A refusal
+    /// (offline, not offering) is the host's 409 and arrives as an error
+    /// carrying its words.
+    pub async fn mesh_media_reach<T: serde::de::DeserializeOwned>(&self, peer: &str) -> Result<T> {
+        self.internal_get("/v1/mesh/media".to_string(), &[("peer", peer.to_string())])
+            .await
+    }
 }
