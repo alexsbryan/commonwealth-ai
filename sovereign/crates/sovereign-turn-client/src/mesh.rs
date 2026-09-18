@@ -18,7 +18,7 @@
 //!
 //! # Why every read is generic
 //!
-//! `NodeContributionsView` and `PeerPreferenceView` are defined in
+//! `NodeContributionsView` and `VenuePreferenceDto` are defined in
 //! `commonwealth-api`, and `mesh_http::StatusResponse` in `sovereign-mesh`.
 //! This crate's only in-repo dependency is `sovereign-contracts`
 //! (`quality/ARCH_LAYERS.toml`, the `contract` layer) — a client that could
@@ -64,7 +64,7 @@ impl TurnClient {
     /// `GET /internal/peer-preference/list` — every affinity
     /// preference the host holds, in the store's own scan order.
     ///
-    /// `T` is `Vec<sovereign_api::routes_internal::PeerPreferenceView>`
+    /// `T` is `Vec<sovereign_api::routes_internal::VenuePreferenceDto>`
     /// for the daemon's shape and the desktop's `Vec<PeerPreferenceDto>`
     /// — identical field names — for the Mesh Health panel. This crate
     /// cannot name either (see the note above [`Self::corpus_atoms`]).

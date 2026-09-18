@@ -969,7 +969,7 @@ mod contribution_view_tests {
     /// The peer-preference half of the same contract (svt-3).
     ///
     /// Exactly what `sovereign_api::routes_internal::peer_preference::
-    /// peer_preference_list` serialises: `Vec<PeerPreferenceView>`, plain
+    /// peer_preference_list` serialises: `Vec<VenuePreferenceDto>`, plain
     /// field names, no serde renames. Before svt-3 the Local arm built these
     /// DTOs in-process from `commonwealth_state::PeerPreferenceStore::list`
     /// and the Attach arm returned an empty list; both arms now parse this

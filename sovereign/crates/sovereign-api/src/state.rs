@@ -38,7 +38,7 @@ pub mod workbench;
 // Fabric's construction seed and its readers, re-exported so the daemon and the
 // test harnesses name them at `sovereign_api::state::*` (the same surface the
 // constructors take).
-pub use fabric::{ClockReader, DialInfoReader, DialSigner, FabricSeed, PeerTransportReader};
+pub use fabric::{ClockReader, DialInfoReader, DialSigner, FabricSeed, TransportReader};
 // Serving's construction seed and its readers, for the same reason.
 pub use serving::{ServableModelFilesReader, ServingSeed, SlotAliasesReader};
 // The node's construction seed, for the same reason.
@@ -621,7 +621,7 @@ impl AppState {
     /// Fabric's peer-transport reader — the owner's write handle. The bootstrap
     /// seeds it at construction and the iroh watchdog publishes through it while
     /// the part reads (DC §4.2 "Construction is staged, and parts are total").
-    pub fn peer_transport_reader(&self) -> fabric::PeerTransportReader {
+    pub fn peer_transport_reader(&self) -> fabric::TransportReader {
         self.inner.fabric.peer_transport.clone()
     }
 

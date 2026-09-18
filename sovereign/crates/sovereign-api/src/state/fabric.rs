@@ -74,9 +74,9 @@ impl Default for ClockReader {
 /// watchdog swaps in a `RoutedTransport` (and a fresh endpoint) during life
 /// without a restart (DC §4.2 "Construction is staged, and parts are total").
 #[derive(Clone)]
-pub struct PeerTransportReader(Arc<ArcSwap<Arc<dyn PeerTransport>>>);
+pub struct TransportReader(Arc<ArcSwap<Arc<dyn PeerTransport>>>);
 
-impl PeerTransportReader {
+impl TransportReader {
     /// Seed the reader with the transport the node starts life with.
     pub fn new(transport: Arc<dyn PeerTransport>) -> Self {
         Self(Arc::new(ArcSwap::from_pointee(transport)))
@@ -93,7 +93,7 @@ impl PeerTransportReader {
     }
 }
 
-impl Default for PeerTransportReader {
+impl Default for TransportReader {
     fn default() -> Self {
         Self::new(Arc::new(commonwealth_transport::IpTransport::default()))
     }
@@ -143,7 +143,7 @@ pub struct FabricSeed {
     /// The node's clock, created first and shared with the harness.
     pub clock: ClockReader,
     /// The node's peer transport, created first and shared with the watchdog.
-    pub peer_transport: PeerTransportReader,
+    pub peer_transport: TransportReader,
     /// The node's live iroh dial info, created first and shared with the
     /// endpoint owner.
     pub dial_info: DialInfoReader,
@@ -218,7 +218,7 @@ pub struct FabricPart {
     /// client port, and the iroh watchdog publishes a `RoutedTransport`
     /// through the same reader. A reader created before the part, not a
     /// slot filled later.
-    pub peer_transport: PeerTransportReader,
+    pub peer_transport: TransportReader,
     /// Wall-clock source. Seeded with [`commonwealth_core::SystemClock`]; the
     /// test harness publishes a per-node [`commonwealth_core::TestClock`]
     /// through the reader to drive skew scenarios deterministically. A reader

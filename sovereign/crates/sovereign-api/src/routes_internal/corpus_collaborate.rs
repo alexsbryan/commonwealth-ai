@@ -947,12 +947,12 @@ pub async fn corpus_collaborate(
 }
 
 #[derive(Debug, Deserialize)]
-pub struct EligiblePeersRequest {
+pub struct EligibleDonorsRequest {
     pub corpus_id: kernel_types::CorpusId,
 }
 
 #[derive(Debug, Serialize)]
-pub struct EligiblePeerDto {
+pub struct EligibleDonorDto {
     /// Full-hex node id (matches the mesh member list + contribution ledger).
     pub node_id: String,
     pub name: String,
@@ -965,8 +965,8 @@ pub struct EligiblePeerDto {
 }
 
 #[derive(Debug, Serialize)]
-pub struct EligiblePeersResponse {
-    pub peers: Vec<EligiblePeerDto>,
+pub struct EligibleDonorsResponse {
+    pub peers: Vec<EligibleDonorDto>,
     /// Whether this corpus may be peer-assisted at all (`[corpus] grantable`).
     /// The desktop hides the whole offer when false.
     pub grantable: bool,
@@ -980,8 +980,8 @@ pub struct EligiblePeersResponse {
 /// never a silent omission).
 pub async fn corpus_eligible_peers(
     State(state): State<AppState>,
-    Json(req): Json<EligiblePeersRequest>,
-) -> Result<Json<EligiblePeersResponse>, (StatusCode, Json<ErrorBody>)> {
+    Json(req): Json<EligibleDonorsRequest>,
+) -> Result<Json<EligibleDonorsResponse>, (StatusCode, Json<ErrorBody>)> {
     let engine = state.inner.node.corpus_engine.as_ref().ok_or_else(|| {
         (
             StatusCode::SERVICE_UNAVAILABLE,
@@ -1001,7 +1001,7 @@ pub async fn corpus_eligible_peers(
 
     let mesh = state.inner.fabric.mesh.read().await;
     let self_id = state.inner.fabric.identity.current();
-    let mut peers: Vec<EligiblePeerDto> = Vec::new();
+    let mut peers: Vec<EligibleDonorDto> = Vec::new();
     for m in mesh.members.values() {
         if m.node_id == self_id {
             continue;
@@ -1022,7 +1022,7 @@ pub async fn corpus_eligible_peers(
                 (None, Some(_)) => (false, "no_embed_model"),
             }
         };
-        peers.push(EligiblePeerDto {
+        peers.push(EligibleDonorDto {
             node_id: m.node_id.to_hex(),
             name: m.name.clone(),
             online,
@@ -1034,7 +1034,7 @@ pub async fn corpus_eligible_peers(
     // Eligible + online first, then by name — the picker checks these by default.
     peers.sort_by(|a, b| b.eligible.cmp(&a.eligible).then(a.name.cmp(&b.name)));
 
-    Ok(Json(EligiblePeersResponse { peers, grantable }))
+    Ok(Json(EligibleDonorsResponse { peers, grantable }))
 }
 
 #[derive(Debug, Deserialize)]
