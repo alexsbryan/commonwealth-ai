@@ -2830,3 +2830,55 @@ row's VERB is satisfied by the standalone construction alone.
 `stop_inner`, cleared on Leave, exposed by `EmbeddedDaemon::fabric()`) and this
 commit (`ralph/STATE.md`: the row marked `[x]` with the CORRECTED note; this
 entry). Behaviour-preserving.
+
+## 2026-09-18 · REVIEW-build-daemon-answering-part · the three-way split dissolves the bundle rather than moving it
+
+**Fork.** The parent row (`REVIEW-build-daemon-parts`) found `state/answering.rs`
+is not one move: `middleware_registry` is host composition (DC §4.2:351),
+`session_store` is `sovereign_atos::session::SessionStore` and `sovereign-atos`
+depends on `sovereign-core` (`Cargo.toml:22`), so the reverse edge is a Cargo
+cycle, and `repo_root` is Answering's fact with no home in the daemon. The row
+asks to "resolve the three-way split … then the `AnsweringPart` struct
+dissolves", offering three shapes: a daemon construction argument/reader for the
+registry, the ATOS registration entry point (or a port) for the store, the
+pipeline's reader for the repo root.
+
+**Choice.** Dissolve the bundle into three `AppStateInner` fields, each supplied
+by its owner, with no new part and no new `[[exception]]`:
+
+1. `middleware_registry: Arc<crate::middleware::MiddlewareRegistry>` — the
+   daemon's own composition root; the daemon constructs it (as it already did)
+   and the route reads it directly. The one field whose owner is the daemon.
+2. `session_store: Option<sovereign_atos::session::SessionStore>` — built by
+   `sovereign_atos::middleware::session_store(mesh, origin)`, a new ATOS-owned
+   entry point beside `registrations()`, so the daemon never constructs an ATOS
+   type.
+3. `repo_root: Option<PathBuf>` — taken from
+   `sovereign_core::answering::repo_root()`, the Answering context's home, so the
+   fact lives with its owner and the daemon holds the resolved value.
+
+No port was needed: the store's constructor takes only `MeshStore` and `NodeId`,
+both of which ATOS already names. The parent's "never a flat field" clause is
+DC §4.2's end state ("Handlers take a part, never the node",
+DAEMON_CORE.md:412-416), already recorded as out of scope for this grammar.
+
+**Evidence** (reproduced this session).
+- `grep -rn 'AnsweringPart\|inner\.answering' sovereign/crates` -> only
+  `state.rs`'s definition and construction; the three reads are
+  `routes_inference.rs:1530,1555,1577`, all inside
+  `#[cfg(feature = "atos")] run_atos_pipeline`.
+- `wc -l sovereign/crates/sovereign-daemon/src/state/answering.rs` -> 28.
+- `grep -n sovereign-core sovereign/crates/sovereign-atos/Cargo.toml` -> :22;
+  `sovereign-core` does not depend on `sovereign-atos`.
+- CLEAN exit=0 (debug target 39G, under 50G); LINT exit=0 (18 crates,
+  `--all-targets`, errors 0); LAYER exit=0 ("fan-in within caps").
+
+**Falsified by.** A showing that the middleware registry belongs to a context
+other than the daemon; or that `sovereign-core` can name
+`sovereign_atos::session::SessionStore` without the cycle (then the store travels
+to core); or an operator ruling that the three fields stay bundled as a part.
+
+**Landed in.** this unit's code commit (`state.rs`, `routes_inference.rs`,
+`sovereign-atos/src/middleware/mod.rs`, `sovereign-core/src/answering/mod.rs`,
+`quality/DOMAINS.toml`, `quality/DAEMON_CORE.md`; `state/answering.rs` deleted)
+and the `ralph:` commit that marks the row `[x]`. Behaviour-preserving.
