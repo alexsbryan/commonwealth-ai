@@ -2114,3 +2114,69 @@ unit and belong to the index-read-port follow-up / the wave-close audit.
 **Landed in.** this commit — the crate rename, its consumers, the registry,
 baselines, docs and the xtask pins; `ralph/STATE.md` (the corrected row) and
 `ralph/DECISIONS.md`.
+
+## 2026-09-18 · dm-corpus-mcp-exception · director: the merge conflict is the vocab rename crossing the read-port repoint; combine both
+
+**Fork.** The pool halted on `merge conflict merging ralph/dm-corpus-mcp-exception
+— resolve in the main tree, then resume` (`ralph/NEEDS_HUMAN.md`). The lane (base
+`3046c76e2`) repoints corpus-mcp's read-only index sites onto the `corpus-index`
+leaf; the main tree then merged `dm-understanding-vocab-rename` (`17b2d7ace`),
+which renamed `corpus-engine-vocab` -> `understanding-vocab`. The two edits
+collide in four files: `corpus-mcp/Cargo.toml` (dep list),
+`corpus-mcp/src/tools.rs` (import block), `Cargo.lock` (the `corpus-mcp` package
+deps), and `ralph/DECISIONS.md` (two appended entries). Options: (a) take the
+lane's side, reverting the rename in corpus-mcp; (b) take main's side, dropping
+the `corpus-index` dep; (c) combine both — `understanding-vocab` AND
+`corpus-index` — and keep both DECISIONS entries in commit order.
+
+**Choice.** (c). The two changes are independent and both correct: the rename is
+mechanical and every consumer must repoint or the workspace does not compile; the
+read-port repoint is the lane's actual work and dropping it would leave the
+`corpus-mcp -> corpus-engine` exception's burn-down step (1) undone. (a)/(b) each
+lose a landed decision. The DECISIONS entries are independent appends (the file's
+header, line 3), so both are kept in commit order: `dm-corpus-mcp-exception`
+(02:40:12) before `dm-understanding-vocab-rename` (02:51:38). The pool's
+bookkeeping is completed by hand (row `[x]`, lane worktree removed, branch
+deleted): leaving the row `[ ]` would re-run a finished lane on a base that no
+longer matches main — the condition that produced this conflict.
+
+**Evidence** (reproduced this session, on `ralph/domains-campaign`).
+- `git merge ralph/dm-corpus-mcp-exception` → CONFLICT (content) in
+  `Cargo.lock`, `corpus-mcp/Cargo.toml`, `corpus-mcp/src/tools.rs`,
+  `ralph/DECISIONS.md`; `corpus-mcp/src/{ask,serve,host}.rs`,
+  `quality/ARCH_LAYERS.toml`, `ralph/STATE.md` auto-merge.
+- The resolution on the merged tree: `corpus-mcp/Cargo.toml:27` is
+  `understanding-vocab` and `:36` `corpus-index`; `corpus-mcp/src/tools.rs`
+  imports `understanding_vocab::{atoms::AtomEnvelope, read::read_atlas_atoms}`
+  and `corpus_index::{index::CorpusIndex, types::{EmbedFn, ScoredChunk}}`;
+  `Cargo.lock:2466` lists `corpus-index`, with no residual
+  `corpus-engine-vocab` in the `corpus-mcp` package.
+- `git grep -n 'corpus_engine_vocab\|corpus-engine-vocab' -- corpus-mcp/` →
+  none after the resolution.
+- The lane's own checks re-run on the MERGED tree, not trusted from the lane:
+  `./scripts/sovereign-lint.sh --human` → exit 0, scope WORKSPACE, `errors: 0`,
+  `cargo exit: 0`; `./scripts/sovereign-test.sh --human --package corpus-mcp` →
+  exit 0, pass 42, fail 0; `cargo xtask layer-gate` → exit 0 ("every edge points
+  down or sideways, fan-in within caps"); `cargo xtask boundary-gate` → exit 0
+  ("corpus-mcp 3/3 crates present", "every declared package reaches only itself
+  + the shared leaves").
+
+**Falsified by.** A merged tree that fails to compile or whose corpus-mcp tests
+fail (the import paths or the lock entry wrong); or a `ralph/DECISIONS.md`
+conflict that is not two appends; or the pool re-running the lane despite the
+`[x]`.
+
+**REVIEW-AFTER:** the judgment call is completing the pool's bookkeeping by hand
+(marking the row `[x]`, removing the lane worktree, deleting the branch) rather
+than leaving the lane to be re-run. The charter covers resolving the halt
+("apply the smallest change that makes the campaign flow"); recorded here so the
+morning sees the worktree/branch cleanup. `docs-gate` remains RED on the base
+tree from `REVIEW-build-index-read-port` (both merged entries' "Not fixed,
+observed" notes); it is not this resolution's check.
+
+**Landed in.** `3ef54115c` (the merge — `corpus-mcp/Cargo.toml`,
+`corpus-mcp/src/tools.rs`, `Cargo.lock`, `ralph/DECISIONS.md` with both entries
+ordered, `ralph/STATE.md` row `[x]`, `ralph/lanes/dm-corpus-mcp-exception.done`),
+and this commit (the director entry). `ralph/NEEDS_HUMAN.md` removed (it is in
+`.git/info/exclude`, so its removal is not a commit change).
+`git revert -m 1 3ef54115c` reverts the merge.
