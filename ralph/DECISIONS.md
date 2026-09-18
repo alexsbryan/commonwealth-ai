@@ -822,3 +822,19 @@ Edit or mark the row in ralph/next/ring-room/STATE.md (it is `[~]`, uncommitted)
 `rm ralph/STOP ralph/NEEDS_HUMAN.md`.
 
 </details>
+
+## 2026-09-18 — seat #5 — the pre-registered first run's three failures become rows ahead of rr-1-tune
+
+Evidence: 99ca7e4cb (five verdict rows + census) and bc679026d (join leg). Rows minted:
+REVIEW-build-rr-1-answer-fans-out (instrument the ask on a first — routing short-circuit on an
+empty local set, `mesh_knowledge` None, or a hosted set missing b — then fix at the one
+'which corpora exist' decider, reusing hosted_corpora; e2e test watched failing first);
+rr-1-media-origin-live (media_origin/media_allow read per dial behind the reload handle; the
+two restart_required pushes deleted; the >120 s stale dial after a restart NOTED as a mesh
+bug, not fixed); rr-1-nothing-typed-to-zero (`corpus share` verb; offer verb probes 8096;
+`admit` without origin; census rule: verbatim tool-printed URLs opened = `opened`, not
+typed — provenance line required; assembled strings count). rr-1-tune now depends on the
+last. Falsified if the instrumented ask shows the mesh step DID run and returned b's passage
+— then the loss is between retrieval and the gate's release, and the row's fix site moves.
+Why the seat minted instead of letting REVIEW-DEMO fail: three known reds would cost a
+REVIEW-DEMO session and a resolution session to arrive at the same rows.
