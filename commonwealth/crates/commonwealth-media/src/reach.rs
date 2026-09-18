@@ -118,6 +118,9 @@ pub struct MediaCandidate {
     /// than one kind now, and a bool per kind would have to grow a field per
     /// variant while the enum already IS the list.
     pub origins: Vec<OriginKind>,
+    /// The member's gossiped `media_allow`: who it admits to its media
+    /// origin, empty = everyone in the mesh.
+    pub media_allow: Vec<String>,
 }
 
 impl MediaCandidate {
@@ -135,6 +138,7 @@ pub fn candidate_of(m: &MemberRecord) -> MediaCandidate {
         has_identity: m.node_pubkey.is_some(),
         active: m.is_active(),
         origins: m.capabilities.origins.clone(),
+        media_allow: m.capabilities.media_allow.clone(),
     }
 }
 
@@ -156,6 +160,10 @@ pub struct MediaOffer {
     pub status: NodeStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path: Option<PeerTransportPath>,
+    /// Who the holder admits, from its gossiped `media_allow`; empty =
+    /// everyone here. Only the media kind gossips an allow list.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub offered_to: Vec<String>,
 }
 
 /// The members offering a media origin, other than this node, by name.
@@ -191,6 +199,11 @@ pub fn offers(
                 .iter()
                 .find(|(id, _)| *id == c.node_id)
                 .map(|(_, p)| p.clone()),
+            offered_to: if kind == OriginKind::Media {
+                c.media_allow
+            } else {
+                Vec::new()
+            },
             peer: c.name,
             node_id: c.node_id.to_string(),
             status: c.status,
@@ -354,6 +367,7 @@ mod tests {
             has_identity: true,
             active: true,
             origins: vec![OriginKind::Media],
+            media_allow: Vec::new(),
         }
     }
 
@@ -408,6 +422,38 @@ mod tests {
             vec![
                 ("BeefyMac", NodeStatus::Offline),
                 ("LittleMac", NodeStatus::Online)
+            ]
+        );
+    }
+
+    /// `offered_to` is the holder's gossiped admit list, read off the
+    /// candidate; a holder that narrows nothing reads empty (everyone here).
+    #[test]
+    fn an_offer_reads_offered_to_from_the_holders_media_allow() {
+        let mut roster: Vec<(MediaCandidate, PeerContact)> = roster()
+            .into_iter()
+            .map(|c| {
+                let contact = PeerContact {
+                    node_id: c.node_id,
+                    addresses: Vec::new(),
+                    node_pubkey: None,
+                    relay_url: None,
+                    iroh_direct_addrs: Vec::new(),
+                };
+                (c, contact)
+            })
+            .collect();
+        roster[1].0.media_allow = vec!["RuggedFox".into()];
+        let rows = offers(NodeId::from_u128(ME), &roster, &[], OriginKind::Media);
+        let by_name: Vec<(&str, &[String])> = rows
+            .iter()
+            .map(|o| (o.peer.as_str(), o.offered_to.as_slice()))
+            .collect();
+        assert_eq!(
+            by_name,
+            vec![
+                ("BeefyMac", &[][..]),
+                ("LittleMac", &["RuggedFox".to_string()][..])
             ]
         );
     }

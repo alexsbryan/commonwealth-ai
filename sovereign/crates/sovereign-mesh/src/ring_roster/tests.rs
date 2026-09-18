@@ -41,6 +41,7 @@ pub(crate) fn member(node_id: NodeId, name: &str, pubkey: Option<NodePubkey>) ->
             inference_capable: false,
             loaded_models: vec![],
             origins: Vec::new(),
+            media_allow: Vec::new(),
             embed_model: None,
             benchmark: None,
             current_in_flight: None,

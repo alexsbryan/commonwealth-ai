@@ -519,6 +519,7 @@ mod tests {
             } else {
                 Vec::new()
             },
+            media_allow: Vec::new(),
         }
     }
 

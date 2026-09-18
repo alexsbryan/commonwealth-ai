@@ -6059,7 +6059,9 @@ carries that as `IrohDialInfo::origins`, and the gossip self-stamp writes it
 into this node's own capabilities each round, after the hardware/corpora
 snapshot replaces them — so the advertisement is a fact about the LIVE acceptor,
 not about config, and a declared origin whose endpoint never bound is not
-offered. A closed enum, serde-defaulted and skipped when empty: a peer on an
+offered. `[iroh] media_allow` rides beside it the same way (`IrohDialInfo::media_allow`
+→ `NodeCapabilities::media_allow`, empty when no media route is live or nothing is
+narrowed) and reads back as `MediaOffer::offered_to`. A closed enum, serde-defaulted and skipped when empty: a peer on an
 older build reads as advertising none (absence, never an offer), and new→old
 wire bytes are unchanged. Two reads consume it. `GET /v1/mesh/media` with no
 `peer` — `svrn mesh media` bare — lists every active member other than self

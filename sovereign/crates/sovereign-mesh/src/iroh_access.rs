@@ -293,6 +293,9 @@ pub struct MeshIrohAccess {
     /// Whether this acceptor routes [`MEDIA_ALPN`] to a local media origin —
     /// the fact the gossip self-stamp advertises as `origins: [media]`.
     media_route_active: bool,
+    /// `[iroh] media_allow`, gossiped beside `origins: [media]` so a
+    /// member learns who the offer is for; empty when no media route is live.
+    media_allow: std::sync::Arc<Vec<String>>,
     /// The live app registry this acceptor routes [`APP_ALPN`] against —
     /// held rather than sampled, because whether this node publishes an app
     /// is advertised as `origins: [app]` in gossip and changes while the
@@ -701,13 +704,14 @@ impl MeshIrohAccess {
                  will be closed (federated inference from peers is off)"
             ),
         }
+        let routes_media_allow = std::sync::Arc::new(media_allow);
         let routes = AcceptorRoutes {
             internal: internal_addr,
             peer: peer_addr,
             guest: guest_addr,
             rpc: rpc_forward,
             media: media_origin,
-            media_allow: std::sync::Arc::new(media_allow),
+            media_allow: routes_media_allow.clone(),
             apps: apps.clone(),
             offer: offer.clone(),
             media_declared: std::sync::Arc::new(commonwealth_media::read_declared_in(
@@ -757,6 +761,11 @@ impl MeshIrohAccess {
             _acceptor: acceptor,
             rpc_route_active: rpc_forward.is_some(),
             media_route_active: media_origin.is_some(),
+            media_allow: if media_origin.is_some() {
+                routes_media_allow
+            } else {
+                std::sync::Arc::new(Vec::new())
+            },
             offer_route_active: offer.origin.is_some(),
             apps: apps.apps.clone(),
         })
@@ -796,6 +805,7 @@ impl MeshIrohAccess {
         // claimed tier is that the answer changes between two of them.
         let apps = self.apps.clone();
         let offer_route_active = self.offer_route_active;
+        let media_allow = self.media_allow.clone();
         std::sync::Arc::new(move || {
             // One kind per live route. Order is Media, App, Offer — the
             // enum's own order — so the gossiped array is stable across
@@ -821,6 +831,7 @@ impl MeshIrohAccess {
                 relay_url,
                 direct_addrs,
                 origins,
+                media_allow: media_allow.as_ref().clone(),
             }
         })
     }
