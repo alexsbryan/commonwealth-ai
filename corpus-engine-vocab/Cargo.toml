@@ -29,5 +29,15 @@ serde_json = { workspace = true }
 # persisted (curation overlays, pin lists), so the hash is part of the format.
 blake3 = "1"
 
+[dev-dependencies]
+# The compile-fail harness for `atoms_reds` — the structural half of the
+# `AtomsFile` invariant is a claim about what a caller OUTSIDE this crate
+# cannot construct, and trybuild is the only thing that can assert it. The
+# leaf's dev surface stays liftable: trybuild is a dev-dep, so it is not part
+# of the shipped closure boundary-gate checks (`boundary_gate.rs:577`).
+# Same version as `corpus-engine`'s `evidence_reds` suite (ARCH §8.2 — one
+# version per third-party crate across the workspace).
+trybuild = "1"
+
 [lints]
 workspace = true
