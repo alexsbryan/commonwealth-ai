@@ -6,13 +6,13 @@
 //! transcription."* §3's numbers came from a 12-node model that
 //! transcribed the scoring arithmetic by hand. These runs drive the
 //! production decision function itself
-//! (`sovereign_mesh::scheduler_core::rank`) over a simulated fleet,
+//! (`sovereign_scheduler::scheduler_core::rank`) over a simulated fleet,
 //! so a finding that survives here survives against the code.
 //!
 //! Run it and read the table:
 //!
 //! ```text
-//! cargo test -p sovereign-mesh --features mesh-sim,treesitter \
+//! cargo test -p sovereign-mesh --features dst,treesitter \
 //!     --test main mesh_sim_scoreboard -- --nocapture
 //! ```
 //!
@@ -25,12 +25,12 @@
 //! Without the feature this is an empty test binary, so the default
 //! workspace `cargo test` neither compiles nor runs it — same
 //! discipline as `dst_scenarios.rs`.
-#![cfg(feature = "mesh-sim")]
+#![cfg(feature = "dst")]
 
-use sovereign_mesh::mesh_sim::scenario::{self, RequestClass, Scenario};
-use sovereign_mesh::mesh_sim::scoreboard::{render, score, ArmScore};
-use sovereign_mesh::mesh_sim::{run, run_with, Arm, RunReport, SimConfig, ALL_ARMS};
 use sovereign_mesh::predicted_time::{self, PredictInputs, RequestShape};
+use sovereign_mesh_test_harness::mesh_sim::scenario::{self, RequestClass, Scenario};
+use sovereign_mesh_test_harness::mesh_sim::scoreboard::{render, score, ArmScore};
+use sovereign_mesh_test_harness::mesh_sim::{run, run_with, Arm, RunReport, SimConfig, ALL_ARMS};
 
 const SEED: u64 = 20_260_726;
 const GOSSIP_WINDOW_MS: u64 = 10_000;
@@ -239,7 +239,7 @@ impl Saturation {
 }
 
 fn saturation(report: &RunReport) -> Option<Saturation> {
-    let mut facts: Vec<&sovereign_mesh::mesh_sim::ServedFact> = report
+    let mut facts: Vec<&sovereign_mesh_test_harness::mesh_sim::ServedFact> = report
         .truth
         .iter()
         .filter(|f| f.class == RequestClass::Knowledge)
@@ -249,13 +249,13 @@ fn saturation(report: &RunReport) -> Option<Saturation> {
     }
     facts.sort_by_key(|f| f.dispatched_at_ms);
     let q = facts.len() / 4;
-    let mean_wait = |slice: &[&sovereign_mesh::mesh_sim::ServedFact]| -> f64 {
+    let mean_wait = |slice: &[&sovereign_mesh_test_harness::mesh_sim::ServedFact]| -> f64 {
         if slice.is_empty() {
             return 0.0;
         }
         slice.iter().map(|f| f.queue_wait_ms as f64).sum::<f64>() / slice.len() as f64 / 1000.0
     };
-    let mean_service = |slice: &[&sovereign_mesh::mesh_sim::ServedFact]| -> f64 {
+    let mean_service = |slice: &[&sovereign_mesh_test_harness::mesh_sim::ServedFact]| -> f64 {
         if slice.is_empty() {
             return 0.0;
         }

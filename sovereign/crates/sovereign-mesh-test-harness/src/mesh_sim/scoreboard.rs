@@ -17,7 +17,9 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use crate::decision_log::{DecisionEvent, RoutingDecision, RoutingOutcome, ServedBy, Verdict};
+use sovereign_scheduler::decision_log::{
+    DecisionEvent, RoutingDecision, RoutingOutcome, ServedBy, Verdict,
+};
 
 use super::scenario::RequestClass;
 use super::{Arm, RunReport};
@@ -284,7 +286,7 @@ pub fn tier_metrics(records: &[DecisionEvent]) -> TierMetrics {
         // cascade got there, not about which model ran.
         let served_name: Option<&str> = match served.get(d.decision_id.as_str()) {
             Some(ServedBy::Local { .. }) | Some(ServedBy::LocalFallback { .. }) => {
-                Some(crate::scheduler_core::LOCAL_CANDIDATE_NAME)
+                Some(sovereign_scheduler::scheduler_core::LOCAL_CANDIDATE_NAME)
             }
             Some(ServedBy::Peer { name, .. }) => Some(name.as_str()),
             // A request every cascade step failed has no served tier
@@ -295,7 +297,9 @@ pub fn tier_metrics(records: &[DecisionEvent]) -> TierMetrics {
                 .iter()
                 .find(|c| c.selected)
                 .map(|c| c.name.as_str())
-                .or(Some(crate::scheduler_core::LOCAL_CANDIDATE_NAME)),
+                .or(Some(
+                    sovereign_scheduler::scheduler_core::LOCAL_CANDIDATE_NAME,
+                )),
         };
         let Some(served_name) = served_name else {
             continue;
@@ -311,7 +315,7 @@ pub fn tier_metrics(records: &[DecisionEvent]) -> TierMetrics {
         let local_band = d
             .candidates
             .iter()
-            .find(|c| c.name == crate::scheduler_core::LOCAL_CANDIDATE_NAME)
+            .find(|c| c.name == sovereign_scheduler::scheduler_core::LOCAL_CANDIDATE_NAME)
             .and_then(|c| c.tier_band);
 
         m.banded_decisions += 1;
@@ -723,7 +727,7 @@ pub fn render(scenario: &str, seed: u64, scores: &[ArmScore]) -> String {
         ));
     }
     out.push_str(
-        "\ncapability (`crate::tier`): band 0 = the most capable models visible in that decision\n",
+        "\ncapability (`sovereign_scheduler::tier`): band 0 = the most capable models visible in that decision\n",
     );
     out.push_str("         down% = served in a WEAKER band than the origin's own local model — a real regression,\n");
     out.push_str("           and the one a tier-floor arm must hold at zero\n");
@@ -800,11 +804,11 @@ mod tests {
 
     #[test]
     fn origin_is_recovered_from_a_sim_request_id_and_falls_back_otherwise() {
-        let mut d = crate::decision_log::DecisionBuilder::new(
+        let mut d = sovereign_scheduler::decision_log::DecisionBuilder::new(
             "d-sim-7-1234",
             "sim-7-1234",
-            crate::decision_log::DecisionPath::RankedOicp,
-            crate::decision_log::RequestFacts {
+            sovereign_scheduler::decision_log::DecisionPath::RankedOicp,
+            sovereign_scheduler::decision_log::RequestFacts {
                 capability_hint: "general".into(),
                 latency_class: "Extended".into(),
                 sharding: "MeshAllowed".into(),

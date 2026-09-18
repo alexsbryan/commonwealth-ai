@@ -12766,6 +12766,7 @@ dependencies = [
  "oicp-types",
  "serde_json",
  "sovereign-api",
+ "sovereign-scheduler",
  "tokio",
  "tracing",
 ]

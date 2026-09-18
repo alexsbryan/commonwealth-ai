@@ -9,6 +9,13 @@ publish = false
 [dependencies]
 commonwealth-core = { workspace = true }
 oicp-types = { workspace = true }
+# The Tier-1 simulator (moved from sovereign-mesh by domains dm-mesh-sim-move)
+# replays the scheduler's routing records — `decision_log`, `oicp_select`,
+# `predicted_time`, `scheduler_core`, `tier` — so it names the ranker directly.
+# The harness's `[[forbid]] sovereign-mesh-test-harness -> sovereign-*`
+# (quality/ARCH_LAYERS.toml) carries `sovereign-scheduler` in its `except`
+# (HUMAN-forbid-harness-except, 2026-09-17).
+sovereign-scheduler = { workspace = true }
 commonwealth-transport = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

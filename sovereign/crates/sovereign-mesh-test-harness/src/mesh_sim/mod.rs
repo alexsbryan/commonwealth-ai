@@ -3,7 +3,7 @@
 //! **real** routing decision at thousands of scenarios per second.
 //!
 //! `SCHEDULER_QUALITY.md` §5, Phase 1 S0. The unlock is that the
-//! scheduling decision is a pure function ([`crate::scheduler_core`])
+//! scheduling decision is a pure function ([`sovereign_scheduler::scheduler_core`])
 //! and the expensive part — generating tokens — is exactly the part
 //! that does not affect it. So arm 0 here is not a model of the
 //! scheduler; it *is* the scheduler, handed simulated beliefs.
@@ -63,16 +63,16 @@ use oicp_types::{
     ProviderManifest,
 };
 
-use crate::decision_log::{
+use sovereign_scheduler::decision_log::{
     DecisionBuilder, DecisionEvent, DecisionPath, RequestFacts, RoutingOutcome, ServedBy, Verdict,
     DECISION_LOG_SCHEMA,
 };
-use crate::oicp_select::offload_eligible;
-use crate::predicted_time;
-use crate::scheduler_core::{
+use sovereign_scheduler::oicp_select::offload_eligible;
+use sovereign_scheduler::predicted_time;
+use sovereign_scheduler::scheduler_core::{
     self, LocalCandidateView, RankInputs, RankObjective, RankResult, VenueManifestView, VenueView,
 };
-use crate::tier::TierFloor;
+use sovereign_scheduler::tier::TierFloor;
 
 use rng::Rng;
 use scenario::{Arrival, RequestClass, Scenario};
@@ -475,7 +475,7 @@ pub enum Arm {
     /// dimensionless multipliers. The feasibility half is untouched —
     /// same hard gates, same candidate records, same scores recorded —
     /// so the delta against arm 0 is a delta of *objective* and of
-    /// nothing else. See [`crate::predicted_time`].
+    /// nothing else. See [`sovereign_scheduler::predicted_time`].
     ///
     /// Read it against [`Oracle`](Arm::Oracle), which minimises the
     /// same quantity with perfect knowledge of every queue. The two
@@ -1537,8 +1537,15 @@ impl Sim {
         let facts = request_facts(&req, arrival);
         self.seq += 1;
         let oicp_request_id = format!("sim-{origin}-{}", self.seq);
+        // The id is a deterministic sim-local join key, never the host's
+        // random mint: the simulator must not reach `sovereign-serving-host`
+        // (`[[forbid]] sovereign-mesh-test-harness -> sovereign-*` has no
+        // except for it — domains dm-mesh-sim-move, ralph/DECISIONS.md
+        // 2026-09-17) and a random id would break the module's stated
+        // determinism. `scoreboard::origin_of` reads `oicp_request_id`, not
+        // this id, so its shape is free.
         let rec = DecisionBuilder::new(
-            sovereign_serving_host::recorder::new_decision_id(),
+            format!("d-{oicp_request_id}"),
             &oicp_request_id,
             DecisionPath::RankedOicp,
             facts,
@@ -2204,7 +2211,7 @@ fn request_facts(req: &InferenceRequirements, arrival: &Arrival) -> RequestFacts
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::decision_log::DecisionEvent;
+    use sovereign_scheduler::decision_log::DecisionEvent;
 
     fn outcomes(report: &RunReport) -> Vec<&RoutingOutcome> {
         report
@@ -2217,7 +2224,7 @@ mod tests {
             .collect()
     }
 
-    fn decisions(report: &RunReport) -> Vec<&crate::decision_log::RoutingDecision> {
+    fn decisions(report: &RunReport) -> Vec<&sovereign_scheduler::decision_log::RoutingDecision> {
         report
             .records
             .iter()
@@ -2327,7 +2334,7 @@ mod tests {
     /// the scoreboard for a reason nobody chose.
     #[test]
     fn no_arrival_is_gated_out_by_its_own_size() {
-        use crate::decision_log::ExclusionReason;
+        use sovereign_scheduler::decision_log::ExclusionReason;
         let s = scenario::household_evening_12(13);
         let r = run(&s, Arm::AsImplemented, 13);
         for d in decisions(&r) {

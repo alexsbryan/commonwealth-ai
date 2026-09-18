@@ -117,7 +117,7 @@ keep_members() {
 # this replaced.
 resolve_features() {
     if [[ $# -eq 0 ]]; then
-        echo "corpus-engine/treesitter,sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli/awareness,sovereign-mesh/mesh-sim,sovereign-mesh/dst,sovereign-turn-client/bundled-backend"
+        echo "corpus-engine/treesitter,sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli/awareness,sovereign-mesh/dst,sovereign-turn-client/bundled-backend"
         return 0
     fi
 
@@ -171,16 +171,15 @@ if "sovereign-cli" in seen:
     # sovereign-cli and sovereign-mesh on every switch.
     want.append("sovereign-cli/awareness")
 if "sovereign-mesh" in seen:
-    # `mesh-sim` and `dst` compile a measurement harness and a
-    # fault-injection harness, both off by default so a production build
-    # never links them. The LINT gate already resolved mesh-sim, so
-    # tests/main/mesh_sim_scoreboard.rs (24) and scheduler_replay_agreement.rs
-    # (8) were COMPILED by one gate and RUN by neither; dst_scenarios.rs (7 —
-    # the mesh invariant pack under seeded fault injection) was in the same
-    # position with its CI job shelved since 2026-07-14. A harness nobody has
-    # watched fail is not a gate (ARCH_PRINCIPLES §18.1). Both are pure
-    # in-process compute — no GPU, no network, no weights (§12.4).
-    want.append("sovereign-mesh/mesh-sim")
+    # `dst` compiles the fault-injection harness and, through it, the Tier-1
+    # scheduler simulator that moved to `sovereign-mesh-test-harness` (domains
+    # dm-mesh-sim-move) — both off by default so a production build never links
+    # them. tests/main/mesh_sim_scoreboard.rs (24) and scheduler_replay_agreement.rs
+    # (8) run under it; dst_scenarios.rs (7 — the mesh invariant pack under
+    # seeded fault injection) was in the same position with its CI job shelved
+    # since 2026-07-14. A harness nobody has watched fail is not a gate
+    # (ARCH_PRINCIPLES §18.1). Both are pure in-process compute — no GPU, no
+    # network, no weights (§12.4).
     want.append("sovereign-mesh/dst")
     # `treesitter` gates 30+ integration files of sovereign-mesh
     # (the `#![cfg(feature = "treesitter")]` crate-gate: turn_surface.rs, knowledge_*,

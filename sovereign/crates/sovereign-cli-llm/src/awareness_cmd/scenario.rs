@@ -278,7 +278,7 @@ struct ScenarioScript {
 }
 
 /// An awareness-scenario manifest — unrelated to
-/// `sovereign_mesh::mesh_sim::scenario::Scenario` (a simulated mesh
+/// `sovereign_mesh_test_harness::mesh_sim::scenario::Scenario` (a simulated mesh
 /// topology) or the voice/moral bench scenarios.
 #[derive(Debug, Deserialize)]
 struct Scenario {
