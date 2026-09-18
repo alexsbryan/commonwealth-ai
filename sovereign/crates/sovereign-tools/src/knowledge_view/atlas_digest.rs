@@ -21,7 +21,8 @@
 
 use std::path::Path;
 
-use corpus_engine::enrichment::atlas::{AtomEnvelope, AtomsFile};
+use corpus_engine_vocab::atoms::AtomEnvelope;
+use corpus_engine_vocab::read::read_atlas_atoms;
 
 use super::tokens::estimate_tokens;
 
@@ -57,16 +58,15 @@ const SECTION_BULLET_CAP: usize = 5;
 /// fallback is preserved by the manager's branch rather than here, so
 /// this function only handles the populated path.
 pub(crate) fn render_atlas_digest(atlas_dir: &Path, budget_tokens: usize) -> String {
-    let atoms_path = atlas_dir.join("atoms.json");
-    let Ok(raw) = std::fs::read(&atoms_path) else {
-        tracing::debug!(
-            atlas_dir = %atlas_dir.display(),
-            "atlas_digest: atoms.json absent — caller should fall back"
-        );
-        return String::new();
-    };
-    let file: AtomsFile = match serde_json::from_slice(&raw) {
+    let file = match read_atlas_atoms(atlas_dir) {
         Ok(f) => f,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            tracing::debug!(
+                atlas_dir = %atlas_dir.display(),
+                "atlas_digest: atoms.json absent — caller should fall back"
+            );
+            return String::new();
+        }
         Err(e) => {
             tracing::warn!(
                 atlas_dir = %atlas_dir.display(),
