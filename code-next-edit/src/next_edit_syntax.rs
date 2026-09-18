@@ -36,6 +36,7 @@
 //! measured and rejected: it keeps buying precision but the marginal
 //! trade collapses from 4.3:1 to 1.5:1, and it is worst on TypeScript.
 
+use crate::grammar::GrammarLookup;
 use crate::next_edit::GuardedRule;
 
 /// Ancestors compared, including the innermost named node. 1 is too
@@ -95,26 +96,26 @@ pub struct SyntaxOracle {
 }
 
 impl SyntaxOracle {
-    /// Parse `text` using the grammar registered for `path`'s
+    /// Parse `text` using the grammar `lookup` registers for `path`'s
     /// extension. `None` when the language has no grammar, the buffer
     /// is too large, or the parse fails — every one of which means
     /// "cannot judge", and the caller must then leave sites alone.
     ///
-    /// The grammar comes from `corpus-engine`'s registry rather than a
-    /// second table here, so `.tsx` routing (which is a DIFFERENT
-    /// grammar from `.ts`, not a suffix of it) stays fixed in one place.
-    pub fn parse(path: &str, text: &str) -> Option<Self> {
+    /// The grammar comes from the host's registry (in the daemon,
+    /// `corpus-engine`'s) rather than a second table here, so `.tsx`
+    /// routing (which is a DIFFERENT grammar from `.ts`, not a suffix
+    /// of it) stays fixed in one place.
+    pub fn parse(path: &str, text: &str, lookup: GrammarLookup) -> Option<Self> {
         if text.len() > MAX_PARSE_BYTES {
             return None;
         }
         let ext = path.rsplit('.').next()?;
-        let cfg = corpus_engine::extractors::code::language_for_extension(ext)?;
+        let cfg = lookup(ext)?;
         if !PROVEN_LANGUAGES.contains(&cfg.id) {
             return None;
         }
-        let language: tree_sitter::Language = cfg.lang.into();
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(&language).ok()?;
+        parser.set_language(&cfg.language).ok()?;
         Some(Self {
             tree: parser.parse(text, None)?,
             decline_when_emptied: DECLINE_WHEN_EMPTIED.contains(&cfg.id),
@@ -222,6 +223,25 @@ fn edit_locus(find: &str, replace: &str) -> usize {
 mod tests {
     use super::*;
 
+    /// Test-only grammar lookup. The real registry is `corpus-engine`'s and
+    /// this package may not name it, so the tests register the grammars their
+    /// fixtures use — including the `.tsx` split, which is a DIFFERENT
+    /// grammar from `.ts` rather than a suffix of it.
+    fn lookup(ext: &str) -> Option<crate::grammar::Grammar> {
+        let (id, language): (&'static str, tree_sitter::Language) = match ext {
+            "rs" => ("rust", tree_sitter_rust::LANGUAGE.into()),
+            "ts" => (
+                "typescript",
+                tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+            ),
+            "tsx" => ("typescript", tree_sitter_typescript::LANGUAGE_TSX.into()),
+            "go" => ("go", tree_sitter_go::LANGUAGE.into()),
+            "py" => ("python", tree_sitter_python::LANGUAGE.into()),
+            _ => return None,
+        };
+        Some(crate::grammar::Grammar { id, language })
+    }
+
     fn rule(find: &str, replace: &str) -> GuardedRule {
         GuardedRule {
             find: find.into(),
@@ -239,7 +259,7 @@ mod tests {
         let text = "fn a() { let alpha = 1; }\n\
                     fn b() { let beta = 2; }\n\
                     // alpha is described here\n";
-        let o = SyntaxOracle::parse("x.rs", text).expect("rust grammar");
+        let o = SyntaxOracle::parse("x.rs", text, lookup).expect("rust grammar");
         let r = rule("alpha", "beta");
         let sites: Vec<usize> = text.match_indices("alpha").map(|(i, _)| i).collect();
         assert_eq!(sites.len(), 2, "one in code, one in the comment");
@@ -252,8 +272,8 @@ mod tests {
     /// registered grammar has to leave the lane exactly as it was.
     #[test]
     fn no_grammar_means_no_opinion() {
-        assert!(SyntaxOracle::parse("notes.txt", "alpha alpha").is_none());
-        assert!(SyntaxOracle::parse("noextension", "alpha").is_none());
+        assert!(SyntaxOracle::parse("notes.txt", "alpha alpha", lookup).is_none());
+        assert!(SyntaxOracle::parse("noextension", "alpha", lookup).is_none());
     }
 
     /// A rule the user has not applied anywhere yet gives the oracle no
@@ -262,7 +282,7 @@ mod tests {
     #[test]
     fn no_exemplar_means_every_site_survives() {
         let text = "fn a() { let alpha = 1; let alpha2 = alpha; }\n";
-        let o = SyntaxOracle::parse("x.rs", text).unwrap();
+        let o = SyntaxOracle::parse("x.rs", text, lookup).unwrap();
         let r = rule("alpha", "zzz_never_present");
         let sites: Vec<usize> = text.match_indices("alpha").map(|(i, _)| i).collect();
         assert_eq!(o.keep(text, &r, sites.clone()), sites);
@@ -291,14 +311,14 @@ mod tests {
                    const beta = 1;\n\
                    const alpha = 2;\n";
         assert!(
-            SyntaxOracle::parse("x.py", "alpha = 1\n").is_none(),
+            SyntaxOracle::parse("x.py", "alpha = 1\n", lookup).is_none(),
             "python is parseable but unmeasured — see PROVEN_LANGUAGES"
         );
         // ...while the measured three are admitted.
-        assert!(SyntaxOracle::parse("Row.tsx", tsx).is_some());
-        assert!(SyntaxOracle::parse("x.ts", tsx).is_some());
-        assert!(SyntaxOracle::parse("x.rs", "fn a() { let alpha = 1; }\n").is_some());
-        assert!(SyntaxOracle::parse("x.go", "func a() { alpha := 1 }\n").is_some());
+        assert!(SyntaxOracle::parse("Row.tsx", tsx, lookup).is_some());
+        assert!(SyntaxOracle::parse("x.ts", tsx, lookup).is_some());
+        assert!(SyntaxOracle::parse("x.rs", "fn a() { let alpha = 1; }\n", lookup).is_some());
+        assert!(SyntaxOracle::parse("x.go", "func a() { alpha := 1 }\n", lookup).is_some());
     }
 
     /// The guard that makes TypeScript shippable, and its absence on the
@@ -314,7 +334,7 @@ mod tests {
         let r = rule("alpha", "beta");
 
         let ts_body = "const beta = 1;\n// alpha\n";
-        let ts = SyntaxOracle::parse("x.ts", ts_body).expect("ts grammar");
+        let ts = SyntaxOracle::parse("x.ts", ts_body, lookup).expect("ts grammar");
         let ts_site = vec![ts_body.find("alpha").unwrap()];
         assert_eq!(
             ts.keep(ts_body, &r, ts_site.clone()),
@@ -323,7 +343,7 @@ mod tests {
         );
 
         let rs_body = "fn a() { let beta = 1; }\n// alpha\n";
-        let rs = SyntaxOracle::parse("x.rs", rs_body).expect("rust grammar");
+        let rs = SyntaxOracle::parse("x.rs", rs_body, lookup).expect("rust grammar");
         let rs_site = vec![rs_body.find("alpha").unwrap()];
         assert!(
             rs.keep(rs_body, &r, rs_site).is_empty(),

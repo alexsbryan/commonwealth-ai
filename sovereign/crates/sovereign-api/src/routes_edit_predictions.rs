@@ -3,9 +3,9 @@
 //! (`sovereign/docs/NEXT_EDIT.md` §3). Deliberately thin over the pure
 //! pipelines: parse + validate the wire shape, convert the client's
 //! UTF-16 offsets to bytes, predict, convert back. The rule lane
-//! ([`crate::next_edit`]) always runs first and needs no inference;
+//! ([`code_next_edit::next_edit`]) always runs first and needs no inference;
 //! when it declines AND the request opts in (`model_lane: true`), the
-//! model lane ([`crate::next_edit_model`]) may consult the resident
+//! model lane ([`code_next_edit::next_edit_model`]) may consult the resident
 //! FIM slot for a region rewrite — behind the same response shape,
 //! with `engine: "model"` and the drop-invalid posture: no suggestion
 //! beats a wrong one.
@@ -26,13 +26,15 @@ use serde::Deserialize;
 
 use futures::StreamExt;
 
-use crate::next_edit::{self, HistoryUnit};
-use crate::next_edit_model::{self, Consult};
-use crate::next_edit_symbols;
-use crate::next_edit_syntax;
 use crate::openai_types::{ChatCompletionRequest, ErrorResponse, StreamFrame};
 use crate::state::AppState;
+use code_next_edit::next_edit::{self, HistoryUnit};
+use code_next_edit::next_edit_model::{self, Consult};
+use code_next_edit::next_edit_symbols;
+use code_next_edit::next_edit_syntax;
 use oicp_types::FimCompletionRequest;
+
+pub mod outcome;
 
 /// Caps: a request past these is malformed, not merely large — the
 /// first-party client enforces the same limits before sending.
@@ -47,6 +49,19 @@ const MAX_UNIT_BYTES: usize = 2 * 1024;
 /// envelope. Anything larger cannot satisfy the caps below, so it is
 /// refused before serde allocates it rather than after.
 pub const MAX_BODY_BYTES: usize = 2 * 1024 * 1024;
+
+/// The host's grammar lookup for the next-edit lanes: `corpus-engine`'s
+/// registry, supplied through `code-next-edit`'s port so the package crate
+/// names no engine (docs/CODE_TOOLING_BOUNDARY.md §3 rule 4). The registry
+/// stays single-implemented here, which is what keeps `.tsx` routing (a
+/// DIFFERENT grammar from `.ts`) fixed in one place.
+pub fn grammar_for(ext: &str) -> Option<code_next_edit::grammar::Grammar> {
+    let cfg = corpus_engine::extractors::code::language_for_extension(ext)?;
+    Some(code_next_edit::grammar::Grammar {
+        id: cfg.id,
+        language: cfg.lang.into(),
+    })
+}
 
 /// Has the actionable symbol-lane warning already been said?
 ///
@@ -91,7 +106,7 @@ pub struct EditPredictionsRequestWire {
     #[serde(default)]
     pub model_lane: bool,
     /// Opt-in to the symbol lane: call-site NAVIGATION for a signature
-    /// edit (`crate::next_edit_symbols`). Off by default, and it
+    /// edit (`code_next_edit::next_edit_symbols`). Off by default, and it
     /// proposes no edits in any case — `navigation.sites` is a jump
     /// list. Requires `corpus_id`.
     #[serde(default)]
@@ -274,7 +289,7 @@ where
     let oracle = wire
         .path
         .as_deref()
-        .and_then(|p| next_edit_syntax::SyntaxOracle::parse(p, &wire.text));
+        .and_then(|p| next_edit_syntax::SyntaxOracle::parse(p, &wire.text, grammar_for));
     let p =
         next_edit::predict_filtered(&history, &wire.text, cursor, &|rule, sites| match &oracle {
             Some(o) => o.keep(&wire.text, rule, sites),
@@ -325,7 +340,7 @@ where
 
     // Built here, where every fact is still in scope, and written by the
     // route rather than by this function — see `PredictOutcome::episode`.
-    let episode = crate::next_edit_journal::episode_from(
+    let episode = code_next_edit::next_edit_journal::episode_from(
         engine,
         edits.len(),
         p.support,
@@ -648,9 +663,9 @@ pub async fn edit_predictions(
     // The developer's own local record of what this lane did. Off the
     // request path and unable to fail it: `record` drops the join handle
     // and turns any error into a `warn` (see that function).
-    crate::next_edit_journal::record_next_edit(sovereign_core::types::JournalLine::Episode(
-        out.episode,
-    ));
+    code_next_edit::next_edit_journal::record_next_edit(
+        sovereign_core::types::JournalLine::Episode(out.episode),
+    );
 
     Json(body).into_response()
 }
@@ -700,7 +715,7 @@ async fn symbol_lane(
     let cursor = next_edit::utf16_to_byte(&wire.text, wire.cursor);
     // Reads are confined to the declared root and to paths the INDEX
     // named — never to a path the request supplied.
-    next_edit_symbols::navigate(&graph, Some(&rel), &wire.text, cursor, |p| {
+    next_edit_symbols::navigate(&graph, Some(&rel), &wire.text, cursor, grammar_for, |p| {
         let candidate = root.join(p);
         if !candidate.starts_with(root) {
             return None;
@@ -1296,7 +1311,8 @@ mod tests {
         );
         assert_eq!(m["dropped"], "region_too_large");
         assert!(
-            m["region_bytes"].as_u64().unwrap() > crate::next_edit_model::MAX_REGION_BYTES as u64,
+            m["region_bytes"].as_u64().unwrap()
+                > code_next_edit::next_edit_model::MAX_REGION_BYTES as u64,
             "the drop must report what it saw"
         );
     }

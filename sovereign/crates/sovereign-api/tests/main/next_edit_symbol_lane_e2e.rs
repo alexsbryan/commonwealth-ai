@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! End-to-end proof of the symbol-lane navigation affordance
-//! (`sovereign_api::next_edit_symbols`), against a REAL `ScipGraph`
+//! (`code_next_edit::next_edit_symbols`), against a REAL `ScipGraph`
 //! and real files on disk — not a mock of either.
 //!
 //! What each test drives: an indexed function whose signature the
@@ -17,8 +17,9 @@
 //! that is a `use` import rather than a call. There is a test for each,
 //! and each fails if the corresponding guard is removed.
 
+use code_next_edit::next_edit_symbols::{navigate, Decline};
 use corpus_engine_scip::scip_graph::{ScipGraph, ScipRefRecord, ScipSymbolRecord};
-use sovereign_api::next_edit_symbols::{navigate, Decline};
+use sovereign_api::routes_edit_predictions::grammar_for;
 
 const CORPUS: &str = "e2e-symbol-lane";
 
@@ -116,9 +117,16 @@ async fn a_signature_edit_names_every_call_site_and_no_import() {
     let (dir, graph) = fixture().await;
     let cursor = EDITED.find("c: u8").expect("cursor in the new parameter");
 
-    let nav = navigate(&graph, Some("lib.rs"), EDITED, cursor, reader(dir.path()))
-        .await
-        .expect("the lane should fire on a changed parameter list");
+    let nav = navigate(
+        &graph,
+        Some("lib.rs"),
+        EDITED,
+        cursor,
+        grammar_for,
+        reader(dir.path()),
+    )
+    .await
+    .expect("the lane should fire on a changed parameter list");
 
     assert_eq!(nav.symbol, "helper");
     let jumps: Vec<(String, i32)> = nav.sites.iter().map(|s| (s.path.clone(), s.line)).collect();
@@ -163,7 +171,15 @@ async fn an_unchanged_signature_does_not_fire() {
     let (dir, graph) = fixture().await;
     let cursor = DECL.find("b: usize").unwrap();
     assert_eq!(
-        navigate(&graph, Some("lib.rs"), DECL, cursor, reader(dir.path())).await,
+        navigate(
+            &graph,
+            Some("lib.rs"),
+            DECL,
+            cursor,
+            grammar_for,
+            reader(dir.path())
+        )
+        .await,
         Err(Decline::SignatureUnchanged)
     );
 }
@@ -178,7 +194,15 @@ async fn a_function_the_index_does_not_know_declines_by_name() {
     let src = "pub fn brand_new(a: usize, b: u8) {}\n";
     let cursor = src.find("b: u8").unwrap();
     assert_eq!(
-        navigate(&graph, Some("lib.rs"), src, cursor, reader(dir.path())).await,
+        navigate(
+            &graph,
+            Some("lib.rs"),
+            src,
+            cursor,
+            grammar_for,
+            reader(dir.path())
+        )
+        .await,
         Err(Decline::SymbolNotIndexed)
     );
 }
@@ -188,7 +212,15 @@ async fn editing_the_body_never_reaches_the_graph() {
     let (dir, graph) = fixture().await;
     let cursor = EDITED.find("a + b").unwrap();
     assert_eq!(
-        navigate(&graph, Some("lib.rs"), EDITED, cursor, reader(dir.path())).await,
+        navigate(
+            &graph,
+            Some("lib.rs"),
+            EDITED,
+            cursor,
+            grammar_for,
+            reader(dir.path())
+        )
+        .await,
         Err(Decline::CursorNotInParameterList)
     );
 }
@@ -216,7 +248,15 @@ async fn an_overload_set_refuses_rather_than_offering_the_union() {
         .unwrap();
     let cursor = EDITED.find("c: u8").unwrap();
     assert_eq!(
-        navigate(&graph, Some("lib.rs"), EDITED, cursor, reader(dir.path())).await,
+        navigate(
+            &graph,
+            Some("lib.rs"),
+            EDITED,
+            cursor,
+            grammar_for,
+            reader(dir.path())
+        )
+        .await,
         Err(Decline::AmbiguousSymbol)
     );
 }
@@ -233,9 +273,16 @@ async fn a_call_site_whose_line_moved_since_the_save_is_dropped_not_pointed_at()
     )
     .unwrap();
     let cursor = EDITED.find("c: u8").unwrap();
-    let nav = navigate(&graph, Some("lib.rs"), EDITED, cursor, reader(dir.path()))
-        .await
-        .unwrap();
+    let nav = navigate(
+        &graph,
+        Some("lib.rs"),
+        EDITED,
+        cursor,
+        grammar_for,
+        reader(dir.path()),
+    )
+    .await
+    .unwrap();
     assert_eq!(nav.sites.len(), 1);
     assert_eq!(nav.sites[0].path, "a.rs");
     assert_eq!(nav.dropped, 2, "the import and the moved line");

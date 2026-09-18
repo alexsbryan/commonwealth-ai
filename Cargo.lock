@@ -1851,6 +1851,19 @@ dependencies = [
 [[package]]
 name = "code-next-edit"
 version = "0.7.0"
+dependencies = [
+ "corpus-engine-scip",
+ "serde",
+ "serde_json",
+ "sovereign-contracts",
+ "tokio",
+ "tracing",
+ "tree-sitter",
+ "tree-sitter-go",
+ "tree-sitter-python",
+ "tree-sitter-rust",
+ "tree-sitter-typescript",
+]
 
 [[package]]
 name = "codepage"
@@ -12038,6 +12051,7 @@ dependencies = [
  "axum",
  "bytes",
  "chrono",
+ "code-next-edit",
  "commonwealth-core",
  "commonwealth-discovery",
  "commonwealth-rail",

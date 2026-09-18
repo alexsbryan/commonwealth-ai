@@ -27,11 +27,11 @@ pub use commonwealth_transport::fanout;
 pub mod frontdoor;
 pub mod headers;
 pub mod middleware;
-pub mod next_edit;
-pub mod next_edit_journal;
-pub mod next_edit_model;
-pub mod next_edit_symbols;
-pub mod next_edit_syntax;
+pub use code_next_edit::next_edit; // shim: moved by domains dm-next-edit-move
+pub use code_next_edit::next_edit_journal; // shim: moved by domains dm-next-edit-move
+pub use code_next_edit::next_edit_model; // shim: moved by domains dm-next-edit-move
+pub use code_next_edit::next_edit_symbols; // shim: moved by domains dm-next-edit-move
+pub use code_next_edit::next_edit_syntax; // shim: moved by domains dm-next-edit-move
 pub use oicp_types::openai_types; // shim: moved by domains dm-wire-openai-types
 pub mod principal;
 pub mod reshaping;

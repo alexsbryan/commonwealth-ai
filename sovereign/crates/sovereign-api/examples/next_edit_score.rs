@@ -48,7 +48,7 @@ use axum::extract::State;
 use axum::response::{IntoResponse, Response};
 use axum::routing::post;
 use axum::Json;
-use sovereign_api::next_edit_model::Prompt;
+use code_next_edit::next_edit_model::Prompt;
 use sovereign_api::routes_edit_predictions::{
     predict_response, validate_wire, EditPredictionsRequestWire, InferError, InferenceCall,
     ModelSlot,

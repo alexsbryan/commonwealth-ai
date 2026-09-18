@@ -1,21 +1,24 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Daemon side of the next-edit journal: build the record, append it
-//! without ever letting that failure reach the developer, and accept the
-//! editor's outcome report.
+//! The next-edit journal's policy half: build the record and append it
+//! without ever letting that failure reach the developer.
 //!
 //! The record model, the file layout and the honesty rules for the
-//! counts live in `sovereign_core::types::next_edit_journal` (one
-//! schema, shared with `svrn journal`). What lives HERE is the daemon's
-//! policy on top of it, which is entirely about invisibility:
+//! counts live in `sovereign_contracts::types::next_edit_journal` (one
+//! schema, shared with `svrn journal`). What lives HERE is the policy on
+//! top of it, which is entirely about invisibility:
 //!
 //! - **Nothing in this module may fail a request.** The append runs
-//!   off-thread and its errors become one `tracing::warn!`. The outcome
-//!   route answers `204` and is not something the extension checks.
+//!   off-thread and its errors become one `tracing::warn!`.
 //! - **The editor must never learn that journaling is off.** A disabled
 //!   journal still gets an `episode_id` on the response and still
 //!   accepts outcome POSTs; the writes are simply dropped. An extension
 //!   that could tell would grow a branch, and the branch would grow a
 //!   message (decision note `09599af1`).
+//!
+//! The outcome ROUTE (`POST /v1/edit_predictions/outcome`) is a host
+//! route shell and lives with the surface that mounts it
+//! (`sovereign-api`'s `routes_edit_predictions`); it calls
+//! [`record_next_edit`] here.
 //!
 //! # The extraction allowlist
 //!
@@ -28,13 +31,8 @@
 //! a new debug field is invisible to the journal until someone adds its
 //! name here, which is the review this design wants to force.
 
-use axum::http::StatusCode;
-use axum::response::{IntoResponse, Response};
-use axum::Json;
-use serde::Deserialize;
-use sovereign_core::types::{
-    journal_dir, JournalLine, JournalStream, NextEditEpisode, NextEditOutcome, NextEditOutcomeLine,
-    NEXT_EDIT_STREAM,
+use sovereign_contracts::types::{
+    journal_dir, JournalLine, JournalStream, NextEditEpisode, NEXT_EDIT_STREAM,
 };
 
 /// Assemble the episode record for one prediction.
@@ -116,146 +114,9 @@ pub fn record_next_edit(line: JournalLine) {
     record(NEXT_EDIT_STREAM, line);
 }
 
-/// The body of `POST /v1/edit_predictions/outcome`.
-#[derive(Debug, Deserialize)]
-pub struct OutcomeWire {
-    /// The `episode_id` the prediction response carried.
-    pub episode_id: String,
-    /// One of `accepted` | `dismissed` | `diverged` | `superseded`.
-    pub outcome: String,
-}
-
-/// POST /v1/edit_predictions/outcome — what the developer did with a
-/// suggestion.
-///
-/// Answers `204` on success and `400` on a malformed body. Both are
-/// invisible: the extension posts and ignores the result, and an older
-/// daemon that 404s this route costs nothing but an unreported episode
-/// (counted as `unknown`, never as `dismissed`).
-///
-/// The 400 is not a user-facing error — it is a *contract* check, and it
-/// exists because the alternative is worse. An unrecognized outcome
-/// string quietly coerced to `dismissed` would corrupt the single number
-/// this whole subsystem exists to produce, so an unknown value is
-/// refused rather than substituted (ARCH §18.3).
-pub async fn edit_prediction_outcome(Json(wire): Json<OutcomeWire>) -> Response {
-    let Some(outcome) = NextEditOutcome::from_wire(&wire.outcome) else {
-        tracing::debug!(
-            target: "next_edit",
-            outcome = %wire.outcome,
-            "rejected an unrecognized next-edit outcome"
-        );
-        return StatusCode::BAD_REQUEST.into_response();
-    };
-    if wire.episode_id.trim().is_empty() {
-        return StatusCode::BAD_REQUEST.into_response();
-    }
-    tracing::debug!(
-        target: "next_edit",
-        episode = %wire.episode_id,
-        outcome = outcome.as_str(),
-        "next-edit outcome"
-    );
-    record_next_edit(JournalLine::Outcome(NextEditOutcomeLine::new(
-        wire.episode_id,
-        outcome,
-    )));
-    StatusCode::NO_CONTENT.into_response()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// covers: IN-27
-    ///
-    /// Outcome reporting adds ZERO user-visible surface. The editor extension
-    /// posts and drops the result, so the only way this route can hurt a
-    /// developer is by doing something an ignore-the-result caller cannot
-    /// ignore: hanging, panicking (a 500 that some HTTP clients surface), or
-    /// answering with a status the extension does not already treat as
-    /// nothing-happened.
-    ///
-    /// The 400 half is the other guarantee, and it is the reason the route
-    /// cannot just accept anything: an unrecognised outcome coerced to
-    /// `dismissed` would corrupt the single number this subsystem exists to
-    /// produce, so it is refused rather than substituted (ARCH §18.3).
-    /// Driven over a router because the status code IS the contract.
-    #[tokio::test]
-    async fn the_outcome_route_answers_204_or_400_and_never_5xx() {
-        use axum::body::Body;
-        use axum::http::{Request, StatusCode};
-        use axum::routing::post;
-        use axum::Router;
-        use tower::ServiceExt;
-
-        let router = Router::new().route(
-            "/v1/edit_predictions/outcome",
-            post(edit_prediction_outcome),
-        );
-
-        async fn post_body(router: &Router, body: &str) -> StatusCode {
-            router
-                .clone()
-                .oneshot(
-                    Request::builder()
-                        .method("POST")
-                        .uri("/v1/edit_predictions/outcome")
-                        .header("content-type", "application/json")
-                        .body(Body::from(body.to_string()))
-                        .unwrap(),
-                )
-                .await
-                .expect("the route must always answer")
-                .status()
-        }
-
-        // Every outcome the extension can report. All four must be accepted
-        // by name — one silently rejected here is an episode counted as
-        // `unknown` forever, which is the measurement this lane produces.
-        for outcome in ["accepted", "dismissed", "diverged", "superseded"] {
-            let status = post_body(
-                &router,
-                &format!(r#"{{"episode_id":"ep-1","outcome":"{outcome}"}}"#),
-            )
-            .await;
-            assert_eq!(
-                status,
-                StatusCode::NO_CONTENT,
-                "`{outcome}` is a recognised outcome and must be accepted"
-            );
-        }
-
-        // A contract violation is a 400 — refused, not coerced.
-        for body in [
-            r#"{"episode_id":"ep-1","outcome":"maybe"}"#,
-            r#"{"episode_id":"ep-1","outcome":""}"#,
-            r#"{"episode_id":"","outcome":"accepted"}"#,
-            r#"{"episode_id":"   ","outcome":"accepted"}"#,
-        ] {
-            let status = post_body(&router, body).await;
-            assert_eq!(
-                status,
-                StatusCode::BAD_REQUEST,
-                "a malformed report must be refused, never coerced: {body}"
-            );
-        }
-
-        // Nothing the extension can send produces a 5xx, which is the class
-        // an editor is entitled to surface to the developer.
-        for body in [
-            r#"{"episode_id":"ep-1","outcome":"accepted"}"#,
-            r#"{"episode_id":"ep-1","outcome":"maybe"}"#,
-            r#"{"not":"even the right shape"}"#,
-            r#"not json at all"#,
-        ] {
-            let status = post_body(&router, body).await;
-            assert!(
-                !status.is_server_error(),
-                "an advisory journal write must never answer 5xx: {body} -> {status}"
-            );
-        }
-    }
 
     /// The debug value the model lane produces on its richest path,
     /// including every code-bearing key the journal must not read.
@@ -374,6 +235,7 @@ mod tests {
 
     #[test]
     fn every_outcome_spelling_the_extension_sends_is_accepted() {
+        use sovereign_contracts::types::NextEditOutcome;
         for o in NextEditOutcome::ALL {
             assert_eq!(NextEditOutcome::from_wire(o.as_str()), Some(o));
         }

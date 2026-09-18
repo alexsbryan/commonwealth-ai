@@ -1572,3 +1572,92 @@ case the move has no legal destination and the row stops (§6).
 **Landed in.** this commit — the two moves, the `sovereign-contracts`/`oicp-types`
 deps on `corpus-engine-notes`, the shims, the `fan_in.tsv` hand-raise (31 → 32),
 `SYSTEM_OVERVIEW.md` §10.1ac, the `ralph/STATE.md` row correction and this entry.
+
+## 2026-09-17 · dm-next-edit-move · the shell cannot leave sovereign-api before `server.rs`; the registry rides a port; two fan-ins hand-raised
+
+**Fork.** The row MOVEs five pure workbench modules to `code-next-edit` and
+`routes_edit_predictions.rs` to `sovereign-daemon`, and says "every consumer
+repoints (`sovereign-cli/src/journal_cmd/{mod,next_edit}.rs`,
+sovereign-cli-daemon/{lib.rs, daemon_cmd/build/inference.rs, setup_cmd/fim.rs}`)".
+Measured, three premises are false. (1) The shell cannot move: it is mounted by
+`sovereign-api::server::client_router_for` (`server.rs:161-177`) and the daemon
+builds its routers by calling that fn (`daemon.rs:3625-3661`), so
+`sovereign-api → sovereign-daemon` is a Cargo cycle (the daemon already names
+sovereign-api, `Cargo.toml:9`) on top of `[[forbid]] sovereign-api ->
+sovereign-*` with no `sovereign-daemon` except (`ARCH_LAYERS.toml:711-714`).
+(2) The named consumers do not name the moved modules at all — they read the
+`sovereign_contracts` journal schema, the `next_edit` tracing target and
+`NextEditFormat`. (3) `next_edit_model.rs` carries
+`include_str!("prompts/instinct_system.txt")`, so `src/prompts/` must move with
+it. The row's own correction still stands: the tree-sitter registry is
+package-illegal, and the journal module carries one route shell.
+
+**Choice.**
+
+1. Move the five pure modules now. Leave `routes_edit_predictions.rs` in
+   `sovereign-api`, repointed at `code_next_edit::*`; it lands with `server.rs`
+   at `dm-daemon-api-edge`, whose scope already includes "the routes
+   (`routes_internal/*` + `routes_*.rs`)". This is the same deferral
+   `REVIEW-build-api-host-decouple` recorded for the shell's `AppState` reads
+   (2026-09-16).
+2. The tree-sitter registry rides a **port**, not a leaf carve. The row offered
+   "carve the registry into a leaf or reach it through a port"; the port is the
+   smaller behaviour-preserving step (ARCH 2), keeps ONE registry so `.tsx`
+   routing cannot drift (ARCH 8), and adds no crate/workspace/layer/package
+   rows. `code-next-edit/src/grammar.rs` declares `Grammar` + `GrammarLookup`
+   (a `fn` pointer — the package's own injection shape,
+   CODE_TOOLING_BOUNDARY.md §3 rule 5); `sovereign-api`'s
+   `routes_edit_predictions::grammar_for` is the one place `corpus-engine` is
+   named.
+3. The journal outcome route splits to a host route shell,
+   `sovereign-api/src/routes_edit_predictions/outcome.rs`, not to the daemon
+   (blocked by (1)) and not an `axum` dep in the package crate (no code-intel
+   crate carries axum; DAEMON_CORE.md §4.1's placement test puts a route shell
+   with the surface that mounts it). `server.rs:176` repoints at it.
+4. Two fan-ins are hand-raised — `corpus-engine-scip` 10 → 11 (the symbol lane
+   opens a `ScipGraph`) and `sovereign-contracts` 32 → 33 (the journal schema is
+   a shared leaf) — with a `SYSTEM_OVERVIEW.md` §10.1ad ledger. `--update-baseline`
+   was not run (PROMPT §7).
+
+**Evidence** (reproduced this session).
+
+- The cycle and the mount: `sovereign-daemon/Cargo.toml` names `sovereign-api`;
+  `server.rs:161-177` mounts `/v1/edit_predictions` and
+  `/v1/edit_predictions/outcome` inside `client_router_for`; `daemon.rs:3625-3661`
+  calls `sovereign_api::server::{client_router, client_router_for}` for four
+  surfaces. `ARCH_LAYERS.toml:711-714` is the forbid, its except list lacking
+  `sovereign-daemon`.
+- The consumers: `git grep -n 'sovereign_api::next_edit\|next_edit_journal::'`
+  hits only `routes_edit_predictions.rs`, `server.rs`, `examples/next_edit_score.rs`
+  and `tests/main/next_edit_symbol_lane_e2e.rs`; the row's cli/cli-daemon files
+  name only `sovereign_contracts::types::next_edit_journal`, the `next_edit`
+  tracing target and `NextEditFormat`.
+- The registry is package-illegal and the port fixes it: `cargo xtask
+  boundary-gate` → exit 0, "code-intel 6/6 crates present"; the pre-port failure
+  (`✗ [code-intel] code-next-edit → corpus-engine`) is the 2026-09-16 entry's.
+- The fan-ins are real, not inferred: `cargo xtask layer-gate` before the
+  hand-raise → `✗ fan-in of corpus-engine-scip grew 10 → 11` and `✗ fan-in of
+  sovereign-contracts grew 32 → 33`; after → exit 0, "fan-in within caps".
+- Checks: CLEAN exit=0; LINT exit=0 (WORKSPACE, errors: 0); LAYER exit=0;
+  BOUNDARY exit=0; TOML exit=0; CENSUS exit=0 (11/11 positives caught, 11/11
+  negatives refused); TEST(code-next-edit) exit=0 (75 pass, 0 fail);
+  TEST(sovereign-api) exit=0 (481 pass, 0 fail).
+- `docs-gate` is RED at HEAD with three pre-existing unresolved citations
+  (`sovereign-api/src/middleware/decision_extractor.rs`,
+  `sovereign-tools/src/notes/response_mine.rs`, `sovereign-mesh/src/mesh_sim/mod.rs`),
+  each in an earlier lane's §10.1 ledger entry and none introduced here (verified
+  against `HEAD:sovereign/SYSTEM_OVERVIEW.md`). This commit adds no docs-gate
+  failure; the three belong to the lanes that moved those files.
+
+**Falsified by.** A showing that `server.rs` can leave `sovereign-api` before
+`dm-daemon-api-edge` (then the shell moves now); or that the grammar registry is
+already reachable from a package crate (`corpus-engine-scip` exports no
+`language_for_extension`, and a `corpus-engine-scip → corpus-engine` edge is a
+cycle); or an operator `[[exception]]` for `code-next-edit → corpus-engine`
+plus the fan-in raise, which would let the registry be named directly.
+
+**Landed in.** this commit — the five moves plus `code-next-edit/src/prompts/`,
+`code-next-edit/src/grammar.rs`, the host `routes_edit_predictions/outcome.rs`,
+the `sovereign-api` shims, the DT `[[module]]` re-keys, the
+`fan_in.tsv`/`oversized.txt` re-keys, `SYSTEM_OVERVIEW.md` §10.1ad, the
+conformance row, the `ralph/STATE.md` row correction and this entry.

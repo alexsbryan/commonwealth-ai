@@ -1720,7 +1720,7 @@ _Historical record below — the reasoning while this row was `preview`._
   `symbol_lane` request field defaults `false`, so any other client is
   unaffected until it asks. Rust only because it is the sole language
   the SCIP graph indexes — `TRIGGER_LANGUAGES` in
-  `commonwealth-api/src/next_edit_symbols.rs`.
+  `code-next-edit/src/next_edit_symbols.rs`.
 - **What it does:** when the cursor is in a function's parameter list
   AND that list differs from the last save, it names that function's
   call sites — `path`, `line`, `col`, preview — as a jump list

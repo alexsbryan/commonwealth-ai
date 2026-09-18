@@ -47,7 +47,7 @@ asserts = 4
 
 [[claim]]
 requirement = "IN-27"
-test = "sovereign-api::next_edit_journal::tests::the_outcome_route_answers_204_or_400_and_never_5xx"
-file = "sovereign/crates/sovereign-api/src/next_edit_journal.rs"
-line = 185
+test = "sovereign-api::routes_edit_predictions::outcome::tests::the_outcome_route_answers_204_or_400_and_never_5xx"
+file = "sovereign/crates/sovereign-api/src/routes_edit_predictions/outcome.rs"
+line = 90
 asserts = 3
