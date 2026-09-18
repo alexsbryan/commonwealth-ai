@@ -1,0 +1,17 @@
+unit: dm-vocab-door-move
+commits: c24b038f1 (the move), 162014cd9 (the row correction)
+what: read_atlas_atoms and read_atlas_edges moved from
+  corpus-engine/src/enrichment/atlas/writer.rs into corpus-engine-vocab/src/read.rs,
+  re-exported at the historical writer path. The row named four readers; two cannot
+  move, verified this session (PROMPT §6 correction on the row + ralph/DECISIONS.md
+  2026-09-17): read_atlas_ontology returns AtlasOntologyFile (writer.rs:378, not
+  vocab) and calls tracing::warn!, and DM §10.5 / DT:3092 decide it is MINTED, not
+  moved; read_atlas_cross_corpus_edges returns CrossCorpusEdgesFile
+  (cross_corpus.rs:132) with its closure CrossCorpusEdge/CrossCorpusAtomRef/MatchTrace,
+  so it is deferred to a follow-on REVIEW-build row (type-home decision, §4).
+  corpus-engine-vocab/src/read.rs gained its [[module]] row (context understanding).
+checks: CLEAN exit=0 (0G, under 50G); LINT exit=0 (corpus-engine-vocab,
+  corpus-engine + 21 dependents, 0 errors); LAYER exit=0; TEST(corpus-engine-vocab)
+  exit=0 (pass 54, fail 0); TEST(corpus-engine) exit=0 (pass 2299, fail 0);
+  misnamed exit=0; atom-outside 12 unchanged; crate-lines --crate corpus-engine-vocab
+  5304 -> 5346.
