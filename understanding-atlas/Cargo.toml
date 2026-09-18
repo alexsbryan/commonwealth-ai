@@ -1,0 +1,12 @@
+[package]
+name = "understanding-atlas"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Understanding's pure tier — the arithmetic over the published language: analysis, resolution by name, classification, the ground walk, domains, ontology, reconciliation, pipeline types and schemas, meta-atlas and traversal logic. Names the language, kernel-types and the index leaf's row types; no async fn. A stub until the classification lands (DE Step 7, redrawn)."
+
+[dependencies]
+
+[lints]
+workspace = true

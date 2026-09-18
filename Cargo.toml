@@ -70,10 +70,17 @@ members = [
     "understanding-vocab",
     # The retrieval read-port leaf — CorpusIndex, IndexInfo, the persisted
     # settings and the search/evidence surface. Carved out of corpus-engine by
-    # domains REVIEW-build-index-read-port (DE "The read-port leaf, measured
-    # again") so a thin host can open an index by corpus id without linking the
+    # domains REVIEW-build-index-read-port (DE: The read-port leaf, measured
+    # again) so a thin host can open an index by corpus id without linking the
     # engine that produced it.
     "corpus-index",
+    # Understanding's two carved tiers (DE Step 7, redrawn; the domains
+    # campaign's rung 7). `understanding-atlas` is the pure arithmetic over the
+    # published language and `understanding-host` the ports and the knot; both
+    # are stubs until REVIEW-mint-understanding-tiers classifies the 170-file
+    # cluster and mints the move rows.
+    "understanding-atlas",
+    "understanding-host",
     # The thin knowledge host — cited search + atlas atom lookup over MCP/stdio
     # against any OpenAI-compatible endpoint; links corpus-engine + the vocab
     # leaf and nothing that carries llama.cpp, ort or iroh (enrichment-as-plugin

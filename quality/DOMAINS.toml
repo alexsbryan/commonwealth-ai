@@ -77,8 +77,8 @@ owns = ["Atom", "Tension", "Ontology", "Seed", "Atlas", "Lacuna", "FieldModel"]
 # SeededResponse/SeededWire->RulesAsserted*, SeedPlan->ConversationFixturePlan;
 # 37 refs / 11 files); SeedError/SeedReport are Understanding's own. `Cluster`
 # is never persisted under atlas/ (writer.rs has zero matches) — not a noun.
-package = ""
-crates = ["understanding-vocab", "understanding-atlas", "understanding-host"]   # + the understanding crate wave 3 creates (DECOMPOSITION spells it corpus-engine-enrichment); until then enrichment/ is misfiled in corpus-engine
+package = "understanding"   # declared 2026-09-18 by REVIEW-build-understanding-tier-crates (ARCH_LAYERS.toml `[[package]] understanding`); boundary-gate is RED until the host half names corpus-engine, so the predicate still fails
+crates = ["understanding-vocab", "understanding-atlas", "understanding-host"]   # understanding-atlas/-host created as stubs 2026-09-18; enrichment/ is still misfiled in corpus-engine until the classification and move rows land
 lift = ""
 applicable_as = "point it at a folder, get back what the material is about — its domains, its tensions, its gaps; corpus-mcp already reads its output against a bare llama-server"
 roots = ["corpus-engine/src/enrichment", "corpus-engine/src/meta_atlas", "corpus-engine/src/atlas_traversal", "understanding-vocab"]
@@ -7451,6 +7451,18 @@ path = "understanding-vocab/src/taxonomy.rs"
 context = "unknown"
 lines = 282
 note = ""
+
+[[module]]
+path = "understanding-atlas/src/lib.rs"
+context = "understanding"
+lines = 11
+note = "Understanding's pure tier, created as a stub by domains REVIEW-build-understanding-tier-crates (DE Step 7, redrawn; `[[package]] understanding`). The arithmetic over the published language lands here once REVIEW-mint-understanding-tiers classifies the 170-file cluster."
+
+[[module]]
+path = "understanding-host/src/lib.rs"
+context = "understanding"
+lines = 10
+note = "Understanding's host tier, created as a stub by domains REVIEW-build-understanding-tier-crates (DE Step 7, redrawn; `[[package]] understanding`). The ports and the knot land here once REVIEW-mint-understanding-tiers classifies the 170-file cluster."
 
 [[module]]
 path = "corpus-engine-watchers/src/error.rs"

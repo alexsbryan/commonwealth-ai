@@ -170,6 +170,14 @@ crates = ["corpus-engine", "corpus-engine-*",
     # published language, a `knowledge` leaf beside the `corpus-engine-*`
     # carve-outs it left.
     "understanding-vocab",
+    # Understanding's two carved tiers (DE "Step 7, redrawn", "The shape";
+    # domains REVIEW-build-understanding-tier-crates). `understanding-atlas` is
+    # the pure arithmetic over the published language, `understanding-host` the
+    # ports and the knot. Both sit beside the `corpus-engine-*` carve-outs they
+    # will receive files from; the `[[package]] understanding` block below is
+    # what keeps their edges honest. Stubs until the classification lands.
+    "understanding-atlas",
+    "understanding-host",
 ]
 
 # Commonwealth mesh internals BELOW the runtime: shared mesh types + state +
@@ -1157,6 +1165,40 @@ crates = [
     "serving-policy",
 ]
 
+[[package]]
+name = "understanding"
+doc = "corpus-engine/DECOMPOSITION.md"
+# The Understanding context's package (DE "Step 7, redrawn"; quality/DOMAINS.toml
+# [[context]] understanding). Declared 2026-09-18 by domains
+# REVIEW-build-understanding-tier-crates, BEFORE the work that fills it, for the
+# reason the `commonwealth` block above gives: no gate here can tell "the files
+# moved" from "the boundary holds". RED the day it is declared (ARCH §18.1): the
+# two tiers are empty stubs, so the one grandfathered edge below is STALE until
+# the host half names `corpus-engine`.
+#
+# THE TWO TIERS (DE "The shape"). `understanding-atlas` is arithmetic over the
+# published language — analysis, resolution by name, classification, the ground
+# walk, domains, ontology, reconciliation, the pipeline types and schemas, the
+# meta-atlas and traversal logic — and may name the language
+# (`understanding-vocab`, a shared leaf below), `kernel-types` and the row types
+# the `corpus-index` leaf publishes; it carries `no async fn`.
+# `understanding-host` is the ports and the knot — stores and the ANN, writers,
+# the field engine, entity extraction, the phase runner — and reaches
+# `corpus-engine`, the `corpus-index` leaf, the pure tier and the language.
+#
+# WHY A PACKAGE, NOT `corpus-mcp` GROWING. DE "This is the `corpus-mcp` package
+# growing, not a second package" reads the tiers as members of `corpus-mcp`; the
+# registry and the campaign's own note say otherwise — quality/DOMAINS.toml
+# "understanding (package, SERVING_BOUNDARY shape)", the cluster note "a
+# two-tier PACKAGE, not a crate", and quality/campaigns/domains.toml's
+# floor_basis ("corpus-mcp, which is a HOST that reads Understanding's output
+# rather than Understanding's crate"). Resolved for the registry, the campaign's
+# data; the DECISIONS entry is in ralph/DECISIONS.md 2026-09-18.
+crates = [
+    "understanding-atlas",
+    "understanding-host",
+]
+
 # ── THE THIN-SURFACE RULE — can this client BECOME what it talks to? ─────────
 #
 # sv-surface's `sv-no-daemon-management` bar, operator 2026-09-11:
@@ -1334,6 +1376,21 @@ from = "sovereign-serving-host"
 to = "commonwealth-core"
 reason = "quarantine state (`PeerHealthTracker`), identity (`ids::NodeId`) and the model wire types `model_fetch` reads (`commonwealth_core::model::*`) are reached from the host; each belongs on the host's own side of the seam rather than the mesh foundation."
 tracking = "clears when quarantine state is the host's own, identity is `kernel_types::NodeId`, and `model_fetch`'s model wire types have a leaf of their own (the third reason was unnamed until the move materialized, §10.1z 2026-09-15)"
+
+# ── Understanding package exceptions (the burn-down list) ────────────────────
+# Declared 2026-09-18 with the [[package]] row above, per DE "Direction:
+# Understanding reads Ingest and Retrieval, never the reverse": the pure tier
+# may NOT name `corpus-engine`, the host MAY. The host's edge is the one
+# grandfathered row. STALE-by-construction today — `understanding-host` is an
+# empty stub, so the gate reports the row STALE rather than silent until the
+# host half names the engine (ARCH §18.1).
+
+[[exception]]
+package = "understanding"
+from = "understanding-host"
+to = "corpus-engine"
+reason = "the host does the engine's own work through `corpus-engine` — the field engine, the atlas writers, entity extraction and the phase runner are the engine's pipeline — and `corpus-engine` cannot join a liftable package yet (its `build.rs`, its `include_str!`d tree-sitter queries and its optional `corpus-engine-scip` edge). The pure tier may NOT name it; the host MAY (DE \"Direction: Understanding reads Ingest and Retrieval, never the reverse\")."
+tracking = "clears when the enrichment pipeline is reachable through a port or the `corpus-index` leaf, the same burn-down the `corpus-mcp -> corpus-engine` exception tracks"
 
 # Populated by the first layer-gate census, 2026-07-11. Removing an entry —
 # with its edge — is the win condition; see the remediation roadmap (R6).

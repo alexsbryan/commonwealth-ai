@@ -1,0 +1,12 @@
+[package]
+name = "understanding-host"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Understanding's host tier — the ports and the knot: stores and the ANN, writers, the field engine, entity extraction, the phase runner. Names corpus-engine, the index leaf, the pure tier and the language. A stub until the classification lands (DE Step 7, redrawn)."
+
+[dependencies]
+
+[lints]
+workspace = true

@@ -39,6 +39,8 @@ commonwealth-ai/
 ├── understanding-vocab/       # Atlas vocabulary — AtomsFile/AtomEnvelope, Edge, kind taxonomy, OntologyPolicies + declaration types, lookup_key, StableAtomKey (serde + kernel-types + blake3 leaf)
 ├── corpus-engine-watchers/    # Lint/test/project-index watchers + result stores (carved out of corpus-engine)
 ├── corpus-index/              # Retrieval read-port leaf — CorpusIndex, IndexInfo, the persisted settings (DisplayMeta/MutableMergePolicy/FilterConfig/StreamAxes), the search/evidence/provenance surface and the engine Error (carved out of corpus-engine)
+├── understanding-atlas/       # Understanding's pure tier — the arithmetic over the published language (analysis, resolution by name, classification, the ground walk, domains, ontology, reconciliation, pipeline types/schemas, meta-atlas and traversal logic); may name the language, kernel-types and the index leaf's row types, no async fn (DE Step 7, redrawn). A stub until REVIEW-mint-understanding-tiers classifies the 170-file cluster
+├── understanding-host/        # Understanding's host tier — the ports and the knot (stores and the ANN, writers, the field engine, entity extraction, the phase runner); may name corpus-engine, the index leaf, the pure tier and the language (DE Step 7, redrawn). A stub until REVIEW-mint-understanding-tiers classifies the 170-file cluster
 ├── corpus-mcp/                # Thin knowledge host, three verbs — `recipe new` (scaffold from an ontology template), `ingest <recipe.toml>` (acquire→index→atlas enrichment) and `serve` (`ask`: cited passages + the map of ideas the atlas walk traversed; cited search; atlas atom lookup, over MCP/stdio; pulls a named corpus's prebuilt snapshot if absent), all against ANY OpenAI-compatible endpoint — DISCOVERED (Ollama, llama-server, the OICP daemon) when none is named; no llama.cpp/ort/iroh
 ├── sovereign-recipes/         # Canonical recipe TOMLs + catalog + data lists (vendored into corpus-engine at build)
 ├── sovereign/                 # Local AI assistant (CLI / desktop / server)
@@ -8651,7 +8653,7 @@ stabilises, same contract as every other row in this section.
 | OICP studio extraction | `oicp-client/src/lib.rs` (1,754) | The corpus-engine-free client carve-out landed as one file by design (boundary-gate leaf); splits into transport/session/structured-output modules on next growth. |
 | Chaos scoring | `sovereign-eval/src/chaos_monkey/score.rs` (1,381) | Rubric scorer for the reliability-report sweep; per-dimension split lands with the pinned-critic work. |
 | Reindexer liveness | `sovereign-mesh/src/reindexer.rs` (1,519) | Freshness gate + heartbeat + supervisor self-heal grew together (watcher-liveness hardening); split waits for the watcher re-enable decision. |
-| corpus-engine index search | `corpus-engine/src/index/search.rs` (1,213) | 13 lines over the ceiling; trims naturally when the ANN-refine retrieval fix migrates the legacy search path. |
+| corpus-index index search | `corpus-index/src/index/search.rs` (1,245) | 45 lines over the ceiling; trims naturally when the ANN-refine retrieval fix migrates the legacy search path. |
 | Iroh transport (cmnwlth) | `commonwealth/crates/commonwealth-transport/src/iroh.rs` (1,280) | No-VPN mesh arc (invite/join/gossip over iroh) landed as one transport module; splits dialer/acceptor/relay once the relay-floor characterization settles. |
 
 ### 10.1d Size-debt acceptance — 2026-09-01 re-freeze at `origin/main`
@@ -9983,7 +9985,7 @@ pinned 35, which is the whole mechanism §10.1j warned about: a bare-count
 baseline cannot name what crossed, so a merge moves it silently.
 
 Dispositioned by renaming the side with the weaker claim to the name, per the
-convention `corpus-engine/src/index/provenance.rs` already states for this
+convention `corpus-index/src/index/provenance.rs` already states for this
 family (qualify, do not add a fifth bare noun):
 
 | Noun | Renamed | To | Why that side |
