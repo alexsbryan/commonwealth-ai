@@ -1,0 +1,7 @@
+dm-vocab-bypass-tools
+commit 477795902
+LINT exit=0
+TEST(sovereign-tools) exit=0 pass=852 fail=0
+LAYER exit=0
+BOUNDARY exit=0
+premise: grep -n 'atoms.json' sovereign/crates/sovereign-tools/src/knowledge_view/atlas_digest.rs sovereign/crates/sovereign-tools/src/catalog_ingest.rs -> both parses present, now through corpus_engine_vocab::read
