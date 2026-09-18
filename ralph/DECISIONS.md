@@ -385,3 +385,38 @@ daemon.rs:1952; mesh_http.rs:504); B and C join with that link and the daemon ke
 founder over iroh. Same code on both backends (decision 2: yes; local re-run is the proof).
 Not taken: `internal_bind = 0.0.0.0` — tests a path the Mac will never take and moves a
 loopback pin. Recorded for the audit: `mesh rotate` prints the link without `dial=`.
+
+## 2026-09-18 · REVIEW-audit-rd-1 · the row closes on the campaign's share; foreign reds go to the operator
+
+Fork: TESTALL (exit 100, 4 fail) and PREPUSH (arch-gate, env-gate) stay red after the audit
+fixed everything the campaign owns (e88a71212). Choice: mark the row `[x]` on e88a71212 and
+9dd7a0401, with the reading the DEMO rows already use for exit 4: a red that names only commits
+outside this campaign does not block it. Package items 1-6 are not fixed here. Each is outside
+ring-doc's scope, and fixing them would add scope the campaign rule forbids.
+
+Evidence, reproduced by the director: the campaign's one census red is green
+(`sovereign-test.sh --package sovereign-core --filter f26_egress_boundary_census` → pass 1
+fail 0). Every other red traces to a commit that is an ancestor of the queue start d8cd7bb9f
+(`git merge-base --is-ancestor`), and `git log d8cd7bb9f..HEAD -- <file>` is empty for each
+named file: quote_verification.rs and the conformance tags (30293904f, 09-13);
+ingest_failure_modes.rs (last touched db21b2f8d, 09-03, the behaviour it checks changed in
+30293904f); cli-contract.toml:3571 citing `docs/internal/RING_APPLICATIONS.md`, which is
+gitignored (`.gitignore:67`) and absent on this host (a3bd715f5, 09-13); env-flags.toml:43 and
+:1662 both declare `SOVEREIGN_SIDECAR_FEATURES` (e3474619c, 09-14); AGENTS.md +399 bytes
+(9272ac2ca, 09-13).
+
+Left for the operator, because each one is outside this campaign or is a ratchet/baseline call:
+regenerate the conformance tags; decide whether the test or the code is right at
+ingest_failure_modes.rs:518; fix the host-dependent doc citation; pick which env-flags
+declaration stays; cut or accept AGENTS.md; the size-gate accepts, including
+`sovereign-mesh::tests` for ring-doc's two test files. Finding 5 (each `/v1/rail/*` path is
+spelled in three places) stays carried in `ralph/REVIEW_FINDINGS.md` and gets no row. It does
+not block `HUMAN-rd-1-three-machines`, and the shared const needs a crate-placement decision
+bigger than this campaign's rule allows.
+
+*Falsified if* any of those reds passes at d8cd7bb9f and fails only once a campaign commit is
+applied, or a campaign commit turns out to touch one of the named files.
+
+REVIEW-AFTER: until the operator decides items 1-5, PREPUSH is red for every campaign on main.
+
+Commit: the one that removes `ralph/NEEDS_HUMAN.md`.
