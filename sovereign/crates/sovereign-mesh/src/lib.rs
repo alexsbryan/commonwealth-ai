@@ -56,12 +56,6 @@ pub use corpus_engine_scip::lsp_tier; // shim: moved by domains dm-mesh-workbenc
 pub use sovereign_turn_client::knowledge_client; // shim: moved by domains REVIEW-build-mesh-client-pair
 pub mod measurements_rail;
 pub mod mesh_discovery;
-/// Tier-1 scheduler simulator — `SCHEDULER_QUALITY.md` §5. Behind a
-/// feature flag beside `dst`: same crate (only this crate can name
-/// the scheduler's internals), same "never in a production build"
-/// rationale.
-#[cfg(feature = "mesh-sim")]
-pub mod mesh_sim;
 pub(crate) use sovereign_scheduler::oicp_select; // shim: moved by domains REVIEW-build-sched-move
 pub use sovereign_serving_host::model_fetch; // shim: moved by domains dm-serving-move-leaves
 /// The mesh implementations of `sovereign-contracts::peer`'s two ports — the

@@ -539,8 +539,8 @@ note = "the code-intel package's next-edit stub crate root (REVIEW-build-next-ed
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/lib.rs"
 context = "fabric"
-lines = 105
-note = "the crate root; Fabric's own modules plus shims to the modules that left (host at dm-daemon-mesh-edge/jobs/adapters, serving and scheduler earlier). Retagged host -> fabric by REVIEW-audit-daemon-1: after the host cluster left, no host module remains here and the crate is Fabric's home (DAEMON_CORE.md §4.2)"
+lines = 98
+note = "the crate root; Fabric's own modules plus shims to the modules that left (host at dm-daemon-mesh-edge/jobs/adapters, serving and scheduler earlier, the Tier-1 simulator at dm-mesh-sim-move). Retagged host -> fabric by REVIEW-audit-daemon-1: after the host cluster left, no host module remains here and the crate is Fabric's home (DAEMON_CORE.md §4.2)"
 
 [[module]]
 path = "sovereign/crates/sovereign-serving-host/src/local_inflight.rs"
@@ -1014,25 +1014,25 @@ lines = 442
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/mesh_sim/mod.rs"
+path = "sovereign/crates/sovereign-mesh-test-harness/src/mesh_sim/mod.rs"
 context = "back-of-house"
 lines = 2398
-note = "cfg(feature=\"mesh-sim\") Tier-1 scheduler simulator; measures Serving, ships in no build"
+note = "Tier-1 scheduler simulator (moved from sovereign-mesh by domains dm-mesh-sim-move; compiled by sovereign-mesh's `dst` feature, ships in no build)"
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/mesh_sim/rng.rs"
+path = "sovereign/crates/sovereign-mesh-test-harness/src/mesh_sim/rng.rs"
 context = "back-of-house"
 lines = 103
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/mesh_sim/scenario.rs"
+path = "sovereign/crates/sovereign-mesh-test-harness/src/mesh_sim/scenario.rs"
 context = "back-of-house"
 lines = 501
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/mesh_sim/scoreboard.rs"
+path = "sovereign/crates/sovereign-mesh-test-harness/src/mesh_sim/scoreboard.rs"
 context = "back-of-house"
 lines = 822
 note = "reads decision_log::{DecisionEvent,RoutingDecision,RoutingOutcome,ServedBy,Verdict} (:20)"
@@ -14026,8 +14026,8 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-mesh-test-harness/src/lib.rs"
 context = "back-of-house"
-lines = 6
-note = ""
+lines = 7
+note = "the harness crate root; gained `mesh_sim` when the Tier-1 simulator moved here (domains dm-mesh-sim-move)"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh-test-harness/src/mock_llama.rs"

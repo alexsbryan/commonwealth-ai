@@ -43,7 +43,8 @@
 //!
 //! Only what a decider can actually see at decision time. That
 //! restriction is what separates this from `mesh_sim`'s `Arm::Oracle`
-//! (that module is feature-gated, hence no link), and the difference
+//! (that module lives in `sovereign-mesh-test-harness` behind the `dst`
+//! feature, hence no link), and the difference
 //! between the two is the headline measurement:
 //!
 //! | term | this objective | the oracle instead knows |
