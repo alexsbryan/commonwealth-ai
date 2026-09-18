@@ -131,6 +131,9 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
   unit half done (rd-1-scaffold lost a session to `/home/sovereign/apps/...`).
   For a scratch build dir use `target/ralph/bundle/` by its repo-relative path
   in every argument (`npx esbuild target/ralph/bundle/entry.js --outfile=sovereign/apps/...`).
+- Change files with the Edit and Write tools, never with a shell heredoc
+  (`cat >> f <<EOF`, `python3 - <<EOF`): edits inside the repo are accepted
+  outright, a heredoc asks the operator and is denied after 600 s unattended.
 - Never `git push`, never `--no-verify`, never rewrite history.
 - No `Co-Authored-By` line and no assistant name in any commit.
 - Never `--update-baseline` a ratchet; never add an `[[exception]]` row or widen
