@@ -838,3 +838,113 @@ last. Falsified if the instrumented ask shows the mesh step DID run and returned
 — then the loss is between retrieval and the gate's release, and the row's fix site moves.
 Why the seat minted instead of letting REVIEW-DEMO fail: three known reds would cost a
 REVIEW-DEMO session and a resolution session to arrive at the same rows.
+
+## 2026-09-18 — seat #6 — REVIEW-build-rr-1-answer-fans-out lands (b0b491740 instrument, 768895508 fix); the per-claim release carries the member as a row; ask timeout 600 s
+
+Fork: the worker's package (inline below). The fan-out now reaches the peer on every turn
+(mesh_hits=5, provenance from_peer Bo); the bar reads 0.4 because two of five answers were
+released through the per-claim path, which emits no ReleasedCitation, and one overran the
+300 s ask timeout on the CPU 2B. Choice on (1): the worker's (i), shaped honestly — a quote
+citation cannot be minted for a claim verdict (epistemic.rs:100-118 binds a quote to ONE
+chunk), so the claim's support pointer (`Provenance` corpus variant) gains `member`, stamped
+from the aligned chunk_members vec; the instrument counts either evidence form and a release
+with claims_checked 0 stays 0. NOT (ii): a bar change is the operator's and the goodhart
+already forbids counting the summary-level name. NOT (iii): swapping the model to move the
+number is the whack the campaign forbids; the room's machine is not a CPU node and the row's
+comment says so. (2): ASK_TIMEOUT_S 600, a measurement budget, not a product change. (3):
+row marked [x]. Flag to the operator: "citation" in the bar now means the released evidence
+pointer in either gate mode — revert if you read it as the quote citation only. Falsified if
+the per-claim path's supporting chunk index is not the gate's leaf index (then the member
+stamp mis-aligns and the alignment test in 933d5a14e's shape is owed here too).
+
+<details><summary>the worker's package</summary>
+
+# NEEDS_HUMAN — REVIEW-build-rr-1-answer-fans-out
+
+## (a) The unit
+
+`REVIEW-build-rr-1-answer-fans-out` (row 58 of `ralph/next/ring-room/STATE.md`, left `[~]`).
+The row's DEMO check says: "paste the five rows; `ra-room-answer-names-the-machine`
+must read 1.0". It reads **0.4**, up from 0.0.
+
+The row's build is done and committed:
+
+- `b0b491740`: the instrument. It named the branch that lost the answer: the chat
+  turn reached `step_main_retrieval_mesh`, and the daemon's `Runtime` had
+  `mesh_knowledge = None`. Decisive lines are in that commit's body.
+- `768895508`: the fix. `daemon_knowledge_source` (sovereign-mesh/src/knowledge_client.rs)
+  gives the daemon a loopback seam to its own `/v1/knowledge/search`, which is the one
+  decider for local ∪ `hosted_corpora`. `KnowledgeQueryPlan.peer_attribution` now
+  carries the pipeline's map, so KnowledgeQuery provenance names the peer (both
+  builders used to pass an empty map). The e2e test was watched red, and two PLANTs
+  went red. CLEAN, LINT, TEST(sovereign-core/-mesh/-api) all exit=0.
+
+## (b) What was run, and what it printed
+
+`RALPH_DEMO_SCRIPT=scripts/ring-room-demo.sh scripts/ralph-check.sh demo` took about
+22 minutes. The answer leg alone ran 14:33 to 14:51, because every answer now does a
+real grounded synthesis on the 2B model. exit=1.
+
+```
+ra-room-answer-names-the-machine   0.4   FAILED
+ra-room-doc-name-from-membership   1.0   PASSED
+ra-room-film-from-the-library-rail 0.0   FAILED  (c_first_byte false; pick_to_first_byte_s 58.95, http 206)
+ra-room-plug-in-live               0.0   FAILED  (c_answer_names false; answered_s null in the 60 s window)
+ra-room-nothing-typed              10    FAILED  (walk count; rr-1-nothing-typed-to-zero's row)
+```
+
+The answer bar, question by question:
+
+```
+q0  error: empty JSON: `chat ask` killed by ASK_TIMEOUT_S=300 (turn 21:34:22 → gate 21:39:18)
+q1  released 3, members [Bo, Bo, Bo]   grounded     (gate_action=citation_grounded)
+q2  released 0                         grounded     (gate_action=released, mode per_claim)
+q3  released 0                         unverified   (gate_action=released, mode per_claim, claims_checked 0)
+q4  released 1, members [Bo]           grounded     (gate_action=citation_grounded)
+```
+
+In a's daemon.err, all five turns read
+`knowledge fan-out summary local_hits=0 mesh_hits=5 mesh_peer_tagged=5 mesh_corpora={"room-yOwnPh"}`,
+and every answer's provenance reads `sources: [{origin: room-yOwnPh, count: 5, from_peer: Bo}]`.
+The answer reaches the peer and names it. What still fails the bar is the gate's
+release path on this model:
+
+- 2 of 5 go through the per-claim release, which carries no quote citations.
+- 1 of 5 overran the 300 s ask timeout.
+
+Neither is on the fan-out path this row owns.
+
+## (c) What the operator must decide
+
+1. **Is the per-claim release a citation?** q2 and q3 were released grounded on Bo's
+   passages, but through `mode: per_claim` (grounding gate, sovereign-core
+   `runtime/grounding/`). That path emits no `ReleasedCitation` rows, so the bar,
+   which reads `epistemic_state.citations[].member`
+   (scripts/ring-room-demo.sh report), scores them 0. Choose one:
+   - (i) a new row makes per-claim releases project `ReleasedCitation` rows, with
+     `member` from the supporting chunk. That is gate work, outside this campaign's
+     "strictly necessary" so far.
+   - (ii) the bar also counts the provenance `from_peer` on a grounded answer. That
+     is a bar change in quality/campaigns/ring-room.toml, and it is the operator's
+     to make.
+   - (iii) a larger chat model on a (RING_ROOM_CHAT, scripts/ring-room-demo.sh:51)
+     that writes quotable answers.
+2. **The ask timeout.** `ASK_TIMEOUT_S=300` (scripts/ring-room-demo.sh:61) was sized
+   when every answer was a fast general-knowledge refusal. A grounded answer on the
+   2B CPU node took 296 s for q0, and 92–229 s for the others (turn routed → gate lifecycle, a's daemon.err). Raise it, or accept
+   q0 as the model's cost.
+3. **Mark this row.** The row's own build (instrument, seam, attribution, e2e test)
+   is committed and green on every check except the 1.0 floor, which depends on 1
+   and 2 above. You can mark it `[x] 768895508` and mint a row for whichever of 1(i),
+   1(ii) or 1(iii) you choose, or keep it `[~]`.
+
+Two other reds belong to rows that already exist: the film leg's first byte took
+58.95 s (rr-1-media-origin-live), and walk count = 10 (rr-1-nothing-typed-to-zero).
+plug-in-live's `c_answer_names` is leg 1's failure re-run on the fourth node.
+
+## (d) To resume
+
+Edit or mark the row in ralph/next/ring-room/STATE.md, then
+`rm ralph/STOP ralph/NEEDS_HUMAN.md`.
+
+</details>
