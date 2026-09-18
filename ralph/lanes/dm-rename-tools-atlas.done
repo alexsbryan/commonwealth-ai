@@ -1,0 +1,21 @@
+unit: dm-rename-tools-atlas
+commits: 75ed6013b (the two in-place renames)
+what: Applies the two DT [[noun]] dispositions (quality/DOMAINS.toml:2379-2399)
+  in sovereign/crates/sovereign-tools/src/atlas_peer_advice.rs — identifiers
+  only, no behaviour change. PeerAtlasView -> RemoteAtlasView (:51),
+  PeerAtlasPullCandidate -> AtlasPullLead (:90). Every referrer repointed
+  (`grep -rn 'PeerAtlasView|PeerAtlasPullCandidate' --include='*.rs'` over the
+  tree is empty after the change): sovereign-tools/src/atlas_postinstall.rs:806
+  (doc link),:816 (launch_tier2_extraction_with_advice's parameter);
+  sovereign-api/src/routes_internal/corpus_ingest.rs:65 (doc),:78,:79,:98,:108
+  (gather_peer_atlas_advice). The registry rows are the design record and are
+  untouched, as are quality/DOMAINS.md and the campaigns/ARCH_LAYERS comments
+  that narrate the rename.
+checks: CLEAN exit=0 (debug target 0G, under 50G — cache kept); LINT exit=0
+  (sovereign-api, sovereign-tools among the crates checked; 0 errors, cargo
+  exit 0).
+census: python3 scripts/domains-census.py peer-outside — 16 in 7 crates -> 14
+  in 6 crates; sovereign/crates/sovereign-tools leaves the list (its 2 were
+  these two types).
+evidence: git diff is 20 insertions / 18 deletions, every hunk an identifier
+  swap (the two insertions of slack are the longer new names).
