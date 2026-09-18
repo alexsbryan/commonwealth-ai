@@ -338,15 +338,32 @@ move must clear (bar `bl-noise`, kill at 10%). A third instrument,
 compiles that a `--workspace` run never does — the structural cause of D1 —
 and must read 0 before the campaign closes.
 
-Spiked, not landed: `cargo hakari` in a throwaway worktree wires a
-`workspace-hack` crate into 59 members (70 files, +275 lines) and takes
-scope drift from 316 to 41. The residual 41 are workspace-member features
-that vary by scope — `kernel-types/wire-fixture`, `sovereign-tools/{atos,
-dev-tools,treesitter}`, `commonwealth-rail-core/test-support`,
-`sovereign-cli-shared`, `sovereign-enrichment-build`,
-`sovereign-cli-llm/awareness` — the same list `scripts/lib/cargo-scope.sh`
-keeps by hand today. Pinning those from the crates that need them is the
-second build-graph rung and retires that list.
+Landed (commit 44f9a1bdc, snapshot `quality/build-probe/2026-09-17-hakari/`,
+banked on the fresh column against `2026-09-17-baseline-29/`):
+
+| sum   | before | after | ratio |
+|-------|-------:|------:|------:|
+| warm  |  419.8 | 420.5 | 1.00× |
+| fresh | 2204.2 | 772.2 | 2.85× |
+| build |  473.4 | 455.9 | 1.04× |
+
+`cargo hakari` wires `workspace-hack` into every member except the eight
+`[[package_leaf]]` crates, with three member features pinned default
+(sovereign-tools/treesitter, sovereign-cli-shared's five, kernel-types/
+wire-fixture). Scope drift 316 → 118, and 80 of the 118 sit in the four leaf
+probe scopes that deliberately do not link the hack (their fresh rows moved
+by 0.3–5 s). The top of the stack is where the seconds were: api 190 → 18,
+server 184 → 10, cli-daemon 226 → 30, tools 174 → 34, enrichment-build
+133 → 4, corpus-mcp 130 → 5, cli-llm 268 → 90. Four rows are still far from
+their warm floor and name the next moves: sovereign-core 197 → 170 and
+sovereign-inference 187 → 160 both resolve a workspace crate (sovereign-tools
+without atos/dev-tools — layer-gate forbids those in the default build;
+corpus-engine without treesitter) that the full gate compiles differently,
+and sovereign-cli 96 → 79 resolves five. Those are `scripts/lib/cargo-scope.sh`
+questions (make the scoped feature list match the gate for those closures),
+not hakari questions; the hack cannot unify a workspace crate. The
+measurement's after-HEAD (48cdb385a) carries five ring-doc peer commits on
+top of the move; they edit sources in cli-llm/api/cli-shared and no manifest.
 
 ## Order
 

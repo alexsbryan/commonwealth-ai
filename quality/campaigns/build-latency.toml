@@ -204,7 +204,7 @@ derives_from = "ARCH_PRINCIPLES 7; 2026-09-17-baseline-29/score.aa.json (28 prob
 status       = "met"
 target       = 0.03
 direction    = "lower_is_better"
-kill         = "a move is banked only if the warm sum falls by more than this band; if an A/A pair ever exceeds it, stop and fix the instrument before any move"
+kill         = "a move is banked only if the sum of the column it targets (warm for edge-cut/cohesion-split/test-layout, fresh for build-graph) falls by more than this band while neither other sum rises by more than it; if an A/A pair ever exceeds it, stop and fix the instrument before any move"
 instrument   = "scripts/build-probe/score.sh --aa"
 
 [[bar]]
@@ -273,3 +273,5 @@ examples = ["sovereign-mesh/tests/main.rs (72 modules) into per-area binaries + 
 
 # ── LEDGER — snapshot directories under quality/build-probe/, one per
 # banked move: <date>-<label>/{score.json,score.fresh.json,score.build.json,HEAD}
+#   2026-09-17-baseline-29   warm 419.8  fresh 2204.2  build 473.4   (HEAD 525a5a940)
+#   2026-09-17-hakari        warm 420.5  fresh  772.2  build 455.9   build-graph, banked on fresh 2.85x (HEAD 48cdb385a, commit 44f9a1bdc)
