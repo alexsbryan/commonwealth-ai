@@ -1424,3 +1424,46 @@ after the move (then the widening is genuinely operator-only); or
 **Landed in.** this commit — `ralph/STATE.md` (the two row corrections),
 `quality/ARCH_LAYERS.toml` (the comment pinning the absence) and this entry;
 the code cut lands in `dm-mesh-sim-move`.
+
+## 2026-09-17 · dm-rename-leaf-words · `PeerAnswer` is kept; the row's "no DT row" premise is false
+
+**Fork.** `dm-rename-leaf-words` (STATE.md:233) directs renaming a "leaf trio",
+its third target `PeerAnswer` -> `AnswerEnvelope`, justified as "a post-adjudication
+type with no DT row". The registry disagrees: `quality/DOMAINS.toml:1818-1827`
+is a `[[noun]]` row for `PeerAnswer` with `disposition = "decided:keep"`, and the
+campaign names it a carve-out. Decide whether to rename anyway (overturning the
+keep) or correct the row.
+
+**Choice.** Correct the row; rename only the two types whose DT rows say
+`decided:rename`. `PeerAnswer` keeps its name. The row's stated reason is
+factually false, and the registry's why — "renaming weakens a custody gate" — is
+the one thing the four stop conditions protect (PROMPT §6: weakening a pass bar
+stops the worker). Renaming would also spend the type that carries the C9 egress
+custody signal (`quality/TARGET_ARCHITECTURE.md:495` records `PeerAnswer` as a
+pass-bar type), so the conservative correction is the smaller reversible step.
+
+**Evidence** (reproduced 2026-09-17).
+- `quality/DOMAINS.toml:1818-1827` — `name = "PeerAnswer"`, `crate = "kernel-types"`,
+  `file = "kernel-types/src/answer.rs:423"`, `disposition = "decided:keep"`,
+  `why = "… CARVE-OUT … renaming weakens a custody gate. The one place the word
+  peer is load-bearing and correct"`.
+- `quality/campaigns/domains.toml:142-145` — the bar's own note names the two
+  carve-outs: "… and `PeerAnswer` in kernel-types (C9, egress custody — the one
+  place the word is load-bearing; disposition keep, with the why on the row)."
+- `quality/DOMAINS.md:433-434` — "`PeerAnswer` in kernel-types is kept: egress
+  custody, the one place the word is load-bearing."
+- `scripts/domains-census.py:329-336` — `peer_defs` subtracts every noun with
+  `disposition = "decided:keep"` by name, so `PeerAnswer` is NOT counted by
+  `peer-outside`; `python3 scripts/domains-census.py peer-outside` on the tree
+  lists corpus-engine, oicp-types, sovereign-cli-llm, sovereign-daemon and
+  sovereign-desktop — kernel-types is absent. The type is no straggler.
+- Contrast `PeerTransportReader` (the sibling `dm-rename-api-venues` row's
+  "post-adjudication type with no DT row"): `grep -n PeerTransportReader
+  quality/DOMAINS.toml` is empty, so that row's premise held. This one's does not.
+
+**Falsified by.** A DT row (or a later operator adjudication) that re-dispositions
+`PeerAnswer` to `decided:rename` with the custody reason addressed; or the
+custody sweep ceasing to be the type's purpose.
+
+**Landed in.** this commit — the two renames (`oicp-types`, `corpus-engine`), the
+`ralph/STATE.md` row correction and this entry.

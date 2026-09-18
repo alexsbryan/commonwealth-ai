@@ -309,11 +309,11 @@ pub struct CorpusDescriptor {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FederationManifest {
-    pub peers: Vec<PeerDescriptor>,
+    pub peers: Vec<FederatedMeshDescriptor>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PeerDescriptor {
+pub struct FederatedMeshDescriptor {
     pub name: String,
     pub capabilities_url: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]

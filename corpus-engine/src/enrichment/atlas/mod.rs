@@ -72,8 +72,8 @@ pub use axis_catalog::{
 };
 pub use citation::{apply_citation, SourceCitation};
 pub use cross_corpus::{
-    detect_grounding, CrossCorpusEdge, CrossCorpusEdgesFile, CrossCorpusInput, CrossCorpusReport,
-    DetectorSummary, MatchTrace, PeerAtomRef, RejectionBucket, RejectionSample,
+    detect_grounding, CrossCorpusAtomRef, CrossCorpusEdge, CrossCorpusEdgesFile, CrossCorpusInput,
+    CrossCorpusReport, DetectorSummary, MatchTrace, RejectionBucket, RejectionSample,
 };
 pub use edges::{Edge, EdgeId, EdgeProvenance, EdgeType, EdgesFile};
 pub use embeddings::atoms_content_hash;

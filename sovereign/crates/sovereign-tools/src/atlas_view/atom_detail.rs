@@ -527,7 +527,7 @@ mod tests {
         AtomEnvelope, AtomId, AtomsFile, ChunkRef, Claim, Entity,
     };
     use corpus_engine::enrichment::atlas::cross_corpus::{
-        CrossCorpusEdge, CrossCorpusEdgesFile, MatchTrace, PeerAtomRef,
+        CrossCorpusAtomRef, CrossCorpusEdge, CrossCorpusEdgesFile, MatchTrace,
     };
     use corpus_engine::enrichment::atlas::edges::{
         Edge, EdgeId, EdgeProvenance, EdgeType, EdgesFile,
@@ -951,7 +951,7 @@ mod tests {
                     confidence: 0.95,
                     provenance: EdgeProvenance::Derived,
                 },
-                peer: PeerAtomRef {
+                peer: CrossCorpusAtomRef {
                     corpus_id: "sep-epistemology".into(),
                     atom_id: AtomId::from_raw("entity-0007".to_string()),
                     canonical_name: "Knowledge (SEP)".into(),
