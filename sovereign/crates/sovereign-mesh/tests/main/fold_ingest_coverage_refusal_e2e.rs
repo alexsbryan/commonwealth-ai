@@ -54,11 +54,11 @@ use commonwealth_rail::{RingRail, SigningKey};
 use commonwealth_work::WORK_NAMESPACE;
 use corpus_engine::index::CorpusIndex;
 use corpus_engine::Corpus;
-use sovereign_api::auto_recover::{
+use sovereign_daemon::ingest_executor::fold_coverage_for;
+use sovereign_daemon::state::AppState;
+use sovereign_grants::auto_recover::{
     merge_from_fold_coverage, try_recover_stranded_partitions, RecoveryOutcome,
 };
-use sovereign_api::state::AppState;
-use sovereign_daemon::ingest_executor::fold_coverage_for;
 use tempfile::TempDir;
 
 use crate::common::corpus_at;
@@ -90,14 +90,14 @@ async fn dead_peer_addr() -> std::net::SocketAddr {
 /// journal and nowhere this node can reach, which is exactly the shape the
 /// coverage guard is for: the fold says two, the disk can supply one.
 async fn leader_alone(corpus: &str) -> (TempDir, std::path::PathBuf, AppState) {
-    leader_alone_with_seed(corpus, sovereign_api::state::FabricSeed::default()).await
+    leader_alone_with_seed(corpus, sovereign_daemon::state::FabricSeed::default()).await
 }
 
 /// [`leader_alone`] with Fabric's construction seed, for the one test that
 /// needs a rail on the node — a construction argument now (DC §4.2).
 async fn leader_alone_with_seed(
     corpus: &str,
-    seed: sovereign_api::state::FabricSeed,
+    seed: sovereign_daemon::state::FabricSeed,
 ) -> (TempDir, std::path::PathBuf, AppState) {
     let home = TempDir::new().expect("leader tempdir");
     let dir = home.path().join("indexes");
@@ -152,7 +152,7 @@ async fn a_two_donor_fold_missing_its_peer_refuses_and_writes_no_canonical() {
          partition this node can reach",
     );
 
-    let node = sovereign_api::routes_internal::fold_recovery(&state).await;
+    let node = sovereign_daemon::routes_internal::fold_recovery(&state).await;
     let outcome = merge_from_fold_coverage(
         node,
         CORPUS,
@@ -194,7 +194,7 @@ async fn a_two_donor_fold_missing_its_peer_refuses_and_writes_no_canonical() {
 
     // ── The paired positive: drop the bar, and the same disk merges half ──
     let (_home2, dir2, state2) = leader_alone(CORPUS).await;
-    let node2 = sovereign_api::routes_internal::fold_recovery(&state2).await;
+    let node2 = sovereign_daemon::routes_internal::fold_recovery(&state2).await;
     let dropped = merge_from_fold_coverage(
         node2,
         CORPUS,
@@ -352,7 +352,7 @@ impl tracing_subscriber::fmt::MakeWriter<'_> for BufWriter {
 /// has to BE the leader for the arm under test to be reached at all — and
 /// return it as a construction seed, since the rail is a construction argument
 /// now (DC §4.2 "Construction is staged, and parts are total").
-fn fold_seed(rail_dir: &std::path::Path, corpus: &str) -> sovereign_api::state::FabricSeed {
+fn fold_seed(rail_dir: &std::path::Path, corpus: &str) -> sovereign_daemon::state::FabricSeed {
     let signer: SigningKey = key(1);
     let rail = Arc::new(RingRail::new(rail_dir, Arc::new(signer)));
     let journal = rail.journal(WORK_NAMESPACE).expect("the work journal");
@@ -365,7 +365,7 @@ fn fold_seed(rail_dir: &std::path::Path, corpus: &str) -> sovereign_api::state::
         "every fixture op must land on the journal, or the loop folds a \
          different handoff than the one this test is about",
     );
-    sovereign_api::state::FabricSeed {
+    sovereign_daemon::state::FabricSeed {
         ring_rail: Some(rail),
         ..Default::default()
     }

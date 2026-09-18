@@ -75,12 +75,10 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use crate::fabric::FabricPart;
 use commonwealth_core::mesh::NodeStatus;
 use commonwealth_transport::{peer_contact, TrafficClass};
-use sovereign_api::routes_internal::{
-    RingSyncRequest, RingSyncResponse, RING_SYNC_OPS_BUDGET_BYTES,
-};
-use sovereign_api::state::AppState;
+use sovereign_peer_wire::{RingSyncRequest, RingSyncResponse, RING_SYNC_OPS_BUDGET_BYTES};
 use tokio::sync::Notify;
 use tracing::{debug, info, warn};
 
@@ -102,7 +100,7 @@ pub const DEFAULT_RING_SYNC_INTERVAL: Duration = Duration::from_secs(60);
 /// journal the module docs price, moved in one sixty-second round. Tripping
 /// it costs nothing but time: every op ingested is already on disk, so the
 /// next round resumes where this one stopped.
-const MAX_CHUNKS_PER_EXCHANGE: usize = 16;
+pub const MAX_CHUNKS_PER_EXCHANGE: usize = 16;
 
 /// Handle to the spawned loop. Aborts the task on drop, matching
 /// [`GossipHandle`](crate::gossip::GossipHandle) so the daemon tears both
@@ -161,7 +159,7 @@ pub struct RoundOutcome {
 /// round. **Nothing about the sender census changes** — the pump does not talk
 /// to a peer, it asks this loop to.
 pub fn spawn_ring_sync_loop(
-    app_state: AppState,
+    fabric: Arc<FabricPart>,
     interval: Duration,
     nudge: Arc<Notify>,
 ) -> RingSyncHandle {
@@ -172,7 +170,7 @@ pub fn spawn_ring_sync_loop(
         );
         loop {
             let started = Instant::now();
-            let outcome = run_one_round(&app_state).await;
+            let outcome = run_one_round(&fabric).await;
             if outcome.namespaces > 0 {
                 debug!(
                     namespaces = outcome.namespaces,
@@ -202,9 +200,9 @@ pub fn spawn_ring_sync_loop(
 
 /// One anti-entropy pass over every namespace this node holds, against every
 /// online peer.
-pub async fn run_one_round(app_state: &AppState) -> RoundOutcome {
+pub async fn run_one_round(fabric: &FabricPart) -> RoundOutcome {
     let mut outcome = RoundOutcome::default();
-    let Some(rail) = app_state.ring_rail() else {
+    let Some(rail) = fabric.ring_rail() else {
         return outcome;
     };
     let namespaces = match rail.namespaces() {
@@ -225,9 +223,9 @@ pub async fn run_one_round(app_state: &AppState) -> RoundOutcome {
         }
     };
 
-    let self_id = app_state.inner.fabric.identity.current();
+    let self_id = fabric.identity.current();
     let peers: Vec<commonwealth_transport::PeerContact> = {
-        let mesh = app_state.inner.fabric.mesh.read().await;
+        let mesh = fabric.mesh.read().await;
         mesh.members
             .values()
             .filter(|m| m.node_id != self_id && m.status == NodeStatus::Online)
@@ -237,7 +235,7 @@ pub async fn run_one_round(app_state: &AppState) -> RoundOutcome {
     if peers.is_empty() {
         return outcome;
     }
-    let transport = app_state.peer_transport();
+    let transport = fabric.peer_transport();
 
     for namespace in &namespaces {
         outcome.namespaces += 1;
@@ -314,7 +312,7 @@ pub async fn run_one_round(app_state: &AppState) -> RoundOutcome {
         //   creates, and a write would reach a peer's disk immediately and its
         //   store never.
         if let Ok(j) = rail.journal(namespace) {
-            if crate::rail_kv_pump::project_namespace(app_state, &rail, &j)
+            if crate::rail_kv_pump::project_namespace(fabric, &rail, &j)
                 .await
                 .is_some()
             {
@@ -327,7 +325,7 @@ pub async fn run_one_round(app_state: &AppState) -> RoundOutcome {
 
 /// Why an exchange with one peer address stopped.
 #[derive(Debug)]
-enum ExchangeStop {
+pub enum ExchangeStop {
     /// The peer **answered**, and refused our body as too large.
     ///
     /// Its own variant because the alternative is the collapse this rung
@@ -353,10 +351,10 @@ enum ExchangeStop {
 /// threw the pulled count away — `ops_pulled` undercounted exactly in the
 /// failure case, which is the case anyone reading the metric is looking for.
 #[derive(Debug, Default)]
-struct ExchangeOutcome {
-    pulled: usize,
-    pushed: usize,
-    stop: Option<ExchangeStop>,
+pub struct ExchangeOutcome {
+    pub pulled: usize,
+    pub pushed: usize,
+    pub stop: Option<ExchangeStop>,
 }
 
 impl ExchangeOutcome {
@@ -436,7 +434,7 @@ async fn prune_what_the_peer_retired(
 /// (nothing came, nothing left to send) returns quietly, and *stalled*
 /// (something outstanding, nothing moved anywhere) warns — repeating that
 /// would repeat verbatim.
-async fn exchange(
+pub async fn exchange(
     http: &reqwest::Client,
     url: &str,
     rail: &commonwealth_rail::RingRail,
@@ -588,10 +586,3 @@ async fn post(
         .await
         .map_err(|e| ExchangeStop::Failed(e.to_string()))
 }
-
-#[cfg(test)]
-mod projection_tests;
-#[cfg(test)]
-mod snapshot_tests;
-#[cfg(test)]
-mod tests;

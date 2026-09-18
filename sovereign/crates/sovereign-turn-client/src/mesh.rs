@@ -10,7 +10,7 @@
 //!
 //! `/v1/mesh/*` is the CLIENT port — `sovereign_daemon::mesh_http`'s router,
 //! mounted on the daemon's client listener. `/internal/*` is the INTERNAL
-//! port — `sovereign_api::routes_internal::mesh_admin`, loopback-only.
+//! port — `sovereign_daemon::routes_internal::mesh_admin`, loopback-only.
 //! A [`TurnClient`] carries one base URL, so a caller builds it from
 //! `client_base_url()` for the first family and `internal_base_url()` for
 //! the second. They are not interchangeable and a wrong base arrives as a
@@ -41,7 +41,7 @@ impl TurnClient {
     /// The wire form of `commonwealth_state::current_contributions`,
     /// which this crate cannot name (see the note above
     /// [`Self::corpus_atoms`]), so the caller supplies `T`. It is
-    /// `Vec<sovereign_api::routes_internal::NodeContributionsView>`
+    /// `Vec<sovereign_daemon::routes_internal::NodeContributionsView>`
     /// for the daemon's own shape, and the desktop's
     /// `Vec<NodeContributionsDto>` — the same field names — for the
     /// Mesh Health Members panel.
@@ -64,7 +64,7 @@ impl TurnClient {
     /// `GET /internal/peer-preference/list` — every affinity
     /// preference the host holds, in the store's own scan order.
     ///
-    /// `T` is `Vec<sovereign_api::routes_internal::VenuePreferenceDto>`
+    /// `T` is `Vec<sovereign_daemon::routes_internal::VenuePreferenceDto>`
     /// for the daemon's shape and the desktop's `Vec<VenuePreferenceDto>`
     /// — identical field names — for the Mesh Health panel. This crate
     /// cannot name either (see the note above [`Self::corpus_atoms`]).
@@ -216,7 +216,7 @@ impl TurnClient {
     }
 
     /// `GET /status` — the serving host's own identity and health, on the
-    /// CLIENT port (`sovereign_api::routes_status`; auth-exempt).
+    /// CLIENT port (`sovereign_daemon::routes_status`; auth-exempt).
     ///
     /// `T` is `sovereign_contracts::daemon_wire::DaemonIdentity` for a
     /// caller that wants the host's `node_id` — the desktop's corpus engine

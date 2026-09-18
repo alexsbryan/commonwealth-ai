@@ -36,8 +36,8 @@ use bytes::Bytes;
 use commonwealth_core::ids::{NodeId, NodePubkey};
 use commonwealth_core::mesh::{aliased_endpoint_keys, EndpointClaim, Mesh, NodeStatus};
 use commonwealth_core::{partition, TestClock};
-use sovereign_api::server::{client_router, internal_router};
-use sovereign_api::state::AppState;
+use sovereign_daemon::server::{client_router, internal_router};
+use sovereign_daemon::state::AppState;
 use sovereign_mesh_test_harness::fault::{shared_policy, FaultProxy, FaultTransport, SharedPolicy};
 use sovereign_mesh_test_harness::simulated_mesh::SimulatedMesh;
 use sovereign_mesh_test_harness::simulated_node::SimulatedNodeBuilder;
@@ -293,8 +293,13 @@ impl DstMesh {
     pub async fn drive_gossip_round(&self, idx: usize) {
         // Individual peer failures are logged inside `run_one_round` and do not
         // propagate; a round only errs on a fundamental fault.
-        if let Err(e) =
-            gossip::run_one_round(&self.sim.nodes[idx].state, DST_OFFLINE_THRESHOLD).await
+        if let Err(e) = gossip::run_one_round(
+            &*self.sim.nodes[idx].state.inner.fabric,
+            self.sim.nodes[idx].state.inner.node.corpus_engine.as_ref(),
+            &self.sim.nodes[idx].state,
+            DST_OFFLINE_THRESHOLD,
+        )
+        .await
         {
             tracing::debug!(node = idx, error = %e, "dst: gossip round error");
         }

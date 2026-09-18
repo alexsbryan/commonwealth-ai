@@ -101,11 +101,11 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::fabric::FabricPart;
 use commonwealth_rail::{Ed25519Verifier, RailAct, RailError, RingJournal, RingRail, Roster};
 use commonwealth_state::{rail_kv, MeshStore, Outboxed};
 use commonwealth_work::projection::{WorkProjection, WorkUnitStatus};
 use commonwealth_work::{ActorKey, UnitRef, WorkAct, WorkActKind};
-use sovereign_api::state::AppState;
 use tokio::sync::Notify;
 use tracing::{debug, info, warn};
 
@@ -184,7 +184,7 @@ impl Drop for RailKvPumpHandle {
 /// rather than up to sixty seconds later. Same wire, same sender: the pump does
 /// not talk to a peer, it asks the one replication path to run.
 pub fn spawn_rail_kv_pump(
-    app_state: AppState,
+    fabric: Arc<FabricPart>,
     interval: Duration,
     nudge: Arc<Notify>,
 ) -> RailKvPumpHandle {
@@ -194,9 +194,9 @@ pub fn spawn_rail_kv_pump(
             seal_after_own_ops = SEAL_AFTER_OWN_OPS,
             "rail kv pump: started"
         );
-        project_all_on_disk(&app_state).await;
+        project_all_on_disk(&fabric).await;
         loop {
-            let out = pump_once(&app_state).await;
+            let out = pump_once(&fabric).await;
             if out.appended > 0 {
                 nudge.notify_one();
                 debug!(
@@ -231,12 +231,12 @@ pub fn spawn_rail_kv_pump(
 ///   that will not open. The row is acked WITH a `warn` naming the sentence:
 ///   never a silent drop, and never a retry loop against a rail that has
 ///   already said no.
-pub async fn pump_once(app_state: &AppState) -> PumpOutcome {
+pub async fn pump_once(fabric: &FabricPart) -> PumpOutcome {
     let mut out = PumpOutcome::default();
-    let Some(rail) = app_state.ring_rail() else {
+    let Some(rail) = fabric.ring_rail() else {
         return out;
     };
-    let store = Arc::clone(&app_state.inner.fabric.mesh_store);
+    let store = Arc::clone(&fabric.mesh_store);
     let queued = match store.outbox_take(OUTBOX_DRAIN_LIMIT) {
         Ok(rows) => rows,
         Err(e) => {
@@ -342,7 +342,7 @@ pub async fn pump_once(app_state: &AppState) -> PumpOutcome {
         out.appended += appended_here;
 
         if appended_here > 0 {
-            seal_if_due(app_state, &rail, &journal, &roster, &mut out).await;
+            seal_if_due(fabric, &rail, &journal, &roster, &mut out).await;
         }
     }
 
@@ -353,7 +353,7 @@ pub async fn pump_once(app_state: &AppState) -> PumpOutcome {
     // constant is the same one (ARCH §10.6).
     if let Ok(journal) = rail.journal(MEASUREMENTS_NAMESPACE) {
         if let Ok(roster) = rail.roster(&journal).await {
-            seal_if_due(app_state, &rail, &journal, &roster, &mut out).await;
+            seal_if_due(fabric, &rail, &journal, &roster, &mut out).await;
         }
     }
 
@@ -371,7 +371,7 @@ pub async fn pump_once(app_state: &AppState) -> PumpOutcome {
     // failure direction is always "do not retire" (ARCH §18.3).
     if let Ok(journal) = rail.journal(WORK_NAMESPACE) {
         if let Ok(roster) = rail.roster(&journal).await {
-            seal_if_due(app_state, &rail, &journal, &roster, &mut out).await;
+            seal_if_due(fabric, &rail, &journal, &roster, &mut out).await;
         }
     }
 
@@ -387,13 +387,13 @@ fn ack(store: &MeshStore, ids: &[i64]) {
     }
 }
 
-const MEASUREMENTS_NAMESPACE: &str = sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID;
+pub const MEASUREMENTS_NAMESPACE: &str = sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID;
 
 /// The work plane's namespace, taken from the crate that owns the vocabulary
 /// rather than spelled again here (ARCH §10.6) — a second literal would be a
 /// second answer to what this data is called, and the symptom would be a
 /// silently empty fold rather than an error.
-const WORK_NAMESPACE: &str = commonwealth_work::WORK_NAMESPACE;
+pub const WORK_NAMESPACE: &str = commonwealth_work::WORK_NAMESPACE;
 
 /// Seal and snapshot this namespace if this node's own history above its last
 /// seal has passed [`SEAL_AFTER_OWN_OPS`].
@@ -410,7 +410,7 @@ const WORK_NAMESPACE: &str = commonwealth_work::WORK_NAMESPACE;
 /// one-sided, so the gate can only ever cost an extra admission — never miss a
 /// seal.
 async fn seal_if_due(
-    app_state: &AppState,
+    fabric: &FabricPart,
     rail: &RingRail,
     journal: &RingJournal,
     roster: &Roster,
@@ -508,7 +508,7 @@ async fn seal_if_due(
     // re-read from a fresh admission, which would be a second answer to "what
     // did we just seal at" (ARCH §10.6).
     out.snapshot_rows += snapshot(
-        app_state,
+        fabric,
         rail,
         journal,
         roster,
@@ -546,7 +546,7 @@ async fn seal_if_due(
 /// It is one act on the journal per seal — 2,000 ops apart — and it is NOT
 /// counted in `snapshot_rows`, which stays what it says: live rows re-appended.
 async fn snapshot(
-    app_state: &AppState,
+    fabric: &FabricPart,
     rail: &RingRail,
     journal: &RingJournal,
     roster: &Roster,
@@ -583,8 +583,8 @@ async fn snapshot(
         Some(Projector::Kv) => {}
     }
 
-    let self_id = app_state.self_node_id();
-    let rows = match app_state.inner.fabric.mesh_store.scan(namespace, "") {
+    let self_id = fabric.self_node_id();
+    let rows = match fabric.mesh_store.scan(namespace, "") {
         Ok(r) => r,
         Err(e) => {
             warn!(namespace, error = %e,
@@ -888,7 +888,7 @@ pub fn projector_for(namespace: &str) -> Option<Projector> {
 /// `apply_projection` refuses on privacy grounds. The two are different facts
 /// and a `0` for both would hide the second (ARCH §18.2).
 pub async fn project_namespace(
-    app_state: &AppState,
+    fabric: &FabricPart,
     rail: &RingRail,
     journal: &RingJournal,
 ) -> Option<usize> {
@@ -930,15 +930,15 @@ pub async fn project_namespace(
     // what keeps the reconciliation off rows this node has not put on the rail
     // yet. This module does no second pass — one call, one decision.
     let mesh_roster = MeshRoster::from_membership(
-        &*app_state.inner.fabric.mesh.read().await,
-        app_state.self_node_id(),
-        app_state.self_node_pubkey(),
+        &*fabric.mesh.read().await,
+        fabric.self_node_id(),
+        fabric.self_node_pubkey(),
     );
-    match app_state.inner.fabric.mesh_store.apply_projection(
+    match fabric.mesh_store.apply_projection(
         &namespace,
         &projection,
         |actor| mesh_roster.node_id_of(actor),
-        app_state.self_node_id(),
+        fabric.self_node_id(),
     ) {
         Ok(applied) => {
             debug!(
@@ -979,8 +979,8 @@ pub async fn project_namespace(
 /// without this a restart loses every row the mesh ever agreed on and the node
 /// re-learns them only as peers happen to re-send — which, on a digest
 /// exchange that ships only what a peer LACKS, is never.
-pub async fn project_all_on_disk(app_state: &AppState) -> usize {
-    let Some(rail) = app_state.ring_rail() else {
+pub async fn project_all_on_disk(fabric: &FabricPart) -> usize {
+    let Some(rail) = fabric.ring_rail() else {
         return 0;
     };
     let namespaces = match rail.namespaces() {
@@ -995,10 +995,7 @@ pub async fn project_all_on_disk(app_state: &AppState) -> usize {
         let Ok(journal) = rail.journal(namespace) else {
             continue;
         };
-        if project_namespace(app_state, &rail, &journal)
-            .await
-            .is_some()
-        {
+        if project_namespace(fabric, &rail, &journal).await.is_some() {
             projected += 1;
         }
     }
@@ -1010,6 +1007,3 @@ pub async fn project_all_on_disk(app_state: &AppState) -> usize {
     }
     projected
 }
-
-#[cfg(test)]
-mod tests;

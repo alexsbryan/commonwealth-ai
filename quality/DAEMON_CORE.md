@@ -208,7 +208,8 @@ caller classes the tree actually serves, measured: the turn surface is `.localho
 local processes — reach a turn, and every one is the single local owner; remote callers reach the
 OpenAI-compat surface (`/v1/chat/completions`), which performs no corpus retrieval, or the
 peer-admission-gated mesh routes. The full edge resolver below landed as `AppState::resolve`
-(`sovereign-api/src/principal.rs`), the one resolution over all five `Principal` arms, which
+(`sovereign-daemon/src/client_principal.rs` after the host cluster moved at `dm-daemon-api-edge`,
+2026-09-18; `sovereign-api/src/principal.rs` before that), the one resolution over all five `Principal` arms, which
 `client_auth_layer`, the host's `AdmissionHost::resolve` port and `peer_admission_layer` all call
 (`REVIEW-build-principal-one-resolver`, 2026-09-16).
 

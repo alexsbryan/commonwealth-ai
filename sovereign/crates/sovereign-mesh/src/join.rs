@@ -44,7 +44,7 @@ use tracing::{debug, info, warn};
 // `JoinRequestWire` and `JoinResponseWire` were mirrors of the founder's own
 // types, forked only because that side derived one half of serde each. Both
 // halves now; one type each.
-use sovereign_api::routes_internal::{
+use commonwealth_core::mesh::wire::{
     JoinRequest as JoinRequestWire, JoinResponse as JoinResponseWire,
 };
 

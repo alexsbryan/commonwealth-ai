@@ -20,6 +20,9 @@ commonwealth-work = { workspace = true, features = ["process"] }
 # that stay behind (DC §4.1; `[[forbid]] sovereign-mesh -> sovereign-daemon`
 # keeps the arrow one-way).
 sovereign-mesh = { workspace = true }
+# The daemon-to-daemon wire bodies the ring-sync route receives and the loops
+# send; a leaf both may name (domains dm-daemon-api-edge (a)).
+sovereign-peer-wire = { workspace = true }
 sovereign-contracts = { workspace = true }
 kernel-types = { workspace = true }
 oicp-types = { workspace = true }
@@ -37,8 +40,26 @@ sovereign-enrichment-catalog = { workspace = true }
 sovereign-meshapp = { workspace = true }
 sovereign-store = { workspace = true }
 sovereign-authoring-harness = { workspace = true }
-corpus-engine = { workspace = true }
+# The host cluster's own deps, arriving with sovereign-api's modules at
+# domains `dm-daemon-api-edge` (2026-09-18): the admission policy, the grant
+# store, the next-edit package crate, the HTTP body seam, the canonical-sync
+# codec and the small leaves the edge reads.
+serving-policy = { workspace = true }
+sovereign-grants = { workspace = true }
+code-next-edit = { path = "../../../code-next-edit" }
+corpus-engine = { workspace = true, features = ["treesitter"] }
+tree-sitter = "0.26"
+corpus-engine-scip = { workspace = true }
 corpus-engine-notes = { workspace = true }
+corpus-engine-atos = { workspace = true, optional = true }
+sovereign-atos = { path = "../sovereign-atos", optional = true }
+http-body = "1"
+arc-swap = { workspace = true }
+sha2 = { workspace = true }
+tar = "0.4"
+zstd = "0.13"
+tokio-util = { version = "0.7", features = ["io", "io-util"] }
+dirs = "5"
 # The composition half of `sovereign-cli-daemon`'s `daemon_cmd` (domains
 # `dm-daemon-cli-composition`, DAEMON_CORE.md §4.1 row 4) reaches these
 # directly now: the solve surface (`sovereign-tdd`), the compute-child
@@ -63,7 +84,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 axum = { workspace = true }
-tower-http = { workspace = true }
+tower-http = { workspace = true, features = ["timeout"] }
 thiserror = { workspace = true }
 toml = { workspace = true }
 uuid = { workspace = true }
@@ -91,7 +112,7 @@ treesitter = ["sovereign-mesh/treesitter", "sovereign-tools/treesitter"]
 # The daemon's ATOS code-intel tools on the MCP surface and the headless OCR
 # installer. Both cfg gates moved here with the composition half (domains
 # `dm-daemon-cli-composition`); the binary's features forward to these.
-atos = ["sovereign-tools/atos", "sovereign-mesh/atos"]
+atos = ["sovereign-tools/atos", "sovereign-mesh/atos", "dep:sovereign-atos", "dep:corpus-engine-atos"]
 ocr = ["sovereign-tools/paddle-ocr"]
 
 [dev-dependencies]
@@ -100,6 +121,14 @@ arc-swap = { workspace = true }
 corpus-engine-scip = { workspace = true }
 # `solve_http`'s route test drives the router with `tower::ServiceExt`.
 tower = { workspace = true, features = ["util"] }
+# The host cluster's own integration tests, moved from sovereign-api at
+# domains `dm-daemon-api-edge`: `rail_e2e` installs a real ring signer, the
+# loopback-vs-remote split drives the router with `tower::oneshot`, and the
+# middleware fixtures come from sovereign-contracts' `test-fixtures`.
+ed25519-dalek = { workspace = true }
+tokio = { workspace = true, features = ["test-util", "macros"] }
+http-body-util = "0.1"
+sovereign-contracts = { workspace = true, features = ["test-fixtures"] }
 
 [lints]
 workspace = true

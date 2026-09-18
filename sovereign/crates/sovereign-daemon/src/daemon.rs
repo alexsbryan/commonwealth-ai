@@ -11,12 +11,12 @@ use std::sync::{Arc, Weak};
 use tokio::sync::RwLock;
 use tracing::{info, warn};
 
+use crate::state::{AppState, LocalInferenceService};
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::Mesh;
 use commonwealth_discovery::mdns::{BrowseHandle, DiscoveredPeer, MdnsDiscovery};
 use commonwealth_discovery::membership;
 use corpus_engine::CorpusEngine;
-use sovereign_api::state::{AppState, LocalInferenceService};
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::{InferenceProvider, StateStore};
 // The candidate record moved to `sovereign-scheduler` (domains row
@@ -1055,7 +1055,7 @@ impl EmbeddedDaemon {
         // leave, and we intend to come back.
         if let Some(app_state) = self.app_state().await {
             sovereign_mesh::gossip::announce_presence_change(
-                &app_state,
+                &*app_state.inner.fabric,
                 sovereign_mesh::gossip::PresenceChange::Parked,
             )
             .await;
@@ -1137,7 +1137,7 @@ impl EmbeddedDaemon {
     /// `AppState` is `Clone` over an `Arc<AppStateInner>`, so this
     /// is cheap and the returned handle survives any subsequent
     /// state transitions.
-    pub async fn app_state(&self) -> Option<sovereign_api::state::AppState> {
+    pub async fn app_state(&self) -> Option<crate::state::AppState> {
         match &*self.state.read().await {
             DaemonState::Running { app_state, .. } => Some(app_state.clone()),
             _ => None,
@@ -1179,7 +1179,7 @@ impl EmbeddedDaemon {
     /// `commonwealth-api` dep.
     pub async fn build_yield_hook(&self) -> Option<std::sync::Arc<dyn corpus_engine::YieldHook>> {
         let state = self.app_state().await?;
-        Some(sovereign_api::yield_hook::AppStateYieldHook::new(
+        Some(crate::yield_hook::AppStateYieldHook::new(
             state.inner.clone(),
         ))
     }
@@ -1463,7 +1463,7 @@ impl EmbeddedDaemon {
             // `removed_at` tombstone would tell peers we left, and we have not.
             if let Some(app_state) = self.app_state().await {
                 sovereign_mesh::gossip::announce_presence_change(
-                    &app_state,
+                    &*app_state.inner.fabric,
                     sovereign_mesh::gossip::PresenceChange::Parked,
                 )
                 .await;
@@ -1750,7 +1750,7 @@ impl EmbeddedDaemon {
         // (gossiped `removed_at`) instead of re-learning our stale live record on
         // their next round. Then tear down + clear local state.
         if let Some(app_state) = self.app_state().await {
-            sovereign_mesh::gossip::announce_departure(&app_state).await;
+            sovereign_mesh::gossip::announce_departure(&*app_state.inner.fabric).await;
         }
         self.stop_inner(StopMode::Leave).await
     }
@@ -2122,8 +2122,13 @@ impl EmbeddedDaemon {
         // taking the write lock: the round takes it too.
         if !force && self.has_unconfirmed_online_peers(&app_state).await {
             info!("rotate: peers unconfirmed since boot — one gossip round before deciding");
-            if let Err(e) =
-                gossip::run_one_round(&app_state, gossip::DEFAULT_OFFLINE_THRESHOLD).await
+            if let Err(e) = gossip::run_one_round(
+                &*app_state.inner.fabric,
+                app_state.inner.node.corpus_engine.as_ref(),
+                &app_state,
+                gossip::DEFAULT_OFFLINE_THRESHOLD,
+            )
+            .await
             {
                 warn!(
                     error = %e,
@@ -3011,7 +3016,7 @@ impl EmbeddedDaemon {
         // info. The key stays captured in the closure — AppState never holds
         // raw key material.
         let signing_key = identity_key.clone();
-        let self_dial_signer: Option<Arc<sovereign_api::state::DialSigner>> = Some(Arc::new(
+        let self_dial_signer: Option<Arc<crate::state::DialSigner>> = Some(Arc::new(
             move |version, relay: Option<String>, addrs: Vec<std::net::SocketAddr>| {
                 commonwealth_transport::identity::sign_dial_info(
                     &signing_key,
@@ -3041,7 +3046,7 @@ impl EmbeddedDaemon {
         // the next 10s gossip-loop re-persist fires, forgetting the joiner on
         // restart. A construction argument now, so the `Arc::get_mut`
         // silent-no-op that used to swallow it is gone.
-        let mesh_mutation_hook: Option<sovereign_api::state::MeshMutationHook> =
+        let mesh_mutation_hook: Option<crate::state::MeshMutationHook> =
             if self.persistence_enabled() {
                 let data_dir = self.data_dir.clone();
                 Some(Arc::new(
@@ -3057,7 +3062,7 @@ impl EmbeddedDaemon {
             } else {
                 None
             };
-        let fabric_seed = sovereign_api::state::FabricSeed {
+        let fabric_seed = crate::state::FabricSeed {
             convergence: convergence_recorder,
             self_node_pubkey,
             self_dial_signer,
@@ -3066,7 +3071,7 @@ impl EmbeddedDaemon {
             // The reader the iroh install publishes through later; seeded with
             // the client-port-correct `IpTransport` so the uniform-port
             // assumption holds until iroh binds.
-            peer_transport: sovereign_api::state::TransportReader::new(ip_transport.clone()),
+            peer_transport: crate::state::TransportReader::new(ip_transport.clone()),
             ..Default::default()
         };
         // Serving's provider and warmer exist before its part is built (DC §4.2
@@ -3092,14 +3097,14 @@ impl EmbeddedDaemon {
                 // seed its RPC tensor cache with a shard on request
                 // (`POST /internal/rpc-warm`). A node that can serve chat can
                 // serve as an RPC worker. See `rpc_warm_http`.
-                let warmer: Arc<dyn sovereign_api::state::RpcShardWarmer> =
+                let warmer: Arc<dyn crate::state::RpcShardWarmer> =
                     Arc::new(crate::rpc_warm_http::MeshRpcShardWarmer::new());
-                sovereign_api::state::ServingSeed {
+                crate::state::ServingSeed {
                     local_inference: Some(adapter),
                     rpc_shard_warmer: Some(warmer),
                 }
             }
-            None => sovereign_api::state::ServingSeed::default(),
+            None => crate::state::ServingSeed::default(),
         };
         // ── Client API bind — the OpenAI-compatible public surface ────
         //
@@ -3153,7 +3158,7 @@ impl EmbeddedDaemon {
         client_bind = posture.bind;
         // The node's part exists before it is built, token and all (DC §4.2
         // "Construction is staged, and parts are total").
-        let node_seed = sovereign_api::state::NodeSeed {
+        let node_seed = crate::state::NodeSeed {
             client_token: posture.token.map(Into::into),
         };
         let app_state =
@@ -3219,10 +3224,10 @@ impl EmbeddedDaemon {
                 );
             }
             let hook: Arc<dyn corpus_engine::YieldHook> =
-                sovereign_api::yield_hook::AppStateYieldHook::new(app_state.inner.clone());
+                crate::yield_hook::AppStateYieldHook::new(app_state.inner.clone());
             engine.set_yield_hook(hook);
             info!("foreground-yield: hook installed on corpus engine");
-            engine.set_foreground_signal(sovereign_api::yield_hook::AppStateForegroundSignal::new(
+            engine.set_foreground_signal(crate::yield_hook::AppStateForegroundSignal::new(
                 app_state.inner.clone(),
             ));
             info!("foreground-yield: turn lease installed on corpus engine");
@@ -3540,7 +3545,7 @@ impl EmbeddedDaemon {
         // peer as a local caller. The iroh acceptor forwards `GUEST_ALPN`
         // here, so a `sovereign://guest/…` bearer is actually read instead of
         // being skipped by the loopback arm — see
-        // `sovereign_api::client_auth`.
+        // `crate::client_auth`.
         //
         // Bound HERE, before the serve task is spawned, because
         // `MeshIrohAccess::start` below needs the resolved port and the serve
@@ -3622,7 +3627,7 @@ impl EmbeddedDaemon {
         self.client_listener.send_replace(ClientListener::Pending);
         let listener_outcome = self.client_listener.clone();
         let serve_handle = tokio::spawn(async move {
-            let mut client_router = sovereign_api::server::client_router(app_state_clone.clone());
+            let mut client_router = crate::server::client_router(app_state_clone.clone());
             if let Some(m) = mcp_mount {
                 // Phase 5: daemon path leaves the spec-presence gate
                 // off (`FeatureRoot::new(None)`) so `tools/list`
@@ -3647,18 +3652,18 @@ impl EmbeddedDaemon {
             for router in mounted {
                 client_router = client_router.merge(router);
             }
-            let internal_router = sovereign_api::server::internal_router(app_state_clone.clone());
-            let peer_router = sovereign_api::server::client_router_for(
+            let internal_router = crate::server::internal_router(app_state_clone.clone());
+            let peer_router = crate::server::client_router_for(
                 app_state_clone.clone(),
-                sovereign_api::server::ClientSurface::Peer,
+                crate::server::ClientSurface::Peer,
             );
-            let guest_router = sovereign_api::server::client_router_for(
+            let guest_router = crate::server::client_router_for(
                 app_state_clone.clone(),
-                sovereign_api::server::ClientSurface::Guest,
+                crate::server::ClientSurface::Guest,
             );
-            let rail_router = sovereign_api::server::client_router_for(
+            let rail_router = crate::server::client_router_for(
                 app_state_clone,
-                sovereign_api::server::ClientSurface::Rail,
+                crate::server::ClientSurface::Rail,
             );
 
             // Phase 3 takeover: a `sovereign init` invocation may have
@@ -3823,7 +3828,10 @@ impl EmbeddedDaemon {
                 // to leave the on-disk snapshot stale, so a Founder restart
                 // forgot every Joiner and Joiners had to rejoin each time).
                 let gossip_handle = gossip::spawn_gossip_loop(
-                    app_state.clone(),
+                    app_state.inner.fabric.clone(),
+                    app_state.inner.node.corpus_engine.clone(),
+                    Arc::new(app_state.clone())
+                        as Arc<dyn sovereign_contracts::self_claims::SelfClaims>,
                     gossip::DEFAULT_GOSSIP_INTERVAL,
                     gossip::DEFAULT_OFFLINE_THRESHOLD,
                     persist_dir,
@@ -3845,14 +3853,14 @@ impl EmbeddedDaemon {
                 // half of "the journal is truth" — production `MeshStore` is
                 // `in_memory()`.
                 let ring_sync_handle = sovereign_mesh::ring_sync::spawn_ring_sync_loop(
-                    app_state.clone(),
+                    app_state.inner.fabric.clone(),
                     sovereign_mesh::ring_sync::DEFAULT_RING_SYNC_INTERVAL,
                     Arc::clone(&ring_write_nudge),
                 );
                 running_services.record(crate::local_only::MeshService::RingSync);
 
                 let rail_kv_pump_handle = sovereign_mesh::rail_kv_pump::spawn_rail_kv_pump(
-                    app_state.clone(),
+                    app_state.inner.fabric.clone(),
                     sovereign_mesh::rail_kv_pump::RAIL_KV_PUMP_INTERVAL,
                     ring_write_nudge,
                 );
@@ -4484,6 +4492,8 @@ impl EmbeddedDaemon {
         let state = self.state.read().await;
         if let DaemonState::Running { app_state, .. } = &*state {
             gossip::initial_sync(
+                &*app_state.inner.fabric,
+                app_state.inner.node.corpus_engine.as_ref(),
                 app_state,
                 gossip::DEFAULT_OFFLINE_THRESHOLD,
                 std::time::Duration::from_secs(2),
@@ -5390,8 +5400,8 @@ mod tests {
     /// Commonwealth's handler had nothing to list.
     #[test]
     fn register_local_model_slots_writes_info_for_all_three_slots() {
+        use crate::state::AppState;
         use commonwealth_core::mesh::Mesh;
-        use sovereign_api::state::AppState;
 
         let mesh = Mesh {
             mesh_secret: [0u8; 32],

@@ -48,8 +48,8 @@
 //! (`apply_projection_refuses_an_excluded_namespace`). The work-atlas tools
 //! still gate on `Privacy::Public` before calling here at all.
 
+use crate::state::AppState;
 use async_trait::async_trait;
-use sovereign_api::state::AppState;
 use sovereign_work_atlas::tools::ClaimBroadcaster;
 
 use sovereign_mesh::rail_kv_pump;
@@ -81,9 +81,9 @@ impl ClaimBroadcaster for MeshBroadcaster {
     /// an index — and that is also why a private `app_id` arriving here cannot
     /// leak: its row was never queued.
     async fn broadcast(&self, app_id: &str, key: &str) {
-        let out = rail_kv_pump::pump_once(&self.app_state).await;
+        let out = rail_kv_pump::pump_once(&self.app_state.inner.fabric).await;
         if out.appended > 0 {
-            self.app_state.ring_write_nudge().notify_one();
+            self.app_state.inner.fabric.ring_write_nudge().notify_one();
         }
         tracing::debug!(
             app_id,
@@ -119,7 +119,7 @@ mod tests {
             Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new()),
             None,
             None,
-            sovereign_api::state::FabricSeed {
+            crate::state::FabricSeed {
                 ring_rail: Some(rail.clone()),
                 ..Default::default()
             },

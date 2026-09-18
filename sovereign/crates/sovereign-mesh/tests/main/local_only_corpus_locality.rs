@@ -44,7 +44,7 @@ use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
 use commonwealth_state::MeshStore;
 use corpus_engine::index::{CorpusIndex, InsertChunk};
 use corpus_engine::{CorpusEngine, EmbedFn};
-use sovereign_api::state::AppState;
+use sovereign_daemon::state::AppState;
 use sovereign_mesh::gossip;
 use sovereign_meshapp_registry::registry::AppRegistry;
 
@@ -201,9 +201,14 @@ async fn query_sharing_false_corpus_does_not_publish_to_hosted_corpora() {
     // capabilities" path runs regardless — it doesn't need a peer
     // to be reachable. After this, our own MemberRecord's
     // `hosted_corpora` is the filtered list.
-    gossip::run_one_round(&state, Duration::from_secs(60))
-        .await
-        .expect("gossip round succeeds with no peers");
+    gossip::run_one_round(
+        &*state.inner.fabric,
+        state.inner.node.corpus_engine.as_ref(),
+        &state,
+        Duration::from_secs(60),
+    )
+    .await
+    .expect("gossip round succeeds with no peers");
 
     let m = state.inner.fabric.mesh.read().await;
     let corpora_ids: Vec<&str> = m

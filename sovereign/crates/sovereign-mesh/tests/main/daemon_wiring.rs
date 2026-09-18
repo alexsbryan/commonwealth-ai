@@ -31,10 +31,10 @@ use serde_json::json;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_state::MeshStore;
-use sovereign_api::server::{client_router, internal_router};
-use sovereign_api::state::{AppState, LocalInferenceService, ServingSeed};
 use sovereign_core::traits::InferenceProvider;
+use sovereign_daemon::server::{client_router, internal_router};
 use sovereign_daemon::slot_manifest::CoreSlotManifest;
+use sovereign_daemon::state::{AppState, LocalInferenceService, ServingSeed};
 use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
 use sovereign_meshapp_registry::registry::AppRegistry;
 
@@ -70,7 +70,7 @@ fn build_wired_app_state() -> (AppState, Arc<AtomicUsize>) {
 
     let counter = Arc::new(AtomicUsize::new(0));
     let counter_clone = Arc::clone(&counter);
-    let hook: sovereign_api::state::MeshMutationHook =
+    let hook: sovereign_daemon::state::MeshMutationHook =
         Arc::new(move |_mesh: &Mesh, _self_id: NodeId| {
             counter_clone.fetch_add(1, Ordering::Relaxed);
         });
@@ -98,7 +98,7 @@ fn build_wired_app_state() -> (AppState, Arc<AtomicUsize>) {
         app_registry,
         None,
         None,
-        sovereign_api::state::FabricSeed {
+        sovereign_daemon::state::FabricSeed {
             mesh_mutation_hook: Some(hook),
             ..Default::default()
         },

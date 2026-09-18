@@ -20,9 +20,9 @@ use std::sync::Arc;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_state::MeshStore;
-use sovereign_api::state::{AppState, LocalInferenceService, ServingSeed};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_daemon::slot_manifest::CoreSlotManifest;
+use sovereign_daemon::state::{AppState, LocalInferenceService, ServingSeed};
 use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
 use sovereign_meshapp_registry::registry::AppRegistry;
 
@@ -76,7 +76,7 @@ fn mesh_mutation_hook_is_present_at_construction() {
     // `Arc::get_mut` contract. It is a constructor argument now, so a future
     // refactor cannot re-order a clone ahead of it: the hook is present the
     // moment the state exists (ARCH 10 — structural, not remembered).
-    let hook: sovereign_api::state::MeshMutationHook =
+    let hook: sovereign_daemon::state::MeshMutationHook =
         Arc::new(|_mesh: &Mesh, _self_id: NodeId| {
             // Body intentionally empty — the test isn't about firing the
             // hook, only about it surviving construction.
@@ -88,7 +88,7 @@ fn mesh_mutation_hook_is_present_at_construction() {
         Arc::new(AppRegistry::new()),
         None,
         None,
-        sovereign_api::state::FabricSeed {
+        sovereign_daemon::state::FabricSeed {
             mesh_mutation_hook: Some(hook),
             ..Default::default()
         },

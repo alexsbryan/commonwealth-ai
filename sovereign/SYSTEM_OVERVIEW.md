@@ -256,7 +256,8 @@ crates/
 ├── sovereign-runtime-recipe # THE recipe that commissions a `Runtime`: the router classifier stack, the turn tool registry and the enrichment lane, below every host. Minted 2026-08-25 (TOPOLOGY.md §10 phase 5c) — the recipe needs `sovereign-tools` + `sovereign-gliner` and every crate that could already see both was a host BINARY, so `svrn chat`, the desktop and `sovereign-server` each carried their own ~600-line copy and only ONE of eleven optional slots was wired by all three. **All four hosts are on it as of 2026-08-26** (phase 7): `sovereign daemon run`, `svrn chat`, the desktop and the hub server, so `runtime_commission_census.rs`'s `UNSHARED_RECIPES` list is EMPTY. A host now supplies `RecipeInputs` — inference, store, corpus engine, skills, `Vec<Box<dyn ToolBundle>>`, `ToolSwitches`, `LaneWarmth`, `RerankWiring` — and struct-updates only the slots that are its own. `common_parts` returns the parts, the shared `AtlasContextManager` and the MCP manager; `commission` is the only `Runtime::new` in first-party production code
 ├── sovereign-turn-client  # THE client half of the turn protocol — how a surface asks a serving host for a turn. Minted 2026-08-25 (TOPOLOGY.md §10 phase 6) in the **contract** layer beside `oicp-client`, the existing precedent for "protocol types plus the client that speaks them"; its only non-leaf dependency is `sovereign-contracts`, so it cannot see a `Runtime`, a store or a corpus — which is what lets a surface depend on it without dragging a serving host's world along. `TurnClient::run_turn` is the client-side mirror of `sovereign_core::runtime::serve_turn`: ONE implementation of "drive a turn to completion and tell me what it did", where five CLI ask commands each had their own and each ended by re-reading the store — which only works from inside the process that owns it. `svrn chat ask` and `svrn chat session` are its first callers and hold no `Runtime`. Before it, the only Rust code that had ever SENT a `TurnRequest` was two integration tests, each with its own hand-rolled WebSocket dance `TurnClient::create_conversation(skill_id, enabled_corpora)` (2026-09-01, issue #57) carries the per-conversation corpus allow-list on the create body — `svrn chat ask/session --corpus <id>` — which the host validates in `Runtime::seed_conversation` against the corpora it would actually search and refuses with a 400 naming the unknown id and the installed list; the key is omitted when unset, so an unscoped create is byte-identical to before. **The protocol's asking half became two shapes (sv-surface R1, 2026-09-09)**: `TurnFrame::{ApprovalRequest,UserInputRequest}` folded into `TurnFrame::Prompt { id, prompt }` and `TurnRequest::{Approve,UserReply}` into `TurnRequest::Answer { id, answer }` — one host-minted id replaces the three key formats, `TurnPrompt`/`TurnAnswer`/`TurnNotice` are closed enums in `sovereign-contracts::types::turn` (`Turn*`-qualified because bare `Prompt`/`Answer` are already nouns in commonwealth-api and kernel-types), and `TurnFrame::Notice { notice }` lands beside them for everything no answer is owed — `StepDone`, `MessageRefined`, `LessonProposed`, `ResolveAck`, `TurnStarted` (gap-ledger rows G4-G8, G10, whose daemon-side producers land at R3; the fold was free because nothing rendered the old variants — three ignore arms, a deliberate error, and the byte pins were the whole consumer census). `ResolveOutcome` and `StepStatus` moved to `sovereign_contracts::types::approval` so the wire carries the type instead of mirroring it (core re-exports at the historical path), `ApprovalDesk::resolve_answer` is the one `TurnAnswer`-to-parked-kind mapping, and `sovereign-server`'s `ExecutorEvent` ask-variants converged on the same `Prompt` shape — its `{task}:{step}` slot format is just what it mints the id FROM, so a client answers identically whichever host it reached. **The client half learned to answer while it reads (sv-surface R2, 2026-09-09)**: the turn socket splits at connect — one writer task fed by an unbounded channel, the reader kept by `TurnStream` — and the write half is a cloneable `TurnSender` (`TurnStream::sender()`), so a prompt's answer goes onto the wire from the task that renders the card while the task draining tokens keeps reading; before the split that shape could not be written against this crate at all. `connect_with(StreamOptions { claim_approvals })` claims the conversation's approvals (`?approvals=true` — the unclaimed URL is byte-identical to before), `TurnSender::send_answer` replies to a `Prompt`, and `TurnObserver::on_notice` + `TurnStream::drain_after_complete` read the post-terminal window (message-refined and lesson-proposed fire after `Complete`; any non-Notice frame there is an error by name). Proven by in-crate tests against a fake WebSocket host that holds its turn until answered. **The socket's LIFECYCLE closed at sv-surface RB1-RB5 (2026-09-10)**: nobody closed it — `handle_ws` looped forever, so every turn leaked a WebSocket, a writer task and a `SocketApprovalChannel` on both ends. `TurnNotice::TurnSettled { message_id }` is emitted once every producer that can still speak on the socket has let go, and the settle predicate is a JOIN rather than a timer: `producers_outstanding` sums frame-sender clones plus `Arc` holders of the socket's approval channel and routing sink against a resting count measured before any turn. The sender-only version shipped first and was wrong — the detached post-stream refinement spawn holds an `Arc`, not a sender clone, so settle fired before `MessageRefined` and the client read "refining forever" as done. `IDLE_AFTER_SETTLED` (30s with no new request) then sends Close and `POST_COMPLETE_SETTLE_MAX` (60s) bounds a producer that never lets go, at WARN (`sovereign-daemon/src/turn_http.rs`). Refusals stopped riding `StreamError`: every answer outcome comes back as `TurnNotice::ResolveAck { id, outcome }` — a notice, never terminal — so a double-clicked approve no longer discards a healthy turn, and `ResolveOutcome::{WaiterGone, Unclaimed}` are named non-successes instead of collapsing into `Resolved`. `TurnRequest::Cancel` and hangup now reach a PARKED prompt: `ApprovalDesk::abandon_all` (`sovereign-core/src/approval_desk.rs`) resolves every parked entry per kind (consent/input → cancelled, information → skipped) BEFORE the task abort, where cancel used to trip the token and leave a turn parked on a `Prompt` with no `Complete` ever; prompt ids carry a per-turn nonce so a late answer cannot resolve the next turn's same-numbered question. Client-side `drain_after_complete` returns on `TurnSettled` or a host close. The desktop reads the socket ONCE — one pump, spawned immediately, with a pure `lead_disposition` classifying the lead frame, because an agentic turn's FIRST frame is a `Prompt` and the private lead loop that only forwarded `Narration|Notice` hung every agentic ask — and keeps one wire slot PER CONVERSATION (`sovereign-desktop/src-tauri/src/state/wire_turns.rs`: `TurnWires` keyed by conversation, released only on `Arc::ptr_eq` with the pump's own sender, `PendingPrompts` routing an answer through the prompt's own conversation). A pump that ends before deciding is an `Err`; a dropped turn is not an empty one. **Reachability joined it at sv-surface (2026-09-11)**: `reach.rs` — `ServingHost::at(base).is_serving()` / `.wait_until_serving(d)` / `.ensure_reachable(d)` — is the one implementation of "is a backend answering", a question thirteen functions across five crates each answered privately (`probe_daemon` / `daemon_reachable` / `wait_for_daemon` / `wait_for_ready`, per-probe timeouts from 500ms to 5s) plus an inline loop in the desktop's `attach_watch`. It lives here because of the bar it serves: `sv-no-daemon-management` (revised by the operator the same day) puts "ensure a backend is reachable" in the CLIENT package the way connection setup belongs to a database driver, so the desktop can hold ZERO daemon code rather than a tolerable little — the precedent is a language-server client or an embedded DB driver, never `libpq`, which does not start Postgres. Hence the `bundled-backend` cargo feature, OFF by default and, since svt-1 (2026-09-11), declared by exactly one surface — `sovereign-desktop`, which ships the backend the declaration promises as a `sovereign-cli-daemon` Tauri sidecar (`DEFAULTS_LEDGER` row GRADUATED that day): with it on, `BundledBackend::at(path)` names a binary the client may bring up when nothing answers — spawned detached (unix `process_group(0)`, Windows `DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP`), the `Child` dropped at the spawn site, the pid returned as a fact. No retry, no health loop, no restart policy: a client holding any of those is managing a daemon again (ARCH principle 12). The feature asks about the BUILD, not the platform, so a phone flips it the day a model fits rather than needing a second architecture; it declares no dependency, so turning it on moves no dependency edge (`cargo tree`, 220 crates identical both ways) and the bar's dependency-edge gate reads the same either way. Absence is typed rather than defaulted — `NotReachable::{NoBackendInThisBuild, NoBackendConfigured, LaunchFailed, SilentAfterLaunch}` (§18.3). First callers: `attach_watch`, `search_gym`, `bench ablate`. **The readiness door became a parameter at svt-2 (2026-09-11)**: `ServingHost::ready_at(path)`, with `DEFAULT_READY_PATH` still `/v1/models` byte-for-byte so no existing caller moves. `sovereign-server` — the phone-facing mobile host — serves no `/v1/models` at all, so the default 404s forever against a host that is serving fine; the alternative was a fourteenth private probe loop in the Mobile-access toggle, which is what this module exists to retire (ARCH principle 8). **The mesh itself crossed at svt-3 (2026-09-11)**: `TurnClient::{mesh_status, mesh_create, mesh_join, mesh_rotate, mesh_switch, mesh_forget, mesh_leave, mesh_relay_candidates}` speak `sovereign_mesh::mesh_http`'s `/v1/mesh/*` routes on the CLIENT port, which is why they live beside the two `/internal/*` mesh-admin reads in a new `src/mesh.rs` — the first of the per-family modules the size ratchet has been owed since the client absorbed every route family, and the reason `lib.rs` shrank (4,170 → 4,088) rather than grew on a change that added eight capabilities. Every read is `T: DeserializeOwned` for this crate's usual reason: `StatusResponse`, `KnownMeshDto` and `RelayCandidate` are defined in `sovereign-mesh`, and a client that could name them would be a client that links a daemon.
 ├── sovereign-mesh           # In-process cmnwlth embed; Fabric's own half (roster, rail, identity, the gossip/ring loops). Its host cluster left at `dm-daemon-mesh-edge`, its `jobs` family at `dm-daemon-mesh-jobs` and its two adapters at `dm-daemon-mesh-adapters` (2026-09-17)
-├── sovereign-daemon         # The node's host crate (DAEMON_CORE.md §4.1) — assembly, the surface shells, the edge and the adapters. Receives sovereign-mesh's host modules and sovereign-api's host cluster. sovereign-mesh's host cluster moved in whole at `dm-daemon-mesh-edge` (2026-09-17: the 37-module strongly-connected component — `daemon`, `daemon_services`, the 21 route shells, the edge leaves and the MCP mount) and its `jobs` family followed at `dm-daemon-mesh-jobs` (2026-09-17: `auto_ingest`, `auto_resume`, `ingest_executor`, `watched_folder_setup`, `watched_folder_runtime`, `job_registry`, `supervised_task`, `work_donor`) and its two `adapters` at `dm-daemon-mesh-adapters` (2026-09-17: `newsworthy_host`, `work_atlas_broadcaster`); `REVIEW-build-daemon-embedded-split` splits `daemon.rs` by owner next, and sovereign-api's host cluster follows
+├── sovereign-daemon         # The node's host crate (DAEMON_CORE.md §4.1) — assembly, the surface shells, the edge and the adapters. Receives sovereign-mesh's host modules and sovereign-api's host cluster. sovereign-mesh's host cluster moved in whole at `dm-daemon-mesh-edge` (2026-09-17: the 37-module strongly-connected component — `daemon`, `daemon_services`, the 21 route shells, the edge leaves and the MCP mount) and its `jobs` family followed at `dm-daemon-mesh-jobs` (2026-09-17: `auto_ingest`, `auto_resume`, `ingest_executor`, `watched_folder_setup`, `watched_folder_runtime`, `job_registry`, `supervised_task`, `work_donor`) and its two `adapters` at `dm-daemon-mesh-adapters` (2026-09-17: `newsworthy_host`, `work_atlas_broadcaster`). sovereign-api's host cluster followed in whole at `dm-daemon-api-edge` (2026-09-18: the edge — `admission`, `client_auth`, `client_principal`, `client_surface`, `frontdoor`, `headers`, `reshaping`, `yield_hook`, `middleware/` — `state` with its five remaining parts, `server`, every route shell, the crate's own integration tests and its two examples, in one commit because edge ↔ state ↔ routes is one Cargo cycle and `[[forbid]] sovereign-api -> sovereign-*` blocks the shim direction); the same commit moved `state/fabric.rs` to its owner `sovereign-mesh` and created `sovereign-peer-wire`. `REVIEW-build-daemon-embedded-split` splits `daemon.rs` by owner next, and `REVIEW-build-daemon-parts` relocates the `state/*.rs` parts to their owners
+├── sovereign-peer-wire      # The daemon-to-daemon wire types both ends of an internal exchange must spell the same way (domains dm-daemon-api-edge (a)): `MAX_REQUEST_BODY_BYTES`, `RING_SYNC_OPS_BUDGET_BYTES`, `RingSyncRequest` and `RingSyncResponse`. The receiving route lives in sovereign-daemon and the sending loop in sovereign-mesh, so the shared body needs a leaf neither makes the other's dependency
 ├── sovereign-compute        # Supervised compute-child process boundary (P1): child-process supervisor + native lossless wire + child server/entrypoint + daemon-side single-child routing facade. Value = crash isolation + distributed case, NOT parallelism (see doc)
 ├── sovereign-pods           # Compute's remote isolation — leasing a rented machine and running work on it (DOMAINS.md §11.2); receives the worker_http / controller / daemon / subprocess-runner / multi-pod-coordinator modules lifted out of sovereign-mesh. `worker_pod`'s owner↔pod wire protocol moved to `sovereign-contracts` (REVIEW-build-serving-worker-port, 2026-09-15) so the serving host can name it without a third package [[exception]]; `sovereign-pods` re-exports it at the historical path
 ├── sovereign-scheduler      # Arithmetic over the published language — the serving package's ranker, decision/outcome record types and replay, lifted out of sovereign-mesh; names `oicp-types` and nothing else (SERVING_BOUNDARY.md "The two tiers"). A stub until the scheduler half moves in
@@ -309,7 +310,7 @@ None of them is mesh substrate. The first four (`domains-1`) went to
 
 | Was | Is | What it actually holds |
 |---|---|---|
-| `commonwealth-api` | `sovereign-api` | HTTP servers (client 9741 + internal 9742). A TEMPORARY home — its contents are four contexts fused (Host, Serving, Workbench's next-edit, Fabric's internal routes) and its end state is dissolution |
+| `commonwealth-api` | `sovereign-api` | HTTP servers (client 9741 + internal 9742). Emptied at `dm-daemon-api-edge` (2026-09-18) — the host cluster moved to `sovereign-daemon` — and now holds only the shims for the modules that left earlier; `REVIEW-build-sovereign-api-retire` deletes it |
 | `commonwealth-inference` | `sovereign-serving` | `RequestRouter`, `RoutingRule`, `LoadPolicy`, `InferencePlan`, `MeshPlan` — the SERVING context, named at last. The peg the scheduler in `sovereign-mesh` lands on later. Emptied to zero and deleted 2026-09-15 (`REVIEW-build-serving-empty-peg`): `inference_plan`/`store_adapter` went to `commonwealth-state`, the re-exports to `oicp-types`/`commonwealth-core` |
 | `commonwealth-knowledge` | `sovereign-grants` | No knowledge at all: `GuestGrant`, `GuestGrantStore`, `EphemeralGrantStore` and **`Scope`** — the per-turn authorization value `TOPOLOGY.md` §3.5 is built around, which lived in a crate named for knowledge. Imperfect: its shard manager and work queue do not belong under this name either and were left rather than split in a move |
 | `commonwealth-app` | `sovereign-meshapp-registry` | Mesh-app manifest, registry, port map, proxy. Open question flagged, not settled: `sovereign-meshapp` (5,656 lines of DTOs) is a second crate about mesh apps |
@@ -4837,7 +4838,7 @@ deleted; see `docs/specs/OICP_RATIONALIZATION.md` for the audit):
 | Joiner decides a turn is offload-*eligible* | `sovereign-mesh/oicp_select.rs::offload_eligible` | SLOT_POLICY §5: `privacy == MeshAllowed && latency_class != Fast`. One predicate, shared by `select_peers_ranked` and `shared_primary_id`; replaced the old privacy-gate + `preferred_speed != Slow` pair (the Speed shadow no longer gates routing) |
 | Joiner picks peer-vs-local for an eligible turn | `sovereign-serving-host/src/peer_inference.rs::select_peers_ranked` | OICP claim score × operational adjustments (observations, load, locality, cold-start, throughput, availability); forced-choice sentinels exclude peers not advertising `x:forced_choice` |
 | Joiner resolves a *named* target | `sovereign-serving-host/src/peer_inference.rs::locate_named_model` | Name resolution + min-in-flight tiebreak, **not** the scorer. **Hard** (caller-supplied `model_id`) is a constraint: unknown ⇒ error, never substitution. But a peer route that FAILS is not the same as unknown: `LocalAlternative` records whether the peer was the sole holder or merely won the min-in-flight tiebreak over us, and in the latter case a peer failure is served from our own copy of the same id (2026-08-06 — before this, a shed peer 503'd a caller for a model that was loaded locally). Serving the named id here is honouring the name, not substituting for it; sole-holder routes still fail loud. **All three entry points (`complete`, `complete_stream_with_id`, `complete_stream_with_id_and_finish`) resolve through one `select_route` → `RoutePlan` cascade as of 2026-08-07**; per-method code builds only the step's terminus. Before that, `complete()` routed inline via a `select_peer` that took a single peer, so the non-streaming path gave up after one declining peer, skipped peer in-flight booking on ranked routes, and was the reason four successive features each had to be written twice. A named step carries `pinned_model_id`, so the resolved id goes on the wire and a strictly-resolving peer cannot refuse the turn into a silent local substitution. **Soft** (configured `shared_model_id`) is a preference: unknown ⇒ falls THROUGH to `select_peers_ranked` with local as the last rung, recorded on `DecisionPath::NamedFallthrough` (SCHEDULER_QUALITY F8 / §4.3, 2026-07-27) |
-| Hub picks a local model for a peer request | `sovereign-api/routes_inference.rs::route_with_oicp` | OICP claim score over synthesized claims |
+| Hub picks a local model for a peer request | `sovereign-daemon/src/routes_inference.rs::route_with_oicp` | OICP claim score over synthesized claims |
 | Serving peer picks Fast-vs-Slow slot | `sovereign-mesh/oicp_select.rs::pick_slot_for_oicp` | canonical `slot_policy::latency_to_speed` + hint veto; `pick_slot` backstops `x:forced_choice` sentinels onto Primary |
 | Synthesis tier (Fast vs Primary) | `sovereign-core/runtime/evidence.rs::resolve_synthesis_route` | intent + atom-enum + evidence-shape heuristic |
 | Distributed placement (model > one node) | `sovereign-inference/embedded/rpc_distribution.rs` | LocalOnly default; StreamSplit ≤500MB; warmed owned-overrides as last resort |
@@ -4893,7 +4894,7 @@ something. See `research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md`
 §9.1.3.
 
 **A node's gossiped `inference_availability` is a composite with one
-writer and two inputs** (`sovereign-api/src/state.rs`):
+writer and two inputs** (`sovereign-daemon/src/state.rs`):
 `AppState::recompute_local_availability` publishes
 `min(activity_level, yield_floor)` — the activity level reported by
 sovereign-server's `ActivityReporter` via
@@ -5565,7 +5566,7 @@ A guest is not a mesh member — no `mesh_secret`, no gossip, no invite key
 variant plus its `paths()` arm and touches neither auth nor the wire.
 
 **The ring rail is the second scope, and the first deployment target**
-(`sovereign-api/src/routes_rail.rs` + the `commonwealth-rail-core` /
+(`sovereign-daemon/src/routes_rail.rs` + the `commonwealth-rail-core` /
 `commonwealth-rail` pair, ring-deploy S1–S6, 2026-08-30). **It became two
 crates on 2026-09-04** (cw-lift 1b), carved out of what was then
 `commonwealth-knowledge`'s own rail module:
@@ -5750,7 +5751,7 @@ named rather than silently totalled.
 
 **One BODY has a ceiling; convergence no longer does** (measured 2026-09-04,
 cw-lift rung 2a; chunked by rung 2f the same day —
-`sovereign-api/tests/rail_e2e/ceiling.rs` §"the convergence ceiling, and the budget
+`sovereign-daemon/tests/rail_e2e/ceiling.rs` §"the convergence ceiling, and the budget
 that ended it", plus the loop's own tests in
 `sovereign-mesh/src/ring_sync.rs`). The receiver caps a request at
 `MAX_REQUEST_BODY_BYTES` = 8 MiB (`server.rs:40`), so the per-body figure is in
@@ -6243,7 +6244,7 @@ and tests the closure outside the repository, then joins a real mesh and reads
 its own three routes — four verdicts, and no invite abstains rather than fails.
 
 **Which listener serves a route is the guard; "is the caller loopback" is not**
-(`ClientSurface`, `sovereign-api/src/server.rs`, 2026-08-28). Narrowing
+(`ClientSurface`, `sovereign-daemon/src/server.rs`, 2026-08-28). Narrowing
 `cwth/client/0` from "any dial-string holder" to "any member" was a reduction,
 not a fix: the acceptor forwards by connecting `127.0.0.1`, so on every listener
 it feeds, a loopback peer address proves nothing. A member therefore landed on
@@ -6517,7 +6518,7 @@ absent and the guards fail closed for *every* caller.
   Read and written over the wire since sv-surface svt-3:
   `GET /internal/peer-preference/list`,
   `POST /internal/peer-preference/{set,clear}`
-  (`sovereign-api/src/routes_internal/peer_preference.rs`, mounted
+  (`sovereign-daemon/src/routes_internal/peer_preference.rs`, mounted
   `server.rs:526-536`), reached by `TurnClient::{peer_preferences,
   set_peer_preference, clear_peer_preference}`. The clamp and the
   32-hex-char node-id precondition stay in the daemon — a client
@@ -7376,7 +7377,7 @@ work pins the GPU while the user is chatting. Components:
 
 - **W2 — peer-admission middleware**
   (`sovereign-serving-host/admission.rs`, the decider and both middlewares;
-  `sovereign-api/admission.rs` keeps the `AppState` port impls and the guards —
+  `sovereign-daemon/src/admission.rs` keeps the `AppState` port impls and the guards —
   REVIEW-build-serving-move-admission, 2026-09-15) — applied to client-port
   `/v1/chat/completions` + internal-port
   `/v1/knowledge/search`. Local requests admit unconditionally;
@@ -7408,7 +7409,7 @@ work pins the GPU while the user is chatting. Components:
   `X-Node-Id` is present — so a request meets exactly one of them and
   is never double-gated. It keys the same policy core as
   **`SchedCore<Principal>`** (`AppStateInner.serving.client_sched`), where
-  the principal comes from `sovereign-api/principal.rs`: the ONE
+  the principal comes from `sovereign-daemon/src/client_principal.rs`: the ONE
   resolver, `AppState::resolve(headers, peer, policy)`, which covers all
   five arms of the published `Principal` — a live guest grant →
   `Guest` (the grant store decides; the key is a fingerprint); another
@@ -8686,7 +8687,7 @@ What the re-freeze accepted, all of it already on `origin/main`:
 | CLI-contract machinery | `sovereign-cli-shared/src/cli_contract.rs` (1,473 → 1,607) | Existing §10.1c row; the experience-axis work (`needs`/`--lacks` partition) is mid-flight. |
 | Daemon bootstrap | `sovereign-daemon/src/bootstrap.rs` (2,672 → 2,786) | Child-process supervision + RPC-worker spawn + manifest refresh cohere as one startup state machine; splits when the compute-child boundary takes the worker half. |
 | corpus-engine engine | `corpus-engine/src/engine/mod.rs` (3,804 → 3,879) | Under the 10-crate decomposition (`corpus-engine/DECOMPOSITION.md`); this file shrinks by carve-out, not by a local split. |
-| Newly oversized, no prior row | `sovereign-api/src/server.rs` (1,253), `sovereign-cli-daemon/src/setup_cmd/mod.rs` (1,287), `sovereign-serving-host/src/oicp_synthesis.rs` (1,266), `sovereign-cli/tests/main/cli_contract_journeys.rs` (1,201) | Four files crossed 1,200 during the 2026-08 arcs. All are within 90 lines of the ceiling and each splits along an obvious seam (route families, setup targets, synthesis stages, journey families) — first candidates when the queue is worked. |
+| Newly oversized, no prior row | `sovereign-daemon/src/server.rs` (1,253), `sovereign-cli-daemon/src/setup_cmd/mod.rs` (1,287), `sovereign-serving-host/src/oicp_synthesis.rs` (1,266), `sovereign-cli/tests/main/cli_contract_journeys.rs` (1,201) | Four files crossed 1,200 during the 2026-08 arcs. All are within 90 lines of the ceiling and each splits along an obvious seam (route families, setup targets, synthesis stages, journey families) — first candidates when the queue is worked. |
 
 ### 10.1e Placement — 2026-09-01 the orchestrator moved below the hosts (ontology-v1 P0.4 → P0.5)
 
@@ -9134,7 +9135,7 @@ after merging `origin/main` reported arch-gate FAILING with seventeen
 findings, and the first question was whose growth it is. It is nobody's on
 this branch: `prefix_state.rs`, `conformance_cmd.rs`,
 `commonwealth-test-harness/tests/integration.rs`, `sovereign/crates/sovereign-daemon/src/daemon.rs` and
-`sovereign/crates/sovereign-api/src/admission.rs` are byte-identical at `abbd08b6f` (a
+`sovereign/crates/sovereign-daemon/src/admission.rs` are byte-identical at `abbd08b6f` (a
 pre-#59 `main` commit), at `851bf1784` (#59, the ontology squash) and at this
 merge. The baseline was already stale at `abbd08b6f` — it carried
 `admission.rs 1317` against a 1,435-line file and `daemon.rs 4758` against a
@@ -9154,7 +9155,7 @@ failure mode §10 exists to prevent.
 
 | File | Baseline | Now | Δ |
 |------|----------|-----|---|
-| `sovereign-api/src/admission.rs` | 1,317 | 1,439 | +122 |
+| `sovereign-daemon/src/admission.rs` | 1,317 | 1,439 | +122 |
 | `corpus-engine/src/engine/mod.rs` | 3,879 | 4,016 | +137 |
 | `corpus-engine/src/enrichment/atlas/resolution.rs` | 5,390 | 5,473 | +83 |
 | `corpus-engine/src/enrichment/atlas/strategies/code_walk.rs` | 1,907 | 2,129 | +222 |
@@ -9332,7 +9333,7 @@ pass, three regenerated baselines, two docs. The rise arrived with
 `origin/main`'s own content, already public.
 
 **What was established, and what was not.** The four nouns
-`sovereign-api/src/state.rs` copies field-for-field from
+`sovereign-daemon/src/state.rs` copies field-for-field from
 `oicp-types/src/slot.rs` (`SlotPlacement`, `WorkerPlacement`, `ResidentSlot`,
 `ComputeChildStatus`) are NOT the crossers: `slot.rs` was added in #47 itself,
 so the baseline already counted them. The two that did cross were not
@@ -9459,7 +9460,7 @@ only its loud rows is the silent-absorb this section exists to prevent — total
 
 | File | On `origin/main` | Now | Δ |
 |------|------------------|-----|---|
-| `sovereign-api/src/admission.rs` | 1,439 | 1,447 | +8 |
+| `sovereign-daemon/src/admission.rs` | 1,439 | 1,447 | +8 |
 | `corpus-engine/src/enrichment/governance_view.rs` | 1,380 | 1,407 | +27 |
 | `corpus-engine/src/sharding.rs` | 2,648 | 2,649 | +1 |
 | `sovereign-tdd/src/trial.rs` | 1,457 | 1,480 | +23 |
@@ -9853,7 +9854,7 @@ What is left is this push's own, and is accepted here:
 | Arena trim | `sovereign-cli-daemon` (+44), `::tests` (+35) | `8750c0442` — glibc never trims per-thread arenas, so daemon RSS only ever went up. |
 
 Nine already-baselined files moved a few lines each in the re-freeze — five
-shrank (`sovereign-api/src/server.rs` −3, `state.rs` −2,
+shrank (`sovereign-daemon/src/server.rs` −3, `state.rs` −2,
 `knowledge_query.rs` −1, `sovereign-daemon/src/daemon.rs` −4,
 `oicp_synthesis.rs` −2) and four grew (`streaming.rs` +18 and
 `grounding/tests.rs` +4, both vl-6; `mechanism_fidelity.rs` +7,
@@ -10009,14 +10010,14 @@ every chaos bank on disk.
 
 | Item | Location | Why deferred |
 |------|----------|--------------|
-| `frontdoor.rs` split | `sovereign-api/src/frontdoor.rs` (~5758 lines) | Harness-protocol → model-native normalizer — 9 concerns (harness detect, tool keeplist, heredoc diagnostics, distiller, path repair, nudges, allowlists, brief). Shares path-canon / tool-rewrite logic with `routes_responses.rs`; sequenced as the harness-unification PR (extract a shared reshaping core), not a bare size split. |
-| `routes_responses.rs` split | `sovereign-api/src/routes_responses.rs` (~3140 lines) | `/v1/responses` OpenAI-adapter — request/SSE translation + tool rewriting + path canon. The path-canon + tool-rewrite halves dedupe with `frontdoor.rs` into the shared reshaping core (same PR). |
-| Multi-embed-model dispatch | `sovereign-api/src/routes_inference.rs` | `/v1/embeddings` ignores the `model` field; gated on a second production embed model. |
-| `embed_batch` | `sovereign-api/src/routes_inference.rs` | Inputs fan out one at a time; gated on a backend that batches more efficiently. |
-| Knowledge replica fanout | `sovereign-api/src/routes_knowledge.rs` | Knowledge fan-out only hits non-hosted corpora today; gated on merge-dedupe hardening. |
+| `frontdoor.rs` split | `sovereign-daemon/src/frontdoor.rs` (~5758 lines) | Harness-protocol → model-native normalizer — 9 concerns (harness detect, tool keeplist, heredoc diagnostics, distiller, path repair, nudges, allowlists, brief). Shares path-canon / tool-rewrite logic with `routes_responses.rs`; sequenced as the harness-unification PR (extract a shared reshaping core), not a bare size split. |
+| `routes_responses.rs` split | `sovereign-daemon/src/routes_responses.rs` (~3140 lines) | `/v1/responses` OpenAI-adapter — request/SSE translation + tool rewriting + path canon. The path-canon + tool-rewrite halves dedupe with `frontdoor.rs` into the shared reshaping core (same PR). |
+| Multi-embed-model dispatch | `sovereign-daemon/src/routes_inference.rs` | `/v1/embeddings` ignores the `model` field; gated on a second production embed model. |
+| `embed_batch` | `sovereign-daemon/src/routes_inference.rs` | Inputs fan out one at a time; gated on a backend that batches more efficiently. |
+| Knowledge replica fanout | `sovereign-daemon/src/routes_knowledge.rs` | Knowledge fan-out only hits non-hosted corpora today; gated on merge-dedupe hardening. |
 | mesh_store replication | `sovereign-mesh/src/ring_sync.rs` · `rail_kv_pump.rs` · `commonwealth-state/src/rail_kv.rs` | **Senders of replicated state: 1**, and it is the ring digest exchange. `sovereign-mesh/src/gossip.rs` replicates the `Mesh` member list and nothing else. Gossip Step 4 — a full mesh-store snapshot POSTed to EVERY online peer on the 10 s round — and `broadcast_now`'s event-driven single-entry POST beside it were deleted at cw-lift 2e, with the route they wrote (`POST /internal/app/state`), its handler `recv_app_state`, the `AppStateGossipBody`/`GossipStoreEntry` wire types, `MeshStore::all_entries_for_gossip` and `backend::all_rows`. The count went 4 → 3 at 2c (`corpus_collaborate`'s queue-handoff unicast) → 1 at 2e. It is `cw-twin-visibility`'s instrument and is pinned structurally by `sovereign-mesh/tests/main/replication_sender_census.rs::every_sender_of_replicated_state_is_declared` (formerly `gossip_push_surfacing.rs`), so a second sender on the surviving route is a build failure rather than a later grep. **K8 is paid, not waived:** the six namespaces that had only Step 4 for anti-entropy — `inference`, `contributions`, `corpus-engine`, `notes`, `work-atlas`, `wikipedia-newsworthy-tracked` — replicate through the outbox → journal → digest path 2c and 2d built, with zero per-namespace code. `FANOUT = 2` now governs the whole gossip module rather than three of its four steps. The work atlas's same-round-trip claim visibility is `MeshBroadcaster`, which drains the outbox through `rail_kv_pump::pump_once` and raises `AppState::ring_write_nudge` — no wire of its own. |
-| Mesh Health attach-mode HTTP | `sovereign-api/src/state.rs` + `sovereign-desktop/src-tauri/src/mesh_commands.rs` | Local-mode UI works; `mesh_get_contributions` now fetches `GET /internal/contribution/view` in attach mode. Remaining: `mesh_set_peer_preference` returns an explicit "not exposed over the daemon HTTP API in Attach mode" error — the set/clear route is still missing. |
-| ATOS middleware no-op fall-through | `sovereign-api/src/routes_inference.rs` | When no session store is configured, the ATOS pipeline degrades to legacy routing. By design; operators should expect the silent fall-through. |
+| Mesh Health attach-mode HTTP | `sovereign-daemon/src/state.rs` + `sovereign-desktop/src-tauri/src/mesh_commands.rs` | Local-mode UI works; `mesh_get_contributions` now fetches `GET /internal/contribution/view` in attach mode. Remaining: `mesh_set_peer_preference` returns an explicit "not exposed over the daemon HTTP API in Attach mode" error — the set/clear route is still missing. |
+| ATOS middleware no-op fall-through | `sovereign-daemon/src/routes_inference.rs` | When no session store is configured, the ATOS pipeline degrades to legacy routing. By design; operators should expect the silent fall-through. |
 
 ### 10.3 Doc posture
 
@@ -10185,11 +10186,11 @@ may ride it.
 
 `REVIEW-build-serving-move-admission` MOVEs the admission decision out of
 `sovereign-api` into `sovereign-serving-host` (`SERVING_BOUNDARY.md` (c)). The
-original `sovereign-api/src/admission.rs` was 1,447 lines and baselined
+original `sovereign-daemon/src/admission.rs` was 1,447 lines and baselined
 OVERSIZED; the split leaves two files, neither over the 1,200 ceiling —
 `sovereign-serving-host/src/admission.rs` (800: the `Admission`/`AdmissionHost`
 traits, the two axum middlewares and the 503 renderer) and
-`sovereign-api/src/admission.rs` (1,105: the daemon's port impls, the RAII
+`sovereign-daemon/src/admission.rs` (1,105: the daemon's port impls, the RAII
 guards and the AppState-coupled tests). Both land INSIDE ARCH §3.1's 800–1,200
 approach band, which is §10.1j's shape exactly: a file leaving the oversized
 list does not shrink the band, it ENTERS it.

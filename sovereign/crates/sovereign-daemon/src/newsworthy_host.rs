@@ -3,7 +3,7 @@
 //!
 //! Bridges between corpus-engine's host-agnostic
 //! [`corpus_engine::update::newsworthy_watcher::NewsworthyHost`] trait
-//! and the live mesh state held by `sovereign_api::AppState`.
+//! and the live mesh state held by `crate::AppState`.
 //!
 //! - Mesh-state queries (`is_leader`, `is_owner_of`) read the
 //!   `Arc<RwLock<Mesh>>` carried on `AppStateInner` and run the
@@ -21,6 +21,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::state::AppState;
 use bytes::Bytes;
 use commonwealth_core::contributions::{LedgerEvent, LedgerEventKind};
 use commonwealth_core::ids::NodeId;
@@ -29,7 +30,6 @@ use commonwealth_core::partition;
 use commonwealth_state::MeshStore;
 use corpus_engine::error::{Error as CorpusError, Result as CorpusResult};
 use corpus_engine::update::newsworthy_watcher::{CommittedDocs, NewsworthyHost};
-use sovereign_api::state::AppState;
 use sovereign_contracts::identity::IdentityReader;
 
 pub struct MeshNewsworthyHost {

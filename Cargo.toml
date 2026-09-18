@@ -138,6 +138,11 @@ members = [
     # `mesh-api` layer. Created as a stub so the boundary has a crate to name;
     # receives sovereign-mesh's host modules and sovereign-api's host cluster.
     "sovereign/crates/sovereign-daemon",
+    # The daemon-to-daemon wire types both ends of an internal exchange must
+    # spell the same way (domains dm-daemon-api-edge (a)): the receiving route
+    # lives in sovereign-daemon and the sending loop in sovereign-mesh, so the
+    # shared body needs a leaf neither makes the other's dependency.
+    "sovereign/crates/sovereign-peer-wire",
     # Supervised compute-child process boundary (DISTRIBUTED_PILOT_READINESS.md
     # P1) — child-process supervisor (extracted from sovereign-desktop) + the
     # native lossless wire + child server/entrypoint + daemon-side provider
@@ -332,6 +337,7 @@ sovereign-studio = { path = "studio/crates/sovereign-studio" }
 sovereign-meshapp = { path = "sovereign/crates/sovereign-meshapp" }
 sovereign-mesh = { path = "sovereign/crates/sovereign-mesh" }
 sovereign-daemon = { path = "sovereign/crates/sovereign-daemon" }
+sovereign-peer-wire = { path = "sovereign/crates/sovereign-peer-wire" }
 sovereign-compute = { path = "sovereign/crates/sovereign-compute" }
 sovereign-service = { path = "sovereign/crates/sovereign-service" }
 sovereign-atos = { path = "sovereign/crates/sovereign-atos" }

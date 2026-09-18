@@ -41,11 +41,11 @@ use std::sync::Arc;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_state::MeshStore;
-use sovereign_api::server::client_router;
-use sovereign_api::state::{AppState, LocalInferenceService, ServingSeed};
 use sovereign_core::in_flight::LocalInFlightGauge;
 use sovereign_core::traits::InferenceProvider;
+use sovereign_daemon::server::client_router;
 use sovereign_daemon::slot_manifest::CoreSlotManifest;
+use sovereign_daemon::state::{AppState, LocalInferenceService, ServingSeed};
 use sovereign_mesh::capabilities::build_local_capabilities;
 use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
 use sovereign_meshapp_registry::registry::AppRegistry;
@@ -297,7 +297,7 @@ async fn desktop_topology_serving_a_peer_request_does_not_publish_in_flight() {
         app_registry,
         None,
         Some(gauge),
-        sovereign_api::state::FabricSeed::default(),
+        sovereign_daemon::state::FabricSeed::default(),
         ServingSeed {
             local_inference: Some(adapter),
             ..Default::default()

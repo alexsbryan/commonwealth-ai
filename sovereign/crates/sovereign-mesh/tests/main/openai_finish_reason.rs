@@ -17,12 +17,12 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use futures::Stream;
 use oicp_types::openai_types::ChatCompletionRequest;
-use sovereign_api::state::LocalInferenceService;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{
     CompletionRequest, CompletionResponse, Depth, FinishReason, ProviderCapabilities, Speed,
 };
 use sovereign_daemon::slot_manifest::CoreSlotManifest;
+use sovereign_daemon::state::LocalInferenceService;
 use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
 
 /// Reports exactly the finish reason it was built with, so the test

@@ -131,7 +131,7 @@ pub fn solo_mesh(self_id: NodeId, name: &str) -> Mesh {
 }
 
 /// Hex-encode a `NodeId` for the `X-Node-Id` header. 32 hex chars,
-/// lowercase — matches `sovereign_api::headers::parse_x_node_id`.
+/// lowercase — matches `sovereign_daemon::headers::parse_x_node_id`.
 pub fn id_to_hex(id: &NodeId) -> String {
     id.as_bytes().iter().map(|b| format!("{b:02x}")).collect()
 }
@@ -167,7 +167,7 @@ pub fn client_app_state(
     self_id: NodeId,
     token: Option<&str>,
     require_encryption: bool,
-) -> sovereign_api::state::AppState {
+) -> sovereign_daemon::state::AppState {
     let mut members = HashMap::new();
     members.insert(
         self_id,
@@ -184,10 +184,10 @@ pub fn client_app_state(
         members,
         peers: vec![],
     };
-    sovereign_api::state::AppState::new_with_node(
+    sovereign_daemon::state::AppState::new_with_node(
         self_id,
         mesh,
-        sovereign_api::state::NodeSeed {
+        sovereign_daemon::state::NodeSeed {
             client_token: token.map(std::sync::Arc::<str>::from),
         },
     )

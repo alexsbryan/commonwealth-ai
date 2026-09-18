@@ -325,6 +325,11 @@ crates = [
     # shells, the edge and the adapters. A stub until the host modules move in;
     # the two [[forbid]] rows below land with it.
     "sovereign-daemon",
+    # The daemon-to-daemon wire types both ends of an internal exchange must
+    # spell the same way (domains dm-daemon-api-edge (a)): the receiving route
+    # lives in `sovereign-daemon` and the sending loop in `sovereign-mesh`, so
+    # the shared body sits in a leaf neither makes the other's dependency.
+    "sovereign-peer-wire",
     "sovereign-mesh-test-harness",
     "sovereign-mesh",
 ]

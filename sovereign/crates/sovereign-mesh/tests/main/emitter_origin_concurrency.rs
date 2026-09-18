@@ -38,8 +38,8 @@ use commonwealth_core::ids::NodeId;
 use commonwealth_state::MeshStore;
 use corpus_engine::index::{CorpusIndex, InsertChunk};
 use corpus_engine::{CorpusEngine, EmbedFn};
-use sovereign_api::server::internal_router;
-use sovereign_api::state::AppState;
+use sovereign_daemon::server::internal_router;
+use sovereign_daemon::state::AppState;
 use sovereign_meshapp_registry::registry::AppRegistry;
 
 use crate::common;

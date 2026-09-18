@@ -30,8 +30,8 @@ use serde_json::json;
 
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh};
-use sovereign_api::server::internal_router;
-use sovereign_api::state::AppState;
+use sovereign_daemon::server::internal_router;
+use sovereign_daemon::state::AppState;
 
 use crate::common;
 use crate::common::{member_with_last_seen as member, spawn_router};
@@ -67,7 +67,7 @@ fn build_founder(
     };
     let counter = Arc::new(AtomicUsize::new(0));
     let counter_clone = Arc::clone(&counter);
-    let hook: sovereign_api::state::MeshMutationHook =
+    let hook: sovereign_daemon::state::MeshMutationHook =
         Arc::new(move |_mesh: &Mesh, _self_id: NodeId| {
             counter_clone.fetch_add(1, Ordering::Relaxed);
         });
@@ -80,7 +80,7 @@ fn build_founder(
         Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new()),
         None,
         None,
-        sovereign_api::state::FabricSeed {
+        sovereign_daemon::state::FabricSeed {
             mesh_mutation_hook: Some(hook),
             ..Default::default()
         },

@@ -145,6 +145,55 @@ pub mod worker;
 pub mod workflow_trigger;
 pub mod workspace;
 
+// ── sovereign-api's host cluster (domains dm-daemon-api-edge, 2026-09-18) ──
+// The whole host cluster moved in one commit: the edge, `state` with its six
+// parts, `server` and the routes. Every `crate::<name>` path inside the moved
+// modules keeps resolving here; the shims below cover the modules that had
+// already left sovereign-api for a leaf, so `crate::<name>` keeps resolving
+// for the moved modules too. `principal.rs` was already the daemon's own
+// (the corpus-ceiling resolver from the cli-composition move), so the HTTP
+// edge resolver landed beside it as `client_principal`.
+pub mod admission;
+pub mod client_auth;
+/// The HTTP edge's one request-to-principal resolver. Named apart from
+/// [`principal`] because the daemon already had a module by that name; the
+/// design's one resolver (`REVIEW-mint-principal`) collapses them.
+pub mod client_principal;
+pub mod client_surface;
+pub mod frontdoor;
+pub mod headers;
+pub mod middleware;
+pub mod reshaping;
+pub mod routes_apps;
+pub mod routes_completions;
+pub mod routes_edit_predictions;
+pub mod routes_inference;
+pub mod routes_internal;
+pub mod routes_knowledge;
+pub mod routes_oicp;
+pub mod routes_oicp_ingest;
+pub mod routes_ollama;
+pub mod routes_rail;
+pub mod routes_responses;
+pub mod routes_status;
+pub mod server;
+pub mod state;
+pub mod yield_hook;
+
+// The shims sovereign-api's lib.rs carried, re-homed here so the moved
+// modules' `crate::<name>` paths keep resolving.
+pub use code_next_edit::next_edit;
+pub use code_next_edit::next_edit_journal;
+pub use code_next_edit::next_edit_model;
+pub use code_next_edit::next_edit_symbols;
+pub use code_next_edit::next_edit_syntax;
+pub use commonwealth_core::{Error, Result};
+pub use commonwealth_transport::fanout;
+pub use oicp_types::openai_types;
+pub use oicp_types::responses_types;
+pub use sovereign_core::answering::turn_fidelity;
+pub use sovereign_grants::auto_recover;
+
 // Re-exports the moved modules reached through the mesh crate root, so their
 // own `crate::` paths keep resolving here (the leaves live in the serving host
 // and the scheduler, not in this crate).

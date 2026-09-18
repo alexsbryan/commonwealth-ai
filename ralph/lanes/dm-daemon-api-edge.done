@@ -1,0 +1,43 @@
+unit: dm-daemon-api-edge
+commits: 0a2891ccf (the move), 8a2de5e6a (rustfmt)
+what: sovereign-api's HOST CLUSTER moved to sovereign-daemon in one commit —
+  the edge (admission, client_auth, client_principal, client_surface,
+  frontdoor, headers, reshaping, yield_hook, middleware/), state.rs with its
+  five remaining parts, server.rs, every route shell (routes_*.rs +
+  routes_internal/*), the crate's own integration tests (tests/) and its two
+  examples. The whole cluster because edge <-> state <-> routes is one Cargo
+  cycle and [[forbid]] sovereign-api -> sovereign-* blocks the shim direction.
+  In the same commit: CREATE sovereign-peer-wire (leaf, layer mesh-api) holding
+  MAX_REQUEST_BODY_BYTES, RING_SYNC_OPS_BUDGET_BYTES, RingSyncRequest and
+  RingSyncResponse; move state/fabric.rs -> sovereign-mesh/src/fabric.rs with
+  MeshMutationHook and the ~20 accessors the three loops call, and repoint
+  gossip.rs / ring_sync.rs / rail_kv_pump.rs to FabricPart plus the node's
+  engine and the SelfClaims answer. Consumers repointed: sovereign-mesh
+  (tests/main 29 files + the loops), sovereign-mesh-test-harness (dev-dep),
+  cli-daemon / cli-llm (RUST_LOG strings), the desktop and turn-client doc
+  comments, corpus-index / corpus-engine / commonwealth-* / sovereign-contracts
+  doc comments. DT [[module]] rows re-keyed (55), SYSTEM_OVERVIEW §2 + the
+  commonwealth-api table row updated, DAEMON_CORE.md:211 fixed, four
+  quality/baselines/ rows re-keyed (§3a step 6).
+  Corrections (PROMPT §6, ralph/DECISIONS.md 2026-09-18):
+  (1) sovereign-api/src/principal.rs collided with sovereign-daemon's own
+  principal.rs (the cli-composition corpus-ceiling resolver), so the HTTP edge
+  resolver landed as sovereign-daemon/src/client_principal.rs.
+  (2) sovereign-mesh's four src/ unit-test modules that assemble AppState
+  (ring_sync/{tests,snapshot_tests,projection_tests}.rs, rail_kv_pump/tests.rs)
+  moved to sovereign-mesh/tests/main/ as integration tests: a #[cfg(test)] module
+  in mesh naming sovereign-daemon puts TWO builds of sovereign_mesh in the graph
+  (the dev-dependency cycle) and the FabricPart types do not unify. Four
+  supporting items became pub (ring_sync::{exchange, ExchangeStop,
+  ExchangeOutcome(+fields), MAX_CHUNKS_PER_EXCHANGE}; rail_kv_pump::{WORK_NAMESPACE,
+  MEASUREMENTS_NAMESPACE}).
+  (3) corpus-engine-scip dropped from sovereign-api's Cargo.toml (the modules
+  that read it are in code-next-edit, the shell in the daemon) to keep its
+  fan-in ratchet flat at 11 rather than --update-baseline (forbidden).
+  sovereign-api is now shim-only; its host deps stay declared so the
+  [[forbid]] exceptions are not STALE (REVIEW-build-sovereign-api-retire deletes
+  the crate). No [[exception]] added or widened; no baseline --update-baseline.
+checks: CLEAN exit=0; LINT exit=0 (WORKSPACE, --all-targets, errors: 0);
+  LAYER exit=0 ("fan-in within caps"); BOUNDARY exit=0 (all packages reach only
+  themselves + shared leaves); DOCS exit=0 (1122 cited paths resolve); TOML
+  exit=0; CENSUS exit=0 (11/11 positives caught, 11/11 negatives refused).
