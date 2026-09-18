@@ -1029,3 +1029,93 @@ Edit or mark the row in `ralph/next/ring-room/STATE.md`, then
 `rm ralph/STOP ralph/NEEDS_HUMAN.md`.
 
 </details>
+
+## 2026-09-18 — seat #8 — rr-1-claim-support-names-the-member: the per-claim path has no supporting chunk; member is stamped pool-level by the sole_corpus rule
+
+Fork: the worker's package (inline below) — my #6 falsifier fired harder than written: the
+per-claim judge decides the window jointly, GateClaim carries no support index, and the one
+holding site writes chunk_id: None with corpus_id only when the pool is single-corpus.
+Choice: the worker's (i) — `sole_member` beside `sole_corpus` in `assemble_epistemic_state`,
+fed by a `pool_members` input from the same chunks; None for a mixed or local pool. Why not
+(ii): `GateClaim.address` is a 0.74-precision display address, never a verdict, and fires
+only for verbatim spans on the streaming path — promoting it to provenance is the guess the
+contract forbids. Why not (iii): a per-chunk verdict in the judge is gate work past strictly
+necessary; it is the honest rr-2 if pool-level proves too coarse. Falsified if a released
+per-claim answer over an all-Bo pool reads None (then the feed at knowledge_query.rs:2081
+is not the gate's pool) — the sole-member test pins it. Row rewritten with the real files.
+
+<details><summary>the worker's package</summary>
+
+# NEEDS_HUMAN — rr-1-claim-support-names-the-member
+
+## (a) The unit
+
+`rr-1-claim-support-names-the-member` (row 60 of `ralph/next/ring-room/STATE.md`, left `[~]`).
+The row's core EDIT reads: in `sovereign-core/src/runtime/grounding/longform.rs`, "where each
+`Holding`'s provenance is built from the supporting chunk: stamp `member` from
+`EvidenceContext.chunk_members` (933d5a14e's vec, already aligned) — no new lookup."
+
+The premise check failed before any edit. Nothing is built or changed except the `[~]` mark.
+Seat decision #6 named this falsifier itself: "Falsified if the per-claim path's supporting
+chunk index is not the gate's leaf index". It is worse than a misaligned index: the per-claim
+path has no supporting chunk index at all.
+
+## (b) What I ran, and what came back
+
+```
+$ grep -n "Provenance::\|chunk_members\|Holding" sovereign/crates/sovereign-core/src/runtime/grounding/longform.rs
+(no output)
+
+$ git grep -n "Provenance::Corpus" -- 'sovereign/crates/*.rs'
+sovereign/crates/sovereign-core/src/runtime/epistemic.rs:120:   provenance: Provenance::Corpus {
+   ... (everything else is a match arm or a test)
+```
+
+1. **Holdings are not built in longform.rs.** The single production construction site is
+   `sovereign-core/src/runtime/epistemic.rs:107-126` (`assemble_epistemic_state`). It turns
+   each `GateClaim` into `Provenance::Corpus { corpus_id: sole_corpus, chunk_id: None }`.
+   `chunk_id` is always `None`, and `corpus_id` is set only when the pool is single-corpus
+   (:97-100).
+2. **The per-claim judge has no supporting chunk.** `grounding/audit_pass.rs:~430` says:
+   "`claim_violation_joint` judges all passages in ONE forced-choice — there is no per-chunk
+   max to decompose". The judged window is the leaf window plus claim-conditioned re-searched
+   hits appended after it (:376-404). Those hits do not appear in `chunk_members` at all.
+   `GateClaim` (`grounding/mod.rs:674-709`) carries `text / supported / failed_once /
+   unjudged / violation_prob / address`, and none of those is a support index.
+3. **The one per-claim chunk binding that does exist is `GateClaim.address`** (`mod.rs:708`,
+   `ClaimAddress.chunk` = an index into the sealed pool). It is filled at exactly one site,
+   `runtime/streaming.rs:2144-2160`, and only when the claim's text resolves verbatim in a
+   single chunk. The field doc says it is "An address, never a verdict", with the resolver
+   at 0.7429 precision. `epistemic.rs` never reads it: every production path passes `chunk_id: None`.
+
+So "stamp from the supporting chunk, no new lookup" has no chunk to stamp from.
+
+## (c) What the operator must decide
+
+1. **Which honest source for a per-claim holding's `member`?** Pick one, then rewrite the row:
+   - (i) **Pool-level, the `sole_corpus` rule applied to members** (recommended; smallest
+     step, and it matches an existing rule). At `epistemic.rs:97-126`, when every chunk in
+     the gate pool has the same `Some(member)`, stamp that member on each corpus holding.
+     Otherwise stamp `None`, exactly as `corpus_id` already does for multi-corpus pools.
+     This needs a `pool_members` input beside `pool_corpora` (`epistemic.rs:51`), fed at
+     `handlers/knowledge_query.rs:2081` from the same chunks, so it is one new field and
+     not a lookup. In 768895508's run every turn had `local_hits=0 mesh_hits=5`, all from Bo,
+     so q2 would read Bo. A mixed local and peer pool honestly reads None.
+   - (ii) **Per-claim, from `GateClaim.address`**: map `address.chunk` → `chunk_members`.
+     It only covers claims whose text is a verbatim span, only on the streaming path
+     (`streaming.rs:2144`), and it promotes a display-only address with 0.74 precision into
+     provenance. I expect it would rarely fire on a 2B model's paraphrases. Not measured.
+   - (iii) **Real per-claim support attribution in the judge**: a per-chunk verdict. This is
+     gate work, well past "strictly necessary".
+2. **The rest of the row stands either way**: the contracts field, the EpistemicFooter
+   rendering, the demo report (either evidence form, with `claims_checked 0` staying 0), and
+   `ASK_TIMEOUT_S` 300 → 600. The file list changes: `epistemic.rs` (+ the
+   `knowledge_query.rs:2081` feed for (i)) replaces `longform.rs`, and the PLANT becomes
+   "drop the member stamp in epistemic.rs".
+
+## (d) Then
+
+Edit or mark the row in ralph/next/ring-room/STATE.md, then
+`rm ralph/STOP ralph/NEEDS_HUMAN.md`.
+
+</details>
