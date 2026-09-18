@@ -1746,7 +1746,7 @@ impl CorpusEngine {
                         // `resolve` failing here means a programmatically
                         // built recipe — still an error, never a default
                         // pass (§18.3).
-                        let pass = crate::enrichment::pass::EnrichmentPassRegistry::builtin()
+                        let pass = crate::engine::pass::EnrichmentPassRegistry::builtin()
                             .resolve(&enrichment_config.enrichment_type)?;
 
                         // Record the REQUEST, at the entry, before any
@@ -1796,7 +1796,7 @@ impl CorpusEngine {
                                 pass.deferred_hint().unwrap_or("it needs an explicit build"),
                             );
                         } else {
-                            let ctx = crate::enrichment::pass::EnrichmentContext {
+                            let ctx = crate::engine::pass::EnrichmentContext {
                                 recipe,
                                 index_path,
                                 index: &index,
@@ -1830,7 +1830,7 @@ impl CorpusEngine {
                         // registry — so a deferred pass stays unstamped here
                         // too, and an unregistered type is an error on this
                         // path exactly as it is on the other.
-                        let pass = crate::enrichment::pass::EnrichmentPassRegistry::builtin()
+                        let pass = crate::engine::pass::EnrichmentPassRegistry::builtin()
                             .resolve(&enrichment_config.enrichment_type)?;
                         if pass.runs_at_install() {
                             if let Err(e) = index.set_enrichment_requested(true) {

@@ -1425,7 +1425,7 @@ control arm.
 
 **Three coexisting systems**, selected per-corpus by `[enrichment] type`.
 Since 2026-09-03 that string resolves through ONE table —
-`enrichment/pass.rs::EnrichmentPassRegistry` (`field_model`, `tiered`,
+`engine/pass.rs::EnrichmentPassRegistry` (`field_model`, `tiered`,
 `atlas`, `investigation`; shape copied from `DomainRegistry`) — and every
 question the pipeline asks about a type is a method on the resolved
 `EnrichmentPass`: `runs_at_install()` (the `'enrichment:` block in

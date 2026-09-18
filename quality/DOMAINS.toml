@@ -2939,7 +2939,7 @@ FieldModelPass, FieldModelSource, FieldModelStats, FieldSkeleton, \
 field_skeleton.json). converge noun FieldModel -> zero definitions. \
 `Pass` is REFUSED as the target: DECOMPOSITION.md:129 is right that \
 [enrichment] type resolves through EnrichmentPassRegistry \
-(corpus-engine/src/enrichment/pass.rs:107), and that is exactly why — an \
+(corpus-engine/src/engine/pass.rs:115), and that is exactly why — an \
 EnrichmentPass is a pipeline STEP and a Domain is a GENRE of material; a \
 recipe selects both independently, so merging them merges two extension points.
 """
@@ -3477,8 +3477,8 @@ note = "registry roots: ingest"
 [[module]]
 path = "corpus-engine/src/engine/"
 context = "ingest"
-lines = 10006
-files = 11
+lines = 10166
+files = 12
 note = "CorpusEngine orchestrates acquire->extract->chunk->embed->index (engine/mod.rs:2-3)"
 
 [[module]]
@@ -3638,7 +3638,7 @@ note = "registry roots: understanding"
 [[module]]
 path = "corpus-engine/src/enrichment/pass.rs"
 context = "understanding"
-lines = 646
+lines = 547
 files = 1
 note = "registry roots: understanding"
 

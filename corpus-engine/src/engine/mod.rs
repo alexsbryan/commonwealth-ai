@@ -9,6 +9,7 @@ mod ingest;
 mod ingest_factories;
 mod ingest_helpers;
 pub(crate) mod ingest_prebuilt;
+pub mod pass;
 pub(crate) mod yield_gate;
 
 pub mod reindex;
@@ -2852,7 +2853,7 @@ impl CorpusEngine {
     /// freshness disclosure can surface it to the user.
     ///
     /// Conservative: only artifact-backed types are checked (via
-    /// [`crate::enrichment::pass::EnrichmentPass::declared_artifacts`]); `None`
+    /// [`crate::engine::pass::EnrichmentPass::declared_artifacts`]); `None`
     /// when enrichment is disabled, the type has no verifiable artifact, the
     /// recipe can't be loaded, or the artifact is present.
     pub async fn enrichment_drift(&self, corpus_id: &str) -> Option<String> {
@@ -2861,7 +2862,7 @@ impl CorpusEngine {
         if !enrichment.enabled {
             return None;
         }
-        let rels = crate::enrichment::pass::EnrichmentPassRegistry::builtin()
+        let rels = crate::engine::pass::EnrichmentPassRegistry::builtin()
             .get(&enrichment.enrichment_type)?
             .declared_artifacts();
         if rels.is_empty() {
@@ -3072,7 +3073,7 @@ pub(crate) fn normalize_content(s: &str) -> String {
 /// Selection rule for [`CorpusEngine::resume_interrupted_conversation_enrichment`].
 /// Pure so the boot-resume corpus filter is unit-testable without a wired
 /// engine: re-kick only NON-folder-shaped corpora whose pass says
-/// [`resumable_at_boot`](crate::enrichment::pass::EnrichmentPass::resumable_at_boot)
+/// [`resumable_at_boot`](crate::engine::pass::EnrichmentPass::resumable_at_boot)
 /// (today: `tiered`) and whose enrichment state is a resumable interruption. Folder/vault corpora are
 /// handled by `LocalCorpusManager::resume_interrupted_enrichment`; a clean
 /// `Complete` needs nothing; a deliberate `Failed` is never auto-retried
@@ -3083,7 +3084,7 @@ fn conversation_enrichment_is_resumable(
     state: &crate::enrichment::state::EnrichmentState,
 ) -> bool {
     enrichment_type
-        .and_then(|t| crate::enrichment::pass::EnrichmentPassRegistry::builtin().get(t))
+        .and_then(|t| crate::engine::pass::EnrichmentPassRegistry::builtin().get(t))
         .is_some_and(|p| p.resumable_at_boot())
         && !matches!(category, "vault" | "watched_folder")
         && state.phase.is_resumable_interruption()
