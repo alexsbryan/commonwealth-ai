@@ -1572,3 +1572,70 @@ case the move has no legal destination and the row stops (§6).
 **Landed in.** this commit — the two moves, the `sovereign-contracts`/`oicp-types`
 deps on `corpus-engine-notes`, the shims, the `fan_in.tsv` hand-raise (31 → 32),
 `SYSTEM_OVERVIEW.md` §10.1ac, the `ralph/STATE.md` row correction and this entry.
+
+## 2026-09-17 · dm-vocab-compile-fail-test · the lane worktree never had the row's pointer; the pool must provision it
+
+**Fork.** The lane failed three waves without producing a diff, so the row's
+content is not implicated — the lane never reached it. The row says "read: O8
+step 2 and check 10", and `O8` is defined at `ralph/STATE.md:48` as
+`.sovereign/features/domains-8-understanding-readmodel/order.md`. That path is
+gitignored (`.gitignore:44`, `.sovereign/features/`), so `git worktree add`
+never brings it into `.ralph/wt/<unit>/`; the lane found the file only in the
+main checkout and its read was auto-rejected as an external directory
+(`target/ralph/lane-dm-vocab-compile-fail-test.out:103-105`), ending the
+session. Options: (a) add `.sovereign/*` to the opencode external-directory
+allow-list and let lanes read the main checkout's copy; (b) provision the
+per-host pointers into the lane worktree, as `ralph/STATE.md:36-39` already
+tells the operator to do for a peer checkout; (c) inline O8 into the row;
+(d) stop.
+
+**Choice.** (b), the structural fix (principle 10; principle 2 — fix the cause,
+not the symptom), in `Pool.run_lane`, the same place and shape as the
+2026-09-17 `dm-daemon-api-edge` lane-refresh fix. (a) leaves the row's
+repo-relative path missing and depends on the worker re-deriving an absolute
+path by `find`, and the config hardcodes `/Users/alexsbryan/…` (it is per-host
+and the Fedora peer would need its own); (c) forks the order, which is the
+campaign's design source, into the queue. The copy is unconditional for an
+existing lane, so the current worktree (zero own commits, so it is refreshed
+onto the base first) is provisioned on the next wave without a manual step.
+
+**Evidence** (reproduced this session, on `ralph/domains-campaign`).
+- `.gitignore:44` is `.sovereign/features/`; `git check-ignore -v
+  .sovereign/features/domains-8-understanding-readmodel/order.md` →
+  `.gitignore:44:.sovereign/features/`. `git ls-files .sovereign/` is the three
+  tracked files only; `.sovereign/features` has zero tracked entries.
+- The lane worktree has `.sovereign/` but no `features/`:
+  `.ralph/wt/dm-vocab-compile-fail-test/.sovereign/` lists `SOVEREIGN.md`,
+  `sovereign.toml`, `sovereign.toml.with-watchers` only.
+- The lane `.out` ends on the auto-reject at
+  `target/ralph/lane-dm-vocab-compile-fail-test.out:103-105`, and the
+  `supervise-1.out` header is the pool's `lane … failed 3 waves`.
+- The fix is a COPY, not a symlink, and that is measured: the ignore pattern
+  ends in `/` (directory-only), so a symlink at `.sovereign/features` is NOT
+  ignored — in a temp repo, `git check-ignore -v sub/.sovereign/features`
+  exits 1 and `git add -A` commits the symlink. A copy is a real directory and
+  is ignored as the main tree's already is.
+- Red then green: `python3 scripts/tests/ralph.py
+  PoolTests.test_lane_worktree_gets_host_pointer_dirs` errors
+  `FileNotFoundError: …/.ralph/wt/dm-a/.sovereign/features/dm-a/order.md`
+  without the `run_lane` block and passes with it; the suite is 39/39.
+
+**Falsified by.** A wave on the provisioned worktree that still ends without
+its marker, with the pointer present and no auto-reject in its `.out` — then
+the failure is the row (size/model) or the vocab leaf's `trybuild` budget, and
+the next decision is a re-scope or a stop. Also falsified if the copy damages
+a lane (it must not: `.sovereign/features/` is gitignored, so `git add -A`
+cannot commit it) or if a future `.gitignore` drops the trailing slash and the
+copied tree becomes committable.
+
+**REVIEW-AFTER:** the charter covers row/execution defects and fixing the code
+the halt names, and this is the same class as the `dm-daemon-api-edge` harness
+fix. The judgment call is copying a 4.3MB per-host tree into every lane (279
+files; it is the campaign's documented peer-checkout step, and the alternative
+was a permission entry keyed to this host's home). The morning should confirm
+the copy-per-lane policy, not the correctness of the fix.
+
+**Landed in.** this commit — `scripts/ralph.py` (the `_provision_host_pointers`
+helper and its `run_lane` call, `import shutil`), `scripts/tests/ralph.py` (the
+new test) and this entry; `ralph/NEEDS_HUMAN.md` removed. `git revert <sha>`
+reverts it alone.

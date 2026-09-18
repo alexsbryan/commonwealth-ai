@@ -26,6 +26,7 @@ import hashlib
 import os
 import pathlib
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -825,6 +826,27 @@ class Pool:
         return self._halt(f"review {review.id} did not finish after "
                           f"{self.max_review_attempts} attempts")
 
+    def _provision_host_pointers(self, wt):
+        """Copy the per-host pointer dirs into a lane worktree.
+
+        A row's `read: O8` names `.sovereign/features/<id>/order.md`, which is
+        gitignored (`.gitignore:44`), so `git worktree add` never brings it and
+        a lane cannot execute its row (dm-vocab-compile-fail-test, 2026-09-17,
+        three waves). This is the copy `ralph/STATE.md` tells the operator to
+        make for a peer checkout. A COPY, not a symlink: the ignore pattern is
+        `.sovereign/features/` (directory-only), so a symlink is NOT ignored
+        and the lane's `git add -A` would commit it.
+        """
+        src = self.paths.workdir / ".sovereign" / "features"
+        dst = wt / ".sovereign" / "features"
+        if not src.is_dir() or dst.exists():
+            return
+        try:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(src, dst, symlinks=True)
+        except OSError as e:
+            say(f"pool: could not provision {dst} from {src}: {e}")
+
     def run_lane(self, unit):
         wt = self.paths.workdir / ".ralph" / "wt" / unit
         branch = f"ralph/{unit}"
@@ -850,6 +872,7 @@ class Pool:
                     say(f"pool: lane {unit} refreshed onto {self.base_branch}")
                 else:
                     say(f"pool: lane {unit} not refreshed: {ff.stderr.strip()}")
+        self._provision_host_pointers(wt)
         note = (f"POOL LANE: you are working unit {unit} in an isolated git worktree.\n"
                 f"Commit your work here. When the unit passes its OWN tests, write "
                 f"ralph/lanes/{unit}.done and commit it — the pool merges your branch then.\n"

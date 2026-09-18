@@ -519,6 +519,27 @@ class PoolTests(unittest.TestCase):
             self.assertEqual(pool.run(), 0)
             self.assertEqual((root / "dm-a.txt").read_text(), "fixed")
 
+    def test_lane_worktree_gets_host_pointer_dirs(self):
+        # A row's `read: O8` names `.sovereign/features/<id>/order.md`, which
+        # is gitignored (`.gitignore:44`), so `git worktree add` never brings
+        # it and the lane cannot execute its row (dm-vocab-compile-fail-test,
+        # 2026-09-17, three waves). The pool provisions the per-host pointers.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] dm-a — depends []\n")
+            write(tmp, ".gitignore", ".sovereign/features/\n")
+            write(tmp, ".sovereign/features/dm-a/order.md", "the order")
+            subprocess.run(["git", "-C", tmp, "add", "-A"], check=True)
+            subprocess.run(["git", "-C", tmp, "commit", "-q", "-m", "pointers"], check=True)
+
+            class PointerLane(FakeLane):
+                def run(self, model_args, prompt, log):
+                    self.body = (self.cwd / ".sovereign/features/dm-a/order.md").read_text()
+                    return super().run(model_args, prompt, log)
+
+            pool = self.make(root, lambda cwd, env=None: PointerLane(cwd))
+            self.assertEqual(pool.run(), 0)
+            self.assertEqual((root / "dm-a.txt").read_text(), "the order")
+
     def test_merge_conflict_halts(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = self.fixture(tmp, "- [ ] dm-a — depends []\n- [ ] dm-b — depends []\n")
