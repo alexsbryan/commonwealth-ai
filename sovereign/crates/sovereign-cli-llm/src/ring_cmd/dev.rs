@@ -273,7 +273,7 @@ const DEV_SHIM: &str = r#"(function () {
           method: 'POST', headers: { 'content-type': 'text/plain' }, body: payload,
         });
         if (!r.ok) throw new Error('ring: live send failed (' + r.status + ')');
-        return null;
+        return r.json();
       },
       // A drain, not a read: the daemon hands each payload out once.
       drain: () => call('live-drain', {}),
@@ -377,6 +377,11 @@ mod tests {
             DEV_SHIM.contains("body: payload,"),
             "the live send stopped handing the payload through verbatim — a \
              `call(` here would double-encode it and every peer would skip it"
+        );
+        assert!(
+            DEV_SHIM.contains("return r.json();"),
+            "the live send stopped returning the daemon's answer — without \
+             `peers` the page cannot name a peer that did not get its presence"
         );
     }
 }

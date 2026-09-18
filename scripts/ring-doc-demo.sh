@@ -262,6 +262,7 @@ for (const k of ["DEBOUNCE_MS", "POLL_MS", "PRESENCE_THROTTLE_MS", "LIVE_POLL_MS
 const EDITS = 100;          // phase 1, split round-robin over three nodes
 const SPLIT_S = 60;         // phase 2, C's daemon down
 const PANEL_SAMPLE_S = 5;   // gap panels sampled this often during the split
+const PRE_SPLIT_S = 12;     // and every 3 s for this long before it: they must be EMPTY
 const SEED = 17;
 
 let rng = SEED;
@@ -293,7 +294,7 @@ class Page {
     this.attribution = createAttribution();
     this.pending = []; this.pendingParas = []; this.nextPara = null; this.forging = false;
     this.timer = null; this.inflight = 0; this.presenceTimer = null;
-    this.roster = {}; this.myActor = null; this.liveGaps = []; this.panel = []; this.err = "";
+    this.roster = {}; this.myActor = null; this.liveGaps = []; this.deliveryGaps = []; this.panel = []; this.err = "";
     this.heldAt = new Map(); this.cursorSeen = new Map(); this.cursorSamples = [];
     this.draining = true; this.presenceOn = true; this.lastLog = null; this.deliveries = [];
     this.ydoc.on("update", (update, origin) => {
@@ -352,10 +353,11 @@ class Page {
       const body = await r.json().catch(() => null);
       if (body && Array.isArray(body.peers)) this.deliveries.push(...body.peers);
       this.lastPeers = body && Array.isArray(body.peers) ? body.peers : [];
-      this.liveGaps = [];
+      this.deliveryGaps = this.lastPeers.filter((p) => !p.delivered)
+        .map((p) => `presence not delivered to ${p.name || p.node}: ${p.error}`);
     } catch (e) {
       this.lastPeers = { error: String(e.message || e) };
-      this.liveGaps = [`presence not delivered: ${String(e.message || e)}`];
+      this.deliveryGaps = [`presence not delivered: ${String(e.message || e)}`];
     }
   }
   async pollLive() {
@@ -388,7 +390,7 @@ class Page {
     this.attribution.absorb(read.acts);
     // The gap panel, exactly as app.js composes it; it keeps its last
     // contents when a poll fails, as the DOM does.
-    this.panel = [...(log.gaps || []).map((g) => g.message || g.gap), ...read.gaps, ...this.liveGaps];
+    this.panel = [...(log.gaps || []).map((g) => g.message || g.gap), ...read.gaps, ...this.liveGaps, ...this.deliveryGaps];
   }
   start() {
     this.poll(); this.pollTimer = setInterval(() => this.poll(), T.POLL_MS);
@@ -507,7 +509,14 @@ out.converge = { sv_equal: svs1.every((s) => s === svs1[0]), text_equal: all.eve
 phase = 2;
 const stop2 = { stop: false };
 const loops2 = ["a", "b", "c"].map((n, i) => typeLoop(pages[n], null, [i, (i + 1) % 3, 0], "x", [800, 1600], stop2));
-await sleep(5000);
+// The positive control: a panel with something in it BEFORE the split is a
+// broken lane, not a detected outage.
+const prePanels = { a: [], b: [], c: [] };
+const preAt = now();
+while (now() - preAt < PRE_SPLIT_S * 1000) {
+  await sleep(3000);
+  for (const p of all) prePanels[p.name].push(p.panel.slice());
+}
 await sh("_stop", "c");
 const splitAt = now();
 const panels = { a: [], b: [], c: [] };
@@ -538,6 +547,10 @@ out.partition = { sv_equal: svs2.every((s) => s === svs2[0]), text_equal: all.ev
   union: unionCheck([...p1tokens, ...p2tokens]), tokens: p1tokens.length + p2tokens.length,
   panel_nonempty: Object.fromEntries(Object.entries(panels).map(([n, xs]) => [n, xs.filter((g) => g.length > 0).length])),
   panel_samples: panels.a.length, peer_c: peerC,
+  pre_split_nonempty: Object.fromEntries(Object.entries(prePanels).map(([n, xs]) => [n, xs.filter((g) => g.length > 0).length])),
+  pre_split_samples: prePanels.a.length,
+  pre_split_examples: Object.fromEntries(Object.entries(prePanels).map(([n, xs]) => [n, (xs.find((g) => g.length) || []).slice(0, 2)])),
+  names_c: Object.fromEntries(["a", "b"].map((n) => [n, panels[n].filter((g) => g.some((l) => l.includes("Cy"))).length])),
   panel_examples: Object.fromEntries(Object.entries(panels).map(([n, xs]) => [n, (xs.find((g) => g.length) || []).slice(0, 2)])) };
 
 // ── phase 3: B's page announces A's Yjs clientID and appends that update.
@@ -687,10 +700,14 @@ p = s.get("partition") or {}
 if fatal or not p:
     row("ra-doc-partition-drill", None, fatal or "the drill did not run")
 else:
-    panels_ok = all(v > 0 for v in p["panel_nonempty"].values())
+    # Empty on all three before the split AND a's and b's named C during it.
+    # A trailing empty sample after mesh drops C is honest, so "at least one".
+    panels_ok = (p["pre_split_samples"] > 0 and all(v == 0 for v in p["pre_split_nonempty"].values())
+                 and p["names_c"]["a"] > 0 and p["names_c"]["b"] > 0)
     row("ra-doc-partition-drill", 1.0 if (p["sv_equal"] and p["text_equal"] and clean(p["union"]) and panels_ok) else 0.0, "",
-        sv_equal=p["sv_equal"], union=p["union"], panel_nonempty=p["panel_nonempty"], panel_samples=p["panel_samples"],
-        settle_s=s.get("p2_settle_s"))
+        sv_equal=p["sv_equal"], union=p["union"], pre_split_nonempty=p["pre_split_nonempty"],
+        names_c=p["names_c"], panel_nonempty=p["panel_nonempty"], panel_samples=p["panel_samples"],
+        settle_s=s.get("p2_settle_s"), pre_split_examples=p["pre_split_examples"], panel_examples=p["panel_examples"])
 
 at = s.get("attribution") or {}
 if fatal or not at:

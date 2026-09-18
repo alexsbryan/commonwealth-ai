@@ -74,6 +74,9 @@ let myActor = null;
 // Gaps from the LIVE lane, held across polls because `poll()` owns the panel
 // and runs on a different clock.
 let liveGaps = [];
+// Peers the last presence send did not reach. `sendPresence` owns it alone, so
+// a drain every 250 ms cannot clear what a send found.
+let deliveryGaps = [];
 let presenceTimer = null;
 
 /// Send everything typed in the last window as ONE act.
@@ -129,14 +132,16 @@ function nameSelf() {
 async function sendPresence() {
   presenceTimer = null;
   try {
-    await window.ring.live.send(presenceEnvelope(encodeSelf(awareness), DOC_ID));
-    liveGaps = [];
+    const sent = await window.ring.live.send(presenceEnvelope(encodeSelf(awareness), DOC_ID));
+    deliveryGaps = ((sent && sent.peers) || [])
+      .filter((p) => !p.delivered)
+      .map((p) => `presence not delivered to ${p.name || p.node}: ${p.error}`);
   } catch (e) {
     // A cursor nobody can see is worth saying out loud once. Held as a gap
     // rather than rethrown: the document still converges with the live lane
     // down, and a page that stopped rendering text because presence failed
     // would be trading the durable half for the ephemeral one.
-    liveGaps = [`presence not delivered: ${String(e.message || e)}`];
+    deliveryGaps = [`presence not delivered: ${String(e.message || e)}`];
   }
 }
 
@@ -237,10 +242,14 @@ async function poll() {
   // `liveGaps` is the third: the live lane refused, or the daemon's buffer
   // overflowed. A missing cursor is not a missing sentence, but it is still
   // something the page knows and the person does not.
+  //
+  // `deliveryGaps` is the fourth: a peer this node's last presence send did
+  // not reach, by name. It is how A and B say C is gone while C is gone.
   const gaps = [
     ...(log.gaps || []).map((g) => g.message || g.gap),
     ...read.gaps,
     ...liveGaps,
+    ...deliveryGaps,
   ];
   el("gaps").hidden = gaps.length === 0;
   el("gaplist").innerHTML = gaps.map((g) => `<li>${g}</li>`).join("");
