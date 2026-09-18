@@ -1,0 +1,18 @@
+unit: dm-corpus-mcp-exception
+commits: cd7ecf070 (the repoint)
+what: repointed corpus-mcp's read-only index sites onto the `corpus-index` leaf
+  (serve.rs `CorpusIndex`; ask.rs `CorpusIndex`/`ScoredChunk`/`ChunkProvenance`;
+  host.rs `EmbedFn`; tools.rs `CorpusIndex`/`EmbedFn`/`ScoredChunk`), added the
+  corpus-index dep, and re-worded the `corpus-mcp -> corpus-engine`
+  [[exception]]: burn-down step (1) LANDED, the row now covers the engine's own
+  work (ingest + the atlas reads), tracking names steps (2) and (3).
+  Premise correction (PROMPT §6, ralph/DECISIONS.md): the row's cited lines were
+  stale (1279-1284 -> 1299-1304) and "ingest ONLY" was false — `corpus-mcp` still
+  names `corpus_engine::enrichment::atlas::*`, `embed_http::http_embed_fn` and
+  `recipe_templates`; worded by the tree, the row does not retire.
+checks: CLEAN exit=0; LINT exit=0; TEST(corpus-mcp) exit=0 pass=42 fail=0;
+  BOUNDARY exit=0 (corpus-mcp 3/3 crates present); LAYER exit=0; TOML exit=0.
+note: docs-gate is RED pre-existing (cites `corpus-engine/src/index/search.rs`
+  and `provenance.rs`, moved to corpus-index by 503681188 without a
+  SYSTEM_OVERVIEW update). Not this row's check; left for REVIEW-audit-wave-n
+  (ARCH 2 — no nearby cleanup).

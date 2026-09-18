@@ -31,7 +31,8 @@
 use corpus_engine::enrichment::atlas::ground::{Degradation, Grounding, MapNode};
 use corpus_engine::enrichment::atlas::{EvidenceFetcher, ResolvedChunk};
 use corpus_engine::CorpusId;
-use corpus_engine::{CorpusIndex, ScoredChunk};
+use corpus_index::index::CorpusIndex;
+use corpus_index::types::ScoredChunk;
 use serde_json::{json, Value};
 
 use crate::tools::ToolOutcome;
@@ -384,7 +385,7 @@ mod tests {
             chunk_id: Some(id),
             source_doc_id: None,
             vector_distance: None,
-            provenance: corpus_engine::index::ChunkProvenance::acquired_from_estate("bk"),
+            provenance: corpus_index::index::ChunkProvenance::acquired_from_estate("bk"),
         }
     }
 

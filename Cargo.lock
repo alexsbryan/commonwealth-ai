@@ -2464,6 +2464,7 @@ dependencies = [
  "chrono",
  "clap",
  "corpus-engine",
+ "corpus-index",
  "oicp-types",
  "reqwest 0.12.28",
  "serde",

@@ -2003,6 +2003,42 @@ is the next CRATE (sovereign-core) rather than the head's remainder.
 **Landed in.** this commit — `ralph/STATE.md` (the corrected mint row and 12
 minted rows), `ralph/DECISIONS.md`.
 
+## 2026-09-18 · dm-corpus-mcp-exception · the read-port repoint, and what the exception actually still covers
+
+**Fork.** STATE.md's row says "re-word the row: the exception now covers `ingest`
+ONLY (which genuinely ingests) and its `tracking` says so", and cites the
+exception at `ARCH_LAYERS.toml:1279-1284`. Decide whether to word the row
+"ingest ONLY" as instructed and use the cited lines, or word it by what the tree
+shows after the repoint.
+
+**Choice.** Word it by the tree (§6). (1) The line pointer is stale by ~20: the
+`sovereign-mesh-test-harness -> sovereign-api` retirement comment landed above
+the three `corpus-mcp` rows, so the exception is at 1299-1304 and its siblings at
+1285/1292; the row is corrected to those lines. (2) After repointing every
+read-only index site to `corpus-index` — `serve.rs` (`CorpusIndex`), `ask.rs`
+(`CorpusIndex`, `ScoredChunk`, `ChunkProvenance`), `host.rs` (`EmbedFn`),
+`tools.rs` (`CorpusIndex`, `EmbedFn`, `ScoredChunk`) — `corpus-mcp` still names
+`corpus-engine` for the atlas reads, the HTTP embedder, recipe templates and the
+ingest verb. So "ingest ONLY" is false; the row reads "the engine's own work
+(ingest + the atlas reads)". The row does NOT retire, because those sites do not
+repoint to the leaf.
+
+**Evidence.** `git grep -n 'corpus_engine' -- corpus-mcp/src` before: the sites
+above plus `enrichment::atlas::*` (ask.rs:31-32, tools.rs:35-38),
+`embed_http::http_embed_fn` (host.rs:96), `recipe_templates::*` (recipe.rs),
+`CorpusEngine`/`CorpusSpec`/`IngestResult`/`snapshot` (serve.rs, ingest.rs);
+`corpus-index` is a `[[package_leaf]]` (ARCH_LAYERS.toml:871-883) and already a
+root `[workspace.dependencies]` entry (Cargo.toml:305), so the new dep passes
+boundary-gate (`corpus-mcp 3/3 crates present`, exit 0).
+
+**Falsified by.** A future move that relocates `corpus_engine::enrichment::atlas`
+and `embed_http` off `corpus-engine`, leaving only `CorpusEngine`/`CorpusSpec` —
+then "ingest ONLY" becomes true and the row's wording is right as minted.
+
+**Landed in.** this commit — `corpus-mcp/src/{serve,ask,host,tools}.rs`,
+`corpus-mcp/Cargo.toml`, `quality/ARCH_LAYERS.toml`, `ralph/STATE.md`,
+`ralph/DECISIONS.md`.
+
 ## 2026-09-18 · dm-understanding-vocab-rename · the consumer set is nine manifests, not four, and the layer glob no longer matches
 
 **Fork.** STATE.md:269 scopes the rename to "the four consumer manifests
