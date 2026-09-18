@@ -1,0 +1,25 @@
+unit: REVIEW-build-daemon-fabric-standalone
+commits: c1cd6e217 (the standalone construction)
+what: Fabric is a standalone object the daemon holds across stop. `FabricPart::new`
+  (sovereign-mesh/src/fabric.rs) assembles the part from its seed, mesh, mesh_store
+  and app_registry; `AppState::new_with_fabric_and_serving_and_node`
+  (sovereign-daemon/src/state.rs) takes the built Arc, while the seed-shaped
+  constructor builds one and delegates so the rail harness and test call sites are
+  unchanged. `EmbeddedDaemon` holds the Arc in a new `fabric` field, set by
+  `start_daemon` before `AppState` and kept across `stop_inner` (cleared on Leave),
+  exposed by `EmbeddedDaemon::fabric()`. Every `app_state.inner.fabric` read is
+  unchanged. Behaviour-preserving.
+corrections (PROMPT §6, ralph/DECISIONS.md 2026-09-18): the row's "then move
+  known_meshes/forget_mesh/switch_mesh/try_resume/resume_active and the running-side
+  create_mesh/join_mesh/leave/rotate_invite/current_invite onto Fabric" half is
+  re-scoped out. Those methods are daemon assembly (DC §4.1 reserves
+  start_daemon/stop_inner/shutdown) and Fabric lives in sovereign-mesh, which cannot
+  name the daemon ([[forbid]] sovereign-mesh -> sovereign-daemon). Reproduced:
+  try_resume -> resume_active -> start_daemon; switch_mesh -> stop_inner + resume_active;
+  create_mesh_with/join_mesh -> start_daemon; leave -> stop_inner; current_invite reads
+  the running DaemonState; rotate_invite requires app_state. The pure membership state
+  already moved at 8a8936b87.
+checks: CLEAN exit=0 (debug target 39G, under 50G); LINT exit=0 (5 crates,
+  --all-targets, errors 0); LAYER exit=0 ("every edge points down or sideways,
+  fan-in within caps"); TEST(sovereign-mesh) exit=0 (613 pass);
+  TEST(sovereign-daemon) exit=0 (706 pass).

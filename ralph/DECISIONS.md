@@ -2781,3 +2781,52 @@ on the daemon and the row's VERB is satisfied by the running-only half.
 (`ralph/STATE.md`: the row marked `[x]` with the CORRECTED note, the minted
 prerequisite, `DEMO-d5-misnamed` re-pointed; this entry). `git revert 8a8936b87`
 reverts the half alone.
+
+## 2026-09-18 · REVIEW-build-daemon-fabric-standalone · the standalone construction lands; the method-move half is re-scoped out as daemon assembly
+
+**Fork.** The row's first clause is buildable and is the enabling step: construct
+`FabricPart` before `AppState` and hold it across `stop_inner`. Its second clause
+("then move `known_meshes`/`forget_mesh`/`switch_mesh`/`try_resume`/`resume_active`
+and the running-side `create_mesh`/`join_mesh`/`leave`/`rotate_invite`/
+`current_invite` onto Fabric") is not. Do both anyway, or land the construction and
+correct the row?
+
+**Choice.** Land the construction and correct the row. The second clause's methods
+are the daemon's assembly orchestration, which DC §4.1 reserves for the daemon
+("the daemon's assembly STAYS: `DaemonState`, the listeners,
+`start_daemon`/`stop_inner`/`shutdown`"), and Fabric lives in `sovereign-mesh`,
+which may not name the daemon (`[[forbid]] sovereign-mesh -> sovereign-daemon`,
+`quality/ARCH_LAYERS.toml:749-752`) — so it cannot call `start_daemon`/`stop_inner`
+at all. The pure membership state those methods would carry (join key, roster,
+identity, `adopt`, `forget_member`) already moved at `8a8936b87`. Re-scoping is a
+§6 correction of scope, not a weakened bar: the row's checks (LINT/LAYER/
+TEST(sovereign-mesh)/TEST(sovereign-daemon)) are unchanged and green.
+
+**Evidence** (reproduced this session).
+- `grep -n` on `daemon.rs`: `try_resume` :963 -> `resume_active` :985 ->
+  `self.start_daemon(mesh, self_node_id)` :999; `switch_mesh` :1047 ->
+  `self.stop_inner(StopMode::Park)` :1069 + `resume_active` :1075;
+  `create_mesh_with` :1219 -> `start_daemon` :1280; `join_mesh` :1410 ->
+  `start_daemon`; `leave` :1769 -> `stop_inner(StopMode::Leave)` :1776;
+  `current_invite` :1993 reads `DaemonState::Running`/`iroh_access`; `rotate_invite`
+  :2134 requires `app_state` (running) and drives a gossip round.
+- `sovereign-mesh/src/lib.rs:30` `pub mod fabric;` and `daemon.rs:193`
+  `use sovereign_mesh::persist;` — Fabric can reach `persist`, but not
+  `EmbeddedDaemon`/`DaemonState`/`start_daemon`.
+- CLEAN exit=0 (debug target 39G, under 50G).
+- LINT exit=0, scope `sovereign-daemon,sovereign-mesh,sovereign-cli-daemon,sovereign-cli-dev,sovereign-cli-llm`, errors 0.
+- LAYER exit=0 — "every crate assigned, every edge points down or sideways … fan-in within caps".
+- TEST(sovereign-mesh) exit=0 (613 pass); TEST(sovereign-daemon) exit=0 (706 pass).
+
+**Falsified by.** A showing that the lifecycle methods can be Fabric's methods —
+i.e. that Fabric (or a port Fabric declares and the daemon implements) can drive
+`start_daemon`/`stop_inner` without `sovereign-mesh` naming the daemon; or an
+operator ruling that the stopped-state operations stay on the daemon and this
+row's VERB is satisfied by the standalone construction alone.
+
+**Landed in.** `c1cd6e217` (`FabricPart::new` in `fabric.rs`;
+`AppState::new_with_fabric_and_serving_and_node` in `state.rs`; the
+`EmbeddedDaemon.fabric` field in `daemon.rs`, set before `AppState`, kept across
+`stop_inner`, cleared on Leave, exposed by `EmbeddedDaemon::fabric()`) and this
+commit (`ralph/STATE.md`: the row marked `[x]` with the CORRECTED note; this
+entry). Behaviour-preserving.
