@@ -205,3 +205,69 @@ fn a_blank_name_falls_back_to_the_node_id_rather_than_dropping_the_key() {
         Some(&Person::from(id.to_string()))
     );
 }
+
+/// **A ring nobody has written to answers with the mesh on first touch.** The
+/// namespace has no directory, no file and no registration — it is what a
+/// fresh app's first append looks like to the rail — and its roster is the
+/// membership, so that append is admitted rather than refused `NotInRoster`
+/// before anything reaches disk.
+#[tokio::test]
+async fn a_namespace_never_written_to_answers_with_the_mesh_roster_on_first_touch() {
+    let me = NodeId::from_u128(1);
+    let k = key(21);
+    let state = sovereign_api::state::AppState::new(
+        me,
+        mesh_of(vec![member(me, "alex", Some(pubkey_of(&k)))]),
+    );
+    let dir = tempfile::tempdir().unwrap();
+    let rail = commonwealth_rail::RingRail::new(dir.path(), std::sync::Arc::new(k.clone()));
+    super::MeshRosterSource::install(&rail, &state).unwrap();
+
+    let journal = rail.journal("fresh-app").unwrap();
+    assert!(!journal.dir().exists(), "never written to");
+    assert_eq!(
+        rail.roster_origin("fresh-app"),
+        commonwealth_rail::RosterOrigin::Derived
+    );
+    let roster = rail.roster(&journal).await.unwrap();
+    assert_eq!(
+        roster.person_for(&RingSigner::actor(&k)),
+        Some(&Person::from("alex")),
+        "everyone in the mesh, on the first read"
+    );
+}
+
+/// **The registered namespace cannot be narrowed by a file.** The reason
+/// `REGISTERED_NAMESPACES` exists: a hand roster on one node would drop
+/// peers' measurements there and nowhere else. The file is written and the
+/// door still answers with the membership.
+#[tokio::test]
+async fn a_registered_namespace_ignores_a_hand_roster() {
+    let me = NodeId::from_u128(1);
+    let k = key(22);
+    let state = sovereign_api::state::AppState::new(
+        me,
+        mesh_of(vec![member(me, "alex", Some(pubkey_of(&k)))]),
+    );
+    let dir = tempfile::tempdir().unwrap();
+    let rail = commonwealth_rail::RingRail::new(dir.path(), std::sync::Arc::new(k.clone()));
+    super::MeshRosterSource::install(&rail, &state).unwrap();
+
+    for ns in super::REGISTERED_NAMESPACES {
+        let journal = rail.journal(ns).unwrap();
+        journal
+            .set_roster(&commonwealth_rail::Roster::default())
+            .unwrap();
+        assert_eq!(
+            rail.roster_origin(ns),
+            commonwealth_rail::RosterOrigin::Derived,
+            "{ns}"
+        );
+        let roster = rail.roster(&journal).await.unwrap();
+        assert_eq!(
+            roster.person_for(&RingSigner::actor(&k)),
+            Some(&Person::from("alex")),
+            "{ns}: the empty file must not narrow a registered ring"
+        );
+    }
+}

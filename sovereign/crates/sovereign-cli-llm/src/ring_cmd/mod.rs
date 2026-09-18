@@ -146,8 +146,14 @@ fn ring_journal(namespace: &str) -> Result<commonwealth_rail::RingJournal, Strin
 /// Only the file's readers and writer stop here. `ring log` and `ring seal`
 /// ask the daemon, whose rail answers with the derived roster, and both work
 /// on this namespace.
+///
+/// Every OTHER ring's roster is derived too — by default, from the same
+/// membership — and there `roster add` is the narrowing primitive: it writes
+/// the file, and the file outranks the default (`RingRail::default_roster`).
+/// Only a REGISTERED namespace outranks the file, so only those refuse, read
+/// from the one list the daemon registers from.
 fn refuse_derived_roster(namespace: &str) -> Option<String> {
-    if namespace != sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID {
+    if !sovereign_mesh::ring_roster::REGISTERED_NAMESPACES.contains(&namespace) {
         return None;
     }
     Some(format!(
@@ -241,6 +247,16 @@ async fn run_roster(args: &[String]) -> i32 {
     // The demo asks for `show`, the ring's first users learned `list`, and a
     // second renderer of the same roster is how the terminal and the campaign
     // end up disagreeing about what a row says (ARCH §10.6).
+    // `svrn ring roster <ns>` is `show --ring <ns>`: who a ring admits is
+    // the one question most callers have.
+    if let Some(ns) = sub.filter(|s| !matches!(*s, "add" | "list" | "show") && !s.starts_with('-'))
+    {
+        if let Some(why) = refuse_derived_roster(ns) {
+            eprintln!("ring roster: {why}");
+            return 2;
+        }
+        return roster_list(ns).await;
+    }
     if !matches!(sub, Some("add") | Some("list") | Some("show")) {
         eprintln!(
             "usage:\n\
@@ -444,11 +460,21 @@ async fn roster_list(namespace: &str) -> i32 {
                 return 1;
             }
         };
+    // The rail's precedence with its first rung already refused by the
+    // caller: a `roster.json` narrows the ring, and without one the daemon's
+    // default — the mesh — answers (`RingRail::default_roster`).
+    let narrowed = ring_journal(namespace)
+        .map(|j| j.roster_path().exists())
+        .unwrap_or(false);
+    if !narrowed {
+        println!("everyone in the mesh");
+    } else if roster.members.is_empty() {
+        println!("limited to: nobody — every op will fold to an unknown-signer gap");
+    } else {
+        let names: Vec<&str> = roster.members.keys().map(|p| p.as_str()).collect();
+        println!("limited to: {}", names.join(", "));
+    }
     if roster.members.is_empty() {
-        println!(
-            "`{namespace}` has no roster yet — every op will fold to an unknown-signer gap.\n\
-             Add yourself: svrn ring roster add <you> --self --ring {namespace}"
-        );
         return 0;
     }
     // A daemon older than this CLI has no `vouches` field, and serde DROPS an

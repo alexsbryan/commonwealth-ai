@@ -285,22 +285,22 @@ join_one() { # node
     > "$D/join-$n.json"
 }
 
-# Every key on every node: a node whose roster lacks a signer reads that
-# signer's acts as gaps, which is not the property under test.
-roster_all() {
-  local n m key
-  declare -A KEY
-  for n in a b c; do
-    key=$(sv $n ring roster add "${PERSON[$n]}" --self --ring $RING | awk '/→/{print $3; exit}')
-    [ -z "$key" ] && { echo "roster: node $n printed no key" >&2; return 1; }
-    KEY[$n]=$key; echo "$key" > "$D/$n/roster.key"
+# No roster step: an app applies to everyone in the mesh by default. What
+# this records is who the mesh says is in it — each member's key and name,
+# as mesh status reports them — so the attribution leg's expected names come
+# from membership, never from a list this script wrote. A member whose key
+# has not been gossiped yet is waited for, not skipped.
+members_from_mesh() {
+  local deadline=$(( $(date +%s) + 90 ))
+  while [ "$(date +%s)" -lt "$deadline" ]; do
+    node_curl a -s --max-time 3 "$(at "${CPORT[a]}")/v1/mesh/status" 2>/dev/null \
+      | python3 -c "import sys,json; m={x['node_pubkey']:x['name'] for x in json.load(sys.stdin)['members'] if x.get('node_pubkey')}; sys.exit(1) if len(m)<3 else json.dump(m,sys.stdout)" \
+      > "$D/members.json" 2>/dev/null && break
+    sleep 3
   done
-  for n in a b c; do
-    for m in a b c; do
-      [ "$n" = "$m" ] && continue
-      sv $n ring roster add "${PERSON[$m]}" --key "${KEY[$m]}" --ring $RING > /dev/null || { echo "roster: $n could not add ${PERSON[$m]}" >&2; return 1; }
-    done
-  done
+  [ -s "$D/members.json" ] || { echo "roster: a never saw three members with keys inside 90s" >&2; return 1; }
+  sv a ring roster $RING | grep -qx 'everyone in the mesh' \
+    || { echo "roster: \`ring roster $RING\` on a does not say everyone in the mesh" >&2; return 1; }
 }
 
 start_proxy() { # node — the page's door to its daemon, holding the grant
@@ -345,7 +345,7 @@ cmd_up() {
   join_one c && wait_online Cy || exit 3
   # One more gossip round, so B has heard about C from A.
   sleep 12
-  roster_all || exit 3
+  members_from_mesh || exit 3
   for n in a b c; do start_proxy $n || exit 3; done
   echo "up ($BACKEND): a(${PERSON[a]}) b(${PERSON[b]}) c(${PERSON[c]}) — proxies on ${DPORT[a]} ${DPORT[b]} ${DPORT[c]}"
 }
@@ -364,12 +364,12 @@ heal_node() { # node
   fi
 }
 
-cmd_tabs() { # each page's URL on this host, and the roster name its node signs as
+cmd_tabs() { # each page's URL on this host, and the mesh name its node signs as
   local n name
   for n in a b c; do
-    # `roster show` prints the name, then its key indented on the next line.
-    name=$(sv $n ring roster show --ring $RING | awk -v k="$(cat "$D/$n/roster.key" 2>/dev/null || echo '<no key>')" '$1 == k {print prev; exit} {prev = $1}')
-    echo "$n  $(tab_url $n)/  ${name:-<not on its own roster>}"
+    name=$(node_curl "$n" -s --max-time 3 "$(at "${CPORT[$n]}")/v1/mesh/status" 2>/dev/null \
+      | python3 -c "import sys,json; print(next((m['name'] for m in json.load(sys.stdin)['members'] if m.get('is_self')), ''))" 2>/dev/null)
+    echo "$n  $(tab_url $n)/  ${name:-<not in the mesh>}"
   done
 }
 
@@ -731,6 +731,10 @@ const forged = [...ledger].find(([, e]) => e.forged);
 const forgedClients = forged ? [...new Set(Y.decodeUpdate(forged[1].update).structs.map((s) => s.id.client))] : [];
 let lines = 0, right = 0;
 const wrong = [];
+// Expected names are the MESH's (members.json, written by `up` from mesh
+// status), not the roster the page renders from — so a page that named the
+// wrong person out of a wrong roster cannot agree with itself.
+const members = JSON.parse(readFileSync(`${D}/members.json`, "utf8"));
 for (const p of all) {
   // The oracle: the driver's own ledger of which act carried which paragraph,
   // walked in the rail's order — nothing read out of Yjs's observation.
@@ -742,7 +746,7 @@ for (const p of all) {
   shown.forEach((line, i) => {
     lines += 1;
     const name = line && (line.match(/^last edited by (\S+) \d+s ago$/) || [])[1];
-    const want = A.personFor(p.roster, expect[i]);
+    const want = members[expect[i]];
     if (name && want && name === want) right += 1; else wrong.push({ node: p.name, para: i, line, want });
   });
 }

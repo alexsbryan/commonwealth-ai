@@ -5458,11 +5458,13 @@ a ring whose measurements had been retired and not yet replaced.
 the fix 4a's live run demanded). `RingRail::roster(&journal)` answers every
 caller that holds a journal and a namespace — the append and log routes in
 `routes_rail.rs`, the sync-side prune in `ring_sync.rs` — from a
-`RosterSource` installed for the namespace when one is, and from `roster.json`
-otherwise; `RingJournal::roster_file` is now named as the file half and has two
+`RosterSource` registered for the namespace when one is, then from
+`roster.json`, then from the rail's DEFAULT source (ring-room, 2026-09-18: an
+app applies to everyone in the mesh, and `svrn ring roster add` writing the
+file is the narrowing primitive); `RingJournal::roster_file` is now named as the file half and has two
 callers, that door and the CLI writer. `MeshRosterSource` (in `ring_roster.rs`)
-is the source for `mesh-measurements` — and, since cw-lift 4, for every
-namespace in `DAEMON_OWN_NAMESPACES` — installed beside the rail itself in
+is the default and the one registration, `REGISTERED_NAMESPACES`
+(`mesh-measurements`, which no file may narrow) — installed beside the rail itself in
 `daemon.rs` through `MeshRosterSource::install`, the one place a namespace
 and its derivation meet. Until then those three paths read the file — empty
 for this namespace — so the daemon refused its own key at the append door and
