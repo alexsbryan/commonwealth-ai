@@ -62,7 +62,7 @@ fn resolve_enrich_cli() -> Option<std::path::PathBuf> {
 
 /// Phase C3 — gather peer atlas advice for `corpus_id`.
 ///
-/// Walks the live mesh, builds [`PeerAtlasView`]s from each peer's
+/// Walks the live mesh, builds [`RemoteAtlasView`]s from each peer's
 /// `hosted_corpora`, reads the local atlas summary, and returns the
 /// best pull candidate (if any) per the rule in
 /// [`evaluate_peer_atlas_advice`].
@@ -75,8 +75,8 @@ async fn gather_peer_atlas_advice(
     state: &AppState,
     corpus_id: &str,
     indexes_dir: &std::path::Path,
-) -> Option<sovereign_tools::atlas_peer_advice::PeerAtlasPullCandidate> {
-    use sovereign_tools::atlas_peer_advice::{evaluate_peer_atlas_advice, PeerAtlasView};
+) -> Option<sovereign_tools::atlas_peer_advice::AtlasPullLead> {
+    use sovereign_tools::atlas_peer_advice::{evaluate_peer_atlas_advice, RemoteAtlasView};
 
     // Local view: atom counts come from the cached summary; embed
     // model from our own member record (populated by gossip).
@@ -95,7 +95,7 @@ async fn gather_peer_atlas_advice(
         .and_then(|m| m.capabilities.embed_model.as_ref())
         .map(|m| m.model_id.clone());
 
-    let mut peer_views: Vec<PeerAtlasView> = Vec::new();
+    let mut peer_views: Vec<RemoteAtlasView> = Vec::new();
     for (node_id, member) in mesh.members.iter() {
         if *node_id == self_node_id {
             continue;
@@ -105,7 +105,7 @@ async fn gather_peer_atlas_advice(
             .embed_model
             .as_ref()
             .map(|m| m.model_id.clone());
-        if let Some(view) = PeerAtlasView::from_member(
+        if let Some(view) = RemoteAtlasView::from_member(
             member.name.clone(),
             model,
             corpus_id,
