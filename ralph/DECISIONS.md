@@ -435,3 +435,18 @@ first touch passes through turns out to exist. It would have to be one that inst
 source before `rail.roster()` is read. None was found at the two doors above.
 
 REVIEW-AFTER: the operator picks among options 1-4 in the package.
+
+## 2026-09-18 — OPERATOR — REVIEW-build-rr-1-roster-from-mesh (ring-room): option 1, the rail's roster door gains a default
+
+Operator's words: "There's plenty of great thinking on permissioning and resource groups
+especially as they have inheritance rules. I just want default to be that an app applies to
+anyone in the mesh, then expose some primitives to limit." Fork: the worker's package
+(ralph/NEEDS_HUMAN.md of 2026-09-18 17:27Z, options 1-3 in its §(c); the director's summary
+is the entry above). Choice: option 1. The zero-rail-diff clause of ring-room's predicate is
+lifted for ONE hunk, lib.rs:130-205 (default RosterSource; precedence registered >
+roster.json > default). `roster add` is the narrowing primitive, so `refuse_derived_roster`
+refuses only registered sources. Evidence: lib.rs:153-165 (exact-match map), :176-205 (file
+fallback), sovereign-api/src/routes_rail.rs:123-139 (first append refused before disk).
+Falsified if a sovereign-side site every namespace's first touch passes through exists that
+installs the source before `rail.roster()` — none found at the two doors. Row rewritten in
+d5dc6037e; predicate, bar and rung note in the commit that follows this entry.

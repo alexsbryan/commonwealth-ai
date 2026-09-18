@@ -18,7 +18,7 @@ status    = "active"
 # after a join mid-run. The negative half is the census: nothing typed, and
 # the rail still learned nothing.
 [predicate]
-statement = "From three daemons on one mesh where A holds no copy of B's corpus, `scripts/ring-room-demo.sh verdict all` reads PASSED on every bar at N=3 and again at N=4 after a fourth member joined by one invite link during the run, with the member set read from `svrn mesh status` on every leg; the driver's typed-string log names zero addresses, ports, URLs, config lines or credentials; and `git diff --stat origin/main -- commonwealth/crates/commonwealth-rail*` is empty"
+statement = "From three daemons on one mesh where A holds no copy of B's corpus, `scripts/ring-room-demo.sh verdict all` reads PASSED on every bar at N=3 and again at N=4 after a fourth member joined by one invite link during the run, with the member set read from `svrn mesh status` on every leg; the driver's typed-string log names zero addresses, ports, URLs, config lines or credentials; and `git diff --stat origin/main -- commonwealth/crates/commonwealth-rail*` names ONLY the roster-door hunk in commonwealth-rail/src/lib.rs (the default RosterSource, operator 2026-09-18) - the rail learned nothing about any app's payload"
 check     = "./scripts/sovereign-test.sh --human --package sovereign-api --package sovereign-mesh --package commonwealth-media"
 # `check` decides only the code legs (fan-out attribution, derived roster,
 # media admit). The three-node run is `scripts/ring-room-demo.sh verdict all`,
@@ -46,8 +46,8 @@ status       = "open"
 id           = "ra-room-doc-name-from-membership"
 demo         = "Type in the shared doc on A; on B and C the paragraph says your name, and nobody ever ran a roster command"
 rung         = "rr-1"
-one_line     = "CLAIM: an edit on A lands on B and C within 2 s (p99 over 100 edits) attributed to A's MESH member name through a roster whose origin is Derived, with `svrn ring roster add` never run for the ring"
-derives_from = "OPERATOR 2026-09-18: membership IS the mesh. A derived roster exists (sovereign-mesh/src/ring_roster.rs:106 MeshRoster::derive, name = mesh record name) but is installed only over DAEMON_OWN_NAMESPACES (:271-292) and refused for one hard-coded id (ring_cmd/mod.rs:149-165); routes_rail.rs:205/:317 already serve roster.members through RingRail::roster, so a derived source flows to ring-doc's page with NO page change. The row makes Derived the DEFAULT for app namespaces with a registry of exceptions (ARCH 9), not a registry of derived ids."
+one_line     = "CLAIM: an edit on A lands on B and C within 2 s (p99 over 100 edits) attributed to A's MESH member name through a roster whose origin is Derived, with `svrn ring roster add` never run for the ring (it is now the NARROWING primitive; the demo never narrows the doc)"
+derives_from = "OPERATOR 2026-09-18: membership IS the mesh. A derived roster exists (sovereign-mesh/src/ring_roster.rs:106 MeshRoster::derive, name = mesh record name) but is installed only over DAEMON_OWN_NAMESPACES (:271-292) and refused for one hard-coded id (ring_cmd/mod.rs:149-165); routes_rail.rs:205/:317 already serve roster.members through RingRail::roster, so a derived source flows to ring-doc's page with NO page change. OPERATOR 2026-09-18 (second reading, after the worker showed the rail has no default source and a fresh ring's first append is refused before it reaches disk): an app applies to everyone in the mesh by default, and narrowing is a primitive - the rail's roster door gains a DEFAULT source (the one permitted hunk under commonwealth-rail*, lib.rs:130-205), precedence registered > roster.json (the hand roster IS the narrowing primitive) > default."
 floor        = 1.0
 floor_basis  = "structural: 1.0 iff (a) every 'last edited by' line on B and C equals the mesh member name of the signer for the latest act on that paragraph, (b) the ring's roster reports RosterOrigin::Derived, (c) the driver's command log contains no `ring roster add`, and (d) p99 propagation <= 2 s over 100 edits. Any false is 0.0."
 target       = 1.0
@@ -110,7 +110,7 @@ title  = "week one - three podman nodes, four legs, a fourth joins mid-run, the 
 status = "open"
 demo   = "D13"
 moves  = ["ra-room-answer-names-the-machine", "ra-room-doc-name-from-membership", "ra-room-film-from-the-library-rail", "ra-room-plug-in-live", "ra-room-nothing-typed"]
-note   = "Order ring-room-week1. Moves D13, D3 and D1's join beside the landed D5. Six working days. Daemon work: derived roster as the app default (registry of exceptions), peer_name first-class on the passage and the citation, the media offer verb with an admit narrowing, a Tauri offers command + Library section. Instrument: scripts/ring-room-demo.sh REUSING ring-doc-demo.sh's node door and podman backend, N from mesh status. NOT in this rung: a QR renderer (rr-2), identity pass-through to Jellyfin, the phone, `svrn ring deploy`, any change under commonwealth-rail*."
+note   = "Order ring-room-week1. Moves D13, D3 and D1's join beside the landed D5. Six working days. Daemon work: derived roster as the app default (registry of exceptions), peer_name first-class on the passage and the citation, the media offer verb with an admit narrowing, a Tauri offers command + Library section. Instrument: scripts/ring-room-demo.sh REUSING ring-doc-demo.sh's node door and podman backend, N from mesh status. NOT in this rung: a QR renderer (rr-2), identity pass-through to Jellyfin, the phone, `svrn ring deploy`, any change under commonwealth-rail* beyond the roster-door default (lib.rs:130-205, operator 2026-09-18)."
 
 [[rung]]
 id     = "rr-2"
