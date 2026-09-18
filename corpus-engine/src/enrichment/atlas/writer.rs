@@ -589,28 +589,12 @@ pub fn write_atlas_configurations(
     Ok(path)
 }
 
-/// Read the atoms file back from disk. Used by Phase 6 / Phase 7
-/// subcommands that run standalone after Phase 3b already wrote
-/// the atlas directory.
-pub fn read_atlas_atoms(atlas_dir: &Path) -> io::Result<AtomsFile> {
-    let path = atlas_dir.join("atoms.json");
-    let data = fs::read(&path)?;
-    serde_json::from_slice(&data)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("parse atoms.json: {e}")))
-}
-
-/// Read the edges file back from disk. Companion to
-/// [`read_atlas_atoms`].
-pub fn read_atlas_edges(atlas_dir: &Path) -> io::Result<EdgesFile> {
-    // NOTE: callers on the hot atom-detail path must go through
-    // `atlas_view::atom_detail::cached_edges`, not this directly — the
-    // Wikipedia atlas ships a 1.3 GB edges.json and this does a full
-    // fs::read + serde parse every call. See the edges cache there.
-    let path = atlas_dir.join("edges.json");
-    let data = fs::read(&path)?;
-    serde_json::from_slice(&data)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("parse edges.json: {e}")))
-}
+// The read door lives in the vocabulary leaf — `corpus-engine-vocab::read`,
+// moved there by domains `dm-vocab-door-move` (DE "The door"). Re-exported at
+// the historical `writer::read_atlas_*` path so the writers below and the
+// consumers outside the engine keep resolving; the two writers read through
+// the door, not around it.
+pub use corpus_engine_vocab::read::{read_atlas_atoms, read_atlas_edges};
 
 /// Replace `atlas/atoms.json` with the provided file, and rebuild the v2
 /// store from it. The atom-side companion to [`write_atlas_edges`]: Phase 6's
