@@ -1519,6 +1519,7 @@ impl Runtime {
             gate_chunk_targets,
             gate_chunk_custodies,
             gate_chunk_urls,
+            gate_chunk_members,
         ) = if gate_on {
             // T1 P1.4: one builder, one ordering for chunks + labels +
             // provenance. Late appends (trace, sealed conversation
@@ -1546,9 +1547,11 @@ impl Runtime {
                 parts.chunk_targets,
                 parts.chunk_custodies,
                 parts.chunk_urls,
+                parts.chunk_members,
             )
         } else {
             (
+                Vec::new(),
                 Vec::new(),
                 Vec::new(),
                 Vec::new(),
@@ -1574,6 +1577,7 @@ impl Runtime {
             // have no custody row and read as unknown by index.
             chunk_custodies: gate_chunk_custodies,
             chunk_urls: gate_chunk_urls,
+            chunk_members: gate_chunk_members,
             searcher: if gate_on {
                 Some(std::sync::Arc::new(
                     self.claim_searcher(context.conversation.enabled_corpora.as_deref(), &chunks)
@@ -3140,6 +3144,7 @@ impl Runtime {
             deep_chunk_targets,
             deep_chunk_custodies,
             deep_chunk_urls,
+            deep_chunk_members,
         ) = if deep_gate_on {
             // T1 P1.4: one builder, one ordering (see KnowledgeQuery
             // sibling above). Late appends read as Leaf.
@@ -3166,9 +3171,11 @@ impl Runtime {
                 parts.chunk_targets,
                 parts.chunk_custodies,
                 parts.chunk_urls,
+                parts.chunk_members,
             )
         } else {
             (
+                Vec::new(),
                 Vec::new(),
                 Vec::new(),
                 Vec::new(),
@@ -3192,6 +3199,7 @@ impl Runtime {
             // Builder-ordered stamps; late appends read as unknown.
             chunk_custodies: deep_chunk_custodies,
             chunk_urls: deep_chunk_urls,
+            chunk_members: deep_chunk_members,
             searcher: if deep_gate_on {
                 Some(std::sync::Arc::new(
                     self.claim_searcher(

@@ -62,17 +62,24 @@ impl EpistemicState {
     /// `headings` is index-parallel to [`kernel_types::Answer::citations`] and
     /// may be shorter; a missing entry reads as no heading, which is the same
     /// legitimate silence [`ReleasedCitation::locator`] already documents.
+    /// `members` is index-parallel the same way; a missing entry reads as
+    /// local ([`ReleasedCitation::member`]).
     /// A citation that cannot become an openable row is DROPPED — see
     /// [`ReleasedCitation::released`].
     pub fn citations_of(
         answer: &kernel_types::Answer,
         headings: &[Option<String>],
+        members: &[Option<String>],
     ) -> Vec<ReleasedCitation> {
         answer
             .citations()
             .iter()
             .enumerate()
-            .filter_map(|(i, c)| ReleasedCitation::released(c, headings.get(i).cloned().flatten()))
+            .filter_map(|(i, c)| {
+                let mut row = ReleasedCitation::released(c, headings.get(i).cloned().flatten())?;
+                row.member = members.get(i).cloned().flatten();
+                Some(row)
+            })
             .collect()
     }
 }
@@ -109,6 +116,9 @@ pub struct ReleasedCitation {
     /// produces no citation row at all rather than one pointing
     /// somewhere plausible — refusal over guess, as the locator does.
     pub target: CitationTarget,
+    /// The mesh member whose corpus the passage came from. `None` = local.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub member: Option<String>,
 }
 
 impl ReleasedCitation {
@@ -150,6 +160,7 @@ impl ReleasedCitation {
                 corpus_id: corpus.as_str().to_string(),
                 chunk_id: locator.as_str().parse().ok()?,
             },
+            member: None,
         })
     }
 }

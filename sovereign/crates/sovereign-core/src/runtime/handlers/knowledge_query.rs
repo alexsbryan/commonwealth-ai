@@ -1747,6 +1747,7 @@ impl Runtime {
                 // have no custody row and read as unknown by index.
                 chunk_custodies: gate_parts.chunk_custodies,
                 chunk_urls: gate_parts.chunk_urls,
+                chunk_members: gate_parts.chunk_members,
                 searcher: Some(std::sync::Arc::new(
                     self.claim_searcher(
                         context.conversation.enabled_corpora.as_deref(),

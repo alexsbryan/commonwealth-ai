@@ -242,6 +242,9 @@ pub(crate) struct EvidenceContext {
     /// `source_url` the gate's custody ledger releases (custody.md §5).
     /// `None` per entry whenever the chunk carries no URL.
     pub chunk_urls: Vec<Option<String>>,
+    /// Per-chunk mesh member aligned with `chunks` by index, as
+    /// `chunk_custodies` is (`Custody::Peer`'s companion); `None` = local.
+    pub chunk_members: Vec<Option<String>>,
     /// What H1's admission stage did on this turn — which since
     /// 2026-08-11 runs by default.
     ///
@@ -328,6 +331,10 @@ pub(crate) struct GateEvidenceParts {
     /// §5). `None` for a chunk with no URL (synthetic chunks, late
     /// appends).
     pub chunk_urls: Vec<Option<String>>,
+    /// Per-chunk mesh member PARALLEL to `chunks`, off `metadata["peer"]`
+    /// (ONE writer: the fan-out in `retrieval_pipeline.rs`; a typed home
+    /// beside `stamped_custody()` is rr-2). Aligned as `chunk_locators`.
+    pub chunk_members: Vec<Option<String>>,
 }
 
 /// T1 P1.4 refinement of Fix B: instead of DROPPING derived RAPTOR
@@ -367,6 +374,7 @@ pub(crate) fn gate_evidence_with_sources(
     // must not become a pool where everything refuses.
     let custody_of = |c: &corpus_engine::ScoredChunk| c.provenance.stamped_custody();
     let url_of = |c: &corpus_engine::ScoredChunk| c.url.clone();
+    let member_of = |c: &corpus_engine::ScoredChunk| c.metadata.get("peer").cloned();
     let exclude_raptor = std::env::var("SOVEREIGN_GATE_EXCLUDE_RAPTOR")
         .map(|v| !(v == "0" || v.eq_ignore_ascii_case("false")))
         .unwrap_or(true);
@@ -380,6 +388,7 @@ pub(crate) fn gate_evidence_with_sources(
             chunk_targets: gate_evidence_targets(chunks),
             chunk_custodies: chunks.iter().map(custody_of).collect(),
             chunk_urls: chunks.iter().map(url_of).collect(),
+            chunk_members: chunks.iter().map(member_of).collect(),
         };
     }
     let summary_evidence = std::env::var("SOVEREIGN_GATE_SUMMARY_EVIDENCE")
@@ -410,6 +419,7 @@ pub(crate) fn gate_evidence_with_sources(
         chunk_targets: Vec::with_capacity(chunks.len()),
         chunk_custodies: Vec::with_capacity(chunks.len()),
         chunk_urls: Vec::with_capacity(chunks.len()),
+        chunk_members: Vec::with_capacity(chunks.len()),
     };
     for (i, c) in chunks.iter().enumerate().filter(|(_, c)| !is_summary(c)) {
         parts.chunks.push(c.content.clone());
@@ -419,6 +429,7 @@ pub(crate) fn gate_evidence_with_sources(
         parts.chunk_targets.push(target_at(i));
         parts.chunk_custodies.push(custody_of(c));
         parts.chunk_urls.push(url_of(c));
+        parts.chunk_members.push(member_of(c));
     }
     if summary_evidence {
         for (i, c) in chunks.iter().enumerate().filter(|(_, c)| is_summary(c)) {
@@ -429,6 +440,7 @@ pub(crate) fn gate_evidence_with_sources(
             parts.chunk_targets.push(target_at(i));
             parts.chunk_custodies.push(custody_of(c));
             parts.chunk_urls.push(url_of(c));
+            parts.chunk_members.push(member_of(c));
         }
     }
     parts

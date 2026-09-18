@@ -314,6 +314,17 @@ describe("EpistemicFooter render", () => {
     ).toBeInTheDocument();
   });
 
+  it("a passage from a mesh member names '<corpus> on <member>'", () => {
+    // Ring-room bar `ra-room-answer-names-the-machine`; a local passage
+    // (no `member`) names no machine.
+    const l = citedLedger();
+    l.citations![0].member = "bob";
+    render(EpistemicFooter, { props: { ledger: l } });
+    const named = screen.getAllByTestId("epistemic-citation-member");
+    expect(named).toHaveLength(1);
+    expect(named[0].textContent).toBe("chaos-saltgrass on bob");
+  });
+
   it("a turn with no citations renders no passage section at all", () => {
     // Legacy turns carry no `citations` key; abstentions and legacy-ladder
     // releases carry an empty one. Both must render nothing rather than an

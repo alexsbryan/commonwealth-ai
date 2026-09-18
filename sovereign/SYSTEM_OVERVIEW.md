@@ -3143,7 +3143,10 @@ the member does not hold verbatim and one whose grain may not be quoted — and
 releases the composed text as a `kernel_types::Draft` → `Answer`, which cannot
 be built without a `Judgement`. The wire rows are then PROJECTED from that
 answer by `EpistemicState::citations_of`, so "what did this turn cite" has one
-decider instead of two lists that agreed by hand. The released STRING and the
+decider instead of two lists that agreed by hand (each row also carries
+`member`, the mesh machine whose corpus the passage came from, read off the
+chunk's `metadata["peer"]` into `EvidenceContext.chunk_members` beside
+custody; absent = local — 2026-09-18). The released STRING and the
 set of emitted rows are unchanged — seal membership is the same
 `(corpus, chunk)` predicate the old fold applied, and WHICH member a quote
 came from is still decided upstream by `locate_quote_in_chunks` (the seal is

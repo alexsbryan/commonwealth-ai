@@ -139,6 +139,7 @@ pub(crate) fn transcript_gate_evidence(
         // pre-custody behavior (custody.md §1).
         chunk_custodies: Vec::new(),
         chunk_urls: Vec::new(),
+        chunk_members: Vec::new(),
     }
 }
 

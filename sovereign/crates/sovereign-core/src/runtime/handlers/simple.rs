@@ -200,6 +200,7 @@ impl Runtime {
                 // §2); simple turns append nothing late.
                 chunk_custodies: gate_parts.chunk_custodies,
                 chunk_urls: gate_parts.chunk_urls,
+                chunk_members: gate_parts.chunk_members,
             };
             let outcome = crate::runtime::grounding::gate_answer(
                 &self.inference,

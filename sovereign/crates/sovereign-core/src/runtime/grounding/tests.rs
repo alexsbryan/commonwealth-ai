@@ -432,6 +432,7 @@ fn refinement_evidence() -> EvidenceContext {
         // these tests exercise the incumbent ladder, not custody.
         chunk_custodies: Vec::new(),
         chunk_urls: Vec::new(),
+        chunk_members: Vec::new(),
         searcher: None,
         entity_anchored: false,
         top_similarity: None,
@@ -2729,6 +2730,48 @@ async fn the_citation_exit_still_releases_a_value_the_quote_carries() {
         "and it must reach the reader: {:?}",
         outcome.answer.text()
     );
+}
+
+/// Bar `ra-room-answer-names-the-machine`: the member of the citation the
+/// gate releases for `quote` (`CitationExitMock` answers "Pier Nine").
+async fn released_member(ev: &EvidenceContext, quote: &'static str) -> Option<String> {
+    let mock = CitationExitMock {
+        quote,
+        value: "Pier Nine",
+    };
+    let inference: Arc<dyn crate::traits::InferenceProvider> = Arc::new(mock);
+    let (q, surface) = (CompletionRequest::default(), citation_surface());
+    let out = gate_answer(&inference, "Where?", "Pier Nine".into(), ev, &q, &surface).await;
+    let row = &out.meta["citations"][0];
+    assert!(row.is_object(), "no citation released: {:?}", out.meta);
+    row.get("member").and_then(|m| m.as_str()).map(Into::into)
+}
+
+/// A chunk carrying `metadata["peer"]` (the fan-out's stamp) releases a
+/// citation naming that member, a local one names none, and a dropped
+/// Summary chunk ahead of the leaf shifts nothing (the keep-filter).
+#[tokio::test]
+async fn a_released_citation_names_the_member_its_passage_came_from() {
+    const PEER: &str = "The ferry leaves from Pier Nine at dawn.";
+    const LOCAL: &str = "The night ferry leaves from Pier Nine too.";
+    let (mut local, mut peer) = (chunk_with("a", Some(1)), chunk_with("b", Some(2)));
+    (local.content, peer.content) = (LOCAL.into(), PEER.into());
+    peer.metadata.insert("peer".into(), "bob".into());
+    let p = gate_evidence_with_sources(&[local, peer]);
+    let mut ev = EvidenceContext {
+        chunks: p.chunks,
+        chunk_sources: p.chunk_sources,
+        chunk_targets: p.chunk_targets,
+        chunk_members: p.chunk_members,
+        ..refinement_evidence()
+    };
+    assert_eq!(released_member(&ev, PEER).await.as_deref(), Some("bob"));
+    assert_eq!(released_member(&ev, LOCAL).await, None);
+    ev.chunks.insert(0, "A summary of the timetable.".into());
+    ev.chunk_sources = vec![Grain::Summary, Grain::Leaf, Grain::Leaf];
+    ev.chunk_targets.insert(0, None);
+    ev.chunk_members.insert(0, Some("carol".into()));
+    assert_eq!(released_member(&ev, PEER).await.as_deref(), Some("bob"));
 }
 
 /// Scripted mock for THE CLIFF PROBE. One confabulated value, served to

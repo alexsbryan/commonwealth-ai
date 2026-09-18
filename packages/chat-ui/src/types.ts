@@ -175,4 +175,6 @@ export interface ReleasedCitation {
   text: string;
   locator?: string | null;
   target: CitationTarget;
+  /** The mesh member whose corpus the passage came from; absent = local. */
+  member?: string | null;
 }

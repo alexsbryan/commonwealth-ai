@@ -420,6 +420,11 @@
               onclick={() =>
                 onOpenCitation(citation.target.corpus_id, citation.target.chunk_id)}
             >
+              {#if citation.member}
+                <span class="citation-locator" data-testid="epistemic-citation-member"
+                  >{citation.target.corpus_id} on {citation.member}</span
+                >
+              {/if}
               {#if citation.locator}
                 <span class="citation-locator">{citation.locator}</span>
               {/if}
@@ -427,6 +432,11 @@
             </button>
           {:else}
             <div class="citation" data-testid="epistemic-citation">
+              {#if citation.member}
+                <span class="citation-locator" data-testid="epistemic-citation-member"
+                  >{citation.target.corpus_id} on {citation.member}</span
+                >
+              {/if}
               {#if citation.locator}
                 <span class="citation-locator">{citation.locator}</span>
               {/if}
