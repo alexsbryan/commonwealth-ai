@@ -16,9 +16,12 @@ use std::sync::Arc;
 use arc_swap::ArcSwap;
 use tokio::sync::RwLock;
 
+use commonwealth_core::capabilities::OriginKind;
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::{IrohDialInfo, Mesh};
 use commonwealth_core::Clock;
+use commonwealth_media::fanout::{FanoutRequest, FanoutResponse};
+use commonwealth_media::{MediaOffer, MediaReach, MediaReachRefusal, PeerTransportPath};
 use commonwealth_state::{ContributionEmitter, MeshStore};
 use commonwealth_transport::PeerTransport;
 use sovereign_core::identity::IdentityReader;
@@ -481,5 +484,79 @@ impl FabricPart {
     pub fn rpc_iroh_accept(&self) -> bool {
         self.rpc_iroh_accept
             .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// The online members whose capability record says they can anchor —
+    /// Fabric's own roster read, moved here from `EmbeddedDaemon` at domains
+    /// `REVIEW-build-daemon-embedded-split` (DC §4.1 "report reach"). The
+    /// daemon's `eligible_anchors` delegates so the roster decision has one
+    /// implementation.
+    pub async fn eligible_anchors(&self) -> Vec<NodeId> {
+        let mesh = self.mesh.read().await;
+        mesh.members
+            .values()
+            .filter(|m| {
+                matches!(
+                    m.status,
+                    commonwealth_core::mesh::NodeStatus::Online
+                        | commonwealth_core::mesh::NodeStatus::Busy
+                )
+            })
+            .filter(|m| m.capabilities.anchor.as_ref().is_some_and(|a| a.can_anchor))
+            .map(|m| m.node_id)
+            .collect()
+    }
+
+    /// The members offering an origin of `kind`, with the live path to each.
+    /// `paths` is the daemon's iroh transport snapshot (Fabric does not own the
+    /// endpoint), passed in so the roster projection stays Fabric's.
+    pub async fn origin_offers(
+        &self,
+        kind: OriginKind,
+        paths: &[(NodeId, PeerTransportPath)],
+    ) -> Vec<MediaOffer> {
+        let self_id = self.identity.current();
+        let roster = {
+            let mesh = self.mesh.read().await;
+            commonwealth_media::roster_of(&mesh)
+        };
+        commonwealth_media::offers(self_id, &roster, paths, kind)
+    }
+
+    /// Mint (or reuse) the loopback bridge to `query`'s origin of `kind`.
+    pub async fn origin_reach(
+        &self,
+        query: &str,
+        kind: OriginKind,
+        paths: &[(NodeId, PeerTransportPath)],
+    ) -> Result<MediaReach, MediaReachRefusal> {
+        let self_id = self.identity.current();
+        let roster = {
+            let mesh = self.mesh.read().await;
+            commonwealth_media::roster_of(&mesh)
+        };
+        commonwealth_media::reach(self_id, &roster, query, &self.peer_transport(), paths, kind)
+            .await
+    }
+
+    /// Ask every selected member the same request through its own bridge for
+    /// the requested origin kind, concurrently, one row per member.
+    pub async fn origin_fanout(
+        &self,
+        req: FanoutRequest,
+    ) -> Result<FanoutResponse, MediaReachRefusal> {
+        let self_id = self.identity.current();
+        let roster = {
+            let mesh = self.mesh.read().await;
+            commonwealth_media::roster_of(&mesh)
+        };
+        commonwealth_media::fanout::fanout(
+            self_id,
+            &roster,
+            req,
+            self.peer_transport(),
+            self.fanout_inflight.clone(),
+        )
+        .await
     }
 }

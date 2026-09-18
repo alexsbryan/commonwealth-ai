@@ -62,17 +62,10 @@ impl EmbeddedDaemon {
         kind: OriginKind,
     ) -> Result<Vec<MediaOffer>, MediaReachRefusal> {
         let app_state = self.app_state().await.ok_or(MediaReachRefusal::NoMesh)?;
-        let self_id = app_state.self_node_id();
-        let roster = {
-            let mesh = app_state.inner.fabric.mesh.read().await;
-            commonwealth_media::roster_of(&mesh)
-        };
-        Ok(commonwealth_media::offers(
-            self_id,
-            &roster,
-            &self.peer_paths().await,
-            kind,
-        ))
+        // The roster projection is Fabric's; the live iroh paths are the
+        // daemon's endpoint snapshot, passed in (DC §4.1 "report reach").
+        let paths = self.peer_paths().await;
+        Ok(app_state.inner.fabric.origin_offers(kind, &paths).await)
     }
 
     /// Mint (or reuse) the loopback bridge to `query`'s media origin and
@@ -90,23 +83,15 @@ impl EmbeddedDaemon {
         kind: OriginKind,
     ) -> Result<MediaReach, MediaReachRefusal> {
         let app_state = self.app_state().await.ok_or(MediaReachRefusal::NoMesh)?;
-        let self_id = app_state.self_node_id();
         // Cloned out before any await: nothing here holds the mesh lock
-        // across a dial.
-        let roster = {
-            let mesh = app_state.inner.fabric.mesh.read().await;
-            commonwealth_media::roster_of(&mesh)
-        };
+        // across a dial. The roster projection and the dial are Fabric's; the
+        // live iroh paths are the daemon's endpoint snapshot (DC §4.1).
         let paths = self.peer_paths().await;
-        commonwealth_media::reach(
-            self_id,
-            &roster,
-            query,
-            &app_state.peer_transport(),
-            &paths,
-            kind,
-        )
-        .await
+        app_state
+            .inner
+            .fabric
+            .origin_reach(query, kind, &paths)
+            .await
     }
 
     /// The live iroh path per peer, as the media reads want it: the daemon's

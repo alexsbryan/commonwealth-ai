@@ -61,21 +61,10 @@ impl EmbeddedDaemon {
         req: FanoutRequest,
     ) -> Result<FanoutResponse, MediaReachRefusal> {
         let app_state = self.app_state().await.ok_or(MediaReachRefusal::NoMesh)?;
-        let self_id = app_state.self_node_id();
-        // Cloned out before any await: nothing here holds the mesh lock
-        // across a dial.
-        let roster = {
-            let mesh = app_state.inner.fabric.mesh.read().await;
-            commonwealth_media::roster_of(&mesh)
-        };
-        commonwealth_media::fanout::fanout(
-            self_id,
-            &roster,
-            req,
-            app_state.peer_transport(),
-            app_state.inner.fabric.fanout_inflight.clone(),
-        )
-        .await
+        // The selection, the transport and the in-flight gauge are Fabric's
+        // (DC §4.1 "report reach"); the daemon owns only the "is there a node
+        // at all" gate.
+        app_state.inner.fabric.origin_fanout(req).await
     }
 }
 

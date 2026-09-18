@@ -2444,19 +2444,9 @@ impl EmbeddedDaemon {
                 DaemonState::Stopped => return Vec::new(),
             }
         };
-        let mesh = app_state.inner.fabric.mesh.read().await;
-        mesh.members
-            .values()
-            .filter(|m| {
-                matches!(
-                    m.status,
-                    commonwealth_core::mesh::NodeStatus::Online
-                        | commonwealth_core::mesh::NodeStatus::Busy
-                )
-            })
-            .filter(|m| m.capabilities.anchor.as_ref().is_some_and(|a| a.can_anchor))
-            .map(|m| m.node_id)
-            .collect()
+        // The roster decision is Fabric's (DC §4.1 "report reach"); the daemon
+        // owns only the "is there a node at all" gate.
+        app_state.inner.fabric.eligible_anchors().await
     }
 
     pub async fn discover_rpc_workers(&self) -> crate::worker_eligibility::DiscoveryOutcome {
