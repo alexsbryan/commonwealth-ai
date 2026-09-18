@@ -2180,3 +2180,53 @@ ordered, `ralph/STATE.md` row `[x]`, `ralph/lanes/dm-corpus-mcp-exception.done`)
 and this commit (the director entry). `ralph/NEEDS_HUMAN.md` removed (it is in
 `.git/info/exclude`, so its removal is not a commit change).
 `git revert -m 1 3ef54115c` reverts the merge.
+
+## 2026-09-18 · REVIEW-build-understanding-tier-crates · the registry wins: Understanding is a new `[[package]]`, not `corpus-mcp` growing
+
+**Fork.** The row names two readings of the destination for the Understanding
+tiers. DE "The shape" says "This is the `corpus-mcp` package growing, not a
+second package"; the registry (quality/DOMAINS.toml) says a NEW `[[package]]
+understanding` with `understanding-vocab` as its published leaf. The readings
+differ on where `understanding-host`'s `corpus-engine` edge lands: a member's
+grandfathered exception inside the package, or outside it (covered by
+`corpus-mcp`'s existing exception).
+
+**Choice.** A NEW `[[package]] understanding` with `understanding-atlas` and
+`understanding-host` as members and `understanding-vocab` as the published
+shared leaf. The row says to resolve with the registry, the campaign's data,
+and the campaign's own floor_basis settles the tie explicitly. The package is
+declared RED (ARCH §18.1): `understanding-host` is an empty stub, so the one
+grandfathered `understanding-host -> corpus-engine` exception is
+STALE-by-construction and boundary-gate fails until the host half names the
+engine. Declaring it now is the point — a package is declared before the work
+that fills it.
+
+**Evidence** (reproduced this session, on `ralph/domains-campaign`).
+- quality/DOMAINS.toml:3984 `dest = "understanding (package, SERVING_BOUNDARY
+  shape): understanding-atlas ... + understanding-host ... over
+  understanding-vocab"`; the cluster note at :3990 "the destination is a
+  two-tier PACKAGE, not a crate".
+- quality/campaigns/domains.toml:231 floor_basis: "corpus-mcp, which is a HOST
+  that reads Understanding's output rather than Understanding's crate".
+- Before the unit: `ls sovereign/crates | grep understanding` empty and
+  `ls -d understanding-atlas understanding-host` empty. After: two stubs, and
+  `boundary-gate` prints `understanding 2/2 crates present` and fails only on
+  the stale exception.
+
+**Falsified by.** A boundary-gate that passes the package on the day it is
+declared (the red is the point); or DE "The shape" being the operator's
+decision rather than a design proposal the registry corrects.
+
+**Landed in.** `d7fabc49b` — the two crate stubs, the root `Cargo.toml`
+members, the `knowledge` layer entries, the `[[package]] understanding` row and
+its exception, the SYSTEM_OVERVIEW §2 lines, and the DOMAINS.toml context
+package + module rows; `ralph/STATE.md` marked in the follow-up commit.
+
+**REVIEW-AFTER:** the row's premise `ls -d understanding-*` was stale (the
+dependency rename had already created `understanding-vocab`) and its DOCS check
+was red on the base tree from `REVIEW-build-index-read-port`'s incomplete doc
+update. Both are recorded in the row's CORRECTED note; the docs repair
+(SYSTEM_OVERVIEW citation repoints, the `Cargo.toml` members-comment
+de-quoting) is in `d7fabc49b`. `quality/baselines/oversized.txt` still keys
+`search.rs` to `corpus-engine/src/index/search.rs` — a move re-key this unit did
+not own (§7 keeps baselines out of its reach), left for the wave-close audit.
