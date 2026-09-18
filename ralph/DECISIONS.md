@@ -1467,3 +1467,58 @@ custody sweep ceasing to be the type's purpose.
 
 **Landed in.** this commit — the two renames (`oicp-types`, `corpus-engine`), the
 `ralph/STATE.md` row correction and this entry.
+
+## 2026-09-17 · dm-rename-leaf-words · director: the conflict is one bookkeeping row; keep HEAD's done-marker and the lane's corrected row
+
+**Fork.** The pool halted on `merge conflict merging ralph/dm-rename-leaf-words —
+resolve in the main tree, then resume` (`ralph/NEEDS_HUMAN.md`). The lane (base
+`654031d71`) and the main tree (which then merged `dm-rename-desktop-member`,
+`c1228b1b3`) each edited the two adjacent row lines in `ralph/STATE.md`; the
+lane also appended its own `ralph/DECISIONS.md` entry. Options: (a) drop the
+lane's row correction to make the merge trivial; (b) take HEAD's `[x]` for the
+already-merged desktop row and the lane's corrected leaf row, complete the
+merge; (c) re-run the lane on the current base.
+
+**Choice.** (b). The lane's correction is a premise correction the worker made
+under PROMPT §6 and recorded in its own `DECISIONS.md` entry; dropping it would
+re-introduce a row that directs a rename overturning a registry `decided:keep`.
+The desktop row's `[x]` is real (its lane merged at `c1228b1b3`); the leaf row
+stays `[ ]` in the merge commit and the pool's bookkeeping sets it `[x]`, exactly
+as the pool does after a clean merge. Source files auto-merged with no conflict
+— the two lanes touch disjoint files — so there is no code decision here. The
+merge is completed by hand, including the pool's immediate bookkeeping (row
+`[x]`, lane worktree removed, branch deleted).
+
+**Evidence** (reproduced in this session).
+- `git merge --no-commit --no-ff ralph/dm-rename-leaf-words` → the sole
+  conflict is `ralph/STATE.md`; `corpus-engine`, `oicp-types`, `sovereign-api`,
+  `sovereign-tools` and `ralph/DECISIONS.md` auto-merge.
+- The lane's premise re-verified on the MERGED tree, not trusted from the lane:
+  `quality/DOMAINS.toml:1818-1827` is the `PeerAnswer` `[[noun]]` row with
+  `disposition = "decided:keep"`; `quality/campaigns/domains.toml:142-145`
+  names it a carve-out (C9 egress custody); `scripts/domains-census.py:329-336`
+  `peer_defs` subtracts `decided:keep` by name. `grep -rn
+  'PeerDescriptor\|PeerAtomRef' --include='*.rs'` over the main tree is empty.
+- `SOVEREIGN_CHANGED_PATHS=<the six changed .rs>` `./scripts/sovereign-lint.sh
+  --human` → `errors: 0`, `cargo exit: 0`, scope 35 crates including
+  corpus-engine, oicp-types, sovereign-api, sovereign-tools.
+- `python3 scripts/domains-census.py --self-test` exit 0 (11 axes, 11/11
+  positives caught, 11/11 negatives refused); `peer-outside` → `2 in 2 crates`
+  (`sovereign-cli-llm`, `sovereign-daemon`), down from the lane's 4 because the
+  desktop rename merged first; both remaining are the later `dm-peer-outside-zero`
+  row's work.
+
+**Falsified by.** The lane's `PeerAnswer` premise being false on re-check (it is
+not — the DT row exists); or the merged tree failing lint, which would make the
+rename unsound on the post-merge base; or the pool re-running the lane despite
+the `[x]`.
+
+**REVIEW-AFTER:** none — the charter covers resolving the halt ("correct the row
+or the code") and the lane's correction was already a worker decision. The one
+judgment call is completing the pool's bookkeeping by hand instead of leaving
+the lane to be re-run; recorded here so the morning sees it.
+
+**Landed in.** `10c57b68b` (the merge, `ralph/STATE.md` conflict resolved,
+lane's `DECISIONS.md` entry included), `ralph/STATE.md` row `[x]` and the pool
+marker in the following commit; this entry lands in a third commit. `git revert
+-m 1 10c57b68b` reverts the merge.
