@@ -47,14 +47,6 @@ const POLL_MS = 500;
 const PRESENCE_THROTTLE_MS = 100;
 const LIVE_POLL_MS = 250;
 
-/// The live lane, on the rail listener beside `/v1/rail/append`.
-///
-/// Spelled here rather than reached through `window.ring` because the SDK
-/// carries the two DURABLE ops — `log` and `record` — and this lane is the
-/// other kind of thing (`sovereign-api/src/routes_rail_live.rs`: delivery, not
-/// record).
-const LIVE_PATH = "/v1/rail/live";
-
 const ydoc = new Y.Doc();
 // Presence for this document. Constructed here and not inside the editor
 // because the live lane, not Tiptap, is what carries it — the caret extension
@@ -133,21 +125,13 @@ function nameSelf() {
 async function sendPresence() {
   presenceTimer = null;
   try {
-    const resp = await fetch(LIVE_PATH, {
-      method: "POST",
-      headers: { "content-type": "text/plain" },
-      body: presenceEnvelope(encodeSelf(awareness), DOC_ID),
-    });
-    if (!resp.ok) {
-      // A cursor nobody can see is worth saying out loud once. Held as a gap
-      // rather than thrown: the document still converges with the live lane
-      // down, and a page that stopped rendering text because presence failed
-      // would be trading the durable half for the ephemeral one.
-      liveGaps = [`presence not delivered: ${LIVE_PATH} answered ${resp.status}`];
-      return;
-    }
+    await window.ring.live.send(presenceEnvelope(encodeSelf(awareness), DOC_ID));
     liveGaps = [];
   } catch (e) {
+    // A cursor nobody can see is worth saying out loud once. Held as a gap
+    // rather than rethrown: the document still converges with the live lane
+    // down, and a page that stopped rendering text because presence failed
+    // would be trading the durable half for the ephemeral one.
     liveGaps = [`presence not delivered: ${String(e.message || e)}`];
   }
 }
@@ -169,12 +153,7 @@ awareness.on("update", (_changes, origin) => {
 async function pollLive() {
   let body;
   try {
-    const resp = await fetch(LIVE_PATH);
-    if (!resp.ok) {
-      liveGaps = [`presence not read: ${LIVE_PATH} answered ${resp.status}`];
-      return;
-    }
-    body = await resp.json();
+    body = await window.ring.live.drain();
   } catch (e) {
     liveGaps = [`presence not read: ${String(e.message || e)}`];
     return;

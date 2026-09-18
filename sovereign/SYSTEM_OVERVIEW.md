@@ -5655,7 +5655,9 @@ a split — the moment it is, adding a housemate silently re-divides every past
 expense, and the test named after that moved to JS with the rest.
 
 **The SDK ships the fold, not just the transport.** `window.ring` is `log()`,
-`record()`, `correct()` and `fold(log, reducer, initial)`, and the fourth is
+`record()`, `correct()`, `fold(log, reducer, initial)` and `live.{send,drain}`
+(the ephemeral lane, proxied as the `live` / `live-drain` ops so a page served
+by `ring dev` can reach `/v1/rail/live` at all), and the fourth is
 why it is an SDK rather than a fetch wrapper: it walks the rail's order and
 skips voided acts and replacement-less corrections, so an author writes a
 reducer and never touches `log.ops`. Hand somebody a raw log and hope, and the
