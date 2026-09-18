@@ -893,3 +893,98 @@ Recorded, not changed:
 - **`size-gate` (advisory)** · keys grew with the campaign; `warn_gate` by
   design. Not re-pinned.
 
+
+## REVIEW-audit-4 — the vocab door
+
+Range audited: the door's commits (`441e28534..31d68f270`) —
+`dm-vocab-compile-fail-test`, `dm-vocab-door-move`, `dm-vocab-atlas-dirname`,
+the four `dm-vocab-bypass-*` rows, and `REVIEW-build-vocab-seal`. Checks:
+TESTALL exit=0 (13394 pass, 0 fail); PREPUSH exit=0 (1 of 18 want attention:
+`size-gate`, the advisory `warn_gate`).
+
+The door, verified against O8's "Done when" clauses that this wave owns:
+
+- **The four readers and the layout constant (O8 checks 1, 10).** `read.rs`
+  holds `read_atlas_atoms`/`read_atlas_edges`/`ATLAS_DIRNAME`; the other two
+  readers are DEFERRED with the row corrected (`read_atlas_ontology` is
+  minted-not-moved and calls tracing; `read_atlas_cross_corpus_edges` needs its
+  product types in vocab first — `dm-vocab-door-move`, `ralph/DECISIONS.md`).
+- **The seal (O8 check 10).** `AtomsFile` no longer derives `Deserialize`, its
+  `atoms` field is `pub(crate)`, `AtomsFileWire` is crate-private and
+  `read_atlas_atoms` is the only parser; the trybuild suite flipped `t.pass` →
+  `t.compile_fail` with `.stderr` recorded from the SEALED type.
+- **corpus-mcp (O8 check 8).** `fn read_atoms` is deleted; `:597` goes through
+  the door with the `NotFound` message preserved.
+- **The bypasses (O8 check 9).** `git grep -nE
+  'from_str::<AtomsFile>|from_slice::<AtomsFile>|: AtomsFile = ' -- '*.rs'
+  ':!corpus-engine/'` returns ONE hit, through the door
+  (`sovereign-tools/src/atlas_view/atom_browse.rs:258`). The remaining
+  `atoms.json` references outside the engine are `exists()`/mtime probes, error
+  strings, or the 15 write-path files O8 excludes by name.
+- **The leaf (O8 check 11).** `corpus-engine-vocab`'s `[dependencies]` are still
+  kernel-types, serde, serde_json, blake3 (trybuild dev-only); `boundary-gate`
+  exit 0.
+
+Findings, fixed (all in this commit):
+
+- **TESTALL red — `conformance_tags_are_fresh`** · `quality/conformance/
+  sovereign-api.toml:52` was stale: `line = 90` for
+  `routes_edit_predictions/outcome.rs` against the generator's 89 (the fn is at
+  `outcome.rs:89`). Regenerated with `UPDATE_CONFORMANCE_TAGS=1`; one line.
+- **ARCH 3/4 (a citation to a path nobody checked) · docs-gate** ·
+  `sovereign/SYSTEM_OVERVIEW.md` cited three paths no file matches:
+  `sovereign-api/src/middleware/decision_extractor.rs` and
+  `sovereign-tools/src/notes/response_mine.rs` (moved to `corpus-engine-notes`
+  by `dm-decision-extractor-move`) and `sovereign-mesh/src/mesh_sim/mod.rs`
+  (moved to `sovereign-mesh-test-harness` by `dm-mesh-sim-move`). Repointed at
+  the landed homes; the scoreboard test path corrected to `tests/main/`.
+- **ARCH 3.2 (a moved oversized file reads as NEW) · arch-gate** ·
+  `dm-mesh-sim-move` never re-keyed `quality/baselines/oversized.txt`: the row
+  still named `sovereign-mesh/src/mesh_sim/mod.rs`, so the file read as a NEW
+  oversized file. Re-keyed the row to
+  `sovereign-mesh-test-harness/src/mesh_sim/mod.rs` (§3a step 6, path re-key, no
+  debt; the count unchanged, so the move's own +11 rides the 50-line slack).
+- **ARCH 3.1 (a file grown past slack) · arch-gate** ·
+  `sovereign-api/src/routes_edit_predictions.rs` 1412 → 1474 (+62; the
+  `dm-next-edit-move` shell that stayed). Split the wire contract — the four
+  caps, the two request shapes and `validate_wire` — to
+  `routes_edit_predictions/wire.rs`, re-exported at the historical path;
+  1474 → 1357, within slack.
+- **ARCH 3.1 (the approach band, a counter ratchet) · arch-gate** · the band
+  read 202836 against the 202703 baseline (+133). Cut `sovereign-serving-host/
+  src/admission.rs` back under the floor by splitting its test module to
+  `admission/tests.rs` (the `ring_sync.rs`/`scoring.rs` pattern
+  `REVIEW-audit-daemon-1` used; 922 → 548). Band now 206 files / 201914 lines.
+  The director's `REVIEW-audit-daemon-2` ruling ("cut, not banked",
+  `2220dbf93`) is satisfied by the same cut; that audit no longer owes it.
+- **ARCH 3/4 (the registry does not land with the code)** · `quality/
+  DOMAINS.toml` · the two new files had no `[[module]]` row (the coverage
+  assertion would exit 4) and the two parents carried stale counts. Added rows
+  for `routes_edit_predictions/wire.rs` and `admission/tests.rs`, re-measured
+  both parents; `crate-lines`/`misnamed` exit 0.
+- **ARCH 3 (a comment that rotted invisibly)** ·
+  `corpus-engine-vocab/Cargo.toml:7,18` still called the leaf "behaviour-free …
+  and nothing else" after `read.rs` brought the door's one `std::fs` read. The
+  description and the carve comment now name it.
+
+Recorded, not changed:
+
+- **The closed-set refusal is the door's designed behaviour, not a regression.**
+  `mine_claims` (`sovereign-eval/src/flywheel/mining.rs`) and
+  `resolve_cache_is_structural_placeholder`
+  (`sovereign-enrichment-build/src/build/steps.rs`) now refuse a whole
+  `atoms.json` that carries an atom kind outside the closed set, where their
+  `serde_json::Value` walks skipped the unknown atom and kept the rest. That is
+  O8's kept seam ("an unknown atom refuses, never skips"); named in
+  `dm-vocab-bypass-rest`'s body.
+- **`catalog_ingest`'s summary was a pre-existing zero.** `read_atlas_summary`
+  treated the `AtomsFile` object as a bare array (`as_array()` is `None` on an
+  object), so it reported 0 atoms/edges/themes/questions for every corpus; the
+  typed read returns the real counts. Named in `dm-vocab-bypass-tools`.
+- **Frozen measurement coordinate** · `quality/DOMAINS.toml:3108`'s
+  `[[collision]]` `definitions` line still spells `pub atoms`; it is the
+  pre-seal measurement's coordinate, and the same row's `survivor` already
+  states the `pub(crate)` shape (the audit-3/5/7/8/9 precedent). A re-key would
+  falsify the record.
+- **`size-gate` (advisory)** · 65 keys grew, the campaign's own accretion;
+  `warn_gate` by design. Not re-pinned.

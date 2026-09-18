@@ -8626,7 +8626,7 @@ stabilises, same contract as every other row in this section.
 
 | Item | Location | Why deferred |
 |------|----------|--------------|
-| Mesh measurement + allocation arc | `sovereign-cli-llm/src/mesh_cmd.rs` (4,730 — grew +3,419), `sovereign-cli-llm/src/mesh_bench.rs` (2,275) + `mesh_bench/tests.rs` (1,583), `sovereign-core/src/mesh_measurements.rs` (2,925), `sovereign-scheduler/src/decision_log.rs` (1,348), `sovereign-daemon/src/mesh_http.rs` (1,623), `sovereign-mesh/src/mesh_sim/mod.rs` (2,380), `sovereign-mesh/tests/mesh_sim_scoreboard.rs` (2,750), `sovereign-scheduler/src/scheduler_core.rs` (1,215), `sovereign-mesh/tests/chat_completion_e2e.rs` (1,511) | The allocation/measurement/plan surface is the hottest current iteration (RunConditions, median-run headlines, gossip-travel measurements — commits through `df88e073`). Splitting mid-arc obscures blame on an algorithm still settling; `mesh_cmd.rs` splits along its verb families (plan/measure/bench) once the measurement schema freezes. |
+| Mesh measurement + allocation arc | `sovereign-cli-llm/src/mesh_cmd.rs` (4,730 — grew +3,419), `sovereign-cli-llm/src/mesh_bench.rs` (2,275) + `mesh_bench/tests.rs` (1,583), `sovereign-core/src/mesh_measurements.rs` (2,925), `sovereign-scheduler/src/decision_log.rs` (1,348), `sovereign-daemon/src/mesh_http.rs` (1,623), `sovereign-mesh-test-harness/src/mesh_sim/mod.rs` (2,405), `sovereign-mesh/tests/main/mesh_sim_scoreboard.rs` (2,750), `sovereign-scheduler/src/scheduler_core.rs` (1,215), `sovereign-mesh/tests/chat_completion_e2e.rs` (1,511) | The allocation/measurement/plan surface is the hottest current iteration (RunConditions, median-run headlines, gossip-travel measurements — commits through `df88e073`). Splitting mid-arc obscures blame on an algorithm still settling; `mesh_cmd.rs` splits along its verb families (plan/measure/bench) once the measurement schema freezes. |
 | 122B distributed inference | `sovereign-inference/src/embedded/rpc_warm_cache.rs` (1,927), `sovereign-daemon/src/rpc_warm_http.rs` (1,236) | RPC warm-cache + its HTTP surface; ggml-RPC-over-iroh is still an open workstream (`docs/QWEN122B_DISTRIBUTED_HANDOFF.md`) — the seam moves with it. |
 | Session continuity + context-spend arc | `sovereign-cli/src/session_cmd.rs` (3,215), `sovereign-tools/src/code/session_state.rs` (1,421), `sovereign-cli/src/cache_audit_cmd.rs` (2,312) | Frame lineage/objective machinery and the cache auditor grew together with `docs/specs/SESSION_CONTINUITY.md` §2; `session_cmd.rs` splits per verb (frames/attach/distill) once the frame contract stops moving. |
 | CLI-contract machinery | `sovereign-cli-shared/src/cli_contract.rs` (1,390), `sovereign-cli/src/main.rs` (1,202) | Contract model + dispatcher; `main.rs` sits 2 lines over the ceiling and shrinks when the next verb family moves out-of-process. |
@@ -10222,9 +10222,10 @@ unrelated growth (PROMPT §7). The caps are `31` and `14`; the landed edges are
 
 ### 10.1ac Fan-in ACCEPTED — `sovereign-contracts` 31 → 32 (the workspace decision extractor reaches its seam, `dm-decision-extractor-move`, 2026-09-17)
 
-`dm-decision-extractor-move` MOVEs `sovereign-api/src/middleware/decision_extractor.rs`
-(443) and `sovereign-tools/src/notes/response_mine.rs` (454) into
-`corpus-engine-notes` (DT `workspace` cluster; dest `corpus-engine-notes`). The
+`dm-decision-extractor-move` MOVEs the workspace decision extractor (443) and
+the notes response miner (454) into `corpus-engine-notes/src/decision_extractor.rs`
+and `corpus-engine-notes/src/response_mine.rs` (DT `workspace` cluster; dest
+`corpus-engine-notes`). The
 moved `DecisionExtractor` implements the `Middleware` trait, whose home is
 `sovereign-contracts::middleware` — the seam lifted there by
 `REVIEW-build-middleware-seam`. `corpus-engine-notes` is the one new dependent:

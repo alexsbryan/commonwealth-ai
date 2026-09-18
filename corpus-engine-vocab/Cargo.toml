@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "The atlas vocabulary — atoms, edges, the kind taxonomy, canonical-name folding and the content-derived stable key. A behaviour-free leaf: serde + kernel-types + blake3 and nothing else."
+description = "The atlas vocabulary — atoms, edges, the kind taxonomy, canonical-name folding, the content-derived stable key and the read door. A leaf: serde + serde_json + kernel-types + blake3 and nothing else."
 
 # Home of `AtomsFile` / `AtomEnvelope` / the eleven atom structs, `Edge` /
 # `EdgesFile`, `EnrichmentDepth` + the eight `string_enum_with_other!` kind
@@ -15,8 +15,10 @@ description = "The atlas vocabulary — atoms, edges, the kind taxonomy, canonic
 # (`enrichment::atlas::{atoms,edges}`, `enrichment::pipeline::atlas::*`,
 # `atlas_canonical`), so nothing inside the monorepo had to change an import.
 #
-# Zero behaviour by measurement: none of the four sources did file IO, took a
-# feature gate, or reached a store. `kernel-types` is here for ONE call —
+# The four carved sources did no file IO, took no feature gate and reached no
+# store; `read` (`read_atlas_atoms`/`read_atlas_edges`, moved here by domains
+# `dm-vocab-door-move`) is the one IO, and it is a `std::fs` read of the product
+# the vocabulary already describes. `kernel-types` is here for ONE call —
 # `ContentHash::of_str` in `AtomId::from_essence` — and is itself an empty
 # leaf, so the closure stays provably tiny. Declared as a `[[package_leaf]]` in
 # `quality/ARCH_LAYERS.toml`; boundary-gate keeps this comment honest.

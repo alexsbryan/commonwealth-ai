@@ -1241,8 +1241,14 @@ note = "was serving; route shell — DAEMON_CORE.md §4 placement test (2026-09-
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_edit_predictions.rs"
 context = "workbench"
-lines = 1474
-note = "the host route shell (DAEMON_CORE.md §4.1 placement test) for POST /v1/edit_predictions; its grammar lookup adapter (grammar_for) is the port the package crate takes. It moves to sovereign-daemon with server.rs at dm-daemon-api-edge"
+lines = 1357
+note = "the host route shell (DAEMON_CORE.md §4.1 placement test) for POST /v1/edit_predictions; its grammar lookup adapter (grammar_for) is the port the package crate takes. It moves to sovereign-daemon with server.rs at dm-daemon-api-edge. The wire contract split to wire.rs at REVIEW-audit-4 (ARCH 3.1: the file had grown past arch-gate's slack)"
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/routes_edit_predictions/wire.rs"
+context = "workbench"
+lines = 133
+note = "the /v1/edit_predictions wire contract — the request shapes, their caps and validate_wire — split out of routes_edit_predictions.rs at REVIEW-audit-4 (ARCH 3.1: the route file had grown past arch-gate's slack). Same shapes, same caps; the route module re-exports the public names at the historical path"
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_edit_predictions/outcome.rs"
@@ -1507,8 +1513,14 @@ note = "the host crate root; the host half arrives in rung domains-10 (2026-09-1
 [[module]]
 path = "sovereign/crates/sovereign-serving-host/src/admission.rs"
 context = "serving"
-lines = 922
-note = "the Admission decider and its two axum middlewares — moved out of sovereign-api by REVIEW-build-serving-move-admission (2026-09-15); `admit(&Principal, now_unix_ms)` is pure over the snapshot, the daemon implements `AdmissionHost` for the resolver/tally/parser; SERVING_BOUNDARY.md (c)"
+lines = 548
+note = "the Admission decider and its two axum middlewares — moved out of sovereign-api by REVIEW-build-serving-move-admission (2026-09-15); `admit(&Principal, now_unix_ms)` is pure over the snapshot, the daemon implements `AdmissionHost` for the resolver/tally/parser; SERVING_BOUNDARY.md (c). The test module split to admission/tests.rs at REVIEW-audit-4 (the file had climbed into arch-gate's 800-1200 approach band, a counter ratchet)"
+
+[[module]]
+path = "sovereign/crates/sovereign-serving-host/src/admission/tests.rs"
+context = "serving"
+lines = 379
+note = "admission.rs's test module, split out at REVIEW-audit-4 (the ring_sync.rs/scoring.rs pattern REVIEW-audit-daemon-1 used: the parent had climbed into arch-gate's 800-1200 approach band). Same tests; the parent declares `#[cfg(test)] mod tests;`"
 
 [[module]]
 path = "sovereign/crates/sovereign-serving-host/src/venue_host.rs"

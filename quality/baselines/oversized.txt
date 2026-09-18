@@ -148,7 +148,7 @@
 2086	sovereign/crates/sovereign-serving-host/src/inference_adapter.rs
 1614	sovereign/crates/sovereign-mesh/src/iroh_access.rs
 1825	sovereign/crates/sovereign-daemon/src/mesh_http.rs
-2394	sovereign/crates/sovereign-mesh/src/mesh_sim/mod.rs
+2394	sovereign/crates/sovereign-mesh-test-harness/src/mesh_sim/mod.rs
 1264	sovereign/crates/sovereign-serving-host/src/oicp_synthesis.rs
 5399	sovereign/crates/sovereign-serving-host/src/peer_inference.rs
 2150	sovereign/crates/sovereign-mesh/src/reindexer.rs
