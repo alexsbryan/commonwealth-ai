@@ -1,10 +1,47 @@
 # ralph director decisions
 
-One entry per resolution, one commit per entry, so `git revert <sha>` undoes
-exactly it. Format: date · unit · the fork · the choice · the evidence · what
-would falsify it.
+One line per decision in the ledger; the reasoning, the evidence and the worker's
+package sit in the appendix of the same number, folded. One decision, one commit,
+so `git revert <sha>` undoes exactly it. `FLAG` marks a reading of a bar or a clause
+the operator may revert.
 
-## 2026-09-17 · REVIEW-build-rd-1-live · the live lane's crate, its PLANT, and its census row
+## Ledger
+
+| # | date | unit | by | choice | commit |
+|---|---|---|---|---|---|
+| A1 | 09-17 | REVIEW-build-rd-1-live | director | live lane wholly in sovereign-api (mesh depends on api, not the reverse); the row gains the test it lacked; no REPLICATION_SENDERS row | 6ac1fd39f |
+| A2 | 09-17 | rd-1-awareness | director | proxy the live lane through `svrn ring dev` as two POST ops, no router change → row rd-1-live-shim | b7e23584f |
+| A3 | 09-17 | REVIEW-build-rd-1-instrument | director | row done at 5ab927237; the rail diff clears on push, no bar change; attribution disagreement → rd-1-attribution-order; the live-lane grant → operator | 5ab927237 |
+| A4 | 09-18 | HUMAN-rd-1-live-grant | operator | (b) namespace the lane, then grant it; no push tonight and no bar change — the instrument names foreign commits | 09ba44764 f181b179e |
+| A5 | 09-18 | rd-1-three-containers | operator | three machines rehearsed as three podman containers before the Mac is involved | 1ebdab2a4 |
+| A6 | 09-18 | rd-1-instrument-rail-diff | director | row done at f181b179e; the partition 'regression' was a masked failure → rd-1-partition-gap ahead of tune | f181b179e |
+| A7 | 09-17 | rd-1-partition-gap | director | widen the row to dev.rs:276; two variables, one owner each; no gap line for a C the mesh already marks offline | 6eeddd1f0 |
+| A8 | 09-18 | rd-1-three-containers | seat | no bind flag on `ring dev`; an in-container forwarder is the instrument's own component | — |
+| A9 | 09-18 | rd-1-three-containers | seat | joins take the product's no-VPN path (the founder's join_link with a live dial=) on both backends | — |
+| A10 | 09-18 | REVIEW-audit-rd-1 | director | row closes on the campaign's share; the foreign reds go to the operator | e88a71212 9dd7a0401 |
+| A11 | 09-18 | REVIEW-build-rr-1-roster-from-mesh | director | ESCALATED — the rail has no default roster source; a rail diff is the campaign's stop condition | — |
+| A12 | 09-18 | REVIEW-build-rr-1-roster-from-mesh | **operator** | option 1: the roster door gains a default source (the one permitted rail hunk); an app admits everyone in the mesh; `roster add` is the narrowing primitive | e94b26826 |
+| A13 | 09-18 | REVIEW-build-rr-1-roster-from-mesh (landing) | seat | ring-doc's own-campaign classifier matches rd-1-/ring-doc, not every REVIEW- row; daemon rings re-registered as a row | 78ff47353 |
+| A14 | 09-18 | rr-1-citation-names-the-machine | seat | wire half done; 'the citation' = EpistemicFooter's released citations; member by corpus (option B) | 3787e2ab7 |
+| A15 | 09-18 | rr-1-citation-member-on-released | seat | option A at its real size — a chunk_members vec beside custody; the attribution map dies before the gate, so B cost the same | f25939c2e → 933d5a14e |
+| A16 | 09-18 | rr-1-media-offer-verb | seat | the admit list rides gossip as its own row; commonwealth-rails is the rails DAEMON, not the ring rail the predicate protects | d4ae4f750 |
+| A17 | 09-18 | REVIEW-build-rr-1-instrument | seat | Jellyfin as a netns sibling of node b; real weights on a and b; census split install/walk; RING_DOC_PHASES in ring-doc-demo.sh | c2933778d |
+| A18 | 09-18 | first pre-registered run | seat | three reds become rows ahead of tune (answer fans out · media origin live · nothing-typed to zero); FLAG: a tool-printed URL opened verbatim is `opened`, not typed | 981e340fe |
+| A19 | 09-18 | REVIEW-build-rr-1-answer-fans-out | seat | landed — the daemon's Runtime had no mesh client, now a loopback seam to its own knowledge search; FLAG: 'citation' = the released evidence pointer in either gate mode; ask timeout 600 s | de1bd318c |
+| A20 | 09-18 | rr-1-media-origin-live | seat | landed, film 1.0 by reload; the media_declared extension kept; demo-bg/demo-wait for the 25-minute run | e30e91398 |
+| A21 | 09-18 | rr-1-claim-support-names-the-member | seat | the per-claim judge has no supporting chunk → member stamped pool-level by the sole_corpus rule; not the 0.74-precision claim address | 1e9188d3d |
+
+## Flags for the operator
+
+- A18: the nothing-typed census classes a URL a tool printed and the person opens verbatim as `opened`, not typed (the driver shows the stdout line it came from; an assembled string still counts).
+- A19: 'citation' in `ra-room-answer-names-the-machine` means the released evidence pointer in either gate mode — a quote citation, or a verified claim's support — and both must name the member.
+- A12/A16: the ring-room predicate's rail clause names `commonwealth-rail` + `commonwealth-rail-core`; the roster-door default (lib.rs:130-205) is its one permitted diff; `commonwealth-rails` (the rails daemon) is outside it.
+
+## Appendices
+
+## A1 · 2026-09-17 · REVIEW-build-rd-1-live · the live lane's crate, its PLANT, and its census row
+
+<details><summary>reasoning, evidence, package</summary>
 
 Three forks came up in `ralph/NEEDS_HUMAN.md`. All three are the charter's, so
 all three are decided here; the row at `ralph/next/ring-doc/STATE.md:39` is
@@ -102,7 +139,11 @@ lane is replicated state, the row is owed, and
 Commit: recorded in the same commit as the row rewrite and the removal of
 `ralph/NEEDS_HUMAN.md`.
 
-## 2026-09-17 · rd-1-awareness · the page cannot reach `/v1/rail/live` under `svrn ring dev`
+</details>
+
+## A2 · 2026-09-17 · rd-1-awareness · the page cannot reach `/v1/rail/live` under `svrn ring dev`
+
+<details><summary>reasoning, evidence, package</summary>
 
 The unit is done and committed (`d572d8f3d`); nothing is broken. What stopped
 the loop is that the transport the row names is not reachable from the page the
@@ -177,7 +218,11 @@ the regression.
 Commit: recorded in the same commit as the new row and the removal of
 `ralph/NEEDS_HUMAN.md`.
 
-## 2026-09-17 · REVIEW-build-rd-1-instrument · the pre-registration run read exit=1 on three bars
+</details>
+
+## A3 · 2026-09-17 · REVIEW-build-rd-1-instrument · the pre-registration run read exit=1 on three bars
+
+<details><summary>reasoning, evidence, package</summary>
 
 The package (`ralph/NEEDS_HUMAN.md`, removed in this commit) named three forks.
 Each fact below was reproduced in this session, not taken from the package.
@@ -255,7 +300,11 @@ the operator's explicitly. It was read here from "behaviour a peer can observe".
 
 Commit: the one that removes `ralph/NEEDS_HUMAN.md`.
 
-## 2026-09-18 · HUMAN-rd-1-live-grant · the operator's two answers
+</details>
+
+## A4 · 2026-09-18 · HUMAN-rd-1-live-grant · the operator's two answers
+
+<details><summary>reasoning, evidence, package</summary>
 
 Weighed by the seat, decided by the operator in session ("sounds good").
 
@@ -279,7 +328,11 @@ clear a bar. The leg keeps its diff exactly as demanding and gains the four-verd
 a non-empty diff made only of commits outside this campaign reads COULD-NOT-JUDGE naming them,
 never FAILED, and never PASSED.
 
-## 2026-09-18 · rd-1-three-containers · three machines rehearsed as three containers first
+</details>
+
+## A5 · 2026-09-18 · rd-1-three-containers · three machines rehearsed as three containers first
+
+<details><summary>reasoning, evidence, package</summary>
 
 Operator direction in session ("Mint it"). The one-host instrument already runs three real
 daemons on real iroh; what it lacks of "three machines" is three network identities, a real
@@ -292,7 +345,11 @@ on the toolbox image resolves host.containers.internal but the loopback-bound ho
 The rehearsal (HUMAN-rd-1-three-tabs) does not retire HUMAN-rd-1-three-machines: the Mac's own
 build and the WAN relay path are that row's claim.
 
-## 2026-09-18 · rd-1-instrument-rail-diff · director, resolution 1
+</details>
+
+## A6 · 2026-09-18 · rd-1-instrument-rail-diff · director, resolution 1
+
+<details><summary>reasoning, evidence, package</summary>
 
 ### Fork 1 — the row's DEMO cannot read five PASSED. Choice: mark it done at f181b179e.
 
@@ -324,7 +381,11 @@ observe beyond the row". Read here as the order's own step 5, not new behaviour.
 
 Commit: the one that removes `ralph/NEEDS_HUMAN.md`.
 
-## 2026-09-17 — rd-1-partition-gap: the page never received `peers`
+</details>
+
+## A7 · 2026-09-17 — rd-1-partition-gap: the page never received `peers`
+
+<details><summary>reasoning, evidence, package</summary>
 
 ### Fork 1 — the row's EDIT is inert on the real page. Choice: widen the row to `dev.rs:276`.
 
@@ -363,7 +424,11 @@ the roster diff the row forbids.
 
 Commit: the one that removes `ralph/NEEDS_HUMAN.md`.
 
-## 2026-09-18 · rd-1-three-containers · the seam is one door; the forwarder is the instrument's
+</details>
+
+## A8 · 2026-09-18 · rd-1-three-containers · the seam is one door; the forwarder is the instrument's
+
+<details><summary>reasoning, evidence, package</summary>
 
 The worker's §6 (03:06Z) showed the row's premise false: `ring dev` binds loopback with no bind
 flag (dev.rs:93), the rail never leaves loopback (rail_bind.rs:62), operator routes admit
@@ -375,7 +440,11 @@ command that runs on or talks to a node goes through `sv`/`node_exec`/`node_curl
 row's earlier four-function seam was a list, not a door. (3) A's join address is per
 backend. (4) `_cut`/`_heal` for phase 2; phase 4 keeps a real stop on both backends.
 
-## 2026-09-18 · rd-1-three-containers · the join takes the product's no-VPN path on both backends
+</details>
+
+## A9 · 2026-09-18 · rd-1-three-containers · the join takes the product's no-VPN path on both backends
+
+<details><summary>reasoning, evidence, package</summary>
 
 Worker §6 03:20Z: `relay=` is a POST to the founder's internal port (daemon.rs:1596-1607), which
 is loopback-bound (ring-doc-demo.sh:191) — on podman B cannot reach it; on local it worked only
@@ -386,7 +455,11 @@ founder over iroh. Same code on both backends (decision 2: yes; local re-run is 
 Not taken: `internal_bind = 0.0.0.0` — tests a path the Mac will never take and moves a
 loopback pin. Recorded for the audit: `mesh rotate` prints the link without `dial=`.
 
-## 2026-09-18 · REVIEW-audit-rd-1 · the row closes on the campaign's share; foreign reds go to the operator
+</details>
+
+## A10 · 2026-09-18 · REVIEW-audit-rd-1 · the row closes on the campaign's share; foreign reds go to the operator
+
+<details><summary>reasoning, evidence, package</summary>
 
 Fork: TESTALL (exit 100, 4 fail) and PREPUSH (arch-gate, env-gate) stay red after the audit
 fixed everything the campaign owns (e88a71212). Choice: mark the row `[x]` on e88a71212 and
@@ -421,7 +494,11 @@ REVIEW-AFTER: until the operator decides items 1-5, PREPUSH is red for every cam
 
 Commit: the one that removes `ralph/NEEDS_HUMAN.md`.
 
-## 2026-09-18 — REVIEW-build-rr-1-roster-from-mesh (ring-room): ESCALATED, not decided
+</details>
+
+## A11 · 2026-09-18 — REVIEW-build-rr-1-roster-from-mesh (ring-room): ESCALATED, not decided
+
+<details><summary>reasoning, evidence, package</summary>
 
 Fork: making the derived roster the default for app rings needs a hunk in
 `commonwealth-rail/src/lib.rs` (roster_origin/roster have no default source, :153-205), or
@@ -436,7 +513,11 @@ source before `rail.roster()` is read. None was found at the two doors above.
 
 REVIEW-AFTER: the operator picks among options 1-4 in the package.
 
-## 2026-09-18 — OPERATOR — REVIEW-build-rr-1-roster-from-mesh (ring-room): option 1, the rail's roster door gains a default
+</details>
+
+## A12 · 2026-09-18 — OPERATOR — REVIEW-build-rr-1-roster-from-mesh (ring-room): option 1, the rail's roster door gains a default
+
+<details><summary>reasoning, evidence, package</summary>
 
 Operator's words: "There's plenty of great thinking on permissioning and resource groups
 especially as they have inheritance rules. I just want default to be that an app applies to
@@ -451,7 +532,11 @@ Falsified if a sovereign-side site every namespace's first touch passes through 
 installs the source before `rail.roster()` — none found at the two doors. Row rewritten in
 d5dc6037e; predicate, bar and rung note in the commit that follows this entry.
 
-## 2026-09-18 — seat (charter: fixing a row whose premise the tree contradicts) — REVIEW-build-rr-1-roster-from-mesh lands; the ring-doc instrument's classifier narrowed; one follow-up row
+</details>
+
+## A13 · 2026-09-18 — seat (charter: fixing a row whose premise the tree contradicts) — REVIEW-build-rr-1-roster-from-mesh lands; the ring-doc instrument's classifier narrowed; one follow-up row
+
+<details><summary>reasoning, evidence, package</summary>
 
 Fork (ralph/NEEDS_HUMAN.md 18:01Z): e94b26826 built and green on every gate; ring-doc's
 `verdict all` read four PASSED and `ra-doc-three-machines-converge` FAILED naming e94b26826.
@@ -468,7 +553,11 @@ file ignored for daemon rings, narrows app rings). Also for the operator: the wo
 down a leftover podman ring-doc session from ~16:30 (ports 19849/59/69) that had collided
 with its DEMO run — if that was your rehearsal, it is gone.
 
-## 2026-09-18 — seat (charter: which of the options an order names; the smaller reversible step) — rr-1-citation-names-the-machine: wire half lands (1426c47f8), citation half is option B as a row
+</details>
+
+## A14 · 2026-09-18 — seat (charter: which of the options an order names; the smaller reversible step) — rr-1-citation-names-the-machine: wire half lands (1426c47f8), citation half is option B as a row
+
+<details><summary>reasoning, evidence, package</summary>
 
 Fork: the worker's package (18:09Z), kept whole below. Choice: surface = EpistemicFooter's
 released citations (the gate's ledger IS the citation; the prose fallback and the per-corpus
@@ -553,7 +642,11 @@ the wire commit and mint a follow-up row for the chosen citation option), then
 
 </details>
 
-## 2026-09-18 — seat #2 (charter: fixing a row whose premise the tree contradicts) — rr-1-citation-member-on-released: option A at its real size, the member rides the gate beside custody
+</details>
+
+## A15 · 2026-09-18 — seat #2 (charter: fixing a row whose premise the tree contradicts) — rr-1-citation-member-on-released: option A at its real size, the member rides the gate beside custody
+
+<details><summary>reasoning, evidence, package</summary>
 
 Fork: the worker's package (18:24Z, inline below): `peer_attribution` is destructured away in
 `prepare_knowledge_context` (`runtime/retrieval/mod.rs:178-261`) and `gate_answer_inner` sees
@@ -627,7 +720,11 @@ So "thread the existing map" is the same shape of cost the seat rejected for opt
 
 </details>
 
-## 2026-09-18 — seat #3 (charter: fixing a row whose premise the tree contradicts) — rr-1-media-offer-verb: the admit list goes on the wire as its own row; `commonwealth-rails` is not the ring rail
+</details>
+
+## A16 · 2026-09-18 — seat #3 (charter: fixing a row whose premise the tree contradicts) — rr-1-media-offer-verb: the admit list goes on the wire as its own row; `commonwealth-rails` is not the ring rail
+
+<details><summary>reasoning, evidence, package</summary>
 
 Fork: the worker's package (18:36Z, inline below). The `offered to` line needs a gossiped
 field; the only literal inside `commonwealth-rail*` is `commonwealth-rails/src/gossip.rs:78`
@@ -713,7 +810,11 @@ Edit or mark the row in ralph/next/ring-room/STATE.md, then
 
 </details>
 
-## 2026-09-18 — seat #4 (charter: which of the options an order names; the smaller reversible step) — REVIEW-build-rr-1-instrument: real Jellyfin as a netns sibling, real weights on a and b, a phase switch in D
+</details>
+
+## A17 · 2026-09-18 — seat #4 (charter: which of the options an order names; the smaller reversible step) — REVIEW-build-rr-1-instrument: real Jellyfin as a netns sibling, real weights on a and b, a phase switch in D
+
+<details><summary>reasoning, evidence, package</summary>
 
 Fork: the worker's package (19:04Z, inline below). (1) Jellyfin: 1a — sibling container in b's
 network namespace from the host; cw-media-demo.sh split into holder-up / holder-setup; one
@@ -823,7 +924,11 @@ Edit or mark the row in ralph/next/ring-room/STATE.md (it is `[~]`, uncommitted)
 
 </details>
 
-## 2026-09-18 — seat #5 — the pre-registered first run's three failures become rows ahead of rr-1-tune
+</details>
+
+## A18 · 2026-09-18 — seat #5 — the pre-registered first run's three failures become rows ahead of rr-1-tune
+
+<details><summary>reasoning, evidence, package</summary>
 
 Evidence: 99ca7e4cb (five verdict rows + census) and bc679026d (join leg). Rows minted:
 REVIEW-build-rr-1-answer-fans-out (instrument the ask on a first — routing short-circuit on an
@@ -839,7 +944,11 @@ last. Falsified if the instrumented ask shows the mesh step DID run and returned
 Why the seat minted instead of letting REVIEW-DEMO fail: three known reds would cost a
 REVIEW-DEMO session and a resolution session to arrive at the same rows.
 
-## 2026-09-18 — seat #6 — REVIEW-build-rr-1-answer-fans-out lands (b0b491740 instrument, 768895508 fix); the per-claim release carries the member as a row; ask timeout 600 s
+</details>
+
+## A19 · 2026-09-18 — seat #6 — REVIEW-build-rr-1-answer-fans-out lands (b0b491740 instrument, 768895508 fix); the per-claim release carries the member as a row; ask timeout 600 s
+
+<details><summary>reasoning, evidence, package</summary>
 
 Fork: the worker's package (inline below). The fan-out now reaches the peer on every turn
 (mesh_hits=5, provenance from_peer Bo); the bar reads 0.4 because two of five answers were
@@ -949,7 +1058,11 @@ Edit or mark the row in ralph/next/ring-room/STATE.md, then
 
 </details>
 
-## 2026-09-18 — seat #7 — rr-1-media-origin-live lands (031a32294): film 1.0 without a restart; the full demo runs detached from now on
+</details>
+
+## A20 · 2026-09-18 — seat #7 — rr-1-media-origin-live lands (031a32294): film 1.0 without a restart; the full demo runs detached from now on
+
+<details><summary>reasoning, evidence, package</summary>
 
 Fork: the worker's package (inline below). (1) accepted — the film bar is this row's, and
 it reads 1.0 with the origin and admit list applied by reload (b_config_diff shows both,
@@ -1030,7 +1143,11 @@ Edit or mark the row in `ralph/next/ring-room/STATE.md`, then
 
 </details>
 
-## 2026-09-18 — seat #8 — rr-1-claim-support-names-the-member: the per-claim path has no supporting chunk; member is stamped pool-level by the sole_corpus rule
+</details>
+
+## A21 · 2026-09-18 — seat #8 — rr-1-claim-support-names-the-member: the per-claim path has no supporting chunk; member is stamped pool-level by the sole_corpus rule
+
+<details><summary>reasoning, evidence, package</summary>
 
 Fork: the worker's package (inline below) — my #6 falsifier fired harder than written: the
 per-claim judge decides the window jointly, GateClaim carries no support index, and the one
@@ -1117,5 +1234,7 @@ So "stamp from the supporting chunk, no new lookup" has no chunk to stamp from.
 
 Edit or mark the row in ralph/next/ring-room/STATE.md, then
 `rm ralph/STOP ralph/NEEDS_HUMAN.md`.
+
+</details>
 
 </details>

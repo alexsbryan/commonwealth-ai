@@ -33,8 +33,10 @@ wrong resolution.
 
 ## Always
 
-- Record the decision in `ralph/DECISIONS.md`: date, unit, the fork, the
-  choice, the evidence (file:line or the run), what would falsify it, the
-  commit hash(es).
+- Record the decision in `ralph/DECISIONS.md` in its two-part shape: ONE row in
+  the Ledger table (date, unit, by, the choice in one line, commit) and ONE
+  appendix of the same number (`## A<n> · …`, body folded in `<details>`): the
+  fork, the evidence (file:line or the run), what would falsify it, the
+  worker's package inline. The ledger must read on its own.
 - One decision, one commit, so `git revert <sha>` undoes exactly it.
 - Tag `REVIEW-AFTER:` anything this charter did not clearly cover.
