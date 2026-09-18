@@ -83,6 +83,7 @@ export function docReducer(acc, payload, op) {
     id: op.id,
     actor: op.actor,
     person: op.person,
+    seq: op.seq,
     ts: op.ts_unix,
     update: payload.update,
   });
@@ -161,30 +162,55 @@ export const PROSE_FRAGMENT = "default";
 /// what makes "which act touched this paragraph" an observed fact rather than
 /// a guess. The caller owns the returned object across polls, the way it owns
 /// `applied`, so each act is replayed once and not once per tick.
+///
+/// The answer is a function of the acts in RAIL order, not arrival order: the
+/// rail's `ts` is whole seconds, so two actors' acts inside one second can
+/// reach two pages in opposite polls, and replaying each as it arrived named a
+/// different last editor on each page. An act that sorts before one already
+/// replayed rebuilds the replay from the full ordered list.
 export function createAttribution() {
-  const ydoc = new Y.Doc();
-  const frag = ydoc.getXmlFragment(PROSE_FRAGMENT);
   const seen = new Set();
+  const absorbed = [];
+  let frag = null;
   // Keyed by the paragraph's Yjs type, which is the identity that survives a
   // peer inserting a paragraph above it. An index would not.
-  const by = new Map();
+  let by = null;
   let current = null;
 
-  frag.observeDeep((events) => {
-    if (current === null) return;
-    for (const event of events) {
-      for (const block of touchedBlocks(event, frag)) by.set(block, current);
-    }
-  });
+  const reset = () => {
+    const f = new Y.Doc().getXmlFragment(PROSE_FRAGMENT);
+    const m = new Map();
+    f.observeDeep((events) => {
+      if (current === null) return;
+      for (const event of events) {
+        for (const block of touchedBlocks(event, f)) m.set(block, current);
+      }
+    });
+    frag = f;
+    by = m;
+  };
+  const replay = (act) => {
+    current = { actor: act.actor, ts: act.ts };
+    Y.applyUpdate(frag.doc, b64ToBytes(act.update));
+  };
+  reset();
 
   return {
-    /// Replay every act not replayed yet, in the order given.
+    /// Replay every act not replayed yet, in the rail's order.
     absorb(acts) {
-      for (const act of acts) {
-        if (seen.has(act.id)) continue;
-        seen.add(act.id);
-        current = { actor: act.actor, ts: act.ts };
-        Y.applyUpdate(ydoc, b64ToBytes(act.update));
+      const fresh = acts.filter((act) => !seen.has(act.id));
+      if (fresh.length === 0) return;
+      for (const act of fresh) seen.add(act.id);
+      fresh.sort(railOrder);
+      const last = absorbed[absorbed.length - 1];
+      const inOrder = last === undefined || railOrder(last, fresh[0]) < 0;
+      absorbed.push(...fresh);
+      if (inOrder) {
+        fresh.forEach(replay);
+      } else {
+        absorbed.sort(railOrder);
+        reset();
+        absorbed.forEach(replay);
       }
       current = null;
     },
@@ -196,6 +222,12 @@ export function createAttribution() {
     },
   };
 }
+
+/// The rail's order over admitted acts: `(ts_unix, actor, seq, id)`, the key
+/// `commonwealth-rail-core/src/admit.rs` sorts by.
+const byText = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+const railOrder = (x, y) =>
+  x.ts - y.ts || byText(x.actor, y.actor) || x.seq - y.seq || byText(x.id, y.id);
 
 /// The top-level blocks one Yjs event changed.
 ///

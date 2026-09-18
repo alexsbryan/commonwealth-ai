@@ -373,3 +373,39 @@ test("a key the roster does not name is said to be unnamed, never invented", () 
   assert.match(line, /does not name/);
   assert.doesNotMatch(line, /alex|bo|dddd/);
 });
+
+test("two pages that absorbed the same acts in different orders name the same author", () => {
+  // Observed on the pre-registration run: node b named alex where a and c
+  // named bo. Two actors edit one paragraph inside one second; one page reads
+  // alex's act first, the other bo's, and the second poll gives both the same
+  // log. The rail orders (ts, actor, seq, id), so aa… before bb…: bo is last.
+  const base = typedParagraphs(["shared"]);
+  const acts = decodeActs(
+    {
+      ops: [
+        op("ring-0", changeAct(base), { actor: ALEX_KEY, ts_unix: NOW_SEC - 20 }),
+        op("ring-x", changeAct(edit(base, undefined, (f) => f.get(0).get(0).insert(0, "A "))), {
+          actor: ALEX_KEY,
+          seq: 2,
+          ts_unix: NOW_SEC - 3,
+        }),
+        op("ring-y", changeAct(edit(base, undefined, (f) => f.get(0).get(0).insert(6, " B"))), {
+          actor: BO_KEY,
+          ts_unix: NOW_SEC - 3,
+        }),
+      ],
+    },
+    fold,
+  ).acts;
+
+  const alexFirst = createAttribution();
+  alexFirst.absorb([acts[0], acts[1]]);
+  alexFirst.absorb(acts);
+  const boFirst = createAttribution();
+  boFirst.absorb([acts[0], acts[2]]);
+  boFirst.absorb(acts);
+
+  const expected = ["last edited by bo 3s ago"];
+  assert.deepEqual(alexFirst.lines(MEMBERS, NOW_SEC * 1000), expected);
+  assert.deepEqual(boFirst.lines(MEMBERS, NOW_SEC * 1000), expected);
+});
