@@ -112,6 +112,11 @@ exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 - Chose: Member stamped pool-level by the same rule as sole_corpus: when every chunk in the pool carries one member it names it, else None.
 - Because: The claim address is a 0.74-precision display resolver, never a verdict; a per-chunk verdict in the judge is gate work past strictly necessary and is the honest rr-2 if pool-level proves too coarse.
 
+**A22 · 2026-09-18 · rr-1-claim-support-names-the-member · seat** — commit 2ae717138 381347465 (row) + the STATE commit that follows
+- Needed: The mechanism landed and its PLANT went red, but the demo read 0.4: q2, a per-claim release over an all-Bo pool, carried member null because `chat ask` ships the ledger assembled in streaming.rs, which fed `pool_corpora` and left `pool_members` to `..Default::default()`. Two other answers (q0 unverified, q1 general-knowledge rescue) released with no evidence at all on the 2B.
+- Chose: Mark the row done; mint rr-1-pool-members-every-ledger — one `PoolContext` helper feeds corpora and members together at every ledger site, and `EpistemicInputs` cannot be built without it. The demo runs twice, 2B and 4B, both pasted; the bar is judged on the 4B with the 2B recorded as the bank's floor; the gk-rescue-over-a-present-passage is filed as a note, not fixed.
+- Because: A defaultable field is the seam that was forgotten — make it structural (10). The two evidence-less releases are a synthesis outcome of a CPU 2B the room's machine does not run; declaring the instrument's model is an environment fact, reported in both directions (7), not a knob turned to flip a number — and nothing in the gate, the prompt or the bank moves.
+
 ## Flags for the operator
 
 - A18: the nothing-typed census classes a URL a tool printed and the person opens verbatim as `opened`, not typed (the driver shows the stdout line it came from; an assembled string still counts).
@@ -1317,5 +1322,84 @@ Edit or mark the row in ralph/next/ring-room/STATE.md, then
 `rm ralph/STOP ralph/NEEDS_HUMAN.md`.
 
 </details>
+
+</details>
+
+## A22 · 2026-09-18 — rr-1-claim-support-names-the-member: the streaming ledger never fed pool_members
+
+<details><summary>reasoning, evidence, package</summary>
+
+See the ledger entry. The worker's package:
+
+# NEEDS_HUMAN — rr-1-claim-support-names-the-member
+
+## (a) The unit
+
+`- [~] rr-1-claim-support-names-the-member` in `ralph/next/ring-room/STATE.md` (row 60).
+The code the row names landed, and every check except DEMO is green:
+
+- `590b58f53`: F26 census `admin_http.rs` 13 -> 14. Not this unit's change: 031a32294's
+  loopback reload test left TEST(sovereign-core) red on HEAD. Recorded the way the row's
+  10 -> 13 note did.
+- `2ae717138` + `381347465` (rustfmt): `Provenance::Corpus.member`, `pool_members()` beside
+  `pool_corpora()`, `sole_member` in `assemble_epistemic_state`, the feed at
+  `knowledge_query.rs:2081`, the footer's `<corpus> on <member>`, the demo instrument, and
+  `ASK_TIMEOUT_S` 600.
+
+## (b) What I ran, and what came back
+
+CLEAN exit=0 · LINT exit=0 · PLANT red (`epistemic.rs:1252` left None, right Some("Bo")) then
+reverted · TEST(sovereign-core) exit=0 1626/0 · TEST(sovereign-contracts) exit=0 382/0 ·
+NODE exit=0 with `# tests 0`; desktop vitest 17/17, and red with the render planted.
+
+Then `scripts/dev-build.sh` (binaries 15:33), `ralph-check.sh demo-bg`, and `demo-wait` three
+times. It finished with **exit=1**:
+
+```
+ra-room-answer-names-the-machine   0.4  FAILED
+  q0 released 0  claims_checked 0  holding_members []           unverified         gate released/per_claim
+  q1 released 0  claims_checked 0  holding_members []           general_knowledge  gate gk_rescue_released
+  q2 released 0  claims_checked 2  holding_members [null,null]  grounded           gate released/per_claim
+  q3 released 1  members [Bo]                                   grounded           gate citation_grounded
+  q4 released 1  members [Bo]                                   grounded           gate citation_grounded
+ra-room-doc-name-from-membership   1.0  PASSED
+ra-room-film-from-the-library-rail 1.0  PASSED
+ra-room-plug-in-live               0.0  FAILED (c_answer_names false: d's join answer released no member)
+ra-room-nothing-typed              10   FAILED (the next row, rr-1-nothing-typed-to-zero)
+```
+
+**Seat #8's falsifier fired.** q2 is a released per-claim answer over an all-Bo pool
+(`provenance.sources = [{origin: room-CbPa96, count: 5, from_peer: Bo}]`, a single-corpus
+pool, `corpus_id` stamped), and its holdings read `member: null`. Cause, from the tree and not
+guessed: `chat ask` drives `handle_message_stream` (`chat_cmd/ask.rs:8`), so the ledger that
+shipped was assembled in `streaming.rs`, not at `knowledge_query.rs:2081`:
+
+- `streaming.rs:1406` `pool_corpora_for_ledger = pool_corpora(&chunks)`, then `:2345`
+  `EpistemicInputs { pool_corpora: pool_corpora_for_ledger, .., ..Default::default() }`, so
+  `pool_members` defaults to empty and resolves to None.
+- `streaming.rs:3115` / `:3474`: the deep-research ledger, same shape.
+
+The chunks do carry `metadata["peer"]`: q3 and q4 released citations naming Bo from that same
+stamp (`gate_chunk_members`, `streaming.rs:1523`).
+
+## (c) What the operator must decide
+
+1. Widen the row to feed `pool_members` at the two streaming ledger sites:
+   `pool_members(&chunks)` beside `streaming.rs:1406` into `:2345`, and
+   `pool_members(&kc.chunks)` beside `:3115` into `:3474`. That is two lines each, from the same
+   chunks as `pool_corpora`, with no second lookup. `simple.rs:333` and `attached_doc.rs:1449` would
+   stay unfed unless you name them too.
+2. What 1.0 needs even after (1). On this bank, with fixed code, the bar reads at most 0.6.
+   q0 released on `per_claim` with `claims_checked 0`, and q1 was a `gk_rescue_released`. Both
+   stay 0 by the goodhart rule and seat #6. So after (1), the row's "1.0 or name the question
+   that did not" ends at q0 and q1. That is a synthesis/gate outcome on the 2B, not attribution.
+3. `ra-room-plug-in-live` c_answer_names reads false on the same mechanism (d's join answer). I
+   expect (1) to move it only if that answer released on the per-claim path. Not measured.
+
+## (d) Then
+
+Edit or mark the row in ralph/next/ring-room/STATE.md, then
+`rm ralph/STOP ralph/NEEDS_HUMAN.md`.
+
 
 </details>
