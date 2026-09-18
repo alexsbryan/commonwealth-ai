@@ -40,7 +40,17 @@ case "$check" in
     node)    [ -n "${1:-}" ] || { echo "usage: ralph-check.sh node <dir>" >&2; exit 2; }
              run node 8 node --test "$1" ;;
     demo)    run demo 12 "${1:-${RALPH_DEMO_SCRIPT:-scripts/ring-doc-demo.sh}}" verdict all ;;   # demo [script]; the queue's launch line sets RALPH_DEMO_SCRIPT
+    demo-bg) # the full ring-room demo (~25 min) outlives a worker's 10-minute foreground call: start it detached, then poll with demo-wait
+             s="${1:-${RALPH_DEMO_SCRIPT:-scripts/ring-doc-demo.sh}}"; rm -f target/ralph/demo.log
+             setsid nohup "$s" verdict all > target/ralph/demo.log 2>&1 < /dev/null &
+             echo $! > target/ralph/demo.pid; echo "started pid=$(cat target/ralph/demo.pid) log=target/ralph/demo.log"; exit 0 ;;
+    demo-wait) # poll the detached demo for up to 540 s; exit 3 = still running (call again), else the demo's exit code + its last 14 lines
+             [ -f target/ralph/demo.pid ] || { echo "no detached demo (run demo-bg first)" >&2; exit 2; }
+             pid=$(cat target/ralph/demo.pid); for _ in $(seq 1 108); do kill -0 "$pid" 2>/dev/null || break; sleep 5; done
+             if kill -0 "$pid" 2>/dev/null; then echo "still running pid=$pid ($(ps -o etimes= -p "$pid" | tr -d ' ')s) — call demo-wait again"; tail -n 3 target/ralph/demo.log; exit 3; fi
+             wait "$pid" 2>/dev/null; rc=$?; [ "$rc" = 127 ] && rc=$(grep -c '"verdict": "PASSED"' target/ralph/demo.log | awk '{print ($1==5)?0:1}')
+             echo "exit=$rc"; tail -n 14 target/ralph/demo.log; rm -f target/ralph/demo.pid; exit "$rc" ;;
     testall) run testall 12 ./scripts/with-cargo-lock.sh ./scripts/sovereign-test.sh --human ;;
     prepush) run prepush 20 ./scripts/pre-push.sh ;;
-    *) echo "usage: scripts/ralph-check.sh clean|lint|test <crate>|layer|toml|docs|node <dir>|demo [script]|testall|prepush" >&2; exit 2 ;;
+    *) echo "usage: scripts/ralph-check.sh clean|lint|test <crate>|layer|toml|docs|node <dir>|demo [script]|demo-bg [script]|demo-wait|testall|prepush" >&2; exit 2 ;;
 esac

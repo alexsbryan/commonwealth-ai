@@ -948,3 +948,84 @@ Edit or mark the row in ralph/next/ring-room/STATE.md, then
 `rm ralph/STOP ralph/NEEDS_HUMAN.md`.
 
 </details>
+
+## 2026-09-18 — seat #7 — rr-1-media-origin-live lands (031a32294): film 1.0 without a restart; the full demo runs detached from now on
+
+Fork: the worker's package (inline below). (1) accepted — the film bar is this row's, and
+it reads 1.0 with the origin and admit list applied by reload (b_config_diff shows both,
+no restart); the two reds are owned by queued rows and are not regressions. (3) keep the
+`media_declared` extension: the declared Jellyfin credential now rides the same MediaRoute
+and re-reads on reload — the 206 is the evidence, and reverting reinstates the restart the
+row exists to remove. (2) the harness: a worker's foreground call is capped at 10 minutes
+and the five-leg demo is ~25, so `scripts/ralph-check.sh` gains `demo-bg` (detached) and
+`demo-wait` (poll ≤ 9 min, exit 3 = call again); REVIEW-DEMO-rr-1-run and the two rows that
+paste a full run use them. Falsified if a detached demo's verdict lines ever land in a
+different file than target/ralph/demo.log (then demo-wait reads the wrong run).
+
+<details><summary>the worker's package</summary>
+
+# NEEDS_HUMAN — rr-1-media-origin-live
+
+## (a) Unit
+
+`rr-1-media-origin-live` (row 59 of `ralph/next/ring-room/STATE.md`, left `[~]`).
+The code is committed as **031a32294**, and every check except DEMO is green.
+
+## (b) What ran
+
+    scripts/ralph-check.sh clean                 exit=0
+    scripts/ralph-check.sh lint                  exit=0
+    PLANT (the reload path does not swap the route; test filter reload_moves_the_media_origin_without_a_restart)
+      FAIL admin_http::tests::reload_moves_the_media_origin_without_a_restart
+      left: None  right: Some(127.0.0.1:8096)   "the live acceptor answers on the reloaded origin"
+    scripts/ralph-check.sh test sovereign-mesh   exit=0  pass 1221 fail 0
+    scripts/ralph-check.sh test sovereign-cli-llm exit=0 pass 1109 fail 0
+    scripts/ralph-check.sh docs                  exit=0
+    ./scripts/with-cargo-lock.sh ./scripts/dev-build.sh -p sovereign-cli-daemon -p sovereign-cli-llm -p sovereign-cli   exit=0
+    RING_ROOM_LEGS=doc,film,join scripts/ralph-check.sh demo scripts/ring-room-demo.sh   exit=1
+
+The full demo does not fit this harness's 10-minute foreground limit. The
+previous run took about 25 min, of which the answer leg was about 18 (14:33
+to 14:51). So the demo ran without the answer leg. The five rows:
+
+    ra-room-answer-names-the-machine   COULD-NOT-JUDGE  "the answer leg did not run" (split run)
+    ra-room-doc-name-from-membership   PASSED 1.0  p50 0.67 p99 1.304, 100 acts, 9/9 lines
+    ra-room-film-from-the-library-rail PASSED 1.0  listed 4.23 s, narrowed 10.57 s, pick→first byte 0.31 s, http 206
+                                       b_config_diff: +media_origin, +media_allow = ["ring-doc-a","Cy"]  (applied by reload, no restart)
+    ra-room-plug-in-live               FAILED 0.0  a_doc_names_and_attributes true, b_library_listed true,
+                                       c_answer_names FALSE (answered_s null, asks 1), d_n_from_mesh_only true
+    ra-room-nothing-typed              FAILED 9    walk: 3 doc URLs, `mesh media offer 127.0.0.1:8096` (b, and
+                                       `--admit ring-doc-a Cy`), join link, d URL, d "query_sharing": true, d offer
+
+Neither red row is a regression. At 99ca7e4cb, nothing-typed was 6 over the
+answer, doc and film legs; now it is 9 over the doc, film and join legs. The
+same string classes are counted, and they are owned by rr-1-nothing-typed-to-zero.
+plug-in-live was 0.0 at bc679026d with the doc leg failing as well; the doc
+leg passes now, and only the answer sub-leg on the fourth node is still false.
+
+This commit also reaches past the row. The declared Jellyfin credential
+(`media_declared`) was read once at acceptor build, and cw-media-demo's
+holder-setup (declare, then offer) needed the old restart to load it. It now
+rides the same `MediaRoute`, and a reload that moves the origin re-reads it.
+The film row's http 206 is the evidence that this works. The row asked for a
+note on the stale-endpoint finding; it was written as note 5e656aea.
+
+## (c) What you decide
+
+1. Accept film at 1.0 as this row's DEMO bar, with the two FAILED rows owned
+   by queued rows (rr-1-nothing-typed-to-zero, and the answer and claim rows),
+   and mark the row: `scripts/ralph-mark.sh rr-1-media-origin-live 031a32294`.
+2. Or require the full five-leg DEMO. It needs a session that can hold a
+   25-minute foreground check, or a launchd one-shot of
+   `scripts/ralph-check.sh demo scripts/ring-room-demo.sh`.
+3. Keep or revert the `media_declared` extension
+   (`sovereign/crates/sovereign-mesh/src/media_route.rs`, and the reload arm
+   in `daemon.rs` `reload_from_setup_config`). Reverting it puts the film bar
+   back on 401s unless holder-setup restarts after `declare`.
+
+## (d) Then
+
+Edit or mark the row in `ralph/next/ring-room/STATE.md`, then
+`rm ralph/STOP ralph/NEEDS_HUMAN.md`.
+
+</details>
