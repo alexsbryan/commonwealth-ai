@@ -712,3 +712,113 @@ Edit or mark the row in ralph/next/ring-room/STATE.md, then
 `rm ralph/STOP ralph/NEEDS_HUMAN.md`.
 
 </details>
+
+## 2026-09-18 — seat #4 (charter: which of the options an order names; the smaller reversible step) — REVIEW-build-rr-1-instrument: real Jellyfin as a netns sibling, real weights on a and b, a phase switch in D
+
+Fork: the worker's package (19:04Z, inline below). (1) Jellyfin: 1a — sibling container in b's
+network namespace from the host; cw-media-demo.sh split into holder-up / holder-setup; one
+restart (the verb's). 1b would substitute a file server for 'it plays' and the bar's demo
+sentence is the thing a person watches — not this week. (2) Weights: 2a — the 0.6B embedder on
+b, embedder + smallest grounding chat GGUF on a; the bar reads a RELEASED citation, so a
+synthesis is the measurement, and 2b would measure the wire the previous rows already test.
+Census: install (bring-up, before the walk) is printed and classified; member
+addresses/ports/hosts/credentials there still count, model paths do not; the bar's count is
+the walk. (3) RING_DOC_PHASES env switch in D — the second and last edit to D. Falsified if
+the smallest GGUF that grounds does not fit beside the embedder in a node's RSS on this host
+(then leg 1 runs a alone with weights and b as terminal + embedder only, and the run names it).
+
+<details><summary>the worker's package</summary>
+
+# NEEDS_HUMAN — REVIEW-build-rr-1-instrument (ring-room)
+
+## (a) The unit
+
+`ralph/next/ring-room/STATE.md:56`, `- [~] REVIEW-build-rr-1-instrument — depends [rr-1-daemon-rings-registered,
+rr-1-citation-member-on-released, rr-1-library-rail] — CREATE scripts/ring-room-demo.sh REUSING D's node door
+and podman backend …` All three dependencies are `[x]`. Nothing was built; the only change to the tree is
+the `[~]` on that row (uncommitted).
+
+Two of the row's premises are false on the nodes D's `up` actually brings up. Leg (1) and leg (3) cannot
+run as written, so the row's DEMO check ("four PASSED or FAILED with their values") cannot be met: those two
+bars could only ever read COULD-NOT-JUDGE, which the check calls §6. Building the script first would
+pre-register two legs whose shape depends on your answer below.
+
+## (b) What I ran, and what came back
+
+Bring-up, D's own door, podman backend, throwaway data dir (35 s):
+
+    RING_DOC_BACKEND=podman RING_DOC_DIR=$PWD/target/ralph/rr-probe scripts/ring-doc-demo.sh up
+    up (podman): a(alex) b(bo) c(cy) — proxies on 19849 19859 19869
+
+Premise 1 — "b runs `scripts/cw-media-demo.sh` inside its node". The node image has no podman, and
+cw-media-demo.sh's `holder_up` begins by requiring it (cw-media-demo.sh:82, whose own message already says
+"the sovereign-vulkan toolbox: it is not"):
+
+    podman exec ring-doc-b sh -c 'command -v podman || echo NO-PODMAN; command -v flatpak-spawn || echo NO-FLATPAK-SPAWN'
+    NO-PODMAN
+    NO-FLATPAK-SPAWN
+
+(The jellyfin image IS on the host: `docker.io/jellyfin/jellyfin:latest 1.7 GB`.)
+
+Premise 2 — "b ingests a small folder (`svrn corpus ingest`) … then a answers a 5-question bank". D's nodes
+are terminal by design (ring-doc-demo.sh:196 "Terminal nodes: no weights"; `[node] entry` points at the
+container's own loopback :9741, where nothing listens). Ingest refuses at the embed step:
+
+    podman exec -e SOVEREIGN_DATA_DIR=$D/b ring-doc-b sovereign-cli corpus ingest $D/folder
+    Daemon not reachable at http://127.0.0.1:19851 (the daemon advertises no models). A `model:`/`embed:`
+    step needs it — start it with `sovereign daemon`.
+
+And A's answer carries a *released* citation (933d5a14e: `ReleasedCitation.member`), which only a grounded
+synthesis produces — so A needs a chat model too. `sovereign/models/` is inside the bind-mounted repo
+(Qwen3-Embedding-0.6B-Q8_0.gguf and several chat GGUFs are there), so weights are reachable; no node is
+configured to load them.
+
+Torn down afterwards (`… ring-doc-demo.sh down`; no `ring-doc-*` container left).
+
+Drift, not a stop: the row says D's dispatcher `case "$1"` is at :911; it is at :917.
+
+## (c) What the operator must decide
+
+1. **The Jellyfin stand-in on b (leg 3).** Pick one:
+   a. The instrument starts Jellyfin from the host side as a sibling container in b's network namespace
+      (`podman run --network container:ring-doc-b … jellyfin`), so it listens on b's own loopback :8096,
+      and runs INSIDE b only cw-media-demo.sh's non-podman half (wizard, `holder_key`'s
+      `svrn mesh media declare`, the offer verb). That needs cw-media-demo.sh split so the half is callable
+      — e.g. a `holder-setup` verb, `holder-up` = container + `holder-setup` — an edit to a file this row
+      does not name (and its `-p 127.0.0.1:8096:8096` cannot combine with `--network container:`).
+      Note `holder_key` (cw-media-demo.sh:74-77) runs `svrn daemon stop/start`; inside a node that restarts
+      the throwaway daemon outside D's pidfile — harmless on podman (the container is removed), but the
+      offer verb already restarts the daemon itself, so it would be a second restart.
+   b. Leg 3 runs the offer and the viewer half against an origin with no real Jellyfin (a python
+      http.server on b's loopback serving one file) — measures the tunnel and the rail, not Jellyfin; the
+      bar's demo sentence says "it plays", so this is a substitution the verdict would have to name.
+   c. Something else (podman in the node image is not ours to do).
+
+2. **Weights on the nodes (leg 1).** Pick one:
+   a. The instrument gives b an embedder and a a chat model from `sovereign/models/` (b: the 0.6B
+      embedder; a: embedder + the smallest chat GGUF that grounds). Costs RSS and a few minutes of load per
+      run, and writes model lines into two node configs — which the nothing-typed census must then
+      classify: I would count config written by bring-up (before the walk) as install, printed but not
+      counted, and count only what the driver types during the walk. Say if that line is wrong.
+   b. Measure the citation one layer down: A's knowledge search fan-out returns passages whose `peer_name`
+      field (1426c47f8) names B, with no synthesis — still needs the embedder on b (and on a, if a embeds
+      the query). The bar's `one_line` says "A answers each with a citation", so this also substitutes and
+      must be named in the row.
+   c. A reaches an inference provider outside the node — the deployed daemon is off-limits and the node's
+      netns cannot reach the host loopback, so this is only open if you name one.
+
+3. **Run length (not a blocker, a heads-up).** Leg 2 reuses D's driver, which is one heredoc running all
+   four ring-doc phases (the 60 s partition and a daemon restart included); ring-room needs phases 1 and 3.
+   Reusing it whole keeps the "never copy" rule and adds roughly two minutes per run; skipping phases 2 and
+   4 needs an env switch in D's driver — a second edit to D beyond the dispatcher guard. Say which.
+
+The row's own judgment (guard D's dispatcher with `[[ "${BASH_SOURCE[0]}" == "$0" ]]` vs lifting the door
+into `scripts/ring-node-door.sh`) I will take as the 2-line guard once the above is settled: it is the
+smaller and reversible step, and D's `SCRIPT` re-entry (`_cut`/`_heal`/`_stop`/`_start`) keeps working.
+
+## (d) Then
+
+Edit or mark the row in ralph/next/ring-room/STATE.md (it is `[~]`, uncommitted), then
+`rm ralph/STOP ralph/NEEDS_HUMAN.md`.
+
+</details>
