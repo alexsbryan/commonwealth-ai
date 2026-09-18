@@ -39,6 +39,9 @@ use corpus_engine::progress::IngestProgress;
 use corpus_engine::recipe::Recipe;
 use corpus_engine::types::{CorpusKind, CorpusSpec};
 use corpus_engine::CorpusEngine;
+use corpus_engine_vocab::atoms::{AtomEnvelope, AtomType};
+use corpus_engine_vocab::read::{read_atlas_atoms, read_atlas_edges};
+use corpus_engine_vocab::taxonomy::EntityType;
 use serde::{Deserialize, Serialize};
 
 use crate::enrich::{run_enrich_build, CancellationFlag, EnrichBuildConfig, EnrichProgressFn};
@@ -811,35 +814,29 @@ async fn read_atlas_summary(engine: &CorpusEngine, corpus_id: &str) -> Option<At
         .into_iter()
         .find(|i| i.corpus_id == corpus_id)?;
     let atlas_dir = info.path.join("atlas");
-    let atoms_path = atlas_dir.join("atoms.json");
-    let edges_path = atlas_dir.join("edges.json");
-    if !atoms_path.exists() {
-        return None;
-    }
-    let atoms_raw = std::fs::read_to_string(&atoms_path).ok()?;
-    let atoms_value: serde_json::Value = serde_json::from_str(&atoms_raw).ok()?;
-    let atoms_count = atoms_value.as_array().map(|a| a.len()).unwrap_or(0) as u64;
-    let edges_count = std::fs::read_to_string(&edges_path)
-        .ok()
-        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-        .and_then(|v| v.as_array().map(|a| a.len()))
-        .unwrap_or(0) as u64;
-    let themes = atoms_value
-        .as_array()
-        .map(|arr| {
-            arr.iter()
-                .filter(|a| a.get("kind").and_then(|k| k.as_str()) == Some("theme"))
-                .count() as u64
-        })
+    // The door parses both files. A missing or unparseable artefact is the
+    // same best-effort case this summary always tolerated — the typed read
+    // just replaces the `serde_json::Value` walk that treated an `AtomsFile`
+    // object as a bare array and so counted zero of everything.
+    let atoms = read_atlas_atoms(&atlas_dir).ok()?;
+    let edges_count = read_atlas_edges(&atlas_dir)
+        .map(|e| e.edges.len() as u64)
         .unwrap_or(0);
-    let questions = atoms_value
-        .as_array()
-        .map(|arr| {
-            arr.iter()
-                .filter(|a| a.get("kind").and_then(|k| k.as_str()) == Some("question"))
-                .count() as u64
-        })
-        .unwrap_or(0);
+    let atoms_count = atoms.atoms.len() as u64;
+    let questions = atoms
+        .atoms
+        .iter()
+        .filter(|a| a.atom_type() == AtomType::Question)
+        .count() as u64;
+    // A "theme" is a Concept entity: the literary atlas's ontology declares
+    // `concept` under the label `theme`
+    // (corpus-engine/tests/main/pipeline_ontology.rs:48-64), and no atom
+    // carries a `theme` type of its own.
+    let themes = atoms
+        .atoms
+        .iter()
+        .filter(|a| matches!(a, AtomEnvelope::Entity(e) if e.entity_type == EntityType::Concept))
+        .count() as u64;
     Some(AtlasSummary {
         atoms: atoms_count,
         edges: edges_count,

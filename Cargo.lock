@@ -13090,6 +13090,7 @@ dependencies = [
  "corpus-engine-notes",
  "corpus-engine-scip",
  "corpus-engine-sections",
+ "corpus-engine-vocab",
  "corpus-engine-watchers",
  "csv",
  "dirs 5.0.1",
