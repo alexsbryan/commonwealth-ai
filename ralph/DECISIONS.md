@@ -2648,3 +2648,53 @@ which would make the store fields legal and this split unnecessary.
 **Landed in.** `6942d96e1` (the move) and `d52b7ab39` (rustfmt). The row is
 marked `[x]` with the correction; `REVIEW-build-daemon-answering-part` is minted
 under it. `git revert 6942d96e1` reverts the move alone.
+
+## 2026-09-18 · REVIEW-build-daemon-embedded-split · the row is two units after the whole-cluster move; the reach reads land, the lifecycle is minted
+
+**Fork.** The row executed (deps `[x]`) and its own text is stale. It says
+"SPLIT `sovereign-mesh/src/daemon.rs` (5,619 lines)", "`daemon_services.rs` and
+mesh's `lib.rs` re-exports split the same way", and "the external consumers
+(cli-daemon 35, cli-llm 24, cli-dev 3 sites) repoint in the same commit" — but
+`dm-daemon-mesh-edge` already moved the whole cluster, so `daemon.rs` is now
+`sovereign-daemon/src/daemon.rs` (5,648), `daemon_services.rs` and the four impl
+files are daemon-side, mesh's `lib.rs` names no daemon module, and every external
+consumer already points at `sovereign_daemon::…`. What remains is the half DC
+§4.1 says moves back: Fabric's membership operations. Build it whole, split it,
+or stop?
+
+**Choice.** Split and land the tractable half, per the `REVIEW-build-daemon-parts`
+precedent (`6942d96e1`). The row is two units:
+
+1. **The reach reads move now.** `eligible_anchors` (`daemon.rs:2439`),
+   `origin_offers`/`origin_reach` (`media_reach.rs:60,87`) and `origin_fanout`
+   (`origin_fanout.rs:59`) were the daemon reading Fabric's roster and
+   projecting it through `commonwealth-media`. They are now `FabricPart`
+   methods in `sovereign-mesh/src/fabric.rs`; the daemon keeps the "is there a
+   node at all" gate and the iroh path snapshot (`peer_paths`), passed in
+   because the endpoint is the daemon's. Landed at `306005a82`.
+2. **The lifecycle is a redesign, not a move.** `create_mesh`/`join_mesh`/
+   `leave`/`switch_mesh`/`forget_mesh`/`rotate_invite`/`try_resume` and
+   `forget_member` orchestrate `DaemonState` (the listeners, the routers, the
+   on-disk `mesh.json`/`join_key.secret`), so "Fabric's methods" requires
+   Fabric to own `join_key_plaintext`, the persisted-mesh pointer and the
+   roster mutations, with the daemon observing through readers (DC §4.1,
+   ARCH 12). Minted as `REVIEW-build-daemon-membership-lifecycle`.
+
+**Evidence** (reproduced this session).
+- `wc -l sovereign/crates/sovereign-daemon/src/daemon.rs` -> 5,648;
+  `find sovereign/crates -name daemon.rs` -> only the daemon's.
+- `git grep -l 'EmbeddedDaemon'` -> the external consumers are
+  `sovereign-cli-daemon`/`sovereign-cli-llm`/`sovereign-cli-dev` naming
+  `sovereign_daemon::…`, plus mesh's `tests/main/` integration tests.
+- CLEAN exit=0 (debug target 24G, under 50G).
+- LINT exit=0, scope `sovereign-daemon,sovereign-mesh,sovereign-cli-daemon,sovereign-cli-dev,sovereign-cli-llm`, errors 0.
+- LAYER exit=0 — "every edge points down or sideways … fan-in within caps".
+
+**Falsified by.** A showing that `FabricPart` cannot name `commonwealth-media`
+(it already deps it, `sovereign-mesh/Cargo.toml:62`, and `iroh_access.rs` uses
+it); or that the lifecycle methods do not touch `DaemonState` (then they would
+have been a pure move and the split into two units unnecessary).
+
+**Landed in.** `306005a82` (the reach reads) and this commit — `ralph/STATE.md`
+(the row marked `[x]` with the correction, the minted row, `DEMO-d5-misnamed`
+re-pointed to it) and this entry. `git revert 306005a82` reverts the reads alone.
