@@ -197,27 +197,47 @@ mod tests {
         let atlas = root.path().join("atlas");
         std::fs::create_dir_all(&atlas).unwrap();
         let atoms = serde_json::json!({
-            "schema_version": 1,
+            "schema_version": "2.0",
             "atoms": [
                 {"atom_type": "Claim", "data": {
                     "id": "claim-aaaa",
                     "content": "The ingest pipeline keys downstream behavior on the recipe's chunker, not the corpus id.",
+                    "discourse_act": "assert",
+                    "epistemic_status": "confident",
+                    "scope": "universal",
                     "evidence": [{"chunk_id": "sec_1", "passage_preview": "pipeline is source-agnostic"}],
-                    "quotable_excerpt": "downstream keys on the threaded_turns chunker and conversational domain"
+                    "quotable_excerpt": "downstream keys on the threaded_turns chunker and conversational domain",
+                    "enrichment_depth": "extracted"
                 }},
                 {"atom_type": "Claim", "data": {
                     "id": "claim-bbbb",
                     "content": "Forced-choice elicitation reads the masked next-token distribution in one pass.",
+                    "discourse_act": "assert",
+                    "epistemic_status": "confident",
+                    "scope": "universal",
                     "evidence": [{"chunk_id": "sec_2", "passage_preview": "one forward pass"}],
-                    "quotable_excerpt": "the daemon reads the candidate leading-token logits and softmaxes them"
+                    "quotable_excerpt": "the daemon reads the candidate leading-token logits and softmaxes them",
+                    "enrichment_depth": "extracted"
                 }},
                 {"atom_type": "Claim", "data": {
                     "id": "claim-cheat",
                     "content": "the sky is blue today",
+                    "discourse_act": "assert",
+                    "epistemic_status": "confident",
+                    "scope": "universal",
                     "evidence": [{"chunk_id": "sec_3", "passage_preview": "x"}],
-                    "quotable_excerpt": "the sky is blue today"
+                    "quotable_excerpt": "the sky is blue today",
+                    "enrichment_depth": "extracted"
                 }},
-                {"atom_type": "Section", "data": {"id": "sec-zzzz", "title": "ignored non-claim"}}
+                {"atom_type": "Entity", "data": {
+                    "id": "entity-zzzz",
+                    "canonical_name": "ignored non-claim",
+                    "entity_type": "concept",
+                    "first_appearance": {"chunk_id": "sec_1"},
+                    "description": "",
+                    "salience": 0.0,
+                    "enrichment_depth": "extracted"
+                }}
             ]
         });
         let mut f = std::fs::File::create(atlas.join("atoms.json")).unwrap();
