@@ -14,7 +14,8 @@
 #              b runs cw-media-demo.sh's holder-setup (wizard, key, the offer
 #              verb); c polls GET /v1/mesh/media for the offer and its
 #              `offered to`; b narrows to a and c; c times the first byte.
-#   4. plug-in owed by rr-1-plug-in: COULD-NOT-JUDGE reason=phase-missing.
+#   4. join    a fourth podman node joins by the link a's `mesh status` prints;
+#              legs 1-3's checks re-run against the member mesh status names new.
 #   5. census  every leg appends what it "typed" on the person's behalf to a
 #              log; the verdict prints it classified, INSTALL (bring-up, before
 #              the walk) and WALK apart. The bar's count is the WALK.
@@ -58,8 +59,10 @@ STAGE=install
 # The PRE-REGISTRATION: the run's shape, fixed before any number exists.
 POLL_S=2          # c's offers poll, the rail's cadence stand-in
 ASK_TIMEOUT_S=300 # one question, one synthesis on a CPU node
+JOIN_POLL_S=2     # join_poll_s: the join-to-visible window's poll (1–5 s, B §Tuning)
+JOIN_WATCH_S=120  # how long each join check is watched; the bar's window is read in the report
 # Which legs run (default all); a leg left out reads COULD-NOT-JUDGE.
-RING_ROOM_LEGS="${RING_ROOM_LEGS:-answer,doc,film}"
+RING_ROOM_LEGS="${RING_ROOM_LEGS:-answer,doc,film,join}"
 
 # ── the command log: every command on every node goes through node_exec ─────
 eval "ring_doc_$(declare -f node_exec)"
@@ -76,11 +79,23 @@ eval "ring_doc_$(declare -f mkcfg)"
 mkcfg() {
   ring_doc_mkcfg "$1"
   case "$1" in
-    a|b) printf '\n[models]\nprimary = "%s"\nembed = "%s"\n' "$CHAT_GGUF" "$EMBED_GGUF" >> "$D/$1/config.toml" ;;
+    a|b|d) printf '\n[models]\nprimary = "%s"\nembed = "%s"\n' "$CHAT_GGUF" "$EMBED_GGUF" >> "$D/$1/config.toml" ;;
   esac
 }
 
 if command -v podman >/dev/null; then HOSTRUN=(); else HOSTRUN=(flatpak-spawn --host); fi
+
+# ── the fourth machine: the same node door, one node more ───────────────────
+# Its ports and address continue the door's own stride past the third, so none
+# is written here. Its container is ring-doc-demo.sh's `containers_up` body run
+# for that one node (the network is up, the three must stay), so the podman
+# line and its HOME guard stay in one place.
+CPORT[d]=$(( CPORT[c] * 2 - CPORT[b] )); IPORT[d]=$(( IPORT[c] * 2 - IPORT[b] )); DPORT[d]=$(( DPORT[c] * 2 - DPORT[b] ))
+IP[d]="${IP[c]%.*}.$(( ${IP[c]##*.} * 2 - ${IP[b]##*.} ))"
+eval "$(declare -f containers_up | sed -e '1s/containers_up/container_up_one/' -e '/^ *containers_down;$/d' \
+  -e '/network create/,/^ *};$/d' -e 's/for n in a b c;/for n in "$1";/')"
+declare -f container_up_one | grep -q 'for n in "$1"' \
+  || { echo "ring-room-demo: ring-doc-demo.sh's containers_up changed shape; the fourth node has no door" >&2; exit 3; }
 
 mesh_json() { sv "$1" mesh status --json; }
 self_name() { mesh_json "$1" | python3 -c "import sys,json; print(next((m['name'] for m in json.load(sys.stdin)['members'] if m.get('is_self')), ''))" 2>/dev/null; }
@@ -95,27 +110,35 @@ BANK='[
  ["The Larkspur Lane cooperative shares one cargo bike, named Pelican, kept in the blue shed.", "What is the Larkspur Lane cooperative cargo bike called?", "Pelican"]
 ]'
 
-leg_answer() {
-  local out="$D/room-answer.json" folder id meta bname i q
+# share_folder <node> <leg> <bank-json> — the node ingests a folder holding the
+# bank's facts and shares it; prints `<corpus-id> <ingest-rc> <meta-path>`.
+share_folder() {
+  local n=$1 leg=$2 folder id meta rc
   folder=$(mktemp -d "$D/room-XXXXXX") # its basename is the corpus id: generated, never written here
   id=$(basename "$folder")
-  BANK="$BANK" python3 -c "
+  BANK="$3" python3 -c "
 import json, os, sys
 for i, (fact, _, _) in enumerate(json.loads(os.environ['BANK'])):
     open(os.path.join(sys.argv[1], f'note-{i}.md'), 'w').write(fact + '\n')" "$folder"
-  bname=$(self_name b)
-  typed b answer "corpus ingest $folder"
-  node_exec b "$CLI" corpus ingest "$folder" > "$D/room-ingest.out" 2>&1
-  local ingest_rc=$?
-  meta=$(find "$D/b" -name _corpus_meta.json -path "*/$id/*" 2>/dev/null | head -1)
+  typed "$n" "$leg" "corpus ingest $folder"
+  node_exec "$n" "$CLI" corpus ingest "$folder" > "$D/room-ingest-$n.out" 2>&1
+  rc=$?
+  meta=$(find "$D/$n" -name _corpus_meta.json -path "*/$id/*" 2>/dev/null | head -1)
   # No verb turns query sharing on for an ingested folder (corpus_store.rs
   # creates it local-only): the driver writes the flag, and the census counts it.
   if [ -n "$meta" ]; then
     python3 -c "import json,sys; p=sys.argv[1]; m=json.load(open(p)); m['query_sharing']=True; json.dump(m,open(p,'w'))" "$meta"
-    typed b answer '"query_sharing": true' "written into $meta — no verb shares an ingested folder"
+    typed "$n" "$leg" '"query_sharing": true' "written into $meta — no verb shares an ingested folder"
   fi
   # The daemon resolves query_sharing at open: the script restarts it, as D does.
-  stop_node b; start_node b > /dev/null && wait_homed b
+  stop_node "$n"; start_node "$n" > /dev/null && wait_homed "$n"
+  echo "$id $rc $meta"
+}
+
+leg_answer() {
+  local out="$D/room-answer.json" id meta bname i q ingest_rc
+  bname=$(self_name b)
+  read -r id ingest_rc meta < <(share_folder b answer "$BANK")
   sv a corpus list > "$D/room-a-corpora.txt"
   # a learns b's corpus from gossip: waited for on a's own fan-out (the route
   # the answer's retrieval uses), then asked regardless. Not scored.
@@ -191,6 +214,20 @@ sys.exit(0 if o and sorted(o[0].get('offered_to') or []) == sorted(json.loads(sy
   done
 }
 
+# media_holder <node> <leg> <container> <root> — the Jellyfin container, from
+# the host, in the node's network namespace (it listens on the node's own
+# loopback, where holder-setup and the node's daemon reach it), then
+# holder-setup inside the node: wizard, the declared key, the offer verb.
+media_holder() {
+  local n=$1 leg=$2 origin
+  origin=$(sed -n 's/^ORIGIN="\(.*\)"$/\1/p' "$MEDIA_SCRIPT")
+  "${HOSTRUN[@]}" env CW_MEDIA_ROOT="$4" CW_MEDIA_NAME="$3" CW_MEDIA_NETWORK="container:ring-doc-$n" \
+    bash "$MEDIA_SCRIPT" holder-up > "$D/room-holder-up-$n.out" 2>&1 || return 1
+  typed "$n" "$leg" "demo / demo" "Jellyfin's own login (holder-setup's wizard, and the key it mints from it and declares) — the ONE excluded credential" secret
+  typed "$n" "$leg" "mesh media offer $origin" "holder-setup's one verb"
+  node_exec "$n" env SVRN="$CLI" CW_MEDIA_ROOT="$4" bash "$MEDIA_SCRIPT" holder-setup > "$D/room-holder-setup-$n.out" 2>&1
+}
+
 leg_film() {
   local out="$D/room-film.json"
   if [ "$BACKEND" != podman ]; then echo '{"skipped":"backend local: Jellyfin needs a node netns to sit in"}' > "$out"; return; fi
@@ -199,14 +236,8 @@ leg_film() {
   bname=$(self_name b); aname=$(self_name a); cname=$(self_name c)
   cp "$D/b/config.toml" "$D/room-b-config.before"; cp "$D/c/config.toml" "$D/room-c-config.before"
   rm -rf "$MEDIA_ROOT/config" "$MEDIA_ROOT/cache" # a cold holder each run; the generated title is kept
-  # The Jellyfin container, from the host, in b's network namespace: it listens
-  # on b's own loopback, where holder-setup and b's daemon reach it.
-  "${HOSTRUN[@]}" env CW_MEDIA_ROOT="$MEDIA_ROOT" CW_MEDIA_NAME="$JELLY" CW_MEDIA_NETWORK="container:ring-doc-b" \
-    bash "$MEDIA_SCRIPT" holder-up > "$D/room-holder-up.out" 2>&1 \
-    || { echo '{"fatal":"holder-up failed, see room-holder-up.out"}' > "$out"; return; }
-  typed b film "demo / demo" "Jellyfin's own login (holder-setup's wizard, and the key it mints from it and declares) — the ONE excluded credential" secret
-  typed b film "mesh media offer $origin" "holder-setup's one verb"
-  node_exec b env SVRN="$CLI" CW_MEDIA_ROOT="$MEDIA_ROOT" bash "$MEDIA_SCRIPT" holder-setup > "$D/room-holder-setup.out" 2>&1
+  media_holder b film "$JELLY" "$MEDIA_ROOT" \
+    || { echo '{"fatal":"holder-up failed, see room-holder-up-b.out"}' > "$out"; return; }
   # The clock starts when the verb returns: its own restart of b's daemon, and
   # b's return to the mesh, are inside the window.
   first=$(poll_offer "$bname" '[]' 30)
@@ -254,6 +285,150 @@ json.dump({"holder": bname, "listed_s": float(first) if first else None, "narrow
 PY
 }
 
+# ── leg 4: a fourth member plugs in ─────────────────────────────────────────
+# The fourth's corpus: a fact that exists nowhere but its folder.
+JOIN_BANK='[
+ ["The Hollowmere allotment society keeps its seed library in a tin trunk under the oak by the pond.", "Where does the Hollowmere allotment society keep its seed library?", "trunk"]
+]'
+
+# The fourth's page, headless: one word typed into the doc as its node holds
+# it, then a's page polled until a holds that act and names its writer. The
+# naming is the adapter's own `personFor` over each node's roster.
+join_doc_js() {
+  cat > "$D/join-doc.mjs" <<'JS'
+const { REPO, PD, PA, POLL_S, WATCH_S } = process.env;
+const A = await import(`file://${REPO}/sovereign/apps/ring-doc/adapter.js`);
+const { Y } = await import(`file://${REPO}/sovereign/apps/ring-doc/vendor/ring-doc-bundle.js`);
+// The SDK's fold, as ring-doc-demo.sh's driver carries it.
+const fold = (log, reducer, initial) => {
+  let acc = initial;
+  for (const op of (log && log.ops) || []) {
+    if (op.voided || op.payload == null) continue;
+    acc = reducer(acc, op.payload, op);
+  }
+  return acc;
+};
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const call = async (base, op, body) => {
+  const r = await fetch(`${base}/__ring/${op}`, { method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify(body || {}), signal: AbortSignal.timeout(20000) });
+  const v = await r.json().catch(() => null);
+  if (!r.ok) throw new Error(JSON.stringify(v));
+  return v;
+};
+const out = { errors: [] };
+const done = () => { console.log(JSON.stringify(out)); process.exit(0); };
+const ydoc = new Y.Doc(), applied = new Set(), frag = ydoc.getXmlFragment(A.PROSE_FRAGMENT);
+let deadline = Date.now() + WATCH_S * 1000;
+while (frag.length === 0 && Date.now() < deadline) {
+  try { A.applyNew(ydoc, A.decodeActs(await call(PD, "log"), fold).acts, applied); }
+  catch (e) { out.errors.push(`d log: ${e.message || e}`); }
+  if (frag.length === 0) await sleep(POLL_S * 1000);
+}
+if (frag.length === 0) { out.fatal = "the doc never reached the fourth's node"; done(); }
+let update = null;
+ydoc.on("update", (u) => { update = u; });
+const text = frag.get(0).get(0);
+text.insert(text.length, " plugged-in");
+let written;
+try { written = await call(PD, "append", { op: "record", payload: A.changeAct(update) }); }
+catch (e) { out.fatal = `the fourth's append was refused: ${e.message || e}`; done(); }
+const t0 = Date.now();
+out.act = written.id;
+deadline = t0 + WATCH_S * 1000;
+while (Date.now() < deadline && (out.a_s === undefined || !out.d_self)) {
+  try {
+    if (!out.d_self) out.d_self = A.personFor(((await call(PD, "log")).roster || {}).members, written.actor);
+    const aLog = await call(PA, "log");
+    out.a_roster = Object.keys((aLog.roster || {}).members || {});
+    const act = A.decodeActs(aLog, fold).acts.find((x) => x.id === written.id);
+    const name = act && A.personFor((aLog.roster || {}).members, act.actor);
+    if (name && out.a_s === undefined) { out.a_name = name; out.a_s = (Date.now() - t0) / 1000; }
+  } catch (e) { out.errors.push(String(e.message || e)); }
+  await sleep(POLL_S * 1000);
+}
+out.errors = out.errors.slice(-3);
+done();
+JS
+}
+
+# Each clock starts when the fourth's own act returns (the append, the shared
+# corpus back up, the offer verb) and stops when an observer sees it: a for the
+# doc and the answer, c's rail for the library — on the host clock they share.
+leg_join() {
+  local out="$D/room-join.json" n_before n_after link="" dname t0
+  local members='import sys,json; print(len(json.load(sys.stdin)["members"]))'
+  n_before=$(mesh_json a | python3 -c "$members")
+  mkcfg d
+  fatal() { python3 -c "import json,sys; print(json.dumps({'fatal': sys.argv[1]}))" "$1" > "$out"; }
+  if [ "$BACKEND" = podman ]; then container_up_one d || { fatal "the fourth container did not start"; return; }; fi
+  start_daemon d
+  { wait_all_up d && wait_homed d; } || { fatal "the fourth daemon never came up homed"; return; }
+  # The invite, as a shows it: `mesh status`'s `join link:` line.
+  t0=$(date +%s)
+  while [ $(( $(date +%s) - t0 )) -lt 30 ]; do
+    link=$(sv a mesh status | sed -n 's/^join link: //p'); [ -n "$link" ] && break; sleep 2
+  done
+  [ -n "$link" ] || { fatal "a's mesh status printed no join link inside 30 s"; return; }
+  typed d join "mesh join $link" "the invite a shows — scanned as a QR in the room (no renderer yet: rr-2)"
+  node_exec d "$CLI" mesh join "$link" > "$D/room-join.out" 2>&1
+  dname=$(self_name d)
+  [ -n "$dname" ] || { fatal "the fourth's mesh status names no self after the join, see room-join.out"; return; }
+  wait_online "$dname" 2> "$D/room-join-online.err" || { fatal "a never saw the fourth online"; return; }
+  n_after=$(mesh_json a | python3 -c "$members")
+
+  # (a) the doc: its page names it, and its edit is attributed on a.
+  start_proxy d 2> "$D/room-join-proxy.err"
+  typed d join "$(tab_url d)/" "the ring-doc page, as ring dev printed it"
+  join_doc_js
+  REPO="$REPO" PD="$(tab_url d)" PA="$(tab_url a)" POLL_S="$JOIN_POLL_S" WATCH_S="$JOIN_WATCH_S" \
+    node "$D/join-doc.mjs" > "$D/room-join-doc.json" 2> "$D/room-join-doc.err"
+
+  # (c) the answer: a question only its corpus answers, answered on a with its
+  # name. Before the library: the offer verb restarts d's daemon outside
+  # stop_node's pidfile, and share_folder restarts it through that pidfile.
+  local id rc meta q i=0 answered="" t1 el
+  read -r id rc meta < <(share_folder d join "$JOIN_BANK")
+  q=$(BANK="$JOIN_BANK" python3 -c "import json,os; print(json.loads(os.environ['BANK'])[0][1])")
+  typed a join "$q"
+  t1=$(date +%s.%N)
+  while :; do
+    el=$(python3 -c "import sys; print(int(float(sys.argv[1]) - float(sys.argv[2])))" "$(date +%s.%N)" "$t1")
+    [ "$el" -lt "$JOIN_WATCH_S" ] || break
+    node_exec a timeout "$JOIN_WATCH_S" "$CLI" chat ask --format json "$q" > "$D/room-join-answer-$i.json" 2> "$D/room-join-answer-$i.err"
+    if python3 -c "
+import json, sys
+c = (json.load(open(sys.argv[1])).get('epistemic_state') or {}).get('citations') or []
+sys.exit(0 if any(x.get('member') == sys.argv[2] for x in c) else 1)" "$D/room-join-answer-$i.json" "$dname" 2>/dev/null; then
+      answered=$(python3 -c "import sys; print(round(float(sys.argv[1]) - float(sys.argv[2]), 2))" "$(date +%s.%N)" "$t1")
+      break
+    fi
+    i=$(( i + 1 )); sleep "$JOIN_POLL_S"
+  done
+
+  # (b) the library: the one verb on the fourth, listed in c's rail.
+  local listed="" root="$MEDIA_ROOT-d"
+  if [ "$BACKEND" = podman ]; then
+    rm -rf "$root/config" "$root/cache"; mkdir -p "$root/media"
+    cp -n "$MEDIA_ROOT"/media/*.mp4 "$root/media/" 2>/dev/null # leg 3's generated title, not encoded twice
+    media_holder d join "$JELLY-d" "$root" && listed=$(poll_offer "$dname" '[]' "$JOIN_WATCH_S")
+  fi
+
+  python3 - "$D" "$dname" "$n_before" "$n_after" "$id" "$rc" "${meta:-}" "$answered" "$i" "$listed" "$BACKEND" > "$out" <<'PY'
+import json, sys
+d, name, nb, na, cid, rc, meta, answered, asks, listed, backend = sys.argv[1:12]
+try:
+    doc = json.load(open(f"{d}/room-join-doc.json"))
+except Exception as e:
+    doc = {"fatal": f"the fourth's page wrote nothing: {e}"}
+json.dump({"name": name, "n_before": int(nb), "n_after": int(na), "doc": doc,
+           "corpus": cid, "ingest_rc": int(rc), "shared_meta": bool(meta),
+           "answered_s": float(answered) if answered else None, "asks": int(asks) + (1 if answered else 0),
+           "listed_s": float(listed) if listed else None,
+           "library": None if backend == "podman" else "backend local: Jellyfin needs a node netns to sit in"}, sys.stdout)
+PY
+}
+
 # ── the census + the five rows ───────────────────────────────────────────────
 report() { # bar|all
   python3 - "$D" "$ROOM_CAMPAIGN" "$1" "$TYPED" "$CMDLOG" "$ROOM_SCRIPT" "${CPORT[*]} ${IPORT[*]} ${DPORT[*]}" "${IP[*]}" <<'PY'
@@ -284,7 +459,7 @@ for line in open(typed_p).read().splitlines() if os.path.exists(typed_p) else []
                         excluded=bool(secret) and "Jellyfin" in note))
 # INSTALL: what bring-up wrote where the daemons read it, before the walk.
 install = []
-for n in "abc":
+for n in "abcd":
     p = os.path.join(d, n, "config.toml")
     if not os.path.exists(p): continue
     before = os.path.join(d, f"room-{n}-config.before")
@@ -304,8 +479,10 @@ install_count = sum(1 for e in install if e["cls"] in COUNTED)
 
 # What this script itself names: every member name, node port, node address, corpus id.
 ans = load("room-answer.json") or {}
+j = load("room-join.json") or {}
 members = load("members.json") or {}
-needles = sorted(set(list(members.values()) + ports.split() + ips.split() + ([ans["corpus"]] if ans.get("corpus") else [])))
+needles = sorted(set(list(members.values()) + ports.split() + ips.split()
+                     + [x for x in (ans.get("corpus"), j.get("name"), j.get("corpus")) if x]))
 text = open(script_p).read()
 hits = [n for n in needles if re.search(r"(?<![\w.])" + re.escape(n) + r"(?![\w.])", text)]
 
@@ -372,8 +549,23 @@ else:
         **{k: f[k] for k in ("holder", "listed_s", "narrowed_s", "pick_to_first_byte_s", "stream_first_byte_s", "http",
                             "b_config_diff", "c_config_diff")})
 
-# 4 — the plug-in is rr-1-plug-in's
-row("ra-room-plug-in-live", None, "phase-missing")
+# 4 — a fourth member plugs in
+win = num(r"within (\d+) s", bars["ra-room-plug-in-live"]["one_line"])
+if not j:
+    row("ra-room-plug-in-live", None, "phase-missing")
+elif j.get("fatal"):
+    row("ra-room-plug-in-live", None, j["fatal"])
+else:
+    within = lambda s: s is not None and win is not None and s <= win
+    doc = j["doc"]
+    legs = {"a_doc_names_and_attributes": doc.get("d_self") == j["name"] and j["name"] in (doc.get("a_roster") or [])
+                                          and doc.get("a_name") == j["name"] and within(doc.get("a_s")),
+            "b_library_listed": within(j["listed_s"]),
+            "c_answer_names": within(j["answered_s"]),
+            "d_n_from_mesh_only": j["n_after"] == j["n_before"] + 1 and not hits}
+    row("ra-room-plug-in-live", 1.0 if all(legs.values()) else 0.0, "", legs=legs, window_s=win,
+        **{k: j[k] for k in ("name", "n_before", "n_after", "listed_s", "answered_s", "asks", "library")},
+        doc={k: doc.get(k) for k in ("d_self", "a_name", "a_s", "a_roster", "fatal", "errors")})
 
 # 5 — nothing typed
 row("ra-room-nothing-typed", walk_count if walk else None, "" if walk else "no leg typed anything: the walk did not run",
@@ -399,6 +591,9 @@ PY
 
 room_down() { # Jellyfin first: podman will not remove b while a container shares its netns
   [ "$BACKEND" = podman ] && "${PODMAN[@]}" rm -f -t 2 "$JELLY" > /dev/null 2>&1
+  [ "$BACKEND" = podman ] && "${PODMAN[@]}" rm -f -t 2 "$JELLY-d" > /dev/null 2>&1
+  local n=d; node_kill $n "$D/$n/dev.pid"; node_kill $n "$D/$n/pid"
+  [ "$BACKEND" = podman ] && "${PODMAN[@]}" rm -f -t 2 "ring-doc-$n" > /dev/null 2>&1
   cmd_down
 }
 
@@ -416,5 +611,5 @@ case "${1:-}" in
     for leg in ${RING_ROOM_LEGS//,/ }; do "leg_$leg" > "$D-$leg.log" 2>&1; done
     report "$2"
     ;;
-  *) sed -n '2,33p' "$0"; exit 2 ;;
+  *) sed -n '2,34p' "$0"; exit 2 ;;
 esac
