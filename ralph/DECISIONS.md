@@ -1,35 +1,116 @@
 # ralph director decisions
 
-One line per decision in the ledger; the reasoning, the evidence and the worker's
-package sit in the appendix of the same number, folded. One decision, one commit,
-so `git revert <sha>` undoes exactly it. `FLAG` marks a reading of a bar or a clause
-the operator may revert.
+One entry per decision, four lines each: what forced it, what was chosen, why, and the
+commit. The reasoning in full, the evidence and the worker's package are in the appendix
+of the same number, folded. One decision, one commit, so `git revert <sha>` undoes
+exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 
 ## Ledger
 
-| # | date | unit | by | choice | commit |
-|---|---|---|---|---|---|
-| A1 | 09-17 | REVIEW-build-rd-1-live | director | live lane wholly in sovereign-api (mesh depends on api, not the reverse); the row gains the test it lacked; no REPLICATION_SENDERS row | 6ac1fd39f |
-| A2 | 09-17 | rd-1-awareness | director | proxy the live lane through `svrn ring dev` as two POST ops, no router change → row rd-1-live-shim | b7e23584f |
-| A3 | 09-17 | REVIEW-build-rd-1-instrument | director | row done at 5ab927237; the rail diff clears on push, no bar change; attribution disagreement → rd-1-attribution-order; the live-lane grant → operator | 5ab927237 |
-| A4 | 09-18 | HUMAN-rd-1-live-grant | operator | (b) namespace the lane, then grant it; no push tonight and no bar change — the instrument names foreign commits | 09ba44764 f181b179e |
-| A5 | 09-18 | rd-1-three-containers | operator | three machines rehearsed as three podman containers before the Mac is involved | 1ebdab2a4 |
-| A6 | 09-18 | rd-1-instrument-rail-diff | director | row done at f181b179e; the partition 'regression' was a masked failure → rd-1-partition-gap ahead of tune | f181b179e |
-| A7 | 09-17 | rd-1-partition-gap | director | widen the row to dev.rs:276; two variables, one owner each; no gap line for a C the mesh already marks offline | 6eeddd1f0 |
-| A8 | 09-18 | rd-1-three-containers | seat | no bind flag on `ring dev`; an in-container forwarder is the instrument's own component | — |
-| A9 | 09-18 | rd-1-three-containers | seat | joins take the product's no-VPN path (the founder's join_link with a live dial=) on both backends | — |
-| A10 | 09-18 | REVIEW-audit-rd-1 | director | row closes on the campaign's share; the foreign reds go to the operator | e88a71212 9dd7a0401 |
-| A11 | 09-18 | REVIEW-build-rr-1-roster-from-mesh | director | ESCALATED — the rail has no default roster source; a rail diff is the campaign's stop condition | — |
-| A12 | 09-18 | REVIEW-build-rr-1-roster-from-mesh | **operator** | option 1: the roster door gains a default source (the one permitted rail hunk); an app admits everyone in the mesh; `roster add` is the narrowing primitive | e94b26826 |
-| A13 | 09-18 | REVIEW-build-rr-1-roster-from-mesh (landing) | seat | ring-doc's own-campaign classifier matches rd-1-/ring-doc, not every REVIEW- row; daemon rings re-registered as a row | 78ff47353 |
-| A14 | 09-18 | rr-1-citation-names-the-machine | seat | wire half done; 'the citation' = EpistemicFooter's released citations; member by corpus (option B) | 3787e2ab7 |
-| A15 | 09-18 | rr-1-citation-member-on-released | seat | option A at its real size — a chunk_members vec beside custody; the attribution map dies before the gate, so B cost the same | f25939c2e → 933d5a14e |
-| A16 | 09-18 | rr-1-media-offer-verb | seat | the admit list rides gossip as its own row; commonwealth-rails is the rails DAEMON, not the ring rail the predicate protects | d4ae4f750 |
-| A17 | 09-18 | REVIEW-build-rr-1-instrument | seat | Jellyfin as a netns sibling of node b; real weights on a and b; census split install/walk; RING_DOC_PHASES in ring-doc-demo.sh | c2933778d |
-| A18 | 09-18 | first pre-registered run | seat | three reds become rows ahead of tune (answer fans out · media origin live · nothing-typed to zero); FLAG: a tool-printed URL opened verbatim is `opened`, not typed | 981e340fe |
-| A19 | 09-18 | REVIEW-build-rr-1-answer-fans-out | seat | landed — the daemon's Runtime had no mesh client, now a loopback seam to its own knowledge search; FLAG: 'citation' = the released evidence pointer in either gate mode; ask timeout 600 s | de1bd318c |
-| A20 | 09-18 | rr-1-media-origin-live | seat | landed, film 1.0 by reload; the media_declared extension kept; demo-bg/demo-wait for the 25-minute run | e30e91398 |
-| A21 | 09-18 | rr-1-claim-support-names-the-member | seat | the per-claim judge has no supporting chunk → member stamped pool-level by the sole_corpus rule; not the 0.74-precision claim address | 1e9188d3d |
+**A1 · 2026-09-17 · REVIEW-build-rd-1-live · director** — commit 6ac1fd39f
+- Needed: The row put the live lane's push helper in sovereign-mesh and its client routes in sovereign-api, but sovereign-mesh depends on sovereign-api and not the reverse, so the routes could not call the helper and the buffer could not live where the row said. Its PLANT also could not go red, and it asked for a REPLICATION_SENDERS census row.
+- Chose: The whole lane lands in sovereign-api; the row gains the test its PLANT was missing; no census row.
+- Because: One crate holds both halves so no new seam is minted (principle 11); a PLANT that cannot fail proves nothing (5); the census row would have registered a lane that by design stores nothing.
+
+**A2 · 2026-09-17 · rd-1-awareness · director** — commit b7e23584f
+- Needed: The unit was built and green, but the page the demo opens runs under `svrn ring dev`, whose proxy only knew the two existing rail routes, so `/v1/rail/live` was unreachable from every tab in the demo.
+- Chose: Proxy the live lane through the dev shim as two POST ops, no router change; new row rd-1-live-shim.
+- Because: The dev proxy's own doc names exactly this condition for growing its ops; a GET drain would have needed a router change the shim's POST-only handler did not have.
+
+**A3 · 2026-09-17 · REVIEW-build-rd-1-instrument · director** — commit 5ab927237
+- Needed: The pre-registration run read exit=1 on three bars: the converge bar saw a rail diff (an unpushed build-latency commit), attribution named different people on different nodes for one paragraph, and the live lane refused every guest.
+- Chose: Row done at 5ab927237 — the first run IS the pre-registration; no bar change for the rail diff (it clears on push); attribution → rd-1-attribution-order; the grant → the operator (HUMAN-rd-1-live-grant).
+- Because: A pre-registered number is the point, not a pass; the rail diff was foreign; attribution must be a pure function of the log in rail order; who a lane is granted to is a boundary the operator draws.
+
+**A4 · 2026-09-18 · HUMAN-rd-1-live-grant · operator** — commit 09ba44764 f181b179e
+- Needed: The live lane was refused to every guest because the grant did not name it, and the converge bar could not read PASSED while an unpushed foreign commit touched the rail.
+- Chose: (b) namespace the lane on the grant, then grant it; no push tonight and no bar change — the instrument names whose commits a rail diff belongs to.
+- Because: The namespace lives on the grant, never in the request, exactly as append and log already resolve it; a baseline that is behind is COULD-NOT-JUDGE, not FAILED.
+
+**A5 · 2026-09-18 · rd-1-three-containers · operator** — commit 1ebdab2a4
+- Needed: The one-host instrument ran three real daemons on one loopback, so it could not show three network identities, a real cut, or three tabs on three addresses — the things a person watches.
+- Chose: Rehearse three machines as three podman containers on one network before the Mac is involved.
+- Because: Containers give exactly the three things missing; VMs would add a kernel each and nothing the demo exercises; MESH_QA.md had designed this backend and never built it.
+
+**A6 · 2026-09-18 · rd-1-instrument-rail-diff · director** — commit f181b179e
+- Needed: The row's DEMO could not read five PASSED while the foreign rail commit was unpushed, and the partition drill appeared to have regressed.
+- Chose: Row done at f181b179e; the 'regression' was a masked failure — the earlier PASS was the live lane's refusal text filling the gap panel — so rd-1-partition-gap is minted ahead of tune.
+- Because: A verdict that reads PASSED on an error string is not a measurement (principle 5); the fix belongs before tuning, not after.
+
+**A7 · 2026-09-17 · rd-1-partition-gap · director** — commit 6eeddd1f0
+- Needed: The row's edit was inert on the real page: the dev shim's live send returned null while the daemon's POST answers with peers, so the page never received the field the gap panel reads.
+- Chose: Widen the row to the shim (dev.rs:276); one owner per variable in the page; no gap line for a peer the mesh already marks offline.
+- Because: Editing the page and the driver 'identically' would have passed a test the real page fails; a second writer to one variable is two deciders (8).
+
+**A8 · 2026-09-18 · rd-1-three-containers · seat** — commit —
+- Needed: The worker showed the podman premise false: `ring dev` binds loopback with no bind flag, the rail never leaves loopback, and operator routes admit loopback peers only — a published port reached nothing.
+- Chose: No bind flag on `ring dev`; the host browser reaches a container's dev server through an in-container forwarder that is the instrument's own component.
+- Because: A LAN-reachable dev proxy would hand the grant it holds to the LAN; the forwarder stands in for 'the browser on that machine' without changing the product's posture.
+
+**A9 · 2026-09-18 · rd-1-three-containers · seat** — commit —
+- Needed: The join's relay hint was a POST to the founder's loopback-bound internal port; on podman B could not reach it, and on one host it only worked because three daemons shared a loopback.
+- Chose: Joins take the product's no-VPN path on both backends: the founder's mesh status already serves a join link with a live dial, and B and C key-dial it over iroh.
+- Because: Same code on both backends, and the local re-run is the proof; the instrument must not carry a path the product does not.
+
+**A10 · 2026-09-18 · REVIEW-audit-rd-1 · director** — commit e88a71212 9dd7a0401
+- Needed: TESTALL and PREPUSH stayed red after the audit fixed everything the campaign owned; the remaining reds predate the queue.
+- Chose: Row closes on the campaign's share; the six foreign reds go to the operator unfixed.
+- Because: The reading the DEMO rows already use: a red naming only commits outside this campaign does not block it, and fixing them would add scope the campaign rule forbids.
+
+**A11 · 2026-09-18 · REVIEW-build-rr-1-roster-from-mesh · director** — commit —
+- Needed: Making Derived the default roster for app rings needs a hunk in commonwealth-rail (the roster door has no default source), or nine hooks outside the row, or a reversal of the operator's morning decision.
+- Chose: ESCALATED, not decided.
+- Because: A rail diff is the campaign's own stop condition and the charter reserves it for the operator.
+
+**A12 · 2026-09-18 · REVIEW-build-rr-1-roster-from-mesh · **operator**** — commit e94b26826
+- Needed: The worker proved 'every app ring except a registry' cannot be enumerated daemon-side: a fresh ring's first append is refused before the namespace ever reaches disk, so only the rail can hold the default.
+- Chose: Option 1 — the roster door gains a default source (the one permitted rail hunk, lib.rs:130-205); an app applies to everyone in the mesh; `roster add` is the narrowing primitive.
+- Because: Operator's words: default = anyone in the mesh, then primitives to limit; permissioning with inheritance is later work. Precedence registered > file > default keeps one decider.
+
+**A13 · 2026-09-18 · REVIEW-build-rr-1-roster-from-mesh (landing) · seat** — commit 78ff47353
+- Needed: e94b26826 was green everywhere, but ring-doc's converge bar read FAILED because its instrument classed any commit whose subject starts with REVIEW- as ring-doc's own; and dropping the daemon rings' registration meant a stray roster.json could now narrow a daemon ring.
+- Chose: Narrow the classifier to subjects carrying rd-1- or ring-doc; mark the row done; mint rr-1-daemon-rings-registered.
+- Because: A4 says a foreign rail diff is COULD-NOT-JUDGE, and the classifier contradicted that; the daemon's own rings must never be narrowable by a file.
+
+**A14 · 2026-09-18 · rr-1-citation-names-the-machine · seat** — commit 3787e2ab7
+- Needed: The wire half landed, but the row's 'the one Svelte citation component' does not exist (four render citation-ish lines) and the only per-citation struct is built by a gate that sees no member name.
+- Chose: Wire half done; 'the citation' = the released citations in EpistemicFooter; the member stamped by corpus from the pipeline's attribution map (option B).
+- Because: The gate's ledger is what the person sees next to the sentence; the desktop-only join (C) would leave the headless instrument nothing to read; per-chunk (A) looked larger.
+
+**A15 · 2026-09-18 · rr-1-citation-member-on-released · seat** — commit f25939c2e → 933d5a14e
+- Needed: Option B's premise was false: the attribution map is destructured away before the gate, so threading it costs the same seven files as a parallel vec.
+- Chose: Option A at its real size — a chunk_members vec beside chunk_custodies, filled from the chunk's peer key, stamped onto ReleasedCitation.member.
+- Because: At equal cost the per-chunk form is exact, and Custody::Peer already says 'came from another node' — the member is that stamp's companion, not a second concept (12).
+
+**A16 · 2026-09-18 · rr-1-media-offer-verb · seat** — commit d4ae4f750
+- Needed: Showing 'offered to' needs the holder's admit list on the wire, a new gossiped field; the only literal it breaks inside the protected glob is a constructor in commonwealth-rails.
+- Chose: The admit list rides gossip as its own mechanical row ahead of the verb; the predicate names commonwealth-rail + commonwealth-rail-core.
+- Because: commonwealth-rails is the rails DAEMON ('the process that IS your address on the mesh'), not the ring rail whose CRDT-ignorance the clause protects; the glob was imprecise, not the intent.
+
+**A17 · 2026-09-18 · REVIEW-build-rr-1-instrument · seat** — commit c2933778d
+- Needed: The podman nodes have no podman (so the Jellyfin stand-in script cannot run inside one) and are terminal with no weights (so nothing on them can ingest or synthesize).
+- Chose: Jellyfin as a container in node b's network namespace with the media script split; the embedder on b, embedder + smallest grounding chat model on a; census split install/walk; a phase switch in ring-doc-demo.sh.
+- Because: 'It plays' and 'a released citation' are what the bars read — a file server or a fan-out probe would substitute; install-time config is printed and a member's address there still counts.
+
+**A18 · 2026-09-18 · first pre-registered run → rows · seat** — commit 981e340fe
+- Needed: The honest first run: doc 1.0; answer 0.0 (chat ask general_knowledge while knowledge/search returns b's passage); film 0.0 (first byte never, c dialed Bo's unchanged key for 120 s after the verb restarted b); nothing-typed 6.
+- Chose: Three rows ahead of tune: answer fans out (instrument first), media origin live (no restart), nothing-typed to zero (verbs + a provenance rule). FLAG: a tool-printed URL opened verbatim is `opened`, not typed.
+- Because: Three known reds would have cost a REVIEW-DEMO session and a resolution to reach the same rows; the answer red is the D13 sentence itself.
+
+**A19 · 2026-09-18 · REVIEW-build-rr-1-answer-fans-out · seat** — commit de1bd318c
+- Needed: Instrumented: the daemon's Runtime had no mesh knowledge client, so the chat path never fanned out; fixed with a loopback seam to its own knowledge search. The bar still read 0.4: two answers released per-claim carry no citation rows, one overran a 300 s ask timeout on the CPU 2B.
+- Chose: Row done; the per-claim release names the member as its own row; ask timeout 600 s. FLAG: 'citation' = the released evidence pointer in either gate mode.
+- Because: Not a bigger model (tuning the number is the whack the campaign forbids) and not a bar change (the operator's, and the goodhart already forbids counting the summary-level name).
+
+**A20 · 2026-09-18 · rr-1-media-origin-live · seat** — commit e30e91398
+- Needed: Film read 1.0 with the origin and admit list applied by reload and no restart, but the worker could not run the five-leg demo inside a 10-minute foreground call and had to split it; it also let the declared Jellyfin credential ride the live route.
+- Chose: Row done; the credential extension kept; `demo-bg` / `demo-wait` added so the ~25-minute run outlives a worker's call.
+- Because: The 206 response is the extension's evidence and reverting it reinstates the restart the row removes; a review-demo on a split run would not be the demo.
+
+**A21 · 2026-09-18 · rr-1-claim-support-names-the-member · seat** — commit 1e9188d3d
+- Needed: My A19 falsifier fired harder than written: the per-claim judge decides the window jointly, GateClaim carries no support index, and the one holding site already writes chunk unknown with a corpus only when the pool is single-corpus.
+- Chose: Member stamped pool-level by the same rule as sole_corpus: when every chunk in the pool carries one member it names it, else None.
+- Because: The claim address is a 0.74-precision display resolver, never a verdict; a per-chunk verdict in the judge is gate work past strictly necessary and is the honest rr-2 if pool-level proves too coarse.
 
 ## Flags for the operator
 
