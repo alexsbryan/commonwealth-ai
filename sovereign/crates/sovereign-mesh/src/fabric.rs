@@ -403,6 +403,43 @@ pub struct FabricPart {
 /// do: `[[forbid]] sovereign-mesh -> sovereign-daemon`). `AppState`'s own
 /// methods now delegate here, so there is one implementation of each read.
 impl FabricPart {
+    /// Assemble Fabric's part from values that all exist before it (DC §4.2
+    /// "Construction is staged, and parts are total"). The daemon gathers the
+    /// seed and calls this before `AppState`, so the part can be held across a
+    /// stop; the tests take [`FabricSeed::default`].
+    pub fn new(
+        self_node_id: NodeId,
+        mesh: Mesh,
+        mesh_store: Arc<MeshStore>,
+        app_registry: Arc<AppRegistry>,
+        seed: FabricSeed,
+    ) -> Self {
+        let contribution_emitter = ContributionEmitter::new((*mesh_store).clone(), self_node_id);
+        Self {
+            identity: IdentityReader::new(self_node_id),
+            mesh: Arc::new(RwLock::new(mesh)),
+            self_node_pubkey: seed.self_node_pubkey,
+            dial_info: seed.dial_info,
+            self_dial_signer: seed.self_dial_signer,
+            ring_rail: seed.ring_rail,
+            ring_write_nudge: Arc::new(tokio::sync::Notify::new()),
+            peer_transport: seed.peer_transport,
+            clock: seed.clock,
+            peer_last_contact: std::sync::RwLock::new(std::collections::HashMap::new()),
+            peer_last_attempt: std::sync::RwLock::new(std::collections::HashMap::new()),
+            peer_post_split: std::sync::RwLock::new(std::collections::HashMap::new()),
+            rpc_iroh_accept: std::sync::atomic::AtomicBool::new(false),
+            mesh_store,
+            app_registry,
+            app_port_map: AppPortMap::new(),
+            fanout_inflight: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            on_mesh_mutation: seed.mesh_mutation_hook,
+            convergence: seed.convergence,
+            contribution_emitter,
+            join_key: seed.join_key,
+        }
+    }
+
     /// This node's identity pubkey, if the node has one.
     pub fn self_node_pubkey(&self) -> Option<commonwealth_core::ids::NodePubkey> {
         self.self_node_pubkey

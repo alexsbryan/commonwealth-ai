@@ -9,13 +9,12 @@ use async_trait::async_trait;
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::Mesh;
 use commonwealth_state::store_adapter::InferenceStateStore;
-use commonwealth_state::{ActivityEmitter, ContributionEmitter, MeshStore, PeerPreferenceStore};
+use commonwealth_state::{ActivityEmitter, MeshStore, PeerPreferenceStore};
 use corpus_engine::CorpusEngine;
 use oicp_types::model_aliases::ModelAliasTable;
 use serving_policy::fair_sched::{reciprocity_weight, SchedCore, TryGrant};
 use sovereign_core::identity::IdentityReader;
 use sovereign_grants::{EphemeralGrantStore, GuestGrantStore, WorkQueueManager};
-use sovereign_meshapp_registry::proxy::AppPortMap;
 use sovereign_meshapp_registry::registry::AppRegistry;
 use sovereign_serving_host::admission::Principal;
 
@@ -933,8 +932,67 @@ impl AppState {
         serving_seed: serving::ServingSeed,
         node_seed: node::NodeSeed,
     ) -> Self {
+        // Fabric's part is constructed HERE, before `AppState`, so the daemon
+        // can hold it across a stop rather than dropping it with the running
+        // state (DC §4.2 "Construction is staged, and parts are total"). The
+        // daemon calls [`Self::new_with_fabric_and_serving_and_node`] with the
+        // `Arc` it holds; this seed-shaped entry point builds one for the
+        // callers (tests, the rail harness) that have no daemon.
+        let fabric = Arc::new(fabric::FabricPart::new(
+            self_node_id,
+            mesh,
+            Arc::clone(&mesh_store),
+            Arc::clone(&app_registry),
+            fabric_seed,
+        ));
+        Self::assemble_with_fabric(
+            self_node_id,
+            fabric,
+            mesh_store,
+            corpus_engine,
+            in_flight_gauge,
+            serving_seed,
+            node_seed,
+        )
+    }
+
+    /// [`Self::new_with_platform_and_engine_and_gauge_and_fabric_and_serving_and_node`]
+    /// with Fabric already constructed — the daemon holds the part across a
+    /// stop and passes the same `Arc` here (DC §4.2 "Construction is staged,
+    /// and parts are total").
+    pub fn new_with_fabric_and_serving_and_node(
+        self_node_id: NodeId,
+        fabric: Arc<fabric::FabricPart>,
+        mesh_store: Arc<MeshStore>,
+        corpus_engine: Option<Arc<CorpusEngine>>,
+        in_flight_gauge: Option<sovereign_core::in_flight::LocalInFlightGauge>,
+        serving_seed: serving::ServingSeed,
+        node_seed: node::NodeSeed,
+    ) -> Self {
+        Self::assemble_with_fabric(
+            self_node_id,
+            fabric,
+            mesh_store,
+            corpus_engine,
+            in_flight_gauge,
+            serving_seed,
+            node_seed,
+        )
+    }
+
+    /// Assemble the node's state around an already-built Fabric part. Every
+    /// other part is constructed here from its seed; Fabric is passed in
+    /// because it outlives a single running `AppState`.
+    fn assemble_with_fabric(
+        self_node_id: NodeId,
+        fabric: Arc<fabric::FabricPart>,
+        mesh_store: Arc<MeshStore>,
+        corpus_engine: Option<Arc<CorpusEngine>>,
+        in_flight_gauge: Option<sovereign_core::in_flight::LocalInFlightGauge>,
+        serving_seed: serving::ServingSeed,
+        node_seed: node::NodeSeed,
+    ) -> Self {
         let inference_store = InferenceStateStore::new(Arc::clone(&mesh_store), self_node_id);
-        let contribution_emitter = ContributionEmitter::new((*mesh_store).clone(), self_node_id);
         let activity_emitter = ActivityEmitter::new((*mesh_store).clone(), self_node_id);
         let peer_preferences = PeerPreferenceStore::new((*mesh_store).clone(), self_node_id);
         // ATOS middleware registry. The wiring is intentionally additive —
@@ -990,32 +1048,9 @@ impl AppState {
             (*mesh_store).clone(),
             self_node_id,
         ));
-        let fabric = fabric::FabricPart {
-            identity: IdentityReader::new(self_node_id),
-            mesh: Arc::new(RwLock::new(mesh)),
-            self_node_pubkey: fabric_seed.self_node_pubkey,
-            dial_info: fabric_seed.dial_info,
-            self_dial_signer: fabric_seed.self_dial_signer,
-            ring_rail: fabric_seed.ring_rail,
-            ring_write_nudge: Arc::new(tokio::sync::Notify::new()),
-            peer_transport: fabric_seed.peer_transport,
-            clock: fabric_seed.clock,
-            peer_last_contact: std::sync::RwLock::new(std::collections::HashMap::new()),
-            peer_last_attempt: std::sync::RwLock::new(std::collections::HashMap::new()),
-            peer_post_split: std::sync::RwLock::new(std::collections::HashMap::new()),
-            rpc_iroh_accept: std::sync::atomic::AtomicBool::new(false),
-            mesh_store,
-            app_registry,
-            app_port_map: AppPortMap::new(),
-            fanout_inflight: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
-            on_mesh_mutation: fabric_seed.mesh_mutation_hook,
-            convergence: fabric_seed.convergence,
-            contribution_emitter,
-            join_key: fabric_seed.join_key,
-        };
         Self {
             inner: Arc::new(AppStateInner {
-                fabric: Arc::new(fabric),
+                fabric,
                 serving: serving::ServingPart {
                     model_aliases: ModelAliasTable::default_table(),
                     pipeline_aliases:

@@ -260,6 +260,12 @@ pub struct EmbeddedDaemon {
     /// observes it through this handle). The daemon's membership orchestration
     /// publishes through it rather than owning a second copy.
     join_key: crate::state::JoinKeyReader,
+    /// Fabric's part, held on the daemon so it survives `stop_inner` and the
+    /// membership operations that answer while the daemon is `Stopped` can
+    /// read it (DC §4.1; DC §4.2 "Construction is staged, and parts are
+    /// total"). Set by `start_daemon` before `AppState` is built; a
+    /// `Park`/`Shutdown` leaves it in place, a `Leave` clears it.
+    fabric: std::sync::RwLock<Option<Arc<sovereign_mesh::fabric::FabricPart>>>,
     /// Endpoint→NodeId directory for discovered RPC workers: which mesh
     /// member owns each raw `ip:port` ggml-RPC endpoint. Written by
     /// [`Self::discover_rpc_workers`] at the moment the endpoint string is
@@ -604,6 +610,7 @@ impl EmbeddedDaemon {
             setup_config: RwLock::new(setup_config),
             inference_provider: RwLock::new(provider),
             join_key: crate::state::JoinKeyReader::default(),
+            fabric: std::sync::RwLock::new(None),
             rpc_endpoint_nodes: std::sync::RwLock::new(std::collections::HashMap::new()),
             published_apps: commonwealth_media::PublishedApps::default(),
             rpc_worker_sticky: std::sync::RwLock::new(std::collections::HashMap::new()),
@@ -1147,6 +1154,18 @@ impl EmbeddedDaemon {
             DaemonState::Running { app_state, .. } => Some(app_state.clone()),
             _ => None,
         }
+    }
+
+    /// Fabric's part as the daemon holds it — present while running and while
+    /// parked or stopped, cleared on leave. The membership operations that
+    /// answer while the daemon is `Stopped` read it here rather than through
+    /// `AppStateInner.fabric`, which only exists while running (DC §4.1; DC
+    /// §4.2 "Construction is staged, and parts are total").
+    pub fn fabric(&self) -> Option<Arc<sovereign_mesh::fabric::FabricPart>> {
+        self.fabric
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// Opt this daemon into serving REMOTE callers — the explicit
@@ -1881,6 +1900,13 @@ impl EmbeddedDaemon {
                     // per-mesh on disk now, and `resume_active` reloads
                     // whichever mesh comes up next.
                     self.join_key.publish(None);
+                }
+                if matches!(mode, StopMode::Leave) {
+                    // Leaving gives up Fabric with the mesh: its roster and
+                    // cached key are gone from disk, so holding a part that
+                    // still names them would answer membership reads with state
+                    // the node no longer has (ARCH 6 — absence is reported).
+                    *self.fabric.write().unwrap_or_else(|e| e.into_inner()) = None;
                 }
                 match mode {
                     StopMode::Leave => info!("mesh daemon stopped (left mesh)"),
@@ -3157,20 +3183,30 @@ impl EmbeddedDaemon {
         let node_seed = crate::state::NodeSeed {
             client_token: posture.token.map(Into::into),
         };
-        let app_state =
-            AppState::new_with_platform_and_engine_and_gauge_and_fabric_and_serving_and_node(
-                node_id,
-                mesh,
-                mesh_store,
-                app_registry,
-                corpus_engine.clone(),
-                self.services
-                    .serving()
-                    .and_then(|s| s.core.in_flight_gauge.clone()),
-                fabric_seed,
-                serving_seed,
-                node_seed,
-            );
+        // Fabric's part is constructed before `AppState` and held on the
+        // daemon, so it survives `stop_inner` (DC §4.1; DC §4.2 "Construction
+        // is staged, and parts are total"). The membership operations that
+        // answer while the daemon is `Stopped` read this part rather than
+        // `AppStateInner.fabric`.
+        let fabric = Arc::new(sovereign_mesh::fabric::FabricPart::new(
+            node_id,
+            mesh,
+            Arc::clone(&mesh_store),
+            Arc::clone(&app_registry),
+            fabric_seed,
+        ));
+        *self.fabric.write().unwrap_or_else(|e| e.into_inner()) = Some(Arc::clone(&fabric));
+        let app_state = AppState::new_with_fabric_and_serving_and_node(
+            node_id,
+            fabric,
+            mesh_store,
+            corpus_engine.clone(),
+            self.services
+                .serving()
+                .and_then(|s| s.core.in_flight_gauge.clone()),
+            serving_seed,
+            node_seed,
+        );
 
         // (The former `Arc::get_mut` installer block lived here. Fabric's and
         // Serving's values are constructor arguments now, so nothing is
