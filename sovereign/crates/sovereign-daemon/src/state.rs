@@ -44,8 +44,8 @@ pub mod workbench;
 // surface the constructors take).
 pub use sovereign_mesh::fabric;
 pub use sovereign_mesh::fabric::{
-    ClockReader, DialInfoReader, DialSigner, FabricPart, FabricSeed, MeshMutationHook,
-    TransportReader,
+    ClockReader, DialInfoReader, DialSigner, FabricPart, FabricSeed, JoinKeyReader,
+    MeshMutationHook, TransportReader,
 };
 // Serving's construction seed, its readers and the two tally types, for the
 // same reason.
@@ -1011,6 +1011,7 @@ impl AppState {
             on_mesh_mutation: fabric_seed.mesh_mutation_hook,
             convergence: fabric_seed.convergence,
             contribution_emitter,
+            join_key: fabric_seed.join_key,
         };
         Self {
             inner: Arc::new(AppStateInner {

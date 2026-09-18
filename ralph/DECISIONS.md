@@ -2698,3 +2698,50 @@ have been a pure move and the split into two units unnecessary).
 **Landed in.** `306005a82` (the reach reads) and this commit — `ralph/STATE.md`
 (the row marked `[x]` with the correction, the minted row, `DEMO-d5-misnamed`
 re-pointed to it) and this entry. `git revert 306005a82` reverts the reads alone.
+
+## 2026-09-18 · REVIEW-build-daemon-membership-lifecycle · the stopped-state half needs Fabric to exist before `AppState`
+
+**Fork.** The row names `create_mesh`/`join_mesh`/`leave`/`switch_mesh`/`forget_mesh`/
+`rotate_invite`/`try_resume`/`forget_member` and says "the daemon half keeps the
+listeners and the Fabric half keeps the roster/identity". Execute it whole, or split
+the tractable running-only half and mint the prerequisite?
+
+**Choice.** Land the half Fabric can own today, then stop at the construction-order
+gap. LANDED: `fabric::JoinKeyReader` (Fabric owns the cached join key, created first
+and shared into `FabricPart` through `FabricSeed`, DC §4.2); `FabricPart::adopt`
+(roster + identity in one step); `FabricPart::forget_member` with `ForgottenMember`
+and `ForgetMemberError` moved to `sovereign-mesh`, `MeshError` mapped at the daemon
+boundary. The row stays `[~]`: the stopped-state operations are not buildable yet.
+
+**The prerequisite the row does not name.** `known_meshes` (`daemon.rs:1025`),
+`forget_mesh` (`:1084`), `switch_mesh` (`:1042`) and `try_resume` (`:958`) are `pub`
+methods that answer **while the daemon is `Stopped`** — they read only `data_dir` and
+the persisted pointer. `join_key_plaintext` (`:257`) is cleared in `stop_inner`
+(`:1881`) *after* `std::mem::replace(&mut *state, DaemonState::Stopped)` drops the
+running `AppState` (`:1807`). `FabricPart` is reachable only as
+`AppStateInner.fabric` (`state.rs:291`), so it does not exist while stopped.
+Therefore Fabric must become a standalone object the daemon holds across stop —
+DC §4.2's staging order already puts Fabric before the engine and Serving — and that
+construction reorder is its own unit. Making `forget_member` a Fabric method needed
+none of this because it runs only while Running (`app_state()` returns `None`
+otherwise).
+
+**Evidence** (reproduced this session).
+- `grep -n 'join_key_plaintext' sovereign/crates/sovereign-daemon/src/daemon.rs`
+  -> the field at `:257`, cleared at `:1886` inside `stop_inner`'s `Leave|Park` arm,
+  after the state replace at `:1807`.
+- `grep -n 'FabricPart' sovereign/crates/sovereign-daemon/src/state.rs` ->
+  `pub fabric: std::sync::Arc<fabric::FabricPart>` at `:291`; the only constructor is
+  `AppStateInner` at `:1017`, reached from `start_daemon`.
+- CLEAN exit=0 (debug target 25G, under 50G).
+- LINT exit=0, scope `sovereign-daemon,sovereign-mesh,sovereign-cli-daemon,sovereign-cli-dev,sovereign-cli-llm`, errors 0.
+- LAYER exit=0 — "every edge points down or sideways … fan-in within caps".
+- TEST(sovereign-mesh) exit=0 (613 pass); TEST(sovereign-daemon) exit=0 (706 pass).
+
+**Falsified by.** A showing that the stopped-state methods can be Fabric methods with
+`FabricPart` still built inside `AppState` — i.e. a Fabric handle the daemon can hold
+before `start_daemon` and after `stop_inner` without moving `FabricPart`'s
+construction out of `state.rs`.
+
+**Landed in.** This commit. The row stays `[~]` with the PROGRESS note; the
+standalone-Fabric prerequisite is the next unit under it.

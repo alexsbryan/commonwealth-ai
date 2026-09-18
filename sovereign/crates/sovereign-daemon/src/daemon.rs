@@ -254,7 +254,12 @@ pub struct EmbeddedDaemon {
     /// app restarts. Genuine runtime state: set on `create_mesh` /
     /// `join_mesh` / `try_resume`; refreshed by `rotate_join_key`, which
     /// is the one implementation of rotation; cleared on `stop`.
-    join_key_plaintext: RwLock<Option<String>>,
+    ///
+    /// Held as a **reader** created before the daemon's parts and shared into
+    /// `FabricPart` at construction (DC §4.1: Fabric owns the key; the daemon
+    /// observes it through this handle). The daemon's membership orchestration
+    /// publishes through it rather than owning a second copy.
+    join_key: crate::state::JoinKeyReader,
     /// Endpoint→NodeId directory for discovered RPC workers: which mesh
     /// member owns each raw `ip:port` ggml-RPC endpoint. Written by
     /// [`Self::discover_rpc_workers`] at the moment the endpoint string is
@@ -598,7 +603,7 @@ impl EmbeddedDaemon {
             services,
             setup_config: RwLock::new(setup_config),
             inference_provider: RwLock::new(provider),
-            join_key_plaintext: RwLock::new(None),
+            join_key: crate::state::JoinKeyReader::default(),
             rpc_endpoint_nodes: std::sync::RwLock::new(std::collections::HashMap::new()),
             published_apps: commonwealth_media::PublishedApps::default(),
             rpc_worker_sticky: std::sync::RwLock::new(std::collections::HashMap::new()),
@@ -997,7 +1002,7 @@ impl EmbeddedDaemon {
         // would see a member roster but no way to invite anyone new.
         match persist::load_join_key(&self.data_dir) {
             Ok(Some(key)) => {
-                *self.join_key_plaintext.write().await = Some(key);
+                self.join_key.publish(Some(key));
             }
             Ok(None) => {
                 // Pre-existing mesh from before this feature shipped.
@@ -1366,7 +1371,7 @@ impl EmbeddedDaemon {
                 );
             }
         }
-        *self.join_key_plaintext.write().await = Some(join_key.clone());
+        self.join_key.publish(Some(join_key.clone()));
 
         info!(mesh_name, "mesh created, daemon started");
         // On create there are no peers yet, but fire initial_sync
@@ -1678,17 +1683,14 @@ impl EmbeddedDaemon {
                 ..
             } = &*state
             {
-                *app_state.inner.fabric.mesh.write().await = handshake.mesh;
-                // Swap our `self_node_id` from the placeholder we
-                // generated locally for mDNS to the founder-assigned
-                // ID. Without this, every component that indexes by
-                // self_node_id (gossip's own-record update,
-                // corpus_collaborate's "find me in members",
-                // auto_ingest's peer filter) would hit the
-                // placeholder which doesn't exist in the adopted
-                // mesh — manifesting as `local node not found in
-                // mesh` 500s and gossip log spam every 10s.
-                app_state.identity_reader().publish(adopted_node_id);
+                // Fabric adopts the roster and the identity in one step
+                // (DC §4.1: the membership operations are Fabric's); the
+                // daemon keeps only the cached `mesh_state` snapshot it serves.
+                app_state
+                    .inner
+                    .fabric
+                    .adopt(handshake.mesh, adopted_node_id)
+                    .await;
                 *mesh_state.write().await = MeshState::from_membership(
                     &*app_state.inner.fabric.mesh.read().await,
                     app_state.inner.fabric.identity.current(),
@@ -1719,7 +1721,7 @@ impl EmbeddedDaemon {
                 );
             }
         }
-        *self.join_key_plaintext.write().await = Some(join_key.clone());
+        self.join_key.publish(Some(join_key.clone()));
 
         info!(mesh_name, node_id = %adopted_node_id, "joined mesh, daemon started");
         // Fire a gossip round immediately so the founder (and any
@@ -1878,7 +1880,7 @@ impl EmbeddedDaemon {
                     // Park clears the cache but not the file: the plaintext is
                     // per-mesh on disk now, and `resume_active` reloads
                     // whichever mesh comes up next.
-                    *self.join_key_plaintext.write().await = None;
+                    self.join_key.publish(None);
                 }
                 match mode {
                     StopMode::Leave => info!("mesh daemon stopped (left mesh)"),
@@ -1963,7 +1965,7 @@ impl EmbeddedDaemon {
     /// so a mesh rename (if we ever add it) is automatically picked
     /// up without invalidating the secret file.
     pub async fn current_invite(&self) -> Option<(String, String)> {
-        let key = self.join_key_plaintext.read().await.clone()?;
+        let key = self.join_key.current()?;
         let state = self.state.read().await;
         let (app_state, endpoint) = match &*state {
             DaemonState::Running {
@@ -2221,7 +2223,7 @@ impl EmbeddedDaemon {
                 warn!(error = %e, "rotate: join_key.secret could not be written");
             }
         }
-        *self.join_key_plaintext.write().await = Some(new_key.clone());
+        self.join_key.publish(Some(new_key.clone()));
 
         info!(
             mesh_name,
@@ -3062,6 +3064,10 @@ impl EmbeddedDaemon {
             // the client-port-correct `IpTransport` so the uniform-port
             // assumption holds until iroh binds.
             peer_transport: crate::state::TransportReader::new(ip_transport.clone()),
+            // The same join-key reader the daemon holds, so Fabric owns the
+            // key while the membership orchestration observes it through its
+            // handle (DC §4.1).
+            join_key: self.join_key.clone(),
             ..Default::default()
         };
         // Serving's provider and warmer exist before its part is built (DC §4.2

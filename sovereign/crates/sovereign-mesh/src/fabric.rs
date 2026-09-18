@@ -112,6 +112,35 @@ impl Default for TransportReader {
     }
 }
 
+/// The active mesh's cached plaintext join key, published as a **reader**
+/// rather than copied into each holder: `create_mesh` / `join_mesh` /
+/// `try_resume` seed it, `rotate_invite` swaps in the new key, and `leave`
+/// clears it — while the share UI's `current_invite` reads through the same
+/// handle. Fabric owns the key; the daemon's orchestration observes it through
+/// this handle instead of a second copy that could go stale (DC §4.1 "the
+/// membership operations ... are Fabric adopting, persisting and gossiping its
+/// own roster and identity"; DC §4.2 "Construction is staged, and parts are
+/// total").
+#[derive(Clone, Default)]
+pub struct JoinKeyReader(Arc<ArcSwap<Option<String>>>);
+
+impl JoinKeyReader {
+    /// Seed the reader with the key the active mesh starts life with.
+    pub fn new(key: Option<String>) -> Self {
+        Self(Arc::new(ArcSwap::from_pointee(key)))
+    }
+
+    /// The cached plaintext right now, if any.
+    pub fn current(&self) -> Option<String> {
+        (**self.0.load()).clone()
+    }
+
+    /// Publish the active mesh's key (or clear it on leave/park).
+    pub fn publish(&self, key: Option<String>) {
+        self.0.store(Arc::new(key));
+    }
+}
+
 /// This node's live iroh dial info, published as a **reader**: the endpoint
 /// binds after the node is constructed, and the reachability watchdog swaps in
 /// a fresh endpoint during life (DC §4.2 "Construction is staged, and parts are
@@ -131,6 +160,35 @@ impl DialInfoReader {
     pub fn publish(&self, provider: Arc<DialInfoProvider>) {
         self.0.store(Arc::new(Some(provider)));
     }
+}
+
+/// What [`FabricPart::forget_member`] retired. Moved here with the tombstone
+/// core at domains `REVIEW-build-daemon-membership-lifecycle` (DC §4.1: the
+/// roster mutations are Fabric's). The daemon's HTTP shell serializes it; the
+/// wire shape is unchanged.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ForgottenMember {
+    pub name: String,
+    pub node_id: NodeId,
+    /// The row was one of a colliding pair — this call was a repair rather
+    /// than a removal. Reported so the CLI can say which it did.
+    pub was_aliased: bool,
+    /// Already a tombstone when we got here; nothing was written. Distinct
+    /// from a fresh retirement so a caller never reports work it did not do.
+    pub already_retired: bool,
+}
+
+/// Why [`FabricPart::forget_member`] refused. The daemon maps each arm onto its
+/// own `MeshError` at the boundary (DC §4.1: "`MeshError` maps at the daemon
+/// boundary"), so Fabric does not name the host's error type.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ForgetMemberError {
+    /// No member row matched the query.
+    UnknownMember(String),
+    /// The query resolved to this node's own row.
+    CannotForgetSelf,
+    /// The member is online and unaliased; a `force` is required.
+    MemberStillLive(String),
 }
 
 /// Everything Fabric's part is constructed with (DC §4.2 "Construction is
@@ -160,6 +218,10 @@ pub struct FabricSeed {
     /// The node's live iroh dial info, created first and shared with the
     /// endpoint owner.
     pub dial_info: DialInfoReader,
+    /// The active mesh's cached plaintext join key, created first and shared
+    /// with the daemon's membership orchestration (DC §4.1: Fabric owns the
+    /// key; the daemon observes it through this reader).
+    pub join_key: JoinKeyReader,
 }
 
 /// Fabric's twenty fields, held as `AppStateInner::fabric`.
@@ -317,6 +379,14 @@ pub struct FabricPart {
     /// daemon-side publish sink and ingest poller stamp the same record
     /// `/status` reads. `None` when the boot has no rails.
     pub convergence: Option<Arc<ConvergenceRecord>>,
+
+    /// The active mesh's cached plaintext join key, held as a **reader**
+    /// created before the part and shared with the daemon's membership
+    /// orchestration (DC §4.1: Fabric owns the roster, identity and join key;
+    /// the daemon observes them through readers rather than a second copy).
+    /// Seeded on `create_mesh`/`join_mesh`/`try_resume`, swapped by
+    /// `rotate_invite`, cleared on `leave`/`park`.
+    pub join_key: JoinKeyReader,
 
     /// Dimensional contribution emitter. Each route handler records
     /// `LedgerEvent`s through this on completion (per write site
@@ -558,5 +628,103 @@ impl FabricPart {
             self.fanout_inflight.clone(),
         )
         .await
+    }
+
+    /// The active mesh's cached plaintext join key, right now. Fabric owns the
+    /// key (DC §4.1); the daemon's `current_invite` reads it through here.
+    pub fn join_key(&self) -> Option<String> {
+        self.join_key.current()
+    }
+
+    /// Publish the active mesh's cached plaintext join key — seeded by
+    /// `create_mesh`/`join_mesh`/`try_resume`, swapped by `rotate_invite`,
+    /// cleared by `leave`/`park`. The daemon holds a handle to the same reader.
+    pub fn publish_join_key(&self, key: Option<String>) {
+        self.join_key.publish(key);
+    }
+
+    /// Adopt an authoritative mesh (a join handshake's snapshot, or a resume)
+    /// and the identity the mesh assigned us, in ONE step. Fabric owns the
+    /// roster and the identity (DC §4.1); the daemon calls this instead of
+    /// writing `fabric.mesh` and `identity_reader().publish` itself.
+    pub async fn adopt(&self, mesh: Mesh, node_id: NodeId) {
+        *self.mesh.write().await = mesh;
+        self.identity.publish(node_id);
+    }
+
+    /// Retire one member row: tombstone it in Fabric's roster and report what
+    /// happened. The daemon persists the result and lets the ordinary gossip
+    /// round carry the removal mesh-wide (DC §4.1: the roster mutations are
+    /// Fabric's; `MeshError` maps at the daemon boundary).
+    ///
+    /// # Why a tombstone rather than a delete
+    ///
+    /// Deleting the row locally would work until the next gossip round, when
+    /// a peer still holding it hands it straight back. `removed_at` is the
+    /// mesh's removal primitive and it converges: it wins the
+    /// [`commonwealth_core::mesh::MemberRecord::effective_at`] LWW against
+    /// any older `last_seen`, and it is what `leave` already uses.
+    ///
+    /// It is also self-limiting in the right way. A GHOST — a stale row for a
+    /// machine that re-registered under a new node_id — has nothing left to
+    /// defend it, so the tombstone sticks. A row belonging to a daemon that
+    /// is genuinely alive gets re-announced on that node's next round, since
+    /// a node is authoritative for itself. The repair therefore cannot evict
+    /// a live member even by mistake, which is why `force` is a guard against
+    /// operator surprise rather than against damage.
+    pub async fn forget_member(
+        &self,
+        query: &str,
+        force: bool,
+        now: u64,
+    ) -> Result<ForgottenMember, ForgetMemberError> {
+        let self_id = self.identity.current();
+        let mut mesh = self.mesh.write().await;
+
+        let aliased: std::collections::HashSet<NodeId> = mesh
+            .aliased_endpoint_keys()
+            .into_iter()
+            .flat_map(|a| a.members.into_iter().map(|(id, _)| id))
+            .collect();
+
+        let target = mesh
+            .members
+            .values()
+            .find(|m| commonwealth_core::mesh::member_matches(m.node_id, &m.name, query))
+            .map(|m| m.node_id)
+            .ok_or_else(|| ForgetMemberError::UnknownMember(query.to_string()))?;
+
+        if target == self_id {
+            return Err(ForgetMemberError::CannotForgetSelf);
+        }
+
+        let record = mesh.members.get(&target).expect("just resolved");
+        let was_aliased = aliased.contains(&target);
+        let name = record.name.clone();
+
+        if !record.is_active() {
+            // Idempotent: already retired, nothing to do and nothing to
+            // report as if it had happened.
+            return Ok(ForgottenMember {
+                name,
+                node_id: target,
+                was_aliased,
+                already_retired: true,
+            });
+        }
+        let live = record.status == commonwealth_core::mesh::NodeStatus::Online;
+        if live && !was_aliased && !force {
+            return Err(ForgetMemberError::MemberStillLive(name));
+        }
+        let record = mesh.members.get_mut(&target).expect("just resolved");
+        record.removed_at = Some(now);
+        record.last_seen = record.last_seen.max(now);
+        record.status = commonwealth_core::mesh::NodeStatus::Offline;
+        Ok(ForgottenMember {
+            name,
+            node_id: target,
+            was_aliased,
+            already_retired: false,
+        })
     }
 }

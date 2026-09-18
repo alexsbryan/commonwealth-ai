@@ -27,25 +27,11 @@ use crate::daemon::{EmbeddedDaemon, MeshError};
 use crate::loopback_guard::LocalOnly;
 use sovereign_mesh::persist;
 
-/// What [`EmbeddedDaemon::forget_member`] retired.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct ForgottenMember {
-    pub name: String,
-    pub node_id: commonwealth_core::ids::NodeId,
-    /// The row was one of a colliding pair — this call was a repair rather
-    /// than a removal. Reported so the CLI can say which it did.
-    pub was_aliased: bool,
-    /// Already a tombstone when we got here; nothing was written. Distinct
-    /// from a fresh retirement so a caller never reports work it did not do.
-    pub already_retired: bool,
-}
-
-/// Resolve an operator's `<node>` argument against a member row — exact
-/// name, or a ≥4-char node_id prefix. The rule itself lives in
-/// `commonwealth_core::mesh` (moved 2026-09-11) so the package crates that
-/// resolve the same `<peer>` argument — `commonwealth-media`, and the rails
-/// daemon behind it — share one implementation with this one (ARCH §10.6).
-pub(crate) use commonwealth_core::mesh::member_matches;
+/// What [`EmbeddedDaemon::forget_member`] retired. The type moved to Fabric
+/// with its tombstone core at domains `REVIEW-build-daemon-membership-lifecycle`
+/// (DC §4.1: the roster mutations are Fabric's); re-exported here so the CLI's
+/// `roster_repair::ForgottenMember` path keeps resolving.
+pub use sovereign_mesh::fabric::ForgottenMember;
 
 impl EmbeddedDaemon {
     /// Retire one member row: tombstone it locally and let the ordinary
@@ -77,6 +63,12 @@ impl EmbeddedDaemon {
     /// a node is authoritative for itself. The repair therefore cannot evict
     /// a live member even by mistake, which is why `force` is a guard against
     /// operator surprise rather than against damage.
+    ///
+    /// The roster mutation itself is Fabric's
+    /// ([`sovereign_mesh::fabric::FabricPart::forget_member`]); the daemon
+    /// maps Fabric's refusal onto its own [`MeshError`] and persists the
+    /// tombstone so a restart does not resurrect the row before gossip carries
+    /// it (DC §4.1 "`MeshError` maps at the daemon boundary").
     pub async fn forget_member(
         &self,
         query: &str,
@@ -89,56 +81,22 @@ impl EmbeddedDaemon {
             .map(|d| d.as_secs())
             .unwrap_or(0);
 
-        let outcome = {
-            let mut mesh = app_state.inner.fabric.mesh.write().await;
-
-            let aliased: std::collections::HashSet<commonwealth_core::ids::NodeId> = mesh
-                .aliased_endpoint_keys()
-                .into_iter()
-                .flat_map(|a| a.members.into_iter().map(|(id, _)| id))
-                .collect();
-
-            let target = mesh
-                .members
-                .values()
-                .find(|m| member_matches(m.node_id, &m.name, query))
-                .map(|m| m.node_id)
-                .ok_or_else(|| MeshError::UnknownMember(query.to_string()))?;
-
-            if target == self_id {
-                return Err(MeshError::CannotForgetSelf);
-            }
-
-            let record = mesh.members.get(&target).expect("just resolved");
-            let was_aliased = aliased.contains(&target);
-            let name = record.name.clone();
-
-            if !record.is_active() {
-                // Idempotent: already retired, nothing to do and nothing to
-                // report as if it had happened.
-                ForgottenMember {
-                    name,
-                    node_id: target,
-                    was_aliased,
-                    already_retired: true,
+        let outcome = app_state
+            .inner
+            .fabric
+            .forget_member(query, force, now)
+            .await
+            .map_err(|e| match e {
+                sovereign_mesh::fabric::ForgetMemberError::UnknownMember(q) => {
+                    MeshError::UnknownMember(q)
                 }
-            } else {
-                let live = record.status == commonwealth_core::mesh::NodeStatus::Online;
-                if live && !was_aliased && !force {
-                    return Err(MeshError::MemberStillLive(name));
+                sovereign_mesh::fabric::ForgetMemberError::CannotForgetSelf => {
+                    MeshError::CannotForgetSelf
                 }
-                let record = mesh.members.get_mut(&target).expect("just resolved");
-                record.removed_at = Some(now);
-                record.last_seen = record.last_seen.max(now);
-                record.status = commonwealth_core::mesh::NodeStatus::Offline;
-                ForgottenMember {
-                    name,
-                    node_id: target,
-                    was_aliased,
-                    already_retired: false,
+                sovereign_mesh::fabric::ForgetMemberError::MemberStillLive(n) => {
+                    MeshError::MemberStillLive(n)
                 }
-            }
-        };
+            })?;
 
         if !outcome.already_retired && self.persistence_enabled() {
             let mesh = app_state.inner.fabric.mesh.read().await;
