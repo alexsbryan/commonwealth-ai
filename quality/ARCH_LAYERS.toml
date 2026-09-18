@@ -158,6 +158,12 @@ crates = ["corpus-engine", "corpus-engine-*",
     # package's own boundary (its crates + the shared leaves) is what keeps it
     # liftable; the layer entry is what keeps the edge direction honest.
     "code-next-edit",
+    # The retrieval read-port leaf (domains REVIEW-build-index-read-port).
+    # CorpusIndex, IndexInfo, the persisted settings and the search/evidence
+    # surface — carved out of corpus-engine so a thin host can read an index
+    # without linking the engine. A `knowledge` crate beside the
+    # `corpus-engine-*` carve-outs it leaves.
+    "corpus-index",
 ]
 
 # Commonwealth mesh internals BELOW the runtime: shared mesh types + state +
@@ -861,6 +867,20 @@ name = "corpus-engine-vocab"
 # `ContentHash::of_str` in `AtomId::from_essence`, and kernel-types is itself
 # an empty leaf — so the closure is two crates and stays that way.
 allow = ["kernel-types"]
+
+[[package_leaf]]
+name = "corpus-index"
+# The retrieval read-port leaf. Admitted 2026-09-18 (domains
+# REVIEW-build-index-read-port, DE "The read-port leaf, measured again") so
+# `corpus-mcp`'s `serve` — and any other thin host — can open an index by
+# corpus id, search it and read its rows without linking `corpus-engine`: the
+# burn-down step (1) of the `corpus-mcp -> corpus-engine` exception below.
+# Its internal closure is three leaves — `kernel-types` (identity),
+# `oplog` (the error bridge) and `corpus-engine-yield` (`unix_now_u64`) — and
+# the retrieval stack it wraps (LanceDB/Tantivy/arrow/reqwest) is the surface
+# itself, not a widening a package can avoid. It carries no `build.rs` and no
+# `include_str!`, so all three filesystem rules pass.
+allow = ["kernel-types", "oplog", "corpus-engine-yield"]
 
 [[package_leaf]]
 name = "sovereign-time"

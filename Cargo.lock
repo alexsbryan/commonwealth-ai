@@ -2271,6 +2271,7 @@ dependencies = [
  "corpus-engine-sections",
  "corpus-engine-vocab",
  "corpus-engine-yield",
+ "corpus-index",
  "csv",
  "flate2",
  "futures",
@@ -2441,6 +2442,30 @@ dependencies = [
 [[package]]
 name = "corpus-engine-yield"
 version = "0.7.0"
+
+[[package]]
+name = "corpus-index"
+version = "0.7.0"
+dependencies = [
+ "arrow",
+ "arrow-array",
+ "arrow-schema",
+ "blake3",
+ "chrono",
+ "corpus-engine-yield",
+ "futures",
+ "kernel-types",
+ "lancedb",
+ "oplog",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
 
 [[package]]
 name = "corpus-mcp"

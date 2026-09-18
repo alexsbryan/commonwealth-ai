@@ -253,7 +253,7 @@ impl ChunkProvenance {
     /// (`index/evidence.rs` module docs). It still has to produce a value, and
     /// the honest one is "this process did not acquire it", never a fabricated
     /// acquisition.
-    pub(crate) fn off_the_wire() -> Self {
+    pub fn off_the_wire() -> Self {
         ChunkProvenance::manufactured("deserialized")
     }
 }

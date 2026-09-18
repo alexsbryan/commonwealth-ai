@@ -260,7 +260,7 @@ impl CorpusIndex {
     /// per open dataset version (see the `gate_cache` field doc — the
     /// uncached reads cost ~1.1-2.3s per SEARCH on a 1.9M-row table and
     /// dominated retrieval wall time before 2026-07-16).
-    pub(crate) async fn gate_info(&self) -> (usize, bool, bool) {
+    pub async fn gate_info(&self) -> (usize, bool, bool) {
         if let Some(cached) = self.gate_cache.lock().ok().and_then(|g| *g) {
             if cached.computed_at.elapsed() < super::GATE_CACHE_TTL {
                 return (cached.row_count, cached.ivf_built, cached.fts_built);

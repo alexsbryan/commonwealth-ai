@@ -21,9 +21,9 @@
 
 use std::sync::Arc;
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
-pub use boilerplate::{BoilerplateConfig, BoilerplateFilter};
+pub use boilerplate::BoilerplateFilter;
 use sha2::{Digest, Sha256};
 
 use crate::extractors::ExtractedDoc;
@@ -35,10 +35,17 @@ pub mod loader;
 pub mod pageview_rank;
 pub mod title_list;
 
-pub use knowledge_density::{KnowledgeDensityConfig, KnowledgeDensityFilter};
+pub use knowledge_density::KnowledgeDensityFilter;
 pub use loader::build_filter_pipeline;
 pub use pageview_rank::PageviewRankFilter;
 pub use title_list::TitleListFilter;
+
+// The filter configuration the index persists is DEFINED in the
+// `corpus-index` leaf and EMBEDDED here (DE "The read-port leaf, measured
+// again": "a type the index persists is defined by the index").
+pub use corpus_index::filters::{
+    BoilerplateConfig, ComposeMode, FilterConfig, KnowledgeDensityConfig,
+}; // shim: moved by domains REVIEW-build-index-read-port
 
 // ---------------------------------------------------------------------------
 // Trait
@@ -63,51 +70,6 @@ pub trait DocumentFilter: Send + Sync {
 // ---------------------------------------------------------------------------
 // Recipe schema
 // ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum ComposeMode {
-    /// Accept if any child filter accepts. Default — matches the
-    /// "Wikipedia Core = top-ranked OR vital" semantics.
-    #[default]
-    Any,
-    /// Accept only when every child filter accepts.
-    All,
-}
-
-/// One entry from a recipe's `[[filter]]` array.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum FilterConfig {
-    /// Accept articles whose normalized title appears in a pageview-rank
-    /// CSV with rank ≤ `max_rank`. The CSV is a two-column
-    /// `title,rank` table.
-    PageviewRank {
-        /// Either a bundled-asset key (`@bundled:pageview_ranks_202311`)
-        /// or a path relative to the recipe override directory.
-        rank_file: String,
-        max_rank: u32,
-    },
-    /// Accept articles whose normalized title appears in a newline-delimited
-    /// title list. Useful for curated sets like Wikipedia Vital Articles.
-    TitleList {
-        /// Either a bundled-asset key (`@bundled:vital_articles_l5`) or
-        /// a path relative to the recipe override directory.
-        list_file: String,
-    },
-    /// Accept Stack Exchange grouped Q&A docs (one doc per question)
-    /// only when their answer set carries enough density to count as
-    /// a trade-off thread rather than a single-answer reference post.
-    /// See [`crate::filters::KnowledgeDensityConfig`] for fields.
-    KnowledgeDensity(KnowledgeDensityConfig),
-    /// Reject email-shaped docs that are reduced to nothing after
-    /// boilerplate (signatures, quoted-reply, corporate disclaimers)
-    /// is stripped. See
-    /// [`crate::filters::boilerplate::BoilerplateConfig`].
-    /// Per-recipe configurable so corpora with code-in-mail or
-    /// non-Outlook clients can tune their strip behaviour.
-    Boilerplate(BoilerplateConfig),
-}
 
 // ---------------------------------------------------------------------------
 // Pipeline

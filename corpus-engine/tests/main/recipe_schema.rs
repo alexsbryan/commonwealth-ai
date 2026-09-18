@@ -36,9 +36,13 @@ const SOURCES: &[&str] = &[
     // The navigation section (`[enrichment.ontology.navigation]`): the policy
     // struct IS the TOML shape, so it is rendered from where it is declared.
     "../corpus-engine-vocab/src/ontology/navigation.rs",
-    "src/filters/mod.rs",
-    "src/filters/boilerplate.rs",
-    "src/filters/knowledge_density.rs",
+    // The persisted setting types (`DisplayMeta`, `MutableMergePolicy`) and the
+    // filter configs (`ComposeMode`, `FilterConfig`, `BoilerplateConfig`,
+    // `KnowledgeDensityConfig`) moved to the `corpus-index` leaf (domains
+    // REVIEW-build-index-read-port); the generator parses SOURCE, so it reads
+    // them where they are declared.
+    "../corpus-index/src/recipe.rs",
+    "../corpus-index/src/filters.rs",
 ];
 
 /// Deserialize-deriving types that are NOT recipe-TOML surface (runtime
@@ -411,7 +415,7 @@ fn recipe_schema_descriptor_is_fresh() {
     // §3.1 size ratchet); they are re-exported from `recipe`, but this gate
     // parses SOURCE, so it reads them where they are declared.
     let recipe_ont_file = descriptor::parse(&manifest.join("src/recipe_ontology/mod.rs"));
-    let filters_file = descriptor::parse(&manifest.join("src/filters/mod.rs"));
+    let filters_file = descriptor::parse(&manifest.join("../corpus-index/src/filters.rs"));
     // Every declaration type — the version-1 ontology types AND the
     // investigation decls — is in the leaf now (enrichment-as-plugin Step 3).
     let ontology_file =

@@ -1882,3 +1882,69 @@ one". Also falsified if a second `AtomsFile*` shape appears in `atoms.rs` and
 the widened predicate lets it through: the census would then under-count.
 
 **Landed in.** this commit — `corpus-engine/xtask/tests/atoms_file_census.rs`.
+
+## 2026-09-18 · REVIEW-build-index-read-port · the "9 reaches" seam is a cross-file type cascade; the leaf absorbs the persisted-setting and row types, and stream-axes-split's per-corpus half
+
+**Fork.** STATE.md:263 scopes the leaf to the six clean index files + `read.rs` +
+"the part of `index/mod.rs`" and says "`mod.rs`'s 9 `crate::{recipe,...}` reaches
+are the seam this row decides: each either moves down with the leaf or arrives
+through the recipe." Measured, the seam is larger and the row cannot land
+atomically as written: (a) the six files are 4,609 lines today, not 4,588
+(`wc -l`: search 1245, create 1011, write 796, maintain 595, evidence 524,
+provenance 438); (b) the leaf's closure also reaches `crate::error`
+(`Error`/`Result`), `crate::types` (`IndexInfo`, `CorpusKind`, `ChunkRange`,
+`IncompleteIngest`, `ScoredChunk`, `RerankConfig`, `RerankFn`, `EmbedFn`,
+`DedupPicker`), `crate::stream_axes::StreamAxes`, `crate::corpus::Corpus::meta_in`,
+`crate::chunkers::CommittedChunk`; (c) `REVIEW-build-stream-axes-split` (the
+row that depends on this one) was to move `Stability`/`StreamAxes`/
+`StreamAxesSource` into the leaf, but this row's `IndexMeta`/`IndexInfo` name
+`StreamAxes` — so the leaf cannot compile without them, and the dependency order
+as minted is circular. Decide: stop (§6) and re-mint the whole wave, or correct
+the row to the closure it actually has and absorb the split.
+
+**Choice.** Correct the row (§6, operator direction 2026-09-17) to the measured
+closure, and let the row's own rule — "each either moves down with the leaf or
+arrives through the recipe" — carry it: the persisted-setting and row types MOVE
+DOWN, the recipe EMBEDS them. Specifically the leaf absorbs `Error`/`Result`
+(moved whole so every `?` and every external `From<corpus_engine::Error>` keeps
+one type identity — a narrow leaf error would have broken the 194 external
+`CorpusIndex` sites), `Corpus`, `DisplayMeta`/`MutableMergePolicy`,
+`FilterConfig`/`ComposeMode`/`KnowledgeDensityConfig`/`BoilerplateConfig`,
+`Stability`/`StreamAxes`/`StreamAxesSource`, `CommittedChunk`, and the index row
+types; `REVIEW-build-stream-axes-split`'s per-corpus half is absorbed (its
+derivation half is a residual). `enrichment.rs` (an `impl CorpusIndex`) and
+`readiness.rs` (a predicate on `IndexMeta`, called by `create.rs`) moved too —
+an inherent impl cannot cross the crate line, and the predicate belongs with the
+type it reads. `field_skeleton.rs` and `raptor.rs` stayed host (free functions;
+`raptor` names `crate::enrichment`/`crate::atlas_context` in docs). The one
+cross-crate visibility change: `Error`'s feature-gated `From<corpus_engine_scip::Error>`
+impl is an orphan on both sides once `Error` moves, so it became a named
+`corpus_engine::error::from_scip` the three `?` sites call; `GateInfo` +
+`GATE_CACHE_TTL` + `gate_info`/`gate_cache_snapshot`/`gate_cache_backdate`/
+`share_gate_cache_from` became `pub` (corpus-engine's `engine/mod.rs` uses them),
+and the two test-seam methods lost their `#[cfg(test)]` (a cfg does not
+propagate across a dependency edge).
+
+**Evidence.** `ls -d corpus-index` empty before; `grep -o 'crate::[a-zA-Z_]*'`
+over the moved files is the reach list above; `git grep` for the historical paths
+is unchanged after the re-export shims. Checks after: LINT exit=0 (workspace
+clean, 2404 warnings); LAYER exit=0; `TEST(corpus-index)` exit=0 (pass 82, fail
+0); `TEST(corpus-engine)` exit=0 (pass 2197, fail 0). The `recipe_schema` and
+`evidence_reds` gates both read SOURCE, so their file lists were repointed at the
+leaf (`../corpus-index/src/{recipe,filters}.rs`) and the trybuild `.stderr`
+regenerated for the new path — the invariant (E0624, `acquired` private) is
+unchanged.
+
+**Falsified by.** A later session showing the leaf can be built without the
+`Error`/row-type move (e.g. a shared `corpus-error` leaf that keeps the type
+identity with a narrower ownership), which would make the `Error` move the wrong
+line; or a `corpus-engine` compile that does not need the widened visibility, in
+which case `pub` was over-granted. Also falsified if `index::raptor` or
+`index::field_skeleton` turns out to belong in the leaf (both are host-side
+today).
+
+**Landed in.** this commit — `corpus-index/` (new crate), the corpus-engine
+re-export shims (`src/{error,corpus,types,recipe,stream_axes}.rs`,
+`src/index/mod.rs`, `src/filters/{mod,boilerplate,knowledge_density}.rs`,
+`src/chunkers/mod.rs`), `quality/ARCH_LAYERS.toml`,
+`sovereign/SYSTEM_OVERVIEW.md`, `corpus-engine/tests/main/recipe_schema.rs`.

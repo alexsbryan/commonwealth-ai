@@ -64,15 +64,6 @@ Optional pre-built index block. When present, the engine can download a pre-buil
 | `display` | `Option<DisplayMeta>` | no | type default | Presentation hints for UI surfaces (Atlas View rail grouping, Settings → Knowledge tile icons, etc.). Pure UI metadata — retrieval and ingest ignore this block. Drives the "Conversations" group in the Atlas View when corpora declare `category = "conversation"`. `#[serde(default)]` so recipes pre-dating this block still parse — see the back-compat policy at the top of this module. |
 | `retrieval` | `RetrievalConfig` | no | type default | Retrieval-time behaviour hints (see [`RetrievalConfig`]). Unlike `[display]`, the runtime *reads* this when retrieving from the corpus. `#[serde(default)]` so recipes pre-dating the block parse. |
 
-## `DisplayMeta`
-
-Presentation hints for a recipe. See [`Recipe::display`]. Pure UI metadata: the retrieval layer reads `category` to decide whether to render a chunk under "From your conversations" rather than the corpus_id slug (see `format_scored_chunks_with_kinds`), and the Atlas View rail groups corpora that share a category under one header. No semantic meaning is attached to category strings — add new ones as needed.
-
-| TOML key | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `category` | `Option<String>` | no | — | Logical group this corpus belongs to. Example values: `"conversation"`, `"reference"`, `"argument"`, `"personal"`. `None` means "ungrouped" — UI buckets these as "Other". |
-| `icon` | `Option<String>` | no | — | Optional icon hint for desktop tiles. Free-form string; the frontend maps known values (`"chat-bubble"`, `"book"`, …) onto its icon set and falls back to a generic glyph for unknown values. |
-
 ## `RetrievalConfig`
 
 Retrieval-time behaviour hints for a corpus. Unlike [`DisplayMeta`] (pure UI), these change how the runtime *retrieves* from this corpus. `#[serde(default)]` on the struct + each field so a recipe omitting the `[retrieval]` table parses with baseline behaviour.
@@ -223,14 +214,6 @@ Fault line detection parameters (TOML representation).
 | `on_demand` | `bool` | no | type default | Marks a recipe as "templated, never directly ingested." On-demand recipes (e.g. `gutenberg-work`) are stamped from a catalog entry at runtime via [`crate::types::CorpusSpec::Inline`]. The plain [`crate::engine::CorpusEngine::ingest`] path refuses to run an `on_demand = true` recipe whose `[corpus] id` has not been overridden, so a misclick can't blast 70K Gutenberg books into the corpus dir. |
 | `parent_corpus_id` | `Option<String>` | no | type default | Parent corpus this recipe is grouped under. Two use cases share the field: 1. **Dynamic per-work catalog children.** Set at runtime by an on-demand catalog ingest (e.g. `gutenberg-2701` carries `parent_corpus_id = "gutenberg"`) via [`crate::types::CorpusSpec::Inline`]. Search consumers group per-work corpora under their catalog and suppress repeated ingest offers for works already read. 2. **Static layer/satellite relationships declared in TOML.** `wikipedia-simple` and `wikipedia-newsworthy` declare `parent_corpus_id = "wikipedia"` to mark themselves as layers of the Core Wikipedia corpus. UI surfaces (e.g. the desktop picker) hide layered children from the top-level list and render them as toggles under the parent's row. The data layer is unaffected — each child still has its own `id`, index dir, mesh-sharing rules, and watcher (if any). Stamped onto the on-disk `IndexMeta` in both cases, so `installed_indexes()` and downstream UI can group consistently. Pointing at an id that doesn't exist is not a parse error — the desktop falls back to top-level rendering for orphans. |
 | `mutable_merge` | `Option<MutableMergePolicy>` | no | type default | How `merge_shards` should reconcile rows that share a logical key across two shards. `None` (the default) keeps the content-hash-based dedupe used by every classic corpus — divergent edits of the same source document survive as two rows with different `content_hash`. The `alignment` corpus opts into [`MutableMergePolicy::SourceDocIdNewestMtime`] so that two daemons editing the same memory or plan file converge on the newer copy after a mesh merge. |
-
-## `MutableMergePolicy`
-
-Reconciliation policy invoked by [`crate::sharding::merge_shards`] when the merged target's `_corpus_meta.json` carries a `mutable_merge` value. Default (`None`) preserves classic content-hash dedupe.
-
-Allowed values:
-
-- `source_doc_id_newest_mtime` — Group rows by `source_doc_id`. When a logical key collides, keep the row with the highest `mtime`. Rows whose `source_doc_id` is null fall back to content-hash dedupe.
 
 ## `CatalogConfig`
 
@@ -1055,6 +1038,23 @@ One row of the navigation table: how to walk for one question kind.
 | `enumeration` | `WalkPolicy` | no | `WalkPolicy::enumeration()` | "Which X?" — the declared types and subtypes; no walk. |
 | `lookup` | `WalkPolicy` | no | `WalkPolicy::lookup()` | "Who is X?" — Entity by name; Involves; 1 hop. |
 
+## `DisplayMeta`
+
+Presentation hints for a recipe. Pure UI metadata: the retrieval layer reads `category` to decide whether to render a chunk under "From your conversations" rather than the corpus_id slug (see `format_scored_chunks_with_kinds`), and the Atlas View rail groups corpora that share a category under one header. No semantic meaning is attached to category strings — add new ones as needed.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `category` | `Option<String>` | no | — | Logical group this corpus belongs to. Example values: `"conversation"`, `"reference"`, `"argument"`, `"personal"`. `None` means "ungrouped" — UI buckets these as "Other". |
+| `icon` | `Option<String>` | no | — | Optional icon hint for desktop tiles. Free-form string; the frontend maps known values (`"chat-bubble"`, `"book"`, …) onto its icon set and falls back to a generic glyph for unknown values. |
+
+## `MutableMergePolicy`
+
+Reconciliation policy invoked by `corpus-engine`'s `sharding::merge_shards` when the merged target's `_corpus_meta.json` carries a `mutable_merge` value. Default (`None`) preserves classic content-hash dedupe.
+
+Allowed values:
+
+- `source_doc_id_newest_mtime` — Group rows by `source_doc_id`. When a logical key collides, keep the row with the highest `mtime`. Rows whose `source_doc_id` is null fall back to content-hash dedupe.
+
 ## `ComposeMode`
 
 Allowed values:
@@ -1085,13 +1085,13 @@ Accept articles whose normalized title appears in a newline-delimited title list
 
 ### `type = "knowledge_density"`
 
-Accept Stack Exchange grouped Q&A docs (one doc per question) only when their answer set carries enough density to count as a trade-off thread rather than a single-answer reference post. See [`crate::filters::KnowledgeDensityConfig`] for fields.
+Accept Stack Exchange grouped Q&A docs (one doc per question) only when their answer set carries enough density to count as a trade-off thread rather than a single-answer reference post. See [`KnowledgeDensityConfig`] for fields.
 
 _No fields._
 
 ### `type = "boilerplate"`
 
-Reject email-shaped docs that are reduced to nothing after boilerplate (signatures, quoted-reply, corporate disclaimers) is stripped. See [`crate::filters::boilerplate::BoilerplateConfig`]. Per-recipe configurable so corpora with code-in-mail or non-Outlook clients can tune their strip behaviour.
+Reject email-shaped docs that are reduced to nothing after boilerplate (signatures, quoted-reply, corporate disclaimers) is stripped. See [`BoilerplateConfig`]. Per-recipe configurable so corpora with code-in-mail or non-Outlook clients can tune their strip behaviour.
 
 _No fields._
 
@@ -1105,14 +1105,6 @@ Per-recipe configuration for the boilerplate filter. Each detection axis can be 
 | `strip_quoted_replies` | `bool` | no | `default_true_bool()` | Strip RFC 3676 §4.5 quoted-reply blocks — lines starting with `>` (one or more). |
 | `strip_disclaimers` | `bool` | no | `default_true_bool()` | Strip common corporate-disclaimer trailers ("This email and any files transmitted with it…"). |
 | `min_body_chars_after_strip` | `usize` | no | `default_min_body_chars_after_strip()` | Reject docs whose body becomes shorter than this many chars after stripping. Default 20 — anything shorter is empty for retrieval purposes. |
-
-## `StripReport`
-
-| TOML key | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `quoted_reply_lines_removed` | `usize` | **yes** | — |  |
-| `signature_lines_removed` | `usize` | **yes** | — |  |
-| `disclaimer_lines_removed` | `usize` | **yes** | — |  |
 
 ## `KnowledgeDensityConfig`
 

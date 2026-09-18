@@ -255,7 +255,8 @@ pub async fn run_code_intel_for_corpus(
 ) -> Result<CodeIntelReport> {
     let source_root = corpus_source_root(corpus_dir)?;
     let t = std::time::Instant::now();
-    let scip = ScipGraph::open(&corpus_dir.join("scip_graph.db"), corpus_id)?;
+    let scip = ScipGraph::open(&corpus_dir.join("scip_graph.db"), corpus_id)
+        .map_err(crate::error::from_scip)?;
     tracing::info!(target: "enrichment.code_intel", ms = t.elapsed().as_millis() as u64, "open: scip_graph");
     let index_owned = if std::env::var("SOVEREIGN_ENRICH_SKIP_INDEX").is_ok() {
         tracing::info!(target: "enrichment.code_intel", "SKIP_INDEX: not opening chunks.lance — cache-only pass");
@@ -299,7 +300,7 @@ fn corpus_source_root(corpus_dir: &Path) -> Result<std::path::PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::enrichment::pipeline::types::{InferenceFn, ChatPrompt};
+    use crate::enrichment::pipeline::types::{ChatPrompt, InferenceFn};
     use crate::index::CorpusIndex;
     use crate::types::EmbedFn;
     use corpus_engine_scip::{ScipGraph, ScipSymbolRecord};

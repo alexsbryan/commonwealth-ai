@@ -262,27 +262,10 @@ pub struct Recipe {
     pub retrieval: RetrievalConfig,
 }
 
-/// Presentation hints for a recipe. See [`Recipe::display`].
-///
-/// Pure UI metadata: the retrieval layer reads `category` to decide
-/// whether to render a chunk under "From your conversations" rather
-/// than the corpus_id slug (see `format_scored_chunks_with_kinds`),
-/// and the Atlas View rail groups corpora that share a category under
-/// one header. No semantic meaning is attached to category strings —
-/// add new ones as needed.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(default)]
-pub struct DisplayMeta {
-    /// Logical group this corpus belongs to. Example values:
-    /// `"conversation"`, `"reference"`, `"argument"`, `"personal"`.
-    /// `None` means "ungrouped" — UI buckets these as "Other".
-    pub category: Option<String>,
-    /// Optional icon hint for desktop tiles. Free-form string; the
-    /// frontend maps known values (`"chat-bubble"`, `"book"`, …) onto
-    /// its icon set and falls back to a generic glyph for unknown
-    /// values.
-    pub icon: Option<String>,
-}
+// The settings the index persists are DEFINED in the `corpus-index` leaf and
+// EMBEDDED here (DE "The read-port leaf, measured again": "a type the index
+// persists is defined by the index").
+pub use corpus_index::recipe::{DisplayMeta, MutableMergePolicy}; // shim: moved by domains REVIEW-build-index-read-port
 
 /// Retrieval-time behaviour hints for a corpus. Unlike [`DisplayMeta`]
 /// (pure UI), these change how the runtime *retrieves* from this corpus.
@@ -890,19 +873,6 @@ pub struct CorpusMeta {
     /// converge on the newer copy after a mesh merge.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mutable_merge: Option<MutableMergePolicy>,
-}
-
-/// Reconciliation policy invoked by [`crate::sharding::merge_shards`]
-/// when the merged target's `_corpus_meta.json` carries a
-/// `mutable_merge` value. Default (`None`) preserves classic
-/// content-hash dedupe.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum MutableMergePolicy {
-    /// Group rows by `source_doc_id`. When a logical key collides,
-    /// keep the row with the highest `mtime`. Rows whose
-    /// `source_doc_id` is null fall back to content-hash dedupe.
-    SourceDocIdNewestMtime,
 }
 
 // ---------------------------------------------------------------------------
