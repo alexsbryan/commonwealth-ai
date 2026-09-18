@@ -305,5 +305,8 @@ tokio-tungstenite = "0.29"
 # library under test and assert on them. Keeping it scoped to
 # dev-deps so the production binary doesn't pay the inclusion cost.
 tracing-subscriber = { workspace = true }
+# `Scope::Rails` for the live-lane namespace tests
+# (`tests/main/ring_live_non_durable.rs`), which issue real rail grants.
+sovereign-grants = { workspace = true }
 [lints]
 workspace = true

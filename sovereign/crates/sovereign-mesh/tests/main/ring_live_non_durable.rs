@@ -23,13 +23,23 @@ use std::sync::Arc;
 use commonwealth_core::ids::NodeId;
 use commonwealth_rail::{Person, RingRail, RingSigner, Roster};
 use ed25519_dalek::SigningKey;
-use sovereign_api::server::{client_router, internal_router};
+use sovereign_api::server::{client_router, client_router_for, internal_router, ClientSurface};
 use sovereign_api::state::AppState;
+use sovereign_grants::Scope;
 
 use crate::common;
 
 const TOKEN: &str = "deadbeefcafef00ddeadbeefcafef00ddeadbeefcafef00ddeadbeefcafef00d";
 const NS: &str = "ring-doc";
+/// A second namespace with its own grant, for the isolation test.
+const NS_B: &str = "tool-lending";
+const GRANT_A: &str = "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0";
+const GRANT_B: &str = "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0";
+
+/// The wire shape a peer's `push_ephemeral` posts to `/internal/ring/live`.
+fn envelope(namespace: &str, payload: &str) -> String {
+    serde_json::json!({ "namespace": namespace, "payload": payload }).to_string()
+}
 
 /// A daemon with ring storage under `dir`, signing as `key`, on a namespace
 /// whose roster file names that key — the same node shape
@@ -46,7 +56,20 @@ fn node(dir: &std::path::Path, key: &SigningKey, self_id: NodeId) -> AppState {
         .set_roster(&Roster::new(members))
         .unwrap();
     state.install_ring_rail(rail);
+    // `/internal/ring/live` refuses a namespace no live rail grant names.
+    grant(&state, GRANT_A, NS);
     state
+}
+
+fn grant(state: &AppState, token: &str, namespace: &str) {
+    let now = commonwealth_core::clock::unix_now_millis();
+    state.inner.guest_grants.issue(
+        token,
+        vec![Scope::Rails(namespace.into())],
+        Some("ring app".into()),
+        3_600,
+        now,
+    );
 }
 
 /// Every file under `dir`, by relative path, with its length.
@@ -109,7 +132,7 @@ async fn a_live_payload_touches_nothing_on_disk() {
     for payload in payloads {
         let sent = http
             .post(format!("http://{internal}/internal/ring/live"))
-            .body(payload)
+            .body(envelope(NS, payload))
             .send()
             .await
             .unwrap();
@@ -123,7 +146,7 @@ async fn a_live_payload_touches_nothing_on_disk() {
 
     // The vacuity guard: the lane carried all three.
     let drained: serde_json::Value = http
-        .get(format!("http://{client}/v1/rail/live"))
+        .get(format!("http://{client}/v1/rail/live?namespace={NS}"))
         .bearer_auth(TOKEN)
         .send()
         .await
@@ -164,7 +187,7 @@ async fn a_restart_empties_the_buffer() {
     let first_internal = common::spawn_router(internal_router(first.clone())).await;
     let first_client = common::spawn_router(client_router(first.clone())).await;
     http.post(format!("http://{first_internal}/internal/ring/live"))
-        .body("AQID")
+        .body(envelope(NS, "AQID"))
         .send()
         .await
         .unwrap()
@@ -173,7 +196,7 @@ async fn a_restart_empties_the_buffer() {
 
     // Control: before the restart the payload IS there.
     let live: serde_json::Value = http
-        .get(format!("http://{first_client}/v1/rail/live"))
+        .get(format!("http://{first_client}/v1/rail/live?namespace={NS}"))
         .bearer_auth(TOKEN)
         .send()
         .await
@@ -190,7 +213,7 @@ async fn a_restart_empties_the_buffer() {
     let second = node(dir.path(), &key, NodeId::from_u128(1));
     let second_client = common::spawn_router(client_router(second)).await;
     let after: serde_json::Value = http
-        .get(format!("http://{second_client}/v1/rail/live"))
+        .get(format!("http://{second_client}/v1/rail/live?namespace={NS}"))
         .bearer_auth(TOKEN)
         .send()
         .await
@@ -203,5 +226,109 @@ async fn a_restart_empties_the_buffer() {
         serde_json::json!([]),
         "a daemon over the same directory drained a live payload it never \
          received — the lane persisted something"
+    );
+}
+
+/// Drain `/v1/rail/live` as the holder of `token`, on the Rail surface — the
+/// listener a ring app reaches, where loopback is NOT trusted, so the grant is
+/// what resolves the namespace.
+async fn drain_as(rail: std::net::SocketAddr, token: &str) -> serde_json::Value {
+    let resp = reqwest::Client::new()
+        .get(format!("http://{rail}/v1/rail/live"))
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), reqwest::StatusCode::OK);
+    resp.json().await.unwrap()
+}
+
+/// **A grant drains only its own namespace.**
+///
+/// Two grants for two namespaces on one daemon; three payloads arrive for the
+/// first. The second grant's drain comes back empty, and the first's returns
+/// all three — so the empty drain is isolation, not a lane that lost them.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_grant_drains_only_its_own_namespace() {
+    let key = SigningKey::from_bytes(&[13u8; 32]);
+    let dir = tempfile::tempdir().unwrap();
+    let state = node(dir.path(), &key, NodeId::from_u128(1));
+    grant(&state, GRANT_B, NS_B);
+
+    let internal = common::spawn_router(internal_router(state.clone())).await;
+    let rail = common::spawn_router(client_router_for(state.clone(), ClientSurface::Rail)).await;
+
+    let http = reqwest::Client::new();
+    let payloads = ["AQID", "BAUG", "BwgJ"];
+    for payload in payloads {
+        http.post(format!("http://{internal}/internal/ring/live"))
+            .body(envelope(NS, payload))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+    }
+
+    let other = drain_as(rail, GRANT_B).await;
+    assert_eq!(
+        other["payloads"],
+        serde_json::json!([]),
+        "a grant for '{NS_B}' drained payloads pushed under '{NS}'"
+    );
+    let own = drain_as(rail, GRANT_A).await;
+    assert_eq!(
+        own["payloads"],
+        serde_json::json!(payloads),
+        "the grant for '{NS}' drains exactly what arrived under it, in order"
+    );
+}
+
+/// **An envelope for a namespace no grant names is refused, and buffers
+/// nothing.**
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_envelope_for_an_unknown_namespace_is_refused() {
+    let key = SigningKey::from_bytes(&[14u8; 32]);
+    let dir = tempfile::tempdir().unwrap();
+    let state = node(dir.path(), &key, NodeId::from_u128(1));
+
+    let internal = common::spawn_router(internal_router(state.clone())).await;
+    let client = common::spawn_router(client_router(state.clone())).await;
+    let rail = common::spawn_router(client_router_for(state.clone(), ClientSurface::Rail)).await;
+
+    let http = reqwest::Client::new();
+    let unknown = "nobody-granted-this";
+    let resp = http
+        .post(format!("http://{internal}/internal/ring/live"))
+        .body(envelope(unknown, "AQID"))
+        .send()
+        .await
+        .unwrap();
+    let status = resp.status();
+    let body = resp.text().await.unwrap();
+    assert!(
+        !status.is_success(),
+        "an envelope for an ungranted namespace was accepted: {status} {body}"
+    );
+    assert!(
+        body.contains(unknown),
+        "the refusal must name the namespace it refused: {body}"
+    );
+
+    let own = drain_as(rail, GRANT_A).await;
+    assert_eq!(own["payloads"], serde_json::json!([]), "the granted buffer is untouched");
+    let refused: serde_json::Value = http
+        .get(format!("http://{client}/v1/rail/live?namespace={unknown}"))
+        .bearer_auth(TOKEN)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        refused["payloads"],
+        serde_json::json!([]),
+        "the refused payload was buffered under its namespace anyway"
     );
 }

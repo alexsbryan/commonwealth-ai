@@ -13,7 +13,8 @@
 //! route to this host (see the `routes_internal` module header) can make a
 //! cursor appear on this daemon's pages. That is the cost of the lane, and it
 //! is bounded to `LIVE_PAYLOAD_MAX_BYTES` × `LIVE_BUFFER_CAPACITY` of memory
-//! that the next drain frees. Attribution is NOT bounded here and is not
+//! per namespace a live rail grant on this daemon names — any other namespace
+//! is refused — that the next drain frees. Attribution is NOT bounded here and is not
 //! meant to be: a NAME on screen comes from a rail act's signer through the
 //! roster, never from anything on this route
 //! (`quality/campaigns/ring-doc.toml` bar `ra-doc-attribution-from-signer`).
@@ -23,14 +24,20 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 
-use crate::routes_rail_live::LIVE_PAYLOAD_MAX_BYTES;
+use crate::routes_rail_live::{LiveEnvelope, LIVE_PAYLOAD_MAX_BYTES};
 use crate::state::AppState;
 
 fn err(status: StatusCode, msg: impl Into<String>) -> Response {
     (status, Json(serde_json::json!({ "error": msg.into() }))).into_response()
 }
 
-/// POST /internal/ring/live — buffer one peer's ephemeral payload.
+/// POST /internal/ring/live — buffer one peer's ephemeral payload under the
+/// namespace its envelope names.
+///
+/// **A namespace no live rail grant on this daemon names is REFUSED**, never
+/// buffered and never dropped quietly: nobody here could drain it, and
+/// buffering it anyway is what would let a peer grow this daemon's memory
+/// one namespace at a time.
 ///
 /// **An oversize payload is REFUSED, never truncated and never dropped
 /// quietly** (ARCH §18.3). The size ceiling read here is the same constant
@@ -40,9 +47,23 @@ fn err(status: StatusCode, msg: impl Into<String>) -> Response {
 /// `ring-apps-shelf.md` §gossip records as the defect we would inherit from
 /// iroh-gossip's default.
 pub async fn ring_live(State(state): State<AppState>, body: axum::body::Bytes) -> Response {
-    if body.len() > LIVE_PAYLOAD_MAX_BYTES {
+    let envelope: LiveEnvelope = match serde_json::from_slice(&body) {
+        Ok(e) => e,
+        Err(e) => {
+            return err(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                format!(
+                    "live envelope is not {{\"namespace\", \"payload\"}} JSON ({e}) — \
+                     a peer on an older daemon sends a bare payload; rebuild it"
+                ),
+            )
+        }
+    };
+    let LiveEnvelope { namespace, payload } = envelope;
+    if payload.len() > LIVE_PAYLOAD_MAX_BYTES {
         tracing::warn!(
-            bytes = body.len(),
+            namespace,
+            bytes = payload.len(),
             max = LIVE_PAYLOAD_MAX_BYTES,
             "internal ring live: refused an oversize payload"
         );
@@ -50,21 +71,34 @@ pub async fn ring_live(State(state): State<AppState>, body: axum::body::Bytes) -
             StatusCode::PAYLOAD_TOO_LARGE,
             format!(
                 "live payload is {} bytes; this lane carries at most {}",
-                body.len(),
+                payload.len(),
                 LIVE_PAYLOAD_MAX_BYTES
             ),
         );
     }
-    let payload = match std::str::from_utf8(&body) {
-        Ok(s) => s.to_string(),
-        Err(e) => {
-            return err(
-                StatusCode::UNPROCESSABLE_ENTITY,
-                format!("live payload is not UTF-8 ({e}) — this lane carries text"),
-            )
-        }
-    };
-    state.rail_live_buffer().push(payload);
-    tracing::debug!(bytes = body.len(), "internal ring live: buffered");
-    Json(serde_json::json!({ "buffered": body.len() })).into_response()
+    let now = commonwealth_core::clock::unix_now_millis();
+    let granted = state
+        .inner
+        .guest_grants
+        .all()
+        .iter()
+        .any(|g| g.is_live(now) && g.rail_namespace() == Some(namespace.as_str()));
+    if !granted {
+        tracing::warn!(
+            namespace,
+            "internal ring live: refused a payload for a namespace no live rail \
+             grant on this daemon names"
+        );
+        return err(
+            StatusCode::FORBIDDEN,
+            format!(
+                "no live rail grant on this daemon names namespace '{namespace}' — \
+                 nobody here could drain it, so it is not buffered"
+            ),
+        );
+    }
+    let bytes = payload.len();
+    state.rail_live_buffer().push(&namespace, payload);
+    tracing::debug!(namespace, bytes, "internal ring live: buffered");
+    Json(serde_json::json!({ "buffered": bytes })).into_response()
 }
