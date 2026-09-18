@@ -1,0 +1,21 @@
+unit: dm-peer-outside-zero
+commits: bd6355766 (the two renames)
+what: the bar dm-peer-outside-fabric reads 0. Two stragglers remained outside
+  commonwealth/crates/, each renamed per its DT [[noun]] row (identifiers only,
+  no behaviour change):
+    PeerHistory       -> TravelHistory       (sovereign-cli-llm/src/mesh_travel.rs:177, 8 refs / 1 file)
+    PeerCanonicalLead -> CanonicalAtlasLead  (sovereign-daemon/src/auto_ingest.rs:1368, 4 refs / 1 file)
+  Both are pub(crate) type definitions, which is what the census counts. The
+  private PeerRow/PeerBody in mesh_travel.rs and the fn names carrying the word
+  (peer_history, find_best_peer_canonical) are not type definitions, so they are
+  not stragglers for this bar and are left as the DT [[noun]] rows do not name
+  them. The DT [[noun]] rows keep the old `name` (the registry records what to
+  rename, as PeerStore's row still does); no DT edit was needed.
+checks: CLEAN exit=0 (disk gate, cache under threshold); LINT exit=0 (scoped to
+  sovereign-cli-llm, sovereign-daemon, sovereign-cli, sovereign-cli-daemon,
+  sovereign-cli-dev); CENSUS --self-test exit=0 (11 axes, 11/11 positives
+  caught, 11/11 negatives refused).
+census: peer-outside 2 in 2 crates -> 0 in 0 crates:
+    peer-outside — Peer* definitions outside commonwealth/crates/ (the word anywhere in the name; prefix mode refused)
+      value: 0 in 0 crates
+    exit=0
