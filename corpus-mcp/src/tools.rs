@@ -37,7 +37,8 @@ use corpus_engine::enrichment::atlas::summary::read_current_summary;
 use corpus_engine::enrichment::atlas::writer::{read_atlas_ontology, AtlasOntologyFile};
 use corpus_engine::enrichment::atlas::{open_walk_provider, AtlasInventory, AtlasProvider};
 use corpus_engine::{CorpusEngine, CorpusIndex, EmbedFn, ScoredChunk};
-use corpus_engine_vocab::atoms::{AtomEnvelope, AtomsFile};
+use corpus_engine_vocab::atoms::AtomEnvelope;
+use corpus_engine_vocab::read::read_atlas_atoms;
 use serde_json::{json, Value};
 
 use crate::host::HostProfile;
@@ -594,8 +595,13 @@ impl Server {
             return refuse("atoms_lookup needs `corpus`");
         };
         let path = self.atlas_path(corpus, "atoms.json");
-        let file = match read_atoms(&path) {
+        let missing = format!(
+            "no atlas at {} — this corpus's enrichment was not built or pulled on this machine",
+            path.display()
+        );
+        let file = match read_atlas_atoms(&self.atlas_dir(corpus)) {
             Ok(f) => f,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return refuse(&missing),
             Err(e) => return refuse(&e.to_string()),
         };
         let needle = args["query"].as_str().map(str::to_lowercase);
@@ -868,17 +874,6 @@ fn tag<T: serde::Serialize>(t: T) -> String {
         .unwrap_or_default()
         .trim_matches('"')
         .to_string()
-}
-
-fn read_atoms(path: &Path) -> Result<AtomsFile> {
-    if !path.exists() {
-        bail!(
-            "no atlas at {} — this corpus's enrichment was not built or pulled on this machine",
-            path.display()
-        );
-    }
-    let file = std::fs::File::open(path)?;
-    Ok(serde_json::from_reader(std::io::BufReader::new(file))?)
 }
 
 /// The prose an atom carries, by kind. Entity/Event/Configuration describe;
