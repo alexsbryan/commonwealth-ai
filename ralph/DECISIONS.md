@@ -2939,3 +2939,49 @@ crate.
 
 **Landed in.** this unit's code commit and the `ralph:` commit marking the row
 `[x]`.
+
+## 2026-09-18 · DEMO-d5-misnamed · the demo cannot pass: its expected verdict is false and one dependency was only partially landed
+
+**Fork.** The row runs `domains-census.py misnamed` expecting sovereign-mesh at
+100% fabric. The tree disagrees in two independent ways: the instrument's
+coverage assertion exits 4 before any crate table, and — bypassing it —
+sovereign-mesh reads 83.1%. Options: (a) mark the row `[x]` and paste the
+failure; (b) correct the row's premise and dependencies, record the
+operator-only blocker, and escalate; (c) attempt the deferred move.
+
+**Choice.** (b). §2/§6 make a failed DEMO a §6 stop, and the move is blocked by
+an operator-only gate decision (§7 forbids re-baselining a ratchet or widening an
+`except`), so (c) is out of a worker's hands. The row keeps its expected verdict
+— a pass bar is not weakened — and gains two dependencies that name the missing
+work.
+
+**Evidence** (reproduced this session; paths under the worktree root).
+- `python3 scripts/domains-census.py misnamed` → exit 4, coverage hole: 33
+  untagged files — corpus-index (19), understanding-atlas (13),
+  `sovereign/crates/sovereign-peer-wire/src/lib.rs` (1); none in sovereign-mesh.
+- `misnamed()` called directly (coverage bypassed): sovereign-mesh
+  `13860 / 16684` (83.1%, MISNAMED); its only non-fabric `[[module]]` rows are
+  `workbench 674 sovereign-mesh/src/projects.rs` and
+  `workbench 2150 sovereign-mesh/src/reindexer.rs`.
+- Those two files are exactly the ones `dm-mesh-workbench-move-watchers`
+  (STATE.md, `[x]`) deferred on 2026-09-17; the blockers reproduce:
+  `reindexer.rs:650,708` reach `corpus_engine::facts` / `facts_store` in
+  production (so `corpus-engine-watchers -> corpus-engine` is code-intel
+  package-illegal, `docs/CODE_TOOLING_BOUNDARY.md:427`), and `projects.rs:364`
+  reaches `sovereign_contracts::rebrand`.
+- `quality/baselines/fan_in.tsv`: corpus-engine 20 (`:8`), sovereign-contracts 33
+  (`:11`) — the contracts cap moved 31→32→33 since the 2026-09-17 note
+  (`dm-decision-extractor-move`, `dm-next-edit-move`).
+
+**Correction.** DEMO-d5-misnamed's `depends` gains `dm-registry-coverage`
+(restores the instrument's coverage) and `REVIEW-build-mesh-workbench-deferred`
+(moves projects.rs + reindexer.rs), the latter depending on the new
+`HUMAN-mesh-workbench-gates`. The decision package is `ralph/NEEDS_HUMAN.md`. The
+row stays `[ ]`; no `.done` was written.
+
+**Falsified by.** A showing that `corpus_engine::facts` is reachable from a
+package crate today (it is not), or that the fan-in caps already admit the two
+moves, or a tag change that makes sovereign-mesh read own == total without a
+`git mv` (the goodhart smell the bar names).
+
+**Landed in.** this commit (the row correction, this entry, `ralph/NEEDS_HUMAN.md`).
