@@ -313,7 +313,10 @@ class Page {
       body: JSON.stringify(body || {}), signal: AbortSignal.timeout(20000) });
     const t = await r.text(); let v = null;
     try { v = t ? JSON.parse(t) : null; } catch (_) { v = { error: t }; }
-    if (!r.ok) throw new Error((v && v.error) || `ring: ${op} failed`);
+    // The daemon's refusals are `{error: {message, code}}`; the proxy's own are
+    // `{error: "<text>"}`. A reason that reads "[object Object]" names neither.
+    const why = v && v.error && (v.error.message || v.error);
+    if (!r.ok) throw new Error(why ? String(why) : `ring: ${op} failed`);
     return v;
   }
   async flush() {
