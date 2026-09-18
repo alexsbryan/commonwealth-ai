@@ -12606,6 +12606,7 @@ dependencies = [
  "chrono",
  "clap",
  "corpus-engine",
+ "corpus-engine-vocab",
  "hex",
  "rand 0.9.4",
  "reqwest 0.12.28",

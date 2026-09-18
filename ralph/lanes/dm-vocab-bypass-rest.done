@@ -1,0 +1,7 @@
+dm-vocab-bypass-rest
+commit c0c233702
+CLEAN exit=0 (0G, under 50G)
+LINT exit=0 (sovereign-enrichment-build, sovereign-eval + 4 dependents)
+TEST(sovereign-enrichment-build) exit=0 pass=113 fail=0
+TEST(sovereign-eval) exit=0 pass=220 fail=0
+premise: git grep -n 'atoms.json' -- '*.rs' in build/steps.rs and flywheel/mining.rs -> one untyped Value walk each (steps.rs:120 resolve_cache_is_structural_placeholder; mining.rs:47 mine_claims), both now through corpus_engine_vocab::read::read_atlas_atoms

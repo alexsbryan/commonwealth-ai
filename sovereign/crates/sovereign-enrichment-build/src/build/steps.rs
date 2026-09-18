@@ -117,21 +117,21 @@ fn extract_cache_has_atlas_payloads(cache_path: &std::path::Path) -> bool {
 /// model-free (it assembles atoms from the cached extract + clusters),
 /// so the worst case for a genuinely-empty corpus is a cheap, idempotent
 /// re-run. A populated `atoms.json` (a real prior resolve) is preserved.
-fn resolve_cache_is_structural_placeholder(cache_path: &std::path::Path) -> bool {
-    let bytes = match std::fs::read(cache_path) {
-        Ok(b) => b,
-        Err(_) => return true, // unreadable → don't trust it → re-resolve
-    };
-    let v: serde_json::Value = match serde_json::from_slice(&bytes) {
-        Ok(v) => v,
-        Err(_) => return true, // unparseable → re-resolve
-    };
-    // Resolved atoms live under `.atoms`; an empty (or absent) array is
-    // the structural placeholder.
-    v.get("atoms")
-        .and_then(|a| a.as_array())
-        .map(|a| a.is_empty())
-        .unwrap_or(true)
+///
+/// The file is read through the vocabulary leaf's door
+/// ([`corpus_engine_vocab::read::read_atlas_atoms`], `dm-vocab-bypass-rest`)
+/// rather than walked as a `serde_json::Value`: the door is the one
+/// constructor for an on-disk `atoms.json`. A file it cannot type —
+/// unreadable, unparseable, or carrying an atom kind outside the closed
+/// set — is untrusted, the same verdict the `Value` walk gave a missing
+/// or malformed `atoms` key.
+fn resolve_cache_is_structural_placeholder(atlas_dir: &std::path::Path) -> bool {
+    match corpus_engine_vocab::read::read_atlas_atoms(atlas_dir) {
+        // Resolved atoms are the file's `atoms`; an empty array is the
+        // structural placeholder.
+        Ok(file) => file.atoms.is_empty(),
+        Err(_) => true,
+    }
 }
 
 // ── The step seam ────────────────────────────────────────────
@@ -246,7 +246,9 @@ pub(super) async fn run_step(
                 {
                     Some("from a non-atlas run (no section_extraction payloads)")
                 } else if matches!(step, Step::Resolve)
-                    && resolve_cache_is_structural_placeholder(&cache_path)
+                    && resolve_cache_is_structural_placeholder(
+                        &paths::index_root(corpus).join(ATLAS_DIRNAME),
+                    )
                 {
                     Some("an empty post-install structural placeholder (no resolved atoms)")
                 } else if matches!(step, Step::Backfill)
@@ -721,32 +723,43 @@ mod tests {
         // be treated as stale so resolve re-runs; a populated one (a real
         // prior resolve) must be preserved so we don't redo finished work.
         let dir = tempfile::tempdir().unwrap();
-        let p = dir.path().join("atoms.json");
+        let atlas_dir = dir.path();
+        let p = atlas_dir.join("atoms.json");
 
         // The post-install structural placeholder: empty atoms array.
-        std::fs::write(&p, r#"{"schema_version":1,"atoms":[]}"#).unwrap();
+        std::fs::write(&p, r#"{"schema_version":"2.0","atoms":[]}"#).unwrap();
         assert!(
-            resolve_cache_is_structural_placeholder(&p),
+            resolve_cache_is_structural_placeholder(atlas_dir),
             "empty atoms ⇒ placeholder ⇒ must re-resolve"
         );
 
-        // A real resolve output is preserved (skip).
-        std::fs::write(&p, r#"{"schema_version":1,"atoms":[{"kind":"Entity"}]}"#).unwrap();
+        // A real resolve output is preserved (skip). A minimal typed Entity
+        // atom — the door parses the closed `AtomEnvelope` set, so a loose
+        // `{"kind":…}` object is now (correctly) untrusted, not "populated".
+        std::fs::write(
+            &p,
+            r#"{"schema_version":"2.0","atoms":[{"atom_type":"Entity","data":{"id":"entity-0001","canonical_name":"x","entity_type":"concept","first_appearance":{"chunk_id":"c0"},"description":"d","salience":0.5,"enrichment_depth":"extracted"}}]}"#,
+        )
+        .unwrap();
         assert!(
-            !resolve_cache_is_structural_placeholder(&p),
+            !resolve_cache_is_structural_placeholder(atlas_dir),
             "non-empty atoms ⇒ real resolve ⇒ must be kept"
         );
 
         // Absent / unparseable / missing ⇒ can't trust it ⇒ re-resolve.
-        std::fs::write(&p, r#"{"schema_version":1}"#).unwrap();
+        std::fs::write(&p, r#"{"schema_version":"2.0"}"#).unwrap();
         assert!(
-            resolve_cache_is_structural_placeholder(&p),
+            resolve_cache_is_structural_placeholder(atlas_dir),
             "absent atoms key"
         );
         std::fs::write(&p, "not json").unwrap();
-        assert!(resolve_cache_is_structural_placeholder(&p), "unparseable");
         assert!(
-            resolve_cache_is_structural_placeholder(&dir.path().join("nope.json")),
+            resolve_cache_is_structural_placeholder(atlas_dir),
+            "unparseable"
+        );
+        let empty = tempfile::tempdir().unwrap();
+        assert!(
+            resolve_cache_is_structural_placeholder(empty.path()),
             "missing file"
         );
     }
