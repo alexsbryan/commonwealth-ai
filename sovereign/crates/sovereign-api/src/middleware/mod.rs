@@ -45,7 +45,12 @@ use crate::openai_types::ChatCompletionRequest;
 
 #[cfg(feature = "atos")]
 pub mod artifact_surface;
-pub mod decision_extractor;
+// The per-turn decision extractor is the note store's question, not routing's,
+// so it moved down to `corpus-engine-notes` (DT `workspace` cluster, dest
+// `corpus-engine-notes`) in domains `dm-decision-extractor-move`. Re-exported
+// here so `crate::middleware::{decision_extractor, DecisionExtractor}` keeps
+// resolving for `state.rs` and this module's own pipeline test.
+pub use corpus_engine_notes::decision_extractor;
 
 #[cfg(feature = "atos")]
 pub use artifact_surface::ArtifactSurface;
@@ -525,8 +530,8 @@ mod tool_vocabulary_boundary {
     //! agent runtime hub's `types` module — moved out of this crate in domains
     //! `REVIEW-build-answering-inversion`: `tool_injector` to
     //! `sovereign-core::answering`, `context_injector` to `sovereign-atos`.
-    //! This guard stays for the middlewares that remain (the artifact surface
-    //! and the decision extractor) and for the composition.
+    //! This guard stays for the middleware that remains (the artifact surface)
+    //! and for the composition.
     //!
     //! Narrowed 2026-09-16: the seam lift (`REVIEW-build-middleware-seam`)
     //! legitimately made `mod.rs` name `sovereign_core::middleware`, so the
@@ -538,7 +543,9 @@ mod tool_vocabulary_boundary {
     //! named in this directory (the feature-gated ATOS surface and
     //! `notes::response_mine`); both carry their own `[[exception]]` in
     //! `quality/ARCH_LAYERS.toml` tracked at R6 and are not this rung's
-    //! subject.
+    //! subject. The decision extractor left the directory for
+    //! `corpus-engine-notes` in domains `dm-decision-extractor-move`, which is
+    //! why the walk floor is 2 files, not 3.
     //!
     //! Failing input, if you want to watch it fail: add a `use` of the hub's
     //! `types` module (`ToolDescriptor`) to `artifact_surface.rs`. Do NOT spell
@@ -577,7 +584,7 @@ mod tool_vocabulary_boundary {
         // An empty walk would pass while proving nothing — the classic
         // zero-case false green (ARCH §18.1).
         assert!(
-            scanned >= 3,
+            scanned >= 2,
             "scanned only {scanned} middleware files; the walk is broken, not the boundary"
         );
         offenders.sort();

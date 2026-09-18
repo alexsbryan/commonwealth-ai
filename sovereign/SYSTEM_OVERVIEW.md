@@ -10219,3 +10219,30 @@ carried the headroom. `corpus-engine-scip` is a DEV edge only (the
 reason — `--update-baseline` would snapshot the whole tree and absorb
 unrelated growth (PROMPT §7). The caps are `31` and `14`; the landed edges are
 `31` and `14`. No other crate may ride them.
+
+### 10.1ac Fan-in ACCEPTED — `sovereign-contracts` 31 → 32 (the workspace decision extractor reaches its seam, `dm-decision-extractor-move`, 2026-09-17)
+
+`dm-decision-extractor-move` MOVEs `sovereign-api/src/middleware/decision_extractor.rs`
+(443) and `sovereign-tools/src/notes/response_mine.rs` (454) into
+`corpus-engine-notes` (DT `workspace` cluster; dest `corpus-engine-notes`). The
+moved `DecisionExtractor` implements the `Middleware` trait, whose home is
+`sovereign-contracts::middleware` — the seam lifted there by
+`REVIEW-build-middleware-seam`. `corpus-engine-notes` is the one new dependent:
+
+| Dependent | Landed | Why it names the crate |
+|---|---|---|
+| `sovereign-contracts` | this commit | the moved `decision_extractor.rs` implements `Middleware` and reads `PipelineContext` / `MiddlewareSession` / `notes_db_path`; `sovereign-contracts` is the knowledge layer's one sanctioned sovereign edge (`[[forbid]] corpus-engine* -> sovereign-*`, `except = ["sovereign-contracts"]`, quality/ARCH_LAYERS.toml:358-362), and `sovereign-core` — the other re-export of the seam — is not a shared leaf the code-intel package may name |
+
+The ratchet's advice — "depend on a narrower crate instead" — has no answer:
+the seam's only homes are `sovereign-contracts` (a shared leaf) and
+`sovereign-core` (not a leaf, and a package-boundary violation for
+`corpus-engine-notes`). Naming it through `sovereign_core`, as `sovereign-api`
+does, is exactly the path `ralph/DECISIONS.md` (2026-09-16,
+`REVIEW-build-middleware-seam`) rejected for this crate. The `oicp-types` dep
+the move also adds is untracked (fan-in 21, below the seeded set), so it raises
+no cap.
+
+`quality/baselines/fan_in.tsv` was edited BY HAND, one line, for §10.1q's
+reason — `--update-baseline` would snapshot the whole tree and absorb unrelated
+growth (PROMPT §7). The cap is `32`; the landed edge is `32`. No other crate may
+ride it.

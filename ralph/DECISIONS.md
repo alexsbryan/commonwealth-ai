@@ -1522,3 +1522,53 @@ the lane to be re-run; recorded here so the morning sees it.
 lane's `DECISIONS.md` entry included), `ralph/STATE.md` row `[x]` and the pool
 marker in the following commit; this entry lands in a third commit. `git revert
 -m 1 10c57b68b` reverts the merge.
+
+## 2026-09-17 · dm-decision-extractor-move · the seam's one home collides with the fan-in ratchet; hand-raise, not `--update-baseline`
+
+**Fork.** The row says the moved `decision_extractor`'s seam import "repoints to
+sovereign-contracts". `REVIEW-build-middleware-seam` landed the seam in
+`sovereign-contracts::middleware` and had `sovereign-api` name it through
+`sovereign_core::middleware` precisely because a direct `sovereign-contracts`
+edge grows that leaf's fan-in past `quality/baselines/fan_in.tsv`. The row was
+minted before that unit landed. Options: (a) name the seam through
+`sovereign_core`, as `sovereign-api` does; (b) name `sovereign-contracts`
+directly and hand-raise the fan-in cap; (c) stop.
+
+**Choice.** (b). (a) is illegal twice over for the destination:
+`sovereign-core` is not a shared leaf, so the code-intel package's boundary
+refuses it (`corpus-engine-notes` is a package crate), and `ralph/DECISIONS.md`
+2026-09-16 (`REVIEW-build-middleware-seam`, "Why not 3") already rejected the
+seam-through-`sovereign-core` shape for exactly this crate. `sovereign-contracts`
+is the knowledge layer's one sanctioned sovereign edge —
+`[[forbid]] corpus-engine* -> sovereign-*`, `except = ["sovereign-contracts"]`
+(`quality/ARCH_LAYERS.toml:358-362`) — so the edge is the design working, not a
+god-crate accreting. The ratchet's cap is raised by hand (one line) with a
+`SYSTEM_OVERVIEW.md` §10.1ac ledger entry, mirroring `dm-daemon-mesh-edge`'s
+§10.1ab: `--update-baseline` would snapshot the whole tree and absorb unrelated
+growth (PROMPT §7).
+
+**Evidence** (reproduced in this session).
+- The collision is real, not inferred: a `tomllib` count of workspace members'
+  non-dev `[dependencies]` + `[build-dependencies]` gives `sovereign-contracts`
+  fan-in 31 — exactly the cap `dm-daemon-mesh-edge` set at `87f650f69`
+  (`fan_in.tsv`), so `+corpus-engine-notes` is 32 > 31.
+- The edge is permitted: `quality/ARCH_LAYERS.toml:358-362` is the
+  `except = ["sovereign-contracts"]` row; `corpus-engine-scip` (a code-intel
+  sibling) already names the leaf (`corpus-engine-scip/Cargo.toml:73`).
+- `cargo xtask layer-gate` after the change and the hand-raise → exit 0, "fan-in
+  within caps" (72 members, 391 edges).
+- The row's line premises were ALSO stale and are corrected in `ralph/STATE.md`:
+  the seam import is at `decision_extractor.rs:50` (not :51) and
+  `crate::openai_types` at :51 (not :52), both shifted by the seam lift; and
+  `notes_db_path` is `sovereign_core::middleware::notes_db_path` (:52), defined
+  at `sovereign-contracts/src/middleware.rs:242` — already at the destination
+  layer, so it is REPOINTED, not moved.
+
+**Falsified by.** A showing that `decision_extractor` can implement `Middleware`
+without naming `sovereign-contracts` (which would make the seam reachable
+without the edge), or an operator reading the fan-in cap as absolute — in which
+case the move has no legal destination and the row stops (§6).
+
+**Landed in.** this commit — the two moves, the `sovereign-contracts`/`oicp-types`
+deps on `corpus-engine-notes`, the shims, the `fan_in.tsv` hand-raise (31 → 32),
+`SYSTEM_OVERVIEW.md` §10.1ac, the `ralph/STATE.md` row correction and this entry.

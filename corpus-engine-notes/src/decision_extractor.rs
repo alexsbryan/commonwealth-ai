@@ -4,7 +4,7 @@
 //! Inserted in the pipeline AFTER `artifact_surface`. The flow is:
 //!
 //! - **`post_process` (turn N)**: scan the assistant response with
-//!   [`sovereign_tools::notes::response_mine`]. If a decision-like
+//!   [`crate::response_mine`]. If a decision-like
 //!   sentence fires, store it on `session.pending_decision`.
 //!
 //! - **`process` (turn N+1)**: inspect the stored candidate.
@@ -44,12 +44,13 @@
 
 use async_trait::async_trait;
 
-use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
-use sovereign_tools::notes::response_mine;
+use crate::response_mine;
+use crate::{NoteScope, NoteSource, NoteStore};
 
-use super::{Middleware, MiddlewareError, MiddlewareSession, PipelineContext, ResponseView};
-use crate::openai_types::{ChatCompletionRequest, ChatMessage};
-use sovereign_core::middleware::notes_db_path;
+use oicp_types::openai_types::{ChatCompletionRequest, ChatMessage};
+use sovereign_contracts::middleware::{
+    notes_db_path, Middleware, MiddlewareError, MiddlewareSession, PipelineContext, ResponseView,
+};
 
 /// User-message substrings (case-insensitive) that drop a pending
 /// candidate. Conservatively short — the goal is to recognise the
