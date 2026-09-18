@@ -245,6 +245,7 @@ mod tests {
             UnavailabilityReason::NoVectorIndex,
             UnavailabilityReason::DimMismatch { built: 768 },
             UnavailabilityReason::PeerUnreachable,
+            UnavailabilityReason::NotHosted,
         ] {
             assert!(!r.user_phrase().contains(['(', ')']), "{r:?}");
         }

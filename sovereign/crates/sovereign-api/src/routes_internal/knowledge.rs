@@ -191,6 +191,8 @@ pub async fn knowledge_search(
                                 metadata: Default::default(),
                                 chunk_id: r.chunk_id,
                                 source_doc_id: r.source_doc_id,
+                                peer_name: None,
+                                peer_node_id: None,
                             }
                         }));
                     }
@@ -257,6 +259,7 @@ pub async fn knowledge_search(
             results: all_results,
             corpora_searched: search_corpora,
             corpora_unavailable,
+            corpora_unhosted: Vec::new(),
             total_chunks_searched: Some(total_chunks),
         }),
     )

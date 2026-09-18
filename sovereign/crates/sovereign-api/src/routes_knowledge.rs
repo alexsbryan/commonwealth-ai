@@ -44,6 +44,7 @@ fn empty_knowledge_response() -> KnowledgeSearchResponse {
         results: Vec::new(),
         corpora_searched: Vec::new(),
         corpora_unavailable: Vec::new(),
+        corpora_unhosted: Vec::new(),
         total_chunks_searched: None,
     }
 }
@@ -225,6 +226,8 @@ pub async fn knowledge_search(
                                     metadata: HashMap::new(),
                                     chunk_id: r.chunk_id,
                                     source_doc_id: r.source_doc_id,
+                                    peer_name: None,
+                                    peer_node_id: None,
                                 }
                             }));
                         }
@@ -500,9 +503,8 @@ async fn fanout_one_peer(
                     .results
                     .into_iter()
                     .map(|mut r| {
-                        r.metadata
-                            .insert("peer_node_id".into(), peer_tag_id.clone());
-                        r.metadata.insert("peer_name".into(), node_name.clone());
+                        r.peer_node_id = Some(peer_tag_id.clone());
+                        r.peer_name = Some(node_name.clone());
                         r
                     })
                     .collect();
@@ -553,12 +555,24 @@ fn build_response(
     //
     // Only for an EXPLICIT corpus list. An unconstrained request means "search
     // whatever the mesh can reach", and nothing can be missing from that.
+    //
+    // A corpus nobody even TRIED is additionally named in `corpora_unhosted`:
+    // no member advertises it, which is a different fact from "its host is
+    // offline" and must read differently (ring-room bar
+    // ra-room-answer-names-the-machine).
+    let mut corpora_unhosted: HashSet<String> = HashSet::new();
     if let Some(named) = requested {
         for c in named {
-            if !corpora_searched.contains(c) {
-                corpora_unavailable.insert(c.clone());
+            if !corpora_searched.contains(c) && corpora_unavailable.insert(c.clone()) {
+                corpora_unhosted.insert(c.clone());
             }
         }
+    }
+    if !corpora_unhosted.is_empty() {
+        tracing::info!(
+            unhosted = ?corpora_unhosted,
+            "knowledge: named corpora no live member hosts"
+        );
     }
 
     // Corpora that appear in `unavailable` but also appear in
@@ -574,6 +588,7 @@ fn build_response(
             results: all_results,
             corpora_searched: corpora_searched.into_iter().collect(),
             corpora_unavailable: corpora_unavailable.into_iter().collect(),
+            corpora_unhosted: corpora_unhosted.into_iter().collect(),
             total_chunks_searched: None,
         }),
     )
