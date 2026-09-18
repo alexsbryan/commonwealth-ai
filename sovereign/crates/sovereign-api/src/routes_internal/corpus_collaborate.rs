@@ -388,13 +388,13 @@ pub async fn corpus_collaborate(
                 // ourselves. See `auto_recover` for the cooldown +
                 // discovery details. Cheap when nothing to do
                 // (deterministic short-circuits before the cooldown).
-                let outcome = crate::auto_recover::try_recover_stranded_partitions(
+                let outcome = sovereign_grants::auto_recover::try_recover_stranded_partitions(
                     engine.index_dir(),
                     req.corpus_id.as_str(),
                 )
                 .await;
                 match outcome {
-                    crate::auto_recover::RecoveryOutcome::Recovered {
+                    sovereign_grants::auto_recover::RecoveryOutcome::Recovered {
                         chunks,
                         shards_covered,
                     } => {
@@ -417,7 +417,7 @@ pub async fn corpus_collaborate(
                             }),
                         ));
                     }
-                    crate::auto_recover::RecoveryOutcome::MergedButNotInstalled {
+                    sovereign_grants::auto_recover::RecoveryOutcome::MergedButNotInstalled {
                         chunks,
                         ref canonical_path,
                         ref error,
@@ -439,14 +439,14 @@ pub async fn corpus_collaborate(
                              finalized — it is on disk and no surface can see it"
                         );
                     }
-                    crate::auto_recover::RecoveryOutcome::AlreadyHasCanonical => {
+                    sovereign_grants::auto_recover::RecoveryOutcome::AlreadyHasCanonical => {
                         // Race: another request raced ahead and built
                         // canonical between our `canonical_exists` check
                         // and the recovery call. Fall through to the
                         // 409 — installed_indexes() picks up the
                         // canonical on the next dispatcher tick.
                     }
-                    crate::auto_recover::RecoveryOutcome::NotEnoughPartitions => {
+                    sovereign_grants::auto_recover::RecoveryOutcome::NotEnoughPartitions => {
                         tracing::warn!(
                             corpus = %req.corpus_id,
                             "corpus_collaborate: queue drained but no canonical index and no \
@@ -454,7 +454,7 @@ pub async fn corpus_collaborate(
                              peer must re-trigger from a node that holds the handoff blob"
                         );
                     }
-                    crate::auto_recover::RecoveryOutcome::PartitionsUnreachable {
+                    sovereign_grants::auto_recover::RecoveryOutcome::PartitionsUnreachable {
                         covered,
                         expected,
                     } => {
@@ -472,14 +472,14 @@ pub async fn corpus_collaborate(
                              partitions, which this producer cannot return — defect"
                         );
                     }
-                    crate::auto_recover::RecoveryOutcome::InCooldown => {
+                    sovereign_grants::auto_recover::RecoveryOutcome::InCooldown => {
                         tracing::info!(
                             corpus = %req.corpus_id,
                             "corpus_collaborate: stranded-partition recovery in cooldown — \
                              a recent attempt is still healing or just failed; not retrying yet"
                         );
                     }
-                    crate::auto_recover::RecoveryOutcome::Failed(err) => {
+                    sovereign_grants::auto_recover::RecoveryOutcome::Failed(err) => {
                         tracing::warn!(
                             corpus = %req.corpus_id,
                             recovery_error = %err,
@@ -489,7 +489,7 @@ pub async fn corpus_collaborate(
                             req.corpus_id,
                         );
                     }
-                    crate::auto_recover::RecoveryOutcome::IncompleteCoverage {
+                    sovereign_grants::auto_recover::RecoveryOutcome::IncompleteCoverage {
                         covered,
                         total,
                         missing,
@@ -511,13 +511,13 @@ pub async fn corpus_collaborate(
                              will produce canonical"
                         );
                     }
-                    crate::auto_recover::RecoveryOutcome::InvalidCorpusId => {
+                    sovereign_grants::auto_recover::RecoveryOutcome::InvalidCorpusId => {
                         tracing::warn!(
                             corpus_id = %req.corpus_id,
                             "corpus_collaborate: empty corpus id, nothing to recover"
                         );
                     }
-                    crate::auto_recover::RecoveryOutcome::CanonicalDirectoryReserved => {
+                    sovereign_grants::auto_recover::RecoveryOutcome::CanonicalDirectoryReserved => {
                         // The canonical-named directory exists but
                         // doesn't carry our `_corpus_meta.json` —
                         // owned by SCIP for code corpora. Fall

@@ -264,8 +264,9 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
                              can never be complete"
                         );
                     }
+                    let node = sovereign_api::routes_internal::fold_recovery(&state).await;
                     match sovereign_api::auto_recover::merge_from_fold_coverage(
-                        &state,
+                        node,
                         corpus_id,
                         cov.handoff_id,
                         &cov.nodes,

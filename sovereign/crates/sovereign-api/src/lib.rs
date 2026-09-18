@@ -17,7 +17,7 @@
 #![warn(clippy::unwrap_used, clippy::expect_used)]
 
 pub mod admission;
-pub mod auto_recover;
+pub use sovereign_grants::auto_recover; // shim: moved by domains dm-auto-recover-move
 pub mod client_auth;
 pub mod client_surface;
 // The fan-out core is `commonwealth_transport::fanout` since the rails carve

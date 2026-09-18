@@ -2471,3 +2471,65 @@ longer names a file.
 **Landed in.** the commit under `dm-understanding-pure-1`: the eight moved
 files, the two extractions, the leaf fixture, the corpus-engine shims, the two
 `Cargo.toml`s, and the DT `[[tier]]` re-key.
+
+## 2026-09-18 · dm-auto-recover-move · the AppState parameter becomes a struct of five reads, not two
+
+**Fork.** The row says `auto_recover.rs` moves to `sovereign-grants` and its
+one `&AppState` parameter "becomes the two things it reads — `corpus_engine`
+and `active_ingests` — supplied by the caller", repointing
+`routes_internal/corpus_collaborate.rs`. The tree says the function reads five
+things and that corpus_collaborate does not call it.
+
+**Choice.**
+
+1. **The five reads become `FoldRecovery`.** `merge_from_fold_coverage` reads
+   `state.inner.node.corpus_engine` (:242), `state.identity_reader().current()`
+   (:252), `crate::routes_internal::peer_control_urls(state, …)` (:253),
+   `state.inner.fabric.mesh_store` (:258) and
+   `state.inner.fabric.contribution_emitter` (:260). `sovereign-grants` cannot
+   name `AppState`, so the parameter becomes a public `FoldRecovery` struct
+   carrying exactly those five; the function body is otherwise unchanged.
+   `active_ingests` is NOT one of them — the caller (`auto_ingest.rs:216-217`)
+   reads it and gates before the call, and the function never sees it.
+2. **A `fold_recovery(state)` adapter gathers them in `sovereign-api`.** It
+   lives in `routes_internal/corpus_queue.rs` beside `peer_control_urls`, which
+   it calls; it is the one place the AppState→`FoldRecovery` mapping is spelled
+   (ARCH 8). The four real callers use it: `sovereign-daemon/src/auto_ingest.rs`
+   and the three `sovereign-mesh/tests/main/fold_ingest_*.rs` files.
+3. **`corpus_collaborate.rs` is repointed, not re-plumbed.** It calls only
+   `try_recover_stranded_partitions` (no `AppState`), so its `crate::auto_recover::`
+   paths become `sovereign_grants::auto_recover::`; its behaviour is unchanged.
+4. **`dirs = "5"` joins sovereign-grants.** The moved file's `dirs::home_dir()`
+   (the alignment projector's self-heal hook, :587) is the one external crate
+   the row's import-list premise missed; copied from sovereign-api's manifest
+   per §3a step 3. Its `#[allow(clippy::disallowed_methods)]` rode along.
+
+**Rejected.** Passing the five positionally: `too_many_arguments` is allowed,
+but `MergePlan` is the crate's own precedent for bundling multi-input merge
+calls as data. Splitting the file (pure half to grants, `AppState` half staying
+in sovereign-api): the row says MOVE the file, and DT's cluster note sends
+`auto_recover.rs` whole to `sovereign-grants`. A trait port on `AppState`:
+`ralph/DECISIONS.md` 2026-09-16 already defers that to
+`REVIEW-build-daemon-parts`, which cannot run before this row.
+
+**Evidence** (reproduced this session).
+- CLEAN `exit=0` (debug target 0G, under 50G).
+- LINT `exit=0`, scope WORKSPACE, `errors: 0`, cargo exit 0.
+- LAYER `exit=0` — "every edge points down or sideways … fan-in within caps".
+- TEST(sovereign-grants) `exit=0`, pass 59 fail 0 (the moved file's own tests
+  now run in their new home).
+- TEST(sovereign-mesh) three filters `exit=0`, pass 1 fail 0 each:
+  `two_donors_on_two_nodes_land_both_slices_in_the_canonical`,
+  `a_two_donor_fold_missing_its_peer_refuses_and_writes_no_canonical`,
+  `the_merge_proceeds_with_the_slices_that_exist` — the `merge_from_fold_coverage`
+  callers that moved signature.
+
+**Falsified by.** A `FoldRecovery` field that does not reproduce the read the
+function made (a behaviour change in the e2e merge); or a caller the
+`fold_recovery` adapter does not satisfy (a LINT failure); or a `dirs` use the
+grants manifest does not link.
+
+**Landed in.** the commit under `dm-auto-recover-move`: the `git mv`, the
+`FoldRecovery` struct, the `fold_recovery` adapter and its re-export, the shim
+at the old path, the four caller repoints, the DT module re-key and the two
+`quality/baselines/` path re-keys.

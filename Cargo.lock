@@ -12673,6 +12673,7 @@ dependencies = [
  "commonwealth-core",
  "commonwealth-state",
  "corpus-engine",
+ "dirs 5.0.1",
  "hex",
  "reqwest 0.12.28",
  "serde",

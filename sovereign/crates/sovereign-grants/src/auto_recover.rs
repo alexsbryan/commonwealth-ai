@@ -53,11 +53,14 @@
 
 use std::collections::HashMap;
 use std::path::Path;
-
-use corpus_engine::Corpus;
-use sovereign_grants::shard_manager::{MergePlan, ShardManager};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
+
+use commonwealth_core::ids::{HandoffId, NodeId};
+use commonwealth_state::{ContributionEmitter, MeshStore};
+use corpus_engine::{Corpus, CorpusEngine};
+
+use crate::shard_manager::{MergePlan, ShardManager};
 
 /// 5-minute cooldown between recovery attempts for the same corpus.
 /// Prevents a stuck dispatcher (firing every 30s) from launching
@@ -187,6 +190,26 @@ pub enum RecoveryOutcome {
     Failed(String),
 }
 
+/// The node-side inputs [`merge_from_fold_coverage`] reads, gathered by the
+/// caller.
+///
+/// `sovereign-grants` cannot name the daemon's `AppState`
+/// (`quality/ARCH_LAYERS.toml`), so the function takes the reads as data.
+/// Each field is one read the function made for itself while it lived in
+/// `sovereign-api`.
+pub struct FoldRecovery {
+    /// This node's corpus engine; `None` before one is booted.
+    pub corpus_engine: Option<Arc<CorpusEngine>>,
+    /// The mesh store the shard manager pulls partitions through.
+    pub mesh_store: Arc<MeshStore>,
+    /// Ledger emitter for `ShardTransferred` events on the pull path.
+    pub contribution_emitter: ContributionEmitter,
+    /// This node's id, as the identity watch reports it at call time.
+    pub local_node_id: NodeId,
+    /// One ControlPlane base URL per peer, from `peer_control_urls`.
+    pub peer_shard_base_urls: Vec<(NodeId, String)>,
+}
+
 /// Merge one corpus from the participant set the `work` fold reported
 /// (cw-lift 5g part 2).
 ///
@@ -233,13 +256,20 @@ pub enum RecoveryOutcome {
 /// as [`RecoveryOutcome::MergedButNotInstalled`] — neither `Recovered` nor
 /// `Failed`; see that variant for why it is neither.
 pub async fn merge_from_fold_coverage(
-    state: &crate::state::AppState,
+    node: FoldRecovery,
     corpus_id: &str,
-    handoff_id: commonwealth_core::ids::HandoffId,
-    participants: &[commonwealth_core::ids::NodeId],
+    handoff_id: HandoffId,
+    participants: &[NodeId],
     expected: usize,
 ) -> RecoveryOutcome {
-    let Some(engine) = state.inner.node.corpus_engine.as_ref() else {
+    let FoldRecovery {
+        corpus_engine,
+        mesh_store,
+        contribution_emitter,
+        local_node_id,
+        peer_shard_base_urls,
+    } = node;
+    let Some(engine) = corpus_engine.as_ref() else {
         return RecoveryOutcome::Failed("no corpus engine on this node".to_string());
     };
     if corpus_id.trim().is_empty() {
@@ -249,22 +279,21 @@ pub async fn merge_from_fold_coverage(
         return RecoveryOutcome::AlreadyHasCanonical;
     }
 
-    let local_node_id = state.identity_reader().current();
-    let peer_urls = crate::routes_internal::peer_control_urls(state, local_node_id).await;
+    let peer_urls = &peer_shard_base_urls;
 
     let shard_mgr = ShardManager::new(
-        std::sync::Arc::clone(engine),
+        Arc::clone(engine),
         engine.index_dir().to_path_buf(),
-        std::sync::Arc::clone(&state.inner.fabric.mesh_store),
+        Arc::clone(&mesh_store),
     )
-    .with_emitter(state.inner.fabric.contribution_emitter.clone());
+    .with_emitter(contribution_emitter);
 
     let plan = MergePlan {
         handoff_id,
         corpus_id,
         local_node_id,
         participants,
-        peer_shard_base_urls: &peer_urls,
+        peer_shard_base_urls: peer_urls,
         // The fold carries no ephemeral flag. An ephemeral grant is the corpus
         // OWNER's lifecycle and lives in `EphemeralGrantStore`, which cw-lift
         // 5g part 1 established the consent pair does not speak for.
