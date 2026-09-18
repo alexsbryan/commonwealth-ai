@@ -2002,3 +2002,79 @@ is the next CRATE (sovereign-core) rather than the head's remainder.
 
 **Landed in.** this commit — `ralph/STATE.md` (the corrected mint row and 12
 minted rows), `ralph/DECISIONS.md`.
+
+## 2026-09-18 · dm-understanding-vocab-rename · the consumer set is nine manifests, not four, and the layer glob no longer matches
+
+**Fork.** STATE.md:269 scopes the rename to "the four consumer manifests
+(corpus-engine, corpus-mcp, oicp-types, corpus-engine-vocab)" and premises
+"39 files / 87 sites" and "5 manifests". Measured at HEAD, the crate is named
+by 43 `.rs` files / 91 sites and by 11 `Cargo.toml` files — the root, the
+crate's own, and NINE consumers. The row also does not name a dependency that
+the rename creates: the `knowledge` layer assigns crates by the
+`corpus-engine-*` glob (`quality/ARCH_LAYERS.toml:153`), which stops matching
+`understanding-vocab`, so layer-gate fails until the crate is named explicitly.
+Options: (a) stop and re-mint; (b) correct the row and do the full rename,
+taking the extra consumers and the layer entry with it; (c) rename only the
+crate's own dir/manifest and leave consumers on a shim.
+
+**Choice.** (b). The rename is mechanical and the extra consumers are the same
+noun — a crate rename is not a design decision, and every consumer must repoint
+or the workspace does not compile. (c) is rejected because the row asks for
+"every `corpus_engine_vocab::` path", and a `pub use` shim in the crate's own
+`lib.rs` cannot keep `corpus_engine_vocab::` resolving across crates (the crate
+identifier itself is gone); a shim would also defeat the point of the rename
+(ARCH 8: one name per concept). (a) is rejected because the correction is
+mechanical: the tree, not the design, moved the count.
+
+**Evidence** (measured this session, worktree `dm-understanding-vocab-rename`).
+- `git grep -l 'corpus_engine_vocab' HEAD -- '*.rs' | wc -l` = 43;
+  `git grep -c 'corpus_engine_vocab' HEAD -- '*.rs'` sums to 91.
+- `git grep -l 'corpus-engine-vocab' HEAD -- '*Cargo.toml'` = 11:
+  `Cargo.toml`, `corpus-engine-vocab/Cargo.toml`, `corpus-engine/Cargo.toml`,
+  `corpus-mcp/Cargo.toml`, `oicp-types/Cargo.toml`,
+  `sovereign/crates/{sovereign-cli-llm,sovereign-core,sovereign-enrichment-build,sovereign-eval,sovereign-mesh,sovereign-tools}/Cargo.toml`.
+- `[workspace.dependencies]` is `Cargo.toml:304` (row said :298); the
+  `[[package_leaf]]` is `ARCH_LAYERS.toml:862-869` (row said :856-863); the
+  "carve-out history and actively misleads" phrase is `ARCH_LAYERS.toml:987`
+  (row said :854, which is the `corpus-engine-sections` comment).
+- LAYER failed on the first run with "crate `understanding-vocab` is not
+  assigned to any layer" because the `knowledge` `[[layer]]` matched by
+  `corpus-engine-*`; adding `"understanding-vocab"` explicitly
+  (`ARCH_LAYERS.toml:167-172`) made it exit 0.
+- Re-keyed in the same commit: the 13 DT `[[module]]` paths under the crate and
+  the `[[context]]` `crates`/`roots`/`vocab_roots`; the two
+  `quality/baselines/lines.tsv` keys and the `oversized.txt` path (path re-key,
+  counts unchanged — 2484/522/1588); `quality/sabotage/all.toml`'s `en-21`
+  target; the xtask `boundary_gate` budget pin and `atoms_file_census` roots
+  and home; every live doc (`DOMAINS.md`, `TARGET_ARCHITECTURE.md`,
+  `SYSTEM_OVERVIEW.md`, `DECOMPOSITION.md`, `EPISTEMIC_INDEX.md`, `SCHEMA.md`,
+  `ENV_FLAGS.md`/`env-flags.toml`, `CONCEPTS.toml`, `campaigns/domains.toml`)
+  and the `scripts/domains-census.py` fixtures. Three historical mentions are
+  left as written: `DECOMPOSITION.md:130` ("landed as corpus-engine-vocab"),
+  `DOMAINS.toml:3984` ("= corpus-engine-vocab RENAMED") and `DOMAINS.toml:3990`
+  (the re-export precedent).
+- Green on the corrected row: CLEAN exit 0; LINT exit 0; LAYER exit 0;
+  TEST(understanding-vocab) exit 0 (pass 75 fail 0); TEST(corpus-engine) exit 0
+  (pass 2197 fail 0). Extra gates touched by the diff, run as verification:
+  BOUNDARY exit 0; TOML exit 0; CENSUS `--self-test` exit 0 (11/11);
+  TEST(xtask) exit 0 (pass 118).
+
+**Falsified by.** A consumer that names the crate through a path the rename
+does not cover (a `build.rs`, an `include_str!`, a CI workflow, a
+`[[package_leaf]]` glob) — the `git grep` above is exhaustive over tracked
+files, so any such site would show as a residual `corpus-engine-vocab` or a
+build failure. Also falsified if a shim could keep `corpus_engine_vocab::`
+resolving cross-crate, which would make (c) viable.
+
+**Not fixed, observed (out of scope).** `cargo xtask docs-gate` is RED on the
+base tree, before this unit: `sovereign/SYSTEM_OVERVIEW.md:8654` and `:9986`
+cite `corpus-engine/src/index/{search,provenance}.rs`, which
+`REVIEW-build-index-read-port` moved to `corpus-index`; and
+`Cargo.toml:73-74` puts a quoted phrase (`DE "The read-port leaf, measured\n
+again"`) inside the `members` array, which `docs_gate.rs:439`'s
+`split('"').skip(1).step_by(2)` mis-reads as a crate name. Both predate this
+unit and belong to the index-read-port follow-up / the wave-close audit.
+
+**Landed in.** this commit — the crate rename, its consumers, the registry,
+baselines, docs and the xtask pins; `ralph/STATE.md` (the corrected row) and
+`ralph/DECISIONS.md`.
