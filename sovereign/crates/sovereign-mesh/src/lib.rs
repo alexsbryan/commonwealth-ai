@@ -28,7 +28,6 @@ pub mod capabilities;
 /// as its home, and the three loops take a handle to it rather than the
 /// daemon's `AppState` (which this crate may not name).
 pub mod fabric;
-pub use corpus_engine_watchers::commit_harvest; // shim: moved by domains dm-mesh-workbench-move-watchers
 /// Routing decision records — Phase 0 (P1/P2) of
 /// `docs/specs/SCHEDULER_QUALITY.md`. One structured record per
 /// routing decision (full candidate set, every scorer input stamped
@@ -66,24 +65,20 @@ pub use sovereign_serving_host::model_fetch; // shim: moved by domains dm-servin
 pub mod peer_adapter;
 pub use sovereign_serving_host::peer_inference; // shim: moved by domains REVIEW-build-serving-move-peer
 pub mod persist;
+pub use corpus_engine_watchers::projects;
 /// The §4.1 candidate objective — rank on predicted time-to-answer
 /// rather than on a product of dimensionless multipliers
 /// (`SCHEDULER_QUALITY.md` §4.1). Public because it is scored from a
 /// capture as well as from the live path.
-pub use sovereign_scheduler::predicted_time; // shim: moved by domains REVIEW-build-sched-move
-pub use corpus_engine_watchers::projects; // shim: moved by domains REVIEW-build-mesh-workbench-deferred
+pub use sovereign_scheduler::predicted_time; // shim: moved by domains REVIEW-build-sched-move // shim: moved by domains REVIEW-build-mesh-workbench-deferred
 pub mod rail_bind;
 pub mod rail_kv_pump;
-pub use understanding_vocab::reading_formatters; // shim: moved by domains dm-mesh-move-reading-formatters
 #[cfg(feature = "treesitter")]
-pub use corpus_engine_watchers::reindexer; // shim: moved by domains REVIEW-build-mesh-workbench-deferred
+pub use corpus_engine_watchers::reindexer;
+pub use understanding_vocab::reading_formatters; // shim: moved by domains dm-mesh-move-reading-formatters // shim: moved by domains REVIEW-build-mesh-workbench-deferred
 pub mod ring_roster;
 pub mod ring_sync;
 pub mod state;
-/// Capability bands — the tier floor of `SCHEDULER_QUALITY.md` §4.1:
-/// capability filters the candidate set, predicted cost ranks what
-/// survives.
-pub use sovereign_scheduler::tier;
 pub use sovereign_serving_host::worker_eligibility; // shim: moved by domains dm-serving-move-leaves
                                                     // Ephemeral worker pods — owner-initiated TLS-pinned transport that
                                                     // replaces the full-mesh-pod path. Pods become single-owner workers,

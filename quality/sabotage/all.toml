@@ -56,7 +56,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-5-full_export_not_due_immediately_after_on"
 requirement = "CI-5"
-target = "sovereign/crates/sovereign-mesh/src/reindexer.rs"
+target = "corpus-engine-watchers/src/reindexer.rs"
 find = "fn full_export_due(last_finished: Option<Instant>, cooldown: Duration) -> bool {\n    last_finished.is_none_or(|t| t.elapsed() >= cooldown)\n}"
 replace = "fn full_export_due(_last_finished: Option<Instant>, _cooldown: Duration) -> bool {\n    true\n}"
 mustFail = ["full_export_not_due_immediately_after_one_finished"]

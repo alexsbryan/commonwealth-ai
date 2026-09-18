@@ -70,7 +70,7 @@
 2	sovereign/crates/sovereign-daemon/src/daemon.rs
 1	sovereign/crates/sovereign-serving-host/src/inference_adapter.rs
 1	sovereign/crates/sovereign-serving-host/src/pinned_pod_snapshot.rs
-3	sovereign/crates/sovereign-mesh/src/projects.rs
+3	corpus-engine-watchers/src/projects.rs
 1	sovereign/crates/sovereign-daemon/src/recipe_http.rs
 1	sovereign/crates/sovereign-daemon/src/roster_repair.rs
 1	sovereign/crates/sovereign-daemon/src/turn_http.rs

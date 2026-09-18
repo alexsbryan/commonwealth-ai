@@ -605,10 +605,7 @@ mod tests {
 
     #[test]
     fn crate_of_reads_both_workspace_layouts() {
-        assert_eq!(
-            crate_of("corpus-engine/src/facts_check.rs"),
-            "corpus-engine"
-        );
+        assert_eq!(crate_of("code-facts/src/facts_check.rs"), "code-facts");
         assert_eq!(
             crate_of("sovereign/crates/sovereign-core/src/memory.rs"),
             "sovereign-core"

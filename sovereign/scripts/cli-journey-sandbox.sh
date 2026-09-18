@@ -361,7 +361,7 @@ fi
 # id instead, so step [3] asserted an id nothing had created.
 #
 # A distinct id alone does NOT fix it. `ProjectRegistry::nested_conflict`
-# (sovereign-mesh/src/projects.rs:386) treats an identical root under a
+# (corpus-engine-watchers/src/projects.rs:457) treats an identical root under a
 # different name as a collision, so registering a second id against THIS repo
 # would be refused as soon as any earlier journey — `code-intel-lifecycle`
 # step [0] — had registered it. The journey therefore needs its own ROOT, not

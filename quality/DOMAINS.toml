@@ -545,7 +545,7 @@ note = "the grammar port the lanes take (dm-next-edit-move): the registry stays 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/lib.rs"
 context = "fabric"
-lines = 98
+lines = 93
 note = "the crate root; Fabric's own modules plus shims to the modules that left (host at dm-daemon-mesh-edge/jobs/adapters, serving and scheduler earlier, the Tier-1 simulator at dm-mesh-sim-move). Retagged host -> fabric by REVIEW-audit-daemon-1: after the host cluster left, no host module remains here and the crate is Fabric's home (DAEMON_CORE.md §4.2)"
 
 [[module]]
@@ -773,7 +773,7 @@ note = ""
 [[module]]
 path = "corpus-engine-watchers/src/reindexer.rs"
 context = "workbench"
-lines = 2150
+lines = 2155
 note = ""
 
 [[module]]
@@ -7257,7 +7257,7 @@ note = ""
 [[module]]
 path = "corpus-engine-watchers/src/lib.rs"
 context = "build-feedback"
-lines = 51
+lines = 75
 note = ""
 
 [[module]]
@@ -8727,7 +8727,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-cli-dev/src/code_cmd.rs"
 context = "unknown"
-lines = 1847
+lines = 1846
 note = ""
 
 [[module]]

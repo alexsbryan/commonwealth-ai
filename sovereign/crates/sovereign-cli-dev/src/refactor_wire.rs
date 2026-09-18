@@ -105,7 +105,7 @@ pub enum WireSurface {
     /// sqlite TEXT columns. Judged via `kernel_types::wire`.
     Json,
     /// The TEXT bytes rusqlite binds for a column parameter (e.g.
-    /// `params![corpus_id, …]`, corpus-engine/src/facts_store.rs:202).
+    /// `params![corpus_id, …]`, code-facts/src/facts_store.rs:202).
     Sqlite,
 }
 

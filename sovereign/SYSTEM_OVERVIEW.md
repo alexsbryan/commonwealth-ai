@@ -8656,7 +8656,7 @@ stabilises, same contract as every other row in this section.
 | Meshapp platform SDK | `sovereign-meshapp/src/wrapped.rs` (1,210), `sovereign-meshapp/src/wrapped/semantic.rs` (1,403) | Wrapped-projection + semantic layer; the `_sdk/` catalog contract is newer than either file — split follows the SDK's shape. |
 | OICP studio extraction | `oicp-client/src/lib.rs` (1,754) | The corpus-engine-free client carve-out landed as one file by design (boundary-gate leaf); splits into transport/session/structured-output modules on next growth. |
 | Chaos scoring | `sovereign-eval/src/chaos_monkey/score.rs` (1,381) | Rubric scorer for the reliability-report sweep; per-dimension split lands with the pinned-critic work. |
-| Reindexer liveness | `sovereign-mesh/src/reindexer.rs` (1,519) | Freshness gate + heartbeat + supervisor self-heal grew together (watcher-liveness hardening); split waits for the watcher re-enable decision. |
+| Reindexer liveness | `corpus-engine-watchers/src/reindexer.rs` (1,519) | Freshness gate + heartbeat + supervisor self-heal grew together (watcher-liveness hardening); split waits for the watcher re-enable decision. |
 | corpus-index index search | `corpus-index/src/index/search.rs` (1,245) | 45 lines over the ceiling; trims naturally when the ANN-refine retrieval fix migrates the legacy search path. |
 | Iroh transport (cmnwlth) | `commonwealth/crates/commonwealth-transport/src/iroh.rs` (1,280) | No-VPN mesh arc (invite/join/gossip over iroh) landed as one transport module; splits dialer/acceptor/relay once the relay-floor characterization settles. |
 

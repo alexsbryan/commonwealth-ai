@@ -110,10 +110,9 @@ sovereign-serving-host = { path = "../sovereign-serving-host" }
 # gossip, etc.) don't pull the 5 tree-sitter grammar crates.
 corpus-engine = { workspace = true }
 corpus-engine-notes = { workspace = true }
-# `commit_harvest` moved to the watchers crate (domains
-# dm-mesh-workbench-move-watchers); the lib.rs shim re-exports it so
-# `sovereign_mesh::commit_harvest::*` keeps resolving, and `reindexer` reads
-# `crate::commit_harvest::harvest_between` through it.
+# The workbench pair (`projects`, `reindexer`) moved here from this crate at
+# domains REVIEW-build-mesh-workbench-deferred; lib.rs shims both so the
+# daemon and cli consumers keep resolving through `sovereign_mesh::`.
 corpus-engine-watchers = { workspace = true }
 # SCIP call graph + exporter dispatch. Carved out of corpus-engine
 # 2026-05-23 — reindexer.rs uses ScipGraph + scip_export directly.
@@ -147,9 +146,11 @@ sovereign-time = { workspace = true }
 # `sovereign-contracts` leaf (REVIEW-build-serving-worker-port), re-exported
 # by `sovereign-pods` and shimmed in lib.rs.
 sovereign-pods = { path = "../sovereign-pods" }
-# The ranker lifted out of this crate (domains dm-sched-move-tier). The
-# lib.rs shim re-exports it so the modules that still reach `crate::tier`
-# keep resolving until the scheduler half moves whole.
+# The scheduler records and ranker lifted out of this crate (domains
+# dm-sched-move-tier, REVIEW-build-sched-move); lib.rs shims `decision_log`,
+# `decision_replay`, `decision_trace` and `predicted_time` for their
+# consumers. `tier`'s shim was deleted by REVIEW-audit-mesh-rest once its
+# last internal reader left with the simulator.
 sovereign-scheduler = { path = "../sovereign-scheduler" }
 # The daemon-to-daemon wire bodies the ring-sync loop sends and the route
 # receives; a leaf both may name (domains dm-daemon-api-edge (a)).
