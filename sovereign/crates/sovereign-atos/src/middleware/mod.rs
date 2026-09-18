@@ -15,6 +15,9 @@
 
 use std::sync::Arc;
 
+use commonwealth_core::ids::NodeId;
+use commonwealth_state::MeshStore;
+
 pub mod approval_gate;
 pub mod context_injector;
 pub mod session_briefing;
@@ -42,4 +45,14 @@ pub fn registrations() -> Vec<Arc<dyn Middleware>> {
         Arc::new(ContextInjector::empty()),
         Arc::new(SessionBriefing::new()),
     ]
+}
+
+/// The ATOS session store, built from the node's replicated KV and its
+/// identity. This is the registration entry point's store half: the daemon
+/// takes the store from ATOS rather than constructing an ATOS type itself,
+/// because the session store belongs to Answering's ATOS surface
+/// (`quality/DAEMON_CORE.md` §4.2). `None` is the daemon's choice, not this
+/// function's — a daemon that never wires ATOS simply does not call it.
+pub fn session_store(mesh: MeshStore, origin: NodeId) -> crate::session::SessionStore {
+    crate::session::SessionStore::new(mesh, origin)
 }

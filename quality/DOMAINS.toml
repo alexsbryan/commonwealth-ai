@@ -1259,7 +1259,7 @@ note = "the host route shell for POST /v1/edit_predictions/outcome, split out of
 [[module]]
 path = "sovereign/crates/sovereign-daemon/src/routes_inference.rs"
 context = "host"
-lines = 1747
+lines = 1745
 note = "was serving; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
@@ -1445,14 +1445,8 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-daemon/src/state.rs"
 context = "host"
-lines = 2085
-note = "the api-side god object, dissolving: the flat owner fields are six parts plus the daemon's store part now (DC §4.2). Names commonwealth_core::mesh::Mesh (:10), commonwealth_state (:11-12), corpus_engine::CorpusEngine (:13), serving_policy::fair_sched (:15), sovereign_grants (:17), sovereign_serving_host::admission (:20); `PrincipalTally`/`RejectedNodeIdHeader` are re-exported from the host part (REVIEW-build-daemon-parts, 2026-09-18)"
-
-[[module]]
-path = "sovereign/crates/sovereign-daemon/src/state/answering.rs"
-context = "host"
-lines = 28
-note = "Answering's part (DC §4.2); scaffolding on AppStateInner until the ATOS inversion moves it to sovereign-core's pipeline (REVIEW-mint-daemon-move)"
+lines = 2136
+note = "the api-side god object, dissolving: the flat owner fields are five parts plus the daemon's store part now (DC §4.2). Names commonwealth_core::mesh::Mesh (:10), commonwealth_state (:11-12), corpus_engine::CorpusEngine (:13), serving_policy::fair_sched (:15), sovereign_grants (:17), sovereign_serving_host::admission (:20); `PrincipalTally`/`RejectedNodeIdHeader` are re-exported from the host part (REVIEW-build-daemon-parts, 2026-09-18). `AnsweringPart` dissolved at REVIEW-build-daemon-answering-part (2026-09-18): `middleware_registry` is a host field, `session_store` comes from `sovereign_atos::middleware::session_store`, `repo_root` from `sovereign_core::answering::repo_root`"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/fabric.rs"
