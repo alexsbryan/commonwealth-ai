@@ -1,0 +1,22 @@
+unit: dm-rename-desktop-member
+commits: ad62cfab1 (the renames)
+what: sovereign-desktop's two Peer* type definitions renamed to their DT words,
+  referrers repointed (the two doc comments in sovereign-turn-client's mesh.rs
+  and sovereign-api's routes_internal/peer_preference.rs):
+    DiscoveredPeerDto -> DiscoveredMemberDto
+    PeerPreferenceDto -> VenuePreferenceDto
+  PeerPreferenceDto is a `decided:merge` row: its target (the api's
+  VenuePreferenceDto) still lives in sovereign-api, not
+  sovereign-contracts::daemon_wire, and the desktop is a thin surface that may
+  not reach sovereign-api (quality/ARCH_LAYERS.toml:1203, may_reach). So the
+  row's "delete the desktop copy and use the api's" option is unavailable; the
+  commit takes the other one — a serde-compatible struct (same four field
+  names, no serde renames) renamed to the owner's word. The full merge waits on
+  the promotion the DT row's own `why` names.
+  The desktop's TypeScript mirror (src/lib/types.ts) is outside the campaign's
+  Rust-only instrument and is untouched, as in the sibling rename rows.
+checks: CLEAN exit=0 (disk gate; debug target 0G, cache kept); LINT exit=0
+  (scoped to 7 crates incl. sovereign-desktop/-api/-turn-client); CENSUS
+  --self-test exit=0 (11/11 positives caught, 11/11 negatives refused).
+census: peer-outside 6 in 5 crates -> 4 in 4 crates (the desktop's two gone;
+  the remaining four are the later rename rows' work).
