@@ -1104,10 +1104,10 @@ lines = 307
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-api/src/middleware/decision_extractor.rs"
+path = "corpus-engine-notes/src/decision_extractor.rs"
 context = "workspace"
 lines = 443
-note = "extracts agent decisions from responses; the note store's question, not routing's"
+note = "extracts agent decisions from responses; the note store's question, not routing's. Moved down from sovereign-api::middleware by domains dm-decision-extractor-move"
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/middleware/mod.rs"
@@ -15608,10 +15608,10 @@ lines = 673
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-tools/src/notes/response_mine.rs"
-context = "unknown"
+path = "corpus-engine-notes/src/response_mine.rs"
+context = "workspace"
 lines = 454
-note = ""
+note = "the regex response miner; moved down from sovereign-tools::notes by domains dm-decision-extractor-move"
 
 [[module]]
 path = "sovereign/crates/sovereign-tools/src/parcel_analytics.rs"
