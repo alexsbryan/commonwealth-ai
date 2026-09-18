@@ -1180,3 +1180,97 @@ Recorded, not changed:
   entry; their `file` coordinates already point at `sovereign-daemon`.
 - **`size-gate` (advisory)** · 69 keys grew — the wave's accretion and its new
   crates; `warn_gate` by design. Not re-pinned.
+
+## REVIEW-audit-mesh-rest — wave 1's close on sovereign-mesh
+
+Range audited: `git log c765d09ec..HEAD` (the previous audit's hash) — the
+`sovereign-api` retire's follow-ons: `REVIEW-build-code-facts` (the `code-facts`
+crate), `REVIEW-build-mesh-workbench-deferred` (the last two mesh modules to
+`corpus-engine-watchers`), `dm-registry-coverage` and the `DEMO-d5-misnamed`
+close. Checks: TESTALL exit=0 (13397 pass, 0 fail); PREPUSH exit=0 (2 of 18 want
+attention: `concept-gate` could-not-judge, declared; `size-gate`, the advisory
+`warn_gate`).
+
+The row's claims, verified:
+
+- **No non-fabric `[[module]]` remains under `sovereign-mesh/src`.** `misnamed`
+  reads sovereign-mesh 13,855 / 13,855 = 100.0% fabric with no MISNAMED flag;
+  all 18 rows are `fabric`.
+- **`crate-lines --crate sovereign-mesh` reads <= 20,000.** It reads 13,855.
+- **`plan --crate sovereign-mesh`'s problems are the registry's frozen
+  `[[cluster]]` rows.** All nine trace to the 2026-09-14 measurement (banner
+  `quality/DOMAINS.toml:4432,4437-4446`, "115 files, 88,255 lines"): five "dest
+  not in context crates" from the prose `dest` strings (`workspace`, `retrieval`,
+  `workbench`, `ingest`, `understanding`) and four `no-new-exception` fails from
+  the same rows' `own_deps`/`imports_clusters` (`back-of-house`, `serving`,
+  `workbench`, `fabric`). None is a live edge — the fabric row's
+  `sovereign-mesh -> sovereign-daemon` is the `[[cluster]]` graph's own
+  `imports_clusters`, not a production dep (`sovereign-daemon` is
+  `[dev-dependencies]`, `sovereign-mesh/Cargo.toml:328`).
+
+Findings, fixed (commit `8b0390a14`):
+
+- **ARCH 3 (a shim whose importers are all repointed)** ·
+  `sovereign/crates/sovereign-mesh/src/lib.rs:31,86` · two dead shims deleted:
+  `corpus_engine_watchers::commit_harvest` — its only reader, `reindexer`, moved
+  to `corpus-engine-watchers` and reaches `crate::commit_harvest` within its new
+  crate — and `sovereign_scheduler::tier` — its last reader, the Tier-1
+  simulator, moved to `sovereign-mesh-test-harness` and names
+  `sovereign_scheduler::tier` directly. A word-boundary sweep of
+  `sovereign_mesh::<m>` and `crate::<m>` over the workspace gave 0/0 for each
+  (the only remaining hits are Cargo.toml comments). The two comments
+  (`Cargo.toml:113-116`, `:150-152`) are rewritten to name the real importers.
+- **ARCH 3 (the registry does not land with the code)** · `quality/DOMAINS.toml`
+  · four `[[module]]` line counts stale against the tree:
+  `sovereign-mesh/src/lib.rs` 98→93 (this audit's deletion),
+  `corpus-engine-watchers/src/reindexer.rs` 2150→2155,
+  `corpus-engine-watchers/src/lib.rs` 51→75,
+  `sovereign-cli-dev/src/code_cmd.rs` 1847→1846.
+- **ARCH 3.2 (a moved file reads as NEW) · arch-gate** ·
+  `quality/baselines/oversized.txt:154` · `REVIEW-build-mesh-workbench-deferred`
+  moved `reindexer.rs` without re-keying its oversized row; re-keyed
+  `sovereign/crates/sovereign-mesh/src/reindexer.rs` →
+  `corpus-engine-watchers/src/reindexer.rs`, count unchanged (§3a step 6).
+- **ARCH 3.2 (a moved file reads as NEW) · clock-gate** ·
+  `quality/baselines/clock_reads.txt:73` · the same move left the clock row keyed
+  to the old path; re-keyed to `corpus-engine-watchers/src/projects.rs`, count 3
+  unchanged (the moved file still has three `SystemTime::now()` reads).
+- **ARCH 3/4 (path-keyed registries)** · `quality/sabotage/all.toml:59`,
+  `quality/sabotage/gr.toml:359,369` · three live mutant targets still keyed
+  `sovereign/crates/sovereign-mesh/src/reindexer.rs`; re-keyed to
+  `corpus-engine-watchers/src/reindexer.rs` (the `find` body still matches the
+  moved file at `:471`), or the mutants can never be planted.
+- **ARCH 3/4 (a doc naming a path that no longer owns the fact)** · the two
+  moves left live pointers, repointed: `corpus-engine-scip/src/error.rs:13`,
+  `sovereign/crates/sovereign-contracts/src/rebrand.rs:313`,
+  `sovereign/crates/sovereign-tools/src/code/symbol_lookup.rs:270`,
+  `sovereign/scripts/cli-journey-sandbox.sh:364` (line also corrected 386→457),
+  `sovereign/SYSTEM_OVERVIEW.md:8659`, `quality/session-frame.golden.md:135-137`
+  (the `facts`/`facts_store` pair to `code-facts/src/`),
+  `sovereign/crates/sovereign-cli-dev/src/intent.rs:609` (the `crate_of` example
+  → `code-facts/src/facts_check.rs` / `"code-facts"`), and
+  `sovereign/crates/sovereign-cli-dev/src/refactor_wire.rs:108`.
+
+Recorded, not changed:
+
+- **Frozen measurement coordinates** · `quality/DOMAINS.toml`'s `[[cluster]]`
+  rows and `[[noun]]` `file` fields still name the 2026-09-14 mesh paths (the
+  banner at `:4432`), and `sovereign/DEFAULTS_LEDGER.md:536`,
+  `sovereign/docs/archive/PHASE_7_GAP_CLOSURE_PLAN.md:94`,
+  `sovereign/handoff/CODE_INTEL_DEMO.md:178,420` and
+  `quality/campaigns/handed/order-3-writers.md:168` are records of their moment.
+  A re-key would falsify the record (the audit-3/5/7/8/9 precedent).
+- **`corpus-engine/xtask/src/clock_gate.rs:270`** · `each_island_is_pointed_at_its_own_decider`
+  uses `corpus-engine/src/facts_store.rs` as its corpus-engine example after the
+  file moved to `code-facts`. The assertion is a pure path-prefix test that still
+  passes, so the example is historical, not a broken gate; a re-pointed example
+  would take `decider_for`'s else branch (it prefixes on `corpus-engine`, not
+  `code-facts`), which is a `decider_for` decision, not this audit's.
+- **`scripts/tests/lint-could-not-judge.sh:87`** · `corpus-engine/src/facts.rs:12:5`
+  is a synthetic diagnostic fixture, not a pointer.
+- **`sovereign/SYSTEM_OVERVIEW.md:4183`** names `sovereign-mesh::reindexer` —
+  the shim, which still resolves and is the path the daemon reaches; the
+  historical-path re-export is intentional (§3a step 5), not drift.
+- **`size-gate` (advisory)** · 69 keys grew, the campaign's accretion;
+  `warn_gate` by design. Not re-pinned.
+- **`concept-gate` could-not-judge** · exit 4, declared; not blocking.
