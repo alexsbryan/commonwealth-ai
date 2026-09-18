@@ -152,8 +152,9 @@ async fn a_two_donor_fold_missing_its_peer_refuses_and_writes_no_canonical() {
          partition this node can reach",
     );
 
+    let node = sovereign_api::routes_internal::fold_recovery(&state).await;
     let outcome = merge_from_fold_coverage(
-        &state,
+        node,
         CORPUS,
         coverage.handoff_id,
         &coverage.nodes,
@@ -193,8 +194,9 @@ async fn a_two_donor_fold_missing_its_peer_refuses_and_writes_no_canonical() {
 
     // ── The paired positive: drop the bar, and the same disk merges half ──
     let (_home2, dir2, state2) = leader_alone(CORPUS).await;
+    let node2 = sovereign_api::routes_internal::fold_recovery(&state2).await;
     let dropped = merge_from_fold_coverage(
-        &state2,
+        node2,
         CORPUS,
         coverage.handoff_id,
         &coverage.nodes,

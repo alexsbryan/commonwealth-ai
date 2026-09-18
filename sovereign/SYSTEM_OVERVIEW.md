@@ -6423,7 +6423,7 @@ absent and the guards fail closed for *every* caller.
   (ARCH §10.6). **It is the last step of `merge_participants` itself**,
   after the shard-dir cleanup — cw-lift 5g B8. Before that it was called
   by the FOLD-side caller only
-  (`commonwealth_api::auto_recover::merge_from_fold_coverage`), and
+  (`sovereign_grants::auto_recover::merge_from_fold_coverage`), and
   `coordinate_merge` — the queue-mode caller, reached from
   `routes_internal/corpus_queue.rs:210` and `:550` — shared the same merge
   and had the identical gap: a queue-mode merge produced a canonical

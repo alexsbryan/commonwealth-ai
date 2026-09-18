@@ -1068,10 +1068,10 @@ lines = 1121
 note = "the daemon's side of admission since REVIEW-build-serving-move-admission (2026-09-15): the `Admission`/`AdmissionHost` impls over AppState, the RAII guards, and the re-exports of the host's surface. The decision, the two axum middlewares and the 503 renderer are `sovereign-serving-host/src/admission.rs`; SERVING_BOUNDARY.md (c). RETAGGED serving -> host at REVIEW-build-api-host-decouple (2026-09-16): the serving decision already moved, and what remains holds `Arc<AppStateInner>` and `impl Admission for AppState` (an inherent/trait impl that cannot leave the crate defining the type) — DAEMON_CORE.md §4.1's host `edge` family. It moves with `dm-daemon-api-edge`"
 
 [[module]]
-path = "sovereign/crates/sovereign-api/src/auto_recover.rs"
+path = "sovereign/crates/sovereign-grants/src/auto_recover.rs"
 context = "ingest"
-lines = 860
-note = "reactive recovery for stranded corpus partitions"
+lines = 889
+note = "reactive recovery for stranded corpus partitions. Moved from sovereign-api by dm-auto-recover-move (2026-09-18): the shard manager recovering its own stranded partitions, per DAEMON_CORE.md §4.3. `merge_from_fold_coverage`'s `&AppState` parameter became `FoldRecovery`, the node-side reads the caller gathers (engine, mesh store, emitter, identity, peer URLs) — sovereign-grants cannot name AppState"
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/client_auth.rs"

@@ -23,6 +23,7 @@ use serde::{Deserialize, Serialize};
 
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::knowledge::IngestionHandoff;
+use sovereign_grants::auto_recover::FoldRecovery;
 use sovereign_grants::shard_manager::ShardManager;
 
 use crate::state::AppState;
@@ -55,6 +56,22 @@ pub async fn peer_control_urls(state: &AppState, local_node_id: NodeId) -> Vec<(
         }
     }
     urls
+}
+
+/// Gather the node-side inputs [`FoldRecovery`] carries, from the daemon
+/// state. `merge_from_fold_coverage` moved to `sovereign-grants`, which cannot
+/// name `AppState`, so the reads it used to make for itself are made here, on
+/// the caller's side of the boundary.
+pub async fn fold_recovery(state: &AppState) -> FoldRecovery {
+    let local_node_id = state.identity_reader().current();
+    let peer_shard_base_urls = peer_control_urls(state, local_node_id).await;
+    FoldRecovery {
+        corpus_engine: state.inner.node.corpus_engine.clone(),
+        mesh_store: Arc::clone(&state.inner.fabric.mesh_store),
+        contribution_emitter: state.inner.fabric.contribution_emitter.clone(),
+        local_node_id,
+        peer_shard_base_urls,
+    }
 }
 
 pub async fn corpus_ingest_partition(

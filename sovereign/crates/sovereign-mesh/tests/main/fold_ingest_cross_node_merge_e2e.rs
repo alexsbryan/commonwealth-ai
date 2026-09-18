@@ -831,8 +831,9 @@ async fn two_donors_on_two_nodes_land_both_slices_in_the_canonical() {
     let coverage = fold_coverage_for(&projection, &actor(1), CORPUS, NOW_MS)
         .expect("the submitter leads a terminal ingest:v1 handoff for this corpus");
 
+    let node = sovereign_api::routes_internal::fold_recovery(&leader_state).await;
     let outcome = merge_from_fold_coverage(
-        &leader_state,
+        node,
         CORPUS,
         coverage.handoff_id,
         &coverage.nodes,

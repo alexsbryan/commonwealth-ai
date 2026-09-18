@@ -23,7 +23,7 @@
 1	oicp-conformance/src/main.rs
 1	sovereign-mobile/src-tauri/src/commands/host.rs
 1	sovereign/crates/sovereign-serving-host/src/admission.rs
-2	sovereign/crates/sovereign-api/src/auto_recover.rs
+2	sovereign/crates/sovereign-grants/src/auto_recover.rs
 1	sovereign/crates/sovereign-api/src/middleware/artifact_surface.rs
 4	sovereign/crates/sovereign-api/src/middleware/session_briefing.rs
 3	sovereign/crates/sovereign-api/src/routes_inference.rs

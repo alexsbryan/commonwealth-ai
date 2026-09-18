@@ -304,8 +304,9 @@ async fn the_merge_proceeds_with_the_slices_that_exist() {
         "precondition: this handoff is partial"
     );
 
+    let node = sovereign_api::routes_internal::fold_recovery(&leader_state).await;
     let outcome = merge_from_fold_coverage(
-        &leader_state,
+        node,
         CORPUS,
         coverage.handoff_id,
         &coverage.nodes,
@@ -520,8 +521,9 @@ async fn a_corpus_missing_an_abandoned_slice_records_nothing_that_says_so() {
 /// Merge one corpus from a coverage, asserting the merge itself succeeded —
 /// a precondition for the gossip reading, not the reading's own bar.
 async fn merge_one(state: &sovereign_api::state::AppState, corpus: &str, cov: &FoldCoverage) {
+    let node = sovereign_api::routes_internal::fold_recovery(state).await;
     let outcome =
-        merge_from_fold_coverage(state, corpus, cov.handoff_id, &cov.nodes, cov.expected).await;
+        merge_from_fold_coverage(node, corpus, cov.handoff_id, &cov.nodes, cov.expected).await;
     assert!(
         matches!(outcome, RecoveryOutcome::Recovered { .. }),
         "precondition for the gossip reading: {corpus} must have a canonical \
