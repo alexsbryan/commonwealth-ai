@@ -828,6 +828,11 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-api/src/routes_internal/corpus_collaborate.rs", Class::Mesh, 1),
     ("sovereign/crates/sovereign-api/src/routes_knowledge.rs", Class::Mesh, 1),
     ("sovereign/crates/sovereign-api/src/routes_internal/pipeline_pause.rs", Class::LocalDaemon, 1),
+    // NEW (2026-09-18, ring-doc REVIEW-build-rd-1-live, 6ac1fd39f): the ring
+    // live lane's fan-out. `push_ephemeral` POSTs a namespaced envelope to
+    // `/internal/ring/live` on each Online mesh member, endpoints resolved
+    // through the `PeerTransport` seam — ring peers, never a third party.
+    ("sovereign/crates/sovereign-api/src/routes_rail_live.rs", Class::Mesh, 1),
     ("oicp-conformance/src/checks.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-meshapp-registry/src/proxy.rs", Class::LocalDaemon, 1),
     // Federated media's catalogue half. The row was
