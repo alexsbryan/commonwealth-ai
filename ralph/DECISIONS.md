@@ -450,3 +450,20 @@ fallback), sovereign-api/src/routes_rail.rs:123-139 (first append refused before
 Falsified if a sovereign-side site every namespace's first touch passes through exists that
 installs the source before `rail.roster()` — none found at the two doors. Row rewritten in
 d5dc6037e; predicate, bar and rung note in the commit that follows this entry.
+
+## 2026-09-18 — seat (charter: fixing a row whose premise the tree contradicts) — REVIEW-build-rr-1-roster-from-mesh lands; the ring-doc instrument's classifier narrowed; one follow-up row
+
+Fork (ralph/NEEDS_HUMAN.md 18:01Z): e94b26826 built and green on every gate; ring-doc's
+`verdict all` read four PASSED and `ra-doc-three-machines-converge` FAILED naming e94b26826.
+Choice: option 1 — the instrument, not the bar. f181b179e (operator) says a rail diff made
+only by commits OUTSIDE ring-doc is COULD-NOT-JUDGE; scripts/ring-doc-demo.sh:832 classified
+"ours" by a bare "REVIEW-" prefix, which every campaign's review rows carry. Now: a subject
+containing "rd-1-" or "ring-doc". Evidence: the row's own subject "REVIEW-build-rr-1-…"; the
+f181b179e row text. Falsified if a ring-doc commit exists whose subject carries neither token.
+Row marked [x]. Worker's §(c)3 accepted as real: the six daemon namespaces lost their
+registration, and a stray `rings/<ns>/roster.json` would now narrow a daemon ring (this
+host has one stray file, ~/.svrnmesh/rings/work/roster.json, not a daemon namespace) —
+minted `rr-1-daemon-rings-registered` (register the closed set with derive_roster; test:
+file ignored for daemon rings, narrows app rings). Also for the operator: the worker tore
+down a leftover podman ring-doc session from ~16:30 (ports 19849/59/69) that had collided
+with its DEMO run — if that was your rehearsal, it is gone.

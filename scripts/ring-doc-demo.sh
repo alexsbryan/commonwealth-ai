@@ -829,7 +829,10 @@ row("ra-doc-append-nudges-sync", None if fatal or not n.get("samples") else n["p
 rail_commits = [l.split(" ", 1) for l in open(os.path.join(cen, "rail.commits")).read().splitlines() if l.strip()]
 # A rail diff made only by commits outside this campaign says nothing about
 # this campaign: the instrument could not judge, it did not fail.
-ours = [h for h, *subj in rail_commits if (subj or [""])[0].startswith(("rd-1-", "REVIEW-", "ralph", "ring-doc"))]
+# "ours" = ring-doc's own rows (every one is rd-1-* / REVIEW-*-rd-1-* / HUMAN-rd-1-*) or the
+# seat's "ring-doc:" commits. A bare "REVIEW-" prefix matched ring-room's rows too
+# (e94b26826) and turned a foreign hunk into FAILED (seat, 2026-09-18).
+ours = [h for h, *subj in rail_commits if any(k in (subj or [""])[0] for k in ("rd-1-", "ring-doc"))]
 foreign = bool(rail_diff) and bool(rail_commits) and not ours
 c = s.get("converge") or {}
 row("ra-doc-three-machines-converge", None if fatal or not c or foreign else
