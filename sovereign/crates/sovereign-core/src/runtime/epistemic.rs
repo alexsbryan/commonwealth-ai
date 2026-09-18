@@ -1257,10 +1257,7 @@ mod tests {
 
     #[test]
     fn mixed_member_pool_leaves_member_open() {
-        assert_eq!(
-            member_of_first_holding(vec![Some("Bo".into()), None]),
-            None
-        );
+        assert_eq!(member_of_first_holding(vec![Some("Bo".into()), None]), None);
         assert_eq!(
             member_of_first_holding(vec![Some("Bo".into()), Some("Al".into())]),
             None
