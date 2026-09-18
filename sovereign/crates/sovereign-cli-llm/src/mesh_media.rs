@@ -228,7 +228,7 @@ async fn list_offers(client: &reqwest::Client, url: &str, json_out: bool) -> i32
     if offers.offering.is_empty() {
         println!(
             "No member offers a media origin. A holder declares one with \
-             `[iroh] media_origin = \"127.0.0.1:8096\"` and restarts its daemon; it shows \
+             `[iroh] media_origin = \"127.0.0.1:8096\"` and reloads its daemon; it shows \
              here within one gossip round."
         );
         return 0;
@@ -480,9 +480,10 @@ fn set_offer(
 }
 
 /// `svrn mesh media offer <origin> [--admit <member>...]` — offer this node's
-/// media origin to the mesh, then restart the daemon so the acceptor
-/// advertises it. Both keys are restart-required (`admin_http.rs` reload
-/// diff), so the restart is this verb's, not the person's.
+/// media origin to the mesh, then `svrn daemon reload` so the running
+/// acceptor serves it. Both keys reload live (`MediaRoute`), so no restart:
+/// a restart left peers dialing the holder's endpoint for 120 s (ring-room
+/// 99ca7e4cb leg 3).
 fn cmd_media_offer(args: &[String]) -> i32 {
     if sovereign_cli_shared::help::wants_help(args) || args.is_empty() {
         eprintln!("Usage: svrn mesh media offer <origin> [--admit <member>...]");
@@ -491,7 +492,7 @@ fn cmd_media_offer(args: &[String]) -> i32 {
         eprintln!("<origin> is a port (8096) or a loopback host:port. With no --admit");
         eprintln!("every member may reach it; --admit names the only members who may,");
         eprintln!("by member name or a node-id prefix, as `svrn mesh status` shows them.");
-        eprintln!("The daemon is restarted to publish the offer.");
+        eprintln!("The running daemon is reloaded to publish the offer.");
         return if args.is_empty() { 1 } else { 0 };
     }
     let mut origin: Option<&str> = None;
@@ -543,14 +544,13 @@ fn cmd_media_offer(args: &[String]) -> i32 {
     tracing::info!(%origin, admit = ?admit, config = %path.display(), "media offer written");
     println!("Offering {origin}. ({})", path.display());
     println!("  {}", offered_to_line(&admit));
-    println!("restarting the daemon to publish the offer…");
-    restart_daemon()
+    println!("reloading the daemon to publish the offer…");
+    reload_daemon()
 }
 
-/// `daemon stop` then `daemon start` through the dispatcher — this binary
-/// does not own the `daemon` verb. A stop that fails is fine (nothing was
-/// running); a start that fails is the verb's failure.
-fn restart_daemon() -> i32 {
+/// `daemon reload` through the dispatcher — this binary does not own the
+/// `daemon` verb. A reload that fails is the verb's failure.
+fn reload_daemon() -> i32 {
     let dispatcher = match std::env::current_exe()
         .map_err(|e| e.to_string())
         .and_then(|exe| crate::bench_cmd::ablate::dispatcher_exe(&exe))
@@ -558,24 +558,18 @@ fn restart_daemon() -> i32 {
         Ok(d) => d,
         Err(e) => {
             eprintln!("mesh media offer: {e}");
-            eprintln!("The offer is written; run `svrn daemon stop && svrn daemon start`.");
+            eprintln!("The offer is written; run `svrn daemon reload`.");
             return 1;
         }
     };
-    let stop = std::process::Command::new(&dispatcher)
-        .args(["daemon", "stop"])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status();
-    tracing::debug!(?stop, "media offer: daemon stop");
     match std::process::Command::new(&dispatcher)
-        .args(["daemon", "start"])
+        .args(["daemon", "reload"])
         .status()
     {
         Ok(s) if s.success() => 0,
         other => {
-            tracing::warn!(?other, "media offer: daemon start failed");
-            eprintln!("mesh media offer: the daemon did not come back — `svrn daemon start`.");
+            tracing::warn!(?other, "media offer: daemon reload failed");
+            eprintln!("mesh media offer: the reload did not apply — `svrn daemon reload`.");
             1
         }
     }

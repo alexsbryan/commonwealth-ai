@@ -226,6 +226,9 @@ async fn admin_reload(
 #[derive(Debug, Default)]
 pub(crate) struct ConfigDiff {
     pub models_changed: Vec<&'static str>,
+    /// `[iroh] media_origin` / `media_allow`: applied by swapping the live
+    /// `MediaRoute`, no restart.
+    pub media_changed: Vec<&'static str>,
     pub restart_required: Vec<&'static str>,
 }
 
@@ -339,7 +342,7 @@ impl ConfigDiff {
             // installed at startup.
             d.restart_required.push("iroh.transport");
         }
-        // The FIVE below reach the acceptor the same way `iroh.enabled` does
+        // The FIVE below reached the acceptor the same way `iroh.enabled` does
         // — read once while it is constructed, never re-read — and until
         // 2026-09-12 none of them was compared here. A change to any one made
         // `is_noop()` true, so `svrn daemon reload` printed "no config changes
@@ -347,11 +350,13 @@ impl ConfigDiff {
         // silently kept the old value (ARCH §18.3: absence is reported, never
         // defaulted). Observed setting `media_origin` on this host: the verb
         // said stored, reload said nothing changed, the fanout still 401'd.
+        // The media two are live since ring-room (`MediaRoute`): reload
+        // applies them, so they are compared here and restart nothing.
         if old.iroh.media_origin != new.iroh.media_origin {
-            d.restart_required.push("iroh.media_origin");
+            d.media_changed.push("iroh.media_origin");
         }
         if old.iroh.media_allow != new.iroh.media_allow {
-            d.restart_required.push("iroh.media_allow");
+            d.media_changed.push("iroh.media_allow");
         }
         if old.iroh.apps != new.iroh.apps {
             // `[iroh.apps]` is the durable publish tier; the ephemeral one
@@ -374,7 +379,9 @@ impl ConfigDiff {
     }
 
     pub(crate) fn is_noop(&self) -> bool {
-        self.models_changed.is_empty() && self.restart_required.is_empty()
+        self.models_changed.is_empty()
+            && self.media_changed.is_empty()
+            && self.restart_required.is_empty()
     }
 }
 
@@ -555,13 +562,15 @@ mod tests {
         let mut origin_set = base.clone();
         origin_set.iroh.media_origin = Some("127.0.0.1:8096".into());
         let d = ConfigDiff::diff(&base, &origin_set);
-        assert_eq!(d.restart_required, vec!["iroh.media_origin"]);
+        assert_eq!(d.media_changed, vec!["iroh.media_origin"]);
+        assert!(d.restart_required.is_empty(), "the media origin reloads live");
         assert!(!d.is_noop(), "a changed config must never read as a no-op");
 
         let mut allow_set = base.clone();
         allow_set.iroh.media_allow = vec!["LittleMac".into()];
         let d = ConfigDiff::diff(&base, &allow_set);
-        assert_eq!(d.restart_required, vec!["iroh.media_allow"]);
+        assert_eq!(d.media_changed, vec!["iroh.media_allow"]);
+        assert!(d.restart_required.is_empty(), "the media allow list reloads live");
         assert!(!d.is_noop());
 
         let mut app_published = base.clone();
@@ -1223,6 +1232,68 @@ mod tests {
             counter.load(Ordering::SeqCst),
             0,
             "port-only change must not rebuild provider"
+        );
+    }
+
+    /// `[iroh] media_origin` set and then `reload`ed: the acceptor built
+    /// BEFORE the reload forwards a member's media dial to the new origin, and
+    /// nothing asks for a restart. Red while the origin was read once at
+    /// acceptor construction (ring-room 99ca7e4cb leg 3: the restart that
+    /// carried it left peers dialing a stale endpoint for 120 s).
+    #[tokio::test]
+    async fn reload_moves_the_media_origin_without_a_restart() {
+        use crate::iroh_access::{AcceptorRoutes, AppRoutes, OfferRoutes};
+        use commonwealth_core::ids::NodePubkey;
+        let tmp = tempfile::tempdir().unwrap();
+        let path = write_cfg(&tmp, "/m/primary.gguf");
+        let initial = SetupConfig::load_from(&path).unwrap();
+        let daemon = EmbeddedDaemon::new(
+            tmp.path().to_path_buf(),
+            initial.clone(),
+            crate::daemon_services::fixtures::headless_with_factory(Arc::new(StubFactory {
+                build_count: Arc::new(AtomicUsize::new(0)),
+            })),
+        );
+        let loopback: SocketAddr = ([127, 0, 0, 1], 9742).into();
+        let routes = AcceptorRoutes {
+            internal: loopback,
+            peer: None,
+            guest: None,
+            rpc: None,
+            media: daemon.media_route().clone(),
+            apps: AppRoutes::default(),
+            offer: OfferRoutes::default(),
+        };
+        let member = NodePubkey([7u8; 32]);
+        let check: crate::iroh_access::MemberCheck = Arc::new(|_| {
+            Box::pin(std::future::ready(Some(crate::iroh_access::MemberIdentity {
+                name: "Bo".into(),
+                node_id: commonwealth_core::ids::NodeId::from_u128(0xB0),
+            })))
+        });
+        let media = commonwealth_transport::iroh::MEDIA_ALPN;
+        assert_eq!(routes.forward_for(media, member, &check).await, None);
+
+        let mut offered = initial;
+        offered.iroh.media_origin = Some("127.0.0.1:8096".into());
+        offered.save_to(&path).unwrap();
+        let base = spawn(Arc::clone(&daemon)).await;
+        let body: ReloadResponse = reqwest::Client::new()
+            .post(format!("{base}/v1/admin/reload"))
+            .json(&serde_json::json!({ "config_path": path }))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(body.reloaded_fields, vec!["iroh.media_origin".to_string()]);
+        assert!(!body.restart_required, "{body:?}");
+        let forward = routes.forward_for(media, member, &check).await;
+        assert_eq!(
+            forward.and_then(|f| f.target()),
+            Some(([127, 0, 0, 1], 8096).into()),
+            "the live acceptor answers on the reloaded origin"
         );
     }
 

@@ -77,6 +77,7 @@ pub mod mcp_config_http;
 pub mod mcp_router;
 pub mod measurements_rail;
 pub mod media_reach;
+pub mod media_route;
 pub mod mesh_discovery;
 pub mod mesh_http;
 /// Tier-1 scheduler simulator — `SCHEDULER_QUALITY.md` §5. Behind a

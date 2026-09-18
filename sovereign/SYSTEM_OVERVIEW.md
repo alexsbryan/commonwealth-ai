@@ -5971,8 +5971,9 @@ wires the old ALPN-only routing and gets a 200 for a stranger presenting nothing
 `commonwealth/crates/commonwealth-media/src/reach.rs`, the route and daemon
 glue in `sovereign-mesh/src/media_reach.rs`, 2026-09-11). The holder declares
 `[iroh] media_origin = "127.0.0.1:8096"` — `svrn mesh media offer <origin>
-[--admit <member>...]` writes it (and `media_allow`) and restarts the daemon
-itself; a value that does not parse refuses the boot. The viewer asks its own daemon — `GET /v1/mesh/media?peer=<name-or-id>`,
+[--admit <member>...]` writes it (and `media_allow`) and runs `daemon reload`,
+which swaps the live `MediaRoute` (`sovereign-mesh/src/media_route.rs`) with no
+restart; a value that does not parse refuses the boot or the reload. The viewer asks its own daemon — `GET /v1/mesh/media?peer=<name-or-id>`,
 `svrn mesh media <peer>` — and gets back `http://127.0.0.1:<port>`: the
 transport's cached bridge for `(peer, cwth/media/0)`, minted once and retargeted
 in place when the peer's dial info moves, so a player can hold the URL. The
