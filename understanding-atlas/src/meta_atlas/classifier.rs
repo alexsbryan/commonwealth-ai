@@ -31,10 +31,10 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
+use crate::articulation::ArticulationVector;
 use crate::enrichment::atlas::AtomEnvelope;
 use crate::enrichment::ontology::{OntologyPolicies, TypeIndex};
 use crate::taxonomy::{DiscourseAct, EntityType, EventType};
-use crate::articulation::ArticulationVector;
 
 /// Top-level entry. Classify a single atom into an articulation
 /// distribution.
@@ -337,6 +337,7 @@ static STRUCTURAL_OPENER: LazyLock<Regex> = LazyLock::new(|| {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::articulation::Articulation;
     use crate::enrichment::atlas::{
         atoms::{
             ArgumentReconstruction, Claim, Configuration, Entity, Event, Opposition, Position,
@@ -348,7 +349,6 @@ mod tests {
         ClaimScope, DiscourseAct, EnrichmentDepth, EntityType, EpistemicStatus, EventType,
         QuestionType, RelationType, StateType,
     };
-    use crate::articulation::Articulation;
 
     fn entity(
         et: EntityType,

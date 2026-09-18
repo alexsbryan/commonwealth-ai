@@ -27,12 +27,12 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
+use crate::articulation::ArticulationVector;
 use crate::atlas_canonical::lookup_key;
 use crate::enrichment::atlas::atoms::AtomType;
 use crate::enrichment::atlas::{read_atlas_atoms, AtomEnvelope};
-use crate::taxonomy::EntityType;
 use crate::meta_atlas::classifier::{classify_articulation, classify_by_chunk_preview};
-use crate::articulation::ArticulationVector;
+use crate::taxonomy::EntityType;
 use crate::types::ScoredChunk;
 
 /// One article on one side of the alignment.
@@ -271,6 +271,7 @@ fn preview_of(env: &AtomEnvelope) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::articulation::Articulation;
     use crate::enrichment::atlas::atoms::{
         ArgumentReconstruction, Claim, Entity, Question, ResolutionStatus,
     };
@@ -278,7 +279,6 @@ mod tests {
     use crate::taxonomy::{
         ClaimScope, DiscourseAct, EnrichmentDepth, EpistemicStatus, QuestionType,
     };
-    use crate::articulation::Articulation;
 
     fn entity(name: &str, et: EntityType, salience: f32, quote: Option<&str>) -> AtomEnvelope {
         AtomEnvelope::Entity(Entity {

@@ -83,8 +83,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
-use understanding_vocab::ontology::{NavigationPolicy, QuestionKind};
 use sovereign_contracts::embed_quirks::classifier_input;
+use understanding_vocab::ontology::{NavigationPolicy, QuestionKind};
 
 use crate::extractors::column_aware::l2_normalize;
 use crate::types::EmbedFn;

@@ -18,8 +18,8 @@
 
 use std::collections::BTreeSet;
 
-use super::BridgeSignal;
 use super::topic_node::BridgeTopic;
+use super::BridgeSignal;
 
 /// External facts the orchestrator pre-fetches (so signals stay pure).
 #[derive(Debug, Clone, Default)]
