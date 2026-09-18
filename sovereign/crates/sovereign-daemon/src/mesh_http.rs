@@ -229,7 +229,7 @@ pub struct StatusResponse {
     /// "is this mesh actually on iroh, and via relay or direct?".
     /// Serde default keeps older consumers wire-compatible.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub iroh_transport: Vec<crate::daemon::IrohPeerPath>,
+    pub iroh_transport: Vec<crate::daemon::MemberReach>,
     /// This NODE's OWN iroh reachability (Track W): relay-homed?,
     /// discoverable?, plus the self-heal watchdog's recovery history. `None`
     /// when iroh isn't running. Answers "am I actually dialable right now?".
@@ -578,7 +578,7 @@ pub struct PublishMeasurementResponse {
 
 /// One peer's measurement, as `GET /v1/mesh/measurements` returns it.
 #[derive(Debug, Serialize)]
-pub struct PeerMeasurementDto {
+pub struct MemberMeasurementDto {
     /// Hex node id of the publisher, resolved from the journal line's `actor`
     /// through the ring roster — not from anything inside the payload, which
     /// the publisher controls. The `actor` is the public key that SIGNED the
@@ -595,7 +595,7 @@ pub struct PeerMeasurementDto {
 
 /// Query for `GET /v1/mesh/measurements`.
 #[derive(Debug, Deserialize, Default)]
-pub struct PeerMeasurementsQuery {
+pub struct MemberMeasurementsQuery {
     /// Include this node's own published records. **Diagnostic only.**
     ///
     /// The default excludes them, and the CLI must never set this: our own runs
@@ -634,11 +634,11 @@ where
 
 /// Response body for `GET /v1/mesh/measurements`.
 #[derive(Debug, Serialize)]
-pub struct PeerMeasurementsResponse {
+pub struct MemberMeasurementsResponse {
     /// Peer records, newest first. Excludes this node's own — the CLI already
     /// holds those on disk, and they are the authoritative copy — unless
-    /// [`PeerMeasurementsQuery::include_self`] was set.
-    pub records: Vec<PeerMeasurementDto>,
+    /// [`MemberMeasurementsQuery::include_self`] was set.
+    pub records: Vec<MemberMeasurementDto>,
     /// Journal lines that were admitted but could not be read as measurements,
     /// usually a peer on an incompatible schema, PLUS everything admission
     /// could not account for at all — an unplaceable signer, a hole in a peer's
@@ -750,12 +750,12 @@ async fn publish_measurement(
 async fn peer_measurements(
     _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
-    axum::extract::Query(q): axum::extract::Query<PeerMeasurementsQuery>,
+    axum::extract::Query(q): axum::extract::Query<MemberMeasurementsQuery>,
 ) -> impl IntoResponse {
     let empty = || {
         (
             StatusCode::OK,
-            Json(PeerMeasurementsResponse {
+            Json(MemberMeasurementsResponse {
                 records: Vec::new(),
                 unreadable: 0,
             }),
@@ -790,7 +790,7 @@ async fn peer_measurements(
             tracing::warn!(error = %e, "mesh-measurements: journal unreadable");
             return (
                 StatusCode::OK,
-                Json(PeerMeasurementsResponse {
+                Json(MemberMeasurementsResponse {
                     records: Vec::new(),
                     unreadable: 1,
                 }),
@@ -813,7 +813,7 @@ async fn peer_measurements(
 fn peer_view(
     seen: sovereign_mesh::measurements_rail::RailMeasurements,
     roster: &sovereign_mesh::ring_roster::MeshRoster,
-) -> PeerMeasurementsResponse {
+) -> MemberMeasurementsResponse {
     // One count, not two. A line this build cannot decode and a line the rail
     // could not account for are both "your answer covers less than the ring
     // holds", and splitting them across two fields would let a caller read one
@@ -822,7 +822,7 @@ fn peer_view(
     let records = seen
         .found
         .into_iter()
-        .map(|m| PeerMeasurementDto {
+        .map(|m| MemberMeasurementDto {
             origin_node: roster
                 .node_id_of(&m.actor)
                 .map(|id| hex::encode(id.as_bytes()))
@@ -835,7 +835,7 @@ fn peer_view(
             record: m.record,
         })
         .collect();
-    PeerMeasurementsResponse {
+    MemberMeasurementsResponse {
         records,
         unreadable,
     }

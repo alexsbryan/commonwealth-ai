@@ -396,7 +396,7 @@ pub struct KnownMeshDto {
 /// closes over two runtime records that have no home at this layer —
 /// `rpc_workers: Vec<worker_eligibility::WorkerStatusView>` (the
 /// eligibility state machine's own view) and `iroh_transport:
-/// Vec<daemon::IrohPeerPath>` (over `commonwealth_media::PeerTransportPath`,
+/// Vec<daemon::MemberReach>` (over `commonwealth_media::PeerTransportPath`,
 /// cross-family). The route keeps the whole type; this is the subset a
 /// client is owed. The two cannot drift silently: `sovereign-mesh`'s
 /// `wire_view_drift` test serialises the real `StatusResponse` and parses

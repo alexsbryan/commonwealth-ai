@@ -6535,7 +6535,7 @@ absent and the guards fail closed for *every* caller.
   `mesh_http::StatusResponse` (over
   `commonwealth_core::capabilities::OriginKind` and
   `commonwealth_media::PeerTransportPath`, reached through
-  `daemon::IrohPeerPath`) do not, and stay where they are until the
+  `daemon::MemberReach`) do not, and stay where they are until the
   vocabulary they close over has a layer-0 home.
 - **The mesh view came down, and the two that cannot got a READ** (svt-3,
   2026-09-11, same day, second landing). `OriginKind` moved to

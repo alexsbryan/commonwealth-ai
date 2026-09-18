@@ -313,7 +313,7 @@ mod tests {
 
     /// The seam that would fail silently.
     ///
-    /// `PeerMeasurementDto` (daemon, `Serialize`) and `PeerRow` (here,
+    /// `MemberMeasurementDto` (daemon, `Serialize`) and `PeerRow` (here,
     /// `Deserialize`) are two separate declarations of one wire shape. If a field
     /// is renamed on one side, nothing fails to compile — `#[serde(default)]`
     /// swallows the mismatch and `peer_history` quietly returns an empty list
@@ -324,8 +324,8 @@ mod tests {
     /// it.
     #[test]
     fn the_daemons_shape_and_this_readers_shape_are_the_same_shape() {
-        let body = sovereign_daemon::mesh_http::PeerMeasurementsResponse {
-            records: vec![sovereign_daemon::mesh_http::PeerMeasurementDto {
+        let body = sovereign_daemon::mesh_http::MemberMeasurementsResponse {
+            records: vec![sovereign_daemon::mesh_http::MemberMeasurementDto {
                 origin_node: "b88252e4325bc3771122334455667788".into(),
                 origin_name: Some("BeefyMac".into()),
                 record: sample_record(),

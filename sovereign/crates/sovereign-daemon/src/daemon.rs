@@ -487,7 +487,7 @@ pub struct HostRole {
 /// One peer's live iroh connection path (H2 observability). `path` is
 /// `None` when the endpoint has no record of this peer yet.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct IrohPeerPath {
+pub struct MemberReach {
     pub node_id: NodeId,
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -2014,7 +2014,7 @@ impl EmbeddedDaemon {
     /// Empty when iroh isn't running (no endpoint) — the mesh is on the
     /// IP path, nothing to report here. Only members with a known
     /// pubkey are queried (an iroh peer must have one).
-    pub async fn iroh_transport_snapshot(&self) -> Vec<IrohPeerPath> {
+    pub async fn iroh_transport_snapshot(&self) -> Vec<MemberReach> {
         let state = self.state.read().await;
         let (app_state, endpoint) = match &*state {
             DaemonState::Running {
@@ -2040,7 +2040,7 @@ impl EmbeddedDaemon {
             let path =
                 sovereign_mesh::iroh_access::MeshIrohAccess::peer_path_on(&endpoint, &pubkey.0)
                     .await;
-            out.push(IrohPeerPath {
+            out.push(MemberReach {
                 node_id: m.node_id,
                 name: m.name.clone(),
                 path,
