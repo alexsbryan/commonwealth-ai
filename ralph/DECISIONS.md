@@ -420,3 +420,18 @@ applied, or a campaign commit turns out to touch one of the named files.
 REVIEW-AFTER: until the operator decides items 1-5, PREPUSH is red for every campaign on main.
 
 Commit: the one that removes `ralph/NEEDS_HUMAN.md`.
+
+## 2026-09-18 — REVIEW-build-rr-1-roster-from-mesh (ring-room): ESCALATED, not decided
+
+Fork: making the derived roster the default for app rings needs a hunk in
+`commonwealth-rail/src/lib.rs` (roster_origin/roster have no default source, :153-205), or
+nine hooks outside the row, or a reversal of the operator's 2026-09-18 decision. The director
+did not choose. This is the campaign's first stop condition (`campaign.md:71-72`), and the
+charter reserves any rail diff. Evidence was reproduced: `lib.rs:153-165,176-205,251-260`,
+`sovereign-api/src/routes_rail.rs:123-140`, `routes_internal/ring_sync.rs:141`. The
+recommendation (option 1, with bar `campaign.md:23` amended to name the hunk) is in
+`ralph/NEEDS_HUMAN.md` §(e). *Falsified if* some sovereign-side site that every namespace's
+first touch passes through turns out to exist. It would have to be one that installs the
+source before `rail.roster()` is read. None was found at the two doors above.
+
+REVIEW-AFTER: the operator picks among options 1-4 in the package.
