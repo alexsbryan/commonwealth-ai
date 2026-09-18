@@ -1917,7 +1917,7 @@ impl Runtime {
         let mut authority_guard_meta: Option<serde_json::Value> = None;
         let final_content = if let Some(armed) = crate::runtime::authority_guard::armed_for_evidence(
             &self.tools,
-            &crate::runtime::epistemic::pool_corpora(&plan.chunks),
+            &crate::runtime::epistemic::pool_context(&plan.chunks).corpora,
             "knowledge_query",
         ) {
             let basis = crate::runtime::authority_guard::GuardBasis {
@@ -2078,11 +2078,11 @@ impl Runtime {
                     gate_meta: grounding_gate_meta.as_ref(),
                     gate_claims: gate_claims.as_deref(),
                     general_knowledge,
-                    pool_corpora: crate::runtime::epistemic::pool_corpora(&plan.chunks),
-                    pool_members: crate::runtime::epistemic::pool_members(&plan.chunks),
                     demands,
                     gaps,
-                    ..Default::default()
+                    ..crate::runtime::epistemic::EpistemicInputs::over(
+                        crate::runtime::epistemic::pool_context(&plan.chunks),
+                    )
                 },
             ))
         } else {

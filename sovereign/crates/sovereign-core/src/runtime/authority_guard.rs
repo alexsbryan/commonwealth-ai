@@ -17,7 +17,7 @@
 //! # Arming — one decider, corpus granularity
 //!
 //! A turn is ARMED when the corpora its answer actually drew on (the
-//! retrieved-chunk pool, [`crate::runtime::epistemic::pool_corpora`])
+//! retrieved-chunk pool, [`crate::runtime::epistemic::pool_context`])
 //! intersect the corpora some registered tool declares authority over
 //! ([`crate::registry::ToolRegistry::authority_domains`]). That is the
 //! SAME declaration index the router's question-level pre-check

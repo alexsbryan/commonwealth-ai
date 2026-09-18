@@ -251,7 +251,7 @@ impl Runtime {
         let mut authority_guard_meta: Option<serde_json::Value> = None;
         let final_content = if let Some(armed) = crate::runtime::authority_guard::armed_for_evidence(
             &self.tools,
-            &crate::runtime::epistemic::pool_corpora(&kc.chunks),
+            &crate::runtime::epistemic::pool_context(&kc.chunks).corpora,
             "simple",
         ) {
             let v = crate::quote_verification::verify_quotes(
@@ -330,8 +330,9 @@ impl Runtime {
                 crate::runtime::epistemic::EpistemicInputs {
                     gate_meta: grounding_gate_meta.as_ref(),
                     gate_claims: gate_claims.as_deref(),
-                    pool_corpora: crate::runtime::epistemic::pool_corpora(&kc.chunks),
-                    ..Default::default()
+                    ..crate::runtime::epistemic::EpistemicInputs::over(
+                        crate::runtime::epistemic::pool_context(&kc.chunks),
+                    )
                 },
             )
         });

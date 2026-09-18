@@ -38,7 +38,10 @@ pub(crate) fn epistemic_state_enabled() -> bool {
 
 /// Everything the assembler collates. All fields are turn-local data
 /// already computed by the pipeline — the assembler adds no judgment.
-#[derive(Default)]
+///
+/// No `Default`: the only way in is [`EpistemicInputs::over`], which takes
+/// the turn's [`PoolContext`], so no ledger site can leave its pool (and
+/// with it the member attribution) on a default.
 pub(crate) struct EpistemicInputs<'a> {
     /// The gate's `grounding_gate` meta blob (reads `action` only).
     pub gate_meta: Option<&'a serde_json::Value>,
@@ -46,12 +49,8 @@ pub(crate) struct EpistemicInputs<'a> {
     pub gate_claims: Option<&'a [GateClaim]>,
     /// Why the plan answered from general knowledge, when it did.
     pub general_knowledge: Option<GkReason>,
-    /// Distinct corpus ids in the evidence pool the answer drew on
-    /// (empty on parametric turns).
-    pub pool_corpora: Vec<String>,
-    /// The mesh member each pool chunk came from, one entry per chunk
-    /// (`None` = local); see [`pool_members`].
-    pub pool_members: Vec<Option<String>>,
+    /// The evidence pool the answer drew on; see [`pool_context`].
+    pub pool: PoolContext,
     /// Memories recalled into the turn (relational surfaces).
     pub recalled: &'a [RecalledMemoryProv],
     /// Outcome of the recall-grounding verifier, when it ran.
@@ -66,6 +65,45 @@ pub(crate) struct EpistemicInputs<'a> {
     /// visible on the ledger). Each is emitted as a
     /// [`Provenance::ToolDerived`] holding; skipped on abstained turns.
     pub tool_holdings: Vec<Holding>,
+}
+
+impl<'a> EpistemicInputs<'a> {
+    /// Inputs over `pool`, every other field empty.
+    pub(crate) fn over(pool: PoolContext) -> Self {
+        Self {
+            gate_meta: None,
+            gate_claims: None,
+            general_knowledge: None,
+            pool,
+            recalled: &[],
+            recall_verification: None,
+            demands: Vec::new(),
+            gaps: Vec::new(),
+            tool_holdings: Vec::new(),
+        }
+    }
+}
+
+/// The evidence pool a ledger attributes, built from ONE chunk slice so
+/// its corpora and members cannot come from different pools. No
+/// `Default`: a parametric turn says so with [`PoolContext::none`].
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct PoolContext {
+    /// Distinct corpus ids, order-preserving (empty on parametric turns).
+    pub corpora: Vec<String>,
+    /// The mesh member each pool chunk came from, one entry per chunk
+    /// (`None` = local).
+    pub members: Vec<Option<String>>,
+}
+
+impl PoolContext {
+    /// No evidence pool: a parametric or non-corpus turn.
+    pub(crate) fn none() -> Self {
+        Self {
+            corpora: Vec::new(),
+            members: Vec::new(),
+        }
+    }
 }
 
 /// Actions whose release shipped WITHOUT a completed verification
@@ -97,13 +135,13 @@ pub(crate) fn assemble_epistemic_state(inputs: EpistemicInputs<'_>) -> Epistemic
     // single-corpus (the sealed-notebook common case). Multi-corpus
     // pools carry `corpus_id: None` until claim-level search binding
     // lands (initiative I2).
-    let sole_corpus = match inputs.pool_corpora.as_slice() {
+    let sole_corpus = match inputs.pool.corpora.as_slice() {
         [only] => Some(only.clone()),
         _ => None,
     };
     // The same rule for members: named only when every chunk in the
     // pool came from one member; a local or mixed pool stays `None`.
-    let sole_member = match inputs.pool_members.split_first() {
+    let sole_member = match inputs.pool.members.split_first() {
         Some((Some(first), rest)) if rest.iter().all(|m| m.as_ref() == Some(first)) => {
             Some(first.clone())
         }
@@ -111,7 +149,7 @@ pub(crate) fn assemble_epistemic_state(inputs: EpistemicInputs<'_>) -> Epistemic
     };
     tracing::debug!(
         target: "sovereign::epistemic",
-        pool_chunks = inputs.pool_members.len(),
+        pool_chunks = inputs.pool.members.len(),
         sole_member = ?sole_member,
         "holding member attribution"
     );
@@ -181,7 +219,7 @@ pub(crate) fn assemble_epistemic_state(inputs: EpistemicInputs<'_>) -> Epistemic
         &holdings,
         abstained,
         inputs.general_knowledge.is_some(),
-        !inputs.pool_corpora.is_empty(),
+        !inputs.pool.corpora.is_empty(),
         gate_action.is_empty(),
     );
     // Released passages, read straight off the gate's meta. Collation, not
@@ -678,26 +716,25 @@ pub async fn coverage_probe(
     }
 }
 
-/// Distinct corpus ids in a chunk pool, order-preserving.
-pub(crate) fn pool_corpora(chunks: &[corpus_engine::ScoredChunk]) -> Vec<String> {
+/// The pool a chunk slice is: its distinct corpus ids, order-preserving,
+/// and the mesh member each chunk came from (`metadata["peer"]`, the one
+/// writer being the retrieval pipeline's mesh merge), aligned with
+/// `chunks`; `None` for a local chunk.
+pub(crate) fn pool_context(chunks: &[corpus_engine::ScoredChunk]) -> PoolContext {
     let mut seen = std::collections::HashSet::new();
-    let mut out = Vec::new();
+    let mut corpora = Vec::new();
     for c in chunks {
         if seen.insert(c.corpus_id.clone()) {
-            out.push(c.corpus_id.clone());
+            corpora.push(c.corpus_id.clone());
         }
     }
-    out
-}
-
-/// The mesh member each pool chunk came from (`metadata["peer"]`, the
-/// one writer being the retrieval pipeline's mesh merge), aligned with
-/// `chunks`; `None` for a local chunk.
-pub(crate) fn pool_members(chunks: &[corpus_engine::ScoredChunk]) -> Vec<Option<String>> {
-    chunks
-        .iter()
-        .map(|c| c.metadata.get("peer").cloned())
-        .collect()
+    PoolContext {
+        corpora,
+        members: chunks
+            .iter()
+            .map(|c| c.metadata.get("peer").cloned())
+            .collect(),
+    }
 }
 
 #[cfg(test)]
@@ -905,7 +942,7 @@ mod tests {
         let state = assemble_epistemic_state(EpistemicInputs {
             gate_meta: Some(&meta),
             tool_holdings: vec![tool_holding()],
-            ..Default::default()
+            ..EpistemicInputs::over(PoolContext::none())
         });
         assert_eq!(state.holdings.len(), 1);
         assert!(matches!(
@@ -921,7 +958,7 @@ mod tests {
         let state = assemble_epistemic_state(EpistemicInputs {
             gate_meta: Some(&meta),
             tool_holdings: vec![tool_holding()],
-            ..Default::default()
+            ..EpistemicInputs::over(PoolContext::none())
         });
         assert!(state.holdings.is_empty());
         assert_eq!(state.verdict, TurnVerdict::CannotKnowFromHere);
@@ -970,10 +1007,12 @@ mod tests {
         let state = assemble_epistemic_state(EpistemicInputs {
             gate_meta: Some(&meta),
             gate_claims: Some(&claims),
-            pool_corpora: vec!["arran-ferries".into()],
             demands,
             gaps,
-            ..Default::default()
+            ..EpistemicInputs::over(PoolContext {
+                corpora: vec!["arran-ferries".into()],
+                members: vec![],
+            })
         });
 
         // 1. All three are populated by the SAME call. A ledger carrying gaps
@@ -1041,8 +1080,10 @@ mod tests {
         let state = assemble_epistemic_state(EpistemicInputs {
             gate_meta: Some(&meta),
             gate_claims: Some(&claims),
-            pool_corpora: vec!["secret-agent".into()],
-            ..Default::default()
+            ..EpistemicInputs::over(PoolContext {
+                corpora: vec!["secret-agent".into()],
+                members: vec![],
+            })
         });
         assert!(state.holdings.is_empty());
         assert_eq!(state.verdict, TurnVerdict::CannotKnowFromHere);
@@ -1077,8 +1118,10 @@ mod tests {
         let state = assemble_epistemic_state(EpistemicInputs {
             gate_meta: Some(&meta),
             gate_claims: Some(&claims),
-            pool_corpora: vec!["shop".into()],
-            ..Default::default()
+            ..EpistemicInputs::over(PoolContext {
+                corpora: vec!["shop".into()],
+                members: vec![],
+            })
         });
         assert_eq!(state.holdings.len(), 2);
         assert_eq!(state.holdings[0].verification, Verification::Verified);
@@ -1118,8 +1161,10 @@ mod tests {
         });
         let state = assemble_epistemic_state(EpistemicInputs {
             gate_meta: Some(&meta),
-            pool_corpora: vec!["chaos-saltgrass".into()],
-            ..Default::default()
+            ..EpistemicInputs::over(PoolContext {
+                corpora: vec!["chaos-saltgrass".into()],
+                members: vec![],
+            })
         });
         assert_eq!(state.citations.len(), 2);
         assert_eq!(state.citations[0].locator.as_deref(), Some("CHAPTER VII"));
@@ -1146,8 +1191,10 @@ mod tests {
         });
         let state = assemble_epistemic_state(EpistemicInputs {
             gate_meta: Some(&meta),
-            pool_corpora: vec!["chaos-saltgrass".into()],
-            ..Default::default()
+            ..EpistemicInputs::over(PoolContext {
+                corpora: vec!["chaos-saltgrass".into()],
+                members: vec![],
+            })
         });
         assert!(state.citations.is_empty());
     }
@@ -1164,8 +1211,10 @@ mod tests {
         ] {
             let state = assemble_epistemic_state(EpistemicInputs {
                 gate_meta: Some(&meta),
-                pool_corpora: vec!["chaos-saltgrass".into()],
-                ..Default::default()
+                ..EpistemicInputs::over(PoolContext {
+                    corpora: vec!["chaos-saltgrass".into()],
+                    members: vec![],
+                })
             });
             assert!(state.citations.is_empty(), "meta: {meta}");
         }
@@ -1185,8 +1234,10 @@ mod tests {
         let state = assemble_epistemic_state(EpistemicInputs {
             gate_meta: Some(&meta),
             gate_claims: Some(&claims),
-            pool_corpora: vec!["secret-agent".into()],
-            ..Default::default()
+            ..EpistemicInputs::over(PoolContext {
+                corpora: vec!["secret-agent".into()],
+                members: vec![],
+            })
         });
         assert_eq!(state.holdings.len(), 1);
         assert!(matches!(
@@ -1211,8 +1262,10 @@ mod tests {
         let state = assemble_epistemic_state(EpistemicInputs {
             gate_meta: Some(&meta),
             gate_claims: Some(&claims),
-            pool_corpora: vec!["wikipedia".into(), "sep".into()],
-            ..Default::default()
+            ..EpistemicInputs::over(PoolContext {
+                corpora: vec!["wikipedia".into(), "sep".into()],
+                members: vec![],
+            })
         });
         assert!(matches!(
             &state.holdings[0].provenance,
@@ -1236,9 +1289,10 @@ mod tests {
         let state = assemble_epistemic_state(EpistemicInputs {
             gate_meta: Some(&meta),
             gate_claims: Some(&claims),
-            pool_corpora: vec!["ring-room".into()],
-            pool_members,
-            ..Default::default()
+            ..EpistemicInputs::over(PoolContext {
+                corpora: vec!["ring-room".into()],
+                members: pool_members,
+            })
         });
         match &state.holdings[0].provenance {
             Provenance::Corpus { member, .. } => member.clone(),
@@ -1288,7 +1342,7 @@ mod tests {
         let state = assemble_epistemic_state(EpistemicInputs {
             recalled: &recalled,
             recall_verification: Some(&rv),
-            ..Default::default()
+            ..EpistemicInputs::over(PoolContext::none())
         });
         assert_eq!(state.holdings.len(), 1);
         assert!(matches!(
@@ -1506,7 +1560,7 @@ mod tests {
         let state = assemble_epistemic_state(EpistemicInputs {
             recalled: &recalled,
             recall_verification: Some(&rv),
-            ..Default::default()
+            ..EpistemicInputs::over(PoolContext::none())
         });
         assert_eq!(state.holdings[0].verification, Verification::FailOpen);
         assert!(matches!(

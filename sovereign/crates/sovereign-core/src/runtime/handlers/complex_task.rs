@@ -513,7 +513,7 @@ impl Runtime {
                 });
                 // I2-A: assemble the epistemic ledger for the complex-task
                 // surface. The evidence universe is the step transcript, not
-                // an installed corpus, so `pool_corpora` is empty (gate claims
+                // an installed corpus, so the pool is `PoolContext::none()` (gate claims
                 // become corpus-holdings with `corpus_id: None`). The
                 // deterministic tool figures (`cited_figures`) become
                 // `ToolDerived` holdings — the "no confabulated numbers"
@@ -539,7 +539,9 @@ impl Runtime {
                             gate_meta: grounding_gate_meta.as_ref(),
                             gate_claims: gate_claims.as_deref(),
                             tool_holdings,
-                            ..Default::default()
+                            ..crate::runtime::epistemic::EpistemicInputs::over(
+                                crate::runtime::epistemic::PoolContext::none(),
+                            )
                         },
                     );
                     m["epistemic_state"] =

@@ -565,7 +565,7 @@ impl Runtime {
         let guarded_content = if let Some(armed) =
             crate::runtime::authority_guard::armed_for_evidence(
                 &self.tools,
-                &crate::runtime::epistemic::pool_corpora(&chunks),
+                &crate::runtime::epistemic::pool_context(&chunks).corpora,
                 "metalingual",
             ) {
             let basis = crate::runtime::authority_guard::GuardBasis {
