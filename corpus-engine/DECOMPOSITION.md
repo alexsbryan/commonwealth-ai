@@ -78,7 +78,7 @@ Tier 6 — corpus data plane (what's LEFT of corpus-engine after carve-outs)
                                                  update/{watch, delta})
 
 Tier 7 — Understanding, as a package (redrawn 2026-09-14: "Step 7, redrawn")
-  corpus-engine-vocab → understanding-vocab     (the products and the read door)
+  understanding-vocab                           (the products and the read door)
   understanding-atlas                           (pure: resolve, classify, walk)
   understanding-host                            (stores, writers, runner — the I/O)
 
@@ -273,7 +273,7 @@ now measured, and it is three ports and a leaf rather than a line through `enric
 
 | tier | crate | holds | may name |
 |---|---|---|---|
-| published language | `corpus-engine-vocab`, renamed `understanding-vocab` when the door moves into it | the products — atoms, edges, ontology, the field skeleton, articulation types, the atlas layout constants — and the read door | `kernel-types` only (its `[[package_leaf]]` row) |
+| published language | `understanding-vocab` | the products — atoms, edges, ontology, the field skeleton, articulation types, the atlas layout constants — and the read door | `kernel-types` only (its `[[package_leaf]]` row) |
 | pure | `understanding-atlas` (108 files, 50,919 lines today) | the arithmetic over the language: analysis, resolution by name, classification, the ground walk, domains, ontology, reconciliation, pipeline types and schemas, meta-atlas and traversal logic | the language, `kernel-types`, and the row types the index leaf publishes; **no `async fn`** |
 | host | `understanding-host` (62 files, 51,308 lines) | the capabilities with I/O: stores and the ANN, writers, the field engine, entity extraction, the phase runner | `corpus-engine`, the index leaf, the pure tier, the language |
 

@@ -40,7 +40,7 @@
 //! Regenerate the `.stderr` files from the sealed type:
 //!
 //! ```text
-//! TRYBUILD=overwrite cargo test -p corpus-engine-vocab --test atoms_reds
+//! TRYBUILD=overwrite cargo test -p understanding-vocab --test atoms_reds
 //! ```
 
 #[test]

@@ -83,7 +83,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
-use corpus_engine_vocab::ontology::{NavigationPolicy, QuestionKind};
+use understanding_vocab::ontology::{NavigationPolicy, QuestionKind};
 use sovereign_contracts::embed_quirks::classifier_input;
 
 use crate::extractors::column_aware::l2_normalize;
@@ -183,7 +183,7 @@ impl KindSource {
     }
 
     /// Did a centroid actually decide this? Everything else means the walk
-    /// ran [`corpus_engine_vocab::ontology::WalkPolicy::unfiltered`] or a
+    /// ran [`understanding_vocab::ontology::WalkPolicy::unfiltered`] or a
     /// caller's own choice, which is a fact `ask` must state, not hide.
     pub fn is_degradation(&self) -> bool {
         matches!(
@@ -513,7 +513,7 @@ fn dot(a: &[f32], b: &[f32]) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use corpus_engine_vocab::ontology::WalkPolicy;
+    use understanding_vocab::ontology::WalkPolicy;
 
     /// Three orthogonal centroids and a query sitting on one of them: the
     /// classifier picks it. Failing input: swap `dot` for a distance.

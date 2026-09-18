@@ -84,7 +84,7 @@
 //! writes no ANN seed row, so the walk is unchanged and the SEP retrieval lane
 //! measures the digest move alone.
 
-use corpus_engine_vocab::taxonomy::{EnrichmentDepth, QuestionType};
+use understanding_vocab::taxonomy::{EnrichmentDepth, QuestionType};
 
 use super::atlas::atoms::{
     AtomEnvelope, AtomId, ChunkRef, Opposition, Position, Question, ResolutionStatus,
@@ -411,8 +411,8 @@ pub fn publish_to_atlas(
     skel: &FieldSkeleton,
 ) -> std::io::Result<FieldAtomsPublished> {
     use super::atlas::{append_atoms_and_edges, read_atlas_atoms, write_atlas_atoms};
-    use corpus_engine_vocab::atoms::AtomsFile;
-    use corpus_engine_vocab::edges::EdgesFile;
+    use understanding_vocab::atoms::AtomsFile;
+    use understanding_vocab::edges::EdgesFile;
 
     std::fs::create_dir_all(atlas_dir)?;
     if !atlas_dir.join("edges.json").exists() {

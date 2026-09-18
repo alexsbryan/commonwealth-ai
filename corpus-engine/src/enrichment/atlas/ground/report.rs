@@ -27,7 +27,7 @@ use super::super::edges::EdgeType;
 use super::super::evidence_site::EvidenceSite;
 use super::super::provider::AtlasProvider;
 use super::{RowInertReport, WalkSelection, MAP_NODE_CAP};
-use corpus_engine_vocab::ontology::QuestionKind;
+use understanding_vocab::ontology::QuestionKind;
 
 /// Which map decided the walk — recorded because a mixed-corpus query has
 /// several atlases and only one can supply the row.

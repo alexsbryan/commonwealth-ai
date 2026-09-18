@@ -9,7 +9,7 @@
 //! - The parsed policy DATA — [`OntologyPolicies`] and its five axes plus
 //!   prose, and the declaration types an author writes (`OntologyTypeDecl`,
 //!   `TypeKind`, `AttrDecl`, …, `OntologyV1`) — live in the
-//!   `corpus-engine-vocab` leaf (`corpus_engine_vocab::ontology`). They
+//!   `understanding-vocab` leaf (`understanding_vocab::ontology`). They
 //!   derive `Deserialize` for the JSON round trip an atlas records
 //!   (`atlas/ontology.json`), so a thin host can read what a corpus declared
 //!   without linking this crate.
@@ -49,12 +49,12 @@ pub use crate::recipe_ontology::language;
 pub use crate::recipe_ontology::language::{OntologyLanguage, OntologyLanguageRegistry};
 
 // The parsed policy data and the author-facing declaration types — the leaf.
-pub use corpus_engine_vocab::ontology::decl::{
+pub use understanding_vocab::ontology::decl::{
     AttrDecl, AttrFamily, ChangeDecl, ClaimScopeDecl, Deontic, DeriveDecl, Force, OntologyTypeDecl,
     OntologyV1, OntologyVocabulary, SourceDecl, SupersessionClock, TensionDecl, TypeKind,
     VoicesDecl,
 };
-pub use corpus_engine_vocab::ontology::{
+pub use understanding_vocab::ontology::{
     AssertionPolicy, ChangePolicy, DerivationPolicy, IdentityPolicy, NavigationPolicy,
     OntologyPolicies, ProsePolicy, QuestionKind, SeedPolicy, ShapePolicy, WalkPolicy,
 };

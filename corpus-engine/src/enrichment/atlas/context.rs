@@ -37,7 +37,7 @@ use crate::enrichment::atlas::{AtomEnvelope, AtomType, ChunkRef, EdgeProvenance,
 use crate::enrichment::ontology::{OntologyPolicies, TypeIndex};
 use crate::enrichment::pipeline::atlas::EpistemicStatus;
 use crate::ScoredChunk;
-use corpus_engine_vocab::ontology::NavigationPolicy;
+use understanding_vocab::ontology::NavigationPolicy;
 
 /// One pre-embedded atlas atom available to retrieval as a virtual
 /// chunk. Built by a loader, immutable after that.
@@ -1326,11 +1326,11 @@ pub async fn atlas_navigate_ann(
         return Vec::new();
     }
     let mut selection = super::ground::WalkSelection::named(
-        corpus_engine_vocab::ontology::QuestionKind::Thematic,
-        &corpus_engine_vocab::ontology::NavigationPolicy::default(),
+        understanding_vocab::ontology::QuestionKind::Thematic,
+        &understanding_vocab::ontology::NavigationPolicy::default(),
         super::ground::PolicySource::PreRegistered,
     );
-    selection.walk = corpus_engine_vocab::ontology::WalkPolicy::unfiltered();
+    selection.walk = understanding_vocab::ontology::WalkPolicy::unfiltered();
     selection.walk.hops = max_hops.min(u8::MAX as usize) as u8;
     // Existing callers hold concrete `AtlasGraph`s; the walk speaks
     // `AtlasProvider`. One widening, here, so no call site changes.
@@ -2310,7 +2310,7 @@ mod store_io_tests {
         use crate::enrichment::atlas::provider::AtlasProvider;
         use crate::enrichment::atlas::{write_atlas_ontology, AtlasOntologyFile, ATLAS_DIRNAME};
         use crate::enrichment::ontology::OntologyPolicies;
-        use corpus_engine_vocab::ontology::{NavigationPolicy, QuestionKind};
+        use understanding_vocab::ontology::{NavigationPolicy, QuestionKind};
 
         let tmp = tempfile::tempdir().unwrap();
         let atlas_dir = tmp.path().join("c1").join(ATLAS_DIRNAME);

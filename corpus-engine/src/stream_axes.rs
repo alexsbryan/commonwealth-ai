@@ -29,7 +29,7 @@
 // The per-atom articulation types live in the language leaf; re-exported here
 // so every historical `crate::stream_axes::{Articulation, ArticulationVector}`
 // path keeps resolving.
-pub use corpus_engine_vocab::articulation::{Articulation, ArticulationVector}; // shim: moved by domains REVIEW-build-articulation-vocab
+pub use understanding_vocab::articulation::{Articulation, ArticulationVector}; // shim: moved by domains REVIEW-build-articulation-vocab
 
 /// Stability axis — what temporal contract the corpus carries.
 ///

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `corpus-engine-vocab` — the atlas vocabulary, as a leaf.
+//! `understanding-vocab` — the atlas vocabulary, as a leaf.
 //!
 //! What an enrichment PRODUCES, separated from what produces it. Four
 //! modules, every one of them data:

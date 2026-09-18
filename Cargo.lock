@@ -2269,7 +2269,6 @@ dependencies = [
  "corpus-engine-notes",
  "corpus-engine-scip",
  "corpus-engine-sections",
- "corpus-engine-vocab",
  "corpus-engine-yield",
  "corpus-index",
  "csv",
@@ -2321,6 +2320,7 @@ dependencies = [
  "tree-sitter-rust",
  "tree-sitter-typescript",
  "trybuild",
+ "understanding-vocab",
  "unicode-normalization",
  "uuid",
  "walkdir",
@@ -2412,17 +2412,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "corpus-engine-vocab"
-version = "0.7.0"
-dependencies = [
- "blake3",
- "kernel-types",
- "serde",
- "serde_json",
- "trybuild",
-]
-
-[[package]]
 name = "corpus-engine-watchers"
 version = "0.7.0"
 dependencies = [
@@ -2475,7 +2464,6 @@ dependencies = [
  "chrono",
  "clap",
  "corpus-engine",
- "corpus-engine-vocab",
  "oicp-types",
  "reqwest 0.12.28",
  "serde",
@@ -2486,6 +2474,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "understanding-vocab",
 ]
 
 [[package]]
@@ -12321,7 +12310,6 @@ dependencies = [
  "corpus-engine",
  "corpus-engine-atos",
  "corpus-engine-notes",
- "corpus-engine-vocab",
  "dirs 5.0.1",
  "ed25519-dalek 2.2.0",
  "futures",
@@ -12366,6 +12354,7 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-subscriber",
+ "understanding-vocab",
  "uuid",
  "which",
  "zstd",
@@ -12458,7 +12447,6 @@ dependencies = [
  "corpus-engine",
  "corpus-engine-notes",
  "corpus-engine-scip",
- "corpus-engine-vocab",
  "dashmap",
  "dirs 5.0.1",
  "futures",
@@ -12483,6 +12471,7 @@ dependencies = [
  "toml 0.8.2",
  "tracing",
  "tracing-subscriber",
+ "understanding-vocab",
  "uuid",
 ]
 
@@ -12596,7 +12585,6 @@ version = "0.7.0"
 dependencies = [
  "chrono",
  "corpus-engine",
- "corpus-engine-vocab",
  "oicp-client",
  "oicp-types",
  "reqwest 0.12.28",
@@ -12609,6 +12597,7 @@ dependencies = [
  "tokio",
  "toml 0.8.2",
  "tracing",
+ "understanding-vocab",
 ]
 
 [[package]]
@@ -12631,7 +12620,6 @@ dependencies = [
  "chrono",
  "clap",
  "corpus-engine",
- "corpus-engine-vocab",
  "hex",
  "rand 0.9.4",
  "reqwest 0.12.28",
@@ -12648,6 +12636,7 @@ dependencies = [
  "toml 0.8.2",
  "tracing",
  "tracing-subscriber",
+ "understanding-vocab",
  "uuid",
 ]
 
@@ -12745,7 +12734,6 @@ dependencies = [
  "corpus-engine",
  "corpus-engine-notes",
  "corpus-engine-scip",
- "corpus-engine-vocab",
  "corpus-engine-watchers",
  "dirs 6.0.0",
  "ed25519-dalek 2.2.0",
@@ -12793,6 +12781,7 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-subscriber",
+ "understanding-vocab",
  "urlencoding",
  "uuid",
 ]
@@ -13116,7 +13105,6 @@ dependencies = [
  "corpus-engine-notes",
  "corpus-engine-scip",
  "corpus-engine-sections",
- "corpus-engine-vocab",
  "corpus-engine-watchers",
  "csv",
  "dirs 5.0.1",
@@ -13164,6 +13152,7 @@ dependencies = [
  "toml 0.8.2",
  "tracing",
  "tracing-subscriber",
+ "understanding-vocab",
  "uuid",
  "walkdir",
  "zip 8.6.0",
@@ -15043,6 +15032,17 @@ name = "ucd-trie"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2896d95c02a80c6d6a5d6e953d479f5ddf2dfdb6a244441010e373ac0fb88971"
+
+[[package]]
+name = "understanding-vocab"
+version = "0.7.0"
+dependencies = [
+ "blake3",
+ "kernel-types",
+ "serde",
+ "serde_json",
+ "trybuild",
+]
 
 [[package]]
 name = "unic-char-property"

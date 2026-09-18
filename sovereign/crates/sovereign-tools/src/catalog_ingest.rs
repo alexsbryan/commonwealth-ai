@@ -39,9 +39,9 @@ use corpus_engine::progress::IngestProgress;
 use corpus_engine::recipe::Recipe;
 use corpus_engine::types::{CorpusKind, CorpusSpec};
 use corpus_engine::CorpusEngine;
-use corpus_engine_vocab::atoms::{AtomEnvelope, AtomType};
-use corpus_engine_vocab::read::{read_atlas_atoms, read_atlas_edges};
-use corpus_engine_vocab::taxonomy::EntityType;
+use understanding_vocab::atoms::{AtomEnvelope, AtomType};
+use understanding_vocab::read::{read_atlas_atoms, read_atlas_edges};
+use understanding_vocab::taxonomy::EntityType;
 use serde::{Deserialize, Serialize};
 
 use crate::enrich::{run_enrich_build, CancellationFlag, EnrichBuildConfig, EnrichProgressFn};

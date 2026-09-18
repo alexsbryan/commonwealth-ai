@@ -22,7 +22,7 @@
 
 use crate::atlas_traversal::question_kind::{shared_classifier, KindScore, KindSource};
 use crate::types::EmbedFn;
-use corpus_engine_vocab::ontology::{NavigationPolicy, QuestionKind, WalkPolicy};
+use understanding_vocab::ontology::{NavigationPolicy, QuestionKind, WalkPolicy};
 
 use super::super::inventory::{AtlasInventory, RowFit, RowInert};
 use super::super::provider::{AtlasProvider, NavigationSource};

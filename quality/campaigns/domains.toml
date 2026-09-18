@@ -79,7 +79,7 @@ check     = "python3 scripts/domains-census.py predicate && (cd corpus-engine &&
 #   sovereign-mesh: 88,255 lines (DOMAINS.md §3 said 82,241 on 09-11; +6,014
 #      in two days as sv-surface moved routes INTO it — the bar below starts
 #      with its trend running the wrong way, and says so).
-#   corpus-engine-vocab: 5,161 lines, recursive — DOMAINS.md §5 is right; an
+#   understanding-vocab: 5,161 lines, recursive — DOMAINS.md §5 is right; an
 #      earlier draft of this file said 2,769 off a non-recursive glob that
 #      missed src/ontology/ (1,719) and atoms/tests.rs (673). Corrected, and
 #      recorded because the next reader will run the same glob.
@@ -207,7 +207,7 @@ status       = "open"
 # ALLOW-LIST below), 7 projections that are the read model built in the wrong
 # crate (five already use vocab's AtomId/AtomType/StableAtomKey), 1 duplicate
 # (reading_http.rs AtomSpan). The instrument counts pub Atom* definitions
-# outside corpus-engine-vocab/ and enrichment/, minus an ALLOW-LIST of named
+# outside understanding-vocab/ and enrichment/, minus an ALLOW-LIST of named
 # binders — never a path pattern: `*_http.rs` returns 9 and silently drops
 # AtomSpan/AtomCard/AtomElsewhere, three types the bar exists to catch.
 # Whole-tree the count is 12 (corpus-engine-archaeology adds AtomWitness and

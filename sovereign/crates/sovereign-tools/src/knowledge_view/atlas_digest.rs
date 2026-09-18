@@ -21,8 +21,8 @@
 
 use std::path::Path;
 
-use corpus_engine_vocab::atoms::AtomEnvelope;
-use corpus_engine_vocab::read::read_atlas_atoms;
+use understanding_vocab::atoms::AtomEnvelope;
+use understanding_vocab::read::read_atlas_atoms;
 
 use super::tokens::estimate_tokens;
 

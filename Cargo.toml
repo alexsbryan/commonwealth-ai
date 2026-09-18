@@ -67,7 +67,7 @@ members = [
     # lookup_key) — a serde + kernel-types leaf carved out 2026-09-03 so a thin
     # host can READ atlas/atoms.json without linking corpus-engine (Step 2 of
     # the enrichment-as-plugin plan).
-    "corpus-engine-vocab",
+    "understanding-vocab",
     # The retrieval read-port leaf — CorpusIndex, IndexInfo, the persisted
     # settings and the search/evidence surface. Carved out of corpus-engine by
     # domains REVIEW-build-index-read-port (DE "The read-port leaf, measured
@@ -301,7 +301,7 @@ corpus-engine-archaeology = { path = "corpus-engine-archaeology" }
 corpus-engine-yield = { path = "corpus-engine-yield" }
 corpus-engine-watchers = { path = "corpus-engine-watchers" }
 corpus-engine-sections = { path = "corpus-engine-sections" }
-corpus-engine-vocab = { path = "corpus-engine-vocab" }
+understanding-vocab = { path = "understanding-vocab" }
 corpus-index = { path = "corpus-index" }
 arch-layers = { path = "quality/arch-layers" }
 sovereign-contracts = { path = "sovereign/crates/sovereign-contracts" }

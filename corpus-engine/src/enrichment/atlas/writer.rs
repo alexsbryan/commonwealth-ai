@@ -585,14 +585,14 @@ pub fn write_atlas_configurations(
     Ok(path)
 }
 
-// The read door lives in the vocabulary leaf — `corpus-engine-vocab::read`,
+// The read door lives in the vocabulary leaf — `understanding-vocab::read`,
 // moved there by domains `dm-vocab-door-move` (DE "The door"), and the layout
 // constant `ATLAS_DIRNAME` followed it by `dm-vocab-atlas-dirname` (DE "The
 // read-port leaf, measured again"). Re-exported at the historical
 // `writer::read_atlas_*` / `writer::ATLAS_DIRNAME` paths so the writers below
 // and the consumers outside the engine keep resolving; the two writers read
 // through the door, not around it.
-pub use corpus_engine_vocab::read::{read_atlas_atoms, read_atlas_edges, ATLAS_DIRNAME};
+pub use understanding_vocab::read::{read_atlas_atoms, read_atlas_edges, ATLAS_DIRNAME};
 
 /// Replace `atlas/atoms.json` with the provided file, and rebuild the v2
 /// store from it. The atom-side companion to [`write_atlas_edges`]: Phase 6's

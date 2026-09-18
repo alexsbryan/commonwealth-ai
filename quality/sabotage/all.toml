@@ -556,7 +556,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "en-21-entity_content_hash_differs_across_corpo"
 requirement = "EN-21"
-target = "corpus-engine-vocab/src/atoms.rs"
+target = "understanding-vocab/src/atoms.rs"
 find = "    pub fn entity_content_hash(\n        canonical_name: &str,\n        entity_type: &crate::taxonomy::EntityType,\n        corpus_id: &str,\n    ) -> Self {\n        let key = crate::canonical::lookup_key(canonical_name);\n        let input = format!(\"entity|{key}|{}|{corpus_id}\", entity_type.as_str_repr());\n        Self(format!(\"entity-{}\", short_hash(&input)))\n    }"
 replace = "    pub fn entity_content_hash(\n        canonical_name: &str,\n        entity_type: &crate::taxonomy::EntityType,\n        _corpus_id: &str,\n    ) -> Self {\n        let key = crate::canonical::lookup_key(canonical_name);\n        let input = format!(\"entity|{key}|{}\", entity_type.as_str_repr());\n        Self(format!(\"entity-{}\", short_hash(&input)))\n    }"
 mustFail = ["entity_content_hash_differs_across_corpora"]

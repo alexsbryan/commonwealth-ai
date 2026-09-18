@@ -552,7 +552,7 @@ mod tests {
         // carries `kernel_types::quality::Precondition`, and the
         // alternatives were a second spelling of `Precondition` in this
         // leaf (§10.6) or one noun with halves in two crates. The widening
-        // is on `corpus-engine-vocab`'s precedent below and costs the
+        // is on `understanding-vocab`'s precedent below and costs the
         // closure ZERO third-party crates: `kernel-types` is itself an
         // empty leaf, and `toml` — the only dep its `quality-registry`
         // feature adds — was already an `oicp-types` dependency.
@@ -560,7 +560,7 @@ mod tests {
         assert!(budget("kernel-types").is_empty());
         assert!(budget("corpus-engine-sections").is_empty());
         assert!(budget("sovereign-time").is_empty());
-        assert_eq!(budget("corpus-engine-vocab"), ["kernel-types"]);
+        assert_eq!(budget("understanding-vocab"), ["kernel-types"]);
         // `sovereign-time` joined 2026-09-07 — an EMPTY-dependency leaf, so the
         // closure widens by zero crates. Pinned here because this test is the
         // structural half of "widen deliberately": the gate binary goes green
@@ -713,7 +713,7 @@ pub const SECOND: &str = include_str!(concat!(
     /// nobody can name is not a rule (ARCH §18.1).
     #[test]
     fn runtime_scan_flags_the_shapes_the_lift_priced() {
-        // corpus-engine-vocab/tests/atoms_file_census.rs — the read and the
+        // understanding-vocab/tests/atoms_file_census.rs — the read and the
         // climb are on different lines, which is why this is windowed.
         let vocab = r#"
 fn roots() -> Vec<PathBuf> {

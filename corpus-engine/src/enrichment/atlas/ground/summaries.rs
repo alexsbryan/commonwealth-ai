@@ -49,7 +49,7 @@
 
 use std::collections::BTreeMap;
 
-use corpus_engine_vocab::ontology::SummarySource;
+use understanding_vocab::ontology::SummarySource;
 
 use super::super::atoms::AtomId;
 use super::super::provider::AtlasProvider;
@@ -86,7 +86,7 @@ pub type SourceYield = BTreeMap<SummarySource, usize>;
 /// THE STAGE SIGNATURE — one method, every source, same shape.
 ///
 /// An extension trait rather than an inherent `impl`, for one reason: the enum
-/// is DATA and lives in `corpus-engine-vocab`, the leaf every thin host links
+/// is DATA and lives in `understanding-vocab`, the leaf every thin host links
 /// and the boundary-gate holds to no store dependencies. It must not learn how
 /// to open a Lance table. So the vocabulary declares WHICH sources exist and
 /// this crate — the one that owns the stores — says what asking one means

@@ -11,10 +11,10 @@
 //! re-derived the schema by key name (and asked for a `statement` key no
 //! atom kind has). Now there is one, here, and every reader names it.
 //!
-//! # Why `xtask` and not `corpus-engine-vocab`
+//! # Why `xtask` and not `understanding-vocab`
 //!
 //! It lived beside the type it counts, which reads as the obvious home and is
-//! the wrong one: `corpus-engine-vocab` is a `[[package_leaf]]`
+//! the wrong one: `understanding-vocab` is a `[[package_leaf]]`
 //! (`quality/ARCH_LAYERS.toml`), so `corpus-mcp` — and through the global leaf
 //! set, every declared package — must build STANDALONE WITH ITS TESTS. This
 //! census resolves the repo root from `CARGO_MANIFEST_DIR` and then
@@ -45,7 +45,7 @@ fn roots() -> Vec<PathBuf> {
     let ws = repo_root();
     let mut roots = vec![
         ws.join("corpus-engine/src"),
-        ws.join("corpus-engine-vocab/src"),
+        ws.join("understanding-vocab/src"),
     ];
     for entry in std::fs::read_dir(ws.join("sovereign/crates")).unwrap() {
         let src = entry.unwrap().path().join("src");
@@ -115,7 +115,7 @@ fn the_atoms_json_shape_is_declared_exactly_once() {
         }
     }
 
-    let home = "corpus-engine-vocab/src/atoms.rs";
+    let home = "understanding-vocab/src/atoms.rs";
     assert_eq!(
         hits.len(),
         1,

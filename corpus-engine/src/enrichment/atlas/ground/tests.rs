@@ -5,7 +5,7 @@
 //! to the walk, which is what these tests exercise.
 
 use super::*;
-use corpus_engine_vocab::taxonomy::EntityType;
+use understanding_vocab::taxonomy::EntityType;
 
 // Named here rather than through `super::*`: the walk stopped importing them
 // when `select.rs` took the classification half, and a test module that leans
@@ -13,14 +13,14 @@ use corpus_engine_vocab::taxonomy::EntityType;
 // split.
 use crate::atlas_traversal::question_kind::KindSource;
 use crate::types::EmbedFn;
-use corpus_engine_vocab::ontology::{NavigationPolicy, QuestionKind, WalkPolicy};
+use understanding_vocab::ontology::{NavigationPolicy, QuestionKind, WalkPolicy};
 
 use crate::enrichment::atlas::ann_store::AnnSeedTable;
 use crate::enrichment::atlas::context::{AtlasEntry, AtomView, EdgeView, EvidenceRef};
 use crate::enrichment::atlas::inventory::AtlasInventory;
 use crate::enrichment::atlas::projection::AtomRecord;
-use corpus_engine_vocab::atoms::ChunkRef;
-use corpus_engine_vocab::edges::EdgeProvenance;
+use understanding_vocab::atoms::ChunkRef;
+use understanding_vocab::edges::EdgeProvenance;
 
 // ── The displacement fixture (§18.1) ────────────────────────────────
 //
@@ -557,7 +557,7 @@ fn the_unfiltered_row_is_the_status_quo_ante() {
     assert!(!seed_filter_is_active(&w));
     assert!(w.walk.is_empty(), "no edge filter");
     assert_eq!(w.hops, 2);
-    assert_eq!(w.budget, corpus_engine_vocab::ontology::DEFAULT_BUDGET);
+    assert_eq!(w.budget, understanding_vocab::ontology::DEFAULT_BUDGET);
 }
 
 /// Every classified row DOES filter, or the map is not driving anything.

@@ -71,7 +71,7 @@ pub use sovereign_scheduler::predicted_time; // shim: moved by domains REVIEW-bu
 pub mod projects;
 pub mod rail_bind;
 pub mod rail_kv_pump;
-pub use corpus_engine_vocab::reading_formatters; // shim: moved by domains dm-mesh-move-reading-formatters
+pub use understanding_vocab::reading_formatters; // shim: moved by domains dm-mesh-move-reading-formatters
 #[cfg(feature = "treesitter")]
 pub mod reindexer;
 pub mod ring_roster;
