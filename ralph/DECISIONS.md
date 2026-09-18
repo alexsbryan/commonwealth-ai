@@ -2325,3 +2325,20 @@ a parser parameter — either would collapse the split to fewer rows.
 **Landed in.** the mint commit under `REVIEW-build-understanding-pass-host`;
 the children carry the work. Parent marked `[x]` in the follow-up
 `ralph: REVIEW-build-understanding-pass-host done`.
+
+## 2026-09-18 · REVIEW-mint-understanding-tiers · the pure/host line is measured, not the DE's estimate
+
+**Fork.** The row says the cluster is "170 files ... corpus-engine/src/{enrichment,meta_atlas,atlas_traversal}, 102,595 lines" and cites DE's "106 of 170" pure. The tree says the `understanding` context tags 169 corpus-engine files / 101,324 lines, and three of them (`stream_axes.rs`, `wikipedia_columnar.rs`, `wikipedia_columnar/tests.rs`) sit outside the three directories the row names. Decide what "pure" means operationally, and which count the `[[tier]]` rows carry.
+
+**Choice.**
+
+1. The cluster is the registry's tag, not a directory glob: all 169 `corpus-engine` files `_module_context` returns `understanding` for (`scripts/domains-census.py`; `plan --crate corpus-engine` reads `169` tree files). The three outside the named dirs are classified like the rest.
+2. `pure` = names no index (`crate::index`/`CorpusIndex`/`IndexMeta`/`IndexInfo`), no engine (`crate::engine`), no embed fn (`EmbedFn`/`embed(`), no filesystem or ANN I/O (`std::fs`, `File::open`, `OpenOptions`, `read_to_string`/`write_all`/`create_dir`, `.exists()`, `read_dir`, `metadata(`, `from_reader`, `lancedb::`/`arrow::`), AND no `crate::<m>` reach to a corpus-engine module — only the leaf shims `crate::error`/`crate::types` (both re-export `corpus-index` since `503681188`), the external `oplog` crate (`lib.rs:53` `pub use ::oplog`), and vocab's `crate::atlas_canonical` (`lib.rs:23`). Inline `#[cfg(test)]` modules are stripped first. Measured: **pure 96 files / 43,982 lines; host 73 files / 57,342 lines.**
+3. Fifteen files the four-capability scan called pure were adjudicated host by hand: eleven name `recipe`/`recipe_ontology`/`chunkers`/`filters`/`WikiAtlasProvider` (`provider.rs`, `vital_tier.rs`, the five `investigation/` files, `ontology/mod.rs`, `ontology/validate.rs`, `configurable_atlas.rs`, `section_join.rs`); four do I/O the four patterns miss (`governance_change.rs`, `meta_atlas/index.rs`, `meta_atlas/bridge/lookup.rs` — `path.exists()`; `wikipedia_columnar.rs` — `lancedb`). DE's 106/108 is a design estimate; the measured split is 96/73.
+4. The 12 pure and 3 host `mod.rs` shells are handled by `REVIEW-build-understanding-crate-tree`, not by a batch move. After the shells split, the only `pure`→host type edge is `AtlasOntologyFile` (`writer.rs:374`, named by `pipeline/pipelines/declaration.rs:22,:29`), which that row moves to the language.
+
+**Evidence.** `python3 scripts/domains-census.py plan --crate corpus-engine` reads `101324→102227 lines, 169→170 files`; the `[[tier]]` rows (`quality/DOMAINS.toml`) carry all 169 paths; the 55 `pure`→host `crate::` edges were resolved file-by-file and all but `AtlasOntologyFile` land on `atlas/mod.rs`/`ontology/mod.rs` re-exports of pure or vocab items.
+
+**Falsified by.** A file in the `pure` list whose `git grep -n 'crate::'` names a corpus-engine module after the shells split; or a file in the `host` list that moves to `understanding-atlas` without naming corpus-engine.
+
+**Landed in.** the `REVIEW-mint-understanding-tiers` mint commit; the move rows carry the work.

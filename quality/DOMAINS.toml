@@ -3981,13 +3981,216 @@ external_consumers = "558 sites / 14 crates: sovereign-cli-llm(t6):220, sovereig
 own_dep_max_tier = 1
 consumer_min_tier = 3
 window = "t1..t2"
-dest = "understanding (package, SERVING_BOUNDARY shape): `understanding-atlas` (arithmetic over the published language, ~46.8k / 106 files with zero index/engine/embed/fs reference) + `understanding-host` (the ports and the knot, ~55.4k / 64 files) over `understanding-vocab` (= corpus-engine-vocab RENAMED, the `serving-policy` role)"
+dest = "understanding (package, SERVING_BOUNDARY shape): `understanding-atlas` (arithmetic over the published language, 43,982 / 96 files with zero index/engine/embed/fs reference — quality/DOMAINS.toml `[[tier]]`) + `understanding-host` (the ports and the knot, 57,342 / 73 files) over `understanding-vocab` (= corpus-engine-vocab RENAMED, the `serving-policy` role)"
 dest_exists = false
 dest_tier = 1
 shim_sites = 7
 renames_riding = "DOMAINS.md §10.5, measured in-crate: Domain->FieldModel 77 sites/26 files; AtomsFile sealed door 72/20; Seed six homonyms 32/17; Gap->Lacuna 24/10; DomainRegistry->FieldModelRegistry 17/8; AtomSpan converge 7/2; AtomCard deletes (0 in-crate)"
 order = 7
-note = "59.4% of corpus-engine and the whole reason the crate is a god-crate. One crate at 102k re-mints the problem this campaign demolishes, so the destination is a two-tier PACKAGE, not a crate — the split is already latent (106 of 170 files name no index, no engine, no embed fn and no fs). DECOMPOSITION.md:83 spells this `corpus-engine-enrich` and estimates 40k; DOMAINS.md §6 already corrected the estimate, and ARCH_LAYERS.toml:854 says the `corpus-engine-` prefix 'is carve-out history and actively misleads'. The knot is three files: enrichment/atlas/resolution.rs (5,473), enrichment/pipeline/runner.rs (3,488), enrichment/atlas/context.rs (2,516). The re-export precedent is exact and cheap: corpus-engine-vocab left behind THREE lines (enrichment/atlas/mod.rs:31,40,58)."
+note = "59.4% of corpus-engine and the whole reason the crate is a god-crate. One crate at 102k re-mints the problem this campaign demolishes, so the destination is a two-tier PACKAGE, not a crate — the split is latent and now MEASURED (96 of 169 files name no index, no engine, no embed fn and no fs; the `[[tier]]` rows below carry every path). DECOMPOSITION.md:83 spells this `corpus-engine-enrich` and estimates 40k; DOMAINS.md §6 already corrected the estimate, and ARCH_LAYERS.toml:854 says the `corpus-engine-` prefix 'is carve-out history and actively misleads'. The knot is three files: enrichment/atlas/resolution.rs (5,473), enrichment/pipeline/runner.rs (3,488), enrichment/atlas/context.rs (2,516). The re-export precedent is exact and cheap: corpus-engine-vocab left behind THREE lines (enrichment/atlas/mod.rs:31,40,58)."
+
+# ── Understanding's two tiers, classified 2026-09-18 (REVIEW-mint-understanding-tiers) ──
+# DE "The shape": `understanding-atlas` is the arithmetic over the language; `understanding-host`
+# is the ports and the knot. The split is the corpus-engine files the `understanding` context tags,
+# measured by scanning each (inline tests stripped) for the capability it reaches — index, engine,
+# embed fn, filesystem/store — plus a `crate::` sweep for any module the destination crate may not
+# name: `pure` names no index/engine/embed/fs and no corpus-engine module (only the leaf shims
+# `crate::error`/`crate::types`, the external `oplog` crate, and vocab's `crate::atlas_canonical`);
+# `host` is the rest. Fifteen files the capability scan called pure were adjudicated host by hand:
+# eleven name `recipe`, `recipe_ontology`, `chunkers`, `filters` or `WikiAtlasProvider`
+# (`provider.rs`, `vital_tier.rs`, the five `investigation/` files, `ontology/mod.rs`,
+# `ontology/validate.rs`, `configurable_atlas.rs`, `section_join.rs`), and four do filesystem or ANN
+# I/O the four-capability scan misses (`governance_change.rs`, `meta_atlas/index.rs`,
+# `meta_atlas/bridge/lookup.rs` — `path.exists()`; `wikipedia_columnar.rs` — lancedb). The shell
+# `mod.rs` files are split by REVIEW-build-understanding-crate-tree. A file whose tier row changes is
+# a diff a reviewer reads; the move rows below read this list.
+
+[[tier]]
+context = "understanding"
+tier = "pure"
+dest = "understanding-atlas"
+files = 96
+lines = 43982
+paths = [
+    "corpus-engine/src/atlas_traversal/brief.rs",
+    "corpus-engine/src/atlas_traversal/classifier.rs",
+    "corpus-engine/src/atlas_traversal/engine.rs",
+    "corpus-engine/src/atlas_traversal/mod.rs",
+    "corpus-engine/src/atlas_traversal/spans.rs",
+    "corpus-engine/src/enrichment/atlas/analysis/configuration.rs",
+    "corpus-engine/src/enrichment/atlas/analysis/gaps.rs",
+    "corpus-engine/src/enrichment/atlas/analysis/holistic_classifier.rs",
+    "corpus-engine/src/enrichment/atlas/analysis/mod.rs",
+    "corpus-engine/src/enrichment/atlas/analysis/parcel_analytics.rs",
+    "corpus-engine/src/enrichment/atlas/analysis/patterns_adapter.rs",
+    "corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs",
+    "corpus-engine/src/enrichment/atlas/analysis/sec_facts/fixtures.rs",
+    "corpus-engine/src/enrichment/atlas/analysis/sec_facts/mod.rs",
+    "corpus-engine/src/enrichment/atlas/analysis/starter_questions.rs",
+    "corpus-engine/src/enrichment/atlas/analysis/tension_classifier.rs",
+    "corpus-engine/src/enrichment/atlas/analysis/tension_fields.rs",
+    "corpus-engine/src/enrichment/atlas/analysis/tension_policy.rs",
+    "corpus-engine/src/enrichment/atlas/analysis/tension_shape.rs",
+    "corpus-engine/src/enrichment/atlas/analysis/tensions.rs",
+    "corpus-engine/src/enrichment/atlas/axis_catalog.rs",
+    "corpus-engine/src/enrichment/atlas/citation.rs",
+    "corpus-engine/src/enrichment/atlas/context_filter.rs",
+    "corpus-engine/src/enrichment/atlas/cross_corpus.rs",
+    "corpus-engine/src/enrichment/atlas/evidence_site.rs",
+    "corpus-engine/src/enrichment/atlas/ground.rs",
+    "corpus-engine/src/enrichment/atlas/ground/report.rs",
+    "corpus-engine/src/enrichment/atlas/inventory.rs",
+    "corpus-engine/src/enrichment/atlas/ontology_coverage.rs",
+    "corpus-engine/src/enrichment/atlas/projection.rs",
+    "corpus-engine/src/enrichment/atlas/registry.rs",
+    "corpus-engine/src/enrichment/atlas/resolution_identity.rs",
+    "corpus-engine/src/enrichment/atlas/resolution_ontology.rs",
+    "corpus-engine/src/enrichment/atlas/resolve.rs",
+    "corpus-engine/src/enrichment/atlas/schema_validation.rs",
+    "corpus-engine/src/enrichment/atlas/store/configures.rs",
+    "corpus-engine/src/enrichment/atlas/strategies/mod.rs",
+    "corpus-engine/src/enrichment/domain_registry.rs",
+    "corpus-engine/src/enrichment/domains/business_email.rs",
+    "corpus-engine/src/enrichment/domains/conversational.rs",
+    "corpus-engine/src/enrichment/domains/institutional.rs",
+    "corpus-engine/src/enrichment/domains/mod.rs",
+    "corpus-engine/src/enrichment/domains/personal.rs",
+    "corpus-engine/src/enrichment/domains/philosophy.rs",
+    "corpus-engine/src/enrichment/filter.rs",
+    "corpus-engine/src/enrichment/governance.rs",
+    "corpus-engine/src/enrichment/investigation/aggregate.rs",
+    "corpus-engine/src/enrichment/mod.rs",
+    "corpus-engine/src/enrichment/ontology/clock.rs",
+    "corpus-engine/src/enrichment/ontology/type_index.rs",
+    "corpus-engine/src/enrichment/pipeline/assemble.rs",
+    "corpus-engine/src/enrichment/pipeline/atlas.rs",
+    "corpus-engine/src/enrichment/pipeline/atlas_extensions.rs",
+    "corpus-engine/src/enrichment/pipeline/atom_normalizer.rs",
+    "corpus-engine/src/enrichment/pipeline/mod.rs",
+    "corpus-engine/src/enrichment/pipeline/pipelines/conversation_atlas.rs",
+    "corpus-engine/src/enrichment/pipeline/pipelines/declaration.rs",
+    "corpus-engine/src/enrichment/pipeline/pipelines/engineering_atlas.rs",
+    "corpus-engine/src/enrichment/pipeline/pipelines/genre.rs",
+    "corpus-engine/src/enrichment/pipeline/pipelines/literary.rs",
+    "corpus-engine/src/enrichment/pipeline/pipelines/mod.rs",
+    "corpus-engine/src/enrichment/pipeline/pipelines/ontology_parse.rs",
+    "corpus-engine/src/enrichment/pipeline/pipelines/ontology_prompt.rs",
+    "corpus-engine/src/enrichment/pipeline/pipelines/ontology_schema.rs",
+    "corpus-engine/src/enrichment/pipeline/pipelines/parse_policy.rs",
+    "corpus-engine/src/enrichment/pipeline/pipelines/philosophy_atlas.rs",
+    "corpus-engine/src/enrichment/pipeline/pipelines/referential_atlas.rs",
+    "corpus-engine/src/enrichment/pipeline/pipelines/sketch_parse.rs",
+    "corpus-engine/src/enrichment/pipeline/progress.rs",
+    "corpus-engine/src/enrichment/pipeline/registry.rs",
+    "corpus-engine/src/enrichment/pipeline/section_classifier.rs",
+    "corpus-engine/src/enrichment/pipeline/text_helpers.rs",
+    "corpus-engine/src/enrichment/pipeline/trait_def.rs",
+    "corpus-engine/src/enrichment/pipeline/typed_schemas/argumentative.rs",
+    "corpus-engine/src/enrichment/pipeline/typed_schemas/descriptive.rs",
+    "corpus-engine/src/enrichment/pipeline/typed_schemas/lyric.rs",
+    "corpus-engine/src/enrichment/pipeline/typed_schemas/mod.rs",
+    "corpus-engine/src/enrichment/pipeline/typed_schemas/modulators.rs",
+    "corpus-engine/src/enrichment/pipeline/typed_schemas/narrative.rs",
+    "corpus-engine/src/enrichment/pipeline/typed_schemas/procedural.rs",
+    "corpus-engine/src/enrichment/pipeline/typed_schemas/reflective.rs",
+    "corpus-engine/src/enrichment/pipeline/typed_schemas/source_recovery.rs",
+    "corpus-engine/src/enrichment/pipeline/types.rs",
+    "corpus-engine/src/enrichment/pipeline/vector_clustering.rs",
+    "corpus-engine/src/enrichment/reconciliation/identity_signals.rs",
+    "corpus-engine/src/enrichment/reconciliation/mod.rs",
+    "corpus-engine/src/enrichment/reconciliation/multi_origin.rs",
+    "corpus-engine/src/enrichment/reconciliation/oplog.rs",
+    "corpus-engine/src/enrichment/reconciliation/reified.rs",
+    "corpus-engine/src/enrichment/reconciliation/signals.rs",
+    "corpus-engine/src/meta_atlas/bridge/adjudicate.rs",
+    "corpus-engine/src/meta_atlas/bridge/mod.rs",
+    "corpus-engine/src/meta_atlas/bridge/signals.rs",
+    "corpus-engine/src/meta_atlas/bridge/topic_node.rs",
+    "corpus-engine/src/meta_atlas/classifier.rs",
+    "corpus-engine/src/meta_atlas/mod.rs",
+]
+
+[[tier]]
+context = "understanding"
+tier = "host"
+dest = "understanding-host"
+files = 73
+lines = 57342
+paths = [
+    "corpus-engine/src/atlas_traversal/question_kind.rs",
+    "corpus-engine/src/enrichment/alignment.rs",
+    "corpus-engine/src/enrichment/atlas/analysis/sec_facts/discovery.rs",
+    "corpus-engine/src/enrichment/atlas/ann_store.rs",
+    "corpus-engine/src/enrichment/atlas/atoms_delta.rs",
+    "corpus-engine/src/enrichment/atlas/context.rs",
+    "corpus-engine/src/enrichment/atlas/context_loader.rs",
+    "corpus-engine/src/enrichment/atlas/doc_to_atoms.rs",
+    "corpus-engine/src/enrichment/atlas/embeddings.rs",
+    "corpus-engine/src/enrichment/atlas/ground/select.rs",
+    "corpus-engine/src/enrichment/atlas/ground/summaries.rs",
+    "corpus-engine/src/enrichment/atlas/ground/tests.rs",
+    "corpus-engine/src/enrichment/atlas/ingestion.rs",
+    "corpus-engine/src/enrichment/atlas/migrate_ids.rs",
+    "corpus-engine/src/enrichment/atlas/mod.rs",
+    "corpus-engine/src/enrichment/atlas/provider.rs",
+    "corpus-engine/src/enrichment/atlas/resolution.rs",
+    "corpus-engine/src/enrichment/atlas/section_cache.rs",
+    "corpus-engine/src/enrichment/atlas/seed_population.rs",
+    "corpus-engine/src/enrichment/atlas/store.rs",
+    "corpus-engine/src/enrichment/atlas/store/derivation.rs",
+    "corpus-engine/src/enrichment/atlas/strategies/code_walk.rs",
+    "corpus-engine/src/enrichment/atlas/strategies/newsworthy_events.rs",
+    "corpus-engine/src/enrichment/atlas/strategies/structure_first.rs",
+    "corpus-engine/src/enrichment/atlas/summary.rs",
+    "corpus-engine/src/enrichment/atlas/vital_tier.rs",
+    "corpus-engine/src/enrichment/atlas/wiki_store.rs",
+    "corpus-engine/src/enrichment/atlas/wiki_store/tests.rs",
+    "corpus-engine/src/enrichment/atlas/writer.rs",
+    "corpus-engine/src/enrichment/checkpoint.rs",
+    "corpus-engine/src/enrichment/clustering.rs",
+    "corpus-engine/src/enrichment/domain.rs",
+    "corpus-engine/src/enrichment/entity_extraction.rs",
+    "corpus-engine/src/enrichment/fault_lines.rs",
+    "corpus-engine/src/enrichment/field_atoms.rs",
+    "corpus-engine/src/enrichment/field_engine.rs",
+    "corpus-engine/src/enrichment/governance_change.rs",
+    "corpus-engine/src/enrichment/governance_view.rs",
+    "corpus-engine/src/enrichment/investigation/checkpoint.rs",
+    "corpus-engine/src/enrichment/investigation/extract.rs",
+    "corpus-engine/src/enrichment/investigation/graph.rs",
+    "corpus-engine/src/enrichment/investigation/mod.rs",
+    "corpus-engine/src/enrichment/investigation/normalize.rs",
+    "corpus-engine/src/enrichment/investigation/patterns.rs",
+    "corpus-engine/src/enrichment/investigation/recoalesce.rs",
+    "corpus-engine/src/enrichment/ontology/mod.rs",
+    "corpus-engine/src/enrichment/ontology/validate.rs",
+    "corpus-engine/src/enrichment/open_questions.rs",
+    "corpus-engine/src/enrichment/pass.rs",
+    "corpus-engine/src/enrichment/pipeline/atlas_clustering.rs",
+    "corpus-engine/src/enrichment/pipeline/chapter_manifest.rs",
+    "corpus-engine/src/enrichment/pipeline/exemplar_bank.rs",
+    "corpus-engine/src/enrichment/pipeline/phase_cache.rs",
+    "corpus-engine/src/enrichment/pipeline/pipelines/configurable_atlas.rs",
+    "corpus-engine/src/enrichment/pipeline/pipelines/literary_atlas.rs",
+    "corpus-engine/src/enrichment/pipeline/prompts.rs",
+    "corpus-engine/src/enrichment/pipeline/run_output.rs",
+    "corpus-engine/src/enrichment/pipeline/runner.rs",
+    "corpus-engine/src/enrichment/pipeline/section_join.rs",
+    "corpus-engine/src/enrichment/pipeline/validation.rs",
+    "corpus-engine/src/enrichment/sep.rs",
+    "corpus-engine/src/enrichment/skeleton_parse.rs",
+    "corpus-engine/src/enrichment/state.rs",
+    "corpus-engine/src/enrichment/tiered.rs",
+    "corpus-engine/src/enrichment/tokens.rs",
+    "corpus-engine/src/meta_atlas/bridge/build.rs",
+    "corpus-engine/src/meta_atlas/bridge/edges.rs",
+    "corpus-engine/src/meta_atlas/bridge/lookup.rs",
+    "corpus-engine/src/meta_atlas/builder.rs",
+    "corpus-engine/src/meta_atlas/index.rs",
+    "corpus-engine/src/stream_axes.rs",
+    "corpus-engine/src/wikipedia_columnar.rs",
+    "corpus-engine/src/wikipedia_columnar/tests.rs",
+]
 
 # ───────────────────────────────────────────────────────────── ingest
 [[cluster]]
