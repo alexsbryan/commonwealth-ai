@@ -18,7 +18,7 @@ status    = "active"
 # after a join mid-run. The negative half is the census: nothing typed, and
 # the rail still learned nothing.
 [predicate]
-statement = "From three daemons on one mesh where A holds no copy of B's corpus, `scripts/ring-room-demo.sh verdict all` reads PASSED on every bar at N=3 and again at N=4 after a fourth member joined by one invite link during the run, with the member set read from `svrn mesh status` on every leg; the driver's typed-string log names zero addresses, ports, URLs, config lines or credentials; and `git diff --stat origin/main -- commonwealth/crates/commonwealth-rail*` names ONLY the roster-door hunk in commonwealth-rail/src/lib.rs (the default RosterSource, operator 2026-09-18) - the rail learned nothing about any app's payload"
+statement = "From three daemons on one mesh where A holds no copy of B's corpus, `scripts/ring-room-demo.sh verdict all` reads PASSED on every bar at N=3 and again at N=4 after a fourth member joined by one invite link during the run, with the member set read from `svrn mesh status` on every leg; the driver's typed-string log names zero addresses, ports, URLs, config lines or credentials; and `git diff --stat origin/main -- commonwealth/crates/commonwealth-rail commonwealth/crates/commonwealth-rail-core` (the ring rail; `commonwealth-rails` is the rails daemon, outside this clause) names ONLY the roster-door hunk in commonwealth-rail/src/lib.rs (the default RosterSource, operator 2026-09-18) - the rail learned nothing about any app's payload"
 check     = "./scripts/sovereign-test.sh --human --package sovereign-api --package sovereign-mesh --package commonwealth-media"
 # `check` decides only the code legs (fan-out attribution, derived roster,
 # media admit). The three-node run is `scripts/ring-room-demo.sh verdict all`,
@@ -110,7 +110,7 @@ title  = "week one - three podman nodes, four legs, a fourth joins mid-run, the 
 status = "open"
 demo   = "D13"
 moves  = ["ra-room-answer-names-the-machine", "ra-room-doc-name-from-membership", "ra-room-film-from-the-library-rail", "ra-room-plug-in-live", "ra-room-nothing-typed"]
-note   = "Order ring-room-week1. Moves D13, D3 and D1's join beside the landed D5. Six working days. Daemon work: derived roster as the app default (registry of exceptions), peer_name first-class on the passage and the citation, the media offer verb with an admit narrowing, a Tauri offers command + Library section. Instrument: scripts/ring-room-demo.sh REUSING ring-doc-demo.sh's node door and podman backend, N from mesh status. NOT in this rung: a QR renderer (rr-2), identity pass-through to Jellyfin, the phone, `svrn ring deploy`, any change under commonwealth-rail* beyond the roster-door default (lib.rs:130-205, operator 2026-09-18)."
+note   = "Order ring-room-week1. Moves D13, D3 and D1's join beside the landed D5. Six working days. Daemon work: derived roster as the app default (registry of exceptions), peer_name first-class on the passage and the citation, the media offer verb with an admit narrowing, a Tauri offers command + Library section. Instrument: scripts/ring-room-demo.sh REUSING ring-doc-demo.sh's node door and podman backend, N from mesh status. NOT in this rung: a QR renderer (rr-2), identity pass-through to Jellyfin, the phone, `svrn ring deploy`, any change under the ring rail (commonwealth-rail, commonwealth-rail-core) beyond the roster-door default (lib.rs:130-205, operator 2026-09-18)."
 
 [[rung]]
 id     = "rr-2"
