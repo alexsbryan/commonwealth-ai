@@ -278,3 +278,16 @@ Pushing 57 commits is a release of the shared branch and is decided on its own m
 clear a bar. The leg keeps its diff exactly as demanding and gains the four-verdict discipline:
 a non-empty diff made only of commits outside this campaign reads COULD-NOT-JUDGE naming them,
 never FAILED, and never PASSED.
+
+## 2026-09-18 · rd-1-three-containers · three machines rehearsed as three containers first
+
+Operator direction in session ("Mint it"). The one-host instrument already runs three real
+daemons on real iroh; what it lacks of "three machines" is three network identities, a real
+network cut, and three browser tabs on three addresses. Containers on one podman network give
+exactly that; VMs would add a kernel each and nothing the demo exercises. Reuse: MESH_QA.md
+designed a podman backend for the mesh soak and never built it — this is that seam, once.
+Premises checked on this host 2026-09-18: rootless `podman network create` works; a container
+on the toolbox image resolves host.containers.internal but the loopback-bound house daemon on
+:9741 answers 000, so the row makes "boots with entry unreachable" a bring-up check.
+The rehearsal (HUMAN-rd-1-three-tabs) does not retire HUMAN-rd-1-three-machines: the Mac's own
+build and the WAN relay path are that row's claim.
