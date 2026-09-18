@@ -2185,7 +2185,13 @@ fn step_main_retrieval_mesh<'a, 'ctx>(
                     m.search(st.message, &st.embedding, KQ_PER_CORPUS_LIMIT, None)
                         .await
                 }
-                (None, _) => crate::traits::MeshSearchOutcome::default(),
+                (None, _) => {
+                    tracing::info!(
+                        label = %st.search_label,
+                        "retrieval: mesh fan-out skipped — this Runtime has no mesh knowledge source"
+                    );
+                    crate::traits::MeshSearchOutcome::default()
+                }
             }
         };
         let (local_fanout, mesh_outcome) = tokio::join!(local_corpora_fut, mesh_fut);
