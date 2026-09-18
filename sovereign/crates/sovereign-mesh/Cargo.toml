@@ -305,7 +305,7 @@ dst = ["dep:sovereign-mesh-test-harness"]
 # drag in `corpus-engine`'s `treesitter` feature with its 5 grammar
 # crates. The CLI dispatcher (sovereign-cli) skips this; the daemon
 # host (sovereign-cli-atos) and desktop both enable it.
-treesitter = ["corpus-engine/treesitter"]
+treesitter = ["corpus-engine/treesitter", "corpus-engine-watchers/treesitter"]
 # EXPERIMENTAL: compiles commonwealth-transport's iroh dial-by-key
 # transport and the spike e2e (tests/iroh_transport_e2e.rs). Off by
 # default — never part of the workspace gates. Run via:

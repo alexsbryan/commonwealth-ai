@@ -27,6 +27,29 @@ corpus-engine-notes = { workspace = true }
 # on the CorpusEngine.
 corpus-engine-yield = { workspace = true }
 
+# The per-project state machine (`projects.rs`) derives serde and reads the
+# `rebrand::projects_json()` path SSOT. `sovereign-contracts` is a shared
+# `[[package_leaf]]`, so this reach stays inside the code-intel closure.
+serde = { workspace = true }
+sovereign-contracts = { workspace = true }
+# Registry timestamps in `projects.rs` and rebuild timestamps in
+# `reindexer.rs`.
+chrono = { workspace = true }
+
+# ── `reindexer` only (behind the `treesitter` feature) ──────────────────────
+# SCIP call graph + exporter dispatch. The code-intel package's own member;
+# `corpus-engine` deliberately ships no re-export shim for it (ARCH §8.3).
+corpus-engine-scip = { workspace = true, optional = true }
+# The deterministic fact base (`facts` + `facts_store`) the overlay merge
+# writes to. `treesitter` supplies the extraction loops, `stores` the SQLite
+# `FactStore` — the same two features `corpus-engine` forwarded before this
+# module moved here.
+code-facts = { workspace = true, optional = true }
+# Holds the Arc<ArcSwap<ScipGraph>> in the Reindexer.
+arc-swap = { workspace = true, optional = true }
+# .gitignore-aware walk in the reindexer's freshness scan.
+ignore = { version = "0.4", optional = true }
+
 # SQLite-backed result stores (bundled — no system dep).
 rusqlite = { version = "0.35", features = ["bundled"] }
 # Filesystem change notifications for the watchers.
@@ -38,6 +61,22 @@ async-trait = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 thiserror = { workspace = true }
+
+[features]
+default = []
+# The SCIP rebuild pipeline (`reindexer`). The gate `sovereign-mesh` carried
+# on the module before domains REVIEW-build-mesh-workbench-deferred moved it
+# here, preserved so the tree-sitter grammars and the SCIP graph do not enter
+# the closure of every `corpus-engine-watchers` consumer. `projects` is
+# unconditional.
+treesitter = [
+    "dep:corpus-engine-scip",
+    "dep:code-facts",
+    "code-facts/treesitter",
+    "code-facts/stores",
+    "dep:arc-swap",
+    "dep:ignore",
+]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

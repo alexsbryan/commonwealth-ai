@@ -717,7 +717,7 @@ lines = 500
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/projects.rs"
+path = "corpus-engine-watchers/src/projects.rs"
 context = "workbench"
 lines = 674
 note = ""
@@ -771,7 +771,7 @@ lines = 825
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/reindexer.rs"
+path = "corpus-engine-watchers/src/reindexer.rs"
 context = "workbench"
 lines = 2150
 note = ""

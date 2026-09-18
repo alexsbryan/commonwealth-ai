@@ -2434,13 +2434,20 @@ dependencies = [
 name = "corpus-engine-watchers"
 version = "0.7.0"
 dependencies = [
+ "arc-swap",
  "async-trait",
+ "chrono",
+ "code-facts",
  "corpus-engine-notes",
+ "corpus-engine-scip",
  "corpus-engine-yield",
  "futures",
+ "ignore",
  "notify",
  "rusqlite",
+ "serde",
  "serde_json",
+ "sovereign-contracts",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",

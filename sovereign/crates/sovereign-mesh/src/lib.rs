@@ -71,12 +71,12 @@ pub mod persist;
 /// (`SCHEDULER_QUALITY.md` §4.1). Public because it is scored from a
 /// capture as well as from the live path.
 pub use sovereign_scheduler::predicted_time; // shim: moved by domains REVIEW-build-sched-move
-pub mod projects;
+pub use corpus_engine_watchers::projects; // shim: moved by domains REVIEW-build-mesh-workbench-deferred
 pub mod rail_bind;
 pub mod rail_kv_pump;
 pub use understanding_vocab::reading_formatters; // shim: moved by domains dm-mesh-move-reading-formatters
 #[cfg(feature = "treesitter")]
-pub mod reindexer;
+pub use corpus_engine_watchers::reindexer; // shim: moved by domains REVIEW-build-mesh-workbench-deferred
 pub mod ring_roster;
 pub mod ring_sync;
 pub mod state;
