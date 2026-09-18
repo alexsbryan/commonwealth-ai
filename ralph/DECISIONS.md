@@ -552,3 +552,77 @@ the wire commit and mint a follow-up row for the chosen citation option), then
 `rm ralph/STOP ralph/NEEDS_HUMAN.md`.
 
 </details>
+
+## 2026-09-18 — seat #2 (charter: fixing a row whose premise the tree contradicts) — rr-1-citation-member-on-released: option A at its real size, the member rides the gate beside custody
+
+Fork: the worker's package (18:24Z, inline below): `peer_attribution` is destructured away in
+`prepare_knowledge_context` (`runtime/retrieval/mod.rs:178-261`) and `gate_answer_inner` sees
+only `EvidenceContext`; threading the map is ~7 files, the same as a parallel vec. Choice:
+option A — `chunk_members: Vec<Option<String>>` parallel to `chunks`, filled in
+`gate_evidence_with_sources` from `metadata["peer"]` (one writer, `retrieval_pipeline.rs:2344`)
+beside `custody_of`; `ReleasedCitation.member` stamped in `citations_of`. Why A over B at equal
+cost: per-chunk and exact, and `Custody::Peer` already names 'arrived from another node' — the
+member is that stamp's companion, not a second concept (ARCH 12). Seam named in the row: a
+typed home on `ScoredChunk.provenance` beside `stamped_custody()` is rr-2, not a free-form
+key forever. Falsified if a released citation's chunk index and the members vec can drift —
+the keep-filter test pins alignment. Row rewritten in place; instrument dependency unchanged.
+
+<details><summary>the worker's package</summary>
+
+# NEEDS_HUMAN — rr-1-citation-member-on-released (premise false: the map never reaches the gate)
+
+## (a) Unit
+
+`rr-1-citation-member-on-released` in `ralph/next/ring-room/STATE.md` (left `[~]`, no code edited).
+The row: `citations_of` "take the turn's `peer_attribution` (corpus → member name,
+`retrieval_pipeline.rs:2335-2346` — the ONE map, not a second one) … EDIT its one caller
+`grounding/inner.rs:498` to pass it (thread the existing map, add no parallel vec)."
+
+## (b) What I found
+
+The premise under option B is that the caller at `inner.rs:498` can pass the map. It cannot:
+nothing in the gate holds it.
+
+- The map is born in `PipelineState.peer_attribution`
+  (`sovereign-core/src/runtime/retrieval_pipeline.rs:403`, filled at :2334-2340 — the row's
+  path `sovereign-core/src/retrieval_pipeline.rs` is `src/runtime/retrieval_pipeline.rs`).
+- It dies in `prepare_knowledge_context` (`runtime/retrieval/mod.rs:178-186` destructures it,
+  :191 counts mesh hits, :259-261 folds it into `SourceSummary.from_peer` via
+  `build_provenance_components`). `KnowledgeContext` (`runtime/types.rs:27-...`) has no field
+  for it; only `sources: Vec<SourceSummary>` carries the projection.
+- `gate_answer_inner` (`grounding/inner.rs:10-18`) sees only `&EvidenceContext`, whose fields
+  (`grounding/mod.rs:174-269`) are chunks/labels/locators/targets/grains/custodies/urls/
+  admission — no corpus→member map, and `Custody` does not name the peer.
+- `EvidenceContext` has no `Default`; it is built literally at 5 production sites in 4 files
+  the row does not name — `handlers/knowledge_query.rs:1738`, `streaming.rs:1562`,
+  `streaming.rs:3182`, `handlers/synthesis_common.rs:122`, `handlers/simple.rs:181` — plus 7
+  literals in `grounding/tests.rs`. Those sites build from `ScoredChunk`s via
+  `gate_evidence_with_sources` (`grounding/mod.rs:345`), and each mesh chunk already carries
+  `metadata["peer"]` (`retrieval_pipeline.rs:2344`).
+
+Commands: `grep -rn peer_attribution sovereign/crates --include=*.rs` (hits only in
+retrieval_pipeline.rs, retrieval/mod.rs, formatters.rs, one desktop test);
+`grep -rln "EvidenceContext {" sovereign/crates/sovereign-core/src` (6 files, 14 literals).
+
+So "thread the existing map" is the same shape of cost the seat rejected for option A — about
+7 files, not 1 — just with a map field instead of a parallel vec.
+
+## (c) Decide
+
+1. Accept B at its real size: add `peer_attribution: HashMap<String,String>` to
+   `KnowledgeContext` (types.rs, set at retrieval/mod.rs:598) and to `EvidenceContext`
+   (grounding/mod.rs:174), fill it at the 5 sites above (empty map at simple.rs and
+   synthesis_common.rs where no fan-out ran, if that holds), 7 test literals, then
+   `citations_of` at inner.rs:498. ~7 files, one map, no parallel vec. Re-mint the row with
+   those files in its read list.
+2. Or derive per chunk inside the gate from what already reaches it: `gate_evidence_with_sources`
+   also returns the chunk's `metadata["peer"]`, i.e. option A (a parallel vec through the same
+   filter in inner.rs:34-105) — per-passage and exact, same file count.
+3. Or fall back to option C (desktop join by `(corpus_id, chunk_id)` against `retrievedChunks`,
+   `EpistemicFooter.svelte:224-236`) and accept that the headless instrument reads the name
+   from `retrieved_chunks[].metadata.peer` instead of the citation.
+
+(d) Edit or mark the row in ralph/next/ring-room/STATE.md, then
+`rm ralph/STOP ralph/NEEDS_HUMAN.md`.
+
+</details>
