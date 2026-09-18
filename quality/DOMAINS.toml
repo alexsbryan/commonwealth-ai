@@ -16085,3 +16085,201 @@ path = "studio/crates/sovereign-workflow/src/template.rs"
 context = "unknown"
 lines = 423
 note = ""
+
+[[module]]
+path = "corpus-index/src/chunkers.rs"
+context = "unknown"
+lines = 17
+note = ""
+
+[[module]]
+path = "corpus-index/src/corpus.rs"
+context = "unknown"
+lines = 218
+note = ""
+
+[[module]]
+path = "corpus-index/src/error.rs"
+context = "unknown"
+lines = 365
+note = ""
+
+[[module]]
+path = "corpus-index/src/filters.rs"
+context = "unknown"
+lines = 176
+note = ""
+
+[[module]]
+path = "corpus-index/src/index/create.rs"
+context = "unknown"
+lines = 1011
+note = ""
+
+[[module]]
+path = "corpus-index/src/index/enrichment.rs"
+context = "unknown"
+lines = 511
+note = ""
+
+[[module]]
+path = "corpus-index/src/index/evidence.rs"
+context = "unknown"
+lines = 524
+note = ""
+
+[[module]]
+path = "corpus-index/src/index/maintain.rs"
+context = "unknown"
+lines = 595
+note = ""
+
+[[module]]
+path = "corpus-index/src/index/mod.rs"
+context = "unknown"
+lines = 2428
+note = ""
+
+[[module]]
+path = "corpus-index/src/index/provenance.rs"
+context = "unknown"
+lines = 438
+note = ""
+
+[[module]]
+path = "corpus-index/src/index/read.rs"
+context = "unknown"
+lines = 788
+note = ""
+
+[[module]]
+path = "corpus-index/src/index/readiness.rs"
+context = "unknown"
+lines = 20
+note = ""
+
+[[module]]
+path = "corpus-index/src/index/search.rs"
+context = "unknown"
+lines = 1245
+note = ""
+
+[[module]]
+path = "corpus-index/src/index/tests/read_tests.rs"
+context = "unknown"
+lines = 131
+note = ""
+
+[[module]]
+path = "corpus-index/src/index/write.rs"
+context = "unknown"
+lines = 796
+note = ""
+
+[[module]]
+path = "corpus-index/src/lib.rs"
+context = "unknown"
+lines = 40
+note = ""
+
+[[module]]
+path = "corpus-index/src/recipe.rs"
+context = "unknown"
+lines = 45
+note = ""
+
+[[module]]
+path = "corpus-index/src/stream_axes.rs"
+context = "unknown"
+lines = 72
+note = ""
+
+[[module]]
+path = "corpus-index/src/types.rs"
+context = "unknown"
+lines = 625
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-peer-wire/src/lib.rs"
+context = "unknown"
+lines = 78
+note = ""
+
+[[module]]
+path = "understanding-atlas/src/atlas_traversal.rs"
+context = "understanding"
+lines = 24
+note = ""
+
+[[module]]
+path = "understanding-atlas/src/atlas_traversal/brief.rs"
+context = "understanding"
+lines = 708
+note = ""
+
+[[module]]
+path = "understanding-atlas/src/atlas_traversal/classifier.rs"
+context = "understanding"
+lines = 1009
+note = ""
+
+[[module]]
+path = "understanding-atlas/src/atlas_traversal/engine.rs"
+context = "understanding"
+lines = 1096
+note = ""
+
+[[module]]
+path = "understanding-atlas/src/atlas_traversal/spans.rs"
+context = "understanding"
+lines = 436
+note = ""
+
+[[module]]
+path = "understanding-atlas/src/atlas_traversal/test_fixtures.rs"
+context = "understanding"
+lines = 121
+note = ""
+
+[[module]]
+path = "understanding-atlas/src/enrichment/atlas/fold.rs"
+context = "understanding"
+lines = 138
+note = ""
+
+[[module]]
+path = "understanding-atlas/src/meta_atlas.rs"
+context = "understanding"
+lines = 14
+note = ""
+
+[[module]]
+path = "understanding-atlas/src/meta_atlas/bridge.rs"
+context = "understanding"
+lines = 98
+note = ""
+
+[[module]]
+path = "understanding-atlas/src/meta_atlas/bridge/adjudicate.rs"
+context = "understanding"
+lines = 205
+note = ""
+
+[[module]]
+path = "understanding-atlas/src/meta_atlas/bridge/signals.rs"
+context = "understanding"
+lines = 557
+note = ""
+
+[[module]]
+path = "understanding-atlas/src/meta_atlas/bridge/topic_node.rs"
+context = "understanding"
+lines = 442
+note = ""
+
+[[module]]
+path = "understanding-atlas/src/meta_atlas/classifier.rs"
+context = "understanding"
+lines = 874
+note = ""
