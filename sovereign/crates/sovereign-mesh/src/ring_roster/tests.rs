@@ -271,3 +271,53 @@ async fn a_registered_namespace_ignores_a_hand_roster() {
         );
     }
 }
+
+/// **A stray file narrows an app ring and nothing else.** The same
+/// `roster.json` — one person, not us — is ignored under a daemon namespace,
+/// where the roster is the mesh's, and narrows an app namespace, where the
+/// file is the narrowing primitive.
+#[tokio::test]
+async fn a_stray_roster_file_narrows_an_app_ring_but_not_a_daemon_ring() {
+    let me = NodeId::from_u128(1);
+    let k = key(23);
+    let state = sovereign_api::state::AppState::new(
+        me,
+        mesh_of(vec![member(me, "alex", Some(pubkey_of(&k)))]),
+    );
+    let dir = tempfile::tempdir().unwrap();
+    let rail = commonwealth_rail::RingRail::new(dir.path(), std::sync::Arc::new(k.clone()));
+    super::MeshRosterSource::install(&rail, &state).unwrap();
+
+    let stray = commonwealth_rail::Roster::new(std::collections::BTreeMap::from([(
+        Person::from("someone-else"),
+        vec![RingSigner::actor(&key(24))],
+    )]));
+    let daemon_ns = sovereign_serving::INFERENCE_APP_ID;
+    for ns in [daemon_ns, "house-expenses"] {
+        rail.journal(ns).unwrap().set_roster(&stray).unwrap();
+    }
+
+    let daemon = rail.journal(daemon_ns).unwrap();
+    assert_eq!(
+        rail.roster(&daemon)
+            .await
+            .unwrap()
+            .person_for(&RingSigner::actor(&k)),
+        Some(&Person::from("alex")),
+        "a daemon ring's roster is the mesh's; the stray file is ignored"
+    );
+
+    let app = rail.journal("house-expenses").unwrap();
+    assert_eq!(
+        rail.roster_origin("house-expenses"),
+        commonwealth_rail::RosterOrigin::File
+    );
+    assert_eq!(
+        rail.roster(&app)
+            .await
+            .unwrap()
+            .person_for(&RingSigner::actor(&k)),
+        None,
+        "the same file narrows an app ring"
+    );
+}

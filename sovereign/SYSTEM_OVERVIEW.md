@@ -5464,7 +5464,7 @@ app applies to everyone in the mesh, and `svrn ring roster add` writing the
 file is the narrowing primitive); `RingJournal::roster_file` is now named as the file half and has two
 callers, that door and the CLI writer. `MeshRosterSource` (in `ring_roster.rs`)
 is the default and the one registration, `REGISTERED_NAMESPACES`
-(`mesh-measurements`, which no file may narrow) — installed beside the rail itself in
+(the daemon's own rings — `mesh-measurements` and the six KV namespaces — which no file may narrow) — installed beside the rail itself in
 `daemon.rs` through `MeshRosterSource::install`, the one place a namespace
 and its derivation meet. Until then those three paths read the file — empty
 for this namespace — so the daemon refused its own key at the append door and

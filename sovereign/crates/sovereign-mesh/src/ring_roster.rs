@@ -225,19 +225,36 @@ impl MeshRoster {
     }
 }
 
-/// The one namespace no `roster.json` may narrow, registered with the rail so
-/// it outranks the file (`RingRail::default_roster` documents the order).
+/// The daemon's own rings — the namespaces no `roster.json` may narrow,
+/// registered with the rail so they outrank the file
+/// (`RingRail::default_roster` documents the order).
 ///
-/// `mesh-measurements` is the daemon's own ring (cw-lift 2d): a peer's run
-/// counts in the ledger because its key is in this roster, and the roster
-/// heals an unplaceable signer the moment that node advertises a key. A file
-/// written by hand on one node would drop peers' measurements there and
-/// nowhere else — the ledger would stop agreeing across the mesh. Every other
-/// ring, the daemon's KV rings included, is answered by the default and may
-/// be narrowed. `svrn ring roster` refuses exactly this list, and
+/// A peer's write counts on these rings because its key is in this roster,
+/// and the roster heals an unplaceable signer the moment that node advertises
+/// a key. A file written by hand — or left behind — on one node would drop
+/// peers' writes there and nowhere else, and the ring would stop agreeing
+/// across the mesh. Every app ring is answered by the default and may be
+/// narrowed. `svrn ring roster` refuses exactly this list, and
 /// `a_registered_namespace_ignores_a_hand_roster` pins the reason.
-pub const REGISTERED_NAMESPACES: &[&str] =
-    &[sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID];
+///
+/// Every entry is a constant owned by the subsystem that writes the namespace,
+/// never a literal repeated here (ARCH §10.6) — that is what makes a rename on
+/// the writing side a compile error rather than a namespace that quietly stops
+/// replicating. `wikipedia-newsworthy-tracked` is the worked example: it was
+/// renamed off a colon in cw-lift 4 and this row followed the constant.
+pub const REGISTERED_NAMESPACES: &[&str] = &[
+    // The daemon's own measurements, on the rail since cw-lift 2d. Not
+    // KV-shaped — see `crate::rail_kv_pump::projector_for`.
+    sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID,
+    // The five KV namespaces gossip Step 4 replicated, plus the tracked-article
+    // watcher's. Each is a `MeshStore` app_id with a real cross-peer consumer.
+    sovereign_serving::INFERENCE_APP_ID,
+    commonwealth_state::CONTRIBUTIONS_APP_ID,
+    commonwealth_state::PROCESSED_SHARDS_APP_ID,
+    corpus_engine_notes::NOTES_APP_ID,
+    sovereign_work_atlas::model::APP_ID_PUBLIC,
+    corpus_engine::update::newsworthy_watcher::APP_ID_TRACKED,
+];
 
 /// [`MeshRoster::from_app_state`] as the rail sees it.
 ///
