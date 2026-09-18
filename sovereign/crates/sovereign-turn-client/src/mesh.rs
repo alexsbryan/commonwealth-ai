@@ -65,7 +65,7 @@ impl TurnClient {
     /// preference the host holds, in the store's own scan order.
     ///
     /// `T` is `Vec<sovereign_api::routes_internal::VenuePreferenceDto>`
-    /// for the daemon's shape and the desktop's `Vec<PeerPreferenceDto>`
+    /// for the daemon's shape and the desktop's `Vec<VenuePreferenceDto>`
     /// — identical field names — for the Mesh Health panel. This crate
     /// cannot name either (see the note above [`Self::corpus_atoms`]).
     ///
