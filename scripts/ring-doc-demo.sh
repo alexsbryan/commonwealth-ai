@@ -105,8 +105,6 @@ at() { echo "http://127.0.0.1:$1"; } # a port on the node's own loopback, from t
 # The page URL as the browser on that machine opens it — on podman, the host's
 # published port into the node's forwarder.
 tab_url() { echo "http://127.0.0.1:${DPORT[$1]}"; }
-# Where B and C find A to join: A's loopback on local, A's container on podman.
-join_host() { if [ "$BACKEND" = podman ]; then echo ring-doc-a; else echo 127.0.0.1; fi; }
 sv() { local n=$1; shift; node_exec "$n" "$CLI" "$@" 2>/dev/null | grep -v '^svrnmesh: bridged'; }
 # A long-lived process on node n; its pid, in the node's own pid space, to pidfile.
 node_bg() { # node pidfile out err cmd…
@@ -261,9 +259,24 @@ join_one() { # node
     sleep 3
   done
   [ -z "$key" ] && { echo "join: a would not rotate a key for $n inside 90s" >&2; return 1; }
+  # The product's no-VPN path, the same on both backends: A's status serves the
+  # invite with its live iroh `dial=`, and the joiner key-dials A by it. A
+  # `relay=` hint would POST to A's internal port, which is loopback-bound.
+  local link="" deadline=$(( $(date +%s) + 60 ))
+  while [ "$(date +%s)" -lt "$deadline" ]; do
+    link=$(node_curl a -s --max-time 3 "$(at "${CPORT[a]}")/v1/mesh/status" 2>/dev/null \
+      | python3 -c "import sys,json; print(json.load(sys.stdin).get('join_link') or '')" 2>/dev/null)
+    case "$link" in *"$key"*dial=*|*dial=*"$key"*) break ;; esac
+    sleep 2
+  done
+  case "$link" in *"$key"*dial=*|*dial=*"$key"*) ;; *)
+    echo "join: a's join_link never carried dial= and the rotated key inside 60s: '$link'" >&2
+    tail -n 20 "$D/a/daemon.err" >&2
+    return 1 ;;
+  esac
   node_curl "$n" -s --max-time 90 -X POST "$(at "${CPORT[$n]}")/v1/mesh/join" \
     -H 'content-type: application/json' \
-    -d "{\"key_or_url\":\"https://sovereign.dev/join/$key?relay=$(join_host):${IPORT[a]}\",\"node_name\":\"${MESHNAME[$n]}\"}" \
+    -d "{\"key_or_url\":\"$link\",\"node_name\":\"${MESHNAME[$n]}\"}" \
     > "$D/join-$n.json"
 }
 
@@ -349,7 +362,8 @@ heal_node() { # node
 cmd_tabs() { # each page's URL on this host, and the roster name its node signs as
   local n name
   for n in a b c; do
-    name=$(sv $n ring roster show --ring $RING | grep -F "$(cat "$D/$n/roster.key" 2>/dev/null || echo '<no key>')" | awk '{print $1}')
+    # `roster show` prints the name, then its key indented on the next line.
+    name=$(sv $n ring roster show --ring $RING | awk -v k="$(cat "$D/$n/roster.key" 2>/dev/null || echo '<no key>')" '$1 == k {print prev; exit} {prev = $1}')
     echo "$n  $(tab_url $n)/  ${name:-<not on its own roster>}"
   done
 }
