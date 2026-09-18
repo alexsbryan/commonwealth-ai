@@ -1782,3 +1782,67 @@ campaign's main tree is the failure the atlas exists to prevent.
 entries, the lane's `.done` included), `71061ce26` (`dm-next-edit-move: merged
 (pool)`, the row `[x]`), and this entry. `git revert -m 1 8fe3b48b4` reverts the
 merge.
+
+## 2026-09-17 · dm-vocab-door-move · two of the four named readers cannot leave corpus-engine; the door lands with the two that can
+
+**Fork.** The row names four readers to move into
+`corpus-engine-vocab/src/read.rs` (`read_atlas_atoms`, `read_atlas_edges`,
+`read_atlas_cross_corpus_edges`, `read_atlas_ontology`) on the premise that
+"each body uses only std, serde_json and types defined in
+corpus-engine-vocab". The premise is false for two of the four. Options:
+(a) move the return types too, so all four readers can cross; (b) move the two
+whose return types are already in vocab and drop/defer the rest; (c) stop.
+
+**Choice.** (b), and the deferrals are not the same kind. `read_atlas_ontology`
+is DROPPED, because the design already decided it: it is minted, not moved.
+`read_atlas_cross_corpus_edges` is DEFERRED to a follow-on `REVIEW-build-` row,
+because moving it needs a type-home decision (where `CrossCorpusEdgesFile` and
+its closure live) that §4 puts in a review row. (a) was rejected because it
+turns a mechanical MOVE into a product-type relocation the row never names —
+"change nothing the row does not ask for" — and because the deferred types are
+not in the DT collision row's survivor set; (c) is wrong because the two
+functions that CAN move are the ones every bypass row in this wave needs
+(`read_atlas_atoms`), so the wave is unblocked.
+
+**Evidence** (measured this session, worktree `dm-vocab-door-move`).
+- `read_atlas_ontology` (`corpus-engine/src/enrichment/atlas/writer.rs:442`)
+  returns `AtlasOntologyFile`, defined at `writer.rs:378`, not in vocab; its
+  body calls `tracing::warn!` (`:447`). `grep -rn tracing
+  corpus-engine-vocab/src` is empty, and the leaf's budget admits no tracing
+  (DT:3075-3094; O8 check 11 names the deps exactly). DM §10.5:484 and
+  DT:3092 both say "read_atlas_ontology is MINTED, not moved"; DT's door
+  collision row says "three fns MOVE" (`:3091`), so the row's four is one more
+  than the design.
+- `read_atlas_cross_corpus_edges` (`writer.rs:562`) returns
+  `CrossCorpusEdgesFile`, defined at
+  `corpus-engine/src/enrichment/atlas/cross_corpus.rs:132`, with closure
+  `CrossCorpusEdge` (`:53`), `CrossCorpusAtomRef` (`:71`) and `MatchTrace`
+  (`:108`). `grep -rn 'CrossCorpus' corpus-engine-vocab/src` is empty, so the
+  leaf cannot name the return type.
+- The two that moved satisfy the premise exactly: `read_atlas_atoms` ->
+  `AtomsFile` (`corpus-engine-vocab/src/atoms.rs:1528`), `read_atlas_edges` ->
+  `EdgesFile` (`corpus-engine-vocab/src/edges.rs:210`); both bodies are
+  `fs::read` + `serde_json::from_slice`.
+- Green on the corrected row: LINT exit 0 (scope includes corpus-engine-vocab,
+  corpus-engine and 21 dependents); LAYER exit 0; TEST(corpus-engine-vocab)
+  exit 0, pass 54 fail 0; TEST(corpus-engine) exit 0, pass 2299 fail 0.
+- Census stays green: the new `corpus-engine-vocab/src/read.rs` gained its
+  `[[module]]` row (`quality/DOMAINS.toml`, context `understanding`), so
+  `misnamed` exits 0 and `crate-lines --crate corpus-engine-vocab` reads
+  5,304 -> 5,346; `atom-outside` is unchanged at 12.
+
+**Falsified by.** A follow-on finding that `CrossCorpusEdgesFile` (or a
+vocabulary-side replacement) is movable without a type-home decision, or that
+`read_atlas_ontology` can cross without `tracing` and without its return type
+— either makes this narrowing unnecessary. Also falsified if the leaf could
+not host `read.rs` without a new dependency: it needed none (std + serde_json,
+both already present).
+
+**REVIEW-AFTER:** the judgment call is deferring the cross-corpus reader
+rather than moving its product types with it. The morning should confirm the
+deferral (and mint the follow-on row) rather than the correctness of the two
+that moved.
+
+**Landed in.** this commit — `corpus-engine-vocab/src/read.rs` (new),
+`corpus-engine-vocab/src/lib.rs`, `corpus-engine/src/enrichment/atlas/writer.rs`
+and the `[[module]]` row in `quality/DOMAINS.toml`.

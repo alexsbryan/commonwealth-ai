@@ -26,10 +26,14 @@
 //!   reading surface. Moved here from `sovereign-mesh` by domains
 //!   `dm-mesh-move-reading-formatters` (DC §4.3: "Understanding's read
 //!   model").
+//! - [`read`] — the read door: `read_atlas_atoms` / `read_atlas_edges`, the
+//!   constructors for the products a consumer outside `corpus-engine` reads.
+//!   Moved here by domains `dm-vocab-door-move` (DE "The door"), so that
+//!   reading `atoms.json` no longer links the engine that wrote it.
 //!
 //! Closure: `serde`, `serde_json`, `kernel-types`, `blake3` (the stable
-//! key's hash — changing it would re-key every curation overlay). No IO,
-//! no features. A
+//! key's hash — changing it would re-key every curation overlay). No
+//! features; the one IO is [`read`], the door. A
 //! consumer that wants to name an atom links this; a consumer that wants
 //! to MAKE one links `corpus-engine`.
 
@@ -37,6 +41,7 @@ pub mod atoms;
 pub mod canonical;
 pub mod edges;
 pub mod ontology;
+pub mod read;
 pub mod reading_formatters;
 pub mod stable_key;
 pub mod taxonomy;
