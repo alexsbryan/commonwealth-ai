@@ -307,7 +307,7 @@ pub async fn run(parsed: &ParsedClassify) -> Result<ClassifyOutcome, String> {
             src = cand.source_atom.as_str(),
             tgt = cand.target_atom.as_str(),
         );
-        let response = match chat(&prompt).await {
+        let response = match chat(&prompt, None).await {
             Ok(r) => r,
             Err(e) => {
                 println!(" — chat error: {e}");

@@ -322,7 +322,7 @@ pub async fn cmd_delta(args: &[String]) -> i32 {
             return 1;
         }
     };
-    let (embed, _chat, _chat_with_tokens) = client.into_closures_with_tokens();
+    let (embed, _chat) = client.into_closures();
 
     // ── Step 4 (cont.): resolve into a STAGING dir ─────────────
     let staging_root = std::env::temp_dir().join(format!("sov-delta-{}-{suffix}", cfg.corpus_id));

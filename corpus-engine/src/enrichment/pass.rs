@@ -38,6 +38,7 @@ use async_trait::async_trait;
 
 use super::clustering::EnrichmentProgress;
 use super::tiered::{ChunkEntityExtractorHandle, TieredProviderHandle};
+use crate::enrichment::pipeline::types::ChatPrompt;
 use crate::error::{Error, Result};
 use crate::index::CorpusIndex;
 use crate::progress::{IngestProgress, ProgressCallback};
@@ -207,10 +208,10 @@ impl EnrichmentPass for FieldModelPass {
             let inner = ctx.inference.clone();
             let calls = inference_calls.clone();
             let failures = inference_failures.clone();
-            Arc::new(move |prompt: &str, schema: Option<&serde_json::Value>| {
+            Arc::new(move |prompt: &ChatPrompt, max_tokens: Option<u32>| {
                 calls.fetch_add(1, Ordering::Relaxed);
                 let failures = failures.clone();
-                let call = inner(prompt, schema);
+                let call = inner(prompt, max_tokens);
                 Box::pin(async move {
                     let outcome = call.await;
                     if outcome.is_err() {

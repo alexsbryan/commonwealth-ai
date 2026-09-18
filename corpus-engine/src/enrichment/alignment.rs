@@ -7,6 +7,7 @@
 
 use std::collections::HashMap;
 
+use crate::enrichment::pipeline::types::ChatPrompt;
 use crate::error::Result;
 use crate::index::CorpusIndex;
 use crate::types::{EmbedFn, InferenceFn};
@@ -106,7 +107,7 @@ pub async fn align_clusters(
             pos_name,
             chunk_text.join("\n---\n")
         );
-        let claim = (inference)(&prompt, None)
+        let claim = (inference)(&ChatPrompt::new("", prompt.as_str()), None)
             .await
             .unwrap_or_else(|_| pos_name.clone());
 

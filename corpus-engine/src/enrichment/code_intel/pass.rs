@@ -15,7 +15,7 @@ use std::path::Path;
 
 use corpus_engine_scip::ScipGraph;
 
-use crate::enrichment::pipeline::types::ChatCompletionFn;
+use crate::enrichment::pipeline::types::InferenceFn;
 use crate::error::{Error, Result};
 use crate::index::CorpusIndex;
 use crate::types::EmbedFn;
@@ -114,7 +114,7 @@ pub async fn run_code_intel(
     index: Option<&CorpusIndex>,
     source_root: &Path,
     cache_dir: &Path,
-    chat: &ChatCompletionFn,
+    chat: &InferenceFn,
     embed: &EmbedFn,
     file_filter: &[String],
 ) -> Result<CodeIntelReport> {
@@ -249,7 +249,7 @@ pub async fn run_code_intel(
 pub async fn run_code_intel_for_corpus(
     corpus_dir: &Path,
     corpus_id: &str,
-    chat: &ChatCompletionFn,
+    chat: &InferenceFn,
     embed: &EmbedFn,
     file_filter: &[String],
 ) -> Result<CodeIntelReport> {
@@ -299,7 +299,7 @@ fn corpus_source_root(corpus_dir: &Path) -> Result<std::path::PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::enrichment::pipeline::types::{ChatCompletionFn, ChatPrompt};
+    use crate::enrichment::pipeline::types::{InferenceFn, ChatPrompt};
     use crate::index::CorpusIndex;
     use crate::types::EmbedFn;
     use corpus_engine_scip::{ScipGraph, ScipSymbolRecord};
@@ -317,8 +317,8 @@ mod tests {
         }
     }
 
-    fn fake_chat() -> ChatCompletionFn {
-        Arc::new(|_p: &ChatPrompt| {
+    fn fake_chat() -> InferenceFn {
+        Arc::new(|_p: &ChatPrompt, _max_tokens: Option<u32>| {
             Box::pin(async {
                 Ok("SUMMARY: it routes and runs the request.\nASKS: where does it go? what runs it?"
                     .to_string())

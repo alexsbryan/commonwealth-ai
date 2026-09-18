@@ -28,6 +28,7 @@ use std::sync::Arc;
 use corpus_engine::enrichment::atlas::atoms::AtomEnvelope;
 use corpus_engine::enrichment::atlas::writer::read_atlas_atoms;
 use corpus_engine::enrichment::pipeline::atlas::EntityType;
+use corpus_engine::enrichment::pipeline::ChatPrompt;
 use corpus_engine::InferenceFn;
 use serde::Deserialize;
 use sovereign_core::traits::ConversationStore;
@@ -673,7 +674,7 @@ async fn drive_suggest_replay(
                 continue;
             }
             let prompt = build_detection_prompt(&conversation, idx);
-            let raw = match (inference)(&prompt, None).await {
+            let raw = match (inference)(&ChatPrompt::new("", prompt.as_str()), None).await {
                 Ok(r) => r,
                 Err(_) => continue,
             };

@@ -1135,8 +1135,18 @@ by `daemon_filter_enables_custom_target_events`.
 
 ```rust
 pub type EmbedFn     = Arc<dyn Fn(&str) -> Pin<Box<dyn Future<Output = Result<Vec<f32>>> + Send>> + Send + Sync>;
-pub type InferenceFn = Arc<dyn Fn(&str) -> Pin<Box<dyn Future<Output = Result<String>> + Send>> + Send + Sync>;
+pub type InferenceFn = Arc<dyn Fn(&ChatPrompt, Option<u32>) -> Pin<Box<dyn Future<Output = Result<String>> + Send>> + Send + Sync>;
 ```
+
+`InferenceFn` is the ONE completion closure port (converged 2026-09-17,
+domains `REVIEW-build-understanding-closure-converge`, ARCH 8): the
+single-message `InferenceFn`, the multi-message `ChatCompletionFn` and its
+`ChatCompletionWithTokensFn` arm were one capability. The prompt is a
+`ChatPrompt` (system + user, optional `response_schema`, phase id, sampling
+controls, output budget); the second argument is the per-call output-token
+override — `Some(n)` wins over the prompt's budget, `None` defers to it.
+`InferenceProvider::complete` is the trait an adapter wraps, not a fourth
+closure.
 
 | Caller       | `EmbedFn`                                | `InferenceFn` (enrichment)        |
 |--------------|------------------------------------------|-----------------------------------|
@@ -8537,7 +8547,8 @@ soak-gate}`.
 - **EmbedFn / InferenceFn** — Function types `corpus-engine`
   accepts from its caller for embedding text and (optionally)
   running an LLM during enrichment. Keeps the engine free of any
-  specific runtime.
+  specific runtime. `InferenceFn` takes a `ChatPrompt` and a per-call
+  `Option<u32>` output-token override (one port since 2026-09-17).
 - **EmbedModelInfo** — `{ model_id, dimensions, pooling,
   normalization }`. Cross-peer interoperability contract.
 - **KnowledgeView** — Three-map landscape-digest system (personal

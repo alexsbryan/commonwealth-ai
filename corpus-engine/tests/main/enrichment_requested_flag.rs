@@ -45,6 +45,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use corpus_engine::enrichment::pipeline::ChatPrompt;
 use corpus_engine::{Corpus, CorpusEngine, CorpusSpec, EmbedFn, Error};
 
 // ─── Fixtures ────────────────────────────────────────────────
@@ -110,7 +111,7 @@ fn working_embed_fn() -> EmbedFn {
 /// failures this flag exists to keep visible (an unregistered domain, a dead
 /// model slot, a mid-phase kill). The block is entered; nothing completes.
 fn always_failing_inference_fn() -> corpus_engine::types::InferenceFn {
-    Arc::new(|_prompt: &str, _schema: Option<&serde_json::Value>| {
+    Arc::new(|_prompt: &ChatPrompt, _max_tokens: Option<u32>| {
         // `corpus_engine::Error` has no dedicated inference variant, so this
         // borrows the nearest one; only the message text is load-bearing.
         Box::pin(async {

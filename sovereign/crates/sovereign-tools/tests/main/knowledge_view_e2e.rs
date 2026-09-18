@@ -34,6 +34,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use corpus_engine::enrichment::clustering::FieldModelStats;
+use corpus_engine::enrichment::pipeline::ChatPrompt;
 use corpus_engine::enrichment::skeleton::{
     CanonicalQuestion, FieldSkeleton, SkeletonFaultLine, SkeletonOpenQuestion, SkeletonPosition,
 };
@@ -82,8 +83,8 @@ fn stub_embed() -> EmbedFn {
 /// prompt method in `PersonalDomain` / `ConversationalDomain` has a
 /// distinctive marker phrase.
 fn stub_inference() -> corpus_engine::InferenceFn {
-    Arc::new(|prompt: &str, _schema: Option<&serde_json::Value>| {
-        let p = prompt.to_string();
+    Arc::new(|prompt: &ChatPrompt, _max_tokens: Option<u32>| {
+        let p = prompt.user.clone();
         Box::pin(async move {
             if p.contains("semantically similar") || p.contains("cluster together") {
                 Ok(r#"{"topic":"meaningful work","position_name":"Purpose-driven","is_argumentative":true,"is_objection":false,"is_open_question":false,"is_coherent":true}"#

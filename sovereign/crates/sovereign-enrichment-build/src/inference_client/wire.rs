@@ -9,9 +9,7 @@
 use crate::providers::{
     local_daemon_base, parse_model_spec, ProviderKind, ProviderRegistry, ResolvedProvider,
 };
-use corpus_engine::enrichment::pipeline::{
-    ChatCompletionFn, ChatCompletionWithTokensFn, ChatPrompt,
-};
+use corpus_engine::enrichment::pipeline::ChatPrompt;
 use corpus_engine::error::{Error, Result};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;

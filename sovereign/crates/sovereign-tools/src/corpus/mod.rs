@@ -219,24 +219,29 @@ pub fn inference_to_batch_embed_fn(
 pub fn inference_to_inference_fn(
     inference: Arc<dyn InferenceProvider>,
 ) -> corpus_engine::InferenceFn {
+    use corpus_engine::enrichment::pipeline::ChatPrompt;
     use sovereign_core::slot_policy::Workload;
 
-    Arc::new(move |prompt: &str, schema: Option<&serde_json::Value>| {
+    Arc::new(move |prompt: &ChatPrompt, max_tokens: Option<u32>| {
         let inf = Arc::clone(&inference);
-        // Schema (when the caller passes one) gates llama-cpp's
+        // Schema (when the caller attaches one) gates llama-cpp's
         // structured-output sampler so the response is forced into a
         // grammar matching the JSON Schema. Phase 1b on business_email
         // sets this to drop the ~54% JSON-parse-failure tail observed
-        // on enron-sample-multi-wide; other phases pass None and get
-        // the legacy free-form path. Owned clone is required since
+        // on enron-sample-multi-wide; other phases leave it `None` and
+        // get the legacy free-form path. Owned clone is required since
         // the future moves the request.
-        let structured_output = schema.cloned();
+        let structured_output = prompt.response_schema.clone();
+        // The caller's single-message prompt rides in `user` (system is
+        // empty on this path); the per-call override, when the retry
+        // paths pass one, wins over the prompt's own budget.
+        let output_budget = max_tokens.or(prompt.max_output_tokens).unwrap_or(4096);
         // SLOT_POLICY §3 EnrichBulk: high-volume corpus claim/relationship
         // extraction where fast-class throughput is existential (the primary
         // model at ~1 min/chunk makes enrichment impractical on large
         // corpora) and quality is bench-validated per recipe.
         let mut request = Workload::EnrichBulk
-            .request(prompt)
+            .request(prompt.user.clone())
             // POLICY-DEBT(SLOT_POLICY §4.5 EnrichBulk): 4096 > 512 forfeits
             // the batched FastShort claim; kept — dropped 2026-05-29
             // (evening): once grammar-constrained decoding lands via
@@ -248,12 +253,12 @@ pub fn inference_to_inference_fn(
             // ~80s/batch worst case while still fitting most observed valid
             // bodies; over-cap batches end with a smaller-but-valid entity
             // list (acceptable recall hit vs the throughput win).
-            .with_output_budget(4096);
-        request.temperature = Some(0.1); // low temperature for consistent JSON output
+            .with_output_budget(output_budget);
+        request.temperature = prompt.temperature.or(Some(0.1)); // low temperature for consistent JSON output
         request.structured_output = structured_output;
         // POLICY-DEBT(SLOT_POLICY §3 EnrichBulk): Some(0) preserved for P1
         // neutrality (bundle is None); P5 confirms.
-        request.think_budget = Some(0); // suppress thinking — hurts JSON, wastes tokens
+        request.think_budget = prompt.thinking_tokens.map(|t| t as usize).or(Some(0)); // suppress thinking — hurts JSON, wastes tokens
         Box::pin(async move {
             let resp = inf
                 .complete(&request)

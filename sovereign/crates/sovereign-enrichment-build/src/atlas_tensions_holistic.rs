@@ -113,7 +113,7 @@ pub(super) async fn run(
     let mut parse_failures = 0usize;
 
     for run_ix in 0..HOLISTIC_RUNS {
-        let response = match chat(&prompt).await {
+        let response = match chat(&prompt, None).await {
             Ok(r) => r,
             Err(e) => {
                 eprintln!("  ⚠ run {} chat failed: {e}", run_ix + 1);

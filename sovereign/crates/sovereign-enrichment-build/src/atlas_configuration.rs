@@ -140,7 +140,7 @@ pub async fn run(parsed: &ParsedConfig) -> Result<ConfigurationReport, Configure
     let (_embed, chat) = client.into_closures();
 
     println!("  dispatching Phase 8 configuration prompt…");
-    let response = chat(&prompt)
+    let response = chat(&prompt, None)
         .await
         .map_err(|e| ConfigureError::Failed(format!("Phase 8 chat failed: {e}")))?;
 

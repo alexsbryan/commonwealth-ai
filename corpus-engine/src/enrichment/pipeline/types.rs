@@ -7,10 +7,7 @@
 //! corresponding `SCHEMA_VERSION` const on `PhaseOutput`.
 
 use std::collections::HashMap;
-use std::future::Future;
-use std::pin::Pin;
 use std::str::FromStr;
-use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
@@ -324,31 +321,15 @@ impl ChatPrompt {
     }
 }
 
-/// Chat-completion function injected by the caller — this is the v2
-/// analogue of `crate::types::InferenceFn`, which is single-message
-/// only. v2 prompts are multi-message (system + user), so the runner
-/// needs a richer entry point.
-///
-/// Sovereign wraps the Primary slot; Commonwealth wraps the mesh chat
-/// endpoint; tests pass a deterministic closure returning canned JSON.
-pub type ChatCompletionFn = Arc<
-    dyn Fn(&ChatPrompt) -> Pin<Box<dyn Future<Output = crate::error::Result<String>> + Send>>
-        + Send
-        + Sync,
->;
-
-/// Chat-completion function with a per-call `max_tokens` override.
-/// Used by the runner when a retry mode needs a larger output budget
-/// for specific chapters without mutating the shared client.
-///
-/// Callers that don't need per-call overrides can keep using
-/// `ChatCompletionFn` directly; the runner selects which closure to
-/// invoke based on whether a retry mode is active.
-pub type ChatCompletionWithTokensFn = Arc<
-    dyn Fn(&ChatPrompt, u32) -> Pin<Box<dyn Future<Output = crate::error::Result<String>> + Send>>
-        + Send
-        + Sync,
->;
+// The two chat-completion closure aliases that used to live here —
+// `ChatCompletionFn` (multi-message) and `ChatCompletionWithTokensFn`
+// (its per-call `max_tokens` arm) — were one capability with
+// `crate::types::InferenceFn` (single-message) and converged onto it
+// 2026-09-17 (ARCH 8). The one port takes a `&ChatPrompt` and an
+// `Option<u32>` override. Re-exported here at the historical pipeline
+// path so `super::types::*` and `enrichment::pipeline::types::InferenceFn`
+// keep resolving.
+pub use crate::types::InferenceFn;
 
 /// Per-invocation retry mode for Phase 1. Passed to
 /// `PhaseRunner::phase_1_extract_questions_with_retry` by the CLI

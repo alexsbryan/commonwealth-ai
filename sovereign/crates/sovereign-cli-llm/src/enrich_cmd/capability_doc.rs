@@ -20,7 +20,8 @@ use std::hash::{Hash, Hasher};
 use std::path::Path;
 
 use corpus_engine::enrichment::code_intel::SymbolEnrichment;
-use corpus_engine::enrichment::pipeline::{ChatCompletionFn, ChatPrompt};
+use corpus_engine::enrichment::pipeline::ChatPrompt;
+use corpus_engine::InferenceFn;
 use futures::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
 
@@ -327,9 +328,9 @@ fn off_spine_mentions(text: &str, inp: &NarrationInput) -> Vec<String> {
     flagged
 }
 
-async fn narrate_one(chat: &ChatCompletionFn, inp: NarrationInput) -> CapSection {
+async fn narrate_one(chat: &InferenceFn, inp: NarrationInput) -> CapSection {
     let prompt = build_prompt(&inp);
-    let narration = match (chat)(&prompt).await {
+    let narration = match (chat)(&prompt, None).await {
         Ok(s) => s.trim().to_string(),
         Err(e) => format!("[narration unavailable: {e}]"),
     };

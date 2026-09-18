@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-phase runner — glues the `Pipeline` trait, `ExemplarBank`,
 //! `PhaseCache`, `RunOutputWriter`, and injected `EmbedFn` +
-//! `ChatCompletionFn` into an executor the CLI calls per subcommand.
+//! `InferenceFn` into an executor the CLI calls per subcommand.
 //!
 //! Landing 2 implements phase 1 (per-chapter question extraction).
 //! Subsequent phases land incrementally; each `phase_N_*` method is
@@ -424,7 +424,7 @@ fn one_line_excerpt(text: &str) -> String {
 pub struct PhaseRunner {
     pipeline: Arc<dyn Pipeline>,
     embed: EmbedFn,
-    chat: ChatCompletionFn,
+    chat: InferenceFn,
     /// Optional per-call token override closure. When a retry mode
     /// requests a specific `max_output_tokens` (e.g. a terse retry
     /// bumping from 4096 to 16384), the runner calls this closure
@@ -434,7 +434,7 @@ pub struct PhaseRunner {
     /// Configured via `with_chat_with_tokens`. When unset, retries
     /// fall back to `chat` with its existing cap; the runner still
     /// swaps the prompt variant.
-    chat_with_tokens: Option<ChatCompletionWithTokensFn>,
+    chat_with_tokens: Option<InferenceFn>,
     /// Compose every phase-1 prompt and dispatch none — `enrich extract
     /// --dry-run`. Set through [`PhaseRunner::with_dry_run`].
     dry_run: bool,
@@ -484,7 +484,7 @@ impl PhaseRunner {
     pub fn new(
         pipeline: Arc<dyn Pipeline>,
         embed: EmbedFn,
-        chat: ChatCompletionFn,
+        chat: InferenceFn,
         cache: PhaseCache,
         runs: RunOutputWriter,
         exemplars_dir: impl AsRef<Path>,
@@ -596,7 +596,7 @@ impl PhaseRunner {
     /// Configure an optional per-call token-aware chat closure so
     /// retry modes (e.g. `RetryMode::Terse`) can raise the output
     /// budget for a single retry without rebuilding the chat client.
-    pub fn with_chat_with_tokens(mut self, chat: ChatCompletionWithTokensFn) -> Self {
+    pub fn with_chat_with_tokens(mut self, chat: InferenceFn) -> Self {
         self.chat_with_tokens = Some(chat);
         self
     }
@@ -678,7 +678,7 @@ impl PhaseRunner {
                             self.pipeline.id()
                         ))
                     })?;
-                let response = (self.chat)(&prompt).await?;
+                let response = (self.chat)(&prompt, None).await?;
                 let entries = self.pipeline.parse_seed_response(&response)?;
                 let seed = SeedEntities {
                     schema_version: SeedEntities::SCHEMA_VERSION,
@@ -961,8 +961,8 @@ impl PhaseRunner {
             } else {
                 match retry_mode {
                     Some(RetryMode::Terse { max_output_tokens }) => match &self.chat_with_tokens {
-                        Some(chat_t) => (chat_t)(&prompt, max_output_tokens).await,
-                        None => (self.chat)(&prompt).await,
+                        Some(chat_t) => (chat_t)(&prompt, Some(max_output_tokens)).await,
+                        None => (self.chat)(&prompt, None).await,
                     },
                     None => {
                         // Seed-threaded default path gets a per-call
@@ -988,12 +988,12 @@ impl PhaseRunner {
                         // `chat_with_tokens` (older tests, embedded callers).
                         match (seed_opt.as_ref(), &self.chat_with_tokens) {
                             (Some(_), Some(chat_t)) => {
-                                (chat_t)(&prompt, PHASE1_SEED_OUTPUT_BUDGET).await
+                                (chat_t)(&prompt, Some(PHASE1_SEED_OUTPUT_BUDGET)).await
                             }
                             (None, Some(chat_t)) => {
-                                (chat_t)(&prompt, PHASE1_DEFAULT_OUTPUT_BUDGET).await
+                                (chat_t)(&prompt, Some(PHASE1_DEFAULT_OUTPUT_BUDGET)).await
                             }
-                            _ => (self.chat)(&prompt).await,
+                            _ => (self.chat)(&prompt, None).await,
                         }
                     }
                 }
@@ -1530,7 +1530,7 @@ impl PhaseRunner {
             };
 
             let prompt = self.pipeline.compose_phase3(cluster, &excerpts, &picked);
-            let response = match (self.chat)(&prompt).await {
+            let response = match (self.chat)(&prompt, None).await {
                 Ok(r) => r,
                 Err(e) => {
                     failures.push(PhaseFailure {
@@ -1738,7 +1738,7 @@ impl PhaseRunner {
                 let prompt = self
                     .pipeline
                     .compose_phase5(concern, cluster, &texts, &picked);
-                let response = match (self.chat)(&prompt).await {
+                let response = match (self.chat)(&prompt, None).await {
                     Ok(r) => r,
                     Err(e) => {
                         failures.push(PhaseFailure {
@@ -1861,7 +1861,7 @@ impl PhaseRunner {
                     };
 
                     let prompt = self.pipeline.compose_phase6(a, b, &picked);
-                    let response = match (self.chat)(&prompt).await {
+                    let response = match (self.chat)(&prompt, None).await {
                         Ok(r) => r,
                         Err(e) => {
                             failures.push(PhaseFailure {
@@ -1964,7 +1964,7 @@ impl PhaseRunner {
             &ctx.chapter_titles,
             &picked,
         );
-        let response = (self.chat)(&prompt).await?;
+        let response = (self.chat)(&prompt, None).await?;
         let parsed = self.pipeline.parse_phase7(&response)?;
 
         let gaps: Vec<ExtractedGap> = parsed
@@ -2199,7 +2199,7 @@ async fn run_phase1b_coverage(
     pipeline: &dyn Pipeline,
     chapter: &ChapterInput,
     sx: &mut SectionExtraction,
-    chat: &ChatCompletionFn,
+    chat: &InferenceFn,
 ) {
     use std::collections::HashSet;
     let mut seen: HashSet<String> = sx
@@ -2220,7 +2220,7 @@ async fn run_phase1b_coverage(
     ];
     for (label, maybe_prompt) in prompts {
         let Some(prompt) = maybe_prompt else { continue };
-        let response = match (chat)(&prompt).await {
+        let response = match (chat)(&prompt, None).await {
             Ok(r) => r,
             Err(e) => {
                 tracing::warn!(
@@ -2401,8 +2401,8 @@ mod tests {
     /// Deterministic chat: returns a fixed Phase1-shaped JSON keyed
     /// by the chapter title embedded in the user prompt. Fails for
     /// a chapter whose title includes "FAIL".
-    fn canned_chat() -> ChatCompletionFn {
-        Arc::new(move |prompt: &ChatPrompt| {
+    fn canned_chat() -> InferenceFn {
+        Arc::new(move |prompt: &ChatPrompt, _max_tokens: Option<u32>| {
             let user = prompt.user.clone();
             let body: String = if user.contains("FAIL") {
                 // Respond with something that doesn't parse.
@@ -2479,22 +2479,21 @@ mod tests {
         // succeeds.
         let observed = Arc::new(std::sync::Mutex::new(Vec::<u32>::new()));
         let observed_c = observed.clone();
-        let chat_with_tokens: ChatCompletionWithTokensFn =
-            Arc::new(move |_prompt: &ChatPrompt, tokens: u32| {
-                observed_c.lock().unwrap().push(tokens);
-                let body = r#"{
+        let chat_with_tokens: InferenceFn = Arc::new(move |_prompt: &ChatPrompt, tokens: Option<u32>| {
+            observed_c.lock().unwrap().push(tokens.expect("override budget"));
+            let body = r#"{
                   "section_id": "ch_01",
                   "entities_introduced": [{"canonical_name": "A", "entity_type": "person"}],
                   "questions_raised": [{"content": "Why?"}]
                 }"#
-                .to_string();
-                Box::pin(async move { Ok(body) })
-            });
+            .to_string();
+            Box::pin(async move { Ok(body) })
+        });
 
         // The default chat is used only when retry_mode is None.
         // Our test sets retry_mode = Some(Terse), so this closure
         // should NOT be invoked — we make it panic to prove that.
-        let default_chat: ChatCompletionFn = Arc::new(move |_prompt: &ChatPrompt| {
+        let default_chat: InferenceFn = Arc::new(move |_prompt: &ChatPrompt, _max_tokens: Option<u32>| {
             Box::pin(async move {
                 panic!("default chat should not be invoked when terse retry is active");
             })
@@ -2538,7 +2537,7 @@ mod tests {
         // through `chat_with_tokens` at `PHASE1_DEFAULT_OUTPUT_BUDGET`
         // (4096) so the per-request token cap fits inside the
         // daemon's inference deadline on fast chat slots. Previously
-        // this path called `(self.chat)(&prompt)` and inherited the
+        // this path called `(self.chat)(&prompt, None)` and inherited the
         // daemon-side 16384 default, which routinely deadline-timed
         // out at ~11 tok/s. Section that needs more headroom gets
         // caught by `run_extract_step`'s auto-retry at 16384.
@@ -2551,22 +2550,21 @@ mod tests {
         use std::sync::Mutex;
         let recorded_budgets: Arc<Mutex<Vec<u32>>> = Arc::new(Mutex::new(Vec::new()));
         let recorded_budgets_clone = Arc::clone(&recorded_budgets);
-        let chat_with_tokens: ChatCompletionWithTokensFn =
-            Arc::new(move |_prompt: &ChatPrompt, tokens: u32| {
-                recorded_budgets_clone.lock().unwrap().push(tokens);
-                let body = r#"{
+        let chat_with_tokens: InferenceFn = Arc::new(move |_prompt: &ChatPrompt, tokens: Option<u32>| {
+            recorded_budgets_clone.lock().unwrap().push(tokens.expect("override budget"));
+            let body = r#"{
                   "section_id": "ch_01",
                   "entities_introduced": [{"canonical_name": "A", "entity_type": "person"}],
                   "questions_raised": [{"content": "Why?"}]
                 }"#
-                .to_string();
-                Box::pin(async move { Ok(body) })
-            });
+            .to_string();
+            Box::pin(async move { Ok(body) })
+        });
 
         let runner = PhaseRunner::new(
             Arc::new(LiteraryAtlasPipeline::new()),
             alphabet_embed(),
-            Arc::new(move |_prompt: &ChatPrompt| {
+            Arc::new(move |_prompt: &ChatPrompt, _max_tokens: Option<u32>| {
                 Box::pin(async move {
                     panic!(
                         "default chat closure should not be invoked when chat_with_tokens is configured"
@@ -2784,17 +2782,16 @@ mod tests {
         // with. Return a minimal atlas JSON so parse succeeds.
         let observed = Arc::new(std::sync::Mutex::new(Vec::<u32>::new()));
         let observed_c = observed.clone();
-        let chat_with_tokens: ChatCompletionWithTokensFn =
-            Arc::new(move |_prompt: &ChatPrompt, tokens: u32| {
-                observed_c.lock().unwrap().push(tokens);
-                let body = r#"{
+        let chat_with_tokens: InferenceFn = Arc::new(move |_prompt: &ChatPrompt, tokens: Option<u32>| {
+            observed_c.lock().unwrap().push(tokens.expect("override budget"));
+            let body = r#"{
                   "section_id": "ch_01",
                   "entities_introduced": [{"canonical_name": "A", "entity_type": "person"}],
                   "questions_raised": [{"content": "Why?"}]
                 }"#
-                .to_string();
-                Box::pin(async move { Ok(body) })
-            });
+            .to_string();
+            Box::pin(async move { Ok(body) })
+        });
 
         // The main Phase 1 branch must route through chat_with_tokens
         // (verified below). Phase 1B coverage refinement is opt-in via
@@ -2805,7 +2802,7 @@ mod tests {
         // assertion below is `0`.
         let default_calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let default_calls_c = default_calls.clone();
-        let default_chat: ChatCompletionFn = Arc::new(move |_prompt: &ChatPrompt| {
+        let default_chat: InferenceFn = Arc::new(move |_prompt: &ChatPrompt, _max_tokens: Option<u32>| {
             default_calls_c.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             // Stub body — only reached if Phase 1B is opted in.
             let body = r#"{"missed_entities": [], "missed_concepts": []}"#.to_string();
@@ -2981,8 +2978,8 @@ mod tests {
     /// A chat mock that returns well-formed JSON for every phase 1-7
     /// call. Branches on which system preamble is present in the prompt
     /// to return the right shape.
-    fn multiphase_chat() -> ChatCompletionFn {
-        Arc::new(move |prompt: &ChatPrompt| {
+    fn multiphase_chat() -> InferenceFn {
+        Arc::new(move |prompt: &ChatPrompt, _max_tokens: Option<u32>| {
             let sys = prompt.system.to_string();
             let body = if sys.contains("Phase 1") {
                 // Echo the first word of the chapter body so different
@@ -3288,7 +3285,7 @@ mod tests {
 
         let saw_seed_block = Arc::new(std::sync::Mutex::new(false));
         let saw_seed_block_c = saw_seed_block.clone();
-        let chat: ChatCompletionFn = Arc::new(move |prompt: &ChatPrompt| {
+        let chat: InferenceFn = Arc::new(move |prompt: &ChatPrompt, _max_tokens: Option<u32>| {
             let is_seed = prompt.system.contains("seed entity list");
             let saw = saw_seed_block_c.clone();
             let body = if is_seed {
@@ -3356,7 +3353,7 @@ mod tests {
 
         let chat_calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let chat_calls_c = chat_calls.clone();
-        let chat: ChatCompletionFn = Arc::new(move |_prompt: &ChatPrompt| {
+        let chat: InferenceFn = Arc::new(move |_prompt: &ChatPrompt, _max_tokens: Option<u32>| {
             chat_calls_c.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             let body =
                 r#"{"entries":[{"canonical_name":"X","entity_type":"person","description":"x"}]}"#

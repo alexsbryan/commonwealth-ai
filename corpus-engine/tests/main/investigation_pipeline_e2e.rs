@@ -21,17 +21,17 @@ use std::sync::Arc;
 use corpus_engine::enrichment::investigation::{
     run_investigation, ChunkInput, INVESTIGATION_DIRNAME,
 };
-use corpus_engine::enrichment::pipeline::types::{ChatCompletionFn, ChatPrompt};
+use corpus_engine::enrichment::pipeline::types::{InferenceFn, ChatPrompt};
 use corpus_engine::Recipe;
 
 /// A scripted chat closure that returns a different canned response
 /// per chunk. Indexed by call order; falls back to an empty
 /// `relationships` array after the script is exhausted so the
 /// pipeline doesn't error on unexpected extra calls.
-fn scripted_responses(responses: &'static [&'static str]) -> ChatCompletionFn {
+fn scripted_responses(responses: &'static [&'static str]) -> InferenceFn {
     let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let responses = responses.to_vec();
-    Arc::new(move |_prompt: &ChatPrompt| {
+    Arc::new(move |_prompt: &ChatPrompt, _max_tokens: Option<u32>| {
         let calls = calls.clone();
         let responses = responses.clone();
         Box::pin(async move {

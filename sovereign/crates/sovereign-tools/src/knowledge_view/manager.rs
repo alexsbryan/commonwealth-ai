@@ -1154,7 +1154,7 @@ mod tests {
             Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 4]) })
         });
         let infer: corpus_engine::InferenceFn =
-            std::sync::Arc::new(|_, _: Option<&serde_json::Value>| {
+            std::sync::Arc::new(|_, _: Option<u32>| {
                 Box::pin(async { Ok::<String, corpus_engine::Error>("{}".into()) })
             });
         let engine = std::sync::Arc::new(corpus_engine::CorpusEngine::new(
@@ -1464,7 +1464,7 @@ mod tests {
             Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 4]) })
         });
         let infer: corpus_engine::InferenceFn =
-            std::sync::Arc::new(|_, _: Option<&serde_json::Value>| {
+            std::sync::Arc::new(|_, _: Option<u32>| {
                 Box::pin(async { Ok::<String, corpus_engine::Error>("{}".into()) })
             });
         let engine = std::sync::Arc::new(corpus_engine::CorpusEngine::new(
@@ -1519,7 +1519,7 @@ mod tests {
             Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 4]) })
         });
         let infer: corpus_engine::InferenceFn =
-            std::sync::Arc::new(|_, _: Option<&serde_json::Value>| {
+            std::sync::Arc::new(|_, _: Option<u32>| {
                 Box::pin(async { Ok::<String, corpus_engine::Error>("{}".into()) })
             });
         let engine = std::sync::Arc::new(corpus_engine::CorpusEngine::new(

@@ -18,6 +18,7 @@ use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 use parquet::arrow::ArrowWriter;
 
+use corpus_engine::enrichment::pipeline::ChatPrompt;
 use corpus_engine::{CorpusEngine, CorpusSpec, EmbedFn, InferenceFn};
 
 // ─── Fixtures ────────────────────────────────────────────────
@@ -104,7 +105,8 @@ fn mock_embed_fn() -> EmbedFn {
 /// Returns canned JSON responses for skeleton extraction, cluster
 /// labeling, fault line detection, and open question prompts.
 fn mock_inference_fn() -> InferenceFn {
-    Arc::new(|prompt: &str, _schema: Option<&serde_json::Value>| {
+    Arc::new(|prompt: &ChatPrompt, _max_tokens: Option<u32>| {
+        let prompt = prompt.user.as_str();
         let response = if prompt.contains("structure of philosophical debate")
             || prompt.contains("introductory passages")
         {

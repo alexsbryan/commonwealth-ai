@@ -390,7 +390,7 @@ pub async fn run_name(parsed: &ParsedName) -> Result<NameReport, String> {
             ));
         };
         let subject = format!("cluster:{}:{}", cluster.facet.as_str(), cluster.id);
-        let response = match (chat)(&prompt).await {
+        let response = match (chat)(&prompt, None).await {
             Ok(r) => r,
             Err(e) => {
                 println!("FAILED: chat error: {e}");

@@ -429,7 +429,7 @@ pub async fn cmd_extract_typed(args: &[String]) -> i32 {
             return 1;
         }
     };
-    let (_embed, chat, _chat_with_tokens) = client.into_closures_with_tokens();
+    let (_embed, chat) = client.into_closures();
     let chat: Arc<_> = chat;
 
     let mut classified = 0usize;
@@ -520,7 +520,7 @@ pub async fn cmd_extract_typed(args: &[String]) -> i32 {
             for (attempt, budget) in budgets.iter().enumerate() {
                 attempts_used = attempt + 1;
                 let prompt = compose_typed_prompt(chapter, *mode, *budget);
-                let response = match chat(&prompt).await {
+                let response = match chat(&prompt, None).await {
                     Ok(s) => s,
                     Err(e) => {
                         chat_error = Some(format!("{e}"));

@@ -73,13 +73,13 @@ pub use section_join::{assign_chunks_to_sections, SectionJoin};
 pub use trait_def::Pipeline;
 pub use types::{
     extract_json_block, is_placeholder_literal, is_truncated_thinking_response,
-    strip_reasoning_tags, Atlas, AtlasCluster, CanonicalConcern, ChapterInput, ChatCompletionFn,
-    ChatCompletionWithTokensFn, ChatPrompt, ChunkCluster, ChunkRecord, CorpusContext, ExtractedGap,
-    ExtractedQuestion, Facet, Grounding, NamedCluster, Phase1ChapterResult, Phase1Failure,
-    Phase1Output, Phase2AtlasOutput, Phase2Output, Phase3AtlasOutput, Phase3FacetParseResult,
-    Phase3Output, Phase3ParseResult, Phase4Output, Phase5Output, Phase5ParseResult, Phase6Output,
-    Phase6ParseResult, Phase7Output, Phase7ParseItem, PhaseFailureKind, PipelinePhase, Position,
-    QuestionCluster, QuestionRef, RetryMode, SketchExcerpt, SketchRef, Tension, Vocabulary,
+    strip_reasoning_tags, Atlas, AtlasCluster, CanonicalConcern, ChapterInput, ChatPrompt,
+    ChunkCluster, ChunkRecord, CorpusContext, ExtractedGap, ExtractedQuestion, Facet, Grounding,
+    InferenceFn, NamedCluster, Phase1ChapterResult, Phase1Failure, Phase1Output, Phase2AtlasOutput,
+    Phase2Output, Phase3AtlasOutput, Phase3FacetParseResult, Phase3Output, Phase3ParseResult,
+    Phase4Output, Phase5Output, Phase5ParseResult, Phase6Output, Phase6ParseResult, Phase7Output,
+    Phase7ParseItem, PhaseFailureKind, PipelinePhase, Position, QuestionCluster, QuestionRef,
+    RetryMode, SketchExcerpt, SketchRef, Tension, Vocabulary,
 };
 pub use validation::{
     run_battery, traverse_atlas, BatteryResult, BatteryRow, ConcernMatch, PositionRef,

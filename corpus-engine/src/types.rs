@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
+use crate::enrichment::pipeline::types::ChatPrompt;
 use crate::error::Result;
 
 // ─── Embedding Function ─────────────────────────────────
@@ -37,22 +38,25 @@ pub type BatchEmbedFn = Arc<
 
 // ─── Inference Function ─────────────────────────────────
 
-/// Inference function injected by the caller — used by the optional
-/// enrichment pipeline to run claim/relationship extraction prompts.
-/// Sovereign passes its Primary slot.
-/// Commonwealth passes the mesh inference endpoint.
-/// Tests pass a mock returning canned JSON.
+/// The ONE completion closure port, injected by the caller — the
+/// enrichment pipeline runs claim/relationship extraction, section
+/// naming, reconciliation and synthesis prompts through it. Sovereign
+/// passes its Primary slot; Commonwealth passes the mesh chat
+/// endpoint; tests pass a deterministic closure returning canned JSON.
 ///
-/// The second argument is an optional JSON Schema (per OpenAI's
-/// `structured_output` shape) the inference adapter should constrain
-/// the response to. The corpus-engine side reads it from
-/// `Domain::entity_extraction_schema()` and threads it through;
-/// callers that pass `None` get the legacy free-form path. This is
-/// the structural fix for the Phase 1b parse-failure tail observed
-/// on enron-sample-multi-wide (2026-05-29): grammar-bounded output
-/// can't emit unclosed arrays or extraneous prose.
+/// Converged 2026-09-17 (ARCH 8) from three aliases that named this one
+/// capability: the single-message `InferenceFn`, the multi-message
+/// `ChatCompletionFn`, and `ChatCompletionWithTokensFn`, its
+/// per-call `max_tokens` arm. The prompt is a [`ChatPrompt`], which
+/// carries the system and user messages, the optional JSON Schema for
+/// grammar-constrained generation (read from
+/// `Domain::entity_extraction_schema()` and threaded through), the
+/// per-phase sampling controls and the prompt's own output budget.
+/// The second argument is the per-call output-token override the retry
+/// paths need: `Some(n)` wins over the prompt's budget, `None` defers
+/// to it. Single-message callers pass `ChatPrompt::new("", prompt)`.
 pub type InferenceFn = Arc<
-    dyn Fn(&str, Option<&serde_json::Value>) -> Pin<Box<dyn Future<Output = Result<String>> + Send>>
+    dyn Fn(&ChatPrompt, Option<u32>) -> Pin<Box<dyn Future<Output = Result<String>> + Send>>
         + Send
         + Sync,
 >;
