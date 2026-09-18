@@ -76,7 +76,7 @@
 //! (`attach_construction_census` pins this process's count at zero), so
 //! the manager this app builds serves no ingest and the context it was
 //! handed read nothing. The daemon that ingests installs its own
-//! (`daemon_cmd/ocr_install.rs`, feature `ocr`), probing
+//! (`sovereign-daemon/src/ocr_install.rs`, feature `ocr`), probing
 //! `SOVEREIGN_PADDLE_OCR_MODEL_DIR`, `{data_dir}/models/paddle-ocr` and
 //! `~/.svrnmesh/models/paddle-ocr`; `lc_ocr_available` reports THAT
 //! context, so the "Read them with OCR" affordance reflects the engine

@@ -7,7 +7,7 @@
 //! A machine with no `config.toml` has no daemon to ask: the sidecar exits 1
 //! off a TTY with no config (`sovereign-cli-daemon/src/daemon_cmd/mod.rs`,
 //! the `SetupConfig::exists()` branch) and refuses a config with no `[models]`
-//! (`daemon_cmd/build/inference.rs`, the `config.models()` arm). So first run
+//! (`sovereign-daemon/src/build/inference.rs`, the `config.models()` arm). So first run
 //! is not an HTTP call — a client SPAWNS the sidecar's own `setup` verb and
 //! reads stdout. That is still a wire: two processes agreeing on a shape.
 //!

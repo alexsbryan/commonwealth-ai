@@ -2864,19 +2864,18 @@ mod tests {
 
         // First pass: inference returns success for batch 0,
         // hard error for batch 1.
-        let inference1: InferenceFn =
-            Arc::new(|prompt: &ChatPrompt, _max_tokens: Option<u32>| {
-                let prompt = prompt.user.clone();
-                Box::pin(async move {
-                    if prompt == "BATCH:1,2,3,4" {
-                        Ok(mock_response_for_batch(0))
-                    } else {
-                        Err(crate::error::Error::from(std::io::Error::other(
-                            "simulated",
-                        )))
-                    }
-                })
-            });
+        let inference1: InferenceFn = Arc::new(|prompt: &ChatPrompt, _max_tokens: Option<u32>| {
+            let prompt = prompt.user.clone();
+            Box::pin(async move {
+                if prompt == "BATCH:1,2,3,4" {
+                    Ok(mock_response_for_batch(0))
+                } else {
+                    Err(crate::error::Error::from(std::io::Error::other(
+                        "simulated",
+                    )))
+                }
+            })
+        });
         let progress = |_: EnrichmentProgress| {};
         let mut checkpoint = EnrichmentCheckpoint::default();
         let _ = run_and_write_entity_extraction(

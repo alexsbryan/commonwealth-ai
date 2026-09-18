@@ -371,7 +371,7 @@ pub(crate) fn format_prompt(
 /// - otherwise → append the full closed empty block.
 /// The pre-open branch is SHAPE-driven, not family-driven, on
 /// purpose: the daemon constructs chat slots with
-/// `ModelFamily::Unknown` (`daemon_cmd/build/inference.rs` resolves
+/// `ModelFamily::Unknown` (`sovereign-daemon/src/build/inference.rs` resolves
 /// only the embed family), so `quirks.thinking` cannot be the gate —
 /// it would leave suppression dead on every production slot. A
 /// rendered prompt ending in `<think>` can only have come from a

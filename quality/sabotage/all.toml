@@ -406,7 +406,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-46-validate_rejects_step_missing_goal"
 requirement = "CI-46"
-target = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/solve_tools.rs"
+target = "sovereign/crates/sovereign-daemon/src/solve_tools.rs"
 find = "    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {\n        for key in [\"workdir\", \"goal\"] {\n            if params.get(key).and_then(|v| v.as_str()).is_none() {\n                return Err(Error::InvalidInput(format!(\n                    \"solve requires a '{key}' string parameter\"\n                )));\n            }\n        }\n        Ok(())\n    }"
 replace = "    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {\n        // Mutation: Remove 'goal' from required keys to violate CI-46 requirement\n        for key in [\"workdir\"] {\n            if params.get(key).and_then(|v| v.as_str()).is_none() {\n                return Err(Error::InvalidInput(format!(\n                    \"solve requires a '{key}' string parameter\"\n                )));\n            }\n        }\n        Ok(())\n    }"
 mustFail = ["validate_rejects_step_missing_goal"]

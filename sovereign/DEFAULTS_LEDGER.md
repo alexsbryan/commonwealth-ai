@@ -1807,7 +1807,7 @@ _Historical record below — the reasoning while this row was `preview`._
 ### Next-edit fallback onto the resident chat model — `SOVEREIGN_NEXT_EDIT_FALLBACK` (off)
 - **Shipped:** 2026-08-07, dark —
   `EmbeddedLlamaCpp::install_fallback_next_edit_slot`, armed from
-  `daemon_cmd/build/inference.rs` only when the env var is `1`/`true`
+  `sovereign-daemon/src/build/inference.rs` only when the env var is `1`/`true`
   AND no `[models.edit]` is configured. An explicit `[models.edit]`
   always wins; the fallback never overwrites an existing arrangement.
 - **What it does:** serves the next-edit lane

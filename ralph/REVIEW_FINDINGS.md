@@ -988,3 +988,120 @@ Recorded, not changed:
   falsify the record.
 - **`size-gate` (advisory)** · 65 keys grew, the campaign's own accretion;
   `warn_gate` by design. Not re-pinned.
+
+
+## REVIEW-audit-daemon-2 — the host crate end to end
+
+Range audited: `git log cafc95dd7..HEAD` for the host-crate rows — the api host
+cluster move (`dm-daemon-api-edge`), the cli composition move
+(`dm-daemon-cli-composition`), the daemon parts (`REVIEW-build-daemon-parts`,
+`-answering-part`, `-embedded-split`, `-fabric-standalone`,
+`-membership-lifecycle`) and the read-port leaf (`REVIEW-build-index-read-port`)
+— plus the doc and registry drift they left. Checks: TESTALL exit=0 (13397
+pass, 0 fail); PREPUSH exit=0 (3 of 18 want attention: `size-gate` and the two
+out-of-budget `could-not-judge` instruments; `size-gate` is the advisory
+`warn_gate`).
+
+The row's claims, verified:
+
+- **No `host`-tagged module remains in sovereign-mesh or sovereign-api.**
+  `sovereign-mesh` holds 0 host rows of 28; `sovereign-api` 0 of 1, after the
+  two retags below.
+- **`crate-lines --crate sovereign-daemon`.** It reads 78,021 lines over 126
+  rows (76,372 host + 1,649 workbench). The instrument itself refuses with the
+  coverage-hole exit 4 (below), so the figure was read with
+  `coverage_holes = lambda root: []` in a throwaway import — the precedent
+  `REVIEW-mint-wave-n` set; the computation is unchanged. `sovereign-mesh` is
+  16,684 lines and `sovereign-api` 56 (shim-only), so the api host cluster and
+  the composition half are in the daemon.
+- **`boundary-gate` green, no new `[[exception]]`.** exit 0; the three
+  `sovereign-api` exception rows are unchanged and still live.
+- **No shim is deletable in this audit.** Every `sovereign_api::` path has
+  ZERO importers outside the crate (`git grep 'sovereign_api::'` over `*.rs`
+  excluding the crate is empty), but the crate is shim-only and its three
+  `[[exception]]` rows retire with it at `REVIEW-build-sovereign-api-retire`;
+  the shim deletion is that row's, not this audit's. The `corpus-engine` index
+  shims are `REVIEW-build-ce-kernel-leaf`'s (backlog).
+
+Findings, fixed (all in this commit):
+
+- **ARCH 5 (a check with no failing input) · TESTALL red** ·
+  `quality/CONCEPTS.toml:522`'s `EvidenceSet` canonical still named
+  `corpus_engine::index::EvidenceSet` after the type moved to `corpus-index`
+  (`REVIEW-build-index-read-port`), so `every_register_home_matches_the_working_tree`
+  and the positive-control `the_repaired_evidence_chain_canonicals_resolve`
+  (`destination.rs:524`) both failed. Repointed both at
+  `corpus_index::index::EvidenceSet`.
+- **ARCH 5 (a check with no failing input) · TESTALL red** ·
+  `chunk_provenance_census::every_acquisition_door_is_a_written_decision` walked
+  only `corpus-engine/src`, but `acquired_from_estate`/`acquired_from_peer`
+  moved to `corpus-index/src/index/provenance.rs`, so the two declared doors
+  read as gone. The scan walks both index crates now.
+- **ARCH 3 (a comment citing a path nobody checked) · TESTALL red** ·
+  `f26_egress_census::f26_egress_boundary_census`: three rows keyed to moved
+  files. The three `ring_sync` test modules moved from
+  `sovereign-mesh/src/ring_sync/` to `sovereign-mesh/tests/main/`, outside the
+  census's production-`src/` scope — rows removed, not re-keyed (the sites
+  still exist, as tests). The three route files moved `sovereign-api` →
+  `sovereign-daemon` — rows re-keyed, classes unchanged.
+- **ARCH 3/5 (the registry does not land with the code) · TESTALL red** ·
+  `conformance_tags_are_fresh`: `quality/conformance/sovereign-api.toml` had no
+  `covers:` tags backing it (the crate is shim-only). Regenerated: the manifest
+  is deleted and its six claims land in
+  `quality/conformance/sovereign-daemon.toml`.
+- **ARCH 8 (one fact, one home) · registry drift** · `quality/DOMAINS.toml`
+  still tagged `sovereign-mesh/src/fabric.rs` `host` with a stale 315-line
+  count and a "scaffolding until REVIEW-mint-daemon-move" note after the file
+  moved there at `dm-daemon-api-edge`; retagged `fabric`, re-measured 767.
+  `sovereign-api/src/lib.rs` still read `host`; the crate root is a shim and no
+  context names the crate, so retagged `unknown` (the `sovereign-grants`
+  precedent) with a note.
+- **ARCH 3.2 (a moved oversized file reads as NEW) · arch-gate** ·
+  `dm-daemon-api-edge` never re-keyed `quality/baselines/oversized.txt`: the
+  rows for `corpus-engine/src/index/{mod,search}.rs` still named the old paths,
+  so `arch-gate` read `corpus-index/src/index/{mod,search}.rs` as NEW oversized
+  files. Re-keyed to the new paths, counts unchanged (§3a step 6, path re-key,
+  no debt).
+- **ARCH 3.1 (a moved file reads as a new hand-spelled site) · layout-gate** ·
+  `corpus-engine/xtask/src/layout_gate.rs:40`'s `DECIDER` still named
+  `corpus-engine/src/corpus.rs` after the decider moved to
+  `corpus-index/src/corpus.rs`, so the decider file itself read as a NEW layout
+  site. Repointed the const and its doc.
+- **ARCH 3 (the doc lands with the code) · the composition move's doc drift** ·
+  `daemon_cmd/<moved>` still named in live docs and comments:
+  `docs/DISTRIBUTED_PILOT_READINESS.md`, `docs/specs/SOLVE_UX.md`,
+  `quality/ARCH_LAYERS.toml:73,1316`, `quality/CLEANUP.md:70`,
+  `quality/DOMAINS.toml:972,2827`, `quality/campaigns/sv-surface.toml`,
+  `quality/sabotage/all.toml:409` (a LIVE mutant target),
+  `quality/session-frame.golden.md:139`, `scripts/nc-boundary.py:98`,
+  `sovereign/DEFAULTS_LEDGER.md:1810`, and 14 `.rs` doc comments across
+  sovereign-cli-daemon, sovereign-contracts, sovereign-daemon, sovereign-desktop,
+  sovereign-inference, sovereign-runtime-recipe and sovereign-tools. Repointed
+  at `sovereign-daemon/src/...`.
+- **ARCH 3 (write for the next reader) · rustfmt** · 17 files carried
+  formatting drift from the range (`corpus-engine/src/enrichment/{code_intel,
+  entity_extraction,pipeline/runner}.rs`, `types.rs`, `corpus-index/src/filters.rs`,
+  `sovereign-core/src/runtime/evidence_loop/anchoring.rs`, `sovereign-tools/src/
+  catalog_ingest.rs`, `sovereign-cli-llm/src/enrich_cmd/spec_reconcile.rs`, and
+  the tests); `cargo fmt --all` fixed them.
+
+Recorded, not changed:
+
+- **Coverage holes make the domains instrument refuse.** `corpus-index` (19
+  files), `sovereign-peer-wire` (1) and `understanding-atlas` (13) have no
+  `[[module]]` rows, so `crate-lines`/`misnamed`/`queue` exit 4. Deferred by the
+  operator's 2026-09-18 priority cut: `dm-corpus-index-tag` and the
+  `dm-understanding-pure-*` rows are in `ralph/BACKLOG-P1-P2.md`, not the
+  critical set (`5f81e0452`). The `sovereign-peer-wire` hole is NOT yet named by
+  any row: it is 1 file / 20 lines, but which context owns a shared wire leaf
+  is a judgment (the same call `dm-corpus-index-tag` makes for retrieval), so it
+  is recorded here for a `REVIEW-build-`/`dm-` tag row rather than tagged in
+  this audit.
+- **`sovereign/HISTORY.md:101,109` and
+  `quality/campaigns/handed/order-2-assemble.md:41,71`** keep their
+  `daemon_cmd/` spellings: both are records of the state at the time they were
+  written, not live pointers. Repointing them would falsify the record.
+- **`size-gate` (advisory)** · 69 keys grew, the wave's own accretion and its
+  new crates (`sovereign-daemon`, `sovereign-serving-host`, `sovereign-peer-wire`,
+  `sovereign-scheduler`, `sovereign-pods`, `sovereign-time`); `warn_gate` by
+  design. Not re-pinned.

@@ -2321,7 +2321,7 @@ pub async fn build_mesh_provider(
     // A guest link this node accepted lets a granted model id resolve to the
     // LENDING node while the turn stays here. Wired at the COLD-START
     // assembly point, which is the whole reason this function exists: the
-    // hot-reload factory in `daemon_cmd/provider.rs` had it and this did not,
+    // hot-reload factory in `provider.rs` had it and this did not,
     // so a freshly started daemon kept `NoGuestLenders` and the guest route
     // was dead until something happened to trigger a provider reload.
     // Observed live 2026-08-28: zero `guest-lender` lines in a daemon whose

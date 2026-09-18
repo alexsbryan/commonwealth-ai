@@ -70,7 +70,7 @@ backstage = [
 #     `sovereign-server` and `sovereign-cli-daemon`. It backs two SHIPPED MCP
 #     tools — `tdd_solve` and `tdd_bdd_cycle`, listed in `tools/list`
 #     (`routes_mcp.rs::tdd_tool_descriptors`) — and the `solve` verb's daemon
-#     route (daemon_cmd/solve_http.rs). The product does not ship without those.
+#     route (sovereign-daemon/src/solve_http.rs). The product does not ship without those.
 #     The distinction that decides it: a quality control measures SOVEREIGN,
 #     while this drives red-green-refactor over the USER's repo and emits their
 #     code. It is a feature about tests, not a test of the product.
@@ -1313,7 +1313,7 @@ file = "sovereign/crates/sovereign-desktop/src-tauri/src/setup_plan.rs"
 rule = "starts"
 max = 3
 kind = "sanctioned"
-reason = "FIRST RUN, operator call 2026-09-12. The wizard spawns the sidecar's own `setup` verb — `--plan --json` to render the screens, `--yes --json` to run them — because on a first run there is no HTTP to ask: the sidecar exits 1 with no config off a TTY (`daemon_cmd/mod.rs`) and refuses a config with no `[models]` (`daemon_cmd/build/inference.rs`), measured 2026-09-12. What this starts is NOT a backend. `setup` binds no port, serves nothing, and exits; the thing this row permits is a one-shot that ends, which is the opposite of the handle-holding the bar refuses. The alternative priced against it was a daemon that boots unconfigured (a new NodeClass and a restart handshake); this links nothing and adds no ability — the app could already exec this binary (`daemon_binary::stable_daemon_binary`, the same one `ServingHost` brings up). Read it as the shape the rule permits: a user action, a process that terminates, no policy and no timer."
+reason = "FIRST RUN, operator call 2026-09-12. The wizard spawns the sidecar's own `setup` verb — `--plan --json` to render the screens, `--yes --json` to run them — because on a first run there is no HTTP to ask: the sidecar exits 1 with no config off a TTY (`daemon_cmd/mod.rs`) and refuses a config with no `[models]` (`sovereign-daemon/src/build/inference.rs`), measured 2026-09-12. What this starts is NOT a backend. `setup` binds no port, serves nothing, and exits; the thing this row permits is a one-shot that ends, which is the opposite of the handle-holding the bar refuses. The alternative priced against it was a daemon that boots unconfigured (a new NodeClass and a restart handshake); this links nothing and adds no ability — the app could already exec this binary (`daemon_binary::stable_daemon_binary`, the same one `ServingHost` brings up). Read it as the shape the rule permits: a user action, a process that terminates, no policy and no timer."
 
 [[thin_surfaces.lifecycle_allow]]
 file = "sovereign/crates/sovereign-desktop/src-tauri/src/setup_plan.rs"

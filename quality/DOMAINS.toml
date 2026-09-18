@@ -969,7 +969,7 @@ note = "pod-side surface, not a daemon handler - the *_http host rule does not a
 path = "sovereign/crates/sovereign-pods/src/worker_inference_proxy.rs"
 context = "compute"
 lines = 542
-note = "re-tagged serving->compute 2026-09-15 on consumer evidence: every production consumer is a pod module (worker_http.rs:214,817; worker_daemon.rs:156) plus the CLI host (sovereign-cli-daemon/src/daemon_cmd/worker.rs:82,120), and its only in-crate import is the pod's worker_http::WorkerState (:67). It is the pod's :9742 TLS tunnel (PINNED_WORKER_AS_INFERENCE_PEER.md:5), not an inference decider — ARCH 12: its uses are all pod-side, so the serving line was drawn wrong."
+note = "re-tagged serving->compute 2026-09-15 on consumer evidence: every production consumer is a pod module (worker_http.rs:214,817; worker_daemon.rs:156) plus the daemon host (sovereign-daemon/src/worker.rs:82,120), and its only in-crate import is the pod's worker_http::WorkerState (:67). It is the pod's :9742 TLS tunnel (PINNED_WORKER_AS_INFERENCE_PEER.md:5), not an inference decider — ARCH 12: its uses are all pod-side, so the serving line was drawn wrong."
 
 [[module]]
 path = "sovereign/crates/sovereign-contracts/src/worker_pod.rs"
@@ -1099,9 +1099,9 @@ note = ""
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/lib.rs"
-context = "host"
+context = "unknown"
 lines = 56
-note = ""
+note = "shim-only crate root after dm-daemon-api-edge (2026-09-18) moved the host cluster to sovereign-daemon; it re-exports the modules that left earlier and is deleted by REVIEW-build-sovereign-api-retire, so it is not host code (retagged host -> unknown at REVIEW-audit-daemon-2)"
 
 [[module]]
 path = "sovereign/crates/sovereign-daemon/src/middleware/artifact_surface.rs"
@@ -1450,9 +1450,9 @@ note = "the api-side god object, dissolving: the flat owner fields are five part
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/fabric.rs"
-context = "host"
-lines = 315
-note = "Fabric's part (DC §4.2) with its construction seed and the readers published after construction; scaffolding until REVIEW-mint-daemon-move relocates it to sovereign-mesh"
+context = "fabric"
+lines = 767
+note = "Fabric's part (DC §4.2) with its construction seed and the readers published after construction; moved here from sovereign-api/src/state/fabric.rs by dm-daemon-api-edge (2026-09-18), retagged host -> fabric with the move (REVIEW-audit-daemon-2)"
 
 [[module]]
 path = "sovereign/crates/sovereign-daemon/src/state/ingest.rs"
@@ -2824,7 +2824,7 @@ definitions = [
     "(b) scheduler entry: sovereign/crates/sovereign-mesh/src/scheduler_core.rs:339 rank(DecisionBuilder, RankInputs<'_>) -> RankResult - pub(crate) today, pure, no I/O, no clock read (:336-338)",
     "(c) admission entry: sovereign/crates/sovereign-daemon/src/admission.rs:551 peer_admission_layer, :457 client_fairness_layer, :199 local_queue_shed_response, :211 shed_response, :228 PeerInflightGuard (+ state.rs:2456-2485)",
     "(d) decision log + replay: decision_log.rs:617 DecisionSink, :1068 emit_decision, :1073 emit_outcome; decision_replay.rs:342 replay_decision, :458 replay_decisions, :517 replay_trace, :269 recompute_score, :305 recompute_verdict, :98 SCORE_TOLERANCE",
-    "(e) inward callers: 8 production sites in sovereign-cli-daemon (daemon_cmd/provider.rs:111,:117,:128,:136; bootstrap.rs:1151,:1203,:2202,:2301-2308; build/inference.rs:130) + 1 e2e test",
+    "(e) inward callers: 8 production sites in sovereign-daemon (provider.rs:111,:117,:128,:136; bootstrap.rs:1151,:1203,:2202,:2301-2308; build/inference.rs:130) + 1 e2e test",
 ]
 verdict = "converge"
 survivor = "sovereign-scheduler (a,b,d) + sovereign-serving-host (c) - five published entries"

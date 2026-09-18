@@ -19,7 +19,7 @@ use crate::error::Result;
 
 // The index row types are DEFINED in the `corpus-index` leaf.
 pub use corpus_index::types::{
-    BatchEmbedFn, ChunkRange, CorpusKind, DedupPicker, EmbedFn, IndexInfo, IncompleteIngest,
+    BatchEmbedFn, ChunkRange, CorpusKind, DedupPicker, EmbedFn, IncompleteIngest, IndexInfo,
     RerankConfig, RerankFn, ScoredChunk, DEFAULT_EMBED_DIM,
 }; // shim: moved by domains REVIEW-build-index-read-port
 

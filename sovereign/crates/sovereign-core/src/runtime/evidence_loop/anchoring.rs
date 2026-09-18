@@ -10,8 +10,8 @@
 //! Split out of `evidence_loop.rs` (2026-07-13) for legibility and the
 //! ARCH §3.1 file-size ceiling — a pure move, no behaviour change.
 
-use understanding_vocab::atoms::{AtomEnvelope, AtomsFile};
 use std::collections::HashSet;
+use understanding_vocab::atoms::{AtomEnvelope, AtomsFile};
 
 use super::dbg;
 

@@ -521,7 +521,7 @@ mod tests {
             "kernel_types::custody::Custody",
             "kernel_types::attribution::Attribution",
             "kernel_types::answer::Answer",
-            "corpus_engine::index::EvidenceSet",
+            "corpus_index::index::EvidenceSet",
         ] {
             let r = ws.resolve(canonical);
             assert!(r.exists(), "{canonical}: {}", r.render());

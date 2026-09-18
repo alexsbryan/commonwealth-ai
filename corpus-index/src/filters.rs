@@ -174,4 +174,3 @@ impl Default for KnowledgeDensityConfig {
         }
     }
 }
-

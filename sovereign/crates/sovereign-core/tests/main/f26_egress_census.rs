@@ -227,21 +227,13 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // two-node reproduction — a sweep on A, then B's next projection round —
     // over the same loopback `internal_router`. One more `exchange` client in
     // this file's test module; class unchanged.
-    // Split 2026-09-17 (REVIEW-audit-daemon-1, ARCH 3.1): the 16 sites above
-    // were one file's; the parent grew past arch-gate's slack and its test
-    // module was split three ways. Same sites, same class, same total — the
-    // census keys by path, so the row re-keys with them.
-    ("sovereign/crates/sovereign-mesh/src/ring_sync/tests.rs", Class::Mesh, 9),
-    (
-        "sovereign/crates/sovereign-mesh/src/ring_sync/projection_tests.rs",
-        Class::Mesh,
-        4,
-    ),
-    (
-        "sovereign/crates/sovereign-mesh/src/ring_sync/snapshot_tests.rs",
-        Class::Mesh,
-        3,
-    ),
+    // The three `ring_sync` test modules (9/4/3 sites) moved from
+    // `sovereign-mesh/src/ring_sync/{tests,projection_tests,snapshot_tests}.rs`
+    // to `sovereign-mesh/tests/main/` at `dm-daemon-api-edge` (they cannot name
+    // `sovereign-daemon` from a `#[cfg(test)]` module without a second
+    // `sovereign_mesh` build). The census scans production `src/` only, so those
+    // sites are out of scope now and their rows are removed, not re-keyed —
+    // the files still hold 9/4/3 sites, but no longer as production code.
     ("sovereign/crates/sovereign-daemon/src/rpc_warm_http.rs", Class::Mesh, 7),
     // 5 -> 7 (2026-08-23): the two reload-diff regression tests
     // (`reload_applies_a_context_size_change_without_a_restart`,
@@ -854,9 +846,12 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // `/internal/app/state` built its own client with its own 10s timeout,
     // a second answer to "how long do we wait on a peer" beside
     // `gossip_client()`. The gossip round already replicated the row.
-    ("sovereign/crates/sovereign-api/src/routes_internal/corpus_collaborate.rs", Class::Mesh, 1),
-    ("sovereign/crates/sovereign-api/src/routes_knowledge.rs", Class::Mesh, 1),
-    ("sovereign/crates/sovereign-api/src/routes_internal/pipeline_pause.rs", Class::LocalDaemon, 1),
+    // Re-keyed 2026-09-18 (REVIEW-audit-daemon-2): the api host cluster moved
+    // to `sovereign-daemon` at `dm-daemon-api-edge`. Path only — the three
+    // sites and their classes travelled with their files.
+    ("sovereign/crates/sovereign-daemon/src/routes_internal/corpus_collaborate.rs", Class::Mesh, 1),
+    ("sovereign/crates/sovereign-daemon/src/routes_knowledge.rs", Class::Mesh, 1),
+    ("sovereign/crates/sovereign-daemon/src/routes_internal/pipeline_pause.rs", Class::LocalDaemon, 1),
     ("oicp-conformance/src/checks.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-meshapp-registry/src/proxy.rs", Class::LocalDaemon, 1),
     // Federated media's catalogue half. The row was

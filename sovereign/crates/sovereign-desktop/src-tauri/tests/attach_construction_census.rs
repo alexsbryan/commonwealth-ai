@@ -172,7 +172,7 @@ const FLOOR: &[Needle] = &[
     Needle {
         hay: "sovereign_gliner::load_gliner_extractor(",
         count: 0,
-        why: "GLiNER ONNX extractor, loaded host-side — DELETED svt-6 (2026-09-12). Its ONE consumer was the corpus engine's builder chain (`with_chunk_entity_extractor`); the daemon loads its own from the same `data_dir` in `daemon_cmd/bootstrap.rs`. the crate left the manifest at svt-7 (2026-09-12) with its last two call sites, and its `[[exception]]` row went with it — `the_desktop_names_no_inference_stack` pins the absence now",
+        why: "GLiNER ONNX extractor, loaded host-side — DELETED svt-6 (2026-09-12). Its ONE consumer was the corpus engine's builder chain (`with_chunk_entity_extractor`); the daemon loads its own from the same `data_dir` in `sovereign-daemon/src/bootstrap.rs`. the crate left the manifest at svt-7 (2026-09-12) with its last two call sites, and its `[[exception]]` row went with it — `the_desktop_names_no_inference_stack` pins the absence now",
     },
     Needle {
         hay: "sovereign_tools::enrichment_bootstrap::build_folder_tiered_provider(",
@@ -182,7 +182,7 @@ const FLOOR: &[Needle] = &[
     Needle {
         hay: "corpus_engine::CorpusEngine::new(",
         count: 0,
-        why: "a FULL local corpus engine — DELETED svt-6 (2026-09-12), and it was a DUPLICATE rather than a leftover: every `.with_*` in its builder chain paired one-for-one against `sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs:276-296`, over the same `~/.svrnmesh/{recipes,indexes}`. Its four boot chores were the daemon's already (lazy fingerprint stamp, the embed-dimension probe, `validate_corpus_readiness`, the vector-index sweep); the ONE thing only it served was the recipe validate/test/harness surface, which is `POST /internal/corpus/recipes/{test,harness}` now. The `GET /status` node-id read went with it — it existed only to partition THIS engine's directory names against the daemon's",
+        why: "a FULL local corpus engine — DELETED svt-6 (2026-09-12), and it was a DUPLICATE rather than a leftover: every `.with_*` in its builder chain paired one-for-one against `sovereign-daemon/src/bootstrap.rs:276-296`, over the same `~/.svrnmesh/{recipes,indexes}`. Its four boot chores were the daemon's already (lazy fingerprint stamp, the embed-dimension probe, `validate_corpus_readiness`, the vector-index sweep); the ONE thing only it served was the recipe validate/test/harness surface, which is `POST /internal/corpus/recipes/{test,harness}` now. The `GET /status` node-id read went with it — it existed only to partition THIS engine's directory names against the daemon's",
     },
     Needle {
         hay: "LocalCorpusManager::init_with_recipes_dir(",

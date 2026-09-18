@@ -519,7 +519,7 @@ a golden equivalence test."""
 
 [[concept]]
 name        = "EvidenceSet"
-canonical   = "corpus_engine::index::EvidenceSet"
+canonical   = "corpus_index::index::EvidenceSet"
 disposition = "converge"
 totality    = """
 TWO seals, both carried: the CHUNK SET composition read, and the CORPUS

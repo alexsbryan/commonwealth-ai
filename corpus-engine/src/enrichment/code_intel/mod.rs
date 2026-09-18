@@ -33,7 +33,7 @@ use std::sync::LazyLock;
 use serde::{Deserialize, Serialize};
 
 use crate::enrichment::pipeline::prompts::load_or_baked;
-use crate::enrichment::pipeline::types::{InferenceFn, ChatPrompt};
+use crate::enrichment::pipeline::types::{ChatPrompt, InferenceFn};
 use crate::error::{Error, Result};
 
 /// SCIP-sourced symbol enumeration (slice 2) — gated on `treesitter`, the

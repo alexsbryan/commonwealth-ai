@@ -30,8 +30,8 @@
 2070	corpus-engine/src/enrichment/pipeline/types.rs
 1208	corpus-engine/src/extractors/email_rfc5322.rs
 1706	corpus-engine/src/extractors/xml.rs
-2382	corpus-engine/src/index/mod.rs
-1245	corpus-engine/src/index/search.rs
+2382	corpus-index/src/index/mod.rs
+1245	corpus-index/src/index/search.rs
 4017	corpus-engine/src/recipe.rs
 2710	corpus-engine/src/sharding.rs
 1595	corpus-engine/src/snapshot.rs

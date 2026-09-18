@@ -2479,25 +2479,30 @@ mod tests {
         // succeeds.
         let observed = Arc::new(std::sync::Mutex::new(Vec::<u32>::new()));
         let observed_c = observed.clone();
-        let chat_with_tokens: InferenceFn = Arc::new(move |_prompt: &ChatPrompt, tokens: Option<u32>| {
-            observed_c.lock().unwrap().push(tokens.expect("override budget"));
-            let body = r#"{
+        let chat_with_tokens: InferenceFn =
+            Arc::new(move |_prompt: &ChatPrompt, tokens: Option<u32>| {
+                observed_c
+                    .lock()
+                    .unwrap()
+                    .push(tokens.expect("override budget"));
+                let body = r#"{
                   "section_id": "ch_01",
                   "entities_introduced": [{"canonical_name": "A", "entity_type": "person"}],
                   "questions_raised": [{"content": "Why?"}]
                 }"#
-            .to_string();
-            Box::pin(async move { Ok(body) })
-        });
+                .to_string();
+                Box::pin(async move { Ok(body) })
+            });
 
         // The default chat is used only when retry_mode is None.
         // Our test sets retry_mode = Some(Terse), so this closure
         // should NOT be invoked — we make it panic to prove that.
-        let default_chat: InferenceFn = Arc::new(move |_prompt: &ChatPrompt, _max_tokens: Option<u32>| {
-            Box::pin(async move {
-                panic!("default chat should not be invoked when terse retry is active");
-            })
-        });
+        let default_chat: InferenceFn =
+            Arc::new(move |_prompt: &ChatPrompt, _max_tokens: Option<u32>| {
+                Box::pin(async move {
+                    panic!("default chat should not be invoked when terse retry is active");
+                })
+            });
 
         let runner = PhaseRunner::new(
             Arc::new(LiteraryAtlasPipeline::new()),
@@ -2550,16 +2555,20 @@ mod tests {
         use std::sync::Mutex;
         let recorded_budgets: Arc<Mutex<Vec<u32>>> = Arc::new(Mutex::new(Vec::new()));
         let recorded_budgets_clone = Arc::clone(&recorded_budgets);
-        let chat_with_tokens: InferenceFn = Arc::new(move |_prompt: &ChatPrompt, tokens: Option<u32>| {
-            recorded_budgets_clone.lock().unwrap().push(tokens.expect("override budget"));
-            let body = r#"{
+        let chat_with_tokens: InferenceFn =
+            Arc::new(move |_prompt: &ChatPrompt, tokens: Option<u32>| {
+                recorded_budgets_clone
+                    .lock()
+                    .unwrap()
+                    .push(tokens.expect("override budget"));
+                let body = r#"{
                   "section_id": "ch_01",
                   "entities_introduced": [{"canonical_name": "A", "entity_type": "person"}],
                   "questions_raised": [{"content": "Why?"}]
                 }"#
-            .to_string();
-            Box::pin(async move { Ok(body) })
-        });
+                .to_string();
+                Box::pin(async move { Ok(body) })
+            });
 
         let runner = PhaseRunner::new(
             Arc::new(LiteraryAtlasPipeline::new()),
@@ -2782,16 +2791,20 @@ mod tests {
         // with. Return a minimal atlas JSON so parse succeeds.
         let observed = Arc::new(std::sync::Mutex::new(Vec::<u32>::new()));
         let observed_c = observed.clone();
-        let chat_with_tokens: InferenceFn = Arc::new(move |_prompt: &ChatPrompt, tokens: Option<u32>| {
-            observed_c.lock().unwrap().push(tokens.expect("override budget"));
-            let body = r#"{
+        let chat_with_tokens: InferenceFn =
+            Arc::new(move |_prompt: &ChatPrompt, tokens: Option<u32>| {
+                observed_c
+                    .lock()
+                    .unwrap()
+                    .push(tokens.expect("override budget"));
+                let body = r#"{
                   "section_id": "ch_01",
                   "entities_introduced": [{"canonical_name": "A", "entity_type": "person"}],
                   "questions_raised": [{"content": "Why?"}]
                 }"#
-            .to_string();
-            Box::pin(async move { Ok(body) })
-        });
+                .to_string();
+                Box::pin(async move { Ok(body) })
+            });
 
         // The main Phase 1 branch must route through chat_with_tokens
         // (verified below). Phase 1B coverage refinement is opt-in via
@@ -2802,12 +2815,13 @@ mod tests {
         // assertion below is `0`.
         let default_calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let default_calls_c = default_calls.clone();
-        let default_chat: InferenceFn = Arc::new(move |_prompt: &ChatPrompt, _max_tokens: Option<u32>| {
-            default_calls_c.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            // Stub body — only reached if Phase 1B is opted in.
-            let body = r#"{"missed_entities": [], "missed_concepts": []}"#.to_string();
-            Box::pin(async move { Ok(body) })
-        });
+        let default_chat: InferenceFn =
+            Arc::new(move |_prompt: &ChatPrompt, _max_tokens: Option<u32>| {
+                default_calls_c.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                // Stub body — only reached if Phase 1B is opted in.
+                let body = r#"{"missed_entities": [], "missed_concepts": []}"#.to_string();
+                Box::pin(async move { Ok(body) })
+            });
 
         let runner = PhaseRunner::new(
             Arc::new(LiteraryAtlasPipeline::new()),

@@ -66,7 +66,7 @@
 //!
 //!   desktop asks the daemon to install (`request_daemon_install`)
 //!     -> the daemon's OWN engine carries the acquirer
-//!        (`daemon_cmd/bootstrap.rs`, unconditional)
+//!        (`sovereign-daemon/src/bootstrap.rs`, unconditional)
 //!       -> the daemon composes `baseline_bundles`
 //!         -> `CoreTurnTools` registers `sec_facts`
 //!           -> no `ToolFamily`, so no switch can withhold it

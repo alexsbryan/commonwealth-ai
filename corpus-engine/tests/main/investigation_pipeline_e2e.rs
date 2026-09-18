@@ -21,7 +21,7 @@ use std::sync::Arc;
 use corpus_engine::enrichment::investigation::{
     run_investigation, ChunkInput, INVESTIGATION_DIRNAME,
 };
-use corpus_engine::enrichment::pipeline::types::{InferenceFn, ChatPrompt};
+use corpus_engine::enrichment::pipeline::types::{ChatPrompt, InferenceFn};
 use corpus_engine::Recipe;
 
 /// A scripted chat closure that returns a different canned response

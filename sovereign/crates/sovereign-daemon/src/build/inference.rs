@@ -556,7 +556,7 @@ mod distributed_primary_routing_tests {
 ///
 /// **The bug this is a gate for.** There are two provider-build paths in
 /// this crate: cold start (`build/inference.rs`) and hot reload
-/// (`daemon_cmd/provider.rs`). When `start_fast_idle_monitor` and
+/// (`provider.rs`). When `start_fast_idle_monitor` and
 /// `start_embed_idle_monitor` were added, only the first was obvious —
 /// the second was found by grepping, not by anything failing. A reloaded
 /// daemon that armed three of four monitors would quietly re-acquire the
