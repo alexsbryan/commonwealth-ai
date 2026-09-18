@@ -32,6 +32,12 @@
 //!   Moved here from `corpus-engine`'s `enrichment::{skeleton,clustering}` by
 //!   domains `REVIEW-build-field-skeleton-vocab` (DE "The read-port leaf,
 //!   measured again"); its JSON IO stayed host.
+//! - [`articulation`] — `Articulation` and `ArticulationVector`, the per-atom
+//!   axis the meta-atlas classifier tags every anchor with. Moved here from
+//!   `corpus-engine`'s `stream_axes` by domains
+//!   `REVIEW-build-articulation-vocab` (DE "The read-port leaf, measured
+//!   again": "the per-atom articulation types go to the language"); the
+//!   per-corpus stability half stayed behind.
 //! - [`read`] — the read door: `read_atlas_atoms` / `read_atlas_edges`, the
 //!   constructors for the products a consumer outside `corpus-engine` reads.
 //!   Moved here by domains `dm-vocab-door-move` (DE "The door"), so that
@@ -43,6 +49,7 @@
 //! consumer that wants to name an atom links this; a consumer that wants
 //! to MAKE one links `corpus-engine`.
 
+pub mod articulation;
 pub mod atoms;
 pub mod canonical;
 pub mod edges;

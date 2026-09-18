@@ -3918,9 +3918,9 @@ note = "parser for .sovereign/sovereign.toml PER-PROJECT WATCHER config; RunnerC
 [[module]]
 path = "corpus-engine/src/stream_axes.rs"
 context = "understanding"
-lines = 518
+lines = 310
 files = 1
-note = "meta-atom articulation/stability taxonomy; only consumers are meta_atlas/* and types.rs:432"
+note = "meta-atom stability taxonomy and derivation; the per-atom articulation types moved to corpus-engine-vocab/src/articulation.rs by domains REVIEW-build-articulation-vocab. Only consumers are meta_atlas/* and types.rs:432"
 
 [[module]]
 path = "corpus-engine/src/testing.rs"
@@ -7373,6 +7373,12 @@ path = "corpus-engine-sections/src/lib.rs"
 context = "workbench"
 lines = 568
 note = ""
+
+[[module]]
+path = "corpus-engine-vocab/src/articulation.rs"
+context = "understanding"
+lines = 243
+note = "The per-atom articulation taxonomy (Articulation, ArticulationVector and their ALL/as_str/dominant/weight/is_ambiguous/dominant_above methods), moved from corpus-engine's stream_axes.rs by domains REVIEW-build-articulation-vocab (DE \"The read-port leaf, measured again\": \"the per-atom articulation types go to the language\"); the per-corpus stability half stayed behind."
 
 [[module]]
 path = "corpus-engine-vocab/src/atoms.rs"
