@@ -38,10 +38,6 @@ use super::context_loader::{backfill_ann_blocking, BackfillOutcome};
 use super::edges::{Edge, EdgesFile};
 use super::resolution::Trajectory;
 
-/// Directory name for atlas output under a corpus's index root.
-/// Full path is `~/.svrnmesh/indexes/<corpus>/atlas/`.
-pub const ATLAS_DIRNAME: &str = "atlas";
-
 /// On-disk layout of `atlas/trajectories.json`. Empty at Step 3a —
 /// Phase 3b populates `trajectories` with per-entity and per-
 /// relation state sequences per spec §6.4.
@@ -590,11 +586,13 @@ pub fn write_atlas_configurations(
 }
 
 // The read door lives in the vocabulary leaf — `corpus-engine-vocab::read`,
-// moved there by domains `dm-vocab-door-move` (DE "The door"). Re-exported at
-// the historical `writer::read_atlas_*` path so the writers below and the
-// consumers outside the engine keep resolving; the two writers read through
-// the door, not around it.
-pub use corpus_engine_vocab::read::{read_atlas_atoms, read_atlas_edges};
+// moved there by domains `dm-vocab-door-move` (DE "The door"), and the layout
+// constant `ATLAS_DIRNAME` followed it by `dm-vocab-atlas-dirname` (DE "The
+// read-port leaf, measured again"). Re-exported at the historical
+// `writer::read_atlas_*` / `writer::ATLAS_DIRNAME` paths so the writers below
+// and the consumers outside the engine keep resolving; the two writers read
+// through the door, not around it.
+pub use corpus_engine_vocab::read::{read_atlas_atoms, read_atlas_edges, ATLAS_DIRNAME};
 
 /// Replace `atlas/atoms.json` with the provided file, and rebuild the v2
 /// store from it. The atom-side companion to [`write_atlas_edges`]: Phase 6's
