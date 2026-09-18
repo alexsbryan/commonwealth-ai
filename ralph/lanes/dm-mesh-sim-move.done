@@ -1,0 +1,34 @@
+unit: dm-mesh-sim-move
+commits: 1b9c67c9c (the move + the host-reach cut)
+what: MOVE sovereign-mesh/src/mesh_sim/ (mod.rs 2,398, rng.rs 103, scenario.rs
+  501, scoreboard.rs 822) -> sovereign-mesh-test-harness (§3a). Inside the four
+  files every `crate::<m>` to the scheduler half rewrote to
+  `sovereign_scheduler::<m>` (decision_log, oicp_select, predicted_time,
+  scheduler_core, tier); the harness gained `sovereign-scheduler` in its
+  Cargo.toml (the forbid's `except`, HUMAN-forbid-harness-except 2026-09-17).
+  The simulator's one host reach is CUT, not excepted (dm-harness-except,
+  ralph/DECISIONS.md 2026-09-17): `sovereign_serving_host::recorder::
+  new_decision_id()` (mod.rs:1541) became `format!("d-{oicp_request_id}")`,
+  restoring the module's stated determinism and leaving sovereign-scheduler as
+  the only `sovereign-*` the harness names. The `mesh-sim` feature and its
+  lib.rs cfg gate are gone; the two tests (tests/main/mesh_sim_scoreboard.rs,
+  scheduler_replay_agreement.rs) now gate on `dst` (which already pulls the
+  harness) and repoint to `sovereign_mesh_test_harness::mesh_sim`. Four DT
+  [[module]] rows re-keyed to the harness paths (tag and line count unchanged);
+  harness lib.rs row 6 -> 7 and mesh lib.rs row 105 -> 98 follow the files.
+  Doc pointers updated with the path: SYSTEM_OVERVIEW Phase-1-S0 table,
+  predicted_time.rs:45, cli-llm awareness_cmd/scenario.rs:281; the now-dead
+  feature flag dropped from scripts/lib/cargo-scope.sh (both the unscoped list
+  and the scoped block) and cli-dev's refactor_cmd/discover.rs:294, and the
+  ci.yml mesh-dst comment corrected.
+checks: CLEAN exit=0 (debug target 0G, under 50G — cache kept); LINT exit=0
+  (9 crates incl. sovereign-mesh-test-harness + sovereign-mesh, features incl.
+  sovereign-mesh/dst, 0 errors); LAYER exit=0; TOML exit=0;
+  TEST(sovereign-mesh-test-harness) exit=0 — 42 pass / 0 fail;
+  TEST(sovereign-mesh --filter mesh_sim_scoreboard) exit=0 — 24 pass / 0 fail;
+  TEST(sovereign-mesh --filter scheduler_replay_agreement) exit=0 — 8 pass.
+evidence: crate-lines --crate sovereign-mesh 20,990 -> 15,917 (the 3,824-line
+  back-of-house block left); crate-lines --crate sovereign-mesh-test-harness
+  1,398 -> 5,222 (1,398 + 3,824); misnamed: sovereign-mesh-test-harness
+  5222/5222 back-of-house 100.0%, sovereign-mesh 13093/15917 fabric 82.3%.
+  No row in ralph/STATE.md was edited (pool lane); the lane marker is this file.
