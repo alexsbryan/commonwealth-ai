@@ -1105,3 +1105,78 @@ Recorded, not changed:
   new crates (`sovereign-daemon`, `sovereign-serving-host`, `sovereign-peer-wire`,
   `sovereign-scheduler`, `sovereign-pods`, `sovereign-time`); `warn_gate` by
   design. Not re-pinned.
+
+## REVIEW-audit-wave-2 — sovereign-api gone, and the shims its moves left dead
+
+Range audited: `git log c9cff4dd6..HEAD` — the `sovereign-api` retire
+(`REVIEW-build-sovereign-api-retire`, `78e38ce76`) and the campaign amendment
+that landed beside it. Checks: TESTALL exit=0 (13397 pass, 0 fail); PREPUSH
+exit=0 (2 of 18 want attention: `concept-gate` NEVER-RAN because
+`sovereign-cli-dev` is not built — the same abstention the prior audit recorded
+as `instrument-gate` — and `size-gate`, the advisory `warn_gate`, 69 keys
+grown and not re-pinned).
+
+The row's claims, verified:
+
+- **sovereign-api is gone.** `ls sovereign/crates/sovereign-api` -> No such
+  file; no `sovereign-api` member or `[workspace.dependencies]` line in the
+  root `Cargo.toml`; `git grep 'sovereign_api::' -- '*.rs'` is 0.
+- **Its three `[[exception]]` rows are zero.** `grep 'from = "sovereign-api"'
+  quality/ARCH_LAYERS.toml` is empty; the `sovereign-api -> sovereign-*` and
+  `sovereign-scheduler -> sovereign-api` forbids and the `mesh-api` layer entry
+  went with them; `layer-gate` passes with no STALE verdict.
+- **`plan --crate sovereign-api` reads no cluster** (CENSUS 11/11 axes);
+  `crate-lines --crate sovereign-api` still exits 4 on the pre-existing
+  coverage hole (`corpus-index`, `understanding-atlas`, `sovereign-peer-wire`),
+  reported not defaulted — the crate itself has no `[[module]]` rows.
+- **The two live instruments the retire repointed work.**
+  `scripts/daemon-route-census.py` -> 302 registrations / 284 unique paths
+  (sovereign-daemon=275); the tracing filters read `sovereign_daemon=info`, so
+  the moved modules' logs do not go dark.
+
+Findings, fixed (commit `c765d09ec`):
+
+- **ARCH 3 (a shim whose importers are all repointed) · dead re-export ·
+  `sovereign/crates/sovereign-mesh/src/lib.rs:60,64,86`** — three shims created
+  by `REVIEW-build-sched-move` and `dm-mesh-workbench-move-scip` (`pub use
+  corpus_engine_scip::lsp_tier`, `pub(crate) use sovereign_scheduler::oicp_select`,
+  `pub(crate) use sovereign_scheduler::scheduler_core`) had zero importers after
+  their only consumers moved to `sovereign-serving-host`/`sovereign-scheduler`. A
+  repo-wide `git grep` finds no `crate::<m>`/`sovereign_mesh::<m>` site outside
+  the shim and the owner crate, so they are deleted. The remaining `// shim:`
+  re-exports all have live importers (mesh tests, the daemon bootstrap,
+  `cli-llm`), and the `corpus-engine` leaf shims re-export whole `pub use` globs
+  whose symbols are still used, so neither set is deletable.
+
+Recorded, not changed:
+
+- **The coverage holes the domains instrument refuses on are unchanged.**
+  `corpus-index` (19 files), `understanding-atlas` (13) and
+  `sovereign-peer-wire` (1) still have no `[[module]]` rows; deferred by the
+  2026-09-18 priority cut and recorded by `REVIEW-audit-daemon-2`.
+- **`quality/CONCEPTS.toml:961`'s `Principal` canonical does not resolve.** The
+  retire repointed it from `sovereign_api::principal::Principal` (a crate now
+  deleted) to `sovereign_daemon::client_principal::Principal`, but the type is
+  defined at `sovereign_contracts/src/principal.rs:59` and
+  `client_principal.rs:82` only `use`s it (private), so the path is not
+  reachable. The register tolerates it because the row's `home = "planned"` and
+  `every_register_home_matches_the_working_tree`
+  (`sovereign-cli-dev/src/refactor_cmd/destination.rs:602`) only fails a
+  *minted* row whose canonical stops resolving. The correct planned home is a
+  register-owner judgment (the `measure` says "may move beside `Scope`"), so it
+  is recorded, not guessed.
+- **`quality/CONCEPTS.toml:968`'s `measure` still cites
+  `sovereign-api/src/principal.rs`** — a frozen measurement string, left as
+  written (the retire updated the live `canonical` beside it).
+- **The design docs still describe sovereign-api in the present tense.**
+  `quality/DAEMON_CORE.md:293` ("Today the node is assembled three times over …
+  `sovereign-api`'s `AppState` carries the rest"), `quality/DOMAINS.md:375,416`,
+  and `corpus-engine/DECOMPOSITION.md:363` ("reads products … `sovereign-api` 7").
+  These are design records of the pre-move state — the same class the prior
+  audit left in `sovereign/HISTORY.md` and the handed orders — so they are
+  recorded, not rewritten.
+- **The frozen `[[noun]]` rows keyed `crate = "sovereign-api"`
+  (`quality/DOMAINS.toml:1866` onward) stay**, per the retire's DECISIONS
+  entry; their `file` coordinates already point at `sovereign-daemon`.
+- **`size-gate` (advisory)** · 69 keys grew — the wave's accretion and its new
+  crates; `warn_gate` by design. Not re-pinned.
