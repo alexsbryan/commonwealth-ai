@@ -1,0 +1,24 @@
+REVIEW-build-field-skeleton-vocab
+commit 05c2034dd
+CLEAN exit=0 (debug target 49G, under the 50G gate)
+LINT exit=0 (scope corpus-engine-vocab, corpus-engine, sovereign-cli-llm, sovereign-daemon, sovereign-tools + 18 dependents; 0 errors)
+LAYER exit=0 (72 members, 396 internal edges; every edge down or sideways)
+TEST(corpus-engine-vocab) exit=0 pass=65 fail=0
+TEST(corpus-engine) exit=0 pass=2288 fail=0 (2299 -> 2288; the 11 skeleton tests moved to vocab)
+extra touched-crate proof: TEST(sovereign-tools) exit=0 pass=852; TEST(sovereign-cli-llm) exit=0 pass=1105; TEST(sovereign-daemon) exit=0 pass=233
+TOML exit=0 (quality/DOMAINS.toml parses; the moved module row re-keyed to corpus-engine-vocab/src/skeleton.rs)
+what: FieldSkeleton and its closure (PartialSkeleton, SkeletonQuestion, SkeletonPosition,
+  SkeletonFaultLine, SkeletonOpenQuestion, CanonicalQuestion) plus FieldModelStats moved to
+  corpus-engine-vocab/src/skeleton.rs; corpus-engine re-exports the module at enrichment::skeleton
+  and clustering.rs re-exports FieldModelStats, so every historical path keeps resolving. The four
+  JSON methods (write/load_field_checkpoint, write/load_field_skeleton), the private
+  read_skeleton_json and FIELD_CHECKPOINT_FILENAME/FIELD_SKELETON_FILENAME left CorpusIndex as free
+  host functions over the index directory in corpus-engine/src/index/field_skeleton.rs; every live
+  reader repointed to load_field_skeleton(&index.path()) (field_engine, parquet_ingest_e2e,
+  sovereign-tools::{epistemic,knowledge_view::manager}, sovereign-cli-llm enrich field-atoms,
+  sovereign-daemon corpus health). The row's two named readers sovereign-core and the desktop budget
+  probe were already retired off the method (turn_prepass.rs:108-157 no longer opens the file; the
+  d9b consumer census lists .load_field_skeleton() under Retired), so no live site remained there.
+premise: measured 2026-09-18 — skeleton.rs:10 is the only non-std import
+  (super::clustering::FieldModelStats); methods at index/enrichment.rs:520/:537/:553/:571, helper
+  :591, consts :586/:589; FieldModelStats at clustering.rs:459 (seven numeric fields, serde only).
