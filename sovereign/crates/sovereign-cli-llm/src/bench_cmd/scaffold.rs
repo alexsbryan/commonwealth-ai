@@ -16,10 +16,8 @@ use std::fs;
 use std::path::PathBuf;
 
 use corpus_engine::enrichment::atlas::axis_catalog::{all_axes, AxisAtomShape, TypedAxis};
-use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
-use corpus_engine_vocab::atoms::{
-    AtomEnvelope, AtomsFile, Entity, Event, Opposition, Position, Question,
-};
+use corpus_engine_vocab::atoms::{AtomEnvelope, Entity, Event, Opposition, Position, Question};
+use corpus_engine_vocab::read::{read_atlas_atoms, ATLAS_DIRNAME};
 
 use crate::enrich_cmd::paths::index_root;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
@@ -75,9 +73,8 @@ pub async fn cmd_scaffold(args: &[String]) -> i32 {
         }
     };
 
-    let atoms_path = index_root(&parsed.corpus_id)
-        .join(ATLAS_DIRNAME)
-        .join("atoms.json");
+    let atlas_dir = index_root(&parsed.corpus_id).join(ATLAS_DIRNAME);
+    let atoms_path = atlas_dir.join("atoms.json");
     if !atoms_path.exists() {
         eprintln!(
             "error: {} not found. Build the atlas first: `svrn enrich build {}`.",
@@ -87,17 +84,14 @@ pub async fn cmd_scaffold(args: &[String]) -> i32 {
         return 1;
     }
 
-    let bytes = match fs::read_to_string(&atoms_path) {
-        Ok(b) => b,
-        Err(e) => {
-            eprintln!("error: read {}: {e}", atoms_path.display());
+    let parsed_atoms = match read_atlas_atoms(&atlas_dir) {
+        Ok(a) => a,
+        Err(e) if e.kind() == std::io::ErrorKind::InvalidData => {
+            eprintln!("error: parse {}: {e}", atoms_path.display());
             return 1;
         }
-    };
-    let parsed_atoms: AtomsFile = match serde_json::from_str(&bytes) {
-        Ok(a) => a,
         Err(e) => {
-            eprintln!("error: parse {}: {e}", atoms_path.display());
+            eprintln!("error: read {}: {e}", atoms_path.display());
             return 1;
         }
     };
