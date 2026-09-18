@@ -1948,3 +1948,57 @@ re-export shims (`src/{error,corpus,types,recipe,stream_axes}.rs`,
 `src/index/mod.rs`, `src/filters/{mod,boilerplate,knowledge_density}.rs`,
 `src/chunkers/mod.rs`), `quality/ARCH_LAYERS.toml`,
 `sovereign/SYSTEM_OVERVIEW.md`, `corpus-engine/tests/main/recipe_schema.rs`.
+
+## 2026-09-18 · REVIEW-mint-wave-n · the queue is unreadable until corpus-index is tagged; the wave is corpus-engine's remainder
+
+**Fork.** STATE.md:298 says "MINT the next wave from the head of `python3
+scripts/domains-census.py queue`". On the tree as found the instrument refuses:
+`queue` exits 4 (could-not-judge), `misnamed` and `crate-lines` with it, because
+`corpus-index` — created by `REVIEW-build-index-read-port` (`503681188`) — has 19
+`.rs` files under its `src/` and ZERO `[[module]]` rows in `quality/DOMAINS.toml`.
+Decide whether to stop (§6) or correct, and what the wave is once the head is
+readable.
+
+**Choice.** Correct the row (§6, operator direction 2026-09-17) and proceed.
+1. The premise is false; the row is corrected. The head was read with the
+   coverage assertion bypassed in a throwaway import (`dc.coverage_holes = lambda
+   root: []` before `dc.queue(dc.REPO)`); the queue computation itself is
+   untouched, so the head is trustworthy: corpus-engine 171,513 lines / 35.9%
+   own, sovereign-core 130,237 / 21.1% next. The wave's FIRST row closes the hole
+   (`dm-corpus-index-tag`), because `queue`, `misnamed` and `crate-lines` are the
+   instruments every later rung gates on.
+2. The wave is corpus-engine's REMAINDER, not the next crate. The queue still
+   heads corpus-engine because `REVIEW-mint-wave-3` took only its Understanding
+   carve; `plan --crate corpus-engine` [4]-[8] names the leaving clusters left —
+   workbench, kernel, back-of-house, workspace, build-feedback (ingest and
+   retrieval stay). The campaign's ladder ("WAVES 4+ — whatever dm-queue lists
+   next") reads the queue's head, so the head is the wave.
+3. The three mid clusters wait on `REVIEW-mint-understanding-tiers` — the cycle
+   `understanding -> workbench -> kernel` is real and measured: `code_intel`
+   names `crate::enrichment::pipeline::{types,prompts}` (4 sites, DT :4036),
+   kernel's `types.rs:17` names `ChatPrompt`, `harness/` names the atlas — so
+   those rows carry the dependency and the two that do not (`dm-ce-move-notes-sync`,
+   `dm-ce-move-build-feedback`) can land now.
+
+**Evidence.** `python3 scripts/domains-census.py queue` → exit 4, 19 untagged
+`corpus-index/src/**.rs`; `grep -c 'corpus-index/src' quality/DOMAINS.toml` = 0;
+`git ls-files 'corpus-index/src/**/*.rs' 'corpus-index/src/*.rs' | wc -l` = 19
+(10,046 lines by `wc -l`); `python3 scripts/domains-census.py plan --crate
+corpus-engine` prints move order "understanding, workbench, kernel, back-of-house,
+workspace, build-feedback" with `CYCLE (port or split ...): understanding ->
+workbench -> kernel` and 2 problems (workbench dest not in context crates;
+back-of-house tier needs the port); `git grep -n 'crate::enrichment::pipeline'
+-- corpus-engine/src/enrichment/code_intel` = mod.rs:35,36 + pass.rs:18;
+`wc -l corpus-engine/src/{types,error,corpus}.rs` = 127/33/10 (the read-port
+carve already emptied the kernel cluster, so DT :4057's 1,523-line figure is
+stale); `queue` exit 4 and `predicate` exit 1 mean no `ralph/DONE` row.
+
+**Falsified by.** A queue read on a clean tree whose head is not corpus-engine
+(e.g. a tag row landing first, or a registry edit that lifts corpus-engine's own
+share to 100%); or `REVIEW-mint-understanding-tiers` changing the prompt/type
+surface so that `code-enrich`/`corpus-engine-vocab` are the wrong destinations,
+which would re-scope the three waiting rows; or the operator ruling that wave-n
+is the next CRATE (sovereign-core) rather than the head's remainder.
+
+**Landed in.** this commit — `ralph/STATE.md` (the corrected mint row and 12
+minted rows), `ralph/DECISIONS.md`.
