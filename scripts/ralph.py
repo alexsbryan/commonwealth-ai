@@ -866,18 +866,35 @@ class Pool:
             # a lane that has no commits of its own onto the base; a lane with
             # work is left alone (--ff-only refuses to rewrite it).
             own = self._git("rev-list", "--count", f"{self.base_branch}..HEAD", cwd=wt)
-            if own.returncode == 0 and own.stdout.strip() == "0":
-                ff = self._git("merge", "--ff-only", self.base_branch, cwd=wt)
-                if ff.returncode == 0:
-                    say(f"pool: lane {unit} refreshed onto {self.base_branch}")
+            if own.returncode == 0:
+                if own.stdout.strip() == "0":
+                    ff = self._git("merge", "--ff-only", self.base_branch, cwd=wt)
+                    if ff.returncode == 0:
+                        say(f"pool: lane {unit} refreshed onto {self.base_branch}")
+                    else:
+                        say(f"pool: lane {unit} not refreshed: {ff.stderr.strip()}")
                 else:
-                    say(f"pool: lane {unit} not refreshed: {ff.stderr.strip()}")
+                    # A lane with its own commits was skipped entirely, so it ran
+                    # on a stale base and the conflict landed at the POOL's merge
+                    # as an escalation (2026-09-18: dm-rename-leaf-words,
+                    # dm-next-edit-move). Merge the base in HERE, where the
+                    # session can resolve it.
+                    m = self._git("merge", "--no-edit", self.base_branch, cwd=wt)
+                    if m.returncode == 0:
+                        say(f"pool: lane {unit} merged {self.base_branch} in")
+                    else:
+                        say(f"pool: lane {unit} conflicts with {self.base_branch} — "
+                            "the session resolves it")
         self._provision_host_pointers(wt)
         note = (f"POOL LANE: you are working unit {unit} in an isolated git worktree.\n"
                 f"Commit your work here. When the unit passes its OWN tests, write "
                 f"ralph/lanes/{unit}.done and commit it — the pool merges your branch then.\n"
                 "Do NOT edit ralph/STATE.md except to correct your own row's premises "
                 "(PROMPT §6); the pool marks the unit done after the merge.\n\n")
+        if self._git("rev-parse", "-q", "--verify", "MERGE_HEAD", cwd=wt).returncode == 0:
+            note = ("Your worktree has a MERGE IN PROGRESS: the pool merged the base "
+                    "branch in and it conflicted. Resolve every conflict, `git add` the "
+                    "files, `git commit --no-edit`, then do your unit.\n\n") + note
         model_args = select_model_args(unit, self.model, self.review_model, self.variant)
         # One lock per lane: a lane builds in its own worktree/target, so the
         # shared /tmp lock would only serialize lanes against each other and
