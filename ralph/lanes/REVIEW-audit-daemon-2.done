@@ -1,0 +1,36 @@
+unit: REVIEW-audit-daemon-2
+commits: c9cff4dd6 (the audit)
+what: audited the host-crate range cafc95dd7..HEAD — dm-daemon-api-edge, the
+  cli composition move, the daemon parts and REVIEW-build-index-read-port — end
+  to end. Row claims verified: no host-tagged module remains in sovereign-mesh
+  (0/28) or sovereign-api (0/1); crate-lines --crate sovereign-daemon reads
+  78,021 lines / 126 rows (read with the coverage-hole assertion bypassed — the
+  instrument refuses on the deferred corpus-index hole); boundary-gate exit=0
+  with no new [[exception]]; no shim is deletable here (every sovereign_api::
+  path has zero importers, but the shims retire with the crate at
+  REVIEW-build-sovereign-api-retire).
+  Fixes:
+  - ARCH 5 (TESTALL red): CONCEPTS.toml EvidenceSet canonical ->
+    corpus_index::index::EvidenceSet (destination.rs's positive-control list
+    too); chunk_provenance_census scanned only corpus-engine/src so the two
+    acquired_from_* doors read as gone (scan corpus-index/src too);
+    f26_egress_census rows for moved files (ring_sync test modules moved to
+    tests/main/, out of the production-src scope -> rows removed; three routes
+    sovereign-api -> sovereign-daemon -> re-keyed);
+    conformance_tags_are_fresh (sovereign-api.toml had no covers: tags left ->
+    deleted, six claims land in sovereign-daemon.toml).
+  - ARCH 3.2 (arch-gate): baselines/oversized.txt rows re-keyed to
+    corpus-index/src/index/{mod,search}.rs (path re-key, counts unchanged).
+  - ARCH 3.1 (layout-gate): layout_gate.rs DECIDER ->
+    corpus-index/src/corpus.rs.
+  - ARCH 3 (doc drift): daemon_cmd/<moved> repointed in 11 live docs/configs
+    (including the LIVE mutant target quality/sabotage/all.toml:409) and 14
+    .rs doc comments; rustfmt drift in 17 files fixed with cargo fmt --all.
+  Recorded, not changed: the corpus-index (19), sovereign-peer-wire (1) and
+  understanding-atlas (13) coverage holes (deferred by the 2026-09-18 priority
+  cut; sovereign-peer-wire needs a tag row); sovereign/HISTORY.md and the
+  handed order keep their historical daemon_cmd spellings; size-gate is the
+  advisory warn_gate, not re-pinned.
+checks: TESTALL exit=0 (13397 pass, 0 fail); PREPUSH exit=0 (3 of 18 want
+  attention: size-gate warn_gate by design, instrument-gate and hook-wiring
+  out of budget / could-not-judge).
