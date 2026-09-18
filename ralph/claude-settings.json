@@ -1,7 +1,7 @@
 {
-  "_comment": "Permission contract for a ralph worker running as `claude -p` (scripts/ralph-claude-shim.sh passes this via --settings). In print mode nothing can prompt: a call outside `allow` is refused and the shim logs it as `auto-rejecting`, which ralph.py counts and warns on. The allow set is the check table in ralph/next/ring-doc/PROMPT.md (CLEAN, LINT, TEST, NODE, PLANT, DEMO, TESTALL, PREPUSH) plus the read-only shell the queue's rows name. `deny` is the prompt's hard rules: never push, never --no-verify, never rewrite history, never delegate.",
+  "_comment": "Permission contract for a ralph worker running as `claude -p` (scripts/ralph-claude-shim.sh passes this via --settings). defaultMode auto: the harness classifier approves routine calls (it is the mode the seat itself runs under); allow rules short-circuit, deny rules block first, and only what the classifier will not approve reaches the bridge. Before 2026-09-18 this was acceptEdits, and the Bash matcher declines any command carrying $?, $(...), a loop, a heredoc or a quoted pipe, so nearly every diagnostic the worker composed asked the operator (log-permissions.txt: 20 asks in 100 minutes). In print mode nothing can prompt: a call outside `allow` is refused and the shim logs it as `auto-rejecting`, which ralph.py counts and warns on. The allow set is the check table in ralph/next/ring-doc/PROMPT.md (CLEAN, LINT, TEST, NODE, PLANT, DEMO, TESTALL, PREPUSH) plus the read-only shell the queue's rows name. `deny` is the prompt's hard rules: never push, never --no-verify, never rewrite history, never delegate.",
   "permissions": {
-    "defaultMode": "acceptEdits",
+    "defaultMode": "auto",
     "allow": [
       "Read",
       "Edit",
