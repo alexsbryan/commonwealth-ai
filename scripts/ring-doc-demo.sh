@@ -606,6 +606,7 @@ run_census() {
   git -C "$REPO" diff --quiet origin/main -- sovereign/crates/sovereign-mesh/tests/main/replication_sender_census.rs
   echo $? > "$CENSUS/census.diff"
   git -C "$REPO" diff --stat origin/main -- 'commonwealth/crates/commonwealth-rail*' > "$CENSUS/rail.diff"
+  git -C "$REPO" log --format='%h %s' origin/main..HEAD -- 'commonwealth/crates/commonwealth-rail*' > "$CENSUS/rail.commits"
 }
 
 report() { # bar|all
@@ -632,11 +633,18 @@ row("ra-doc-append-nudges-sync", None if fatal or not n.get("samples") else n["p
     fatal or ("" if n.get("samples") else "no latency samples"),
     p50=n.get("p50"), p99=n.get("p99"), samples=n.get("samples"), missing=n.get("missing"), acts=n.get("acts"))
 
+rail_commits = [l.split(" ", 1) for l in open(os.path.join(cen, "rail.commits")).read().splitlines() if l.strip()]
+# A rail diff made only by commits outside this campaign says nothing about
+# this campaign: the instrument could not judge, it did not fail.
+ours = [h for h, *subj in rail_commits if (subj or [""])[0].startswith(("rd-1-", "REVIEW-", "ralph", "ring-doc"))]
+foreign = bool(rail_diff) and bool(rail_commits) and not ours
 c = s.get("converge") or {}
-row("ra-doc-three-machines-converge", None if fatal or not c else
+row("ra-doc-three-machines-converge", None if fatal or not c or foreign else
     1.0 if (c["sv_equal"] and c["text_equal"] and clean(c["union"]) and not rail_diff) else 0.0,
-    fatal or "", sv_equal=c.get("sv_equal"), text_equal=c.get("text_equal"), union=c.get("union"),
-    rail_diff=rail_diff.splitlines())
+    fatal or (f"rail diff vs origin/main from commits outside this campaign: {' '.join(h for h, *_ in rail_commits)}"
+              if foreign else ""),
+    sv_equal=c.get("sv_equal"), text_equal=c.get("text_equal"), union=c.get("union"),
+    rail_diff=rail_diff.splitlines(), rail_commits=[" ".join(x) for x in rail_commits])
 
 lv = s.get("live") or {}
 basis = bars["ra-doc-live-lane-non-durable"]["floor_basis"]
