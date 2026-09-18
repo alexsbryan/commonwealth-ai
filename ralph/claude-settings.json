@@ -119,7 +119,6 @@
       "Bash(git add -u*)",
       "Bash(git add .*)",
       "Bash(git add :/*)",
-      "Bash(git add *Cargo.lock*)",
       "Bash(git commit -a*)",
       "Bash(git commit --all*)"
     ]
