@@ -176,3 +176,81 @@ the regression.
 
 Commit: recorded in the same commit as the new row and the removal of
 `ralph/NEEDS_HUMAN.md`.
+
+## 2026-09-17 · REVIEW-build-rd-1-instrument · the pre-registration run read exit=1 on three bars
+
+The package (`ralph/NEEDS_HUMAN.md`, removed in this commit) named three forks.
+Each fact below was reproduced in this session, not taken from the package.
+
+### The instrument row itself. Choice: `[x]` at 5ab927237.
+
+The row's check says "the FIRST run is the pre-registration; its numbers are
+recorded, not tuned to", and order step 7 says the measurement is
+PRE-REGISTERED before the run. A pre-registration is done when it is recorded,
+which 5ab927237 did. Five PASSED is what `REVIEW-DEMO-rd-1-run` expects, and
+that row keeps its bar. Holding the instrument at `[~]` for exit=0 would have
+the instrument owe the product's result.
+
+*Falsified if* the instrument itself is wrong — a bar it misreads rather than a
+product gap it reports. None of the three non-passes is that (below).
+
+### Fork 3 — attribution disagrees across nodes. Choice: mint `rd-1-attribution-order`.
+
+`createAttribution().absorb` skips seen ids and credits in arrival order
+(`sovereign/apps/ring-doc/adapter.js:182-190`, called once per poll at
+`app.js:222`), while the rail's total order is `(ts_unix, actor, seq, id)` with
+second-resolution `ts` (`commonwealth-rail-core/src/admit.rs:34,443`). Two pages
+that saw the same acts in different arrival orders can name different people,
+which is what node b did. Order step 3 already says acts apply "in the rail's
+order", and Demo step 3 has all three screens agree, so "latest" means latest in
+rail order, and the adapter is what is wrong. Reading "latest" as arrival order
+would change the bar's oracle. The cause is read from the code and was not
+re-observed from the run's log (`up` empties the run dir). The new row's test
+must fail on the current adapter first. That is where the cause gets confirmed.
+
+*Falsified if* that test passes on the current adapter. Then the ordering is not
+the cause, and the row goes back to instrumenting the run.
+
+### Fork 2 — `commonwealth-rail*` diff. Choice: no bar change, no hakari exclusion. It clears on push.
+
+The package called the lines uncommitted. They are committed now:
+`git diff --stat origin/main -- 'commonwealth/crates/commonwealth-rail*'` is
+exactly three `+workspace-hack = { … }` lines, `git log origin/main..HEAD` on
+those paths is 44f9a1bdc alone, and the worktree equals 44f9a1bdc there. The bar
+reads "zero diffs against origin/main". It reads 0.0 because a peer campaign's
+commit is local and not yet public, not because the rail learned anything. Once
+44f9a1bdc is pushed, the diff is empty and the bar is unchanged. The package's other
+options are each worse. Narrowing to `src/` weakens a floor_basis, which is the
+operator's. Excluding the rail crates from hakari reaches into the other
+campaign's work. There is no hakari-free tree to run the demo in on `main`.
+The push is the operator's, so it is named in the HUMAN row below.
+
+*Falsified if* 44f9a1bdc is dropped or reshaped before the push. Then this fork
+reopens as the package framed it.
+
+### Fork 1 — the live lane is refused to every guest. Choice: the operator's. `HUMAN-rd-1-live-grant`.
+
+Reproduced: `Scope::Rails(_) => &["/v1/rail/append", "/v1/rail/log"]`
+(`sovereign-grants/src/guest_grant.rs:105`). The package did not raise one
+thing, and it keeps this fork away from the director: `/v1/rail/live` has **no
+namespace** ("No namespace: the buffer is one per daemon",
+`sovereign-api/src/routes_rail_live.rs:255`), and the drain is destructive. So
+the one-line fix the package proposed would let ANY rail-scoped guest link,
+including one sent to a guest of another app, read and drain every app's
+presence on that daemon. That changes what a link handed to a guest grants,
+against the `Scope::Rails` doc's own one-namespace rule (`guest_grant.rs:84-87`).
+The charter leaves that to the operator. The options and a recommendation
+(namespace the lane, then grant it) are in the row. The loop runs
+`rd-1-attribution-order` first, then stops at the HUMAN row with the package
+the row names. `ra-doc-live-lane-non-durable` is COULD-NOT-JUDGE and not FAILED
+because no cursor sample ever arrived, and that is consistent with the refusal
+reproduced on all three proxies.
+
+*Falsified if* guest grants are meant to be app-agnostic for the live lane,
+e.g. the lane is decided to be a daemon-wide broadcast by design. Then option
+(a) is right and this was a needless stop.
+
+REVIEW-AFTER: whether the charter should name "a guest grant gains a path" as
+the operator's explicitly. It was read here from "behaviour a peer can observe".
+
+Commit: the one that removes `ralph/NEEDS_HUMAN.md`.
