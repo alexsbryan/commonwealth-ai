@@ -21,9 +21,13 @@ corpus-index = { workspace = true }
 kernel-types = { workspace = true }
 oplog = { workspace = true }
 chrono = { workspace = true }
+regex = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
+# `enrichment::atlas::fold`'s NFD diacritic strip (moved from corpus-engine's
+# `resolution.rs` by dm-understanding-pure-1). Same version as corpus-engine.
+unicode-normalization = "0.1"
 
 [lints]
 workspace = true

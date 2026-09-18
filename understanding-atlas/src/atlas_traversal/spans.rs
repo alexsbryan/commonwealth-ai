@@ -312,7 +312,7 @@ fn find_whole_word_byte_ranges(haystack: &str, needle: &str) -> Vec<(usize, usiz
 mod tests {
     use super::*;
     use crate::enrichment::atlas::{AtomId, ChunkRef, Entity, SectionRange, State};
-    use crate::enrichment::pipeline::{EnrichmentDepth, EntityType, StateType};
+    use crate::taxonomy::{EnrichmentDepth, EntityType, StateType};
 
     fn entity_atom(idx: usize, canonical: &str, aliases: &[&str], section: &str) -> AtomEnvelope {
         AtomEnvelope::Entity(Entity {

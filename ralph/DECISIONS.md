@@ -2413,3 +2413,61 @@ moved files, the new `understanding-atlas` modules, `AtlasOntologyFile` in
 `understanding-vocab`, the two `Cargo.toml`s + root `[workspace.dependencies]`,
 `corpus-engine`'s re-export shims and dep, the DT tier/module re-keys, and
 `SYSTEM_OVERVIEW.md` §2.
+
+## 2026-09-18 · dm-understanding-pure-1 · the first pure batch carries two forced extractions and one registry re-key
+
+**Fork.** The row names one landing: MOVE the eight `pure`-tier files to
+`understanding-atlas`, with the path-preserving tree and the four listed
+rewrites. The tree forced three things the row does not name: two host
+definitions the moved pure files name, and the registry paths the row's own
+premise reads.
+
+**Choice.**
+
+1. **`fold` moves to the pure tier.** `atlas_traversal/classifier.rs` (this
+   batch) reaches `crate::enrichment::atlas::fold`, which was defined in the
+   HOST `enrichment/atlas/resolution.rs:2272`. A pure file may not name
+   corpus-engine, and duplicating the fold would be two deciders for one key
+   (ARCH 8), so `fold` + `transliterate_cyrillic` moved to
+   `understanding-atlas/src/enrichment/atlas/fold.rs` and `resolution.rs`
+   re-exports at the historical path. The pure files that move in later rows
+   (`atlas::cross_corpus`, `atlas::resolution_ontology`) keep resolving through
+   that re-export today and reach the pure module after they move.
+2. **`BridgeRelation` / `BridgeSignal` move to the pure bridge.** The moved
+   `meta_atlas/bridge/signals.rs` and `adjudicate.rs` name both enums, defined
+   in the HOST `meta_atlas/bridge/edges.rs:30,63` (the persisted edge store,
+   which does IO). They moved to `understanding-atlas/src/meta_atlas/bridge.rs`
+   and `edges.rs` re-exports at the historical path.
+3. **The classifier's recipe-template test reach is replaced by a leaf
+   fixture.** The row's CORRECTED note names it: the moved test used
+   `crate::recipe_templates::numismatics_policies` (recipe TOML parsing, host),
+   and boundary-gate counts dev edges. `atlas_traversal/test_fixtures.rs`
+   builds the same `OntologyV1` from `understanding_vocab::ontology::decl` and
+   folds it through the language's `into_policies()`.
+4. **The DT `[[tier]]` pure paths are re-keyed** (8 paths) from
+   `corpus-engine/src/...` to `understanding-atlas/src/...`, matching the
+   parent row's `clock`/`type_index` re-key; the wave-close audit
+   (`REVIEW-audit-understanding`) requires every `[[tier]]` path to resolve.
+
+**Rejected.** A `pub use corpus_engine::...` shim inside `understanding-atlas`
+for `fold`/`BridgeRelation`: boundary-gate refuses the pure→corpus-engine edge,
+even dev. A checked-in fixture that re-parses the shipped recipe TOML: it would
+re-introduce the recipe parser the pure tier may not name.
+
+**Evidence** (reproduced this session).
+- CLEAN `exit=0` (debug target 15G, under 50G).
+- LINT `exit=0`, scope WORKSPACE, `errors: 0`, cargo exit 0.
+- LAYER `exit=0` — "every edge points down or sideways … fan-in within caps".
+- TOML `exit=0`.
+- TEST(understanding-atlas) `exit=0`, pass 118 fail 0 (the moved pure tests).
+- TEST(corpus-engine) `exit=0`, pass 2080 fail 0 (the shims keep every
+  in-engine reach resolving, including the fold and bridge re-exports).
+
+**Falsified by.** A moved pure file whose `crate::` reach does not resolve under
+the path-preserving tree; or a `fold`/`BridgeRelation` caller that the re-export
+does not satisfy (a corpus-engine test failure); or a DT `[[tier]]` path that no
+longer names a file.
+
+**Landed in.** the commit under `dm-understanding-pure-1`: the eight moved
+files, the two extractions, the leaf fixture, the corpus-engine shims, the two
+`Cargo.toml`s, and the DT `[[tier]]` re-key.

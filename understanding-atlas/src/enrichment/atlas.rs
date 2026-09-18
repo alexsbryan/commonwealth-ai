@@ -14,6 +14,18 @@ pub use understanding_vocab::atoms;
 pub use understanding_vocab::edges;
 pub use understanding_vocab::stable_key;
 
+// The name-fold (`fold`) was defined in corpus-engine's HOST
+// `enrichment/atlas/resolution.rs`; pure files reached it through this module
+// (`crate::enrichment::atlas::fold`). It is arithmetic, so it moved here —
+// `dm-understanding-pure-1`, ralph/DECISIONS.md.
+pub mod fold;
+pub use fold::fold;
+
+// The read door's atom reader (`read_atlas_atoms`), re-exported at the
+// historical `crate::enrichment::atlas` path so a moved pure file keeps
+// resolving it. It already lives in the language (`understanding_vocab::read`).
+pub use understanding_vocab::read::read_atlas_atoms;
+
 pub use atoms::{
     AtomEnvelope, AtomId, AtomType, AtomsFile, ChunkRef, Claim, Configuration, Entity, Event,
     Question, Relation, ResolutionStatus, SectionPosition, SectionRange, State,

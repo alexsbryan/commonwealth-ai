@@ -2322,7 +2322,6 @@ dependencies = [
  "trybuild",
  "understanding-atlas",
  "understanding-vocab",
- "unicode-normalization",
  "uuid",
  "walkdir",
  "wiremock",
@@ -15043,10 +15042,12 @@ dependencies = [
  "corpus-index",
  "kernel-types",
  "oplog",
+ "regex",
  "serde",
  "serde_json",
  "tracing",
  "understanding-vocab",
+ "unicode-normalization",
 ]
 
 [[package]]

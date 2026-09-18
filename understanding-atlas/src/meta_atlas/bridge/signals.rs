@@ -18,8 +18,8 @@
 
 use std::collections::BTreeSet;
 
-use super::edges::BridgeSignal;
 use super::topic_node::BridgeTopic;
+use super::BridgeSignal;
 
 /// External facts the orchestrator pre-fetches (so signals stay pure).
 #[derive(Debug, Clone, Default)]
@@ -360,7 +360,7 @@ fn cosine(a: &[f32], b: &[f32]) -> Option<f32> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::stream_axes::ArticulationVector;
+    use crate::articulation::ArticulationVector;
     use std::collections::{BTreeMap, BTreeSet};
 
     fn topic(

@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use serde::Deserialize;
 
-use super::edges::BridgeRelation;
+use super::BridgeRelation;
 use crate::error::{Error, Result};
 
 /// What the adjudicator is shown about a candidate `left → right` pair.

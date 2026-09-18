@@ -598,7 +598,7 @@ fn parse_relation_pair(
 mod tests {
     use super::*;
     use crate::enrichment::atlas::atoms::{AtomId, ChunkRef, Entity};
-    use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
+    use crate::taxonomy::{EnrichmentDepth, EntityType};
 
     fn entity(idx: usize, canonical: &str, aliases: &[&str]) -> Entity {
         Entity {
@@ -630,7 +630,7 @@ mod tests {
 
     // ── ontology-v1 P5: declared-type plans ──────────────────
 
-    use crate::recipe_templates::numismatics_policies as numismatics;
+    use crate::atlas_traversal::test_fixtures::numismatics_policies as numismatics;
 
     /// The wessex-hoard enumeration probe. This is link 5 of the chain: the
     /// question has to reach the AUTHOR'S noun, not one of the six kinds.
