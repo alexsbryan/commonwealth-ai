@@ -320,7 +320,6 @@ crates = [
 [[layer]]
 name = "mesh-api"
 crates = [
-    "sovereign-api",
     # The node's host crate (DAEMON_CORE.md §4.1): assembly, the surface
     # shells, the edge and the adapters. A stub until the host modules move in;
     # the two [[forbid]] rows below land with it.
@@ -474,14 +473,7 @@ from = "sovereign-scheduler"
 to = "sovereign-inference"
 reason = "ranking is not executing — only the host connects, so the ranker must never name the inference stack"
 
-# Rule 4 — not `sovereign-api`: wire types belong to `oicp-types` or the host,
-# never the ranker.
-[[forbid]]
-from = "sovereign-scheduler"
-to = "sovereign-api"
-reason = "the wire types the four serving modules import from sovereign-api belong to oicp-types or the host, never the ranker"
-
-# Rule 5 — the host may name inference; it may NOT name `sovereign-mesh`: it
+# Rule 4 — the host may name inference; it may NOT name `sovereign-mesh`: it
 # receives candidates through a port, never an `EmbeddedDaemon`.
 [[forbid]]
 from = "sovereign-serving-host"
@@ -700,68 +692,6 @@ from = "sovereign-meshapp-registry"
 to = "sovereign-*"
 reason = "must stay consumable without the agent runtime — it names NO sovereign-* crate today (measured at the domains-1 move, 2026-09-11) and this rule keeps it that way. The reason read \"mesh foundation must stay…\" until that move, when the crate left commonwealth/crates/ for sovereign/crates/; the PROPERTY is unchanged, only the family it sits in changed"
 
-# WHAT actually crosses, so R6 has a size rather than a feeling. Census
-# 2026-08-20, `scripts/nc-boundary.py --edge commonwealth:sovereign`: 11 types /
-# 38 refs, all from `commonwealth-api` —
-#   sovereign-contracts (5, permitted by the `except` below — the declared seam)
-#     next_edit_journal.rs NextEditEpisode, JournalLine, NextEditOutcome,
-#                          NextEditOutcomeLine
-#     journal.rs           JournalStream
-#   sovereign-tools (6, grandfathered below)
-#     atlas_postinstall.rs Tier2LaunchOutcome, StructuralAtlasOutcome, TriageOutcome
-#     atlas_peer_advice.rs PeerAtlasView, PeerAtlasPullCandidate
-#     atlas_status.rs      AtlasStatusRow
-#   sovereign-atos (grandfathered below; named from the ATOS-feature middleware,
-#   which is off in default builds so the type census does not count it)
-#     session.rs           ArtifactDelta, MilestonePassEvent, SessionStore
-#     approval.rs          FeatureApproval, ApprovalSource
-# The 5 contract types are the seam working as designed. The other 6 are the
-# in-process runtime embed, and they are what R6 has to delete.
-#
-# Burn-down: 22/122 -> 16/98 (rung 2b moved the inference vocabulary to
-# oicp-types) -> 11/38 (rung 2c family A moved the tool vocabulary — Effect,
-# Scope, ToolDescriptor, Idempotency, Latency, ToolExample — to oicp-types
-# too). The `except` below stays for now, and the reason is worth stating
-# because the two halves of this rule measure different things: the `except`
-# is CRATE-level and is already inert — no commonwealth crate carries a direct
-# `sovereign-contracts` dep, so it grants nothing today. What is still live is
-# the TYPE-level reach: the next-edit journal family (rung 2c/B) names
-# sovereign-contracts types through `sovereign_core`'s re-exports, which the
-# `commonwealth-api -> sovereign-core` exception below already covers. Dropping
-# the `except` is therefore a free ratchet against a dep nobody has taken yet —
-# it belongs with the family that makes the type census zero, not with this one.
-# The mesh API's reach into the agent runtime is real, load-bearing debt —
-# the OICP-only seam is the goal state (remediation R6). Forbidden so every
-# such edge must be individually grandfathered below and burns down visibly.
-[[forbid]]
-from = "sovereign-api"
-to = "sovereign-*"
-except = ["sovereign-contracts", "sovereign-serving-host", "sovereign-grants", "sovereign-meshapp-registry", "sovereign-time"]
-# `except` gained sovereign-{serving,grants,meshapp-registry} at the domains-1
-# move (2026-09-11): they were `commonwealth-{inference,knowledge,app}` and left
-# `commonwealth/crates/` in the same commit as this crate. They were ALWAYS in
-# its closure and were never part of R6 — the census counts 11 types / 38 refs
-# into sovereign-{contracts,tools,atos} only. Excepting them preserves R6's
-# measurement exactly; without it the rule fires on three edges it never meant.
-# `sovereign-serving` left this list when the peg was emptied and deleted
-# (REVIEW-build-serving-empty-peg, 2026-09-15) — the edge it granted is gone.
-# `except` gained sovereign-time at dm-time-repoint-api (2026-09-15, e5b6264d5):
-# the row repointed nine `sovereign_core::time::` sites at the leaf clock-gate
-# routes every non-core sovereign crate to (`[[package_leaf]]` at :752-760,
-# `[dependencies]` empty), and this list was not widened with it, so layer-gate
-# was red from that commit. Same shape as the three above: a contract-family
-# leaf always in the closure, never part of R6's measurement.
-# `except` gained sovereign-serving-host at REVIEW-build-serving-move-admission
-# (2026-09-15): the row MOVES `sovereign-api`'s admission module into
-# `sovereign-serving-host` (SERVING_BOUNDARY.md (c)) and the daemon keeps only
-# the port impl, so the mount in `server.rs` and the `Admission for AppState`
-# impl name the host. This is the R6 ledger gaining one entry, NOT a third
-# serving-package `[[exception]]` (that ledger is unchanged at two). The edge
-# burns down when the daemon's host modules move to `sovereign-daemon`
-# (DAEMON_CORE.md §4.1), which is where `sovereign-api`'s mounting of these
-# layers goes.
-
-reason = "cross-family reach — the mesh API should meet the runtime at the OICP/contracts seam (R6)"
 
 # The daemon crate's two rows, landing with the crate (DAEMON_CORE.md §4.1;
 # domains dm-daemon-crate). Layer ordering already forbids a lower tier
@@ -1411,24 +1341,6 @@ from = "sovereign-cli-llm"
 to = "sovereign-eval"
 reason = "bench_cmd (51 files, ~31k lines) shares this crate with chat/corpus/mesh, so the shipped binary links the instrument. Priced 2026-08-20 and declined: extracting it needs pub churn through enrich_cmd/eval_cmd/chat_cmd. CONTAINED meanwhile by the module rule bench_cmd_is_the_only_module_naming_the_eval_harness (src/lib.rs) — one module names it, and a test fails if that changes. The product verb that used to cross (recipe_cmd, via the harness alias on the eval crate) was repointed at sovereign-authoring-harness directly and no longer does. UPDATE 2026-08-21 (nc-26): the crate is no longer bin-only — it gained a [lib] target so awareness_cmd could move to the crate whose enrich_cmd it was importing. Half of the declined price is therefore already paid; what remains is the pub-visibility churn, not the lib target."
 tracking = "nc-3-backstage"
-
-[[exception]]
-from = "sovereign-api"
-to = "sovereign-core"
-reason = "the mesh API embeds the agent runtime for in-process serving (frontdoor); goal state is the OICP seam"
-tracking = "R6"
-
-[[exception]]
-from = "sovereign-api"
-to = "sovereign-tools"
-reason = "tool registry assembly for the embedded runtime; goal state is the OICP seam"
-tracking = "R6"
-
-[[exception]]
-from = "sovereign-api"
-to = "sovereign-atos"
-reason = "feature-gated (atos) ATOS surface on the mesh API; opt-in experiment, off in default builds"
-tracking = "R6"
 
 # ── Thin-surface reaches, grandfathered (sv-no-daemon-management) ────────────
 # The violation list as it stood on 2026-09-11, one row per crate the desktop

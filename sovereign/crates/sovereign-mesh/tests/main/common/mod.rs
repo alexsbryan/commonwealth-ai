@@ -160,7 +160,7 @@ pub async fn spawn_router(router: Router) -> SocketAddr {
 
 /// An `AppState` with one member (self) and a client token configured.
 ///
-/// Shared by the tests that drive the REAL `sovereign_api` client router
+/// Shared by the tests that drive the REAL `sovereign_daemon` client router
 /// over a transport — they differ only in the mesh's encryption posture, and a
 /// second copy of this would drift from the first.
 pub fn client_app_state(

@@ -2882,3 +2882,60 @@ to core); or an operator ruling that the three fields stay bundled as a part.
 `sovereign-atos/src/middleware/mod.rs`, `sovereign-core/src/answering/mod.rs`,
 `quality/DOMAINS.toml`, `quality/DAEMON_CORE.md`; `state/answering.rs` deleted)
 and the `ralph:` commit that marks the row `[x]`. Behaviour-preserving.
+
+## 2026-09-18 · REVIEW-build-sovereign-api-retire · the row's coordinates were stale and the crate was already shim-only; the dissolved crate's plan rows are dead data and go with it
+
+**Fork.** The row's premise (measured 2026-09-16) assumed the crate still held
+its clusters and named coordinates: root Cargo.toml :171/:327, ARCH_LAYERS
+:1298-1314, consumers `sovereign-mesh :63` and `sovereign-mesh-test-harness :13`,
+162 `sovereign_api::` doc refs, and a `quality/conformance/sovereign-api.toml`.
+Measure before editing: none hold.
+
+**Choice.** Correct the row and land the retire.
+
+1. The crate is shim-only: `src/lib.rs` is 41 lines of re-exports and `src/`
+   holds nothing else. `git grep 'sovereign_api::' -- '*.rs' | grep -v
+   'sovereign-api/'` is 0 (was 162). The live consumers are
+   `sovereign-daemon/Cargo.toml:29` (unused — no `sovereign_api::` site) and
+   `sovereign-mesh/Cargo.toml:63`; the harness edge was already repointed at
+   `dm-daemon-api-edge`. `quality/conformance/sovereign-api.toml` was renamed to
+   `sovereign-daemon.toml` when the host cluster moved.
+2. Coordinates moved: members :195, workspace-dep :355; the three
+   `[[exception]]` rows at :1415-1431. The `sovereign-scheduler -> sovereign-api`
+   forbid (rule 4) and the `sovereign-api -> sovereign-*` forbid are dead once
+   the crate is gone, and are removed with the `mesh-api` layer entry.
+3. The `atos` feature chain: `sovereign-mesh`'s `atos = ["sovereign-api/atos"]`
+   was the only forwarding left, and `sovereign-daemon`'s `atos` feature carried
+   `sovereign-mesh/atos`; both removed. The pipeline lives in the daemon's own
+   `dep:sovereign-atos` / `dep:corpus-engine-atos`.
+4. Dead DOMAINS registry rows removed: the `[[module]]` row for the deleted
+   `lib.rs`, the nine `[[cluster]]` rows and the `[plan."sovereign-api"]`
+   order/exceptions tables. `plan --crate sovereign-api` now reads "no
+   [[cluster]] rows". The frozen `[[noun]]` / `[[cluster.own_deps]]` /
+   `external_consumers` strings are historical measurements and stay.
+5. `crate-lines --crate sovereign-api` cannot read 0: the command's first act is
+   a repo-wide coverage assertion (`coverage_holes`), which fails on crates other
+   rows created without a module row (`sovereign-peer-wire`, `corpus-index`,
+   `understanding-atlas`). The crate itself has zero module rows; `plan` is the
+   operative proof. Reported, not defaulted (ARCH 6).
+6. The tracing filters `sovereign_api=info` in `sovereign-cli-daemon`,
+   `sovereign-cli-llm` and the desktop were repointed at
+   `sovereign_daemon=info` — the moved modules' target — so the daemon's logs do
+   not go dark.
+7. `scripts/daemon-route-census.py` HOSTS repointed `sovereign-api/src` ->
+   `sovereign-daemon/src` (the script errored on the missing dir; now reads 302
+   registrations / 284 unique paths).
+
+**Evidence.** CLEAN exit=0 (debug target 96G, cleaned 98.8GiB, then warm under
+50G); LINT exit=0 (workspace, `--all-targets`, errors 0); LAYER exit=0 (the
+three exceptions retired without a STALE verdict); TOML exit=0; CENSUS exit=0
+(11/11 axes); `plan --crate sovereign-api` -> no rows;
+`daemon-route-census.py` -> 302 registrations / 284 unique paths.
+
+**Falsified by.** A consumer that still names `sovereign_api::` (a repoint was
+missed); a gate that reads the frozen `[[noun]]` / `own_deps` strings as live;
+or a showing that `crate-lines` should skip the coverage assertion for a deleted
+crate.
+
+**Landed in.** this unit's code commit and the `ralph:` commit marking the row
+`[x]`.

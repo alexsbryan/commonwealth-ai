@@ -60,7 +60,6 @@ commonwealth-discovery = { path = "../../../commonwealth/crates/commonwealth-dis
 # and the package-only rails daemon compose ONE implementation (ARCH §10.6).
 # A direct path dep on the owner like its neighbours above (ARCH §8.3).
 commonwealth-media = { path = "../../../commonwealth/crates/commonwealth-media" }
-sovereign-api = { path = "../../../sovereign/crates/sovereign-api" }
 # Needed because `AppState::new_with_platform_and_engine` requires
 # an explicit `MeshStore` / `AppRegistry` — we construct in-memory
 # variants of each when `EmbeddedDaemon` builds its state.
@@ -296,9 +295,6 @@ default = []
 # flag; off by default so the production build never links the harness. Run:
 #   cargo test -p sovereign-mesh --features dst,treesitter --test main mesh_sim_scoreboard -- --nocapture
 dst = ["dep:sovereign-mesh-test-harness"]
-# Forward the ATOS served-middleware pipeline through to sovereign-api.
-# OFF by default; an atos daemon build turns it on via the feature chain.
-atos = ["sovereign-api/atos"]
 # Enables `reindexer` + `project_http` — the SCIP-graph-hosting
 # modules. Off by default so binaries that only use the mesh
 # primitives (deep_link, EmbeddedDaemon, persist, model_fetch) don't

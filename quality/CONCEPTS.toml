@@ -958,7 +958,7 @@ measure    = "definitions carrying `Donor` outside the commonwealth package's co
 
 [[concept]]
 name       = "Principal"
-canonical  = "sovereign_api::principal::Principal"
+canonical  = "sovereign_daemon::client_principal::Principal"
 disposition = "converge"
 totality   = "Who is asking — the identity a request resolves to before admission, and the key of DAEMON_CORE.md §1's one table `principal -> Scope`. Admission's inflight guard and tally are keyed on it; a peer's row and a local caller's row have the same shape."
 gloss      = '''who is asking, resolved to a Scope.'''

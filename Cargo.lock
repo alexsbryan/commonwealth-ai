@@ -12059,60 +12059,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sovereign-api"
-version = "0.7.0"
-dependencies = [
- "arc-swap",
- "async-trait",
- "axum",
- "bytes",
- "chrono",
- "code-next-edit",
- "commonwealth-core",
- "commonwealth-discovery",
- "commonwealth-rail",
- "commonwealth-state",
- "commonwealth-transport",
- "corpus-engine",
- "corpus-engine-atos",
- "corpus-engine-notes",
- "dirs 5.0.1",
- "ed25519-dalek 2.2.0",
- "futures",
- "hex",
- "http-body 1.0.1",
- "http-body-util",
- "kernel-types",
- "libc",
- "oicp-types",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "serving-policy",
- "sha2 0.10.9",
- "sovereign-atos",
- "sovereign-contracts",
- "sovereign-core",
- "sovereign-grants",
- "sovereign-meshapp-registry",
- "sovereign-serving-host",
- "sovereign-time",
- "sovereign-tools",
- "tar",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tokio-stream",
- "tokio-util",
- "toml 0.8.2",
- "tower",
- "tower-http",
- "tracing",
- "tree-sitter",
- "zstd",
-]
-
-[[package]]
 name = "sovereign-atos"
 version = "0.7.0"
 dependencies = [
@@ -12513,7 +12459,6 @@ dependencies = [
  "serde_json",
  "serving-policy",
  "sha2 0.10.9",
- "sovereign-api",
  "sovereign-atos",
  "sovereign-authoring-harness",
  "sovereign-compute",
@@ -12767,7 +12712,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
- "sovereign-api",
  "sovereign-authoring-harness",
  "sovereign-contracts",
  "sovereign-core",

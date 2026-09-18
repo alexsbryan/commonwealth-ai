@@ -26,7 +26,6 @@ sovereign-peer-wire = { workspace = true }
 sovereign-contracts = { workspace = true }
 kernel-types = { workspace = true }
 oicp-types = { workspace = true }
-sovereign-api = { path = "../../../sovereign/crates/sovereign-api" }
 sovereign-meshapp-registry = { workspace = true }
 sovereign-serving-host = { path = "../sovereign-serving-host" }
 sovereign-scheduler = { workspace = true }
@@ -112,7 +111,7 @@ treesitter = ["sovereign-mesh/treesitter", "sovereign-tools/treesitter"]
 # The daemon's ATOS code-intel tools on the MCP surface and the headless OCR
 # installer. Both cfg gates moved here with the composition half (domains
 # `dm-daemon-cli-composition`); the binary's features forward to these.
-atos = ["sovereign-tools/atos", "sovereign-mesh/atos", "dep:sovereign-atos", "dep:corpus-engine-atos"]
+atos = ["sovereign-tools/atos", "dep:sovereign-atos", "dep:corpus-engine-atos"]
 ocr = ["sovereign-tools/paddle-ocr"]
 
 [dev-dependencies]

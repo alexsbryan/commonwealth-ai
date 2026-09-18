@@ -12,7 +12,7 @@
 //! `AcceptorRoutes::forward_for` fixes that by consulting the ONE thing a QUIC
 //! handshake actually proves: the dialer's Ed25519 key, the same key the mesh
 //! gossips. These tests drive it through a real `IrohAcceptor`, real
-//! `sovereign_api` client routers, and real `HttpBridge` dials — and the
+//! `sovereign_daemon` client routers, and real `HttpBridge` dials — and the
 //! `..._is_the_hole_this_closes` twin reproduces the old behaviour so the fix
 //! is watched succeeding against a failure that is watched failing.
 //!

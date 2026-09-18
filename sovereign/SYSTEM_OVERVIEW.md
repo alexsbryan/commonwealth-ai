@@ -310,7 +310,7 @@ None of them is mesh substrate. The first four (`domains-1`) went to
 
 | Was | Is | What it actually holds |
 |---|---|---|
-| `commonwealth-api` | `sovereign-api` | HTTP servers (client 9741 + internal 9742). Emptied at `dm-daemon-api-edge` (2026-09-18) — the host cluster moved to `sovereign-daemon` — and now holds only the shims for the modules that left earlier; `REVIEW-build-sovereign-api-retire` deletes it |
+| `commonwealth-api` | `sovereign-api` | HTTP servers (client 9741 + internal 9742). Emptied at `dm-daemon-api-edge` (2026-09-18) — the host cluster moved to `sovereign-daemon` — and deleted at `REVIEW-build-sovereign-api-retire` (2026-09-18) once its last shims were repointed and its three `[[exception]]` rows retired to zero |
 | `commonwealth-inference` | `sovereign-serving` | `RequestRouter`, `RoutingRule`, `LoadPolicy`, `InferencePlan`, `MeshPlan` — the SERVING context, named at last. The peg the scheduler in `sovereign-mesh` lands on later. Emptied to zero and deleted 2026-09-15 (`REVIEW-build-serving-empty-peg`): `inference_plan`/`store_adapter` went to `commonwealth-state`, the re-exports to `oicp-types`/`commonwealth-core` |
 | `commonwealth-knowledge` | `sovereign-grants` | No knowledge at all: `GuestGrant`, `GuestGrantStore`, `EphemeralGrantStore` and **`Scope`** — the per-turn authorization value `TOPOLOGY.md` §3.5 is built around, which lived in a crate named for knowledge. Imperfect: its shard manager and work queue do not belong under this name either and were left rather than split in a move |
 | `commonwealth-app` | `sovereign-meshapp-registry` | Mesh-app manifest, registry, port map, proxy. Open question flagged, not settled: `sovereign-meshapp` (5,656 lines of DTOs) is a second crate about mesh apps |
@@ -9342,7 +9342,7 @@ isolated, and saying so is cheaper than a guess.
 **A live convergence the ratchet is right about, with its blocker named.**
 Those four copies carry a stale reason — the comment says commonwealth-api
 "cannot depend on sovereign-contracts", which is true and no longer relevant:
-the owner is `oicp-types`, and `sovereign-api/Cargo.toml:63` already
+the owner is `oicp-types`, and `sovereign-daemon/Cargo.toml` already
 depends on it (layer-0 contract; `ARCH_LAYERS.toml` permits the edge). What
 blocks the `pub use` is not the layer map but SERDE: `state.rs` marks
 `placement`, `port` and `last_exit` `skip_serializing_if = "Option::is_none"`
