@@ -46,6 +46,13 @@ prompt="${1:-}"
 
 args=(-p --settings "$settings" --output-format stream-json --verbose)
 [ -n "$model" ] && args+=(--model "$model")
+# A print-mode session exits the moment the model ends its turn, and its
+# background children die with it. Watched 2026-09-18 00:39Z: the worker
+# backgrounded `ralph-check.sh demo` (longer than the Bash tool's 2 min
+# default), said "when it finishes I'll paste the rows", ended its turn 36 s
+# in, and the next session repeated it - a stall that would have halted the
+# loop. This is the harness's property, so it is said here, not in PROMPT.md.
+args+=(--append-system-prompt "HARNESS: you are a one-shot print-mode session. The process exits the moment you end your turn, and every background task you started is killed with it - no notification will ever reach you. Never run a command in the background and never end your turn while a check is running. Run long checks (DEMO, TEST, LINT, TESTALL, PREPUSH, anything under the cargo lock) in the FOREGROUND with the Bash tool's timeout parameter set to 600000; if a single check cannot finish inside ten minutes, split it or write ralph/NEEDS_HUMAN.md saying so. Commit before you end your turn - an uncommitted turn is lost.")
 # The directories .opencode/opencode.json's external_directory already
 # granted: /run (the PROMPT's containerenv premise check), /tmp (the cargo
 # lock), and ralph's own state under ~/.svrnmesh. Anything else outside the
