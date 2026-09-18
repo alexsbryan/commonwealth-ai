@@ -28,7 +28,7 @@
 
 use std::path::{Path, PathBuf};
 
-use corpus_engine_vocab::atoms::{AtomEnvelope, AtomsFile};
+use corpus_engine_vocab::atoms::AtomEnvelope;
 
 use corpus_engine::pii::{scrub_pii, EntityMap};
 use serde::{Deserialize, Serialize};
@@ -151,11 +151,11 @@ pub async fn run_scrub(args: &[String]) -> i32 {
             return 1;
         }
     };
-    let atoms_path = sovereign_contracts::rebrand::svrnmesh_root()
+    let atlas_dir = sovereign_contracts::rebrand::svrnmesh_root()
         .join("indexes")
         .join(&corpus_id)
-        .join("atlas")
-        .join("atoms.json");
+        .join(corpus_engine_vocab::read::ATLAS_DIRNAME);
+    let atoms_path = atlas_dir.join("atoms.json");
     let out = out.unwrap_or_else(|| default_root.join("entity-candidates.json"));
 
     if !atoms_path.exists() {
@@ -171,18 +171,15 @@ pub async fn run_scrub(args: &[String]) -> i32 {
         return 2;
     }
 
-    let raw = match std::fs::read_to_string(&atoms_path) {
-        Ok(s) => s,
+    let parsed = match corpus_engine_vocab::read::read_atlas_atoms(&atlas_dir) {
+        Ok(p) => p,
+        Err(e) if e.kind() == std::io::ErrorKind::InvalidData => {
+            eprintln!("Failed to parse {}: {e}", atoms_path.display());
+            return 4;
+        }
         Err(e) => {
             eprintln!("Failed to read {}: {e}", atoms_path.display());
             return 3;
-        }
-    };
-    let parsed: AtomsFile = match serde_json::from_str(&raw) {
-        Ok(p) => p,
-        Err(e) => {
-            eprintln!("Failed to parse {}: {e}", atoms_path.display());
-            return 4;
         }
     };
 
