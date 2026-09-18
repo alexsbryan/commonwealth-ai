@@ -15,7 +15,7 @@
 //!
 //! | What | Whose |
 //! |---|---|
-//! | reading the v1 artifact | `CorpusIndex::load_field_skeleton` |
+//! | reading the v1 artifact | `corpus_engine::index::field_skeleton::load_field_skeleton` |
 //! | skeleton → atoms | `field_atoms::skeleton_to_atoms` |
 //! | writing them, idempotently | `field_atoms::publish_to_atlas` |
 //! | the digest it prints | `FieldSkeleton::render_landscape` — the same renderer `turn_prepass` calls |
@@ -75,7 +75,7 @@ pub async fn cmd_field_atoms(args: &[String]) -> i32 {
     // The absence is REPORTED, never rendered as an empty success (§18.3): a
     // corpus with no legacy skeleton has nothing to migrate, and saying "0
     // atoms written" would read like a corpus whose field model was empty.
-    let skeleton = match index.load_field_skeleton() {
+    let skeleton = match corpus_engine::index::field_skeleton::load_field_skeleton(&index.path()) {
         Ok(Some(s)) => s,
         Ok(None) => {
             eprintln!(

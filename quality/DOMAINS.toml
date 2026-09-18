@@ -3650,13 +3650,6 @@ files = 1
 note = "registry roots: understanding"
 
 [[module]]
-path = "corpus-engine/src/enrichment/skeleton.rs"
-context = "understanding"
-lines = 490
-files = 1
-note = "registry roots: understanding"
-
-[[module]]
 path = "corpus-engine/src/enrichment/skeleton_parse.rs"
 context = "understanding"
 lines = 1060
@@ -7434,6 +7427,12 @@ path = "corpus-engine-vocab/src/read.rs"
 context = "understanding"
 lines = 51
 note = "The read door (read_atlas_atoms/read_atlas_edges) and the layout constant ATLAS_DIRNAME, moved from corpus-engine's enrichment/atlas/writer.rs by domains dm-vocab-door-move and dm-vocab-atlas-dirname (DE \"The door\", DE \"The read-port leaf, measured again\")."
+
+[[module]]
+path = "corpus-engine-vocab/src/skeleton.rs"
+context = "understanding"
+lines = 510
+note = "The field skeleton (FieldSkeleton, PartialSkeleton and the question/position/fault-line/open-question closure) and FieldModelStats, moved from corpus-engine's enrichment/skeleton.rs and enrichment/clustering.rs by domains REVIEW-build-field-skeleton-vocab (DE \"The read-port leaf, measured again\"); its JSON IO stayed host at corpus-engine/src/index/field_skeleton.rs."
 
 [[module]]
 path = "corpus-engine-vocab/src/stable_key.rs"

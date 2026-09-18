@@ -300,7 +300,9 @@ async fn parquet_ingest_with_enrichment_creates_field_model() {
     // The v1 artifact must NOT be written by an `AtlasAtoms` domain — this is
     // the retirement half of the port, and it is asserted rather than assumed.
     assert!(
-        index.load_field_skeleton().unwrap().is_none(),
+        corpus_engine::index::field_skeleton::load_field_skeleton(&index.path())
+            .unwrap()
+            .is_none(),
         "an AtlasAtoms domain must not write field_skeleton.json"
     );
 
@@ -407,7 +409,8 @@ async fn non_enriched_corpus_has_no_field_model() {
         .expect("non-enriched ingest should succeed");
 
     let index = engine.open_index_for_corpus("test_corpus").await.unwrap();
-    let skeleton = index.load_field_skeleton().unwrap();
+    let skeleton =
+        corpus_engine::index::field_skeleton::load_field_skeleton(&index.path()).unwrap();
     assert!(
         skeleton.is_none(),
         "non-enriched corpus should not have field_skeleton.json"

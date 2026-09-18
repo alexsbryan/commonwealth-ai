@@ -9,6 +9,9 @@ use std::sync::Arc;
 
 use crate::enrichment::pipeline::types::ChatPrompt;
 use crate::error::{Error, Result};
+use crate::index::field_skeleton::{
+    load_field_checkpoint, write_field_checkpoint, write_field_skeleton,
+};
 use crate::index::CorpusIndex;
 use crate::types::{EmbedFn, InferenceFn};
 
@@ -120,8 +123,7 @@ impl FieldModelEngine {
                 name: "Skeleton extraction",
             });
             // Reload skeleton from file
-            index
-                .load_field_checkpoint()?
+            load_field_checkpoint(&index.path())?
                 .map(|s| {
                     let mut ps = PartialSkeleton::new(self.domain.id());
                     for q in &s.canonical_questions {
@@ -496,7 +498,7 @@ impl FieldModelEngine {
         let resume_from = checkpoint.phase_1_batches_done;
         let mut skeleton = if resume_from > 0 {
             // Load the partial skeleton that was flushed to disk.
-            let existing = index.load_field_checkpoint()?;
+            let existing = load_field_checkpoint(&index.path())?;
             let loaded = existing
                 .map(|fs| {
                     let mut ps = PartialSkeleton::new(self.domain.id());
@@ -680,7 +682,7 @@ impl FieldModelEngine {
             open_questions: Vec::new(),
             field_stats: FieldModelStats::default(),
         };
-        index.write_field_checkpoint(&field_skeleton)
+        write_field_checkpoint(&index.path(), &field_skeleton)
     }
 
     async fn label_clusters_phase(
@@ -875,7 +877,7 @@ impl FieldModelEngine {
         open_questions: &[OpenQuestion],
     ) -> Result<()> {
         let field_skeleton = self.complete_skeleton(index, skeleton, stats, open_questions);
-        index.write_field_skeleton(&field_skeleton)?;
+        write_field_skeleton(&index.path(), &field_skeleton)?;
         tracing::info!(
             corpus = %index.corpus_id(),
             domain = %self.domain.id(),
@@ -968,7 +970,7 @@ pub fn reprocess_skeleton_failures(index: &CorpusIndex) -> Result<(usize, usize)
 
     if salvaged_count > 0 {
         // Load existing skeleton and merge.
-        if let Some(mut existing) = index.load_field_checkpoint()? {
+        if let Some(mut existing) = load_field_checkpoint(&index.path())? {
             for q in &salvaged_questions {
                 // Check for duplicate question IDs before merging.
                 if let Some(existing_q) = existing
@@ -997,7 +999,7 @@ pub fn reprocess_skeleton_failures(index: &CorpusIndex) -> Result<(usize, usize)
                 }
             }
             existing.generated_at = chrono::Utc::now().to_rfc3339();
-            index.write_field_checkpoint(&existing)?;
+            write_field_checkpoint(&index.path(), &existing)?;
             tracing::info!(
                 salvaged = salvaged_count,
                 total_questions = existing.canonical_questions.len(),

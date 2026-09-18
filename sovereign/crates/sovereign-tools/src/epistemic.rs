@@ -80,10 +80,11 @@ impl ClaimSearchTool {
                 }
             };
 
-            let skeleton = match index.load_field_skeleton() {
-                Ok(Some(s)) => s,
-                _ => continue,
-            };
+            let skeleton =
+                match corpus_engine::index::field_skeleton::load_field_skeleton(&index.path()) {
+                    Ok(Some(s)) => s,
+                    _ => continue,
+                };
 
             // Find positions relevant to the query by scanning the skeleton.
             for question in &skeleton.canonical_questions {
@@ -260,10 +261,11 @@ impl EpistemicLandscapeTool {
                 }
             };
 
-            let skeleton = match index.load_field_skeleton() {
-                Ok(Some(s)) => s,
-                _ => continue,
-            };
+            let skeleton =
+                match corpus_engine::index::field_skeleton::load_field_skeleton(&index.path()) {
+                    Ok(Some(s)) => s,
+                    _ => continue,
+                };
 
             // Find the most relevant canonical question.
             let topic_lower = topic.to_lowercase();

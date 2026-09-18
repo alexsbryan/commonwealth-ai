@@ -26,6 +26,12 @@
 //!   reading surface. Moved here from `sovereign-mesh` by domains
 //!   `dm-mesh-move-reading-formatters` (DC §4.3: "Understanding's read
 //!   model").
+//! - [`skeleton`] — the field skeleton (`FieldSkeleton`, `PartialSkeleton`
+//!   and the question/position/fault-line/open-question closure) plus
+//!   `FieldModelStats`, the primary artifact of a v1 field-model enrichment.
+//!   Moved here from `corpus-engine`'s `enrichment::{skeleton,clustering}` by
+//!   domains `REVIEW-build-field-skeleton-vocab` (DE "The read-port leaf,
+//!   measured again"); its JSON IO stayed host.
 //! - [`read`] — the read door: `read_atlas_atoms` / `read_atlas_edges`, the
 //!   constructors for the products a consumer outside `corpus-engine` reads.
 //!   Moved here by domains `dm-vocab-door-move` (DE "The door"), so that
@@ -43,5 +49,6 @@ pub mod edges;
 pub mod ontology;
 pub mod read;
 pub mod reading_formatters;
+pub mod skeleton;
 pub mod stable_key;
 pub mod taxonomy;

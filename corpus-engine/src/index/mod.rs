@@ -5,6 +5,7 @@
 mod create;
 pub(crate) mod enrichment;
 mod evidence;
+pub mod field_skeleton;
 mod maintain;
 mod provenance;
 pub use maintain::{MaintenanceStats, Retention};

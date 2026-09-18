@@ -569,7 +569,7 @@ pub fn load_field_model(
 
 /// The pre-ei-7b artifact name. One spelling, here, so the fallback and the
 /// index accessor cannot disagree about which file they mean.
-pub const LEGACY_ARTIFACT: &str = crate::index::enrichment::FIELD_SKELETON_FILENAME;
+pub const LEGACY_ARTIFACT: &str = crate::index::field_skeleton::FIELD_SKELETON_FILENAME;
 
 #[cfg(test)]
 mod tests {

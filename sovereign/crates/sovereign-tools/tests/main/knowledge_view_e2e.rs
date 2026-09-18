@@ -233,9 +233,11 @@ fn plant_skeleton(engine: &CorpusEngine, view_id: &str, domain_id: &str) -> Fiel
                 .open_index_for_corpus(&view)
                 .await
                 .expect("open index after ingest");
-            index
-                .write_field_skeleton(&skeleton_clone)
-                .expect("write skeleton");
+            corpus_engine::index::field_skeleton::write_field_skeleton(
+                &index.path(),
+                &skeleton_clone,
+            )
+            .expect("write skeleton");
         });
     });
     skeleton
@@ -518,9 +520,11 @@ fn plant_skeleton_into(engine: &CorpusEngine, view_id: &str, skeleton: &FieldSke
                 .open_index(&target)
                 .await
                 .unwrap_or_else(|e| panic!("open index at {}: {e}", target.display()));
-            index
-                .write_field_skeleton(&skeleton_clone)
-                .unwrap_or_else(|e| panic!("write skeleton for {view}: {e}"));
+            corpus_engine::index::field_skeleton::write_field_skeleton(
+                &index.path(),
+                &skeleton_clone,
+            )
+            .unwrap_or_else(|e| panic!("write skeleton for {view}: {e}"));
         });
     });
 }

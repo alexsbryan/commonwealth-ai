@@ -4,10 +4,13 @@
 //! `FieldSkeleton` is the complete field model, serialized to
 //! `field_skeleton.json` in the corpus index directory.
 //! `PartialSkeleton` is used during the pipeline as a working structure.
+//!
+//! Moved here from `corpus-engine`'s `enrichment::skeleton` by domains
+//! `REVIEW-build-field-skeleton-vocab` (DE "The read-port leaf, measured
+//! again": "`FieldSkeleton` goes to the language"). The JSON IO stayed host
+//! (`corpus_engine::index::field_skeleton`); this module is data only.
 
 use serde::{Deserialize, Serialize};
-
-use super::clustering::FieldModelStats;
 
 /// A partial skeleton built during Phase 1 (skeleton extraction).
 /// Grows as positions are extracted from overview chunks.
@@ -78,6 +81,23 @@ pub struct SkeletonOpenQuestion {
     pub question_type: Option<String>,
     pub related_question_id: Option<String>,
     pub representative_chunk_ids: Vec<u64>,
+}
+
+/// Summary statistics for a completed enrichment run.
+///
+/// Moved here from `corpus-engine`'s `enrichment::clustering` by domains
+/// `REVIEW-build-field-skeleton-vocab`: it is the `field_stats` field of
+/// [`FieldSkeleton`] and carries no behaviour, so it belongs with the
+/// language rather than with the clustering that fills it in.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct FieldModelStats {
+    pub total_chunks: u64,
+    pub classified_chunks: u64,
+    pub unclassified_chunks: u64,
+    pub cluster_count: usize,
+    pub questions_count: usize,
+    pub positions_count: usize,
+    pub fault_lines_count: usize,
 }
 
 /// The complete field skeleton — the primary enrichment artifact.

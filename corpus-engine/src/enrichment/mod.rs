@@ -28,7 +28,7 @@ pub mod pass;
 pub mod pipeline;
 pub mod reconciliation;
 pub mod sep;
-pub mod skeleton;
+pub use corpus_engine_vocab::skeleton; // shim: moved by domains REVIEW-build-field-skeleton-vocab
 pub(crate) mod skeleton_parse;
 pub mod state;
 pub mod tiered;

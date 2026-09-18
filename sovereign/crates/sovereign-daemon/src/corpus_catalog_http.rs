@@ -715,7 +715,9 @@ async fn health(
     // One load, two answers. The command loaded the skeleton TWICE —
     // once to test presence, once to count — which is two chances for
     // the disk to answer differently within one response.
-    let skeleton = index.load_field_skeleton().ok().flatten();
+    let skeleton = corpus_engine::index::field_skeleton::load_field_skeleton(&index.path())
+        .ok()
+        .flatten();
     let has_article_profiles = skeleton.is_some();
     let claims_count = skeleton
         .map(|s| s.canonical_questions.len() as u64)
