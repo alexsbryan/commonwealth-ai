@@ -264,7 +264,12 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // loopback in the same process. `Class::Mesh` is unchanged and correct:
     // no third-party host is dialed, and no estate content crosses a
     // boundary — there is no boundary to cross.
-    ("sovereign/crates/sovereign-mesh/src/admin_http.rs", Class::Mesh, 13),
+    //
+    // 13 -> 14 (2026-09-18, recorded by rr-1-claim-support-names-the-member,
+    // NOT its change): 031a32294's `reload_moves_the_media_origin_without_a_restart`
+    // POSTs /v1/admin/reload (:1281) to the router it spawned on loopback,
+    // inside `mod tests` — same class, no new egress.
+    ("sovereign/crates/sovereign-mesh/src/admin_http.rs", Class::Mesh, 14),
     // NEW ROW 2026-09-12 (sv-surface svt-7). `assets_http.rs` is the daemon's
     // weights surface — hardware / catalog / slot / NER reads plus the one
     // asset-download job. All five constructions are inside its
