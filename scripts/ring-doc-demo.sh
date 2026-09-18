@@ -351,8 +351,12 @@ class Page {
       if (!r.ok) throw new Error(`ring: live send failed (${r.status})`);
       const body = await r.json().catch(() => null);
       if (body && Array.isArray(body.peers)) this.deliveries.push(...body.peers);
+      this.lastPeers = body && Array.isArray(body.peers) ? body.peers : [];
       this.liveGaps = [];
-    } catch (e) { this.liveGaps = [`presence not delivered: ${String(e.message || e)}`]; }
+    } catch (e) {
+      this.lastPeers = { error: String(e.message || e) };
+      this.liveGaps = [`presence not delivered: ${String(e.message || e)}`];
+    }
   }
   async pollLive() {
     if (!this.draining) return;
@@ -507,9 +511,21 @@ await sleep(5000);
 await sh("_stop", "c");
 const splitAt = now();
 const panels = { a: [], b: [], c: [] };
+// What a's and b's last live POST said about C, per sample: delivered, its
+// error, absent from `peers` (mesh still Online is the only way C is offered),
+// or the POST itself failed.
+const peerC = { a: [], b: [] };
+const saidAboutC = (p) => {
+  const lp = p.lastPeers;
+  if (lp === undefined) return "no-post";
+  if (!Array.isArray(lp)) return `post-failed: ${lp.error}`;
+  const e = lp.find((d) => d.name === "Cy");
+  return e === undefined ? "absent" : e.delivered ? "delivered" : `error: ${e.error}`;
+};
 while (now() - splitAt < SPLIT_S * 1000) {
   await sleep(PANEL_SAMPLE_S * 1000);
   for (const p of all) panels[p.name].push(p.panel.slice());
+  for (const n of ["a", "b"]) peerC[n].push(saidAboutC(pages[n]));
 }
 await sh("_start", "c");
 out.split_actual_s = (now() - splitAt) / 1000;
@@ -521,7 +537,7 @@ const svs2 = all.map((p) => p.sv());
 out.partition = { sv_equal: svs2.every((s) => s === svs2[0]), text_equal: all.every((p) => p.text() === pages.a.text()),
   union: unionCheck([...p1tokens, ...p2tokens]), tokens: p1tokens.length + p2tokens.length,
   panel_nonempty: Object.fromEntries(Object.entries(panels).map(([n, xs]) => [n, xs.filter((g) => g.length > 0).length])),
-  panel_samples: panels.a.length,
+  panel_samples: panels.a.length, peer_c: peerC,
   panel_examples: Object.fromEntries(Object.entries(panels).map(([n, xs]) => [n, (xs.find((g) => g.length) || []).slice(0, 2)])) };
 
 // ── phase 3: B's page announces A's Yjs clientID and appends that update.
