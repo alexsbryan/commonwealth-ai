@@ -1,0 +1,37 @@
+unit: dm-understanding-vocab-rename
+commits: 5b7bc02f6 (the rename), 4390ac211 (the row correction)
+what: corpus-engine-vocab renamed to understanding-vocab — the directory, the
+  [package] name, the root [workspace] members (Cargo.toml:70) and
+  [workspace.dependencies] (:304), and nine consumer manifests (corpus-engine,
+  corpus-mcp, oicp-types, sovereign-cli-llm, sovereign-core,
+  sovereign-enrichment-build, sovereign-eval, sovereign-mesh, sovereign-tools),
+  plus every corpus_engine_vocab:: path (43 .rs files / 91 sites at HEAD). No
+  shim: the crate identifier itself is gone, so `pub use` cannot keep the old
+  path resolving cross-crate. Re-keyed in the same commit: the 13 DT
+  [[module]] paths under the crate and the [[context]] crates/roots/vocab_roots;
+  quality/baselines/lines.tsv (2484 / 522) and oversized.txt (1588) — path
+  re-key, counts unchanged; quality/sabotage/all.toml's en-21 target; the xtask
+  boundary_gate budget pin and atoms_file_census roots/home; and every live doc
+  (DOMAINS.md, TARGET_ARCHITECTURE.md, SYSTEM_OVERVIEW.md, DECOMPOSITION.md,
+  EPISTEMIC_INDEX.md, SCHEMA.md, ENV_FLAGS.md/env-flags.toml, CONCEPTS.toml,
+  campaigns/domains.toml). The knowledge layer assigns by the `corpus-engine-*`
+  glob (ARCH_LAYERS.toml:153), which no longer matches, so the crate gained an
+  explicit [[layer]] entry (:167-172). Historical mentions under ralph/ and
+  quality/report-audit/ are left as written.
+premise correction (PROMPT §6, ralph/DECISIONS.md 2026-09-18): the row said
+  four consumer manifests and 39 files / 87 sites; measured 43/91 and 11
+  manifests (nine consumers). It also did not name the layer-glob dependency,
+  which made LAYER fail until the explicit entry landed.
+checks: CLEAN exit=0 (0G, under 50G); LINT exit=0 (errors 0);
+  LAYER exit=0; TEST(understanding-vocab) exit=0 (pass 75, fail 0);
+  TEST(corpus-engine) exit=0 (pass 2197, fail 0).
+verification of gates the diff touches: BOUNDARY exit=0; TOML exit=0;
+  CENSUS --self-test exit=0 (11/11 axes); TEST(xtask) exit=0 (pass 118);
+  lock-gate exit=0. atom-outside unchanged at 12.
+observed pre-existing red, NOT this unit: docs-gate (SYSTEM_OVERVIEW:8654,
+  :9986 cite corpus-engine/src/index/{search,provenance}.rs which
+  REVIEW-build-index-read-port moved to corpus-index; and Cargo.toml:73-74
+  puts a quoted phrase inside the members array, which docs_gate.rs:439's
+  split('"').skip(1).step_by(2) mis-reads as a crate name); size-gate and
+  arch-gate (unbaselined crates and corpus-index oversized files from prior
+  units).
