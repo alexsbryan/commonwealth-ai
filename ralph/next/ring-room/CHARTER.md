@@ -33,8 +33,9 @@ wrong resolution.
 
 ## Always
 
-- Record the decision in `ralph/DECISIONS.md` in its two-part shape: ONE row in
-  the Ledger table (date, unit, by, the choice in one line, commit) and ONE
+- Record the decision in `ralph/DECISIONS.md` in its two-part shape: ONE ledger
+  entry (a bold line: id · date · unit · by · commit; then three bullets —
+  Needed: what forced the decision; Chose: the choice; Because: the reason) and ONE
   appendix of the same number (`## A<n> · …`, body folded in `<details>`): the
   fork, the evidence (file:line or the run), what would falsify it, the
   worker's package inline. The ledger must read on its own.
