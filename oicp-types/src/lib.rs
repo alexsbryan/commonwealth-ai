@@ -97,9 +97,9 @@ pub use knowledge::{
     LandscapeDigestRequest, LandscapeDigestResponse,
 };
 pub use manifest::{
-    features, CorpusDescriptor, EmbedModelInfo, FederationManifest, KnowledgeManifest, ModelStatus,
-    NormalizationStrategy, PeerDescriptor, PoolingStrategy, ProviderInfo, ProviderManifest,
-    ProviderModel, ProviderType,
+    features, CorpusDescriptor, EmbedModelInfo, FederatedMeshDescriptor, FederationManifest,
+    KnowledgeManifest, ModelStatus, NormalizationStrategy, PoolingStrategy, ProviderInfo,
+    ProviderManifest, ProviderModel, ProviderType,
 };
 pub use model_aliases::{AliasResolution, ModelAlias, ModelAliasConfig, ModelAliasTable};
 pub use pipeline_context::PipelineContextConfig;

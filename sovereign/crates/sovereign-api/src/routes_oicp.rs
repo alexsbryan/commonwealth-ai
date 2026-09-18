@@ -7,8 +7,8 @@ use commonwealth_core::ids::NodeId;
 use oicp_types::features::{self, EMBEDDED_FEATURES};
 use oicp_types::{
     Capability, CapabilityClaim, CapabilityHint, CapabilityProfile, CorpusDescriptor,
-    FederationManifest, IngestEndpoints, KnowledgeManifest, LatencyClass, ModelStatus,
-    PeerDescriptor, ProviderInfo, ProviderManifest, ProviderModel, ProviderType, OICP_VERSION,
+    FederatedMeshDescriptor, FederationManifest, IngestEndpoints, KnowledgeManifest, LatencyClass,
+    ModelStatus, ProviderInfo, ProviderManifest, ProviderModel, ProviderType, OICP_VERSION,
 };
 
 use crate::state::AppState;
@@ -324,10 +324,10 @@ pub async fn capabilities(
     // cross-mesh federation URL here is IP-shaped, and that is not a
     // W-track dial. Do not "seam-ify" this without a federation
     // trust-model change.
-    let peers: Vec<PeerDescriptor> = mesh
+    let peers: Vec<FederatedMeshDescriptor> = mesh
         .peers
         .iter()
-        .map(|p| PeerDescriptor {
+        .map(|p| FederatedMeshDescriptor {
             name: p.peer_mesh_name.clone(),
             capabilities_url: p
                 .contact_nodes
