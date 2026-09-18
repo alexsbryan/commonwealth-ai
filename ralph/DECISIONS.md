@@ -2230,3 +2230,46 @@ update. Both are recorded in the row's CORRECTED note; the docs repair
 de-quoting) is in `d7fabc49b`. `quality/baselines/oversized.txt` still keys
 `search.rs` to `corpus-engine/src/index/search.rs` — a move re-key this unit did
 not own (§7 keeps baselines out of its reach), left for the wave-close audit.
+
+## 2026-09-18 · REVIEW-build-understanding-pass-port · the host extraction cannot ride this row
+
+**Fork.** The row names one unit: move the port (trait/context/registry) to
+`corpus-engine/src/engine/pass.rs` AND move the four `*Pass` impls +
+`EnrichmentPassRegistry::builtin()` to `understanding-host`, handing the
+registry in at construction. The tree says the second half cannot land in the
+same commit.
+
+**Choice.** Land the port move; keep the impls + `builtin()` in
+`corpus-engine/src/enrichment/pass.rs` (the module that becomes
+`understanding-host`), re-exporting the port at the historical
+`crate::enrichment::pass::*` paths; add `EnrichmentPassRegistry::new()` so the
+assembly no longer needs the registry's private field. Mint
+`REVIEW-build-understanding-pass-host` for the extraction and the injection, and
+record the premise fixes in the row.
+
+**Evidence** (reproduced this session, on `ralph/domains-campaign`).
+- `git grep -n 'EnrichmentPassRegistry::builtin()' -- '*.rs'` is SEVEN sites,
+  not the row's five: `engine/ingest.rs:1749,:1833`, `engine/mod.rs:2864,:3086`,
+  `recipe_parsing.rs:268`, `sovereign-tools/src/local_corpus/atlas_dispatch.rs:60`,
+  and `recipe.rs:1903` (`Recipe::produces_enriched_atoms`) — a site the row does
+  not name.
+- `understanding-host/Cargo.toml` has an empty `[dependencies]`; the row's
+  "the host already depends on corpus-engine" is false.
+- `builtin()` leaving corpus-engine forces `check_enrichment_type` (called from
+  `Recipe::from_toml`, recipe.rs:1879) and `produces_enriched_atoms` to take a
+  registry: `git grep -c 'from_toml'` counts ~100 call sites and
+  `git grep -c 'CorpusEngine::new'` 165. The row's own checks name only
+  TEST(corpus-engine) and TEST(understanding-host), which cannot cover that
+  cascade.
+- After the move, `python3 scripts/domains-census.py crate-lines --crate
+  corpus-engine` names 0 corpus-engine files (the new `engine/pass.rs` is covered
+  by the `corpus-engine/src/engine/` directory row, re-counted 10006/11 →
+  10166/12; the `enrichment/pass.rs` per-file row 646 → 547).
+
+**Falsified by.** A `builtin()` that can stay in corpus-engine while the impls
+live in `understanding-host` (it cannot: the engine may not name the host), or a
+`CorpusEngine::new`/`Recipe::from_toml` that does not need the registry.
+
+**Landed in.** `037f8285c` (the port move, the re-exports, `new()`, the engine
+sites, the DT re-counts, the `SYSTEM_OVERVIEW.md` and `DOMAINS.toml` path
+repoints).
