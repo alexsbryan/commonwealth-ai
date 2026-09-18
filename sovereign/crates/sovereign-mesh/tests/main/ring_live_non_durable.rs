@@ -213,7 +213,9 @@ async fn a_restart_empties_the_buffer() {
     let second = node(dir.path(), &key, NodeId::from_u128(1));
     let second_client = common::spawn_router(client_router(second)).await;
     let after: serde_json::Value = http
-        .get(format!("http://{second_client}/v1/rail/live?namespace={NS}"))
+        .get(format!(
+            "http://{second_client}/v1/rail/live?namespace={NS}"
+        ))
         .bearer_auth(TOKEN)
         .send()
         .await
@@ -316,7 +318,11 @@ async fn an_envelope_for_an_unknown_namespace_is_refused() {
     );
 
     let own = drain_as(rail, GRANT_A).await;
-    assert_eq!(own["payloads"], serde_json::json!([]), "the granted buffer is untouched");
+    assert_eq!(
+        own["payloads"],
+        serde_json::json!([]),
+        "the granted buffer is untouched"
+    );
     let refused: serde_json::Value = http
         .get(format!("http://{client}/v1/rail/live?namespace={unknown}"))
         .bearer_auth(TOKEN)
