@@ -38,6 +38,9 @@ instrument_note = "a test that writes an introduction, admits a key on it, and r
 goodhart     = "1.0 over one row proves nothing, and 1.0 is also what you measure when the warrant field is present but the op id resolves to nothing - the check must RESOLVE the op, not merely find a string. A verdict citing only the affirmative leg is reporting half the predicate; ra-roster-stays-independent must be at target in the same run."
 status       = "open"
 
+# Scope under the 2026-09-18 membership amendment (ra-5): this bar counts
+# changes to roster.json, the SEED, and it stays at 0. Admit/Remove acts change
+# computed membership, never the file. Numbers unchanged.
 [[bar]]
 id           = "ra-roster-stays-independent"
 demo         = "A peer sends an introduction and nothing in my ring changes until I say so"
@@ -156,6 +159,27 @@ instrument_note = "the existing two-daemon rig (commonwealth-rails/tests/two_dae
 goodhart     = "an app that refuses everyone scores the refused leg, and a dialer refused for not being a member proves nothing about per-origin audience. Both legs, one admitted member, one run."
 status       = "open"
 
+# ra-5 bar, declared 2026-09-18 with the membership amendment, before any code.
+# It fills the campaign to the 9-bar cap; ra-6's two bars are pre-stated in
+# campaign.md and move here when a slot frees.
+
+[[bar]]
+id           = "ra-membership-is-order-free"
+demo         = "Undo a leaked invite in one act, and every node agrees who is in"
+rung         = "ra-5"
+one_line     = "CLAIM: over an op set containing Admit, Remove and voids of both, every permutation admits byte-identically, and each of the three recoveries is one act"
+derives_from = "admit's one property: 'The result is a function of the op SET' (commonwealth-rail-core/src/admit.rs:23), asserted today over permutations of app acts only. Membership on the journal is the first time admission depends on acts that change who may sign, so the property must be re-proven over them - including the one case with two self-consistent answers, two members removing each other."
+floor        = 0.0
+floor_basis  = "structural: FRACTION of five legs in one test run - (1) every permutation of a membership-bearing set, with a mutual removal and an Admit racing its own void, yields a byte-identical Admission, gaps included; (2) voiding one Admit drops that key and every key it transitively admitted; (3) voiding a Remove restores the member and admits what they wrote while removed; (4) a replacement key admitted under the same person, with the old key removed through its last seq, leaves every past act admitted; (5) a parser without the new acts reads them as NewerVersionLine, never as admitted and never as MalformedLine. Zero at declaration: the acts do not exist."
+target       = 1.0
+direction    = "higher_is_better"
+# instrument   = (none yet) - co-lineage EXECS this field, and a cargo test filter
+#   naming a test that does not exist yet runs zero tests and exits 0: a vacuous
+#   pass. Owed once the test exists and has been watched failing.
+instrument_note = "a rail-core test beside the existing permutation test, not a new harness. Leg 5 is a fixture line at the bumped version read by the current parser, not a second build. Watch each leg fail first: leg 1 against a membership function that folds in arrival order, leg 2 against one that voids only the direct Admit."
+goodhart     = "a membership function that ignores Admit and Remove passes leg 1 perfectly - every permutation agrees on the seed. Legs 2-4 are what prove the acts do anything, and they run in the same test binary. ra-roster-stays-independent must read 0 in the same run: passing here by writing roster.json would move the roster route into a file."
+status       = "open"
+
 # ── THE LADDER ───────────────────────────────────────────────────────────────
 
 [[rung]]
@@ -190,3 +214,27 @@ demo   = "D3"
 moves  = ["ra-send-reaches-only-the-grantee", "ra-bytes-never-served-wrong", "ra-blob-lan-parity", "ra-origin-audience-per-name"]
 note   = "S5. Independent of ra-1 and ra-2 and can run in parallel with a different pair of hands. Nothing visual works in either domain while a photo radiates from one node's first hop. BARS DECLARED 2026-09-14 with order ring-3-blobs (approval pending), consolidated here by operator direction: the byte plane, a private send to one member, the GGUF plane moved onto it so the mesh keeps one way to move files, and the Media/App/Offer origin stacks collapsed into one registry with an audience per name. Demo 3 is UNBLOCKED by that order, not delivered - a photo in an offer is the public case, a ring act carrying a blob reference."
 
+
+[[rung]]
+id     = "ra-5"
+title  = "membership is two acts from the founder's seed"
+status = "open"
+demo   = "D5"
+moves  = ["ra-membership-is-order-free"]
+note   = "S9, from the 2026-09-18 membership amendment (RING_APPLICATIONS.md; campaign.md Decisions). Admit and Remove join Record/Correct/Seal behind one membership function; the seed is roster.json as today; undo is the existing Correct. Lands first among the club rungs - ra-6 selects peers from this membership. ra-roster-stays-independent must hold at 0 through it."
+
+[[rung]]
+id     = "ra-6"
+title  = "a ring is joined by a link and reaches only its members"
+status = "open"
+demo   = "D6"
+moves  = []
+note   = "S10. ring invite/join with the invite secret on the minting node; ring_sync picks peers from the ring's membership and dials them by key; the receiver refuses a namespace from a non-member. Ends the plaintext copy on every non-member mesh peer and the one-active-mesh limit for rings. Its two bars are pre-stated in campaign.md and wait for a slot under the 9-bar cap."
+
+[[rung]]
+id     = "ra-7"
+title  = "the app travels with the ring, and a version mismatch is named"
+status = "open"
+demo   = "D7"
+moves  = []
+note   = "S11. Bundle hash stamped on each record at the daemon; window.ring in _sdk/ behind a desktop rail bridge on a rail-scoped grant; a membership panel beside the gap panel in the scaffold. Names no bar yet - declare one before drafting an order."
