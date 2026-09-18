@@ -2939,3 +2939,90 @@ crate.
 
 **Landed in.** this unit's code commit and the `ralph:` commit marking the row
 `[x]`.
+
+## 2026-09-18 · DEMO-d5-misnamed · director: the workbench destination is already decided and needs no exception; mint the `code-facts` prerequisite and drop the operator row
+
+**Fork.** `DEMO-d5-misnamed` (the `dm-mesh-closed` rung's D5) expects
+sovereign-mesh at 100% fabric; its last two non-fabric modules are
+`projects.rs` (674) and `reindexer.rs` (2,155), the two files
+`dm-mesh-workbench-move-watchers` deferred. The package asks the operator to
+choose between (a) widening the code-intel `[[exception]]` plus the fan-in caps,
+(b) waiting for the `code-facts` carve-out, or (c) re-homing one/both. Option
+(a) is operator-only (`ralph/CHARTER.md:34`; PROMPT §7), and the package framed
+the whole fork as such.
+
+**Choice.** Decide it: option (b), the doc-named path. The premise that this
+fork needs the operator is FALSE. `domains-11-workbench-next-edit`'s "Done
+when" already fixes the gate — "`boundary-gate` green for `code-intel` **with no
+new exception**" (`.sovereign/features/domains-11-workbench-next-edit/order.md:32`)
+— and `CODE_TOOLING_BOUNDARY.md` §2 names the crate that makes the reach legal:
+`code-facts` from `corpus-engine/src/{facts,facts_check,facts_store}.rs`
+(`:404`, table `:67`). The destination is likewise decided: the code-intel
+package (`quality/DOMAINS.md:160`) and, for this cluster, `corpus-engine-watchers`
+(`quality/DOMAINS.toml:5581`). So:
+
+1. Remove `HUMAN-mesh-workbench-gates`; mint `REVIEW-build-code-facts` (CREATE
+   the crate per §2 Phase 2, move the three files, repoint the four consumers).
+   It is the prerequisite that turns `corpus_engine::facts` into a package edge.
+2. `REVIEW-build-mesh-workbench-deferred` (the MOVE of `projects.rs` +
+   `reindexer.rs` to `corpus-engine-watchers`) now depends on it, and carries
+   the two fan-in hand-raises — `corpus-engine-scip` 11→12 and
+   `sovereign-contracts` 33→34 — done by hand with a `SYSTEM_OVERVIEW.md` §10.1
+   ledger, exactly as `dm-decision-extractor-move` (2026-09-17) and
+   `dm-next-edit-move` (2026-09-17) did. That is a ratchet cap raised to admit a
+   sanctioned edge, not a pass bar weakened; `--update-baseline` is still
+   forbidden (PROMPT §7).
+3. No `[[exception]]` is added and no pass bar changes, so nothing here is the
+   operator's.
+
+**Evidence** (reproduced this session, on `ralph/domains-campaign`).
+- The demo fails as the package says: `python3 scripts/domains-census.py
+  misnamed` -> exit 4, 33 untagged files (`corpus-index` 19, `understanding-atlas`
+  13, `sovereign-peer-wire` 1), none in sovereign-mesh. The per-crate row
+  (coverage bypassed) is `sovereign-mesh fabric 13860 / 16684 83.1% MISNAMED`,
+  its non-fabric rows `workbench 674 projects.rs` and `workbench 2150
+  reindexer.rs`.
+- The reaches reproduce: `reindexer.rs:650` `use corpus_engine::facts::{...}` and
+  `:708 corpus_engine::facts_store::FactStore::open`, both in production
+  `run_overlay_merge`; `projects.rs:364
+  sovereign_contracts::rebrand::projects_json()` in `Registry::default_path`.
+- The gate is already decided: `order.md:32` "no new exception"; the boundary
+  doc names `code-facts` (`docs/CODE_TOOLING_BOUNDARY.md:67,:404`); the
+  workbench cluster's registry dest is `corpus-engine-watchers`
+  (`quality/DOMAINS.toml:5581`) and DOMAINS §4 puts Workbench in the code-intel
+  package (`quality/DOMAINS.md:160`).
+- `sovereign-contracts` is package-legal for code-intel: it is a
+  `[[package_leaf]]` (`quality/ARCH_LAYERS.toml:850`) and the siblings
+  `corpus-engine-scip/Cargo.toml:73` and `code-next-edit/Cargo.toml:18` already
+  name it. So `projects.rs`'s edge needs only the fan-in cap moved, not an
+  exception.
+- The caps are real, not inferred: `quality/baselines/fan_in.tsv:10,11` read
+  `11 corpus-engine-scip` and `33 sovereign-contracts`.
+- Re-homing to `corpus-engine` was rejected: it contradicts the operator's own
+  rung ("workbench leaves for code-intel", `quality/campaigns/domains.toml:429`)
+  and grows the god-crate the campaign is demolishing.
+
+**Correction.** `ralph/STATE.md`: the DEMO row's `depends` gains
+`dm-registry-coverage` (restores the instrument's coverage) and
+`REVIEW-build-mesh-workbench-deferred`; `HUMAN-mesh-workbench-gates` is replaced
+by `REVIEW-build-code-facts`, and `REVIEW-build-mesh-workbench-deferred` now
+depends on it. `ralph/NEEDS_HUMAN.md` is removed. The worker's own entry for
+this unit is on branch `ralph/DEMO-d5-misnamed` (commit `183949c17`); its facts
+are re-measured above and its correction is carried here.
+
+**Falsified by.** A showing that the code-intel package may NOT reach
+`sovereign-contracts` (then `projects.rs` needs a port or an exception); that
+`code-facts` cannot be built without a `corpus-engine` edge (then the carve
+needs a different shape); or an operator ruling that a hand-raised fan-in cap is
+an operator-only act (then this decision is the one to revert, and the fork is
+the package's).
+
+**REVIEW-AFTER:** the choice to pull `code-facts` (a wave-3 corpus-engine
+carve) forward to unblock a wave-1 mesh move, and the fan-in hand-raise as a
+director act. Both are within the charter's "row order, re-scoping" and its
+"placements the docs already imply", but the campaign's rungs put mesh workbench
+(wave 1) before corpus-engine workbench (wave 3), so the reorder is the part a
+reviewer should read first.
+
+**Landed in.** this commit — `ralph/STATE.md` (the rows) and this entry;
+`ralph/NEEDS_HUMAN.md` removed (untracked; `.git/info/exclude:21`).
