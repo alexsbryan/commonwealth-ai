@@ -323,3 +323,42 @@ REVIEW-AFTER: whether naming an undelivered peer in the gap panel is "behaviour 
 observe beyond the row". Read here as the order's own step 5, not new behaviour.
 
 Commit: the one that removes `ralph/NEEDS_HUMAN.md`.
+
+## 2026-09-17 — rd-1-partition-gap: the page never received `peers`
+
+### Fork 1 — the row's EDIT is inert on the real page. Choice: widen the row to `dev.rs:276`.
+
+Reproduced: `DEV_SHIM`'s `live.send` (`sovereign-cli-llm/src/ring_cmd/dev.rs:271-277`) ends
+`return null`, while the daemon's POST answers `{bytes, peers, delivered}`
+(`routes_rail_live.rs:333-337`) and the driver's mirror reads `body.peers` straight off `fetch`
+(`scripts/ring-doc-demo.sh:352-354`). Editing `app.js` and the driver "identically" would pass the
+demo while the page served by `svrn ring dev` still said nothing — the masked pass this row exists
+to remove. `rd-1-live-shim` never specified a `null` return; it is an implementation choice, and
+`PeerDelivery`'s own doc (`routes_rail_live.rs:145-148`) says the page is meant to see it. Smallest
+fix: `return r.json()`, asserted in the existing shim string test rather than a new one.
+Order step 5 ("the gap panel on A and B names C") implies it.
+
+### Fork 2 — `pollLive` clears what `sendPresence` found. Choice: two variables, one owner each.
+
+Reproduced: both `A/app.js:169` and the driver (`:376`) assign `liveGaps = read.gaps` every 250 ms,
+so a delivery gap would show for under one drain. `deliveryGaps` (owned by `sendPresence`) and
+`liveGaps` (owned by `pollLive`) both feed the panel (ARCH 12: each side owns its own finding).
+No new type, no roster read.
+
+### Fork 3 — C absent from `peers` after mesh marks it offline. Choice: no gap line; the leg reads "at least one sample".
+
+`peer_c.a` in `target/ring-doc-demo/session.json` (run at 0fb1e725f): 11 × `error: … error sending
+request`, then 1 × `absent`; b: 12 × the error. The row already forbids a roster diff, so once C
+leaves `peers` the page honestly knows nothing further. The positive control's during-split leg is
+read as at least one sample naming C on each of a and b — the reading `panels_ok` already uses
+(`scripts/ring-doc-demo.sh:690`, `v > 0`); the pre-split-empty leg is unchanged.
+
+*Falsified if* the edited page served by `svrn ring dev` (not the driver) shows no C line during a
+split while the driver's mirror does — the shim and the mirror diverged again; or if a split run
+shows C `absent` from a's and b's `peers` on every sample, which makes Fork 3's leg unpassable
+without a roster diff and goes back to the operator.
+
+REVIEW-AFTER: Fork 3's "at least one sample" reading — a stricter "every sample" bar would need
+the roster diff the row forbids.
+
+Commit: the one that removes `ralph/NEEDS_HUMAN.md`.
