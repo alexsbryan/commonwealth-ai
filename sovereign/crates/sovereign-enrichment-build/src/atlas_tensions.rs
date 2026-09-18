@@ -135,7 +135,7 @@ pub async fn run(parsed: &ParsedTensions) -> Result<TensionCandidatesReport, Str
     let mut claims = Vec::new();
     let mut states = Vec::new();
     let mut entities = Vec::new();
-    for a in atoms.atoms {
+    for a in atoms.atoms().to_vec() {
         match a {
             AtomEnvelope::Claim(c) => claims.push(c),
             AtomEnvelope::State(s) => states.push(s),

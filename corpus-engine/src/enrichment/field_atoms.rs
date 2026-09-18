@@ -430,7 +430,7 @@ pub fn publish_to_atlas(
 
     let existing = read_atlas_atoms(atlas_dir)?;
     let held: std::collections::HashSet<String> = existing
-        .atoms
+        .atoms()
         .iter()
         .map(|a| a.id().as_str().to_string())
         .collect();
@@ -444,7 +444,7 @@ pub fn publish_to_atlas(
         projected: projected.len(),
         written: fresh.len(),
         already_present: projected.len() - fresh.len(),
-        atoms_before: existing.atoms.len(),
+        atoms_before: existing.atoms().len(),
     };
     append_atoms_and_edges(atlas_dir, &fresh, &[])?;
     tracing::info!(
@@ -521,7 +521,7 @@ pub fn load_field_model(
     if !census_says_none {
         match read_atlas_atoms(&atlas_dir) {
             Ok(file) => {
-                let view = skeleton_from_atoms(corpus_id, &file.atoms);
+                let view = skeleton_from_atoms(corpus_id, &file.atoms());
                 if !view.is_empty() {
                     return Some((view, FieldModelSource::Atlas));
                 }
@@ -797,9 +797,9 @@ mod tests {
 
         // And what landed renders the same digest the v1 file would have.
         let on_disk = super::super::atlas::read_atlas_atoms(&atlas).unwrap();
-        assert_eq!(on_disk.atoms.len(), first.written);
+        assert_eq!(on_disk.atoms().len(), first.written);
         assert_eq!(
-            skeleton_from_atoms("sep", &on_disk.atoms).render_landscape(HEADING, BUDGET),
+            skeleton_from_atoms("sep", &on_disk.atoms()).render_landscape(HEADING, BUDGET),
             skel.render_landscape(HEADING, BUDGET),
         );
     }

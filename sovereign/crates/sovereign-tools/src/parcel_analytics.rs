@@ -91,8 +91,9 @@ impl ParcelAnalyticsTool {
 
         // Move Parcel entity atoms out of their envelopes (no clone).
         let parcels: Vec<_> = atoms_file
-            .atoms
-            .into_iter()
+            .atoms()
+            .iter()
+            .cloned()
             .filter_map(|env| match env {
                 AtomEnvelope::Entity(e) => match &e.entity_type {
                     EntityType::Other(t) if t.as_str() == DEFAULT_ENTITY_TYPE => Some(e),

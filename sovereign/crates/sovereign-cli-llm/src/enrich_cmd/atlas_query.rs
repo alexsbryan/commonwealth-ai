@@ -142,7 +142,7 @@ pub async fn cmd_atlas_query(args: &[String]) -> i32 {
     let mut configurations = Vec::new();
     let mut positions = Vec::new();
     let mut oppositions = Vec::new();
-    for a in atoms_file.atoms {
+    for a in atoms_file.atoms().iter().cloned() {
         match a {
             AtomEnvelope::Entity(x) => entities.push(x),
             AtomEnvelope::Event(x) => events.push(x),

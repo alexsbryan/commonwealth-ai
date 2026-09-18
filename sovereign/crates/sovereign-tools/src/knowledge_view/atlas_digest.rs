@@ -80,7 +80,7 @@ pub(crate) fn render_atlas_digest(atlas_dir: &Path, budget_tokens: usize) -> Str
     let mut entities: Vec<(&str, f32)> = Vec::new();
     let mut claims: Vec<(&str, f32)> = Vec::new();
     let mut questions: Vec<(&str, f32)> = Vec::new();
-    for env in &file.atoms {
+    for env in file.atoms() {
         match env {
             AtomEnvelope::Entity(e) => entities.push((&e.canonical_name, e.salience)),
             AtomEnvelope::Claim(c) => {
@@ -126,7 +126,7 @@ pub(crate) fn render_atlas_digest(atlas_dir: &Path, budget_tokens: usize) -> Str
         atlas_dir = %atlas_dir.display(),
         budget_tokens,
         output_tokens = estimate_tokens(&out),
-        input_atoms = file.atoms.len(),
+        input_atoms = file.atoms().len(),
         input_entities = entities.len(),
         input_claims = claims.len(),
         input_questions = questions.len(),

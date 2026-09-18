@@ -804,7 +804,7 @@ impl KnowledgeViewManager {
             let Ok(file) = read_atlas_atoms(&atlas_dir) else {
                 continue;
             };
-            for atom in &file.atoms {
+            for atom in file.atoms() {
                 if let AtomEnvelope::Entity(e) = atom {
                     names.push(e.canonical_name.clone());
                     for alias in &e.aliases {

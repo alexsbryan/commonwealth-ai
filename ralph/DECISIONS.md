@@ -1846,3 +1846,39 @@ that moved.
 **Landed in.** this commit — `corpus-engine-vocab/src/read.rs` (new),
 `corpus-engine-vocab/src/lib.rs`, `corpus-engine/src/enrichment/atlas/writer.rs`
 and the `[[module]]` row in `quality/DOMAINS.toml`.
+
+## 2026-09-17 · REVIEW-build-vocab-seal · the census's "one AtomsFile" predicate collides with the design's named wire twin
+
+**Fork.** The seal (STATE.md:246) mandates "a private deserialize-only wire
+twin", and the registry names it: `struct AtomsFileWire`
+(quality/DOMAINS.toml:3113, "AtomsFile (the one door, structural)").
+`corpus-engine/xtask/tests/atoms_file_census.rs`'s `is_atoms_file_decl` matches
+every struct whose name starts with `AtomsFile`, so the mandated name makes
+`the_atoms_json_shape_is_declared_exactly_once` read 2 (`atoms.rs:1536`
+`AtomsFile`, `:1628` `AtomsFileWire`). Decide: rename the twin (contradicts the
+registry), or widen the census predicate.
+
+**Choice.** Widen the predicate — `name.starts_with("AtomsFile") && name !=
+"AtomsFileWire"` — with the rationale in the doc comment and a planted negative
+in `the_matcher_sees_the_three_shapes_that_were_deleted`
+(`assert!(!is_atoms_file_decl("pub(crate) struct AtomsFileWire {"))`). The
+census's invariant is that the shape has ONE home and is not re-derived outside
+it; the wire twin is the deserialize half of that one declaration, in the same
+home, and is the mechanism that makes `AtomsFile` not `Deserialize`. Renaming it
+would violate the registry's explicit name, and the design cannot avoid a second
+struct: a `Deserialize` impl on a public type cannot be private.
+
+**Evidence.** `cargo test -p xtask` before: the census test FAILED, hits
+`atoms.rs:1536 pub struct AtomsFile` and `atoms.rs:1628 pub(crate) struct
+AtomsFileWire`; after: pass 117 fail 0 except the pre-existing
+`conformance_tags_are_fresh` (`quality/conformance/sovereign-api.toml` line 90
+committed vs 89 generated — `git show HEAD:.../routes_edit_predictions/outcome.rs`
+has the fn at line 89, and neither file is touched by this unit). DT:3110-3133.
+
+**Falsified by.** A finding that the wire twin can be avoided — a crate-private
+`Deserialize` impl, or a `pub(crate)` field making the derive unreachable —
+which would remove the second struct and let the census stay literally "exactly
+one". Also falsified if a second `AtomsFile*` shape appears in `atoms.rs` and
+the widened predicate lets it through: the census would then under-count.
+
+**Landed in.** this commit — `corpus-engine/xtask/tests/atoms_file_census.rs`.

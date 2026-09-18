@@ -141,9 +141,9 @@ pub async fn cmd_atlas_patch_code(args: &[String]) -> i32 {
             return 1;
         }
     };
-    if !atoms_file.atoms.is_empty()
+    if !atoms_file.atoms().is_empty()
         && !atoms_file
-            .atoms
+            .atoms()
             .iter()
             .all(|env| env.id().is_content_hash())
     {

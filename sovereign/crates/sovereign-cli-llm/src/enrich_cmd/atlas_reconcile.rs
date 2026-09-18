@@ -102,8 +102,9 @@ pub async fn cmd_atlas_reconcile(args: &[String]) -> i32 {
         }
     };
     let entities: Vec<Entity> = atoms_file
-        .atoms
-        .into_iter()
+        .atoms()
+        .iter()
+        .cloned()
         .filter_map(|env| match env {
             AtomEnvelope::Entity(e) => Some(e),
             _ => None,
@@ -231,7 +232,7 @@ fn append_reified_merges(
     let atoms = read_atlas_atoms(atlas_dir).map_err(|e| format!("read atoms.json: {e}"))?;
     let edges = read_atlas_edges(atlas_dir).map_err(|e| format!("read edges.json: {e}"))?;
     let next_claim = 1 + atoms
-        .atoms
+        .atoms()
         .iter()
         .filter_map(|a| match a {
             AtomEnvelope::Claim(c) => index_suffix(c.id.as_str()),

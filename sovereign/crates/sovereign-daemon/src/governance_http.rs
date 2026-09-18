@@ -763,7 +763,7 @@ fn seed_at(dir: &Path) -> GovResult<u32> {
         .collect();
     let ts = unix_now();
     let mut new_ops = Vec::new();
-    for env in &atoms.atoms {
+    for env in atoms.atoms() {
         if let AtomEnvelope::Claim(c) = env {
             if already.contains(&c.id) {
                 continue;
@@ -827,7 +827,7 @@ fn scope_names(atlas_dir: &Path) -> HashMap<String, String> {
         return HashMap::new();
     };
     atoms
-        .atoms
+        .atoms()
         .iter()
         .filter_map(|env| match env {
             AtomEnvelope::Entity(e) => Some((e.id.as_str().to_string(), e.canonical_name.clone())),

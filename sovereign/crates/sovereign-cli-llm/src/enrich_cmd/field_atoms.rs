@@ -115,13 +115,14 @@ pub async fn cmd_field_atoms(args: &[String]) -> i32 {
     // Read the atoms BACK and render the digest from them — the only honest
     // confirmation that the move preserved what a turn will see (§18.4:
     // validate the instrument, not just the write).
-    let atoms = match corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir) {
-        Ok(f) => f.atoms,
+    let atoms_file = match corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir) {
+        Ok(f) => f,
         Err(e) => {
             eprintln!("error: wrote the atoms but could not read them back: {e}");
             return 1;
         }
     };
+    let atoms = atoms_file.atoms();
     let heading_after = format!("Field guide — {target_id}");
     let digest_after = skeleton_from_atoms(&target_id, &atoms)
         .render_landscape(&heading_after, FIELD_DIGEST_BUDGET_TOKENS);

@@ -560,7 +560,7 @@ fn count_entities(sandbox: &Path) -> EntityCounts {
         let Ok(file) = read_atlas_atoms(&dir) else {
             continue;
         };
-        for atom in file.atoms {
+        for atom in file.atoms().iter().cloned() {
             if let AtomEnvelope::Entity(e) = atom {
                 match e.entity_type {
                     EntityType::Person => counts.people += 1,

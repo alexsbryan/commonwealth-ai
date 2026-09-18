@@ -307,9 +307,9 @@ async fn parquet_ingest_with_enrichment_creates_field_model() {
     let atlas_dir = index
         .path()
         .join(corpus_engine::enrichment::atlas::ATLAS_DIRNAME);
-    let atoms = corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir)
-        .expect("an enriched AtlasAtoms corpus has an atlas")
-        .atoms;
+    let atoms_file = corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir)
+        .expect("an enriched AtlasAtoms corpus has an atlas");
+    let atoms = atoms_file.atoms();
     assert!(
         atoms
             .iter()

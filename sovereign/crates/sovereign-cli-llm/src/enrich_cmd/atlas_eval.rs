@@ -133,9 +133,9 @@ pub async fn cmd_atlas_eval(args: &[String]) -> i32 {
         desc_tokens: HashSet<String>,
         title_char_len: usize,
     }
-    let mut index: Vec<EntityIndex> = Vec::with_capacity(atoms_file.atoms.len());
+    let mut index: Vec<EntityIndex> = Vec::with_capacity(atoms_file.atoms().len());
     let mut placeholder_skipped = 0usize;
-    for atom in &atoms_file.atoms {
+    for atom in atoms_file.atoms() {
         if let AtomEnvelope::Entity(e) = atom {
             let is_placeholder = e.description.is_empty() && e.salience == 0.0;
             if is_placeholder && !parsed.include_placeholders {

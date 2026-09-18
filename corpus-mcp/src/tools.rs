@@ -608,9 +608,9 @@ impl Server {
         let kind = args["kind"].as_str().map(str::to_lowercase);
         let limit = args["limit"].as_u64().map(|l| l as usize).unwrap_or(20);
 
-        let total = file.atoms.len();
+        let total = file.atoms().len();
         let matched: Vec<&AtomEnvelope> = file
-            .atoms
+            .atoms()
             .iter()
             .filter(|a| kind.as_deref().is_none_or(|k| a.atom_type().label() == k))
             .filter(|a| {

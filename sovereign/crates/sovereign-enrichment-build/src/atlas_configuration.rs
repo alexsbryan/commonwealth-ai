@@ -208,7 +208,7 @@ pub fn build_atlas_summary(corpus_id: &str) -> Result<AtlasSummary, String> {
     let mut relations = Vec::new();
     let mut claims = Vec::new();
     let mut questions = Vec::new();
-    for a in atoms_file.atoms {
+    for a in atoms_file.atoms().to_vec() {
         match a {
             AtomEnvelope::Entity(x) => entities.push(x),
             AtomEnvelope::Event(x) => events.push(x),
@@ -277,7 +277,7 @@ pub fn finalize_configurations(
     // only by a walk that stopped seeding. Held and restored instead
     // (ARCH §18.3: never silently substitute, and never silently drop).
     let mut summaries = Vec::new();
-    for a in atoms_file.atoms {
+    for a in atoms_file.atoms().to_vec() {
         match a {
             AtomEnvelope::Entity(x) => entities.push(x),
             AtomEnvelope::Event(x) => events.push(x),

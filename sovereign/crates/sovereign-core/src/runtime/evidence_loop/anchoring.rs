@@ -78,7 +78,7 @@ pub(crate) fn atlas_entity_names(corpus_id: &str) -> Vec<String> {
     // version cloned the whole atoms array on every call). `canonical_name`
     // is an Entity (and Position) field; the untyped walk read it off any
     // atom's `data`, which for every other kind was absent.
-    file.atoms
+    file.atoms()
         .iter()
         .filter_map(|a| match a {
             AtomEnvelope::Entity(e) => Some(e.canonical_name.clone()),
@@ -396,7 +396,7 @@ fn atlas_atom_records(corpus_id: &str) -> Vec<(String, Vec<String>)> {
     // has one — see `cached_atoms`.) Previews come from the envelope's own
     // evidence accessor; an Entity has no evidence list, so its previews are
     // empty exactly as before.
-    file.atoms
+    file.atoms()
         .iter()
         .filter_map(|a| {
             let desc = match a {

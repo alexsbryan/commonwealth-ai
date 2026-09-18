@@ -231,7 +231,7 @@ async fn filter_atlas(
 
     // Initiative candidates with stable order (atoms.json order).
     let mut candidates: Vec<&Entity> = Vec::new();
-    for atom in &atoms.atoms {
+    for atom in atoms.atoms() {
         if let AtomEnvelope::Entity(e) = atom {
             if matches!(e.entity_type, EntityType::Initiative) {
                 candidates.push(e);
@@ -304,8 +304,8 @@ async fn filter_atlas(
     // whose id is not in dropped_ids; drop edges whose target is a
     // dropped initiative; clean stale participant references on
     // surviving Entity atoms.
-    let mut new_entities: Vec<Entity> = Vec::with_capacity(atoms.atoms.len());
-    for atom in atoms.atoms {
+    let mut new_entities: Vec<Entity> = Vec::with_capacity(atoms.atoms().len());
+    for atom in atoms.atoms().iter().cloned() {
         if let AtomEnvelope::Entity(mut e) = atom {
             if dropped_ids.contains(&e.id) {
                 continue;

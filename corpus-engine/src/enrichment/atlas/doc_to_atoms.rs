@@ -139,7 +139,7 @@ pub fn extract_doc_id(env: &AtomEnvelope) -> Option<String> {
 /// Atoms without a resolvable doc_id are skipped (logged).
 pub fn build_from_atoms_file(atoms: &AtomsFile) -> DocToAtomsFile {
     let mut file = DocToAtomsFile::new();
-    for env in &atoms.atoms {
+    for env in atoms.atoms() {
         let Some(doc_id) = extract_doc_id(env) else {
             tracing::debug!(
                 atom_id = env.id().as_str(),

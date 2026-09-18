@@ -822,9 +822,9 @@ async fn read_atlas_summary(engine: &CorpusEngine, corpus_id: &str) -> Option<At
     let edges_count = read_atlas_edges(&atlas_dir)
         .map(|e| e.edges.len() as u64)
         .unwrap_or(0);
-    let atoms_count = atoms.atoms.len() as u64;
+    let atoms_count = atoms.atoms().len() as u64;
     let questions = atoms
-        .atoms
+        .atoms()
         .iter()
         .filter(|a| a.atom_type() == AtomType::Question)
         .count() as u64;
@@ -833,7 +833,7 @@ async fn read_atlas_summary(engine: &CorpusEngine, corpus_id: &str) -> Option<At
     // (corpus-engine/tests/main/pipeline_ontology.rs:48-64), and no atom
     // carries a `theme` type of its own.
     let themes = atoms
-        .atoms
+        .atoms()
         .iter()
         .filter(|a| matches!(a, AtomEnvelope::Entity(e) if e.entity_type == EntityType::Concept))
         .count() as u64;

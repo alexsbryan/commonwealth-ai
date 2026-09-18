@@ -92,7 +92,7 @@ pub(super) async fn cmd_corpus_export_parcels(args: &[String]) -> i32 {
     };
 
     let parcels: Vec<_> = atoms_file
-        .atoms
+        .atoms()
         .into_iter()
         .filter_map(|env| match env {
             AtomEnvelope::Entity(e) => match &e.entity_type {

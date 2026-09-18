@@ -71,6 +71,12 @@ fn rs_files(dir: &Path, out: &mut Vec<PathBuf>) {
 /// `struct AtomsFile`, `struct AtomsFile<Suffix>` (the `Lite` lookalike), or
 /// `struct RawAtom` (the untyped envelope). `DocToAtomsFile` is a different
 /// artifact (`doc_to_atoms.json`) and is deliberately not matched.
+///
+/// `AtomsFileWire` is NOT a second shape. It is the private deserialize twin of
+/// `AtomsFile` in the same home — the mechanism that lets `AtomsFile` itself be
+/// not `Deserialize` while `read_atlas_atoms` stays the only parser (domains
+/// `REVIEW-build-vocab-seal`; `quality/DOMAINS.md` §10.5 "The correction"). It
+/// is part of the ONE declaration, so the census does not count it.
 fn is_atoms_file_decl(line: &str) -> bool {
     let t = line.trim_start();
     let t = t.strip_prefix("pub ").unwrap_or(t);
@@ -82,7 +88,7 @@ fn is_atoms_file_decl(line: &str) -> bool {
         .chars()
         .take_while(|c| c.is_alphanumeric() || *c == '_')
         .collect();
-    name == "RawAtom" || name.starts_with("AtomsFile")
+    name == "RawAtom" || (name.starts_with("AtomsFile") && name != "AtomsFileWire")
 }
 
 #[test]
@@ -126,6 +132,9 @@ fn the_matcher_sees_the_three_shapes_that_were_deleted() {
     assert!(is_atoms_file_decl("struct AtomsFileLite {"));
     assert!(is_atoms_file_decl("struct RawAtom {"));
     assert!(is_atoms_file_decl("pub struct AtomsFile {"));
+    // The wire twin is the one declaration's private deserialize half, not a
+    // second shape: refused by the matcher (domains REVIEW-build-vocab-seal).
+    assert!(!is_atoms_file_decl("pub(crate) struct AtomsFileWire {"));
     assert!(!is_atoms_file_decl("pub struct AtomEnvelope {"));
     assert!(!is_atoms_file_decl("struct EdgesFile {"));
     assert!(!is_atoms_file_decl("pub struct DocToAtomsFile {"));

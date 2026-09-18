@@ -164,9 +164,9 @@ pub async fn cmd_delta(args: &[String]) -> i32 {
     // legacy atoms orphaned). Mirror the newsworthy_host check.
     match read_atlas_atoms(&real_atlas_dir) {
         Ok(atoms_file) => {
-            let needs_migration = !atoms_file.atoms.is_empty()
+            let needs_migration = !atoms_file.atoms().is_empty()
                 && !atoms_file
-                    .atoms
+                    .atoms()
                     .iter()
                     .all(|env| env.id().is_content_hash());
             if needs_migration {
@@ -389,9 +389,9 @@ pub async fn cmd_delta(args: &[String]) -> i32 {
     // Capture the staged atom count before the vec is moved into the
     // delta — `atoms_added` (newly-appended) plus this minus that
     // gives the replaced-in-place count for the summary line.
-    let staged_atom_count = staged_atoms.atoms.len();
+    let staged_atom_count = staged_atoms.atoms().len();
     let delta = AtomsDelta {
-        added: staged_atoms.atoms,
+        added: staged_atoms.atoms().to_vec(),
         added_edges: staged_edges,
         // Net-new chapters have no prior atoms to remove/upsert.
         removed_doc_ids: vec![],
@@ -1164,9 +1164,9 @@ mod tests {
             // Sanity: the live atom is the content-hash Alice.
             {
                 let live_atoms = read_atlas_atoms(&live).unwrap();
-                assert_eq!(live_atoms.atoms.len(), 1);
-                assert_eq!(live_atoms.atoms[0].id(), &alice_id);
-                assert!(live_atoms.atoms[0].id().is_content_hash());
+                assert_eq!(live_atoms.atoms().len(), 1);
+                assert_eq!(live_atoms.atoms()[0].id(), &alice_id);
+                assert!(live_atoms.atoms()[0].id().is_content_hash());
             }
 
             // Staging atlas: sequential ids, one re-mentioning "Alice"
@@ -1186,10 +1186,10 @@ mod tests {
             // Step 6: read staging back, build the additive delta,
             // apply it to the live atlas.
             let staged = read_atlas_atoms(&staging).unwrap();
-            assert_eq!(staged.atoms.len(), 2);
-            let staged_count = staged.atoms.len();
+            assert_eq!(staged.atoms().len(), 2);
+            let staged_count = staged.atoms().len();
             let delta = AtomsDelta {
-                added: staged.atoms,
+                added: staged.atoms().to_vec(),
                 added_edges: vec![],
                 removed_doc_ids: vec![],
                 upserted_docs: vec![],
@@ -1206,16 +1206,16 @@ mod tests {
             // Final atlas carries exactly Alice + Bob, ids unique +
             // content-hash, Alice's id stable across the merge.
             let after = read_atlas_atoms(&live).unwrap();
-            assert_eq!(after.atoms.len(), 2);
+            assert_eq!(after.atoms().len(), 2);
             let bob_id = AtomId::entity_content_hash("Bob", &EntityType::Person, CORPUS);
             let ids: std::collections::HashSet<String> = after
-                .atoms
+                .atoms()
                 .iter()
                 .map(|a| a.id().as_str().to_string())
                 .collect();
             assert!(ids.contains(alice_id.as_str()), "Alice id preserved");
             assert!(ids.contains(bob_id.as_str()), "Bob appended");
-            assert!(after.atoms.iter().all(|a| a.id().is_content_hash()));
+            assert!(after.atoms().iter().all(|a| a.id().is_content_hash()));
         }
 
         #[test]
@@ -1241,7 +1241,7 @@ mod tests {
                 summary.files_touched.is_empty(),
                 "empty delta touches nothing"
             );
-            assert_eq!(read_atlas_atoms(&live).unwrap().atoms.len(), 1);
+            assert_eq!(read_atlas_atoms(&live).unwrap().atoms().len(), 1);
         }
     }
 }

@@ -1524,10 +1524,16 @@ impl AtomEnvelope {
 }
 
 /// Top-level atom file written to `atlas/atoms.json`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// `atoms` is crate-private and this type is deliberately NOT `Deserialize`:
+/// the derive is a constructor, so it would let any caller outside vocab mint a
+/// file from a string. The wire shape is [`AtomsFileWire`] and
+/// [`crate::read::read_atlas_atoms`] is the only parser (DM §10.5). `Serialize`
+/// stays — it is not a constructor, and every writer needs it.
+#[derive(Debug, Clone, Serialize)]
 pub struct AtomsFile {
     pub schema_version: String,
-    pub atoms: Vec<AtomEnvelope>,
+    pub(crate) atoms: Vec<AtomEnvelope>,
 }
 
 impl AtomsFile {
@@ -1580,6 +1586,48 @@ impl AtomsFile {
         Self {
             schema_version: Self::SCHEMA_VERSION.to_string(),
             atoms,
+        }
+    }
+
+    /// Construct from an explicit schema version — the WRITE path. Building
+    /// from a `Vec` you made is not the defect; parsing outside `read` is (DT).
+    pub fn from_atoms(schema_version: impl Into<String>, atoms: Vec<AtomEnvelope>) -> Self {
+        Self {
+            schema_version: schema_version.into(),
+            atoms,
+        }
+    }
+
+    /// The atoms this file carries — the one read accessor.
+    pub fn atoms(&self) -> &[AtomEnvelope] {
+        &self.atoms
+    }
+
+    /// Number of atoms in the file.
+    pub fn len(&self) -> usize {
+        self.atoms.len()
+    }
+
+    /// Whether the file carries no atoms.
+    pub fn is_empty(&self) -> bool {
+        self.atoms.is_empty()
+    }
+}
+
+/// The wire twin — the ONLY `Deserialize` for `atlas/atoms.json`. Crate-private,
+/// so no caller outside vocab can name it; [`crate::read::read_atlas_atoms`]
+/// parses this and hands back an [`AtomsFile`].
+#[derive(Deserialize)]
+pub(crate) struct AtomsFileWire {
+    pub(crate) schema_version: String,
+    pub(crate) atoms: Vec<AtomEnvelope>,
+}
+
+impl From<AtomsFileWire> for AtomsFile {
+    fn from(wire: AtomsFileWire) -> Self {
+        Self {
+            schema_version: wire.schema_version,
+            atoms: wire.atoms,
         }
     }
 }

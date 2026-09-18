@@ -122,7 +122,7 @@ pub(super) async fn cmd_entities(args: &[String]) -> i32 {
         // Involves edge contributes one (entity_id, chunk_id) pair.
         let entity_chunks = build_entity_chunk_map(&edges_file.edges);
 
-        for atom in &atoms_file.atoms {
+        for atom in atoms_file.atoms() {
             let AtomEnvelope::Entity(e) = atom else {
                 continue;
             };

@@ -129,7 +129,7 @@ fn resolve_cache_is_structural_placeholder(atlas_dir: &std::path::Path) -> bool 
     match corpus_engine_vocab::read::read_atlas_atoms(atlas_dir) {
         // Resolved atoms are the file's `atoms`; an empty array is the
         // structural placeholder.
-        Ok(file) => file.atoms.is_empty(),
+        Ok(file) => file.atoms().is_empty(),
         Err(_) => true,
     }
 }

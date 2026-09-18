@@ -191,7 +191,7 @@ pub fn write_atlas_full(
     // runtime can't open is a failed atlas write, not a silent degrade.
     // `atoms.json` stays the canonical export + the rebuild source for
     // `sovereign atlas migrate-all`.
-    write_atlas_v2_store(atlas_dir, &atoms_file.atoms, edges)?;
+    write_atlas_v2_store(atlas_dir, &atoms_file.atoms(), edges)?;
 
     // …then the seed table, from the `atoms.json` just written. Third artifact
     // of the same write, not a later step somebody remembers to run.
@@ -616,7 +616,7 @@ pub fn write_atlas_atoms(atlas_dir: &Path, atoms: &AtomsFile) -> io::Result<Path
     let path = atlas_dir.join("atoms.json");
     write_atomic(&path, atoms)?;
     let edges_file = read_atlas_edges(atlas_dir)?;
-    write_atlas_v2_store(atlas_dir, &atoms.atoms, &edges_file.edges)?;
+    write_atlas_v2_store(atlas_dir, &atoms.atoms(), &edges_file.edges)?;
     Ok(path)
 }
 
@@ -640,13 +640,15 @@ pub fn append_atoms_and_edges(
     if atoms.is_empty() && edges.is_empty() {
         return Ok(());
     }
-    let mut atoms_file = read_atlas_atoms(atlas_dir)?;
+    let atoms_file = read_atlas_atoms(atlas_dir)?;
     let mut edges_file = read_atlas_edges(atlas_dir)?;
-    atoms_file.atoms.extend(atoms.iter().cloned());
+    let mut merged_atoms = atoms_file.atoms().to_vec();
+    merged_atoms.extend(atoms.iter().cloned());
+    let atoms_file = AtomsFile::from_atoms(atoms_file.schema_version.clone(), merged_atoms);
     edges_file.edges.extend(edges.iter().cloned());
     write_atomic(&atlas_dir.join("atoms.json"), &atoms_file)?;
     write_atomic(&atlas_dir.join("edges.json"), &edges_file)?;
-    write_atlas_v2_store(atlas_dir, &atoms_file.atoms, &edges_file.edges)
+    write_atlas_v2_store(atlas_dir, &atoms_file.atoms(), &edges_file.edges)
 }
 
 /// Replace `atlas/edges.json` with the provided file. Used by Phase

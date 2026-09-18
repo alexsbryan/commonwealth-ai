@@ -423,8 +423,8 @@ pub async fn build_triage_candidates(
         canonical_name: String,
         is_placeholder: bool,
     }
-    let mut by_id: HashMap<String, Ent> = HashMap::with_capacity(atoms.atoms.len());
-    for atom in &atoms.atoms {
+    let mut by_id: HashMap<String, Ent> = HashMap::with_capacity(atoms.atoms().len());
+    for atom in atoms.atoms() {
         if let AtomEnvelope::Entity(e) = atom {
             by_id.insert(
                 e.id.as_str().to_string(),

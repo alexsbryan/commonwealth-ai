@@ -20,7 +20,7 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
-use crate::atoms::AtomsFile;
+use crate::atoms::{AtomsFile, AtomsFileWire};
 use crate::edges::EdgesFile;
 
 /// Directory name for atlas output under a corpus's index root.
@@ -30,11 +30,17 @@ pub const ATLAS_DIRNAME: &str = "atlas";
 /// Read the atoms file back from disk. Used by Phase 6 / Phase 7
 /// subcommands that run standalone after Phase 3b already wrote
 /// the atlas directory.
+///
+/// The parse goes through [`AtomsFileWire`] — the crate-private twin that is
+/// the only `Deserialize` for this file — so this function is the only
+/// constructor that parses `atoms.json` (DM §10.5 "The correction").
 pub fn read_atlas_atoms(atlas_dir: &Path) -> io::Result<AtomsFile> {
     let path = atlas_dir.join("atoms.json");
     let data = fs::read(&path)?;
-    serde_json::from_slice(&data)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("parse atoms.json: {e}")))
+    let wire: AtomsFileWire = serde_json::from_slice(&data).map_err(|e| {
+        io::Error::new(io::ErrorKind::InvalidData, format!("parse atoms.json: {e}"))
+    })?;
+    Ok(wire.into())
 }
 
 /// Read the edges file back from disk. Companion to

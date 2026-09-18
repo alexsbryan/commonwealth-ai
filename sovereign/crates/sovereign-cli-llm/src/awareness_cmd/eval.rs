@@ -86,7 +86,7 @@ pub(super) async fn cmd_eval(args: &[String]) -> i32 {
                 return 1;
             }
         };
-        for atom in atoms.atoms {
+        for atom in atoms.atoms().iter().cloned() {
             if let AtomEnvelope::Entity(e) = atom {
                 if classify_kind(&e.entity_type).is_some() {
                     extracted_names.push(e.canonical_name);

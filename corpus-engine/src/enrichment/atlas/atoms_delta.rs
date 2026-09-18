@@ -40,7 +40,7 @@ use std::path::Path;
 
 use crate::error::{Error, Result};
 
-use super::atoms::{AtomEnvelope, AtomId};
+use super::atoms::{AtomEnvelope, AtomId, AtomsFile};
 use super::doc_to_atoms::{self, DocToAtomsFile};
 
 /// Delta description. All four lists may be empty; `apply_atom_delta`
@@ -109,9 +109,10 @@ pub fn apply_atom_delta(atlas_dir: &Path, delta: AtomsDelta) -> Result<DeltaSumm
     }
 
     // ── Load current state ─────────────────────────────────
-    let mut atoms_file = super::writer::read_atlas_atoms(atlas_dir)
+    let atoms_file = super::writer::read_atlas_atoms(atlas_dir)
         .map_err(|e| Error::Serialization(format!("read atoms.json: {e}")))?;
-    summary.atoms_before = atoms_file.atoms.len();
+    let mut atoms = atoms_file.atoms().to_vec();
+    summary.atoms_before = atoms.len();
 
     let mut doc_index = doc_to_atoms::read(atlas_dir)
         .map_err(|e| Error::Serialization(format!("read doc_to_atoms.json: {e}")))?
@@ -135,11 +136,9 @@ pub fn apply_atom_delta(atlas_dir: &Path, delta: AtomsDelta) -> Result<DeltaSumm
 
     // ── Apply atoms.json mutations ─────────────────────────
     // Drop affected atoms.
-    let pre_len = atoms_file.atoms.len();
-    atoms_file
-        .atoms
-        .retain(|env| !atoms_to_drop.contains(env.id()));
-    summary.atoms_removed = pre_len - atoms_file.atoms.len();
+    let pre_len = atoms.len();
+    atoms.retain(|env| !atoms_to_drop.contains(env.id()));
+    summary.atoms_removed = pre_len - atoms.len();
 
     // Insert added + upserted atoms. Dedup by id (content-hash means
     // re-extracting the same conceptual atom produces the same id;
@@ -156,20 +155,21 @@ pub fn apply_atom_delta(atlas_dir: &Path, delta: AtomsDelta) -> Result<DeltaSumm
     // Replace in-place if already present (same content-hash id);
     // otherwise append.
     let mut by_id: HashMap<AtomId, usize> = HashMap::new();
-    for (idx, env) in atoms_file.atoms.iter().enumerate() {
+    for (idx, env) in atoms.iter().enumerate() {
         by_id.insert(env.id().clone(), idx);
     }
     let mut appended = 0usize;
     for (id, env) in new_atoms {
         if let Some(&idx) = by_id.get(&id) {
-            atoms_file.atoms[idx] = env;
+            atoms[idx] = env;
         } else {
-            atoms_file.atoms.push(env);
+            atoms.push(env);
             appended += 1;
         }
     }
     summary.atoms_added = appended;
-    summary.atoms_after = atoms_file.atoms.len();
+    summary.atoms_after = atoms.len();
+    let atoms_file = AtomsFile::from_atoms(atoms_file.schema_version.clone(), atoms);
 
     // ── Rebuild doc index ──────────────────────────────────
     // Rebuilding from scratch is O(atoms) — same cost as walking
@@ -326,8 +326,7 @@ mod tests {
     }
 
     fn read_atoms(atlas_dir: &Path) -> AtomsFile {
-        let raw = fs::read(atlas_dir.join("atoms.json")).unwrap();
-        serde_json::from_slice(&raw).unwrap()
+        crate::enrichment::atlas::read_atlas_atoms(atlas_dir).unwrap()
     }
 
     fn read_edges(atlas_dir: &Path) -> EdgesFile {
@@ -358,7 +357,7 @@ mod tests {
         assert_eq!(s.atoms_before, 1);
         assert_eq!(s.atoms_after, 2);
         let after = read_atoms(tmp.path());
-        assert_eq!(after.atoms.len(), 2);
+        assert_eq!(after.atoms().len(), 2);
     }
 
     #[test]
@@ -390,9 +389,9 @@ mod tests {
         assert_eq!(s.docs_removed, 1);
         assert_eq!(s.edges_dropped, 1); // edge referenced doc_a's atom
         let after_atoms = read_atoms(tmp.path());
-        assert_eq!(after_atoms.atoms.len(), 1);
-        assert_eq!(after_atoms.atoms[0].id().as_str(), {
-            match &after_atoms.atoms[0] {
+        assert_eq!(after_atoms.atoms().len(), 1);
+        assert_eq!(after_atoms.atoms()[0].id().as_str(), {
+            match &after_atoms.atoms()[0] {
                 AtomEnvelope::Entity(e) => e.id.as_str(),
                 _ => unreachable!(),
             }
@@ -421,8 +420,8 @@ mod tests {
         assert_eq!(s.atoms_added, 1);
         assert_eq!(s.docs_upserted, 1);
         let after = read_atoms(tmp.path());
-        assert_eq!(after.atoms.len(), 1);
-        match &after.atoms[0] {
+        assert_eq!(after.atoms().len(), 1);
+        match &after.atoms()[0] {
             AtomEnvelope::Entity(e) => assert_eq!(e.canonical_name, "Alice2"),
             _ => unreachable!(),
         }
@@ -451,7 +450,7 @@ mod tests {
         assert_eq!(s.atoms_added, 1);
         assert_eq!(s.atoms_after, 1);
         let after = read_atoms(tmp.path());
-        assert_eq!(after.atoms[0].id(), &alice_a_id);
+        assert_eq!(after.atoms()[0].id(), &alice_a_id);
     }
 
     #[test]
@@ -584,9 +583,9 @@ mod tests {
         apply_atom_delta(tmp.path(), delta).unwrap();
 
         let after = read_atoms(tmp.path());
-        assert_eq!(after.atoms.len(), 2);
+        assert_eq!(after.atoms().len(), 2);
         let names: Vec<String> = after
-            .atoms
+            .atoms()
             .iter()
             .filter_map(|a| match a {
                 AtomEnvelope::Entity(e) => Some(e.canonical_name.clone()),

@@ -35,7 +35,7 @@ use std::path::Path;
 
 use crate::error::{Error, Result};
 
-use super::atoms::{AtomEnvelope, AtomId};
+use super::atoms::{AtomEnvelope, AtomId, AtomsFile};
 use super::writer::{
     read_atlas_atoms, read_atlas_cross_corpus_edges, read_atlas_edges,
     write_atlas_cross_corpus_edges,
@@ -73,7 +73,7 @@ pub fn migrate_atlas_ids(
     let mut summary = MigrationSummary::default();
 
     // ── Load atoms.json ────────────────────────────────────
-    let mut atoms_file = match read_atlas_atoms(atlas_dir) {
+    let atoms_file = match read_atlas_atoms(atlas_dir) {
         Ok(f) => f,
         Err(e) => {
             return Err(Error::Serialization(format!(
@@ -91,7 +91,7 @@ pub fn migrate_atlas_ids(
     let mut new_ids_seen: HashMap<AtomId, AtomId> = HashMap::new();
 
     // First pass — entities.
-    for env in &atoms_file.atoms {
+    for env in atoms_file.atoms() {
         if let AtomEnvelope::Entity(e) = env {
             if e.id.is_content_hash() {
                 summary.atoms_already_content_hash += 1;
@@ -109,7 +109,7 @@ pub fn migrate_atlas_ids(
     }
     // Second pass — everything else. Some references need the
     // first-pass entity ids resolved already.
-    for env in &atoms_file.atoms {
+    for env in atoms_file.atoms() {
         let (old_id, new_id) = match env {
             AtomEnvelope::Entity(_) => continue,
             AtomEnvelope::Event(e) => {
@@ -243,7 +243,8 @@ pub fn migrate_atlas_ids(
     }
 
     // ── Rewrite atoms.json (atom.id + intra-atom refs) ─────
-    for env in atoms_file.atoms.iter_mut() {
+    let mut atoms = atoms_file.atoms().to_vec();
+    for env in atoms.iter_mut() {
         rewrite_atom(env, &id_map);
     }
     summary.atoms_migrated = id_map.len();
@@ -255,12 +256,11 @@ pub fn migrate_atlas_ids(
     // this step atoms.json carries multiple records sharing one id
     // and every downstream reader (apply_atom_delta, drift,
     // retrieval) sees inconsistent atom state.
-    let pre_dedup = atoms_file.atoms.len();
+    let pre_dedup = atoms.len();
     let mut seen_ids: HashSet<AtomId> = HashSet::new();
-    atoms_file
-        .atoms
-        .retain(|env| seen_ids.insert(env.id().clone()));
-    summary.atoms_deduped = pre_dedup - atoms_file.atoms.len();
+    atoms.retain(|env| seen_ids.insert(env.id().clone()));
+    summary.atoms_deduped = pre_dedup - atoms.len();
+    let atoms_file = AtomsFile::from_atoms(atoms_file.schema_version.clone(), atoms);
 
     if !dry_run {
         write_atomic(
@@ -594,9 +594,8 @@ mod tests {
         assert!(summary.files_touched.contains(&"edges.json".to_string()));
 
         // Re-read and verify content-hash shape on every atom + edge.
-        let atoms: AtomsFile =
-            serde_json::from_slice(&fs::read(atlas_dir.join("atoms.json")).unwrap()).unwrap();
-        for env in &atoms.atoms {
+        let atoms: AtomsFile = read_atlas_atoms(atlas_dir).unwrap();
+        for env in atoms.atoms() {
             let id = env.id();
             assert!(
                 id.is_content_hash(),
@@ -667,10 +666,9 @@ mod tests {
 
         migrate_atlas_ids(tmp.path(), "c", false).unwrap();
 
-        let atoms: AtomsFile =
-            serde_json::from_slice(&fs::read(tmp.path().join("atoms.json")).unwrap()).unwrap();
+        let atoms: AtomsFile = read_atlas_atoms(tmp.path()).unwrap();
         let alice_new = atoms
-            .atoms
+            .atoms()
             .iter()
             .find_map(|a| match a {
                 AtomEnvelope::Entity(e) if e.canonical_name == "Alice" => Some(e.id.clone()),
@@ -678,7 +676,7 @@ mod tests {
             })
             .unwrap();
         let bob_atom = atoms
-            .atoms
+            .atoms()
             .iter()
             .find_map(|a| match a {
                 AtomEnvelope::Entity(e) if e.canonical_name == "Bob" => Some(e),
@@ -707,12 +705,11 @@ mod tests {
         assert_eq!(summary.atoms_deduped, 1, "one duplicate Alice collapsed");
         assert_eq!(summary.collisions_detected.len(), 1);
 
-        let atoms: AtomsFile =
-            serde_json::from_slice(&fs::read(tmp.path().join("atoms.json")).unwrap()).unwrap();
-        assert_eq!(atoms.atoms.len(), 2, "Alice + Bob, no duplicates");
+        let atoms: AtomsFile = read_atlas_atoms(tmp.path()).unwrap();
+        assert_eq!(atoms.atoms().len(), 2, "Alice + Bob, no duplicates");
 
         let mut ids: Vec<_> = atoms
-            .atoms
+            .atoms()
             .iter()
             .map(|env| env.id().as_str().to_string())
             .collect();

@@ -48,7 +48,7 @@ pub fn cmd_seed(args: &[String]) -> i32 {
     };
     let ts = now_unix();
     let mut seeded = 0usize;
-    for env in &atoms.atoms {
+    for env in atoms.atoms() {
         if let AtomEnvelope::Claim(c) = env {
             if already.contains(&c.id) {
                 continue;

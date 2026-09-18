@@ -184,7 +184,7 @@ pub(super) fn collect_axis_atoms<'a>(
         return Vec::new();
     };
     let mut out = Vec::new();
-    for atom in &file.atoms {
+    for atom in file.atoms() {
         let candidate = match (axis.atom_shape, atom) {
             (AxisAtomShape::EntityWithConceptKind(tag), AtomEnvelope::Entity(e))
                 if e.concept_kind.as_deref() == Some(tag) =>

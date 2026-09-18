@@ -250,7 +250,7 @@ fn resolve_position_to_entity(name: &str, atoms: &AtomsFile) -> Option<AtomId> {
     // Collect entities once.
     let mut concepts: Vec<&Entity> = Vec::new();
     let mut persons: Vec<&Entity> = Vec::new();
-    for env in &atoms.atoms {
+    for env in atoms.atoms() {
         if let AtomEnvelope::Entity(e) = env {
             match e.entity_type {
                 EntityType::Concept => concepts.push(e),

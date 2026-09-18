@@ -430,8 +430,14 @@ async fn get_corpus_atoms(
         Err(e) => return internal_error(&format!("read atoms for `{corpus}`: {e}")),
     };
 
-    let total = file.atoms.len();
-    let page: Vec<AtomEnvelope> = file.atoms.into_iter().skip(offset).take(limit).collect();
+    let total = file.atoms().len();
+    let page: Vec<AtomEnvelope> = file
+        .atoms()
+        .iter()
+        .cloned()
+        .skip(offset)
+        .take(limit)
+        .collect();
     let next_offset = {
         let end = offset.saturating_add(page.len());
         (end < total).then_some(end)
@@ -555,7 +561,7 @@ async fn get_atom_card(
     };
 
     let atoms = match read_atlas_atoms(&atlas_dir) {
-        Ok(file) => file.atoms,
+        Ok(file) => file.atoms().to_vec(),
         Err(e) => return internal_error(&format!("read atoms: {e}")),
     };
     let target_id = AtomId::from_raw(atom_id.clone());
@@ -592,7 +598,7 @@ async fn get_atom_elsewhere(
     };
 
     let atoms = match read_atlas_atoms(&atlas_dir) {
-        Ok(file) => file.atoms,
+        Ok(file) => file.atoms().to_vec(),
         Err(e) => return internal_error(&format!("read atoms: {e}")),
     };
     let target_id = AtomId::from_raw(atom_id.clone());
@@ -656,7 +662,7 @@ async fn load_atlas_atoms(
 ) -> Option<Vec<AtomEnvelope>> {
     let (atlas_dir, _) = atlas_dir_for_corpus(engine, corpus_id).await?;
     match read_atlas_atoms(&atlas_dir) {
-        Ok(file) => Some(file.atoms),
+        Ok(file) => Some(file.atoms().to_vec()),
         Err(e) => {
             tracing::warn!(
                 corpus = %corpus_id,

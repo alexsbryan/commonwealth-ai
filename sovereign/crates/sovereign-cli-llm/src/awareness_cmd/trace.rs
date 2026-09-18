@@ -78,7 +78,7 @@ pub(super) async fn cmd_trace(args: &[String]) -> i32 {
                 return 1;
             }
         };
-        for atom in atoms_file.atoms {
+        for atom in atoms_file.atoms().iter().cloned() {
             if let AtomEnvelope::Entity(e) = atom {
                 atom_records.push((view_id.to_string(), e));
             }

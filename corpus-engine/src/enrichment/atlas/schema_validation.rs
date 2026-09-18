@@ -374,7 +374,7 @@ pub struct SchemaValidationInput<'a> {
 pub fn build_report(input: SchemaValidationInput<'_>) -> SchemaValidationReport {
     // Partition atoms by type.
     let (entities, events, states, relations, claims, questions, configurations) =
-        partition_atoms(&input.atoms.atoms);
+        partition_atoms(&input.atoms.atoms());
 
     let extraction = build_extraction_coverage(
         &entities,
@@ -396,7 +396,7 @@ pub fn build_report(input: SchemaValidationInput<'_>) -> SchemaValidationReport 
     );
     let confidence = build_confidence_distribution(&entities, &events, &states, &claims);
     let utilisation = build_atom_type_utilisation(&extraction);
-    let orphans = build_orphan_analysis(&input.atoms.atoms, &input.edges.edges);
+    let orphans = build_orphan_analysis(&input.atoms.atoms(), &input.edges.edges);
     let discourse = build_discourse_distribution(&claims);
     let cross_corpus = build_cross_corpus_connectivity(input.cross_corpus, entities.len());
     let gaps = DeterministicGapCounts {
@@ -415,7 +415,7 @@ pub fn build_report(input: SchemaValidationInput<'_>) -> SchemaValidationReport 
 
     let ontology = input
         .ontology
-        .map(|(file, merges)| build_ontology_coverage(file, &input.atoms.atoms, merges));
+        .map(|(file, merges)| build_ontology_coverage(file, &input.atoms.atoms(), merges));
 
     // Section count: union of section_ids across evidence. Cheap
     // proxy for "how long is the corpus".

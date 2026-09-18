@@ -216,13 +216,13 @@ pub fn topic_from_atlas(
     atlas_dir: &Path,
 ) -> std::io::Result<Option<BridgeTopic>> {
     let atoms = read_atlas_atoms(atlas_dir)?;
-    if atoms.atoms.is_empty() {
+    if atoms.atoms().is_empty() {
         return Ok(None);
     }
     Ok(Some(BridgeTopic::from_atoms(
         corpus_id,
         topic_id,
-        &atoms.atoms,
+        &atoms.atoms(),
     )))
 }
 

@@ -126,7 +126,7 @@ pub fn run(parsed: &ParsedGaps) -> Result<GapsReport, String> {
     let mut claims = Vec::new();
     let mut states = Vec::new();
     let mut questions = Vec::new();
-    for a in atoms.atoms {
+    for a in atoms.atoms().to_vec() {
         match a {
             AtomEnvelope::Claim(c) => claims.push(c),
             AtomEnvelope::State(s) => states.push(s),

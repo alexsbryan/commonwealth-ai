@@ -84,10 +84,10 @@ async fn starter_questions(
         .limit
         .unwrap_or(STARTER_QUESTIONS_DEFAULT)
         .min(STARTER_QUESTIONS_MAX);
-    let starters = rank_starter_questions(&file.atoms, limit);
+    let starters = rank_starter_questions(&file.atoms(), limit);
     tracing::debug!(
         corpus = %corpus,
-        total_atoms = file.atoms.len(),
+        total_atoms = file.atoms().len(),
         limit,
         returned = starters.len(),
         "enrich_http: starter questions served"

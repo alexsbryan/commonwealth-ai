@@ -96,7 +96,7 @@ pub async fn cmd_scaffold(args: &[String]) -> i32 {
         }
     };
 
-    let draft = scaffold_draft(&parsed.corpus_id, &parsed_atoms.atoms, parsed.per_axis);
+    let draft = scaffold_draft(&parsed.corpus_id, &parsed_atoms.atoms(), parsed.per_axis);
     let rendered = render_toml(&draft);
 
     match parsed.output.as_deref() {

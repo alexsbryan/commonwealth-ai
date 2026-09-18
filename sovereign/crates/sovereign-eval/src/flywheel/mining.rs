@@ -60,7 +60,7 @@ pub fn mine_claims(corpus: &Path, preview_fallback: bool) -> Vec<MinedClaim> {
     };
 
     let mut out = Vec::new();
-    for atom in &file.atoms {
+    for atom in file.atoms() {
         let AtomEnvelope::Claim(claim) = atom else {
             continue;
         };

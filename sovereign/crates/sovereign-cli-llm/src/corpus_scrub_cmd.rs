@@ -183,7 +183,7 @@ pub async fn run_scrub(args: &[String]) -> i32 {
         }
     };
 
-    let candidates = extract_candidates(&parsed.atoms, min_salience, include_concepts);
+    let candidates = extract_candidates(&parsed.atoms(), min_salience, include_concepts);
 
     if let Some(parent) = out.parent() {
         if let Err(e) = std::fs::create_dir_all(parent) {

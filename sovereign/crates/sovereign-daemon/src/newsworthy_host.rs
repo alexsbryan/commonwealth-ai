@@ -516,9 +516,9 @@ async fn apply_incremental(
         Ok(a) => a,
         Err(e) => return Err(format!("read atoms.json at {}: {e}", atlas_dir.display())),
     };
-    if !atoms_file.atoms.is_empty()
+    if !atoms_file.atoms().is_empty()
         && !atoms_file
-            .atoms
+            .atoms()
             .iter()
             .all(|env| env.id().is_content_hash())
     {
@@ -527,7 +527,7 @@ async fn apply_incremental(
                 .to_string(),
         );
     }
-    let atoms_before = atoms_file.atoms.len();
+    let atoms_before = atoms_file.atoms().len();
     drop(atoms_file);
 
     // Query LanceDB for the tick's chunks.
