@@ -116,7 +116,7 @@
 36309	sovereign/crates/sovereign-mesh
 1086	sovereign/crates/sovereign-mesh-test-harness
 585	sovereign/crates/sovereign-mesh-test-harness::tests
-42914	sovereign/crates/sovereign-mesh::tests
+44977	sovereign/crates/sovereign-mesh::tests
 4482	sovereign/crates/sovereign-meshapp
 114	sovereign/crates/sovereign-meshapp-registry
 56	sovereign/crates/sovereign-meshapp-registry::tests
