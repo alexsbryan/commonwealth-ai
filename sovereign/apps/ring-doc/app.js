@@ -22,6 +22,7 @@ import {
   applyPresence,
   changeAct,
   colorFor,
+  createAttribution,
   decodeActs,
   decodePresence,
   encodeSelf,
@@ -55,6 +56,9 @@ const awareness = new awarenessProtocol.Awareness(ydoc);
 // Op ids this document has already absorbed. Owned here, across polls —
 // `applyNew` reads and extends it.
 const applied = new Set();
+// Who last edited each paragraph. Owned here across polls for the same reason
+// `applied` is: it replays each act once, not once per tick.
+const attribution = createAttribution();
 
 let pending = [];
 let timer = null;
@@ -167,6 +171,35 @@ async function pollLive() {
     : read.gaps;
 }
 
+/// Put each paragraph's line beside the paragraph it is about.
+///
+/// The notes live in a gutter OUTSIDE the editable element and are positioned
+/// against it, rather than written into the paragraphs: text inside the
+/// contenteditable belongs to ProseMirror, and a page that put its own nodes
+/// there would have them redrawn away — or worse, folded into the document and
+/// appended to the rail as somebody's writing.
+///
+/// A paragraph the replay has no act for (the line is `null`) gets no note.
+/// That is the paragraph the typist is making right now, before its act has
+/// been read back: saying nothing for a third of a second is honest, and a
+/// placeholder name would not be.
+function renderAttribution(lines) {
+  const prose = el("editor").querySelector(".tiptap");
+  const gutter = el("attribution");
+  if (!prose) return;
+  const blocks = Array.from(prose.children);
+  gutter.replaceChildren();
+  lines.forEach((line, i) => {
+    const block = blocks[i];
+    if (line === null || block === undefined) return;
+    const note = document.createElement("div");
+    note.className = "note";
+    note.style.top = `${block.offsetTop}px`;
+    note.textContent = line;
+    gutter.appendChild(note);
+  });
+}
+
 async function poll() {
   let log;
   try {
@@ -186,6 +219,8 @@ async function poll() {
 
   const read = decodeActs(log, window.ring.fold, DOC_ID);
   applyNew(ydoc, read.acts, applied);
+  attribution.absorb(read.acts);
+  renderAttribution(attribution.lines(rosterMembers, Date.now()));
 
   el("scope").textContent =
     `${window.ring.namespace} — ${applied.size} change${applied.size === 1 ? "" : "s"}`;

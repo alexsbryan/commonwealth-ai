@@ -15,12 +15,14 @@ import { Y, awarenessProtocol } from "./vendor/ring-doc-bundle.js";
 import {
   DOC_CHANGE,
   DOC_ID,
+  PROSE_FRAGMENT,
   applyNew,
   applyPresence,
   b64ToBytes,
   bytesToB64,
   changeAct,
   colorFor,
+  createAttribution,
   decodeActs,
   decodePresence,
   encodeSelf,
@@ -249,4 +251,125 @@ test("a node absent for the outdated timeout is gone from the awareness map", as
     a.destroy();
     b.destroy();
   }
+});
+
+// --- attribution -----------------------------------------------------------
+//
+// The claim is `ra-doc-attribution-from-signer`: every "last edited by" line
+// resolves from the act's `actor` through the roster. The test that earns it
+// is the second one — the first would read the same if the adapter took the
+// name from inside the update, which is the mistake this whole path avoids.
+
+/// Paragraphs in the fragment Tiptap edits, as ONE update.
+const typedParagraphs = (texts) => {
+  const doc = new Y.Doc();
+  const frag = doc.getXmlFragment(PROSE_FRAGMENT);
+  for (const text of texts) {
+    const para = new Y.XmlElement("paragraph");
+    const body = new Y.XmlText();
+    body.insert(0, text);
+    para.insert(0, [body]);
+    frag.push([para]);
+  }
+  return Y.encodeStateAsUpdate(doc);
+};
+
+/// A further update over `base`, optionally announcing `clientID` as the
+/// client that wrote it. Yjs lets a client say who it is — `doc.clientID` is
+/// one assignment — which is exactly the forgery the rail's signature is
+/// there to make irrelevant.
+const edit = (base, clientID, change) => {
+  const doc = new Y.Doc();
+  Y.applyUpdate(doc, base);
+  if (clientID !== undefined) doc.clientID = clientID;
+  const before = Y.encodeStateVector(doc);
+  change(doc.getXmlFragment(PROSE_FRAGMENT));
+  return Y.encodeStateAsUpdate(doc, before);
+};
+
+const NOW_SEC = 1_756_512_000;
+const ALEX_KEY = MEMBERS.alex[0];
+const BO_KEY = MEMBERS.bo[0];
+
+test("each paragraph says who last edited it, and how long ago", () => {
+  const first = typedParagraphs(["one", "two"]);
+  const second = edit(first, undefined, (frag) => frag.get(1).get(0).insert(3, " more"));
+
+  const attribution = createAttribution();
+  attribution.absorb(
+    decodeActs(
+      {
+        ops: [
+          op("ring-a", changeAct(first), { actor: ALEX_KEY, ts_unix: NOW_SEC - 12 }),
+          op("ring-b", changeAct(second), { actor: BO_KEY, ts_unix: NOW_SEC - 4 }),
+        ],
+      },
+      fold,
+    ).acts,
+  );
+
+  assert.deepEqual(attribution.lines(MEMBERS, NOW_SEC * 1000), [
+    "last edited by alex 12s ago",
+    "last edited by bo 4s ago",
+  ]);
+});
+
+test("an update whose clientID is another node's still attributes to the signer", () => {
+  // The negative leg of the bar. `bo`'s page announces alex's Yjs clientID —
+  // one number, changed in a page anybody can edit, and Yjs has no way to
+  // refuse it. The act carrying it is still signed by bo's key, which is the
+  // field admission verified, so the paragraph must read bo.
+  const alexDoc = new Y.Doc();
+  alexDoc.clientID = 1001;
+  const alexFrag = alexDoc.getXmlFragment(PROSE_FRAGMENT);
+  const para = new Y.XmlElement("paragraph");
+  const body = new Y.XmlText();
+  body.insert(0, "alex wrote this");
+  para.insert(0, [body]);
+  alexFrag.push([para]);
+  const honest = Y.encodeStateAsUpdate(alexDoc);
+
+  const forged = edit(honest, 1001, (frag) => frag.get(0).get(0).insert(0, "bo typed here. "));
+  // The forgery, checked rather than assumed: every struct in bo's update
+  // announces alex's client. A reader that took the name from in here would
+  // say alex, which is the failure the line below rules out.
+  assert.deepEqual(
+    [...new Set(Y.decodeUpdate(forged).structs.map((s) => s.id.client))],
+    [1001],
+    "the update under test does not actually carry alex's clientID",
+  );
+
+  const attribution = createAttribution();
+  attribution.absorb(
+    decodeActs(
+      {
+        ops: [
+          op("ring-a", changeAct(honest), { actor: ALEX_KEY, ts_unix: NOW_SEC - 30 }),
+          op("ring-b", changeAct(forged), { actor: BO_KEY, ts_unix: NOW_SEC - 1 }),
+        ],
+      },
+      fold,
+    ).acts,
+  );
+
+  assert.deepEqual(attribution.lines(MEMBERS, NOW_SEC * 1000), [
+    "last edited by bo 1s ago",
+  ]);
+});
+
+test("a key the roster does not name is said to be unnamed, never invented", () => {
+  // A member admitted since this node's last log read signs acts it cannot yet
+  // name. The honest line says so; a fallback to the key, or to "someone",
+  // would be a page substituting for an absence (ARCH §6).
+  const attribution = createAttribution();
+  attribution.absorb(
+    decodeActs(
+      { ops: [op("ring-a", changeAct(typedParagraphs(["hello"])), { actor: "dd".repeat(32) })] },
+      fold,
+    ).acts,
+  );
+
+  const [line] = attribution.lines(MEMBERS, NOW_SEC * 1000);
+  assert.match(line, /does not name/);
+  assert.doesNotMatch(line, /alex|bo|dddd/);
 });

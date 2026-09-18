@@ -77,12 +77,13 @@ export function docReducer(acc, payload, op) {
     acc.gaps.push(`act ${op.id} carries a ${typeof payload.update} update`);
     return acc;
   }
-  // `actor` and `person` ride along for attribution. They come from the
-  // SIGNER the rail authenticated, never from anything inside the update.
+  // `actor`, `person` and `ts_unix` ride along for attribution. They come from
+  // the SIGNER the rail authenticated, never from anything inside the update.
   acc.acts.push({
     id: op.id,
     actor: op.actor,
     person: op.person,
+    ts: op.ts_unix,
     update: payload.update,
   });
   return acc;
@@ -125,6 +126,109 @@ export function applyNew(ydoc, acts, applied) {
     FROM_RAIL,
   );
   return fresh;
+}
+
+// ---------------------------------------------------------------------------
+// Attribution — who last edited each paragraph, and when.
+//
+// Yjs stamps every character with the clientID of the client that produced it,
+// and a clientID is self-asserted: a page edited to announce another node's
+// number writes that number into every update it makes, and nothing in Yjs
+// checks it. The rail's `actor` is the other kind of field — the signing key
+// admission verified before the act was admitted (`admit.rs:204`) — and a
+// writer cannot set it for somebody else.
+//
+// So nothing below reads a name out of an update. It replays the acts in the
+// rail's order and records, per paragraph, WHICH ACT last changed it; the name
+// is that act's `actor` through the roster. A forged clientID travels inside
+// an act like any other bytes and renders under the key that signed the act.
+//
+// This is also why per-character colouring is not shown, and why the page says
+// so out loud: telling two authors apart INSIDE one paragraph could only read
+// the per-character clientIDs, which is the field that cannot be checked.
+
+/// The fragment Tiptap's `Collaboration` extension edits. One name, one place
+/// — a replay that read a different fragment would attribute nothing and look
+/// exactly like a document nobody has typed in.
+export const PROSE_FRAGMENT = "default";
+
+/// Replay the acts and keep, per paragraph, the act that last touched it.
+///
+/// The replay runs on its OWN `Y.Doc` rather than on the editor's: `applyNew`
+/// applies a poll's acts in one transaction, deliberately, so the editor sees
+/// one update event for the batch — and a batch is exactly what destroys the
+/// act-to-paragraph correspondence. Here each act is applied alone, which is
+/// what makes "which act touched this paragraph" an observed fact rather than
+/// a guess. The caller owns the returned object across polls, the way it owns
+/// `applied`, so each act is replayed once and not once per tick.
+export function createAttribution() {
+  const ydoc = new Y.Doc();
+  const frag = ydoc.getXmlFragment(PROSE_FRAGMENT);
+  const seen = new Set();
+  // Keyed by the paragraph's Yjs type, which is the identity that survives a
+  // peer inserting a paragraph above it. An index would not.
+  const by = new Map();
+  let current = null;
+
+  frag.observeDeep((events) => {
+    if (current === null) return;
+    for (const event of events) {
+      for (const block of touchedBlocks(event, frag)) by.set(block, current);
+    }
+  });
+
+  return {
+    /// Replay every act not replayed yet, in the order given.
+    absorb(acts) {
+      for (const act of acts) {
+        if (seen.has(act.id)) continue;
+        seen.add(act.id);
+        current = { actor: act.actor, ts: act.ts };
+        Y.applyUpdate(ydoc, b64ToBytes(act.update));
+      }
+      current = null;
+    },
+    /// One line per top-level block, in document order; `null` where no act
+    /// has touched that block yet (a paragraph the typist has made and not
+    /// yet had read back).
+    lines(members, nowMs) {
+      return frag.toArray().map((block) => attributionLine(by.get(block), members, nowMs));
+    },
+  };
+}
+
+/// The top-level blocks one Yjs event changed.
+///
+/// An event on the fragment itself is a paragraph added or removed, and the
+/// added ones are in its delta; an event anywhere else is text inside one
+/// block, so the block is found by walking up to the fragment's child.
+function touchedBlocks(event, frag) {
+  if (event.target === frag) {
+    const added = [];
+    for (const part of event.delta || []) {
+      if (Array.isArray(part.insert)) added.push(...part.insert);
+    }
+    return added;
+  }
+  let node = event.target;
+  while (node && node.parent && node.parent !== frag) node = node.parent;
+  return node && node.parent === frag ? [node] : [];
+}
+
+/// "last edited by alex 4s ago", from the act, or `null` when no act has
+/// touched this paragraph.
+///
+/// A key the roster does not know is SAID to be unknown rather than rendered
+/// as the key or as "someone" — an absence reported, never defaulted
+/// (ARCH §6). It can happen honestly: a member admitted after this node's last
+/// log read signs acts this node cannot yet name.
+export function attributionLine(entry, members, nowMs) {
+  if (!entry) return null;
+  const name = personFor(members, entry.actor);
+  const ago = Math.max(0, Math.round(nowMs / 1000 - entry.ts));
+  return name === null
+    ? `last edited by a key this node's roster does not name, ${ago}s ago`
+    : `last edited by ${name} ${ago}s ago`;
 }
 
 // ---------------------------------------------------------------------------
