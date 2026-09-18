@@ -374,3 +374,14 @@ instrument's own component and stands in for 'the browser on that machine'. (2) 
 command that runs on or talks to a node goes through `sv`/`node_exec`/`node_curl`; the
 row's earlier four-function seam was a list, not a door. (3) A's join address is per
 backend. (4) `_cut`/`_heal` for phase 2; phase 4 keeps a real stop on both backends.
+
+## 2026-09-18 · rd-1-three-containers · the join takes the product's no-VPN path on both backends
+
+Worker §6 03:20Z: `relay=` is a POST to the founder's internal port (daemon.rs:1596-1607), which
+is loopback-bound (ring-doc-demo.sh:191) — on podman B cannot reach it; on local it worked only
+because three daemons share one loopback. Decided by the seat: option (i). The founder's
+`/v1/mesh/status` already serves `join_link` with the live `dial=` (current_invite,
+daemon.rs:1952; mesh_http.rs:504); B and C join with that link and the daemon key-dials the
+founder over iroh. Same code on both backends (decision 2: yes; local re-run is the proof).
+Not taken: `internal_bind = 0.0.0.0` — tests a path the Mac will never take and moves a
+loopback pin. Recorded for the audit: `mesh rotate` prints the link without `dial=`.
