@@ -12,7 +12,8 @@
 # ONE session, four phases, so the legs a bar joins are measured together:
 #   1. 100 concurrent edits, three nodes, shared and separate paragraphs
 #      → append-to-held latency, cursor latency, convergence.
-#   2. C's daemon is stopped for 60 s while all three keep typing
+#   2. C is cut off for 60 s while all three keep typing (`_cut`/`_heal`:
+#      local stops C's daemon, podman disconnects C's container from the net)
 #      → reconvergence, the union of what was typed, the gap panels.
 #   3. B appends an update carrying A's Yjs clientID → attribution.
 #   4. presence only, then a stop/start of B's daemon → the live lane kept
@@ -29,14 +30,35 @@
 # a daemon from config and must not be able to reach the operator's.
 #
 #   scripts/ring-doc-demo.sh up                  bring the three up, join, roster
+#   scripts/ring-doc-demo.sh tabs                the three page URLs and whose each is
 #   scripts/ring-doc-demo.sh down                stop everything
 #   scripts/ring-doc-demo.sh verdict <bar|all>   census, bring up, run, tear down
+#
+# BACKENDS (`--backend <b>` first, or env RING_DOC_BACKEND; default local).
+#   local   the three daemons as processes on this host, as above.
+#   podman  three containers ring-doc-a|b|c on a `ring-doc` network, the repo
+#           bind-mounted at its own path so target/debug/* runs unchanged. Each
+#           daemon and its `ring dev` run INSIDE their container and stay on
+#           that container's loopback, as the product requires. The host
+#           browser (and the driver) reaches a node's page through a python3
+#           forwarder IN the container, container-address:DPORT → 127.0.0.1:DPORT,
+#           published on the host's DPORT. The forwarder is this instrument's,
+#           not the product's: it stands in for "the browser on that machine",
+#           and `svrn ring dev` gains no bind flag for it.
+# Every command that runs on or talks to a node goes through `sv`/`node_exec`/
+# `node_curl`; every verdict row is the same code on both backends.
 #
 # `verdict` prints one co-lineage measurement line per bar as its LAST lines
 # (`{"bar": …, "value": N, "floor": F, "verdict": …, "artifact": …}`). Floors
 # and directions are READ from quality/campaigns/ring-doc.toml, never restated.
 # The first run is the pre-registration: its numbers are recorded, not tuned to.
 set -uo pipefail
+
+BACKEND="${RING_DOC_BACKEND:-local}"
+[ "${1:-}" = --backend ] && { BACKEND="${2:-}"; shift 2; }
+case "$BACKEND" in local|podman) ;; *) echo "ring-doc-demo: backend is local or podman, not '$BACKEND'" >&2; exit 2 ;; esac
+# The driver re-enters this script for _cut/_heal/_stop/_start: same backend.
+export RING_DOC_BACKEND="$BACKEND"
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 SCRIPT="$REPO/scripts/ring-doc-demo.sh"
@@ -56,13 +78,107 @@ declare -A DPORT=([a]=19849 [b]=19859 [c]=19869)
 declare -A PERSON=([a]=alex [b]=bo [c]=cy)
 declare -A MESHNAME=([a]=Alex [b]=Bo [c]=Cy)
 
-sv() { local n=$1; shift; SOVEREIGN_DATA_DIR="$D/$n" "$CLI" "$@" 2>/dev/null | grep -v '^svrnmesh: bridged'; }
+# ── the one door to a node ──────────────────────────────────────────────────
+# podman from inside the toolbox is the host's, reached through flatpak-spawn.
+if command -v podman >/dev/null; then PODMAN=(podman); else PODMAN=(flatpak-spawn --host podman); fi
+NET=ring-doc
+# Fixed addresses, so a healed container comes back where its forwarder listens.
+SUBNET=10.89.49.0/24
+declare -A IP=([a]=10.89.49.11 [b]=10.89.49.12 [c]=10.89.49.13)
+# The image the binaries link against. The toolbox was created from this tag;
+# when the tag has moved on (it is not pulled here), the toolbox's own image
+# is used and the substitution is printed.
+IMAGE="${RING_DOC_IMAGE:-docker.io/kyuz0/amd-strix-halo-toolboxes:vulkan-radv}"
+
+# A command on node n, with n's data dir. Plain on local; in n's container on podman.
+node_exec() {
+  local n=$1; shift
+  if [ "$BACKEND" = podman ]; then
+    "${PODMAN[@]}" exec -e SOVEREIGN_DATA_DIR="$D/$n" -e SOVEREIGN_NO_STALE_WARN=1 "ring-doc-$n" "$@"
+  else
+    SOVEREIGN_DATA_DIR="$D/$n" "$@"
+  fi
+}
+# curl run ON node n, so a URL on n's loopback is n's own (see `at`).
+node_curl() { local n=$1; shift; node_exec "$n" curl "$@"; }
+at() { echo "http://127.0.0.1:$1"; } # a port on the node's own loopback, from the node
+# The page URL as the browser on that machine opens it — on podman, the host's
+# published port into the node's forwarder.
+tab_url() { echo "http://127.0.0.1:${DPORT[$1]}"; }
+# Where B and C find A to join: A's loopback on local, A's container on podman.
+join_host() { if [ "$BACKEND" = podman ]; then echo ring-doc-a; else echo 127.0.0.1; fi; }
+sv() { local n=$1; shift; node_exec "$n" "$CLI" "$@" 2>/dev/null | grep -v '^svrnmesh: bridged'; }
+# A long-lived process on node n; its pid, in the node's own pid space, to pidfile.
+node_bg() { # node pidfile out err cmd…
+  local n=$1 pidf=$2 out=$3 err=$4; shift 4
+  node_exec "$n" sh -c 'p=$1 o=$2 e=$3; shift 3; "$@" >> "$o" 2>> "$e" < /dev/null & echo $! > "$p"' sh "$pidf" "$out" "$err" "$@"
+}
+node_kill() { local n=$1 pidf=$2; [ -f "$pidf" ] && node_exec "$n" kill "$(cat "$pidf")" 2>/dev/null; return 0; }
+
+# The instrument's forwarder (podman only): container-address:port → 127.0.0.1:port.
+FWD_PY='
+import socket, sys, threading
+host, port = sys.argv[1], int(sys.argv[2])
+def pipe(a, b):
+    try:
+        while True:
+            d = a.recv(65536)
+            if not d: break
+            b.sendall(d)
+    except OSError: pass
+    try: b.shutdown(socket.SHUT_WR)
+    except OSError: pass
+def serve(c):
+    try: u = socket.create_connection(("127.0.0.1", port))
+    except OSError: c.close(); return
+    t = threading.Thread(target=pipe, args=(u, c), daemon=True); t.start()
+    pipe(c, u); t.join(); c.close(); u.close()
+srv = socket.create_server((host, port))
+while True:
+    c, _ = srv.accept()
+    threading.Thread(target=serve, args=(c,), daemon=True).start()
+'
+start_forwarder() { # node
+  local n=$1
+  node_kill "$n" "$D/$n/fwd.pid"
+  node_bg "$n" "$D/$n/fwd.pid" "$D/$n/fwd.out" "$D/$n/fwd.err" python3 -c "$FWD_PY" "${IP[$n]}" "${DPORT[$n]}"
+}
 
 need_binaries() {
   # Exit 3 is co-lineage's "artifact-absent": could-not-judge, not a failed bar.
-  [ -x "$DAEMON" ] && [ -x "$CLI" ] && command -v node >/dev/null && return 0
-  echo "ring-doc-demo: build first (cargo build --bins --features sovereign-cli/dev-tools) and put node on PATH" >&2
-  exit 3
+  if ! { [ -x "$DAEMON" ] && [ -x "$CLI" ] && command -v node >/dev/null; }; then
+    echo "ring-doc-demo: build first (cargo build --bins --features sovereign-cli/dev-tools) and put node on PATH" >&2
+    exit 3
+  fi
+  [ "$BACKEND" = podman ] || return 0
+  "${PODMAN[@]}" version >/dev/null 2>&1 || { echo "ring-doc-demo: podman is not reachable (${PODMAN[*]})" >&2; exit 3; }
+  if ! "${PODMAN[@]}" image exists "$IMAGE" 2>/dev/null; then
+    local tb; tb=$("${PODMAN[@]}" inspect sovereign-vulkan --format '{{.Image}}' 2>/dev/null)
+    [ -n "$tb" ] || { echo "ring-doc-demo: image $IMAGE is not on this host and there is no sovereign-vulkan toolbox to take it from" >&2; exit 3; }
+    echo "ring-doc-demo: $IMAGE is not on this host; using the sovereign-vulkan toolbox's image ${tb:0:12} instead" >&2
+    IMAGE=$tb
+  fi
+}
+
+containers_down() {
+  local n
+  for n in a b c; do "${PODMAN[@]}" rm -f -t 2 "ring-doc-$n" >/dev/null 2>&1; done
+  "${PODMAN[@]}" network rm -f "$NET" >/dev/null 2>&1
+  return 0
+}
+
+containers_up() {
+  local n
+  containers_down
+  "${PODMAN[@]}" network create --subnet "$SUBNET" "$NET" >/dev/null || { echo "podman: could not create network $NET" >&2; return 1; }
+  for n in a b c; do
+    # label=disable, as the toolbox runs: relabelling a bind-mounted repo is not ours to do.
+    "${PODMAN[@]}" run -d --name "ring-doc-$n" --hostname "ring-doc-$n" --network "$NET" --ip "${IP[$n]}" \
+      --init --userns=keep-id --security-opt label=disable -v "$REPO:$REPO" -w "$REPO" \
+      -p "${DPORT[$n]}:${DPORT[$n]}" --pull=never "$IMAGE" sleep infinity >/dev/null \
+      || { echo "podman: could not start ring-doc-$n" >&2; return 1; }
+    start_forwarder "$n"
+  done
 }
 
 mkcfg() { # node
@@ -82,15 +198,15 @@ mkcfg() { # node
   } > "$dir/config.toml"
 }
 
-start_daemon() { local n=$1; SOVEREIGN_DATA_DIR="$D/$n" "$DAEMON" daemon run >> "$D/$n/daemon.out" 2>> "$D/$n/daemon.err" & echo $! > "$D/$n/pid"; }
+start_daemon() { local n=$1; node_bg "$n" "$D/$n/pid" "$D/$n/daemon.out" "$D/$n/daemon.err" "$DAEMON" daemon run; }
 
 # ONE deadline for all of them: they cold-boot concurrently.
-wait_all_up() {
-  local deadline=$(( $(date +%s) + 240 )) p missing
+wait_all_up() { # node…
+  local deadline=$(( $(date +%s) + 240 )) n missing
   while [ "$(date +%s)" -lt "$deadline" ]; do
     missing=""
-    for p in "$@"; do
-      curl -s --max-time 2 "http://127.0.0.1:$p/status" >/dev/null 2>&1 || missing="$missing $p"
+    for n in "$@"; do
+      node_curl "$n" -s --max-time 2 "$(at "${CPORT[$n]}")/status" >/dev/null 2>&1 || missing="$missing $n"
     done
     [ -z "$missing" ] && return 0
     sleep 3
@@ -104,14 +220,14 @@ wait_all_up() {
 # contact with no iroh path — measured 2026-09-17: B joined 3 s after boot,
 # gossiped at A's plain addresses forever, and neither side could send the
 # other the correction. `/status` answering is not "ready"; `relay_homed` is.
-wait_homed() {
-  local deadline=$(( $(date +%s) + 120 )) p missing
+wait_homed() { # node…
+  local deadline=$(( $(date +%s) + 120 )) n missing
   while [ "$(date +%s)" -lt "$deadline" ]; do
     missing=""
-    for p in "$@"; do
-      curl -s --max-time 3 "http://127.0.0.1:$p/v1/mesh/status" 2>/dev/null \
+    for n in "$@"; do
+      node_curl "$n" -s --max-time 3 "$(at "${CPORT[$n]}")/v1/mesh/status" 2>/dev/null \
         | python3 -c "import sys,json; sys.exit(0 if (json.load(sys.stdin).get('self_reachability') or {}).get('relay_homed') else 1)" 2>/dev/null \
-        || missing="$missing $p"
+        || missing="$missing $n"
     done
     [ -z "$missing" ] && return 0
     sleep 2
@@ -125,7 +241,7 @@ wait_homed() {
 wait_online() { # display-name
   local deadline=$(( $(date +%s) + 120 ))
   while [ "$(date +%s)" -lt "$deadline" ]; do
-    curl -s --max-time 3 "http://127.0.0.1:${CPORT[a]}/v1/mesh/status" 2>/dev/null \
+    node_curl a -s --max-time 3 "$(at "${CPORT[a]}")/v1/mesh/status" 2>/dev/null \
       | python3 -c "import sys,json; sys.exit(0 if any(m['name']=='$1' and m.get('status')=='online' for m in json.load(sys.stdin)['members']) else 1)" 2>/dev/null \
       && return 0
     sleep 3
@@ -145,9 +261,9 @@ join_one() { # node
     sleep 3
   done
   [ -z "$key" ] && { echo "join: a would not rotate a key for $n inside 90s" >&2; return 1; }
-  curl -s --max-time 90 -X POST "http://127.0.0.1:${CPORT[$n]}/v1/mesh/join" \
+  node_curl "$n" -s --max-time 90 -X POST "$(at "${CPORT[$n]}")/v1/mesh/join" \
     -H 'content-type: application/json' \
-    -d "{\"key_or_url\":\"https://sovereign.dev/join/$key?relay=127.0.0.1:${IPORT[a]}\",\"node_name\":\"${MESHNAME[$n]}\"}" \
+    -d "{\"key_or_url\":\"https://sovereign.dev/join/$key?relay=$(join_host):${IPORT[a]}\",\"node_name\":\"${MESHNAME[$n]}\"}" \
     > "$D/join-$n.json"
 }
 
@@ -159,7 +275,7 @@ roster_all() {
   for n in a b c; do
     key=$(sv $n ring roster add "${PERSON[$n]}" --self --ring $RING | awk '/→/{print $3; exit}')
     [ -z "$key" ] && { echo "roster: node $n printed no key" >&2; return 1; }
-    KEY[$n]=$key
+    KEY[$n]=$key; echo "$key" > "$D/$n/roster.key"
   done
   for n in a b c; do
     for m in a b c; do
@@ -171,11 +287,11 @@ roster_all() {
 
 start_proxy() { # node — the page's door to its daemon, holding the grant
   local n=$1 deadline
-  [ -f "$D/$n/dev.pid" ] && kill "$(cat "$D/$n/dev.pid")" 2>/dev/null && sleep 1
-  SOVEREIGN_DATA_DIR="$D/$n" "$CLI" ring dev $RING --dir "$APP" --port "${DPORT[$n]}" >> "$D/$n/dev.out" 2>&1 & echo $! > "$D/$n/dev.pid"
+  [ -f "$D/$n/dev.pid" ] && node_kill "$n" "$D/$n/dev.pid" && sleep 1
+  node_bg "$n" "$D/$n/dev.pid" "$D/$n/dev.out" "$D/$n/dev.out" "$CLI" ring dev $RING --dir "$APP" --port "${DPORT[$n]}"
   deadline=$(( $(date +%s) + 60 ))
   while [ "$(date +%s)" -lt "$deadline" ]; do
-    curl -s --max-time 2 -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${DPORT[$n]}/__ring/log" -d '{}' 2>/dev/null | grep -q 200 && return 0
+    node_curl "$n" -s --max-time 2 -o /dev/null -w '%{http_code}' -X POST "$(at "${DPORT[$n]}")/__ring/log" -d '{}' 2>/dev/null | grep -q 200 && return 0
     sleep 1
   done
   echo "ring dev for $n never served /__ring/log" >&2
@@ -185,16 +301,16 @@ start_proxy() { # node — the page's door to its daemon, holding the grant
 stop_node() { # node — the daemon only; its proxy stays up and answers 502, as a page's would
   local n=$1 pid i
   pid=$(cat "$D/$n/pid" 2>/dev/null) || return 0
-  kill "$pid" 2>/dev/null
-  for i in $(seq 1 40); do kill -0 "$pid" 2>/dev/null || break; sleep 0.5; done
-  kill -9 "$pid" 2>/dev/null
+  node_exec "$n" kill "$pid" 2>/dev/null
+  for i in $(seq 1 40); do node_exec "$n" kill -0 "$pid" 2>/dev/null || break; sleep 0.5; done
+  node_exec "$n" kill -9 "$pid" 2>/dev/null
   return 0
 }
 
 start_node() { # node — daemon over the same data dir, then a fresh proxy (the grant may not survive)
   local n=$1
   start_daemon "$n"
-  wait_all_up "${CPORT[$n]}" || return 1
+  wait_all_up "$n" || return 1
   start_proxy "$n"
 }
 
@@ -203,25 +319,49 @@ cmd_up() {
   rm -rf "$D"; mkdir -p "$D"
   local n
   for n in a b c; do mkcfg $n; done
+  if [ "$BACKEND" = podman ]; then containers_up || exit 3; fi
   for n in a b c; do start_daemon $n; done
-  wait_all_up "${CPORT[a]}" "${CPORT[b]}" "${CPORT[c]}" || exit 3
-  wait_homed "${CPORT[a]}" "${CPORT[b]}" "${CPORT[c]}" || exit 3
+  wait_all_up a b c || exit 3
+  wait_homed a b c || exit 3
   join_one b && wait_online Bo || exit 3
   join_one c && wait_online Cy || exit 3
   # One more gossip round, so B has heard about C from A.
   sleep 12
   roster_all || exit 3
   for n in a b c; do start_proxy $n || exit 3; done
-  echo "up: a(${PERSON[a]}) b(${PERSON[b]}) c(${PERSON[c]}) — proxies on ${DPORT[a]} ${DPORT[b]} ${DPORT[c]}"
+  echo "up ($BACKEND): a(${PERSON[a]}) b(${PERSON[b]}) c(${PERSON[c]}) — proxies on ${DPORT[a]} ${DPORT[b]} ${DPORT[c]}"
+}
+
+# The cut phase 2 makes: on local C's daemon stops; on podman C's container
+# leaves the network, daemon still running — a real partition.
+cut_node() { # node
+  if [ "$BACKEND" = podman ]; then "${PODMAN[@]}" network disconnect "$NET" "ring-doc-$1"; else stop_node "$1"; fi
+}
+heal_node() { # node
+  if [ "$BACKEND" = podman ]; then
+    "${PODMAN[@]}" network connect --ip "${IP[$1]}" "$NET" "ring-doc-$1" || return 1
+    start_forwarder "$1"
+  else
+    start_node "$1"
+  fi
+}
+
+cmd_tabs() { # each page's URL on this host, and the roster name its node signs as
+  local n name
+  for n in a b c; do
+    name=$(sv $n ring roster show --ring $RING | grep -F "$(cat "$D/$n/roster.key" 2>/dev/null || echo '<no key>')" | awk '{print $1}')
+    echo "$n  $(tab_url $n)/  ${name:-<not on its own roster>}"
+  done
 }
 
 cmd_down() {
   local n
   for n in a b c; do
-    [ -f "$D/$n/dev.pid" ] && kill "$(cat "$D/$n/dev.pid")" 2>/dev/null
-    [ -f "$D/$n/pid" ] && kill "$(cat "$D/$n/pid")" 2>/dev/null
+    node_kill "$n" "$D/$n/dev.pid"
+    node_kill "$n" "$D/$n/pid"
   done
   sleep 1
+  if [ "$BACKEND" = podman ]; then containers_down; fi
 }
 
 # This ring's journals on all three nodes, as `<files> <fingerprint>`. Only
@@ -286,8 +426,8 @@ let phase = 0;
 const ledger = new Map(); // act id → { writer, paras, t0, phase, forged }
 
 class Page {
-  constructor(name, port) {
-    Object.assign(this, { name, port });
+  constructor(name, base) {
+    Object.assign(this, { name, base });
     this.ydoc = new Y.Doc();
     this.awareness = new awarenessProtocol.Awareness(this.ydoc);
     this.applied = new Set();
@@ -308,7 +448,7 @@ class Page {
       if (this.presenceTimer === null) this.presenceTimer = setTimeout(() => this.sendPresence(), T.PRESENCE_THROTTLE_MS);
     });
   }
-  url(op) { return `http://127.0.0.1:${this.port}/__ring/${op}`; }
+  url(op) { return `${this.base}/__ring/${op}`; }
   async call(op, body) { // the shim's `call`
     const r = await fetch(this.url(op), { method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify(body || {}), signal: AbortSignal.timeout(20000) });
@@ -408,7 +548,8 @@ class Page {
 }
 const { createAttribution } = A;
 
-const pages = { a: new Page("a", Number(process.env.PA)), b: new Page("b", Number(process.env.PB)), c: new Page("c", Number(process.env.PC)) };
+// Each page's base URL as its browser opens it (the script's `tab_url`).
+const pages = { a: new Page("a", process.env.PA), b: new Page("b", process.env.PB), c: new Page("c", process.env.PC) };
 const all = Object.values(pages);
 // Async on purpose: a synchronous exec would freeze all three pages' timers
 // for the whole of C's restart, and A and B must keep typing through it.
@@ -517,7 +658,7 @@ while (now() - preAt < PRE_SPLIT_S * 1000) {
   await sleep(3000);
   for (const p of all) prePanels[p.name].push(p.panel.slice());
 }
-await sh("_stop", "c");
+await sh("_cut", "c");
 const splitAt = now();
 const panels = { a: [], b: [], c: [] };
 // What a's and b's last live POST said about C, per sample: delivered, its
@@ -536,7 +677,7 @@ while (now() - splitAt < SPLIT_S * 1000) {
   for (const p of all) panels[p.name].push(p.panel.slice());
   for (const n of ["a", "b"]) peerC[n].push(saidAboutC(pages[n]));
 }
-await sh("_start", "c");
+await sh("_heal", "c");
 out.split_actual_s = (now() - splitAt) / 1000;
 await sleep(10000);
 stop2.stop = true;
@@ -617,7 +758,7 @@ JS
 
 run_session() {
   driver_js
-  REPO="$REPO" D="$D" SCRIPT="$SCRIPT" PA="${DPORT[a]}" PB="${DPORT[b]}" PC="${DPORT[c]}" \
+  REPO="$REPO" D="$D" SCRIPT="$SCRIPT" PA="$(tab_url a)" PB="$(tab_url b)" PC="$(tab_url c)" \
     node "$D/driver.mjs" > "$D/driver.out" 2> "$D/driver.err"
 }
 
@@ -750,8 +891,11 @@ PY
 case "${1:-}" in
   up)   cmd_up ;;
   down) cmd_down; echo "stopped" ;;
+  tabs) cmd_tabs ;;
   _stop)  stop_node "$2" ;;
   _start) start_node "$2" > /dev/null ;;
+  _cut)   cut_node "$2" ;;
+  _heal)  heal_node "$2" > /dev/null ;;
   _journals) journals ;;
   verdict)
     case "${2:-}" in
@@ -765,5 +909,5 @@ case "${1:-}" in
     run_session
     report "$2"
     ;;
-  *) sed -n '2,37p' "$0"; exit 2 ;;
+  *) sed -n '2,54p' "$0"; exit 2 ;;
 esac
