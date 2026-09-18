@@ -75,6 +75,26 @@ impl MeshKnowledgeClient {
     }
 }
 
+/// A serving daemon's mesh seam: its OWN `/v1/knowledge/search`, over loopback
+/// (TOPOLOGY §3.5). That route is the one decider for which corpora an ask can
+/// reach — local installed ∪ every queryable member's `hosted_corpora` — so the
+/// Runtime asks it rather than keeping a list of its own. Until 2026-09-18 the
+/// daemon left the slot `None` and every daemon-served turn skipped the fan-out.
+pub fn daemon_knowledge_source(
+    client_base: &str,
+) -> Option<std::sync::Arc<dyn MeshKnowledgeSource>> {
+    match MeshKnowledgeClient::new(client_base) {
+        Ok(c) => {
+            tracing::info!(base = %client_base, "mesh knowledge: daemon seam is its own knowledge route");
+            Some(std::sync::Arc::new(c))
+        }
+        Err(e) => {
+            tracing::warn!(base = %client_base, error = %e, "mesh knowledge: client build failed — turns will not fan out");
+            None
+        }
+    }
+}
+
 #[async_trait]
 impl MeshKnowledgeSource for MeshKnowledgeClient {
     async fn search(

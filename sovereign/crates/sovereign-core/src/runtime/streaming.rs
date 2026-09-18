@@ -1366,6 +1366,7 @@ impl Runtime {
             search_ms,
             retrieved_chunks,
             source_map,
+            peer_attribution,
             result_quality,
             prompt_budget_note,
             folder_meta,
@@ -2198,7 +2199,7 @@ impl Runtime {
             // have everything they had on the non-streaming path.
             let (sources_for_prov, coverage_for_prov) = build_provenance_components(
                 &source_map,
-                &std::collections::HashMap::new(),
+                &peer_attribution,
                 &folder_meta,
                 // KnowledgeQueryPlan doesn't carry the
                 // display-category lookup; the chip-label rename

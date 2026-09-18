@@ -407,6 +407,7 @@ impl Runtime {
             demand_plan,
             unavailable_corpora,
             atlas_summaries,
+            peer_attribution,
             ..
         } = pipeline_state;
 
@@ -569,6 +570,7 @@ impl Runtime {
                 search_ms,
                 retrieved_chunks: Vec::new(),
                 source_map: HashMap::new(),
+                peer_attribution: HashMap::new(),
                 result_quality: "empty",
                 // Parametric request — tiny prompt, can't overflow.
                 prompt_budget_note: None,
@@ -841,6 +843,7 @@ impl Runtime {
                 search_ms,
                 retrieved_chunks: Vec::new(),
                 source_map: HashMap::new(),
+                peer_attribution: HashMap::new(),
                 result_quality: "weak_evidence",
                 prompt_budget_note: None,
                 folder_meta: std::collections::HashMap::new(),
@@ -1600,6 +1603,7 @@ impl Runtime {
             search_ms,
             retrieved_chunks,
             source_map,
+            peer_attribution,
             result_quality,
             prompt_budget_note,
             folder_meta,
@@ -1942,7 +1946,7 @@ impl Runtime {
 
         let (sources_for_prov, coverage_for_prov) = build_provenance_components(
             &plan.source_map,
-            &std::collections::HashMap::new(),
+            &plan.peer_attribution,
             &plan.folder_meta,
             // KnowledgeQueryPlan doesn't yet carry a display-category
             // lookup. See the matching note in the streaming path

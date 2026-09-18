@@ -641,3 +641,191 @@ async fn fan_out_stamps_x_node_id_so_peer_emits_ledger() {
     assert_eq!(corpus_id, "sep", "corpus_id must be the served corpus");
     assert_eq!(*chunks, 1, "one chunk served");
 }
+
+/// Routes every message to `KnowledgeQuery`, the intent a question about a
+/// corpus reaches in production (the ring-room leg-1 log: `→ KnowledgeQuery`).
+struct KnowledgeRouter;
+
+#[async_trait::async_trait]
+impl sovereign_core::traits::Router for KnowledgeRouter {
+    async fn classify(
+        &self,
+        _message: &str,
+        _context: &sovereign_core::types::ConversationContext,
+        _tools: &[sovereign_core::types::ToolDescriptor],
+    ) -> sovereign_core::error::Result<sovereign_core::types::RouterClassification> {
+        Ok(sovereign_core::types::RouterClassification {
+            primary: sovereign_core::types::IntentCandidate {
+                intent: sovereign_core::types::Intent::KnowledgeQuery,
+                confidence: 1.0,
+            },
+            alternatives: Vec::new(),
+            rationale: None,
+            coarse_intent: None,
+            self_assessment: None,
+            timing: None,
+            scope: None,
+        })
+    }
+}
+
+/// ring-room D13: a CHAT turn served by the asker's daemon reaches the corpus
+/// a peer hosts, and the answer's sources name that peer. The route above was
+/// already green; the turn was not, because the daemon's `Runtime` had no mesh
+/// seam, so `step_main_retrieval_mesh` skipped the fan-out (ring-room leg 1:
+/// `mesh fan-out skipped — this Runtime has no mesh knowledge source`).
+///
+/// Asserted on `provenance.sources[].from_peer`, which is written from the
+/// same `peer_attribution` the released citation's `member` is
+/// (rr-1-citation-member-on-released covers that projection at the gate).
+#[tokio::test]
+async fn a_daemon_served_chat_turn_names_the_peer_whose_corpus_answered() {
+    const FACT: &str =
+        "The Larkspur Lane cooperative keeps its bees in four hives painted teal, ochre, plum and slate.";
+    // === Host (Bo): the corpus lives only here, behind its internal router ===
+    let tmp_host = tempfile::tempdir().unwrap();
+    let indexes_host = tmp_host.path().join("indexes");
+    std::fs::create_dir_all(&indexes_host).unwrap();
+    install_corpus(&indexes_host, "larkspur", "note-0", FACT).await;
+    let engine_host = Arc::new(
+        CorpusEngine::new(
+            tmp_host.path().join("recipes"),
+            indexes_host,
+            mock_embed_fn(),
+        )
+        .with_embedding_model("qwen3-embedding-0.6b"),
+    );
+    let id_host = NodeId::from_u128(0xB0B0_B0B0_B0B0_B0B0);
+    let mut host_self = common::member(id_host, "Bo", "127.0.0.1:9742".parse().unwrap());
+    host_self.capabilities = caps_with_hosted(&["larkspur"]);
+    let mut mesh_host = common::solo_mesh(id_host, "room");
+    mesh_host.members.insert(id_host, host_self);
+    let addr_host = spawn_router(internal_router(AppState::new_with_platform_and_engine(
+        id_host,
+        mesh_host,
+        Arc::new(MeshStore::in_memory().unwrap()),
+        Arc::new(AppRegistry::new()),
+        Some(engine_host),
+    )))
+    .await;
+
+    // === Asker: nothing installed; its client router knows Bo hosts it ===
+    let id_ask = NodeId::from_u128(0xA5A5_A5A5_A5A5_A5A5);
+    let mut mesh_ask = common::solo_mesh(id_ask, "room");
+    let mut bo = common::member(id_host, "Bo", addr_host);
+    bo.capabilities = caps_with_hosted(&["larkspur"]);
+    mesh_ask.members.insert(id_host, bo);
+    let addr_ask = spawn_router(client_router(AppState::new_with_platform_and_engine(
+        id_ask,
+        mesh_ask,
+        Arc::new(MeshStore::in_memory().unwrap()),
+        Arc::new(AppRegistry::new()),
+        None,
+    )))
+    .await;
+
+    // The asker's daemon Runtime, with the seam the daemon gives it.
+    let tmp_ask = tempfile::tempdir().unwrap();
+    let engine_ask = Arc::new(CorpusEngine::new(
+        tmp_ask.path().join("recipes"),
+        tmp_ask.path().join("indexes"),
+        mock_embed_fn(),
+    ));
+    let provider: Arc<dyn sovereign_core::traits::InferenceProvider> = Arc::new(
+        common::TestProvider::new()
+            .with_embed_marker(|_| vec![0.0_f32; EMBED_DIM])
+            .with_complete_text("teal, ochre, plum and slate")
+            .with_stream_chunks(vec!["The hives are teal, ochre, plum and slate.".into()]),
+    );
+    // One store for the Runtime that writes the answer and the daemon that
+    // projects it onto the `Complete` frame.
+    let store: Arc<dyn sovereign_core::traits::StateStore> =
+        Arc::new(sovereign_store::memory::InMemoryStateStore::new());
+    let mut runtime = sovereign_core::runtime::Runtime::new(sovereign_core::RuntimeParts::new(
+        Arc::clone(&provider),
+        Box::new(KnowledgeRouter),
+        Box::new(sovereign_core::stubs::NoOpPlanner),
+        Arc::new(sovereign_core::ToolRegistry::new()),
+        Arc::clone(&store),
+        Arc::new(sovereign_core::SkillRegistry::new()),
+        Arc::new(sovereign_core::executor::AutoApprovalChannel),
+        sovereign_core::types::InferenceConfig::default(),
+        sovereign_core::runtime::lane::LaneSources::none(),
+    ));
+    runtime.corpus_engine = Some(Arc::clone(&engine_ask));
+    runtime.mesh_knowledge =
+        sovereign_mesh::knowledge_client::daemon_knowledge_source(&format!("http://{addr_ask}"));
+    let daemon = sovereign_mesh::EmbeddedDaemon::new(
+        tmp_ask.path().to_path_buf(),
+        sovereign_core::setup_config::SetupConfig::unconfigured(),
+        common::desktop_services(common::DesktopParts {
+            provider,
+            store,
+            runtime: Arc::new(runtime),
+            ..common::DesktopParts::new(engine_ask)
+        }),
+    );
+    let addr_turn = spawn_router(sovereign_mesh::turn_http::turn_router(daemon)).await;
+
+    // === The chat ask, over the route `svrn chat ask` drives ===
+    let conv: serde_json::Value = reqwest::Client::new()
+        .post(format!("http://{addr_turn}/v1/conversations"))
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        .expect("turn route reachable")
+        .json()
+        .await
+        .unwrap();
+    let conv = conv["id"].as_str().expect("conversation id").to_string();
+    let (mut ws, _) = tokio_tungstenite::connect_async(format!(
+        "ws://{addr_turn}/v1/conversations/{conv}/stream"
+    ))
+    .await
+    .expect("websocket upgrade");
+    use futures::{SinkExt, StreamExt};
+    ws.send(tokio_tungstenite::tungstenite::Message::Text(
+        serde_json::to_string(&sovereign_contracts::types::TurnRequest::Message {
+            content: "What colours are the four hives of the Larkspur Lane cooperative painted?"
+                .into(),
+            mode: sovereign_contracts::types::TurnMode::Grounded,
+            intent: None,
+        })
+        .unwrap()
+        .into(),
+    ))
+    .await
+    .unwrap();
+    let complete = tokio::time::timeout(std::time::Duration::from_secs(60), async {
+        while let Some(Ok(msg)) = ws.next().await {
+            let tokio_tungstenite::tungstenite::Message::Text(t) = msg else {
+                continue;
+            };
+            let frame: sovereign_contracts::types::TurnFrame = serde_json::from_str(&t).unwrap();
+            match frame {
+                sovereign_contracts::types::TurnFrame::Complete { .. } => return frame,
+                sovereign_contracts::types::TurnFrame::StreamError { .. } => {
+                    panic!("the turn failed: {frame:?}")
+                }
+                _ => {}
+            }
+        }
+        panic!("the socket closed before a Complete frame")
+    })
+    .await
+    .expect("the turn completed within 60s");
+    let sovereign_contracts::types::TurnFrame::Complete { provenance, .. } = complete else {
+        unreachable!()
+    };
+    let sources = provenance
+        .expect("a grounded Complete carries provenance — absent is not the same as no sources")
+        .sources;
+    assert!(
+        sources
+            .iter()
+            .any(|s| s.origin == "larkspur" && s.from_peer.as_deref() == Some("Bo")),
+        "the answer's sources must name Bo as the machine serving `larkspur`; the asker \
+         installs nothing, so a source list without it means the turn never fanned out. \
+         Got: {sources:?}"
+    );
+}

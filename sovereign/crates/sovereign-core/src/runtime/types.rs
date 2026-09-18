@@ -200,6 +200,9 @@ pub(crate) struct KnowledgeQueryPlan {
     pub(crate) search_ms: u64,
     pub(crate) retrieved_chunks: Vec<serde_json::Value>,
     pub(crate) source_map: HashMap<String, usize>,
+    /// corpus id → the mesh member that served it, from
+    /// `PipelineState::peer_attribution` — the provenance's `from_peer`.
+    pub(crate) peer_attribution: HashMap<String, String>,
     /// `"empty"` | `"focused"` | `"synthesis"` | `"routed"` —
     /// surfaced in message metadata for the UI to label the turn.
     pub(crate) result_quality: &'static str,

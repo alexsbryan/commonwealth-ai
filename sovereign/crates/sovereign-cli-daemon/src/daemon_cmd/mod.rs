@@ -981,10 +981,9 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     //     move into a long-lived daemon running as a different user with a
     //     different cwd. Named in `tool_bundles` as a `Withheld` family, so it
     //     reads as a decision rather than an omission.
-    //   * `mesh_knowledge` left at the recipe's `None`. §3.5 lists it among
-    //     the five capabilities that leave the Runtime entirely: the client
-    //     posts to `127.0.0.1:9741/v1/knowledge/search`, which INSIDE this
-    //     process is a loopback call to itself.
+    //   * `mesh_knowledge` is the loopback §3.5 names: this daemon's own
+    //     `/v1/knowledge/search`. It was left at the recipe's `None` until
+    //     2026-09-18, and no daemon-served turn fanned out to a peer.
     let common = sovereign_runtime_recipe::common_parts(
         sovereign_runtime_recipe::RecipeInputs {
             inference: Arc::clone(&routed_provider),
@@ -1088,7 +1087,13 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
         &sovereign_runtime_recipe::TracingProgress,
     )
     .await;
-    let runtime = sovereign_runtime_recipe::commission(common.parts);
+    let runtime = sovereign_runtime_recipe::commission(sovereign_core::RuntimeParts {
+        mesh_knowledge: sovereign_mesh::knowledge_client::daemon_knowledge_source(&format!(
+            "http://127.0.0.1:{}",
+            config.daemon.client_port
+        )),
+        ..common.parts
+    });
     tracing::info!(
         tools = runtime.tools.count(),
         "daemon: Runtime commissioned — this process can serve a turn"
