@@ -1,0 +1,31 @@
+REVIEW-mint-wave-n
+commit 74698039e
+no build — REVIEW-mint: 12 rows appended to ralph/STATE.md, DECISIONS.md entry, no code touched
+correction: `python3 scripts/domains-census.py queue` exits 4 on the tree as found — 19 untagged
+  `corpus-index/src/**.rs` modules REVIEW-build-index-read-port (503681188) created with no
+  `[[module]]` rows, so queue/misnamed/crate-lines all refuse. Head read with the coverage
+  assertion bypassed (the queue computation is unchanged): corpus-engine 171,513 lines / 35.9%
+  own, sovereign-core 130,237 / 21.1% next. Recorded in the mint row + ralph/DECISIONS.md.
+what: wave = corpus-engine's REMAINDER. Wave 3 took only its Understanding carve, so the queue
+  still heads corpus-engine; `plan --crate corpus-engine` [4]-[8] names the leaving clusters left
+  (workbench, kernel, back-of-house, workspace, build-feedback; ingest and retrieval stay). Rows,
+  in plan order with the cycle carrying the wait:
+    dm-corpus-index-tag            — closes the coverage hole (tag 19 modules, context retrieval)
+    REVIEW-build-ce-workbench-crates — create code-facts/code-enrich; resolve the 4 reaches + from_scip
+    dm-ce-move-workbench           — the 7 files out
+    REVIEW-build-ce-kernel-leaf    — split the emptied kernel cluster (types.rs 127, error.rs 33, corpus.rs 10)
+    dm-ce-move-kernel              — move + delete the corpus-index shims
+    REVIEW-build-ce-harness-port   — the make_extractor/make_chunker port + understanding reaches
+    dm-ce-move-harness             — harness/ (7 files, 1,542) -> sovereign-authoring-harness
+    REVIEW-build-ce-notes-sync-crate — create corpus-engine-notes-sync; drop the dead notes dep
+    dm-ce-move-notes-sync          — notes_sync.rs + alignment_projector.rs out
+    dm-ce-move-build-feedback      — sovereign_config.rs (260) -> corpus-engine-watchers
+    REVIEW-build-ce-closed         — verdict rung: corpus-engine at 100% its own context
+    REVIEW-audit-wave-n            — TESTALL; PREPUSH
+premise: measured 2026-09-18 — `git ls-files 'corpus-index/src/**/*.rs' 'corpus-index/src/*.rs' | wc -l`
+  = 19 (10,046 lines); `grep -c 'corpus-index/src' quality/DOMAINS.toml` = 0; `plan --crate
+  corpus-engine` prints move order "understanding, workbench, kernel, back-of-house, workspace,
+  build-feedback" with `CYCLE ... understanding -> workbench -> kernel`; `git grep -n
+  'crate::enrichment::pipeline' -- corpus-engine/src/enrichment/code_intel` = mod.rs:35,36 + pass.rs:18;
+  `wc -l corpus-engine/src/{types,error,corpus}.rs` = 127/33/10 (DT :4057's 1,523-line kernel figure
+  is stale). `queue` exits 4 and `predicate` exits 1, so no ralph/DONE row.
