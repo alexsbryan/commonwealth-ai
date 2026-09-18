@@ -2745,3 +2745,39 @@ construction out of `state.rs`.
 
 **Landed in.** This commit. The row stays `[~]` with the PROGRESS note; the
 standalone-Fabric prerequisite is the next unit under it.
+
+## 2026-09-18 · REVIEW-build-daemon-membership-lifecycle · attempt 2 finalizes the row as its landed half; the standalone-Fabric prerequisite is minted
+
+**Fork.** Attempt 1 committed the running-only half at `8a8936b87` and left the
+row `[~]` with a PROGRESS note. Attempt 2 is told to finish the row, run its
+checks, and mark it `[x]` — but the row's own VERB is not complete: the
+stopped-state operations still cannot be Fabric's methods while `FabricPart`
+lives only inside `AppStateInner`. Complete the construction reorder here, or
+finalize the row for its landed half and mint the remainder?
+
+**Choice.** Finalize for the landed half and mint the remainder, per the
+`REVIEW-build-daemon-embedded-split` precedent (`306005a82`, which marked that
+row `[x]` for its landed half and minted this row). Re-deriving the
+construction reorder is explicitly out of scope for this attempt ("do not
+re-derive the analysis"); the prerequisite is a distinct unit whose evidence
+attempt 1 already recorded. Minted `REVIEW-build-daemon-fabric-standalone`
+(depends on this row) and re-pointed `DEMO-d5-misnamed` to it, so the demo
+cannot run before the lifecycle actually moves.
+
+**Evidence** (reproduced this session, tree unchanged since `8a8936b87`).
+- CLEAN exit=0 (debug target 38G, under 50G).
+- LINT exit=0 (WORKSPACE, `--all-targets`, errors 0, warnings 2405).
+- LAYER exit=0 — "every crate assigned, every edge points down or sideways …
+  fan-in within caps".
+- TEST(sovereign-mesh) exit=0 (613 pass); TEST(sovereign-daemon) exit=0 (706 pass).
+
+**Falsified by.** A showing that `FabricPart` can be constructed before
+`AppState` without moving its construction out of `state.rs` — i.e. a Fabric
+handle the daemon can hold across `stop_inner` while `AppStateInner` still owns
+the only instance; or an operator ruling that the stopped-state operations stay
+on the daemon and the row's VERB is satisfied by the running-only half.
+
+**Landed in.** `8a8936b87` (the running-only half) and this commit
+(`ralph/STATE.md`: the row marked `[x]` with the CORRECTED note, the minted
+prerequisite, `DEMO-d5-misnamed` re-pointed; this entry). `git revert 8a8936b87`
+reverts the half alone.
