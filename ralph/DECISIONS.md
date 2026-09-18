@@ -2588,3 +2588,63 @@ unnecessary); or that the `corpus-engine-scip` edge belongs on `sovereign-api`
 
 **Landed in.** `0a2891ccf` (the move) and `8a2de5e6a` (rustfmt). `git revert
 0a2891ccf` reverts the move alone.
+
+## 2026-09-18 · REVIEW-build-daemon-parts · the row cannot move all twenty fields; the serving package may not name commonwealth-state
+
+**Fork.** The row executes (all deps `[x]`) and says `state/serving.rs` (20
+fields) -> `sovereign-serving-host`, `state/answering.rs` -> `sovereign-core`,
+`state/workbench.rs` stays, `state/node.rs`/`state/ingest.rs` stay. Measure the
+destinations before editing: is each move legal?
+
+**Choice.** Split the row and land the legal half.
+
+1. **Serving: 17 of 20 move; 3 stay.** The part holds
+   `inference_store: InferenceStateStore` and
+   `peer_preferences: PeerPreferenceStore`, both defined in
+   `commonwealth-state`, plus `rpc_shard_warmer: Option<Arc<dyn RpcShardWarmer>>`
+   whose trait method takes `AppState`. `commonwealth-state` is a member of the
+   `commonwealth` package (`quality/ARCH_LAYERS.toml:1090-1094`), not a shared
+   leaf of `serving` (the package text names `oicp-types`, `kernel-types`,
+   `sovereign-contracts`, and the one grandfathered `commonwealth-core`
+   exception at `:1378-1383`). A `sovereign-serving-host -> commonwealth-state`
+   dep is a second `[[exception]]`; §7 makes adding one operator-only, and the
+   campaign's own kill clause says split, never widen
+   (`quality/campaigns/domains.toml:288`). The daemon holds the three in a new
+   `state/store.rs::StorePart`; both stores are `MeshStore`-backed, so their
+   home is the node the daemon assembles. The row's answering clause is false
+   for the same class of reason (below).
+2. **Answering does not move.** `AnsweringPart.middleware_registry` is
+   `crate::middleware::MiddlewareRegistry`, which DC §4.2:351 calls host
+   composition, and `session_store` is `sovereign_atos::session::SessionStore`;
+   `sovereign-atos` depends on `sovereign-core` (`Cargo.toml:22`), so the
+   reverse edge is a Cargo cycle. The part stays scaffolding in the daemon and
+   a follow-up row is minted for the three-way split the design actually needs.
+3. **The "never a flat field" clause is DC §4.2's end state, not this row.**
+   The parts remain the daemon's assembly bundle on `AppStateInner`; moving
+   every handler to take a part is `quality/DAEMON_CORE.md:412-416`'s
+   "Handlers take a part, never the node", a workspace-wide surface change the
+   row's ten-file grammar does not carry.
+
+**Evidence** (reproduced this session).
+- `quality/ARCH_LAYERS.toml:1090-1094` (`commonwealth` crates include
+  `commonwealth-state`); `:1161-1171` (the `serving` package's leaves and the
+  one exception); `:1378-1383` (the `commonwealth-core` exception).
+- `grep -n "pub struct InferenceStateStore\|pub struct PeerPreferenceStore"` ->
+  `commonwealth-state/src/store_adapter.rs:51`,
+  `commonwealth-state/src/peer_preferences.rs:105`; both hold `MeshStore`.
+- `grep -n "sovereign-core" sovereign/crates/sovereign-atos/Cargo.toml` ->
+  `:22`; `sovereign-core` does not depend on `sovereign-atos`.
+- `grep -n "middleware_registry" sovereign/crates/sovereign-daemon/src/state.rs`
+  -> `crate::middleware::MiddlewareRegistry` (host).
+- CLEAN exit=0; LINT exit=0 (WORKSPACE, `--all-targets`, 0 errors); LAYER
+  exit=0 ("fan-in within caps"); CENSUS `--self-test` exit=0.
+
+**Falsified by.** A showing that `commonwealth-state` is nameable from the
+`serving` package (then all twenty fields move in one row); or that
+`sovereign-core` can name `sovereign_atos::session::SessionStore` without the
+cycle (then answering moves); or an operator widening the serving `except`,
+which would make the store fields legal and this split unnecessary.
+
+**Landed in.** `6942d96e1` (the move) and `d52b7ab39` (rustfmt). The row is
+marked `[x]` with the correction; `REVIEW-build-daemon-answering-part` is minted
+under it. `git revert 6942d96e1` reverts the move alone.
