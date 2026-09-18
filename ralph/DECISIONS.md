@@ -2273,3 +2273,55 @@ live in `understanding-host` (it cannot: the engine may not name the host), or a
 **Landed in.** `037f8285c` (the port move, the re-exports, `new()`, the engine
 sites, the DT re-counts, the `SYSTEM_OVERVIEW.md` and `DOMAINS.toml` path
 repoints).
+
+## 2026-09-18 · REVIEW-build-understanding-pass-host · the extraction splits into five rows
+
+**Fork.** The row names one MOVE: the four `*Pass` impls, `refuse_deferred`,
+the test block and `builtin()` into `understanding-host`, plus the engine
+taking the registry at construction and the recipe path taking it too. Its own
+text says "SPLIT IT before building". The tree says the split has a forced
+order, because `builtin()` cannot leave `corpus-engine` while any
+`corpus-engine` site still calls it — and the engine may not name the host.
+
+**Choice.** Split into five rows, ordered so every dependency sits above it:
+(1) `dm-pass-registry-field` — `CorpusEngine` gains the registry field, a
+`with_enrichment_passes` builder and an `enrichment_passes()` accessor, with a
+TEMPORARY default of `builtin()` so the four engine sites and
+`atlas_dispatch.rs:60` switch to the field with no behaviour change; (2)
+`REVIEW-build-recipe-check-seam` — the `[enrichment] type` gate leaves
+`Recipe::from_toml` for the checked boundary (engine load + daemon previews),
+and `produces_enriched_atoms` takes the registry; (3)
+`REVIEW-build-pass-assembly-injection` — the prod assemblers inject the built-in
+registry explicitly, while it still lives in corpus-engine; (4)
+`dm-pass-impls-move` — the file moves to `understanding-host`, `builtin()`
+becomes a free function, the default flips to `new()`, the injections repoint;
+(5) `REVIEW-audit-pass-host` — TESTALL; PREPUSH. The four `*Pass` impl names
+appear nowhere outside `enrichment/pass.rs`, so only `builtin()`'s callers move.
+
+**Evidence** (reproduced this session, on `ralph/domains-campaign`).
+- `git grep -n 'EnrichmentPassRegistry::builtin()' -- '*.rs'` is TEN sites:
+  `engine/ingest.rs:1749,:1833`, `engine/mod.rs:2865,:3087`,
+  `enrichment/pass.rs:469,:503,:539` (tests), `recipe.rs:1903`,
+  `recipe_parsing.rs:268`, `sovereign-tools/src/local_corpus/atlas_dispatch.rs:60`.
+- `git grep -l 'Recipe::from_toml' -- '*.rs'` is 34 files; `git grep -o
+  'Recipe::from_toml'` 157 sites. `CorpusEngine::new` is 165 sites, 45 non-test
+  files. `understanding-host/Cargo.toml` `[dependencies]` is empty.
+- The four impl type names (`FieldModelPass`, `TieredPass`, `AtlasPass`,
+  `InvestigationPass`) and `refuse_deferred` appear NOWHERE outside
+  `enrichment/pass.rs` except a comment at `engine/mod.rs:3095`.
+- The recipe gate is called from `Recipe::from_toml` (`recipe.rs:1879`); the
+  daemon's prod `from_toml` sites (`recipe_http.rs:85,:323,:528`,
+  `recipe_project_http.rs:616,:648`) all hold an engine, so the checked boundary
+  can reach the registry.
+- The understanding package's grandfathered exception is `ARCH_LAYERS.toml:1388-1393`
+  (`from = "understanding-host"`, `to = "corpus-engine"`), STALE until the host
+  names the engine.
+
+**Falsified by.** A `builtin()` that can leave corpus-engine while a
+corpus-engine site still calls it (the engine may not name the host), or a
+recipe-load gate that reaches the registry without either the engine's field or
+a parser parameter — either would collapse the split to fewer rows.
+
+**Landed in.** the mint commit under `REVIEW-build-understanding-pass-host`;
+the children carry the work. Parent marked `[x]` in the follow-up
+`ralph: REVIEW-build-understanding-pass-host done`.
