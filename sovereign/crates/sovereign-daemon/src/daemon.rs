@@ -3066,7 +3066,7 @@ impl EmbeddedDaemon {
             // The reader the iroh install publishes through later; seeded with
             // the client-port-correct `IpTransport` so the uniform-port
             // assumption holds until iroh binds.
-            peer_transport: sovereign_api::state::PeerTransportReader::new(ip_transport.clone()),
+            peer_transport: sovereign_api::state::TransportReader::new(ip_transport.clone()),
             ..Default::default()
         };
         // Serving's provider and warmer exist before its part is built (DC §4.2

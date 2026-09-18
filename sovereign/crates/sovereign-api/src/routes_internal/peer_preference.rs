@@ -46,7 +46,7 @@ use crate::state::AppState;
 /// `NodeContributionsDto`, and pinned the same way, by a parse test on the
 /// client side over this handler's literal output.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PeerPreferenceView {
+pub struct VenuePreferenceDto {
     /// 32-char lowercase hex of the peer's node id.
     pub node_id: String,
     /// Affinity multiplier in `(0.0, 1.0]`.
@@ -59,7 +59,7 @@ pub struct PeerPreferenceView {
 
 /// Body of `POST /internal/peer-preference/set`.
 #[derive(Debug, Clone, Deserialize)]
-pub struct SetPeerPreferenceRequest {
+pub struct SetVenuePreferenceRequest {
     pub node_id: String,
     pub multiplier: f64,
     #[serde(default)]
@@ -68,7 +68,7 @@ pub struct SetPeerPreferenceRequest {
 
 /// Body of `POST /internal/peer-preference/clear`.
 #[derive(Debug, Clone, Deserialize)]
-pub struct ClearPeerPreferenceRequest {
+pub struct ClearVenuePreferenceRequest {
     pub node_id: String,
 }
 
@@ -104,7 +104,7 @@ fn parse_node_id_hex(s: &str) -> Result<NodeId, (StatusCode, String)> {
 /// make one of the two surfaces disagree with the store.
 pub async fn peer_preference_list(
     State(state): State<AppState>,
-) -> Result<Json<Vec<PeerPreferenceView>>, (StatusCode, String)> {
+) -> Result<Json<Vec<VenuePreferenceDto>>, (StatusCode, String)> {
     let entries = state.inner.serving.peer_preferences.list().map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -119,7 +119,7 @@ pub async fn peer_preference_list(
     Ok(Json(
         entries
             .into_iter()
-            .map(|(id, p)| PeerPreferenceView {
+            .map(|(id, p)| VenuePreferenceDto {
                 node_id: id.to_hex(),
                 multiplier: p.multiplier(),
                 reason: p.reason().map(|s| s.to_string()),
@@ -138,7 +138,7 @@ pub async fn peer_preference_list(
 /// rule (ARCH principle 8 — one decider).
 pub async fn peer_preference_set(
     State(state): State<AppState>,
-    Json(req): Json<SetPeerPreferenceRequest>,
+    Json(req): Json<SetVenuePreferenceRequest>,
 ) -> Result<StatusCode, (StatusCode, String)> {
     let target = parse_node_id_hex(&req.node_id)?;
     let pref = PeerPreference::new(req.multiplier, req.reason)
@@ -165,7 +165,7 @@ pub async fn peer_preference_set(
 /// panel distinguishes them (ARCH principle 6).
 pub async fn peer_preference_clear(
     State(state): State<AppState>,
-    Json(req): Json<ClearPeerPreferenceRequest>,
+    Json(req): Json<ClearVenuePreferenceRequest>,
 ) -> Result<Json<bool>, (StatusCode, String)> {
     let target = parse_node_id_hex(&req.node_id)?;
     let existed = state
@@ -234,7 +234,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK, "list route is mounted");
-        let empty: Vec<PeerPreferenceView> =
+        let empty: Vec<VenuePreferenceDto> =
             serde_json::from_str(&body_string(resp).await).expect("list parses");
         assert!(empty.is_empty(), "a fresh node holds no preferences");
 
@@ -268,7 +268,7 @@ mod tests {
             )
             .await
             .unwrap();
-        let listed: Vec<PeerPreferenceView> =
+        let listed: Vec<VenuePreferenceDto> =
             serde_json::from_str(&body_string(resp).await).expect("list parses");
         assert_eq!(listed.len(), 1, "the preference just set comes back");
         assert_eq!(
@@ -359,7 +359,7 @@ mod tests {
             )
             .await
             .unwrap();
-        let listed: Vec<PeerPreferenceView> =
+        let listed: Vec<VenuePreferenceDto> =
             serde_json::from_str(&body_string(resp).await).expect("list parses");
         assert!(listed.is_empty(), "a refused set writes nothing");
     }

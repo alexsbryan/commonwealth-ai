@@ -92,8 +92,8 @@ pub use newsworthy_status::{
     newsworthy_status, newsworthy_tick, NewsworthyStatusResponse, NewsworthyTickResponse,
 };
 pub use peer_preference::{
-    peer_preference_clear, peer_preference_list, peer_preference_set, ClearPeerPreferenceRequest,
-    PeerPreferenceView, SetPeerPreferenceRequest,
+    peer_preference_clear, peer_preference_list, peer_preference_set, ClearVenuePreferenceRequest,
+    SetVenuePreferenceRequest, VenuePreferenceDto,
 };
 pub use pipeline_pause::{
     pipeline_pause, NodePauseResult, PipelinePauseRequest, PipelinePauseResponse,

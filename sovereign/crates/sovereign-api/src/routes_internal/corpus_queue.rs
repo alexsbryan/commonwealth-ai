@@ -738,7 +738,7 @@ pub struct CollaborateStatusRequest {
 }
 
 #[derive(Debug, Serialize)]
-pub struct PeerProgressDto {
+pub struct DonorProgressDto {
     /// Full-hex node id (joins to the mesh member list for a display name).
     pub node_id: String,
     pub leased: u32,
@@ -765,7 +765,7 @@ pub struct CollaborateStatusResponse {
     pub queued: u32,
     /// Per-peer unit tallies — the glassbox core of the desktop's assist view
     /// ("Machine B: 12 done, 1 leased"). Empty until peers pull.
-    pub per_peer: Vec<PeerProgressDto>,
+    pub per_peer: Vec<DonorProgressDto>,
     /// True when this ingest is backed by a live ephemeral grant.
     pub ephemeral: bool,
     pub grant: Option<GrantStatusDto>,
@@ -816,7 +816,7 @@ pub async fn corpus_collaborate_status(
     }
     let per_peer = per
         .into_iter()
-        .map(|(node, (l, c, f))| PeerProgressDto {
+        .map(|(node, (l, c, f))| DonorProgressDto {
             node_id: node.to_hex(),
             leased: l,
             completed: c,
