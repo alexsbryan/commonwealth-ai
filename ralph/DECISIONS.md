@@ -291,3 +291,35 @@ on the toolbox image resolves host.containers.internal but the loopback-bound ho
 :9741 answers 000, so the row makes "boots with entry unreachable" a bring-up check.
 The rehearsal (HUMAN-rd-1-three-tabs) does not retire HUMAN-rd-1-three-machines: the Mac's own
 build and the WAN relay path are that row's claim.
+
+## 2026-09-18 · rd-1-instrument-rail-diff · director, resolution 1
+
+### Fork 1 — the row's DEMO cannot read five PASSED. Choice: mark it done at f181b179e.
+
+The operator's no-push decision makes converge COULD-NOT-JUDGE while 44f9a1bdc (build-latency,
+the only commit behind `git log origin/main..HEAD -- 'commonwealth/crates/commonwealth-rail*'`,
+reproduced) is unpushed, and the row's own check asks for exactly that reading. f181b179e touches
+only `scripts/ring-doc-demo.sh` (census + report), so it cannot move any other row. The same
+premise was false in `REVIEW-DEMO-rd-1-run` ("five PASSED"); its expectation now accepts converge
+COULD-NOT-JUDGE naming only foreign commits. *Falsified if* the census names an `rd-1-`/`REVIEW-`/
+`ralph`/`ring-doc` commit and the row still reads COULD-NOT-JUDGE.
+
+### Fork 2 — partition-drill "regressed". Choice: not a regression; a masked failure. New row `rd-1-partition-gap`, before `rd-1-tune`.
+
+The pre-registration PASS (12/12 on a, b, c) was the live lane's refusal: 5ab927237's body records
+every `/v1/rail/live` call answering out_of_scope, and that error sits in `liveGaps`, which the
+panel includes (`scripts/ring-doc-demo.sh:387`, `A/app.js:240-243`) — so every page's panel was
+non-empty for the whole run regardless of C. With the lane working (09ba44764), the current
+session.json reads a 0/12, b 0/12, c 12/12, and c's only text is its own drain error. Nothing on
+a or b names C: the rail reports a hole only after a later act arrives, and `sendPresence` drops
+the live POST's per-peer `PeerDelivery` report (`routes_rail_live.rs:142-152`), whose doc says it
+exists so the page can show a half-up lane. Order step 5 already says A's and B's panels name C;
+the row makes the page say it, instrumenting first, with a §6 exit if C is absent from `peers`
+rather than `delivered: false`. Bar, floor and `panels_ok` untouched (ARCH 5: a gate never
+watched fail for the right reason). *Falsified if* the instrument shows a or b's panel did name
+C in a run with the live lane refused — i.e. the pass had a second source.
+
+REVIEW-AFTER: whether naming an undelivered peer in the gap panel is "behaviour a user can
+observe beyond the row". Read here as the order's own step 5, not new behaviour.
+
+Commit: the one that removes `ralph/NEEDS_HUMAN.md`.
