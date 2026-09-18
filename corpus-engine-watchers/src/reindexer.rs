@@ -647,7 +647,7 @@ async fn run_overlay_merge(
     root: &Path,
     changed: &[PathBuf],
 ) -> (usize, usize) {
-    use corpus_engine::facts::{
+    use code_facts::facts::{
         extract_facts_for_file, extract_symbol_defs, pack_for_extension, Facts,
     };
 
@@ -705,7 +705,7 @@ async fn run_overlay_merge(
     //    to the tool's next read immediately — facts go live-fresh per save.
     let facts_db = indexes_dir.join(corpus_id).join("facts.db");
     if facts_db.exists() {
-        match corpus_engine::facts_store::FactStore::open(&facts_db) {
+        match code_facts::facts_store::FactStore::open(&facts_db) {
             Ok(store) => {
                 if let Err(e) = store.replace_files(corpus_id, &files, &facts).await {
                     tracing::warn!(error = %e, "facts overlay merge failed (store preserved)");

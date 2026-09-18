@@ -195,7 +195,7 @@ kind = "supporting"
 question = "what is in this codebase?"
 owns = ["Symbol", "CallGraph", "Edit", "NextEdit"]
 package = "code-intel"
-crates = ["corpus-engine-scip", "corpus-engine-sections", "code-next-edit"]   # + the code-intel package crates CODE_TOOLING_BOUNDARY.md §2 names as they are created; `code-next-edit` is the TENTH and §2's table does not name it (REVIEW-build-next-edit-crate)
+crates = ["corpus-engine-scip", "corpus-engine-sections", "code-next-edit", "code-facts"]   # + the code-intel package crates CODE_TOOLING_BOUNDARY.md §2 names as they are created; `code-next-edit` is the TENTH and §2's table does not name it (REVIEW-build-next-edit-crate); `code-facts` is §2's Phase 2 (REVIEW-build-code-facts)
 lift = ""             # no lift script yet; the package row is gated, not lifted
 applicable_as = "a code-intelligence MCP server; next-edit is its clearest lost child (sovereign/docs/NEXT_EDIT.md)"
 roots = ["corpus-engine-scip", "corpus-engine-sections", "corpus-engine/src/enrichment/code_intel", "code-next-edit"]
@@ -717,7 +717,7 @@ lines = 500
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/projects.rs"
+path = "corpus-engine-watchers/src/projects.rs"
 context = "workbench"
 lines = 674
 note = ""
@@ -771,7 +771,7 @@ lines = 825
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-mesh/src/reindexer.rs"
+path = "corpus-engine-watchers/src/reindexer.rs"
 context = "workbench"
 lines = 2150
 note = ""
@@ -3769,25 +3769,32 @@ files = 1
 note = "crate-wide Error/Result, spoken by every cluster"
 
 [[module]]
-path = "corpus-engine/src/facts.rs"
+path = "code-facts/src/facts.rs"
 context = "workbench"
 lines = 631
 files = 1
-note = "code-facts per docs/CODE_TOOLING_BOUNDARY.md:2 table (facts,facts_check,facts_store -> code-facts, 1710 LOC)"
+note = "moved from corpus-engine/src/facts.rs at REVIEW-build-code-facts (code-facts per docs/CODE_TOOLING_BOUNDARY.md §2 table)"
 
 [[module]]
-path = "corpus-engine/src/facts_check.rs"
+path = "code-facts/src/facts_check.rs"
 context = "workbench"
 lines = 312
 files = 1
-note = "code-facts per docs/CODE_TOOLING_BOUNDARY.md:2"
+note = "moved from corpus-engine/src/facts_check.rs at REVIEW-build-code-facts (code-facts per docs/CODE_TOOLING_BOUNDARY.md §2)"
 
 [[module]]
-path = "corpus-engine/src/facts_store.rs"
+path = "code-facts/src/facts_store.rs"
 context = "workbench"
 lines = 763
 files = 1
-note = "code-facts per docs/CODE_TOOLING_BOUNDARY.md:2"
+note = "moved from corpus-engine/src/facts_store.rs at REVIEW-build-code-facts (code-facts per docs/CODE_TOOLING_BOUNDARY.md §2)"
+
+[[module]]
+path = "code-facts/src/lib.rs"
+context = "workbench"
+lines = 32
+files = 1
+note = "the code-intel package's fact-base crate root; the three modules landed here at REVIEW-build-code-facts and corpus-engine re-exports them at their historical paths"
 
 [[module]]
 path = "corpus-engine/src/freshness.rs"
@@ -16077,4 +16084,202 @@ note = ""
 path = "studio/crates/sovereign-workflow/src/template.rs"
 context = "unknown"
 lines = 423
+note = ""
+
+[[module]]
+path = "corpus-index/src/chunkers.rs"
+context = "unknown"
+lines = 17
+note = ""
+
+[[module]]
+path = "corpus-index/src/corpus.rs"
+context = "unknown"
+lines = 218
+note = ""
+
+[[module]]
+path = "corpus-index/src/error.rs"
+context = "unknown"
+lines = 365
+note = ""
+
+[[module]]
+path = "corpus-index/src/filters.rs"
+context = "unknown"
+lines = 176
+note = ""
+
+[[module]]
+path = "corpus-index/src/index/create.rs"
+context = "unknown"
+lines = 1011
+note = ""
+
+[[module]]
+path = "corpus-index/src/index/enrichment.rs"
+context = "unknown"
+lines = 511
+note = ""
+
+[[module]]
+path = "corpus-index/src/index/evidence.rs"
+context = "unknown"
+lines = 524
+note = ""
+
+[[module]]
+path = "corpus-index/src/index/maintain.rs"
+context = "unknown"
+lines = 595
+note = ""
+
+[[module]]
+path = "corpus-index/src/index/mod.rs"
+context = "unknown"
+lines = 2428
+note = ""
+
+[[module]]
+path = "corpus-index/src/index/provenance.rs"
+context = "unknown"
+lines = 438
+note = ""
+
+[[module]]
+path = "corpus-index/src/index/read.rs"
+context = "unknown"
+lines = 788
+note = ""
+
+[[module]]
+path = "corpus-index/src/index/readiness.rs"
+context = "unknown"
+lines = 20
+note = ""
+
+[[module]]
+path = "corpus-index/src/index/search.rs"
+context = "unknown"
+lines = 1245
+note = ""
+
+[[module]]
+path = "corpus-index/src/index/tests/read_tests.rs"
+context = "unknown"
+lines = 131
+note = ""
+
+[[module]]
+path = "corpus-index/src/index/write.rs"
+context = "unknown"
+lines = 796
+note = ""
+
+[[module]]
+path = "corpus-index/src/lib.rs"
+context = "unknown"
+lines = 40
+note = ""
+
+[[module]]
+path = "corpus-index/src/recipe.rs"
+context = "unknown"
+lines = 45
+note = ""
+
+[[module]]
+path = "corpus-index/src/stream_axes.rs"
+context = "unknown"
+lines = 72
+note = ""
+
+[[module]]
+path = "corpus-index/src/types.rs"
+context = "unknown"
+lines = 625
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-peer-wire/src/lib.rs"
+context = "unknown"
+lines = 78
+note = ""
+
+[[module]]
+path = "understanding-atlas/src/atlas_traversal.rs"
+context = "understanding"
+lines = 24
+note = ""
+
+[[module]]
+path = "understanding-atlas/src/atlas_traversal/brief.rs"
+context = "understanding"
+lines = 708
+note = ""
+
+[[module]]
+path = "understanding-atlas/src/atlas_traversal/classifier.rs"
+context = "understanding"
+lines = 1009
+note = ""
+
+[[module]]
+path = "understanding-atlas/src/atlas_traversal/engine.rs"
+context = "understanding"
+lines = 1096
+note = ""
+
+[[module]]
+path = "understanding-atlas/src/atlas_traversal/spans.rs"
+context = "understanding"
+lines = 436
+note = ""
+
+[[module]]
+path = "understanding-atlas/src/atlas_traversal/test_fixtures.rs"
+context = "understanding"
+lines = 121
+note = ""
+
+[[module]]
+path = "understanding-atlas/src/enrichment/atlas/fold.rs"
+context = "understanding"
+lines = 138
+note = ""
+
+[[module]]
+path = "understanding-atlas/src/meta_atlas.rs"
+context = "understanding"
+lines = 14
+note = ""
+
+[[module]]
+path = "understanding-atlas/src/meta_atlas/bridge.rs"
+context = "understanding"
+lines = 98
+note = ""
+
+[[module]]
+path = "understanding-atlas/src/meta_atlas/bridge/adjudicate.rs"
+context = "understanding"
+lines = 205
+note = ""
+
+[[module]]
+path = "understanding-atlas/src/meta_atlas/bridge/signals.rs"
+context = "understanding"
+lines = 557
+note = ""
+
+[[module]]
+path = "understanding-atlas/src/meta_atlas/bridge/topic_node.rs"
+context = "understanding"
+lines = 442
+note = ""
+
+[[module]]
+path = "understanding-atlas/src/meta_atlas/classifier.rs"
+context = "understanding"
+lines = 874
 note = ""

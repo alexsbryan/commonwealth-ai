@@ -158,6 +158,10 @@ crates = ["corpus-engine", "corpus-engine-*",
     # package's own boundary (its crates + the shared leaves) is what keeps it
     # liftable; the layer entry is what keeps the edge direction honest.
     "code-next-edit",
+    # The code-intel package's deterministic fact base (docs/CODE_TOOLING_BOUNDARY.md
+    # §2 Phase 2; domains REVIEW-build-code-facts). `facts`/`facts_check`/`facts_store`
+    # moved out of corpus-engine, which re-exports them at their historical paths.
+    "code-facts",
     # The retrieval read-port leaf (domains REVIEW-build-index-read-port).
     # CorpusIndex, IndexInfo, the persisted settings and the search/evidence
     # surface — carved out of corpus-engine so a thin host can read an index
@@ -953,6 +957,11 @@ crates = [
     # the five pure modules; `routes_edit_predictions.rs` is a route shell and
     # goes to sovereign-daemon instead (DAEMON_CORE.md §4.1).
     "code-next-edit",
+    # The package's §2 `code-facts` — the deterministic tree-sitter fact base
+    # (`facts` + `facts_check` + `facts_store`), moved out of `corpus-engine` by
+    # domains REVIEW-build-code-facts (Phase 2). `corpus-engine` re-exports the
+    # three modules at their historical paths.
+    "code-facts",
 ]
 
 [[package]]

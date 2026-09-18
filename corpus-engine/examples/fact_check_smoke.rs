@@ -4,8 +4,8 @@
 //!
 //! Run: cargo run -p corpus-engine --example fact_check_smoke --features treesitter
 
-use corpus_engine::facts::Facts;
-use corpus_engine::facts_check::{
+use code_facts::facts::Facts;
+use code_facts::facts_check::{
     build_adjacency, check_config, check_exists, check_literal, neighborhood_stems, Verdict,
     VerdictKind,
 };

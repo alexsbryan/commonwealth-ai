@@ -1,0 +1,15 @@
+unit: dm-registry-coverage
+commits: ba41313af (the registry coverage)
+what: EDIT quality/DOMAINS.toml — append one [[module]] row for every untagged
+  `.rs` under the three crates the campaign created without tags: corpus-index
+  (19 files), understanding-atlas (13) and sovereign/crates/sovereign-peer-wire
+  (1), 33 rows. context = the one [[context]] whose crates list names the crate
+  (understanding for understanding-atlas; unknown for corpus-index and
+  sovereign-peer-wire, which no context names); lines from wc -l; note "".
+  The generator rule of dm3-tag-workspace, applied to the crates created after
+  it ran (2026-09-18).
+checks: CLEAN exit=0 (debug target 0G, cache kept);
+  TOML exit=0; CENSUS exit=0 (--self-test 11/11 axes);
+  misnamed before exit=4, 33 untagged; after exit=0, 0 untagged.
+  corpus-index now 10045 lines, understanding-atlas 6463 (100% understanding),
+  sovereign-peer-wire 78.
