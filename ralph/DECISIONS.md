@@ -2533,3 +2533,58 @@ grants manifest does not link.
 `FoldRecovery` struct, the `fold_recovery` adapter and its re-export, the shim
 at the old path, the four caller repoints, the DT module re-key and the two
 `quality/baselines/` path re-keys.
+
+## 2026-09-18 · dm-daemon-api-edge · the move lands; three premises the row did not carry
+
+**Fork.** The row executed (all deps `[x]`), and the tree falsified three of its
+unstated assumptions. Correct the row and land, or stop?
+
+**Choice.** Correct and land. The three:
+
+1. **`principal.rs` collides.** `sovereign-api/src/principal.rs` (the HTTP edge
+   resolver, 502 lines, `impl AppState { resolve }`) and
+   `sovereign-daemon/src/principal.rs` (the corpus-ceiling `LocalOwnerPrincipal`
+   from `dm-daemon-cli-composition`) share a module name. An inherent impl cannot
+   leave the crate defining the type, so the resolver had to move; it landed as
+   `client_principal.rs`. The design's one resolver (`REVIEW-mint-principal`)
+   collapses the two.
+2. **mesh's own `src/` unit tests cannot name the daemon.** `ring_sync/tests.rs`,
+   `ring_sync/snapshot_tests.rs`, `ring_sync/projection_tests.rs` and
+   `rail_kv_pump/tests.rs` assemble `AppState`. A `#[cfg(test)]` module inside
+   `sovereign-mesh` that names `sovereign-daemon` puts TWO builds of
+   `sovereign-mesh` in the graph (the dev-dependency cycle:
+   `sovereign-mesh` dev-depends on `sovereign-daemon`, which depends on
+   `sovereign-mesh`), and the compiler refuses to unify the two `FabricPart`
+   types ("multiple different versions of crate `sovereign_mesh`"). They moved
+   to `sovereign-mesh/tests/main/` as integration tests, where Cargo unifies the
+   two paths to one build. Four supporting items became `pub` for them
+   (`ring_sync::exchange`, `ExchangeStop`, `ExchangeOutcome` and its fields,
+   `MAX_CHUNKS_PER_EXCHANGE`; `rail_kv_pump::WORK_NAMESPACE`,
+   `MEASUREMENTS_NAMESPACE`).
+3. **`corpus-engine-scip` fan-in.** `sovereign-daemon` gained the dep when the
+   workbench shell moved in, growing the god-crate's fan-in 11 -> 12. The row
+   does not name `--update-baseline` (forbidden, PROMPT §7), so the unused dep
+   was dropped from `sovereign-api`'s manifest instead — the modules that read
+   it live in `code-next-edit` and the shell in the daemon. Fan-in is flat at 11.
+
+Also carried: the `sovereign-api` crate is now shim-only (its host deps stay
+declared so the `[[forbid]]` exceptions are not STALE; `REVIEW-build-sovereign-api-retire`
+deletes it), `state/fabric.rs` moved to `sovereign-mesh/src/fabric.rs` with
+`MeshMutationHook` and the 20 accessors the loops call, and the four
+`quality/baselines/` rows naming moved paths were re-keyed in the same commit
+(§3a step 6).
+
+**Evidence.** `./scripts/sovereign-lint.sh --human` exit=0 (workspace,
+`--all-targets`, 0 errors); `cargo xtask layer-gate` exit=0; `cargo xtask
+boundary-gate` exit=0; `cargo xtask docs-gate` exit=0; `python3
+scripts/domains-census.py --self-test` exit=0. The duplicate-crate error is
+`error[E0308]: mismatched types ... note: there are multiple different versions
+of crate sovereign_mesh in the dependency graph`.
+
+**Falsified by.** A showing that `sovereign-mesh`'s `src/` unit tests can name
+`sovereign-daemon` without a duplicate build (then the move to `tests/main/` was
+unnecessary); or that the `corpus-engine-scip` edge belongs on `sovereign-api`
+(no module there reads it).
+
+**Landed in.** `0a2891ccf` (the move) and `8a2de5e6a` (rustfmt). `git revert
+0a2891ccf` reverts the move alone.
