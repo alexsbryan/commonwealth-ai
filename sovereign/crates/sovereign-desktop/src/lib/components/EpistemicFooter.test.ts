@@ -325,6 +325,21 @@ describe("EpistemicFooter render", () => {
     expect(named[0].textContent).toBe("chaos-saltgrass on bob");
   });
 
+  it("a verified claim over a one-member pool reads '<corpus> on <member>'", async () => {
+    // Ring-room bar `ra-room-answer-names-the-machine`, per-claim path: the
+    // member is pool-level (the sole_corpus rule), so a local holding names none.
+    const named = corpusHolding();
+    if (typeof named.provenance !== "string" && "corpus" in named.provenance)
+      named.provenance.corpus.member = "Bo";
+    const { container } = render(EpistemicFooter, {
+      props: { ledger: ledger({ holdings: [named, corpusHolding()] }) },
+    });
+    await fireEvent.click(container.querySelector(".badges")!);
+    const support = screen.getAllByTestId("epistemic-holding-member");
+    expect(support).toHaveLength(1);
+    expect(support[0].textContent).toBe("secret-agent on Bo");
+  });
+
   it("a turn with no citations renders no passage section at all", () => {
     // Legacy turns carry no `citations` key; abstentions and legacy-ladder
     // releases carry an empty one. Both must render nothing rather than an

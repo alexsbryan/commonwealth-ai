@@ -244,6 +244,14 @@
     return seed;
   }
 
+  /** `<corpus> on <member>` for a corpus holding whose pool came from
+   *  one mesh member; null otherwise. */
+  function memberSupport(h: Holding): string | null {
+    const p = h.provenance;
+    if (typeof p === "string" || !("corpus" in p) || !p.corpus.member) return null;
+    return `${p.corpus.corpus_id ?? "sources"} on ${p.corpus.member}`;
+  }
+
   /** The band label for a memory holding (empty for non-memory). */
   function memoryBand(h: Holding): string | null {
     const p = h.provenance;
@@ -362,6 +370,7 @@
               {#each group.holdings as holding}
                 {@const band = memoryBand(holding)}
                 {@const bridge = pprBridgeFor(holding)}
+                {@const support = memberSupport(holding)}
                 <div class="holding-item holding-{group.kind}">
                   <div class="holding-claim">{holding.claim}</div>
                   <div class="holding-meta">
@@ -379,6 +388,11 @@
                       <span class="tool-tag">computed by a tool</span>
                     {:else if holding.verification === "verified"}
                       <span class="verif ok">verified</span>
+                      {#if support}
+                        <span class="citation-locator" data-testid="epistemic-holding-member"
+                          >{support}</span
+                        >
+                      {/if}
                     {:else if holding.verification === "failed_once"}
                       <span class="verif warn">revised</span>
                     {:else if holding.verification === "fail_open"}

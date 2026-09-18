@@ -101,7 +101,14 @@ export type Verification = "verified" | "failed_once" | "fail_open" | "unverifie
  *  string. Rendering paths MUST match on this so a memory recall can
  *  never render as document evidence (invariant I3). */
 export type Provenance =
-  | { corpus: { corpus_id: string | null; chunk_id: number | null } }
+  | {
+      corpus: {
+        corpus_id: string | null;
+        chunk_id: number | null;
+        /** The mesh member whose corpus the pool came from; absent = local or mixed. */
+        member?: string | null;
+      };
+    }
   | { memory: { band: MemoryBand; entry_id: string } }
   | "general_knowledge"
   | { tool_derived: { tool: string } };

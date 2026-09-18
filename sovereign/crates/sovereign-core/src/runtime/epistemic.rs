@@ -49,6 +49,9 @@ pub(crate) struct EpistemicInputs<'a> {
     /// Distinct corpus ids in the evidence pool the answer drew on
     /// (empty on parametric turns).
     pub pool_corpora: Vec<String>,
+    /// The mesh member each pool chunk came from, one entry per chunk
+    /// (`None` = local); see [`pool_members`].
+    pub pool_members: Vec<Option<String>>,
     /// Memories recalled into the turn (relational surfaces).
     pub recalled: &'a [RecalledMemoryProv],
     /// Outcome of the recall-grounding verifier, when it ran.
@@ -98,6 +101,20 @@ pub(crate) fn assemble_epistemic_state(inputs: EpistemicInputs<'_>) -> Epistemic
         [only] => Some(only.clone()),
         _ => None,
     };
+    // The same rule for members: named only when every chunk in the
+    // pool came from one member; a local or mixed pool stays `None`.
+    let sole_member = match inputs.pool_members.split_first() {
+        Some((Some(first), rest)) if rest.iter().all(|m| m.as_ref() == Some(first)) => {
+            Some(first.clone())
+        }
+        _ => None,
+    };
+    tracing::debug!(
+        target: "sovereign::epistemic",
+        pool_chunks = inputs.pool_members.len(),
+        sole_member = ?sole_member,
+        "holding member attribution"
+    );
 
     let mut holdings: Vec<Holding> = Vec::new();
     // Gate-audited claims → corpus-provenance holdings. An abstained
@@ -120,6 +137,7 @@ pub(crate) fn assemble_epistemic_state(inputs: EpistemicInputs<'_>) -> Epistemic
                 provenance: Provenance::Corpus {
                     corpus_id: sole_corpus.clone(),
                     chunk_id: None,
+                    member: sole_member.clone(),
                 },
                 verification,
             });
@@ -672,6 +690,16 @@ pub(crate) fn pool_corpora(chunks: &[corpus_engine::ScoredChunk]) -> Vec<String>
     out
 }
 
+/// The mesh member each pool chunk came from (`metadata["peer"]`, the
+/// one writer being the retrieval pipeline's mesh merge), aligned with
+/// `chunks`; `None` for a local chunk.
+pub(crate) fn pool_members(chunks: &[corpus_engine::ScoredChunk]) -> Vec<Option<String>> {
+    chunks
+        .iter()
+        .map(|c| c.metadata.get("peer").cloned())
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -725,6 +753,7 @@ mod tests {
             provenance: Provenance::Corpus {
                 corpus_id: Some("wiki".into()),
                 chunk_id: None,
+                member: None,
             },
             verification,
         }
@@ -1192,6 +1221,56 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    fn member_of_first_holding(pool_members: Vec<Option<String>>) -> Option<String> {
+        let meta = serde_json::json!({"action": "released"});
+        let claims = vec![GateClaim {
+            text: "x".into(),
+            supported: true,
+            failed_once: false,
+            unjudged: false,
+            violation_prob: None,
+            address: None,
+        }];
+        let state = assemble_epistemic_state(EpistemicInputs {
+            gate_meta: Some(&meta),
+            gate_claims: Some(&claims),
+            pool_corpora: vec!["ring-room".into()],
+            pool_members,
+            ..Default::default()
+        });
+        match &state.holdings[0].provenance {
+            Provenance::Corpus { member, .. } => member.clone(),
+            other => panic!("expected a corpus holding, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn sole_member_pool_names_the_member() {
+        let bo = Some("Bo".to_string());
+        assert_eq!(
+            member_of_first_holding(vec![bo.clone(), bo.clone(), bo]),
+            Some("Bo".into())
+        );
+    }
+
+    #[test]
+    fn mixed_member_pool_leaves_member_open() {
+        assert_eq!(
+            member_of_first_holding(vec![Some("Bo".into()), None]),
+            None
+        );
+        assert_eq!(
+            member_of_first_holding(vec![Some("Bo".into()), Some("Al".into())]),
+            None
+        );
+    }
+
+    #[test]
+    fn local_pool_names_no_member() {
+        assert_eq!(member_of_first_holding(vec![None, None]), None);
+        assert_eq!(member_of_first_holding(vec![]), None);
     }
 
     #[test]

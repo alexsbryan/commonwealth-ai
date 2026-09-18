@@ -252,6 +252,11 @@ pub enum Provenance {
         /// structurally-unique citation handle). `None` when the gate
         /// verified against the pool without a single-chunk binding.
         chunk_id: Option<u64>,
+        /// The mesh member whose corpus the supporting pool came from.
+        /// `None` when the pool is local or mixed — the same honesty
+        /// `corpus_id` has for a multi-corpus pool.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        member: Option<String>,
     },
     /// Recalled from the user-memory pool, with its honesty band.
     Memory {

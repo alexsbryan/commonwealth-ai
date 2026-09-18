@@ -58,7 +58,7 @@ STAGE=install
 
 # The PRE-REGISTRATION: the run's shape, fixed before any number exists.
 POLL_S=2          # c's offers poll, the rail's cadence stand-in
-ASK_TIMEOUT_S=300 # one question, one synthesis on a CPU node
+ASK_TIMEOUT_S=600 # one question, one synthesis; a measurement budget - the room's machine is not a CPU node, this one is
 JOIN_POLL_S=2     # join_poll_s: the join-to-visible window's poll (1–5 s, B §Tuning)
 JOIN_WATCH_S=120  # how long each join check is watched; the bar's window is read in the report
 # Which legs run (default all); a leg left out reads COULD-NOT-JUDGE.
@@ -174,9 +174,16 @@ for i, (_, q, key) in enumerate(bank):
         a = json.load(open(os.path.join(d, f"room-answer-{i}.json")))
     except Exception as e:
         qs.append({"q": q, "error": str(e)[:200]}); continue
-    cites = (a.get("epistemic_state") or {}).get("citations") or []
+    es = a.get("epistemic_state") or {}
+    cites = es.get("citations") or []
+    # The per-claim path releases no citation; its evidence is a verified
+    # holding's pool-level member. A release that checked no claim names nobody.
+    checked = ((a.get("metadata") or {}).get("grounding_gate") or {}).get("claims_checked") or 0
+    held = [((h.get("provenance") or {}).get("corpus") or {}).get("member")
+            for h in es.get("holdings") or [] if h.get("verification") == "verified"] if checked else []
     qs.append({"q": q, "released": len(cites), "members": [c.get("member") for c in cites],
-               "names_b": any(c.get("member") == bname for c in cites),
+               "claims_checked": checked, "holding_members": held,
+               "names_b": any(c.get("member") == bname for c in cites) or bname in held,
                "answer_has": key.lower() in (a.get("visible") or "").lower(),
                "verdict": (a.get("epistemic_state") or {}).get("verdict")})
 json.dump({"corpus": cid, "b_name": bname, "ingest_rc": int(rc), "shared_meta": bool(meta),
@@ -512,7 +519,7 @@ else:
     row("ra-room-answer-names-the-machine", sum(1 for q in qs if q.get("names_b")) / len(qs), "",
         b_name=ans["b_name"], absent_on_a=True, a_heard_s=ans["a_heard_s"], shared_meta=ans["shared_meta"],
         fanout_members=ans.get("fanout_members"),
-        questions=[{k: q.get(k) for k in ("released", "members", "verdict", "answer_has", "error")} for q in qs])
+        questions=[{k: q.get(k) for k in ("released", "members", "claims_checked", "holding_members", "verdict", "answer_has", "error")} for q in qs])
 
 # 2 — the doc names you from membership
 s = load("session.json") or {"fatal": "the driver wrote no session.json"}

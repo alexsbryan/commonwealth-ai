@@ -2079,6 +2079,7 @@ impl Runtime {
                     gate_claims: gate_claims.as_deref(),
                     general_knowledge,
                     pool_corpora: crate::runtime::epistemic::pool_corpora(&plan.chunks),
+                    pool_members: crate::runtime::epistemic::pool_members(&plan.chunks),
                     demands,
                     gaps,
                     ..Default::default()
