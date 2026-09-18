@@ -1,0 +1,42 @@
+unit: dm-auto-recover-move
+commits: f7d6f4f93 (the move + the premise correction)
+what: sovereign-api/src/auto_recover.rs (860) moved to sovereign-grants per
+  §3a (DAEMON_CORE.md §4.3 "the shard manager recovering its own stranded
+  partitions -> sovereign-grants"). The AppState-taking function is
+  `merge_from_fold_coverage`, and the row's premise was wrong on two counts
+  (recorded in ralph/STATE.md + ralph/DECISIONS.md):
+    - its consumers are NOT corpus_collaborate.rs — that file calls only
+      `try_recover_stranded_partitions` (no AppState, unchanged by the move).
+      The real callers are sovereign-daemon/src/auto_ingest.rs:267 and three
+      sovereign-mesh tests (fold_ingest_cross_node_merge_e2e.rs:834,
+      fold_ingest_coverage_refusal_e2e.rs:155,:196,
+      fold_ingest_abandoned_unit_e2e.rs:307,:524);
+    - it reads FIVE things, not two: corpus_engine (:242),
+      identity_reader().current() (:252), peer_control_urls(state, ..) (:253),
+      fabric.mesh_store (:258) and fabric.contribution_emitter (:260).
+      `active_ingests` is read by the caller (auto_ingest.rs:216-217), never by
+      the function.
+  The `&AppState` parameter becomes `FoldRecovery`, a sovereign-grants struct
+  carrying those five reads; a `fold_recovery(state)` adapter in sovereign-api's
+  routes_internal gathers them (one AppState->FoldRecovery mapping, ARCH 8).
+  Shims: `pub use sovereign_grants::auto_recover;` at the old lib.rs path keeps
+  `sovereign_api::auto_recover::{try_recover_stranded_partitions, RecoveryOutcome}`
+  resolving for sovereign-daemon and the mesh tests (neither depends on
+  sovereign-grants directly). `dirs = "5"` joined sovereign-grants (the moved
+  file's `dirs::home_dir()` at :587 — the one external crate the row's
+  import-list premise missed). DT module row re-keyed to the new path (889
+  lines after the struct); both quality/baselines rows (clock_reads.txt,
+  corpus_layout.txt) re-keyed to the new path, counts unchanged (§3a step 6);
+  SYSTEM_OVERVIEW.md §8 fixed the `commonwealth_api::auto_recover` path.
+checks: CLEAN exit=0 (debug target 0G, under 50G); LINT exit=0 (WORKSPACE,
+  errors: 0, cargo exit 0); LAYER exit=0 (fan-in within caps);
+  TEST(sovereign-grants) exit=0 (59 pass, 0 fail);
+  TEST(sovereign-mesh) exit=0 for the three signature-moved callers (1 pass
+  each: two_donors_on_two_nodes_land_both_slices_in_the_canonical,
+  a_two_donor_fold_missing_its_peer_refuses_and_writes_no_canonical,
+  the_merge_proceeds_with_the_slices_that_exist); TOML exit=0;
+  CENSUS --self-test exit=0 (11/11 caught, 11/11 refused).
+observed: layout-gate is RED at HEAD with one pre-existing NEW layout site
+  (`corpus-index/src/corpus.rs`, added by 503681188 REVIEW-build-index-read-port)
+  that is not in this unit's diff; the sovereign-grants path re-key it checks is
+  correct. Not fixed here — outside the row's scope.
