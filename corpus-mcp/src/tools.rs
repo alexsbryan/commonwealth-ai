@@ -36,9 +36,11 @@ use corpus_engine::enrichment::atlas::ground;
 use corpus_engine::enrichment::atlas::summary::read_current_summary;
 use corpus_engine::enrichment::atlas::writer::{read_atlas_ontology, AtlasOntologyFile};
 use corpus_engine::enrichment::atlas::{open_walk_provider, AtlasInventory, AtlasProvider};
-use corpus_engine::{CorpusEngine, CorpusIndex, EmbedFn, ScoredChunk};
+use corpus_engine::CorpusEngine;
 use corpus_engine_vocab::atoms::AtomEnvelope;
 use corpus_engine_vocab::read::read_atlas_atoms;
+use corpus_index::index::CorpusIndex;
+use corpus_index::types::{EmbedFn, ScoredChunk};
 use serde_json::{json, Value};
 
 use crate::host::HostProfile;

@@ -2476,6 +2476,7 @@ dependencies = [
  "clap",
  "corpus-engine",
  "corpus-engine-vocab",
+ "corpus-index",
  "oicp-types",
  "reqwest 0.12.28",
  "serde",

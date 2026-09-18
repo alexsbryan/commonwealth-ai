@@ -25,6 +25,12 @@ path = "src/main.rs"
 [dependencies]
 corpus-engine = { workspace = true }
 corpus-engine-vocab = { workspace = true }
+# The retrieval read-port leaf (domains REVIEW-build-index-read-port): the
+# `CorpusIndex` / `ScoredChunk` / `EmbedFn` surface `serve`, `ask`, `host` and
+# the `corpus_search` tool read through, so the host no longer reaches those
+# read-only types through `corpus-engine`. `corpus-engine` stays for the
+# `ingest` verb and the atlas reads, which genuinely are the engine's.
+corpus-index = { workspace = true }
 # The atlas enrichment orchestrator — `corpus ingest`'s second half, and the
 # WRITER of everything the tools here read. It joined this `[[package]]` in
 # `quality/ARCH_LAYERS.toml` at ei-5a-build-cut, when the seven import sites
