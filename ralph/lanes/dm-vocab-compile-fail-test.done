@@ -1,0 +1,22 @@
+unit: dm-vocab-compile-fail-test
+commits: 441e28534 (the compile-fail suite, watched red)
+what: ADD corpus-engine-vocab/tests/atoms_reds.rs, the trybuild suite O8 step 2
+  describes (the `nc-thesis` shape), pinning that an `AtomsFile` built outside
+  `vocab::read` cannot yield atoms. Two fixtures, one per construction DM §10.5
+  "The correction" names as the door — `serde_json::from_str::<AtomsFile>` (the
+  derived `Deserialize`, atoms.rs:1527) and the struct literal (both fields
+  `pub`, atoms.rs:1529-1530) — plus tests/ui/harness_positive_control.rs, which
+  always fails to compile and gates the reading. `trybuild` is a dev-dep, so the
+  leaf's shipped closure is unchanged (boundary_gate.rs:577 ignores dev edges);
+  Cargo.lock gains only the corpus-engine-vocab -> trybuild edge. Watched red
+  first (O8 step 2): with both fixtures asserted `compile_fail` the suite
+  reports "Expected test case to fail to compile, but it succeeded" for each —
+  the illegal construction compiles today, which is the red. The committed
+  polarity is `t.pass` (a red suite is not a gate, §5, and
+  TEST(corpus-engine-vocab) is this row's check); REVIEW-build-vocab-seal flips
+  both to `compile_fail` when it seals the type and records the `.stderr` then.
+checks: CLEAN exit=0 (disk gate, cache kept); LINT exit=0 (7 crates, errors: 0);
+  TEST(corpus-engine-vocab) exit=0 (54 pass, 0 fail); BOUNDARY exit=0
+  (corpus-engine-vocab still a package_leaf, 34 crates). Red observed: 2 of 3
+  fixtures "Expected test case to fail to compile, but it succeeded" under the
+  temporary compile_fail polarity.
