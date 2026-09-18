@@ -119,14 +119,14 @@ fn extract_cache_has_atlas_payloads(cache_path: &std::path::Path) -> bool {
 /// re-run. A populated `atoms.json` (a real prior resolve) is preserved.
 ///
 /// The file is read through the vocabulary leaf's door
-/// ([`corpus_engine_vocab::read::read_atlas_atoms`], `dm-vocab-bypass-rest`)
+/// ([`understanding_vocab::read::read_atlas_atoms`], `dm-vocab-bypass-rest`)
 /// rather than walked as a `serde_json::Value`: the door is the one
 /// constructor for an on-disk `atoms.json`. A file it cannot type —
 /// unreadable, unparseable, or carrying an atom kind outside the closed
 /// set — is untrusted, the same verdict the `Value` walk gave a missing
 /// or malformed `atoms` key.
 fn resolve_cache_is_structural_placeholder(atlas_dir: &std::path::Path) -> bool {
-    match corpus_engine_vocab::read::read_atlas_atoms(atlas_dir) {
+    match understanding_vocab::read::read_atlas_atoms(atlas_dir) {
         // Resolved atoms are the file's `atoms`; an empty array is the
         // structural placeholder.
         Ok(file) => file.atoms().is_empty(),

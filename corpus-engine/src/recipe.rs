@@ -695,12 +695,12 @@ impl Default for ReconciliationToml {
 // ---------------------------------------------------------------------------
 // Investigation-pipeline schema (entity types, relationship types, patterns)
 // ---------------------------------------------------------------------------
-// The declaration types live in the `corpus-engine-vocab` leaf since
-// 2026-09-03 (`corpus_engine_vocab::ontology::decl`) — the same shapes the
+// The declaration types live in the `understanding-vocab` leaf since
+// 2026-09-03 (`understanding_vocab::ontology::decl`) — the same shapes the
 // version-1 ontology language converts into `OntologyTypeDecl`, so the
 // investigation schema and the ontology schema share ONE home. Re-exported at
 // the historical path; `recipe_schema` renders them from the leaf's source.
-pub use corpus_engine_vocab::ontology::decl::{
+pub use understanding_vocab::ontology::decl::{
     Comparison, EntityTypeDecl, PatternDecl, RelationshipTypeDecl,
 };
 
@@ -1940,7 +1940,7 @@ impl Recipe {
     /// `from_toml` already parsed the block eagerly, so a parse failure here
     /// means a `Recipe` built without the load boundary; it is logged, never
     /// swallowed silently.
-    pub fn custom_ontology(&self) -> Option<corpus_engine_vocab::ontology::OntologyPolicies> {
+    pub fn custom_ontology(&self) -> Option<understanding_vocab::ontology::OntologyPolicies> {
         let block = self.ontology_block()?;
         match block.policies() {
             Ok(p) if p.is_active() => Some(p),

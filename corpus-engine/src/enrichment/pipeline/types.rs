@@ -183,9 +183,9 @@ impl FromStr for PipelinePhase {
 // ── Domain vocabulary + prompt envelope ───────────────────────
 
 // `Vocabulary` — the five resolved terms a pipeline prints — lives in the
-// `corpus-engine-vocab` leaf since 2026-09-03, beside the `OntologyPolicies`
+// `understanding-vocab` leaf since 2026-09-03, beside the `OntologyPolicies`
 // that derive it. Re-exported at the historical path.
-pub use corpus_engine_vocab::ontology::Vocabulary;
+pub use understanding_vocab::ontology::Vocabulary;
 
 /// Chat message prompt ready to submit to an OpenAI-compatible endpoint.
 ///

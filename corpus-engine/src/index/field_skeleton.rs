@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Field-model JSON persistence — host functions over an index directory.
 //!
-//! `FieldSkeleton` and its closure live in `corpus-engine-vocab` (the
+//! `FieldSkeleton` and its closure live in `understanding-vocab` (the
 //! language). The IO that reads and writes them to an index directory is the
 //! host's, and it is a free function rather than a `CorpusIndex` method since
 //! domains `REVIEW-build-field-skeleton-vocab` took it off that type (DE "The
@@ -10,7 +10,7 @@
 
 use std::path::Path;
 
-use corpus_engine_vocab::skeleton::FieldSkeleton;
+use understanding_vocab::skeleton::FieldSkeleton;
 
 use crate::error::{Error, Result};
 

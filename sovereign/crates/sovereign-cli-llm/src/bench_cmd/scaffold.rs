@@ -16,8 +16,8 @@ use std::fs;
 use std::path::PathBuf;
 
 use corpus_engine::enrichment::atlas::axis_catalog::{all_axes, AxisAtomShape, TypedAxis};
-use corpus_engine_vocab::atoms::{AtomEnvelope, Entity, Event, Opposition, Position, Question};
-use corpus_engine_vocab::read::{read_atlas_atoms, ATLAS_DIRNAME};
+use understanding_vocab::atoms::{AtomEnvelope, Entity, Event, Opposition, Position, Question};
+use understanding_vocab::read::{read_atlas_atoms, ATLAS_DIRNAME};
 
 use crate::enrich_cmd::paths::index_root;
 use sovereign_cli_shared::help::{self, Help, HelpSection};

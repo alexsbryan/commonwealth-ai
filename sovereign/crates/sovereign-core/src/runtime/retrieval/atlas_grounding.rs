@@ -567,10 +567,10 @@ mod tests {
         let live = ((KQ_PER_CORPUS_LIMIT as f32) * 0.6).ceil() as u32;
         assert_eq!(
             live,
-            corpus_engine_vocab::ontology::DEFAULT_BUDGET,
+            understanding_vocab::ontology::DEFAULT_BUDGET,
             "the navigation table's default budget ({}) and the retrieval \
              fetch budget ({live}) are one number",
-            corpus_engine_vocab::ontology::DEFAULT_BUDGET
+            understanding_vocab::ontology::DEFAULT_BUDGET
         );
     }
 

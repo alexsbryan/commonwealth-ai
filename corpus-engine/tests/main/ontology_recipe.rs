@@ -756,11 +756,11 @@ fn v1_navigation_round_trips_toml_and_json_with_defaults() {
     let tension = one_row.navigation.walk(QuestionKind::Tension);
     assert_eq!(
         tension.seed.kinds,
-        vec![corpus_engine_vocab::atoms::AtomType::Claim]
+        vec![understanding_vocab::atoms::AtomType::Claim]
     );
     assert_eq!(
         tension.walk,
-        vec![corpus_engine_vocab::edges::EdgeType::Tension]
+        vec![understanding_vocab::edges::EdgeType::Tension]
     );
     assert_eq!((tension.hops, tension.budget), (2, 8));
     assert_eq!(

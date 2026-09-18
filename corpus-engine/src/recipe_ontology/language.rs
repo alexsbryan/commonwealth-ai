@@ -28,8 +28,8 @@ use serde::Serialize;
 use super::OntologyConfig;
 use crate::error::{Error, Result};
 use crate::recipe_parsing::translate_parse_error;
-use corpus_engine_vocab::ontology::decl::{Force, OntologyV1, TypeKind};
-use corpus_engine_vocab::ontology::OntologyPolicies;
+use understanding_vocab::ontology::decl::{Force, OntologyV1, TypeKind};
+use understanding_vocab::ontology::OntologyPolicies;
 
 // ── The trait and its registry ──────────────────────────────────────────────
 

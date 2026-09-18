@@ -10,7 +10,7 @@
 //! Split out of `evidence_loop.rs` (2026-07-13) for legibility and the
 //! ARCH §3.1 file-size ceiling — a pure move, no behaviour change.
 
-use corpus_engine_vocab::atoms::{AtomEnvelope, AtomsFile};
+use understanding_vocab::atoms::{AtomEnvelope, AtomsFile};
 use std::collections::HashSet;
 
 use super::dbg;
@@ -45,7 +45,7 @@ fn cached_atoms(corpus_id: &str) -> Option<std::sync::Arc<AtomsFile>> {
     let atlas_dir = sovereign_contracts::rebrand::data_dir()
         .join("indexes")
         .join(corpus_id)
-        .join(corpus_engine_vocab::read::ATLAS_DIRNAME);
+        .join(understanding_vocab::read::ATLAS_DIRNAME);
     let path = atlas_dir.join("atoms.json");
     let mtime = std::fs::metadata(&path).ok()?.modified().ok()?;
 
@@ -58,7 +58,7 @@ fn cached_atoms(corpus_id: &str) -> Option<std::sync::Arc<AtomsFile>> {
         }
     }
     // Slow path: (re)parse and cache under the current mtime.
-    let value = Arc::new(corpus_engine_vocab::read::read_atlas_atoms(&atlas_dir).ok()?);
+    let value = Arc::new(understanding_vocab::read::read_atlas_atoms(&atlas_dir).ok()?);
     if let Ok(mut map) = cache.write() {
         map.insert(corpus_id.to_string(), (mtime, Arc::clone(&value)));
     }

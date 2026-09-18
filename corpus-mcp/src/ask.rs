@@ -370,8 +370,8 @@ mod tests {
     use corpus_engine::enrichment::atlas::ground::{
         MapSection, PolicySource, WalkLedger, WalkSelection,
     };
-    use corpus_engine_vocab::atoms::AtomType;
-    use corpus_engine_vocab::ontology::{NavigationPolicy, QuestionKind};
+    use understanding_vocab::atoms::AtomType;
+    use understanding_vocab::ontology::{NavigationPolicy, QuestionKind};
 
     fn chunk(id: u64, title: &str, body: &str) -> ScoredChunk {
         ScoredChunk {

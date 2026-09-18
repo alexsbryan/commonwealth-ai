@@ -25,7 +25,7 @@ sovereign-time = { workspace = true }
 # no source-level dependency on the gated APIs.
 corpus-engine = { workspace = true }
 # The atlas vocabulary leaf — `AtomsFile` for the evidence loop's gazetteer.
-corpus-engine-vocab = { workspace = true }
+understanding-vocab = { workspace = true }
 # `LaneSources::meta_atlas` is a CELL, not a value: the desktop fires
 # `backend-ready` and warms the ~900MB index in the background, then fills it
 # in an already-shared `Arc<Runtime>`. One storage, lock-free snapshot per turn.

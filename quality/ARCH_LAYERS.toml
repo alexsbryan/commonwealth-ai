@@ -164,6 +164,12 @@ crates = ["corpus-engine", "corpus-engine-*",
     # without linking the engine. A `knowledge` crate beside the
     # `corpus-engine-*` carve-outs it leaves.
     "corpus-index",
+    # The atlas vocabulary, renamed from `corpus-engine-vocab` by domains
+    # `dm-understanding-vocab-rename` (DE "The shape"). It no longer matches
+    # the `corpus-engine-*` glob above and must be named: Understanding's
+    # published language, a `knowledge` leaf beside the `corpus-engine-*`
+    # carve-outs it left.
+    "understanding-vocab",
 ]
 
 # Commonwealth mesh internals BELOW the runtime: shared mesh types + state +
@@ -834,7 +840,7 @@ name = "oicp-types"
 # in this crate, which is the ARCH §10.6 defect the budget exists to prevent,
 # so the edge buys a deletion rather than paying for one.
 #
-# Same justification as `corpus-engine-vocab` below (`:581-588`): kernel-types
+# Same justification as `understanding-vocab` below (`:581-588`): kernel-types
 # is itself an empty leaf, so the closure is two crates and stays that way.
 # Still enforced from above by `[[forbid]] oicp-types -> sovereign-*` — a
 # protocol crate that names the RUNTIME cannot be lifted, versioned, or
@@ -860,12 +866,16 @@ name = "corpus-engine-sections"
 allow = []
 
 [[package_leaf]]
-name = "corpus-engine-vocab"
+name = "understanding-vocab"
 # The atlas vocabulary — atoms, edges, kind taxonomy, canonical fold. Admitted
 # 2026-09-03 (enrichment-as-plugin Step 2) so a thin host can name an atom
 # without linking corpus-engine. `kernel-types` is its ONE internal dep, for
 # `ContentHash::of_str` in `AtomId::from_essence`, and kernel-types is itself
-# an empty leaf — so the closure is two crates and stays that way.
+# an empty leaf — so the closure is two crates and stays that way. Renamed from
+# `corpus-engine-vocab` by domains `dm-understanding-vocab-rename` (DE "The
+# shape": the published language is `understanding-vocab`); the `corpus-engine-`
+# prefix was carve-out history and the crate is Understanding's, not the
+# engine's.
 allow = ["kernel-types"]
 
 [[package_leaf]]
@@ -938,7 +948,7 @@ name = "oplog"
 # All 27 transitive deps (serde, serde_json, thiserror, tracing, blake3 via
 # kernel-types, itoa, memchr, once_cell, …) are already inside an admitted
 # leaf, so the real widening is the crate and nothing else. On size it is
-# mid-pack: kernel-types 16, oicp-types 20, corpus-engine-vocab 21, oplog 28,
+# mid-pack: kernel-types 16, oicp-types 20, understanding-vocab 21, oplog 28,
 # sovereign-contracts 147. All three filesystem rules pass — no `build.rs`,
 # no `include_str!`/`include_bytes!` escaping the crate root, and no runtime
 # reach-out past it.

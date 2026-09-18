@@ -456,10 +456,10 @@ pub enum EnrichmentProgress {
 
 /// Summary statistics for a completed enrichment run.
 ///
-/// Moved to `corpus-engine-vocab`'s `skeleton` module by domains
+/// Moved to `understanding-vocab`'s `skeleton` module by domains
 /// `REVIEW-build-field-skeleton-vocab`; re-exported here so the historical
 /// `enrichment::clustering::FieldModelStats` path keeps resolving.
-pub use corpus_engine_vocab::skeleton::FieldModelStats;
+pub use understanding_vocab::skeleton::FieldModelStats;
 
 #[cfg(test)]
 mod tests {

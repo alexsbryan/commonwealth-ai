@@ -1,7 +1,7 @@
 # Recipe schema reference
 
 > **Generated** from `corpus-engine/src/recipe.rs` (+ `recipe_ontology/`, the
-> declaration types in `corpus-engine-vocab/src/ontology/decl.rs`, and the
+> declaration types in `understanding-vocab/src/ontology/decl.rs`, and the
 > filter config types) by
 > the `recipe_schema` test. Do not edit by hand — regenerate with
 > `UPDATE_RECIPE_SCHEMA=1 cargo test -p corpus-engine --test main recipe_schema`.

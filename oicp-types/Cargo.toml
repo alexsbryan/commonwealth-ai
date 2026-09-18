@@ -31,7 +31,7 @@ toml = { workspace = true }
 #
 # The ONE in-repo edge this crate has, and it is budgeted: `quality/
 # ARCH_LAYERS.toml` grants `oicp-types` `allow = ["kernel-types"]` on the
-# `corpus-engine-vocab` precedent — kernel-types is itself an empty leaf, so
+# `understanding-vocab` precedent — kernel-types is itself an empty leaf, so
 # the closure is two crates.
 #
 # `quality-registry` because `kernel_types::quality` is feature-gated

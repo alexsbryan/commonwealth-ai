@@ -13,7 +13,7 @@
 //! - `corpus_search` — tier 1: cited chunks from `CorpusIndex::search` (the
 //!   same LanceDB + Tantivy hybrid every sovereign surface uses).
 //! - `atoms_lookup` — tier 1.5: the atoms an enrichment PRODUCED, read from
-//!   `atlas/atoms.json` through `corpus_engine_vocab::atoms::AtomsFile`.
+//!   `atlas/atoms.json` through `understanding_vocab::atoms::AtomsFile`.
 //!   That the artifact crosses the seam is the point; the atom-grounded
 //!   ranking does not, and this module does not pretend to.
 //! - `corpus_ontology` — what the corpus DECLARED, from `atlas/ontology.json`
@@ -37,8 +37,8 @@ use corpus_engine::enrichment::atlas::summary::read_current_summary;
 use corpus_engine::enrichment::atlas::writer::{read_atlas_ontology, AtlasOntologyFile};
 use corpus_engine::enrichment::atlas::{open_walk_provider, AtlasInventory, AtlasProvider};
 use corpus_engine::{CorpusEngine, CorpusIndex, EmbedFn, ScoredChunk};
-use corpus_engine_vocab::atoms::AtomEnvelope;
-use corpus_engine_vocab::read::read_atlas_atoms;
+use understanding_vocab::atoms::AtomEnvelope;
+use understanding_vocab::read::read_atlas_atoms;
 use serde_json::{json, Value};
 
 use crate::host::HostProfile;
@@ -911,8 +911,8 @@ fn truncate(s: &str, max: usize) -> String {
 mod tests {
     use super::*;
     use corpus_engine::enrichment::atlas::writer::write_atlas_ontology;
-    use corpus_engine_vocab::ontology::decl::{OntologyTypeDecl, TypeKind};
-    use corpus_engine_vocab::ontology::OntologyPolicies;
+    use understanding_vocab::ontology::decl::{OntologyTypeDecl, TypeKind};
+    use understanding_vocab::ontology::OntologyPolicies;
 
     fn declared(names: &[(&str, TypeKind)]) -> OntologyPolicies {
         let mut p = OntologyPolicies::default();

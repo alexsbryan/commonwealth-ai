@@ -899,7 +899,7 @@ def _atom_registry(root: Path) -> None:
         'id = "understanding"\n'
         'kind = "core"\n'
         'owns = ["Atom"]\n'
-        'vocab_roots = ["corpus-engine-vocab", "corpus-engine/src/enrichment"]\n'
+        'vocab_roots = ["understanding-vocab", "corpus-engine/src/enrichment"]\n'
         '\n'
         '[[noun]]\n'
         'name = "AtomFixture"\n'
@@ -935,8 +935,8 @@ def _atom_negative(root: Path) -> None:
         "fn f() { let atom_local = 1; }\n"
         "impl AtomThing {}\n",
         encoding="utf-8")
-    (root / "corpus-engine-vocab" / "src").mkdir(parents=True, exist_ok=True)
-    (root / "corpus-engine-vocab" / "src" / "atoms.rs").write_text(
+    (root / "understanding-vocab" / "src").mkdir(parents=True, exist_ok=True)
+    (root / "understanding-vocab" / "src" / "atoms.rs").write_text(
         "pub struct AtomInVocab;\n", encoding="utf-8")
     (root / "corpus-engine" / "src" / "enrichment").mkdir(parents=True,
                                                           exist_ok=True)
@@ -960,7 +960,7 @@ def cmd_atom_outside(args: list[str]) -> int:
     if "--json" in args:
         emit_measurement(len(found))
         return EXIT_OK
-    print("atom-outside — pub Atom* definitions outside corpus-engine-vocab/ and "
+    print("atom-outside — pub Atom* definitions outside understanding-vocab/ and "
           "corpus-engine/src/enrichment/\n  (Understanding's word; the registry's "
           "kept Atom* rows are the allow-list)\n")
     for d in sorted(found, key=lambda d: (d["file"], d["line"])):

@@ -910,7 +910,7 @@ impl TurnClient {
 
     // ── The reading + atlas surfaces (sv-surface D3 / D4) ─────────
     //
-    // These answer with types owned by `corpus-engine-vocab`
+    // These answer with types owned by `understanding-vocab`
     // (`AtomEnvelope`) and `sovereign-tools` (`atlas_view::*`), both of
     // which sit ABOVE this crate's Tier-0 dependency budget
     // (`quality/ARCH_LAYERS.toml:103-111` — "its only non-leaf

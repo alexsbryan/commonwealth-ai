@@ -5,14 +5,14 @@
 //! Lifted out of `mechanism_fidelity::classes::attribution` so the attribution
 //! reasoning class and the flywheel's I1 corpus generator mine claims through
 //! one implementation. Reads the atlas product through the vocabulary leaf's
-//! door (`corpus_engine_vocab::read::read_atlas_atoms`, `dm-vocab-bypass-rest`)
+//! door (`understanding_vocab::read::read_atlas_atoms`, `dm-vocab-bypass-rest`)
 //! and returns an empty vec on any I/O or shape problem so callers report "no
 //! probes" rather than panicking.
 
 use std::path::Path;
 
-use corpus_engine_vocab::atoms::AtomEnvelope;
-use corpus_engine_vocab::read::{read_atlas_atoms, ATLAS_DIRNAME};
+use understanding_vocab::atoms::AtomEnvelope;
+use understanding_vocab::read::{read_atlas_atoms, ATLAS_DIRNAME};
 
 /// One mined claim with a genuine supporting excerpt.
 #[derive(Debug, Clone)]

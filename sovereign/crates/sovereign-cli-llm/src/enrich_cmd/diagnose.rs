@@ -259,7 +259,7 @@ fn read_atoms_optional(atlas_dir: &Path) -> Result<Option<AtomsFile>, String> {
     if !path.exists() {
         return Ok(None);
     }
-    match corpus_engine_vocab::read::read_atlas_atoms(atlas_dir) {
+    match understanding_vocab::read::read_atlas_atoms(atlas_dir) {
         Ok(file) => Ok(Some(file)),
         Err(e) if e.kind() == std::io::ErrorKind::InvalidData => {
             Err(format!("parse {}: {e}", path.display()))

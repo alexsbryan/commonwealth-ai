@@ -1,4 +1,4 @@
-// POSITIVE CONTROL — names no corpus-engine-vocab type on purpose.
+// POSITIVE CONTROL — names no understanding-vocab type on purpose.
 //
 // This fixture cannot compile under any feature resolution, so it must ALWAYS
 // be reported as failing. If it is ever reported as compiling, the harness is

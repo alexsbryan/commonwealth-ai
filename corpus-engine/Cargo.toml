@@ -26,8 +26,8 @@ oplog = { workspace = true }
 # 2026-08-20).
 corpus-engine-sections = { workspace = true }
 # The atlas vocabulary (atoms/edges/taxonomy/canonical) — a behaviour-free
-# leaf re-exported at its historical paths. See corpus-engine-vocab/Cargo.toml.
-corpus-engine-vocab = { workspace = true }
+# leaf re-exported at its historical paths. See understanding-vocab/Cargo.toml.
+understanding-vocab = { workspace = true }
 # The retrieval read-port leaf (CorpusIndex, IndexInfo, the persisted settings,
 # the search/evidence surface) — re-exported at its historical paths so nothing
 # in the monorepo changed when it was carved out (domains

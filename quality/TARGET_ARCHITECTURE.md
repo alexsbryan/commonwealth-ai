@@ -98,7 +98,7 @@ mentioned five rows that exist.
 | **`Recipe`** | how a corpus is made. | `holds` | `corpus-engine` | — | Pure TOML declaring acquire → extract → filter → chunk → embed → index, plus custody. |
 | **`Corpus`** | an index plus its custody, produced by a `Recipe`. | `holds` | `corpus-engine` | — | An index plus its sharing policy, produced by a Recipe. |
 | **`Claim`** | one assertion extracted from a `Draft`; the unit the gate judges. | `target` | `kernel-types` | 4 | One assertion extracted from a Draft — the unit the gate judges. |
-| **`Atom`** | the enrichment ontology's unit (`AtomEnvelope`). | `holds` | `corpus-engine-vocab` | — | The closed set of atlas atom kinds (Entity, Event, State, Relation, Claim, Question, Configuration, ArgumentReconstruction, Position), tagged, with deliberately no #[serde(other)] — an unknown atom refuses, never skips. |
+| **`Atom`** | the enrichment ontology's unit (`AtomEnvelope`). | `holds` | `understanding-vocab` | — | The closed set of atlas atom kinds (Entity, Event, State, Relation, Claim, Question, Configuration, ArgumentReconstruction, Position), tagged, with deliberately no #[serde(other)] — an unknown atom refuses, never skips. |
 | **`Tool`** | one manifest of tool identity, effect and scope (`ToolRegistry`). | `holds` | `sovereign-contracts` | — | One manifest of tool identity, effect and scope; a tool exists iff the registry lists it. |
 | **`Peer`** | another node in the trust ring. | `holds` | `commonwealth-core` | — | Identity, transport, advertised capabilities. |
 | **`NodeCapability`** | what a peer advertises (OICP). | `holds` | `oicp-types` | — | The OICP manifest — what a node advertises. |

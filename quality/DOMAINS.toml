@@ -78,14 +78,14 @@ owns = ["Atom", "Tension", "Ontology", "Seed", "Atlas", "Lacuna", "FieldModel"]
 # 37 refs / 11 files); SeedError/SeedReport are Understanding's own. `Cluster`
 # is never persisted under atlas/ (writer.rs has zero matches) — not a noun.
 package = ""
-crates = ["corpus-engine-vocab", "understanding-atlas", "understanding-host"]   # + the understanding crate wave 3 creates (DECOMPOSITION spells it corpus-engine-enrichment); until then enrichment/ is misfiled in corpus-engine
+crates = ["understanding-vocab", "understanding-atlas", "understanding-host"]   # + the understanding crate wave 3 creates (DECOMPOSITION spells it corpus-engine-enrichment); until then enrichment/ is misfiled in corpus-engine
 lift = ""
 applicable_as = "point it at a folder, get back what the material is about — its domains, its tensions, its gaps; corpus-mcp already reads its output against a bare llama-server"
-roots = ["corpus-engine/src/enrichment", "corpus-engine/src/meta_atlas", "corpus-engine/src/atlas_traversal", "corpus-engine-vocab"]
+roots = ["corpus-engine/src/enrichment", "corpus-engine/src/meta_atlas", "corpus-engine/src/atlas_traversal", "understanding-vocab"]
 # The two roots where the ATOM vocabulary is authored — the atom-outside axis's
 # scope (campaigns/domains.toml dm-atom-outside). A subset of `roots`: the atom
 # read model is authored here, not in meta_atlas/ or atlas_traversal/.
-vocab_roots = ["corpus-engine-vocab", "corpus-engine/src/enrichment"]
+vocab_roots = ["understanding-vocab", "corpus-engine/src/enrichment"]
 status = "kept"
 
 [[context]]
@@ -246,10 +246,10 @@ owns_exact = ["Principal"]
 # head, :19-22); the word-owners axis reads this flag, never a hardcoded id.
 exempt = true
 package = ""
-crates = ["oicp-types", "kernel-types", "corpus-engine-vocab", "sovereign-contracts", "oicp-client", "sovereign-turn-client"]
+crates = ["oicp-types", "kernel-types", "understanding-vocab", "sovereign-contracts", "oicp-client", "sovereign-turn-client"]
 lift = ""
 applicable_as = "the shared kernel between contexts, not an eleventh"
-roots = ["oicp-types", "kernel-types", "corpus-engine-vocab", "sovereign/crates/sovereign-contracts"]
+roots = ["oicp-types", "kernel-types", "understanding-vocab", "sovereign/crates/sovereign-contracts"]
 status = "kept"
 
 [[context]]
@@ -747,7 +747,7 @@ lines = 1015
 note = ""
 
 [[module]]
-path = "corpus-engine-vocab/src/reading_formatters.rs"
+path = "understanding-vocab/src/reading_formatters.rs"
 context = "understanding"
 lines = 137
 note = ""
@@ -2929,7 +2929,7 @@ zero, and the atlas writer persists atoms/edges/trajectories/gaps/ \
 tension_candidates/configurations/pattern_findings/schema_validation/ \
 resolution_failures/cross_corpus_edges — no domains file. The nearest carriers \
 of 'what is this material about' at the declared level are Vocabulary \
-(corpus-engine-vocab/src/ontology/mod.rs:48) and OntologyPolicies (:62), \
+(understanding-vocab/src/ontology/mod.rs:48) and OntologyPolicies (:62), \
 written to atlas/ontology.json — and Understanding already owns `Ontology`. \
 So adding `Domain` to owns would claim a word against nothing, and `owns` is \
 what dm-word-owners reads. The plugin is not a squatter: its own doc says it \
@@ -2951,7 +2951,7 @@ recipe selects both independently, so merging them merges two extension points.
 family = "Seed"
 context = "understanding"
 definitions = [
-  "NAVIGATION SEED (where a walk starts): corpus-engine-vocab/src/ontology/navigation.rs:134 SeedPolicy; corpus-engine/src/enrichment/atlas/seed_population.rs:77 SeedPopulation; .../atlas/ann_store.rs:124 SeedOutcome; sovereign-cli-llm/src/eval_cmd/atlas_ann.rs:21 SeedMode",
+  "NAVIGATION SEED (where a walk starts): understanding-vocab/src/ontology/navigation.rs:134 SeedPolicy; corpus-engine/src/enrichment/atlas/seed_population.rs:77 SeedPopulation; .../atlas/ann_store.rs:124 SeedOutcome; sovereign-cli-llm/src/eval_cmd/atlas_ann.rs:21 SeedMode",
   "EXTRACTION SEED (the Stage 1a entity list -> cache/seed.json): corpus-engine/src/enrichment/pipeline/atlas.rs:285 SeedEntity, :300 SeedEntities, :322 SeedOrigin, :348 SeedStrategy; sovereign-enrichment-build/src/seed_cmd.rs:31 SeedError, :61 SeedReport",
   "HOMONYMS: sovereign-cli-dev/src/refactor_cmd/spec.rs:42 SeedEdit; .../refactor_cmd/discover.rs:127 SeededFile; sovereign-cli-llm/src/voice_eval/scenarios.rs:78 SeedMemory; sovereign-mesh/src/governance_http.rs:181 SeededResponse; sovereign-turn-client/src/lib.rs:3758 SeededWire; sovereign-cli-llm/src/awareness_cmd/seed.rs:159 SeedPlan",
 ]
@@ -2996,19 +2996,19 @@ definitions = [
   "sovereign/crates/sovereign-mesh/src/reading_http.rs:123 AtomSpan — the same five fields with atom_type: String; own doc 'Wire shape mirrors corpus_engine::atlas_traversal::AtomSpan'; impl From<DetectorAtomSpan> at :131",
 ]
 verdict = "converge"
-survivor = "corpus_engine_vocab::view::span::AtomSpan — owned, serde-able, atom_type: AtomType"
+survivor = "understanding_vocab::view::span::AtomSpan — owned, serde-able, atom_type: AtomType"
 renames = ["sovereign-mesh reading_http.rs:123 AtomSpan + its From impl DELETE; 18 refs / 5 files repointed"]
 rung = "domains-8"
 why = """
 The copy is forced by the internal type's shape, not by the boundary: a \
 &'static str cannot cross serde. Carrying the closed enum removes both the \
 flattening and the copy. The closed set lives at \
-corpus-engine-vocab/src/atoms.rs:1104 (pub enum AtomType, twelve variants, \
+understanding-vocab/src/atoms.rs:1104 (pub enum AtomType, twelve variants, \
 Hash + Ord) — NOT taxonomy.rs, which holds EnrichmentDepth at :40. \
 label() is at atoms.rs:1163 and already the one decider for the lowercase \
 spelling the desktop's CSS classes consume. ONE function must be minted and it \
 is the only new behaviour in this row: AtomType::from_label(&str) -> \
-Option<AtomType> (git grep 'fn from_label' corpus-engine-vocab/ returns \
+Option<AtomType> (git grep 'fn from_label' understanding-vocab/ returns \
 nothing today), so the field serialises with #[serde(with = \
 \"crate::atoms::atom_type_label\")] and the wire does not change. It refuses \
 on an unknown label rather than defaulting, matching AtomEnvelope's deliberate \
@@ -3064,7 +3064,7 @@ definitions = [
   "21 definitions across 5 crates",
 ]
 verdict = "converge"
-survivor = "corpus_engine_vocab::view::{AtomHead, AtomSummary, AtomDetail, AtomFilter, AtlasPage<T>, AtomQueryError, AtomElsewhere, RelatedAtom, CrossCorpusLink, ResolvedEvidence, ReferencedAtom, CurationState, CurationStatus, PageCursor, AtomSpan} — 15 in one crate; AtlasViewError stays in sovereign-tools"
+survivor = "understanding_vocab::view::{AtomHead, AtomSummary, AtomDetail, AtomFilter, AtlasPage<T>, AtomQueryError, AtomElsewhere, RelatedAtom, CrossCorpusLink, ResolvedEvidence, ReferencedAtom, CurationState, CurationStatus, PageCursor, AtomSpan} — 15 in one crate; AtlasViewError stays in sovereign-tools"
 renames = [
   "CorpusAtomsPage + AtomListPage + AtomsPage<T> -> AtlasPage<T>, with aliases AtomPage = AtlasPage<AtomEnvelope> and AtomSummaryPage = AtlasPage<AtomSummary>. total/total_matching were one number under two names and two widths (usize, u64) -> one name, u64. The browse surface gains corpus_id, schema_version, offset, limit — all four already in scope at atom_browse.rs:258",
   "RelatedAtom x2 -> one, typed (AtomId/AtomType, not String)",
@@ -3098,10 +3098,10 @@ definitions = [
   "read_atlas_ontology DOES NOT EXIST — the only site that reads the file is corpus-engine/src/enrichment/atlas/context_loader.rs:711 (atlas.join(\"ontology.json\")), inline inside the loader",
 ]
 verdict = "converge"
-survivor = "corpus_engine_vocab::read — four fns + ATLAS_DIRNAME, all returning Result<_, AtomQueryError>"
+survivor = "understanding_vocab::read — four fns + ATLAS_DIRNAME, all returning Result<_, AtomQueryError>"
 renames = [
   "three fns MOVE (fs::read + serde_json::from_slice and nothing else); corpus-engine re-exports at the historical path as enrichment/atlas/mod.rs:31,40,58 already does for atoms/edges",
-  "read_atlas_ontology is MINTED, not moved — ~8 lines, OntologyV1 is already vocab's at corpus-engine-vocab/src/ontology/decl.rs:213",
+  "read_atlas_ontology is MINTED, not moved — ~8 lines, OntologyV1 is already vocab's at understanding-vocab/src/ontology/decl.rs:213",
   "AtomQueryError moves to vocab with THREE variants: Absent { atlas_dir, file } / Io / Parse. UnknownCorpus(String) and Task(String) do NOT cross — vocab knows directories, not corpus ids, and Task is a tokio JoinError. Both stay in sovereign-tools' AtlasViewError (reader.rs:169), which already has CorpusNotFound",
   "AtomQueryError is hand-written Display + Error, NOT #[derive(thiserror::Error)] — vocab's deps are exactly kernel-types, serde, serde_json, blake3 and check 11 is the kill clause. ~25 lines",
 ]
@@ -3117,7 +3117,7 @@ should render an empty state.
 [[collision]]
 family = "AtomsFile (the one door, structural)"
 context = "understanding"
-definitions = ["corpus-engine-vocab/src/atoms.rs:1528 AtomsFile { pub schema_version, pub atoms: Vec<AtomEnvelope> (:1530) }"]
+definitions = ["understanding-vocab/src/atoms.rs:1528 AtomsFile { pub schema_version, pub atoms: Vec<AtomEnvelope> (:1530) }"]
 verdict = "converge"
 survivor = "AtomsFile with pub fn atoms(&self) -> &[AtomEnvelope], pub(crate) field, and NO public Deserialize"
 renames = [
@@ -3210,7 +3210,7 @@ Acquirer and Extractor. Ingest's owns row names a word with no type behind it �
 the same defect as Understanding's Domain. \
 kernel_types::origin::Source IS Ingest's noun published: 'where these bytes came \
 from' is precisely Ingest's question, and the published language is where a \
-context's noun goes when every context cites it — corpus-engine-vocab holds \
+context's noun goes when every context cites it — understanding-vocab holds \
 Understanding's AtomEnvelope on exactly that pattern, and DOMAINS §4 calls the \
 kernel 'the shared kernel between contexts, not an eleventh'. So the registry \
 row gains a named home and Knowledge's peer-as-source word is confirmed NOT to \
@@ -3920,7 +3920,7 @@ path = "corpus-engine/src/stream_axes.rs"
 context = "understanding"
 lines = 310
 files = 1
-note = "meta-atom stability taxonomy and derivation; the per-atom articulation types moved to corpus-engine-vocab/src/articulation.rs by domains REVIEW-build-articulation-vocab. Only consumers are meta_atlas/* and types.rs:432"
+note = "meta-atom stability taxonomy and derivation; the per-atom articulation types moved to understanding-vocab/src/articulation.rs by domains REVIEW-build-articulation-vocab. Only consumers are meta_atlas/* and types.rs:432"
 
 [[module]]
 path = "corpus-engine/src/testing.rs"
@@ -4065,7 +4065,7 @@ external_consumers = "370 sites / 17 crates: sovereign-core(t3):183, sovereign-t
 own_dep_max_tier = 1
 consumer_min_tier = 2
 window = "t0..t1"
-dest = "types.rs + error.rs + corpus.rs -> a t0/t1 leaf (DECOMPOSITION.md:45 calls it `corpus-engine-types`; the honest name is `corpus-engine-vocab` extended, since that leaf already exists at t1 with kernel-types as its ONE internal dep, ARCH_LAYERS.toml:744-747). lib.rs stays with corpus-engine."
+dest = "types.rs + error.rs + corpus.rs -> a t0/t1 leaf (DECOMPOSITION.md:45 calls it `corpus-engine-types`; the honest name is `understanding-vocab` extended, since that leaf already exists at t1 with kernel-types as its ONE internal dep, ARCH_LAYERS.toml:744-747). lib.rs stays with corpus-engine."
 dest_exists = true
 dest_tier = 1
 shim_sites = 3
@@ -7375,79 +7375,79 @@ lines = 568
 note = ""
 
 [[module]]
-path = "corpus-engine-vocab/src/articulation.rs"
+path = "understanding-vocab/src/articulation.rs"
 context = "understanding"
 lines = 243
 note = "The per-atom articulation taxonomy (Articulation, ArticulationVector and their ALL/as_str/dominant/weight/is_ambiguous/dominant_above methods), moved from corpus-engine's stream_axes.rs by domains REVIEW-build-articulation-vocab (DE \"The read-port leaf, measured again\": \"the per-atom articulation types go to the language\"); the per-corpus stability half stayed behind."
 
 [[module]]
-path = "corpus-engine-vocab/src/atoms.rs"
+path = "understanding-vocab/src/atoms.rs"
 context = "unknown"
 lines = 1588
 note = ""
 
 [[module]]
-path = "corpus-engine-vocab/src/atoms/tests.rs"
+path = "understanding-vocab/src/atoms/tests.rs"
 context = "unknown"
 lines = 673
 note = ""
 
 [[module]]
-path = "corpus-engine-vocab/src/canonical.rs"
+path = "understanding-vocab/src/canonical.rs"
 context = "unknown"
 lines = 61
 note = ""
 
 [[module]]
-path = "corpus-engine-vocab/src/edges.rs"
+path = "understanding-vocab/src/edges.rs"
 context = "unknown"
 lines = 328
 note = ""
 
 [[module]]
-path = "corpus-engine-vocab/src/lib.rs"
+path = "understanding-vocab/src/lib.rs"
 context = "unknown"
 lines = 42
 note = ""
 
 [[module]]
-path = "corpus-engine-vocab/src/ontology/decl.rs"
+path = "understanding-vocab/src/ontology/decl.rs"
 context = "unknown"
 lines = 651
 note = ""
 
 [[module]]
-path = "corpus-engine-vocab/src/ontology/mod.rs"
+path = "understanding-vocab/src/ontology/mod.rs"
 context = "unknown"
 lines = 269
 note = ""
 
 [[module]]
-path = "corpus-engine-vocab/src/ontology/navigation.rs"
+path = "understanding-vocab/src/ontology/navigation.rs"
 context = "unknown"
 lines = 799
 note = ""
 
 [[module]]
-path = "corpus-engine-vocab/src/read.rs"
+path = "understanding-vocab/src/read.rs"
 context = "understanding"
 lines = 51
 note = "The read door (read_atlas_atoms/read_atlas_edges) and the layout constant ATLAS_DIRNAME, moved from corpus-engine's enrichment/atlas/writer.rs by domains dm-vocab-door-move and dm-vocab-atlas-dirname (DE \"The door\", DE \"The read-port leaf, measured again\")."
 
 [[module]]
-path = "corpus-engine-vocab/src/skeleton.rs"
+path = "understanding-vocab/src/skeleton.rs"
 context = "understanding"
 lines = 510
 note = "The field skeleton (FieldSkeleton, PartialSkeleton and the question/position/fault-line/open-question closure) and FieldModelStats, moved from corpus-engine's enrichment/skeleton.rs and enrichment/clustering.rs by domains REVIEW-build-field-skeleton-vocab (DE \"The read-port leaf, measured again\"); its JSON IO stayed host at corpus-engine/src/index/field_skeleton.rs."
 
 [[module]]
-path = "corpus-engine-vocab/src/stable_key.rs"
+path = "understanding-vocab/src/stable_key.rs"
 context = "unknown"
 lines = 474
 note = ""
 
 [[module]]
-path = "corpus-engine-vocab/src/taxonomy.rs"
+path = "understanding-vocab/src/taxonomy.rs"
 context = "unknown"
 lines = 282
 note = ""

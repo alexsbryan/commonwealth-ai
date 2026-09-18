@@ -12,7 +12,7 @@
 1361	corpus-engine-scip/src/converge.rs
 1300	corpus-engine-scip/src/scip_export.rs
 3691	corpus-engine-scip/src/scip_graph.rs
-1588	corpus-engine-vocab/src/atoms.rs
+1588	understanding-vocab/src/atoms.rs
 2148	corpus-engine/src/engine/ingest.rs
 4222	corpus-engine/src/engine/mod.rs
 1420	corpus-engine/src/enrichment/atlas/analysis/sec_facts/mod.rs

@@ -1574,7 +1574,7 @@ impl AtomsFile {
     ///       disagrees with itself.
     ///     * **Snapshots and peers.** An atlas containing `Summary`
     ///       atoms is not readable by a mesh peer running older
-    ///       `corpus-engine-vocab`. Publishing such a snapshot to
+    ///       `understanding-vocab`. Publishing such a snapshot to
     ///       peers is a coordinated upgrade, not a drop-in — the same
     ///       constraint `Asset` introduced, now with a second
     ///       producer.
