@@ -4730,11 +4730,7 @@ fn register_local_model_slots(app_state: &AppState, cfg: &SetupConfig, node_id: 
             supports_parallel_instances: false,
             supports_pipeline_shard: false,
         };
-        app_state
-            .inner
-            .store
-            .inference_store
-            .set_model_info(&info);
+        app_state.inner.store.inference_store.set_model_info(&info);
         info!(
             role,
             name = %info.name,
