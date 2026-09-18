@@ -96,6 +96,11 @@ sovereign-work-atlas = { workspace = true, optional = true }
 commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state", optional = true }
 commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core", optional = true }
 corpus-engine = { workspace = true, features = ["treesitter"], optional = true }
+# The code-intel package's fact base (`facts`/`facts_check`/`facts_store`),
+# moved out of corpus-engine at domains REVIEW-build-code-facts. `code_cmd`
+# names `code_facts::*` directly; the `treesitter`/`stores` features arrive
+# through corpus-engine's feature of the same name.
+code-facts = { workspace = true, optional = true }
 corpus-engine-notes = { workspace = true, optional = true }
 # `code_fieldglass` renders the layer-flow panel from the SAME parser/evaluator
 # the layer gate uses (one decider), and the SRP co-change communities from the
@@ -157,6 +162,7 @@ workbench = [
     "dep:commonwealth-state",
     "dep:commonwealth-core",
     "dep:corpus-engine",
+    "dep:code-facts",
     "dep:corpus-engine-notes",
     "dep:arch-layers",
     "dep:corpus-engine-archaeology",

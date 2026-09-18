@@ -195,7 +195,7 @@ kind = "supporting"
 question = "what is in this codebase?"
 owns = ["Symbol", "CallGraph", "Edit", "NextEdit"]
 package = "code-intel"
-crates = ["corpus-engine-scip", "corpus-engine-sections", "code-next-edit"]   # + the code-intel package crates CODE_TOOLING_BOUNDARY.md §2 names as they are created; `code-next-edit` is the TENTH and §2's table does not name it (REVIEW-build-next-edit-crate)
+crates = ["corpus-engine-scip", "corpus-engine-sections", "code-next-edit", "code-facts"]   # + the code-intel package crates CODE_TOOLING_BOUNDARY.md §2 names as they are created; `code-next-edit` is the TENTH and §2's table does not name it (REVIEW-build-next-edit-crate); `code-facts` is §2's Phase 2 (REVIEW-build-code-facts)
 lift = ""             # no lift script yet; the package row is gated, not lifted
 applicable_as = "a code-intelligence MCP server; next-edit is its clearest lost child (sovereign/docs/NEXT_EDIT.md)"
 roots = ["corpus-engine-scip", "corpus-engine-sections", "corpus-engine/src/enrichment/code_intel", "code-next-edit"]
@@ -3769,25 +3769,32 @@ files = 1
 note = "crate-wide Error/Result, spoken by every cluster"
 
 [[module]]
-path = "corpus-engine/src/facts.rs"
+path = "code-facts/src/facts.rs"
 context = "workbench"
 lines = 631
 files = 1
-note = "code-facts per docs/CODE_TOOLING_BOUNDARY.md:2 table (facts,facts_check,facts_store -> code-facts, 1710 LOC)"
+note = "moved from corpus-engine/src/facts.rs at REVIEW-build-code-facts (code-facts per docs/CODE_TOOLING_BOUNDARY.md §2 table)"
 
 [[module]]
-path = "corpus-engine/src/facts_check.rs"
+path = "code-facts/src/facts_check.rs"
 context = "workbench"
 lines = 312
 files = 1
-note = "code-facts per docs/CODE_TOOLING_BOUNDARY.md:2"
+note = "moved from corpus-engine/src/facts_check.rs at REVIEW-build-code-facts (code-facts per docs/CODE_TOOLING_BOUNDARY.md §2)"
 
 [[module]]
-path = "corpus-engine/src/facts_store.rs"
+path = "code-facts/src/facts_store.rs"
 context = "workbench"
 lines = 763
 files = 1
-note = "code-facts per docs/CODE_TOOLING_BOUNDARY.md:2"
+note = "moved from corpus-engine/src/facts_store.rs at REVIEW-build-code-facts (code-facts per docs/CODE_TOOLING_BOUNDARY.md §2)"
+
+[[module]]
+path = "code-facts/src/lib.rs"
+context = "workbench"
+lines = 32
+files = 1
+note = "the code-intel package's fact-base crate root; the three modules landed here at REVIEW-build-code-facts and corpus-engine re-exports them at their historical paths"
 
 [[module]]
 path = "corpus-engine/src/freshness.rs"

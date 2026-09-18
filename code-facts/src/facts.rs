@@ -18,7 +18,7 @@
 //! nothing else in this file (walker, dispatch, extraction) is language-specific.
 //! To add a language:
 //!
-//! 1. Add its `tree-sitter-<lang>` grammar crate to `corpus-engine/Cargo.toml`
+//! 1. Add its `tree-sitter-<lang>` grammar crate to `code-facts/Cargo.toml`
 //!    under the `treesitter` feature (Rust, Python, TS, JS, Go are already there).
 //! 2. Append one [`LangPack`] literal to [`lang_packs`] below. Fill in five things:
 //!      - `id` / `extensions`         — trivial

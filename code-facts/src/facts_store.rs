@@ -31,8 +31,8 @@ use std::sync::Arc;
 use rusqlite::{params, Connection};
 use tokio::sync::Mutex;
 
-use crate::error::{Error, Result};
 use crate::facts::{CtorField, Facts, FnDef, StrLit};
+use corpus_index::error::{Error, Result};
 
 /// Bump when the schema changes so a stale DB is rebuilt rather than queried.
 const SCHEMA_VERSION: i64 = 1;

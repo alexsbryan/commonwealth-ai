@@ -118,6 +118,10 @@ corpus-engine-watchers = { workspace = true }
 # SCIP call graph + exporter dispatch. Carved out of corpus-engine
 # 2026-05-23 — reindexer.rs uses ScipGraph + scip_export directly.
 corpus-engine-scip = { workspace = true }
+# The code-intel package's fact base (`facts`/`facts_store`), moved out of
+# corpus-engine at domains REVIEW-build-code-facts; `reindexer.rs` names
+# `code_facts::*` directly. The `stores` feature arrives through corpus-engine.
+code-facts = { workspace = true }
 # The atlas vocabulary leaf. Named directly rather than through corpus-engine's
 # re-export so `reading_formatters` resolves at its new home (domains row
 # dm-mesh-move-reading-formatters, DC §4.3).

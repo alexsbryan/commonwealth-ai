@@ -3026,3 +3026,32 @@ reviewer should read first.
 
 **Landed in.** this commit — `ralph/STATE.md` (the rows) and this entry;
 `ralph/NEEDS_HUMAN.md` removed (untracked; `.git/info/exclude:21`).
+
+## 2026-09-18 · REVIEW-build-code-facts · the `corpus-engine-scip` fan-in cap the next row names was already spent
+
+**Fork.** `REVIEW-build-mesh-workbench-deferred`'s text says it hand-raises
+`corpus-engine-scip` 11→12 (reindexer's `ScipGraph`). But `REVIEW-build-code-facts`
+landed first and already spent that raise: `code-facts` (the code-intel package's
+new fact base) depends on `corpus-engine-scip` for `facts_check.rs`'s `ScipGraph`
+dispatch, so the cap is `12` at HEAD.
+
+**Choice.** Correct the next row to `12→13` and record the raise in this unit's
+§10.1ae ledger. The alternative — leaving the next row's premise — makes it raise
+the cap to `12` when it is already `12`, a no-op that fails `LAYER` when the
+reindexer edge lands (fan-in `13 > 12`).
+
+**Evidence** (reproduced this session, on `ralph/domains-campaign`).
+- `quality/baselines/fan_in.tsv:11` now reads `12 corpus-engine-scip`, raised by
+  this unit's §10.1ae ledger (`sovereign/SYSTEM_OVERVIEW.md`).
+- `code-facts/src/facts_check.rs:20` names
+  `corpus_engine_scip::scip_graph::ScipGraph`; `code-facts/Cargo.toml` carries
+  `corpus-engine-scip = { workspace = true, optional = true }`.
+- `corpus-engine-watchers/Cargo.toml` names no `corpus-engine-scip` today, so the
+  next row's move does add the dependent — the raise is real, only its base moved.
+
+**Falsified by.** A showing that `code-facts` need not depend on
+`corpus-engine-scip` (then the cap is `11` again and the next row's original
+`11→12` stands); or that `internal_dep_edges` exempts optional deps (then this
+unit's own `LAYER` run would not have needed the raise).
+
+**Landed in.** this unit's code commit and the `ralph:` marker commit.

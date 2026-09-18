@@ -1849,6 +1849,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "code-facts"
+version = "0.7.0"
+dependencies = [
+ "corpus-engine-scip",
+ "corpus-engine-yield",
+ "corpus-index",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "streaming-iterator",
+ "tokio",
+ "tree-sitter",
+ "tree-sitter-language",
+ "tree-sitter-python",
+ "tree-sitter-rust",
+]
+
+[[package]]
 name = "code-next-edit"
 version = "0.7.0"
 dependencies = [
@@ -2266,6 +2284,7 @@ dependencies = [
  "bzip2 0.5.2",
  "calamine",
  "chrono",
+ "code-facts",
  "corpus-engine-notes",
  "corpus-engine-scip",
  "corpus-engine-sections",
@@ -12199,6 +12218,7 @@ dependencies = [
  "async-trait",
  "axum",
  "chrono",
+ "code-facts",
  "commonwealth-core",
  "commonwealth-state",
  "corpus-engine",
@@ -12685,6 +12705,7 @@ dependencies = [
  "axum-server",
  "bytes",
  "chrono",
+ "code-facts",
  "commonwealth-core",
  "commonwealth-discovery",
  "commonwealth-media",
@@ -13069,6 +13090,7 @@ dependencies = [
  "blake3",
  "bzip2 0.5.2",
  "chrono",
+ "code-facts",
  "commonwealth-core",
  "corpus-engine",
  "corpus-engine-archaeology",

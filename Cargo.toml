@@ -46,6 +46,11 @@ members = [
     # policy split out of sovereign-api's workbench cluster. A stub until
     # dm-next-edit-move lands the modules.
     "code-next-edit",
+    # The code-intel package's deterministic fact base
+    # (docs/CODE_TOOLING_BOUNDARY.md §2, Phase 2; domains
+    # REVIEW-build-code-facts). The `facts`/`facts_check`/`facts_store` modules
+    # split out of corpus-engine, which re-exports them at their old paths.
+    "code-facts",
     # Git archaeology — commit-history mining, rough-edge surfacing,
     # atom-provenance evaluation. Step 4 of the decomposition.
     "corpus-engine-archaeology",
@@ -315,6 +320,7 @@ corpus-engine-sections = { path = "corpus-engine-sections" }
 understanding-vocab = { path = "understanding-vocab" }
 understanding-atlas = { path = "understanding-atlas" }
 corpus-index = { path = "corpus-index" }
+code-facts = { path = "code-facts" }
 arch-layers = { path = "quality/arch-layers" }
 sovereign-contracts = { path = "sovereign/crates/sovereign-contracts" }
 sovereign-core = { path = "sovereign/crates/sovereign-core" }

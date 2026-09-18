@@ -32,6 +32,7 @@ commonwealth-ai/
 ├── corpus-engine-scip/        # SCIP call graph + per-language exporter dispatch
 ├── corpus-engine-notes/       # NoteStore + project_docs index (carved out of corpus-engine)
 ├── code-next-edit/            # The code-intel package's next-edit crate (docs/CODE_TOOLING_BOUNDARY.md §2) — the pure rule/model/symbol/syntax lanes + the journal policy split out of sovereign-api's workbench cluster. A stub until dm-next-edit-move lands the modules
+├── code-facts/                # The code-intel package's deterministic tree-sitter fact base (docs/CODE_TOOLING_BOUNDARY.md §2, Phase 2) — the facts/facts_check/facts_store modules split out of corpus-engine at REVIEW-build-code-facts; corpus-engine re-exports them at their historical paths
 ├── corpus-engine-atos/        # ATOS feature store + plan items + design signals (carved out) — opt-in behind `--features atos`
 ├── corpus-engine-archaeology/ # Git archaeology + rough-edges + atom-provenance (carved out)
 ├── corpus-engine-yield/       # YieldHook cooperative-yield contract (Tier-0 leaf shared by the data plane + watchers)
@@ -10290,3 +10291,23 @@ own `grammar::GrammarLookup` port, so `.tsx` routing keeps ONE implementation
 reason — `--update-baseline` would snapshot the whole tree and absorb unrelated
 growth (PROMPT §7). The caps are `11` and `33`; the landed edges are `11` and
 `33`. No other crate may ride them.
+
+### 10.1ae Fan-in ACCEPTED — `corpus-engine-scip` 11 → 12 (the fact-base crate's SCIP reach, `REVIEW-build-code-facts`, 2026-09-18)
+
+`REVIEW-build-code-facts` CREATEs the code-intel package's `code-facts` and MOVEs
+`corpus-engine/src/{facts,facts_check,facts_store}.rs` (1,706 lines) into it
+(docs/CODE_TOOLING_BOUNDARY.md §2 Phase 2, `:404`; table `:67`). The new crate is
+the one new dependent, and its reach is the package's declared surface rather
+than convenience:
+
+| Dependent | Landed | Why it names the crate |
+|---|---|---|
+| `corpus-engine-scip` | this commit | `facts_check.rs` dispatches CONFIG/CALLS over `ScipGraph` and `facts.rs`'s `extract_symbol_defs` returns `ScipSymbolRecord` (both behind the `treesitter` feature). The crate is the code-intel package's own member (`quality/ARCH_LAYERS.toml` `[[package]] code-intel`), and `corpus-engine` deliberately ships no re-export shim for it (ARCH §8.3) |
+
+The other two reaches cost no cap: `corpus-index` — a shared `[[package_leaf]]`,
+for `types::EmbedFn` and `error::{Error, Result}` — and `corpus-engine-yield`, a
+code-intel member, for `time::unix_now()`; neither is in the baseline. The
+tree-sitter grammars are external crates, not tracked. `quality/baselines/fan_in.tsv`
+was edited BY HAND, one line, for §10.1q's reason — `--update-baseline` would
+snapshot the whole tree and absorb unrelated growth (PROMPT §7). The cap is `12`;
+the landed edge is `12`. No other crate may ride it.

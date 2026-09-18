@@ -16,8 +16,8 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 
 use crate::facts::Facts;
-use crate::types::EmbedFn;
 use corpus_engine_scip::scip_graph::ScipGraph;
+use corpus_index::types::EmbedFn;
 
 /// A claim's structured tag — the dispatch input (produced by the tagger).
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
