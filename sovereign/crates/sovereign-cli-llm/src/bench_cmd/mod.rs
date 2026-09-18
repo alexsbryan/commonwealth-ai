@@ -24,7 +24,7 @@
 //! systemd unit) and folding it into the bench would couple this
 //! tool to those concerns. Keep it dumb: measure what's loaded.
 
-mod ablate;
+pub(crate) mod ablate;
 mod adjudicate;
 mod all;
 mod atlas;

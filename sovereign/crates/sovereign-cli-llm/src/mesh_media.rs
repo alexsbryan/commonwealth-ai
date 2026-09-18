@@ -19,8 +19,12 @@ pub(crate) async fn cmd_media(args: &[String]) -> i32 {
     if args.first().map(String::as_str) == Some("declare") {
         return cmd_media_declare(&args[1..]);
     }
+    if args.first().map(String::as_str) == Some("offer") {
+        return cmd_media_offer(&args[1..]);
+    }
     if sovereign_cli_shared::help::wants_help(args) {
         eprintln!("Usage: svrn mesh media [<peer>] [--json] [--no-probe]");
+        eprintln!("       svrn mesh media offer <origin> [--admit <member>...]");
         eprintln!("       svrn mesh media fanout <path> [--peers a,b] [--method M] [--timeout-ms N] [--json]");
         eprintln!(
             "       svrn mesh media declare <header-name>   # value on stdin; --list / --clear"
@@ -242,6 +246,7 @@ async fn list_offers(client: &reqwest::Client, url: &str, json_out: bool) -> i32
             })
             .unwrap_or_else(|| "no path yet (nothing dialed)".to_string());
         println!("  {:<16} {}  {:<8} {}", o.peer, o.node_id, status, path);
+        println!("  {:<16} {}", "", offered_to_line(&o.offered_to));
     }
     println!();
     println!("Play one:  svrn mesh media <peer>");
@@ -439,6 +444,143 @@ pub(crate) async fn cmd_fanout(app: Option<&str>, args: &[String]) -> i32 {
     0
 }
 
+/// The `offered to` line for one offer: the holder's gossiped admit list, or
+/// everyone when it is empty (`admit_media` reads an empty list the same way).
+fn offered_to_line(offered_to: &[String]) -> String {
+    if offered_to.is_empty() {
+        "offered to: everyone here".to_string()
+    } else {
+        format!("offered to: {}", offered_to.join(", "))
+    }
+}
+
+// ─── offer: this node's origin, to its members ──────────────────────────────
+
+/// Set `[iroh] media_origin` and `[iroh] media_allow` in the config document.
+/// No `--admit` REMOVES `media_allow`, so re-offering without names widens back
+/// to every member rather than keeping a narrowing nobody typed this time.
+fn set_offer(
+    doc: &mut toml_edit::DocumentMut,
+    origin: std::net::SocketAddr,
+    admit: &[String],
+) -> Result<(), String> {
+    let iroh = doc
+        .entry("iroh")
+        .or_insert_with(|| toml_edit::Item::Table(toml_edit::Table::new()))
+        .as_table_mut()
+        .ok_or("`iroh` in config.toml is not a table")?;
+    iroh.insert("media_origin", toml_edit::value(origin.to_string()));
+    if admit.is_empty() {
+        iroh.remove("media_allow");
+    } else {
+        let names: toml_edit::Array = admit.iter().map(String::as_str).collect();
+        iroh.insert("media_allow", toml_edit::value(names));
+    }
+    Ok(())
+}
+
+/// `svrn mesh media offer <origin> [--admit <member>...]` — offer this node's
+/// media origin to the mesh, then restart the daemon so the acceptor
+/// advertises it. Both keys are restart-required (`admin_http.rs` reload
+/// diff), so the restart is this verb's, not the person's.
+fn cmd_media_offer(args: &[String]) -> i32 {
+    if sovereign_cli_shared::help::wants_help(args) || args.is_empty() {
+        eprintln!("Usage: svrn mesh media offer <origin> [--admit <member>...]");
+        eprintln!();
+        eprintln!("Offer a media server on this machine to the members of this mesh.");
+        eprintln!("<origin> is a port (8096) or a loopback host:port. With no --admit");
+        eprintln!("every member may reach it; --admit names the only members who may,");
+        eprintln!("by member name or a node-id prefix, as `svrn mesh status` shows them.");
+        eprintln!("The daemon is restarted to publish the offer.");
+        return if args.is_empty() { 1 } else { 0 };
+    }
+    let mut origin: Option<&str> = None;
+    let mut admit: Vec<String> = Vec::new();
+    let mut in_admit = false;
+    for a in args {
+        match a.as_str() {
+            "--admit" => in_admit = true,
+            other if other.starts_with("--") => {
+                eprintln!("mesh media offer: unknown flag {other}");
+                return 1;
+            }
+            other if in_admit => admit.push(other.to_string()),
+            other if origin.is_none() => origin = Some(other),
+            other => {
+                eprintln!("mesh media offer: one origin only (got {other:?} as well)");
+                return 1;
+            }
+        }
+    }
+    if in_admit && admit.is_empty() {
+        eprintln!("mesh media offer: --admit names at least one member");
+        return 1;
+    }
+    let Some(origin) = origin else {
+        eprintln!("mesh media offer: which origin? `svrn mesh media offer 8096`");
+        return 1;
+    };
+    let origin = match crate::publish_cmd::resolve_target(origin) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("mesh media offer: {e}");
+            return 1;
+        }
+    };
+    let (path, mut doc) = match crate::publish_cmd::load_doc() {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("mesh media offer: {e}");
+            return 1;
+        }
+    };
+    if let Err(e) = set_offer(&mut doc, origin, &admit)
+        .and_then(|()| crate::publish_cmd::write_doc(&path, &doc))
+    {
+        eprintln!("mesh media offer: could not write the config — {e}");
+        return 1;
+    }
+    tracing::info!(%origin, admit = ?admit, config = %path.display(), "media offer written");
+    println!("Offering {origin}. ({})", path.display());
+    println!("  {}", offered_to_line(&admit));
+    println!("restarting the daemon to publish the offer…");
+    restart_daemon()
+}
+
+/// `daemon stop` then `daemon start` through the dispatcher — this binary
+/// does not own the `daemon` verb. A stop that fails is fine (nothing was
+/// running); a start that fails is the verb's failure.
+fn restart_daemon() -> i32 {
+    let dispatcher = match std::env::current_exe()
+        .map_err(|e| e.to_string())
+        .and_then(|exe| crate::bench_cmd::ablate::dispatcher_exe(&exe))
+    {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("mesh media offer: {e}");
+            eprintln!("The offer is written; run `svrn daemon stop && svrn daemon start`.");
+            return 1;
+        }
+    };
+    let stop = std::process::Command::new(&dispatcher)
+        .args(["daemon", "stop"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+    tracing::debug!(?stop, "media offer: daemon stop");
+    match std::process::Command::new(&dispatcher)
+        .args(["daemon", "start"])
+        .status()
+    {
+        Ok(s) if s.success() => 0,
+        other => {
+            tracing::warn!(?other, "media offer: daemon start failed");
+            eprintln!("mesh media offer: the daemon did not come back — `svrn daemon start`.");
+            1
+        }
+    }
+}
+
 // ─── declare: this node's own credential for its own origin ─────────────────
 
 /// `svrn mesh media declare <header>` — store the credential THIS node adds to
@@ -592,4 +734,64 @@ fn atty_stdin() -> bool {
 #[cfg(not(unix))]
 fn atty_stdin() -> bool {
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use commonwealth_core::ids::{NodeId, NodePubkey};
+    use commonwealth_media::MemberIdentity;
+    use sovereign_contracts::setup_config::IrohSection;
+
+    /// What `offer` leaves in `[iroh]`, read back the way the daemon reads it.
+    fn offered(admit: &[&str]) -> IrohSection {
+        let mut doc: toml_edit::DocumentMut = "[iroh]\n# kept\nenabled = true\n".parse().unwrap();
+        let admit: Vec<String> = admit.iter().map(|s| s.to_string()).collect();
+        set_offer(&mut doc, "127.0.0.1:8096".parse().unwrap(), &admit).unwrap();
+        assert!(doc.to_string().contains("# kept"), "comments survive");
+        toml::from_str(&doc["iroh"].to_string()).unwrap()
+    }
+
+    fn member(name: &str, id: u128) -> MemberIdentity {
+        MemberIdentity {
+            name: name.into(),
+            node_id: NodeId::from_u128(id),
+        }
+    }
+
+    fn reaches(iroh: &IrohSection, who: &MemberIdentity) -> bool {
+        let origin = iroh.media_origin.as_deref().map(|o| o.parse().unwrap());
+        commonwealth_media::admit_media(
+            Some(who),
+            NodePubkey([7u8; 32]),
+            origin,
+            &iroh.media_allow,
+            &[],
+        )
+        .is_some()
+    }
+
+    /// The failing input is the verb ignoring `--admit`: an unnamed member
+    /// would then reach the origin.
+    #[test]
+    fn offer_admit_narrows_through_admit_media() {
+        let mac = member("LittleMac", 0xb0b252e4 << 96);
+        let quiet = member("Quiet", 0xc0de << 96);
+        let narrowed = offered(&["LittleMac"]);
+        assert_eq!(narrowed.media_origin.as_deref(), Some("127.0.0.1:8096"));
+        assert!(reaches(&narrowed, &mac));
+        assert!(!reaches(&narrowed, &quiet), "a member not named is refused");
+        let everyone = offered(&[]);
+        assert!(everyone.media_allow.is_empty());
+        assert!(reaches(&everyone, &mac) && reaches(&everyone, &quiet));
+    }
+
+    #[test]
+    fn offered_to_line_names_everyone_or_the_admitted() {
+        assert_eq!(offered_to_line(&[]), "offered to: everyone here");
+        assert_eq!(
+            offered_to_line(&["LittleMac".into(), "Quiet".into()]),
+            "offered to: LittleMac, Quiet"
+        );
+    }
 }

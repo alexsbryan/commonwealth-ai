@@ -6,8 +6,8 @@
 #
 #   HOLDER (the machine with the library):
 #     scripts/cw-media-demo.sh holder-up        # Jellyfin on 127.0.0.1:8096 + one test title + wizard done
-#     # add to ~/.svrnmesh/config.toml under [iroh]:   media_origin = "127.0.0.1:8096"
-#     svrn daemon stop; svrn daemon start       # the acceptor now advertises cwth/media/0 to members
+#     # holder-up runs `svrn mesh media offer 127.0.0.1:8096`, which writes [iroh] media_origin
+#     # and restarts the daemon itself -- the acceptor then advertises cwth/media/0 to members
 #
 #   VIEWER (any other member):
 #     svrn mesh media <holder-name>             # prints http://127.0.0.1:NNNNN + path (direct/relayed) + a probe
@@ -127,6 +127,8 @@ holder_up() {
   fi
 
   holder_key || say "declaration skipped -- viewers will get 401 from /Items until you run it by hand"
+  "${SVRN:-svrn}" mesh media offer "$ORIGIN" \
+    || say "offer failed -- run \`svrn mesh media offer $ORIGIN\` by hand"
 
   cat >&2 <<EOF
 
@@ -135,11 +137,8 @@ library:      $ROOT/media
 credential:   declared as \`authorization\` under ~/.svrnmesh/secrets/media/
               (0600, never leaves this machine, never printed back)
 
-one line left, and it is a config edit because publishing an ORIGIN is still a
-config line — \`svrn mesh media declare\` declares a CREDENTIAL, not an origin.
-In ~/.svrnmesh/config.toml under [iroh]:
-  media_origin = "$ORIGIN"
-then:  svrn daemon stop; svrn daemon start
+offered:      \`svrn mesh media offer $ORIGIN\` wrote [iroh] media_origin and
+              restarted the daemon (narrow it with --admit <member>...)
 
 a member then runs:  svrn mesh media <this node's name>
 and a shim fans out:  POST /v1/mesh/media/fanout {"path":"/Items?..."} — which
