@@ -7,11 +7,11 @@
 
 use commonwealth_core::ids::NodeId;
 use commonwealth_rail::{Ed25519Verifier, RailAct, RingRail, SigningKey};
-use std::sync::Arc;
 use sovereign_daemon::state::AppState;
 use sovereign_mesh::rail_kv_pump::*;
 use sovereign_mesh::ring_roster::tests::{member, mesh_of, pubkey_of};
 use sovereign_mesh::ring_roster::DAEMON_OWN_NAMESPACES;
+use std::sync::Arc;
 
 /// **The declaration is checkable, and this is the check.**
 ///

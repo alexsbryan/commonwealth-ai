@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use crate::state::AppState;
 use commonwealth_core::clock::unix_now_millis as now_ms;
 use commonwealth_core::ids::{HandoffId, NodeId};
 use commonwealth_core::knowledge::{
@@ -10,7 +11,6 @@ use commonwealth_core::knowledge::{
 };
 use commonwealth_core::mesh::NodeStatus;
 use corpus_engine::CancellationFlag;
-use crate::state::AppState;
 
 const CHECK_INTERVAL: Duration = Duration::from_secs(30);
 const COOLDOWN: Duration = Duration::from_secs(30 * 60);

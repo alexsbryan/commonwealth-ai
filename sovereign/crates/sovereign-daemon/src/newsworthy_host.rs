@@ -21,6 +21,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::state::AppState;
 use bytes::Bytes;
 use commonwealth_core::contributions::{LedgerEvent, LedgerEventKind};
 use commonwealth_core::ids::NodeId;
@@ -29,7 +30,6 @@ use commonwealth_core::partition;
 use commonwealth_state::MeshStore;
 use corpus_engine::error::{Error as CorpusError, Result as CorpusResult};
 use corpus_engine::update::newsworthy_watcher::{CommittedDocs, NewsworthyHost};
-use crate::state::AppState;
 use sovereign_contracts::identity::IdentityReader;
 
 pub struct MeshNewsworthyHost {

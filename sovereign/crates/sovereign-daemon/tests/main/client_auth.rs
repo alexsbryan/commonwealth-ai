@@ -559,11 +559,14 @@ async fn get_via_guest_listener(
         req.extensions_mut()
             .insert(ConnectInfo(p.parse::<SocketAddr>().unwrap()));
     }
-    sovereign_daemon::server::client_router_for(state, sovereign_daemon::server::ClientSurface::Guest)
-        .oneshot(req)
-        .await
-        .unwrap()
-        .status()
+    sovereign_daemon::server::client_router_for(
+        state,
+        sovereign_daemon::server::ClientSurface::Guest,
+    )
+    .oneshot(req)
+    .await
+    .unwrap()
+    .status()
 }
 
 /// THE finding. A tunnelled caller presenting nothing looks exactly like the

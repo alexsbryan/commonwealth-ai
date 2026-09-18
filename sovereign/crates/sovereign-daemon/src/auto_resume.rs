@@ -355,8 +355,7 @@ async fn resume_in_progress_ingests(state: AppState) {
         // `active_ingests`. So even if the desktop races us with its
         // own install POST, exactly one task spawns.
         let spawned =
-            crate::routes_internal::spawn_corpus_install(state.clone(), corpus_id.clone())
-                .await;
+            crate::routes_internal::spawn_corpus_install(state.clone(), corpus_id.clone()).await;
         if spawned {
             tracing::info!(
                 corpus = %corpus_id,

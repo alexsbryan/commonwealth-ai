@@ -511,9 +511,9 @@ use futures::Stream;
 use http_body_util::BodyExt;
 use oicp_types::openai_types::StreamFrame;
 use oicp_types::openai_types::{ChatCompletionResponse, ChatMessage, ToolCall};
-use sovereign_daemon::state::{LocalInferenceError, LocalInferenceService};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, CompletionResponse, ProviderCapabilities};
+use sovereign_daemon::state::{LocalInferenceError, LocalInferenceService};
 use std::pin::Pin;
 
 /// A response-side pass the gate governs, paired with the name the

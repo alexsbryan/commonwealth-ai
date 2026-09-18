@@ -17,9 +17,9 @@ use sovereign_daemon::server::internal_router;
 use sovereign_daemon::state::AppState;
 use sovereign_mesh::ring_sync::*;
 use sovereign_peer_wire::{RingSyncRequest, RingSyncResponse, RING_SYNC_OPS_BUDGET_BYTES};
-use std::time::Duration;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 
 pub const NS: &str = "house-expenses";
 

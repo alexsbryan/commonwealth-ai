@@ -23,10 +23,10 @@ use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
 use futures::Stream;
 use oicp_types::openai_types::{ChatCompletionRequest, ChatCompletionResponse, StreamFrame};
-use sovereign_daemon::routes_inference::chat_completions;
-use sovereign_daemon::state::{AppState, LocalInferenceError, LocalInferenceService, ServingSeed};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, CompletionResponse, ProviderCapabilities};
+use sovereign_daemon::routes_inference::chat_completions;
+use sovereign_daemon::state::{AppState, LocalInferenceError, LocalInferenceService, ServingSeed};
 
 /// Minimal single-member mesh, the shape `AppState::new` wants. Mirrors
 /// `tests/app_state_privacy.rs` — an integration test cannot reach the

@@ -541,11 +541,13 @@ async fn a_seal_shortens_the_exchange_only_once_the_retired_lines_are_deleted() 
 
 /// Drive the RAIL bind rather than the operator one.
 async fn call_rail(state: AppState, req: Request<Body>) -> (StatusCode, serde_json::Value) {
-    let resp =
-        sovereign_daemon::server::client_router_for(state, sovereign_daemon::server::ClientSurface::Rail)
-            .oneshot(req)
-            .await
-            .unwrap();
+    let resp = sovereign_daemon::server::client_router_for(
+        state,
+        sovereign_daemon::server::ClientSurface::Rail,
+    )
+    .oneshot(req)
+    .await
+    .unwrap();
     let status = resp.status();
     let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
         .await
