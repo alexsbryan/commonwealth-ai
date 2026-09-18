@@ -1,0 +1,23 @@
+unit: dm-rename-api-venues
+commits: 17ac14904 (the renames)
+what: sovereign-api's eight Peer* type definitions renamed to their DT words,
+  referrers repointed (state.rs re-export, routes_internal/mod.rs re-export,
+  daemon.rs construction, and the two doc comments in sovereign-turn-client's
+  mesh.rs and sovereign-desktop's mesh_commands.rs):
+    ClearPeerPreferenceRequest -> ClearVenuePreferenceRequest
+    PeerPreferenceView        -> VenuePreferenceDto
+    SetPeerPreferenceRequest  -> SetVenuePreferenceRequest
+    EligiblePeerDto           -> EligibleDonorDto
+    EligiblePeersRequest      -> EligibleDonorsRequest
+    EligiblePeersResponse     -> EligibleDonorsResponse
+    PeerProgressDto           -> DonorProgressDto
+    PeerTransportReader       -> TransportReader
+  PeerTransportReader is a post-adjudication type with no DT row; its word
+  follows the `IdentityReader` precedent in the same file — a reader type
+  named for what it reads, not for its subject.
+checks: CLEAN exit=0 (disk gate, cache under threshold); LINT exit=0 (scoped
+  to sovereign-api + sovereign-daemon + sovereign-desktop + sovereign-turn-client
+  and their dependents); CENSUS --self-test exit=0 (11/11 positives caught,
+  11/11 negatives refused).
+census: peer-outside 16 in 7 crates -> 8 in 6 crates (sovereign-api's row gone;
+  the remaining eight are the later rename rows' work).
