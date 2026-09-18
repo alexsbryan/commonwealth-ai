@@ -1,0 +1,16 @@
+unit: dm-vocab-atlas-dirname
+commits: b749a3a9d (the move)
+what: the layout constant ATLAS_DIRNAME moved from
+  corpus-engine/src/enrichment/atlas/writer.rs:43 into
+  corpus-engine-vocab/src/read.rs beside the readers, per DE "The read-port
+  leaf, measured again" third paragraph: "ATLAS_DIRNAME goes to the language,
+  beside the door." Re-exported at the historical paths
+  (writer::ATLAS_DIRNAME via the existing `pub use corpus_engine_vocab::read::`
+  line, and enrichment::atlas::ATLAS_DIRNAME via mod.rs:115), so no consumer
+  repointed. quality/DOMAINS.toml's corpus-engine-vocab/src/read.rs [[module]]
+  row re-keyed lines 42 -> 51 (the constant's doc + definition + the module-doc
+  sentence) and the note extended.
+checks: CLEAN exit=0 (0G, under 50G); LINT exit=0 (corpus-engine-vocab,
+  corpus-engine + 21 dependents, 0 errors); TEST(corpus-engine-vocab) exit=0
+  (pass 54, fail 0); TEST(corpus-engine) exit=0 (pass 2299, fail 0);
+  TOML exit=0; crate-lines --crate corpus-engine-vocab 5346 -> 5355.

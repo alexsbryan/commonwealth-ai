@@ -7420,8 +7420,8 @@ note = ""
 [[module]]
 path = "corpus-engine-vocab/src/read.rs"
 context = "understanding"
-lines = 42
-note = "The read door (read_atlas_atoms/read_atlas_edges), moved from corpus-engine's enrichment/atlas/writer.rs by domains dm-vocab-door-move (DE \"The door\")."
+lines = 51
+note = "The read door (read_atlas_atoms/read_atlas_edges) and the layout constant ATLAS_DIRNAME, moved from corpus-engine's enrichment/atlas/writer.rs by domains dm-vocab-door-move and dm-vocab-atlas-dirname (DE \"The door\", DE \"The read-port leaf, measured again\")."
 
 [[module]]
 path = "corpus-engine-vocab/src/stable_key.rs"

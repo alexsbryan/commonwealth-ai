@@ -10,6 +10,11 @@
 //! The door is a product of the vocabulary, so it lives here beside the types
 //! it returns; `corpus-engine` re-exports both functions at the historical
 //! path, so nothing inside the monorepo had to change an import.
+//!
+//! The layout constant [`ATLAS_DIRNAME`] lives here too — DE "The read-port
+//! leaf, measured again": "`ATLAS_DIRNAME` goes to the language, beside the
+//! door." It names the directory the readers open, so a consumer that can name
+//! the reader can name the directory without linking the engine.
 
 use std::fs;
 use std::io;
@@ -17,6 +22,10 @@ use std::path::Path;
 
 use crate::atoms::AtomsFile;
 use crate::edges::EdgesFile;
+
+/// Directory name for atlas output under a corpus's index root.
+/// Full path is `~/.svrnmesh/indexes/<corpus>/atlas/`.
+pub const ATLAS_DIRNAME: &str = "atlas";
 
 /// Read the atoms file back from disk. Used by Phase 6 / Phase 7
 /// subcommands that run standalone after Phase 3b already wrote
