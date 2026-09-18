@@ -467,3 +467,88 @@ minted `rr-1-daemon-rings-registered` (register the closed set with derive_roste
 file ignored for daemon rings, narrows app rings). Also for the operator: the worker tore
 down a leftover podman ring-doc session from ~16:30 (ports 19849/59/69) that had collided
 with its DEMO run — if that was your rehearsal, it is gone.
+
+## 2026-09-18 — seat (charter: which of the options an order names; the smaller reversible step) — rr-1-citation-names-the-machine: wire half lands (1426c47f8), citation half is option B as a row
+
+Fork: the worker's package (18:09Z), kept whole below. Choice: surface = EpistemicFooter's
+released citations (the gate's ledger IS the citation; the prose fallback and the per-corpus
+'via' line stay); join = option B — `ReleasedCitation.member` stamped by corpus in
+`citations_of` from the existing `peer_attribution` map. Why not A: a per-chunk parallel vec
+through ~10 files buys nothing while the fan-out asks ONE peer per corpus per turn
+(routes_knowledge.rs:130-159), so per-corpus is already per-passage. Why not C: the
+instrument reads the daemon's HTTP headless; a desktop-only join leaves it nothing to read,
+and the bar's goodhart says the name must be on the citation. Falsified if a turn can
+receive one corpus's passages from two members (then B mis-names the second's and A is
+owed). Test lives in sovereign-core (citations_of) + a chat-ui node test; PLANT = drop the
+stamp. Row `rr-1-citation-member-on-released` minted; the instrument row depends on it.
+
+<details><summary>the worker's package</summary>
+
+# NEEDS_HUMAN — rr-1-citation-names-the-machine (citation half)
+
+## (a) Unit
+
+`rr-1-citation-names-the-machine` in `ralph/next/ring-room/STATE.md` (left `[~]`).
+The wire half is committed (see `git log -1 --grep rr-1-citation`): `peer_name`/
+`peer_node_id` fields on `KnowledgeResult`, one write site in `fanout_one_peer`,
+metadata keys retired, `knowledge_client` reads the field, `corpora_unhosted` +
+`UnavailabilityReason::NotHosted`. CLEAN, LINT, PLANT, TEST(sovereign-api/mesh/core)
+all green in that commit.
+
+The row's remaining clause: "add the same name to the citation struct the passage
+renders under and to the desktop's citation line as '<corpus> on <member>' (find
+the one Svelte component that renders a citation)". The tree disagrees with its
+premises in two places, so the choice is a design one and is not mine to make.
+
+## (b) What I found
+
+- There is no ONE citation component. Four render citation-ish lines on the
+  desktop: `packages/chat-ui/src/components/EpistemicFooter.svelte:404-433`
+  (the gate's released citations, `ledger.citations`), `SourceAttribution.svelte`
+  (parses the prose `Sources:` block, used when no ledger), `AnswerProvenance.svelte`
+  (flag-gated native-grounding segments), and `RoutingMeta.svelte` (the per-corpus
+  summary, already "via <peer>").
+- The only per-citation struct is `ReleasedCitation`
+  (`sovereign/crates/sovereign-contracts/src/types/epistemic.rs:93`), projected from
+  `kernel_types::Citation` by `EpistemicState::citations_of`
+  (`epistemic.rs:66-78`), called once at
+  `sovereign-core/src/runtime/grounding/inner.rs:498`. The gate there sees only
+  `EvidenceContext` parallel vectors (`chunks`, `chunk_targets`, `chunk_custodies`,
+  … `inner.rs:58-105`); no member name reaches it. Threading one means a new
+  parallel vec through `grounding/mod.rs:225,317,380,410-429`, `gate.rs`,
+  `handlers/knowledge_query.rs:1703-1743`, `handlers/simple.rs:189`,
+  `streaming.rs:1519-1570`, `synthesis_common.rs:131`, and the filter in
+  `inner.rs:58-105` — about ten files the row does not name.
+- The member name already reaches the desktop per CHUNK: the pipeline stamps
+  `metadata["peer"]` on every mesh hit (`retrieval_pipeline.rs:2342-2346`), and
+  the desktop holds those as `retrievedChunks`; `EpistemicFooter.svelte:224-236`
+  already joins a holding to its retrieved chunk by `(corpus_id, chunk_id)`.
+
+## (c) Decide
+
+1. Which surface is "the citation": `EpistemicFooter`'s released citations only,
+   or also `SourceAttribution`'s prose `Sources:` lines?
+2. Where the name joins the citation:
+   - (A) Rust: `ReleasedCitation` gains `member: Option<String>`, filled via a new
+     `chunk_members` parallel vec through `EvidenceContext` (~10 files listed above,
+     sovereign-core test asserts it). Structural, larger.
+   - (B) Rust, smaller: `citations_of` takes the turn's `peer_attribution`
+     (corpus → member, `retrieval_pipeline.rs:2335-2340`) and stamps by corpus.
+     Per-corpus, not per-chunk: wrong only if two members serve the same corpus in
+     one turn (`or_insert_with` keeps the first).
+   - (C) Desktop only: `EpistemicFooter` joins `citation.target` to
+     `retrievedChunks` by `(corpus_id, chunk_id)` — the join it already does at
+     :224-236 — and renders `metadata.peer` as "<corpus> on <member>". No Rust
+     change; the row's "citation struct" clause is dropped.
+3. The row's test clause asks `knowledge_fanout.rs` (sovereign-api) to assert "the
+   citation's member name"; that test only sees the wire, so a citation assert has
+   to live in sovereign-core (A/B) or a node/Svelte test (C). Name which, and the
+   PLANT for it.
+
+## (d) Then
+
+Edit or mark the row in `ralph/next/ring-room/STATE.md` (e.g. mark it `[x]` with
+the wire commit and mint a follow-up row for the chosen citation option), then
+`rm ralph/STOP ralph/NEEDS_HUMAN.md`.
+
+</details>
