@@ -10,8 +10,8 @@
 1	corpus-engine/src/snapshot.rs
 6	corpus-engine/xtask/src/layout_gate.rs
 4	sovereign/crates/sovereign-grants/src/auto_recover.rs
-2	sovereign/crates/sovereign-api/src/routes_internal/corpus_queue.rs
-4	sovereign/crates/sovereign-api/src/routes_internal/corpus_sync.rs
+2	sovereign/crates/sovereign-daemon/src/routes_internal/corpus_queue.rs
+4	sovereign/crates/sovereign-daemon/src/routes_internal/corpus_sync.rs
 1	sovereign/crates/sovereign-cli-dev/src/code_cmd.rs
 1	sovereign/crates/sovereign-cli-dev/src/code_fieldglass/assemble.rs
 1	sovereign/crates/sovereign-cli-dev/src/converge_cmd.rs

@@ -18,8 +18,8 @@ use sovereign_mesh_test_harness::simulated_node::SimulatedNodeBuilder;
 
 // The harness's node is generic over its state (the OICP/contracts seam), so
 // these tests — which assemble the real host node — bind `AppState` here.
-use sovereign_api::server::{client_router, internal_router};
-use sovereign_api::state::AppState;
+use sovereign_daemon::server::{client_router, internal_router};
+use sovereign_daemon::state::AppState;
 
 /// The node-state factory the simulated nodes are built with.
 fn app_state(id: NodeId, mesh: Mesh) -> AppState {

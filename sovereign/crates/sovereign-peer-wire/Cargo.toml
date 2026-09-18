@@ -1,0 +1,14 @@
+[package]
+name = "sovereign-peer-wire"
+description = "The daemon-to-daemon wire types both ends of an internal exchange must spell the same way"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+# The ring rail's op and digest vocabulary — what a ring-sync exchange carries.
+commonwealth-rail = { workspace = true }
+
+[lints]
+workspace = true

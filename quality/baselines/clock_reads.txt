@@ -24,12 +24,12 @@
 1	sovereign-mobile/src-tauri/src/commands/host.rs
 1	sovereign/crates/sovereign-serving-host/src/admission.rs
 2	sovereign/crates/sovereign-grants/src/auto_recover.rs
-1	sovereign/crates/sovereign-api/src/middleware/artifact_surface.rs
+1	sovereign/crates/sovereign-daemon/src/middleware/artifact_surface.rs
 4	sovereign/crates/sovereign-api/src/middleware/session_briefing.rs
-3	sovereign/crates/sovereign-api/src/routes_inference.rs
-2	sovereign/crates/sovereign-api/src/routes_internal/mesh_admin.rs
-3	sovereign/crates/sovereign-api/src/state.rs
-2	sovereign/crates/sovereign-api/src/yield_hook.rs
+3	sovereign/crates/sovereign-daemon/src/routes_inference.rs
+2	sovereign/crates/sovereign-daemon/src/routes_internal/mesh_admin.rs
+3	sovereign/crates/sovereign-daemon/src/state.rs
+2	sovereign/crates/sovereign-daemon/src/yield_hook.rs
 2	sovereign/crates/sovereign-daemon/src/bootstrap.rs
 1	sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/lifecycle.rs
 1	sovereign/crates/sovereign-cli-daemon/src/doctor_cmd/checks_freshness.rs

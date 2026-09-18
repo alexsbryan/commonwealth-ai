@@ -78,7 +78,7 @@ use std::time::Duration;
 use commonwealth_rail::{Ed25519Verifier, RailAct, RingRail};
 use commonwealth_work::act::{Completion, Failure, UnitRef, WorkAct};
 use commonwealth_work::actor::ActorKey;
-use sovereign_api::state::AppState;
+use crate::state::AppState;
 // The named absence for a workdir that is not a checkout. Imported rather
 // than re-spelled: this donor, the submitter and a lifted peer all have to
 // name the same absence, and the comparability rule keys on it.

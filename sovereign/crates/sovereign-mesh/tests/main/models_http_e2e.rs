@@ -28,7 +28,7 @@
 //! reachable", which is not "can anything serve this" — that gap is why
 //! `/v1/models` advertised ids chat completions refused. The manifest
 //! path's own gate lives in
-//! `sovereign_api::routes_inference::list_models_tests`.
+//! `sovereign_daemon::routes_inference::list_models_tests`.
 //!
 //! Two assertions:
 //!
@@ -52,8 +52,8 @@ use commonwealth_core::ids::{MeshId, ModelId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_core::model::{ModelArchitecture, ModelInfo};
 use commonwealth_state::MeshStore;
-use sovereign_api::server::client_router;
-use sovereign_api::state::AppState;
+use sovereign_daemon::server::client_router;
+use sovereign_daemon::state::AppState;
 use sovereign_meshapp_registry::registry::AppRegistry;
 
 use crate::common;

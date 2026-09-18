@@ -65,7 +65,7 @@
 //! saturates every core on every boot, forever. Hence the third gate
 //! in the loop below: see `watched_folder_errored`.
 
-use sovereign_api::state::AppState;
+use crate::state::AppState;
 use sovereign_tools::local_corpus::watched::state::WatchedFolderState;
 use sovereign_tools::local_corpus::watched::status::WatchedFolderStatus;
 
@@ -355,7 +355,7 @@ async fn resume_in_progress_ingests(state: AppState) {
         // `active_ingests`. So even if the desktop races us with its
         // own install POST, exactly one task spawns.
         let spawned =
-            sovereign_api::routes_internal::spawn_corpus_install(state.clone(), corpus_id.clone())
+            crate::routes_internal::spawn_corpus_install(state.clone(), corpus_id.clone())
                 .await;
         if spawned {
             tracing::info!(

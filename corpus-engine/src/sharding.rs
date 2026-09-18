@@ -1254,7 +1254,7 @@ pub struct PartitionMergeReport {
 /// * [`merge_partitions_into_canonical`], the disk-derived one, and
 /// * `sovereign_grants::ShardManager::merge_participants`, the
 ///   peer-pull one, which serves BOTH the fold-derived collector
-///   (`sovereign_api::auto_recover::merge_from_fold_coverage`) and the
+///   (`sovereign_grants::auto_recover::merge_from_fold_coverage`) and the
 ///   queue-mode coordinator (`ShardManager::coordinate_merge`).
 ///
 /// That second entry named `merge_from_fold_coverage` itself until cw-lift 5g

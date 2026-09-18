@@ -28,7 +28,7 @@ use commonwealth_transport::iroh::{
     Endpoint, EndpointAddr, EndpointBuilder, HttpBridge, IrohAcceptor, SecretKey, APP_ALPN,
     CLIENT_ALPN, MEDIA_ALPN, OFFER_ALPN, RPC_ALPN,
 };
-use sovereign_api::server::{client_router, client_router_for, ClientSurface};
+use sovereign_daemon::server::{client_router, client_router_for, ClientSurface};
 use sovereign_mesh::iroh_access::{AcceptorRoutes, MemberCheck, MemberIdentity};
 
 use crate::common;

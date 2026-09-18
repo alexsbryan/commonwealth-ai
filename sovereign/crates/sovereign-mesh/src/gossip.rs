@@ -36,16 +36,19 @@
 //! `tests/main/replication_sender_census.rs::every_sender_of_replicated_state_is_declared`.
 //! So `FANOUT` now governs the whole module rather than three of its four
 //! steps.
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, MeshPeering, NodeStatus};
 use commonwealth_transport::{peer_contact, PeerContact, TrafficClass};
+use corpus_engine::CorpusEngine;
 use serde::{Deserialize, Serialize};
-use sovereign_api::state::AppState;
+use sovereign_contracts::self_claims::SelfClaims;
 use tracing::{debug, info, warn};
 
 use crate::capabilities::build_local_capabilities;
+use crate::fabric::FabricPart;
 
 // Address ordering and the last-working-address promotion both live
 // in the PeerTransport seam now (`IpTransport` in
@@ -144,7 +147,9 @@ impl Drop for GossipHandle {
 /// callback. Costs one JSON file write per 10s (trivial). `None`
 /// (test harnesses, CLI without persistence) skips persistence.
 pub fn spawn_gossip_loop(
-    app_state: AppState,
+    fabric: Arc<FabricPart>,
+    engine: Option<Arc<CorpusEngine>>,
+    claims: Arc<dyn SelfClaims>,
     interval: Duration,
     offline_threshold: Duration,
     persist_dir: Option<std::path::PathBuf>,
@@ -163,7 +168,9 @@ pub fn spawn_gossip_loop(
         let mut over_rail = false;
         loop {
             tokio::time::sleep(interval).await;
-            if let Err(e) = run_one_round(&app_state, offline_threshold).await {
+            if let Err(e) =
+                run_one_round(&fabric, engine.as_ref(), claims.as_ref(), offline_threshold).await
+            {
                 warn!(error = %e, "gossip: round errored");
             }
 
@@ -183,8 +190,8 @@ pub fn spawn_gossip_loop(
             // — if peers start flapping Offline, this is why", and
             // raising fanout is NOT the indicated fix.
             let online_peers = {
-                let self_id = app_state.inner.fabric.identity.current();
-                let mesh = app_state.inner.fabric.mesh.read().await;
+                let self_id = fabric.identity.current();
+                let mesh = fabric.mesh.read().await;
                 mesh.members
                     .values()
                     .filter(|m| m.node_id != self_id && m.status == NodeStatus::Online)
@@ -222,8 +229,8 @@ pub fn spawn_gossip_loop(
                 );
             }
             if let Some(dir) = persist_dir.as_deref() {
-                let mesh = app_state.inner.fabric.mesh.read().await.clone();
-                let self_id = app_state.inner.fabric.identity.current();
+                let mesh = fabric.mesh.read().await.clone();
+                let self_id = fabric.identity.current();
                 if let Err(e) = crate::persist::save(dir, &mesh, self_id) {
                     // Don't spam — persistence failure is rarely
                     // fatal to the running session, but the operator
@@ -245,11 +252,18 @@ pub fn spawn_gossip_loop(
 /// `max_duration` so daemon startup stays prompt even when all
 /// peers are unreachable.
 pub async fn initial_sync(
-    app_state: &AppState,
+    fabric: &FabricPart,
+    engine: Option<&Arc<CorpusEngine>>,
+    claims: &dyn SelfClaims,
     offline_threshold: Duration,
     max_duration: Duration,
 ) {
-    match tokio::time::timeout(max_duration, run_one_round(app_state, offline_threshold)).await {
+    match tokio::time::timeout(
+        max_duration,
+        run_one_round(fabric, engine, claims, offline_threshold),
+    )
+    .await
+    {
         Ok(Ok(())) => {
             debug!("gossip: initial_sync completed");
         }
@@ -443,11 +457,13 @@ fn max_online_peers_before_false_offline(
 /// peers, then pair-gossips with up to `FANOUT` members — online ones
 /// first (`select_round_peers`).
 pub async fn run_one_round(
-    app_state: &AppState,
+    fabric: &FabricPart,
+    engine: Option<&Arc<CorpusEngine>>,
+    claims: &dyn SelfClaims,
     offline_threshold: Duration,
 ) -> Result<(), GossipError> {
-    let self_id = app_state.inner.fabric.identity.current();
-    let now = app_state.clock().now_unix_secs();
+    let self_id = fabric.identity.current();
+    let now = fabric.clock().now_unix_secs();
     let threshold = offline_threshold.as_secs();
 
     // Build a fresh snapshot of our own capabilities BEFORE we take
@@ -462,15 +478,14 @@ pub async fn run_one_round(
     // implementation: the yield-to-local-user half is time-derived and has no
     // transition event to hook, so a node refusing every peer request would
     // otherwise gossip a stale `1.0` (note 3234d770).
-    let fresh_caps =
-        build_local_capabilities(app_state.inner.node.corpus_engine.as_ref(), now, app_state).await;
+    let fresh_caps = build_local_capabilities(engine, now, claims).await;
     // Step 1: touch self + decay stale peers. One write-lock window.
     // Compare current vs. fresh hosted_corpora so we can log at
     // info only when the advertised set changed (new corpus
     // installed, one removed) — the every-10s heartbeat otherwise
     // logs at debug. Same gating policy as `mesh_state: rebuilt`.
     let candidates: Vec<(PeerContact, bool, u64)> = {
-        let mut mesh = app_state.inner.fabric.mesh.write().await;
+        let mut mesh = fabric.mesh.write().await;
         let prior_corpora: std::collections::BTreeSet<String> = mesh
             .members
             .get(&self_id)
@@ -515,7 +530,7 @@ pub async fn run_one_round(
             // before identity keys existed) publishes its key
             // without a rejoin — within one gossip interval the
             // whole mesh learns it.
-            if let Some(pubkey) = app_state.self_node_pubkey() {
+            if let Some(pubkey) = fabric.self_node_pubkey() {
                 me.node_pubkey = Some(pubkey);
             }
             // Stamp our LIVE iroh dial info every round (W2). Unlike
@@ -526,7 +541,7 @@ pub async fn run_one_round(
             // pubkey, "known member" == "dialable by key". A `None`
             // provider (iroh disabled) leaves these fields at their
             // default empty, so a non-iroh node publishes nothing here.
-            if let Some(info) = app_state.self_iroh_dialinfo() {
+            if let Some(info) = fabric.self_iroh_dialinfo() {
                 let changed =
                     me.relay_url != info.relay_url || me.iroh_direct_addrs != info.direct_addrs;
                 me.relay_url = info.relay_url;
@@ -549,7 +564,7 @@ pub async fn run_one_round(
                     } else {
                         me.dial_info_version.max(1)
                     };
-                    if let Some(sig) = app_state.sign_dial_info(
+                    if let Some(sig) = fabric.sign_dial_info(
                         next_version,
                         me.relay_url.as_deref(),
                         &me.iroh_direct_addrs,
@@ -572,7 +587,7 @@ pub async fn run_one_round(
             // `f152dfe7` #4): a clock-skewed-but-live peer looked stale.
             // `peer_contact_or_init` lazy-inits a freshly-seen peer to `now`, a
             // full grace window, so we never decay a peer we just learned of.
-            let last_contact = app_state.peer_contact_or_init(*id, now);
+            let last_contact = fabric.peer_contact_or_init(*id, now);
             if now.saturating_sub(last_contact) > threshold && m.status != NodeStatus::Offline {
                 m.status = NodeStatus::Offline;
                 info!(
@@ -632,7 +647,7 @@ pub async fn run_one_round(
                 (
                     peer_contact(m),
                     m.status != NodeStatus::Offline,
-                    app_state.peer_attempt_or_init(m.node_id, now),
+                    fabric.peer_attempt_or_init(m.node_id, now),
                 )
             })
             .collect()
@@ -663,10 +678,10 @@ pub async fn run_one_round(
     // Step 3: snapshot our mesh once and POST it to each picked
     // peer. Using the same snapshot across the fan-out keeps rounds
     // cheap and means every peer sees the same view of us.
-    let my_snapshot = { app_state.inner.fabric.mesh.read().await.clone() };
+    let my_snapshot = { fabric.mesh.read().await.clone() };
     let http = gossip_client().map_err(|e| GossipError::ClientBuild(e.to_string()))?;
 
-    let transport = app_state.peer_transport();
+    let transport = fabric.peer_transport();
     for contact in selection {
         let peer_id = contact.node_id;
         // SPENDING THE SLOT IS THE EVENT THIS STAMPS, not the outcome. It goes
@@ -675,7 +690,7 @@ pub async fn run_one_round(
         // unreachable peers from holding both slots for ever. Liveness is
         // stamped separately and only on a completed round-trip
         // (`observe_peer_contact`, below).
-        app_state.note_peer_attempt(peer_id, now);
+        fabric.note_peer_attempt(peer_id, now);
         // The transport resolves and orders candidates: the address
         // that worked last round goes first. The common case is
         // "Tailscale 100.x stable, LAN 192.168.x stale because the
@@ -720,7 +735,7 @@ pub async fn run_one_round(
                 &my_snapshot,
                 self_id,
                 now,
-                app_state.peer_confirmed_post_split(peer_id),
+                fabric.peer_confirmed_post_split(peer_id),
             )
             .await
             {
@@ -759,8 +774,8 @@ pub async fn run_one_round(
                     //
                     // Liveness must never be a side effect of payload
                     // change. Talking to someone IS the evidence.
-                    app_state.observe_peer_contact(peer_id, now);
-                    let mut mesh = app_state.inner.fabric.mesh.write().await;
+                    fabric.observe_peer_contact(peer_id, now);
+                    let mut mesh = fabric.mesh.write().await;
                     let report = mesh.merge_from_authenticated(self_id, &their_view, &their_auth);
                     // A REFUSED merge on this path used to be completely
                     // silent: `added` and `updated` are both 0, so it fell
@@ -785,7 +800,7 @@ pub async fn run_one_round(
                         // ONLY in the payload we just merged. Retain it —
                         // `rotate_invite` needs it to refuse rather than
                         // partition this peer, and has no other way to learn it.
-                        app_state.observe_peer_split_generation(peer_id, !report.peer_pre_split());
+                        fabric.observe_peer_split_generation(peer_id, !report.peer_pre_split());
                         tracing::debug!(
                             peer = %peer_id,
                             pre_split = report.peer_pre_split(),
@@ -796,7 +811,7 @@ pub async fn run_one_round(
                     // advanced in this merge (incl. transitively-relayed ones),
                     // so offline-decay sees them as freshly-observed.
                     for observed_id in report.observed() {
-                        app_state.observe_peer_contact(*observed_id, now);
+                        fabric.observe_peer_contact(*observed_id, now);
                     }
                     if report.added() > 0 {
                         info!(
@@ -824,7 +839,7 @@ pub async fn run_one_round(
                     // offline-decay log in the pass above.
                     if let Some(peer) = mesh.members.get_mut(&peer_id) {
                         let was_offline = peer.status == NodeStatus::Offline;
-                        peer.last_seen = app_state.clock().now_unix_secs();
+                        peer.last_seen = fabric.clock().now_unix_secs();
                         peer.status = NodeStatus::Online;
                         if was_offline {
                             info!(
@@ -903,15 +918,15 @@ pub enum PresenceChange {
 }
 
 /// Leaving: tombstone + offline. Thin wrapper so existing callers read the same.
-pub async fn announce_departure(app_state: &AppState) {
-    announce_presence_change(app_state, PresenceChange::Left).await
+pub async fn announce_departure(fabric: &FabricPart) {
+    announce_presence_change(fabric, PresenceChange::Left).await
 }
 
-pub async fn announce_presence_change(app_state: &AppState, change: PresenceChange) {
-    let self_id = app_state.inner.fabric.identity.current();
-    let now = app_state.clock().now_unix_secs();
+pub async fn announce_presence_change(fabric: &FabricPart, change: PresenceChange) {
+    let self_id = fabric.identity.current();
+    let now = fabric.clock().now_unix_secs();
     let (snapshot, targets) = {
-        let mut mesh = app_state.inner.fabric.mesh.write().await;
+        let mut mesh = fabric.mesh.write().await;
         if let Some(me) = mesh.members.get_mut(&self_id) {
             if change == PresenceChange::Left {
                 me.removed_at = Some(now);
@@ -930,7 +945,7 @@ pub async fn announce_presence_change(app_state: &AppState, change: PresenceChan
     let Ok(http) = gossip_client() else {
         return;
     };
-    let transport = app_state.peer_transport();
+    let transport = fabric.peer_transport();
     let mut announced = 0usize;
     for contact in &targets {
         let eps = transport.endpoints(contact, TrafficClass::Gossip).await;
@@ -941,7 +956,7 @@ pub async fn announce_presence_change(app_state: &AppState, change: PresenceChan
                 &snapshot,
                 self_id,
                 now,
-                app_state.peer_confirmed_post_split(contact.node_id),
+                fabric.peer_confirmed_post_split(contact.node_id),
             )
             .await
             .is_ok()
@@ -1046,7 +1061,7 @@ pub enum GossipError {
 // types. The request one existed because that side derived `Deserialize` only;
 // the RESPONSE one had no reason at all — `GossipResponse` already derived
 // both halves and was already re-exported. It was a pure duplicate.
-use sovereign_api::routes_internal::{
+use commonwealth_core::mesh::wire::{
     GossipRequest as GossipRequestWire, GossipResponse as GossipResponseWire,
 };
 

@@ -26,12 +26,16 @@ async-trait = { workspace = true }
 # The harness's `src/` meets the runtime at the OICP/contracts seam: its
 # simulated node is generic over the node state, so the library names no host.
 # The integration tests assemble the real host node and bind it, which is why
-# `sovereign-api` is a test-only edge here — layer-gate never enforces dev
+# `sovereign-daemon` is a test-only edge here — layer-gate never enforces dev
 # edges (DepKind::Dev), and the production direction is unchanged.
 [dev-dependencies]
 commonwealth-discovery = { workspace = true }
 commonwealth-state = { workspace = true }
-sovereign-api = { workspace = true }
+# The integration tests assemble the real host node — the host cluster moved
+# from `sovereign-api` to `sovereign-daemon` at domains `dm-daemon-api-edge`,
+# so this TEST-ONLY edge follows it. Layer-gate never enforces dev edges
+# (DepKind::Dev), and the production direction is unchanged.
+sovereign-daemon = { workspace = true }
 
 [[test]]
 name = "integration"

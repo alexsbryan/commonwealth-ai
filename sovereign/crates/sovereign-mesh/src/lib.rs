@@ -23,6 +23,11 @@
 
 pub mod canonical_pull;
 pub mod capabilities;
+/// Fabric's own part of the node's state, moved here from `sovereign-api`'s
+/// `state` at domains `dm-daemon-api-edge` (b): DC §4.2 names `sovereign-mesh`
+/// as its home, and the three loops take a handle to it rather than the
+/// daemon's `AppState` (which this crate may not name).
+pub mod fabric;
 pub use corpus_engine_watchers::commit_harvest; // shim: moved by domains dm-mesh-workbench-move-watchers
 /// Routing decision records — Phase 0 (P1/P2) of
 /// `docs/specs/SCHEDULER_QUALITY.md`. One structured record per

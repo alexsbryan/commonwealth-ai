@@ -27,8 +27,8 @@ use serde_json::json;
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::Mesh;
 use commonwealth_discovery::membership;
-use sovereign_api::server::internal_router;
-use sovereign_api::state::AppState;
+use sovereign_daemon::server::internal_router;
+use sovereign_daemon::state::AppState;
 
 async fn spawn_internal_router(state: AppState) -> SocketAddr {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -53,7 +53,7 @@ fn build_founder() -> (AppState, NodeId, String, Arc<AtomicUsize>) {
 
     let counter = Arc::new(AtomicUsize::new(0));
     let counter_clone = Arc::clone(&counter);
-    let hook: sovereign_api::state::MeshMutationHook =
+    let hook: sovereign_daemon::state::MeshMutationHook =
         Arc::new(move |_mesh: &Mesh, _self_id: NodeId| {
             counter_clone.fetch_add(1, Ordering::Relaxed);
         });
@@ -66,7 +66,7 @@ fn build_founder() -> (AppState, NodeId, String, Arc<AtomicUsize>) {
         Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new()),
         None,
         None,
-        sovereign_api::state::FabricSeed {
+        sovereign_daemon::state::FabricSeed {
             mesh_mutation_hook: Some(hook),
             ..Default::default()
         },

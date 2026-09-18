@@ -26,8 +26,8 @@ use commonwealth_transport::iroh::{
     Endpoint, EndpointBuilder, IrohAcceptor, IrohTransport, SecretKey, ALPN,
 };
 use commonwealth_transport::{PeerContact, PeerTransport, TrafficClass};
-use sovereign_api::server::internal_router;
-use sovereign_api::state::AppState;
+use sovereign_daemon::server::internal_router;
+use sovereign_daemon::state::AppState;
 
 async fn bind_iroh_endpoint(seed: u8) -> Endpoint {
     // Builder::empty(): no relays, no address-lookup services —

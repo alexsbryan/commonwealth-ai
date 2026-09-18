@@ -445,7 +445,7 @@ pub struct MeshStatusSummary {
 
 // ─── `GET /status` — the serving host's identity ─────────────────
 
-/// The one field a client reads off `GET /status` (`sovereign_api::
+/// The one field a client reads off `GET /status` (`sovereign_daemon::
 /// routes_status::StatusResponse`): the serving host's own node id, in
 /// `NodeId`'s `Display` form. A client that needs the daemon's identity
 /// asks the daemon; it does not read the daemon's `<data_dir>/node_id`

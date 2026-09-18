@@ -14,7 +14,7 @@ use crate::traits::InferenceProvider;
 /// The OpenAI-shaped face of a local inference provider: chat completions,
 /// the provider manifest, FIM inline completion, and editing-slot status.
 ///
-/// This was `sovereign_api::state::LocalInferenceService`, a second inference
+/// This was `sovereign_daemon::state::LocalInferenceService`, a second inference
 /// port minted when the API crate could not depend on the runtime. That reason
 /// expired when it began to, so the duplicated half of the port collapses onto
 /// [`InferenceProvider`], which this trait extends: every method that already

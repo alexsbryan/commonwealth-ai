@@ -8,7 +8,7 @@
 //! corpus holding half the data while `auto_recover` returned `Recovered`.
 //! That reading is preserved verbatim in the pre-registration's
 //! `## Measurements` section and is not re-run here: the path it measured
-//! (`sovereign_api::auto_recover::try_recover_stranded_partitions`, which
+//! (`sovereign_grants::auto_recover::try_recover_stranded_partitions`, which
 //! merges `<corpus>-partition-*/` **on this node** and fetches nothing) still
 //! exists and still behaves that way. What changed at `df2ffecb8` is that
 //! `auto_ingest` no longer reaches it for a corpus the `work` fold can speak
@@ -27,7 +27,7 @@
 //!   half) and [`only_the_submitter_reads_a_merge_out_of_the_fold`] (B3). No
 //!   corpus, no disk, no clock beyond the `now_ms` it is handed.
 //!
-//! * [`sovereign_api::auto_recover::merge_from_fold_coverage`] → the
+//! * [`sovereign_grants::auto_recover::merge_from_fold_coverage`] → the
 //!   `ShardManager::merge_participants` the fold's answer is handed to.
 //!   Measured by
 //!   [`two_donors_on_two_nodes_land_both_slices_in_the_canonical`] (B2, second
@@ -57,7 +57,7 @@
 //!   `IngestExecutor::run` makes to choose where a slice lands
 //!   (`ingest_executor.rs`).
 //! * **The real wire.** The peer donor's partition is served by the peer's own
-//!   `sovereign_api::server::internal_router` on a real loopback socket,
+//!   `sovereign_daemon::server::internal_router` on a real loopback socket,
 //!   and reaches the leader through `ShardManager::fetch_remote_shard`'s
 //!   `GET /internal/index/serve` → `tar xf`. B1 could not say this: it stubbed
 //!   nothing because it pulled nothing.
@@ -112,10 +112,10 @@ use kernel_types::judgement::Reason;
 use kernel_types::{ComputeAttribution, Judgement, NodeId, Server};
 use oicp_types::{JobKind, JobRequirements, JobUnit};
 use serde_json::json;
-use sovereign_api::auto_recover::{merge_from_fold_coverage, RecoveryOutcome};
-use sovereign_api::server::internal_router;
-use sovereign_api::state::AppState;
 use sovereign_daemon::ingest_executor::{fold_coverage_for, IngestPayload, INGEST_KIND};
+use sovereign_daemon::server::internal_router;
+use sovereign_daemon::state::AppState;
+use sovereign_grants::auto_recover::{merge_from_fold_coverage, RecoveryOutcome};
 use sovereign_meshapp_registry::AppRegistry;
 use tempfile::TempDir;
 
@@ -415,7 +415,7 @@ pub(crate) fn node_state(
         self_id,
         index_dir,
         others,
-        sovereign_api::state::FabricSeed::default(),
+        sovereign_daemon::state::FabricSeed::default(),
     )
 }
 
@@ -426,7 +426,7 @@ pub(crate) fn node_state_with_seed(
     self_id: NodeId,
     index_dir: &std::path::Path,
     others: &[(NodeId, &str)],
-    seed: sovereign_api::state::FabricSeed,
+    seed: sovereign_daemon::state::FabricSeed,
 ) -> AppState {
     let mut members = HashMap::new();
     members.insert(
@@ -831,7 +831,7 @@ async fn two_donors_on_two_nodes_land_both_slices_in_the_canonical() {
     let coverage = fold_coverage_for(&projection, &actor(1), CORPUS, NOW_MS)
         .expect("the submitter leads a terminal ingest:v1 handoff for this corpus");
 
-    let node = sovereign_api::routes_internal::fold_recovery(&leader_state).await;
+    let node = sovereign_daemon::routes_internal::fold_recovery(&leader_state).await;
     let outcome = merge_from_fold_coverage(
         node,
         CORPUS,
@@ -968,7 +968,7 @@ async fn two_donors_on_one_node_do_land_both_slices_in_the_canonical() {
 
     let outcome = format!(
         "{:?}",
-        sovereign_api::auto_recover::try_recover_stranded_partitions(&index_dir, CORPUS).await
+        sovereign_grants::auto_recover::try_recover_stranded_partitions(&index_dir, CORPUS).await
     );
     let probe = probe_canonical(&index_dir, CORPUS).await;
 

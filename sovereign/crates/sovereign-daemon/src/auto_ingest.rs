@@ -10,7 +10,7 @@ use commonwealth_core::knowledge::{
 };
 use commonwealth_core::mesh::NodeStatus;
 use corpus_engine::CancellationFlag;
-use sovereign_api::state::AppState;
+use crate::state::AppState;
 
 const CHECK_INTERVAL: Duration = Duration::from_secs(30);
 const COOLDOWN: Duration = Duration::from_secs(30 * 60);
@@ -264,8 +264,8 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
                              can never be complete"
                         );
                     }
-                    let node = sovereign_api::routes_internal::fold_recovery(&state).await;
-                    match sovereign_api::auto_recover::merge_from_fold_coverage(
+                    let node = crate::routes_internal::fold_recovery(&state).await;
+                    match sovereign_grants::auto_recover::merge_from_fold_coverage(
                         node,
                         corpus_id,
                         cov.handoff_id,
@@ -274,7 +274,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
                     )
                     .await
                     {
-                        sovereign_api::auto_recover::RecoveryOutcome::Recovered {
+                        sovereign_grants::auto_recover::RecoveryOutcome::Recovered {
                             chunks,
                             shards_covered,
                         } => tracing::info!(
@@ -285,7 +285,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
                             partial = cov.is_partial(),
                             "auto_ingest: canonical built from the fold's participant set"
                         ),
-                        sovereign_api::auto_recover::RecoveryOutcome::PartitionsUnreachable {
+                        sovereign_grants::auto_recover::RecoveryOutcome::PartitionsUnreachable {
                             covered,
                             expected,
                         } => tracing::warn!(
@@ -296,7 +296,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
                             "auto_ingest: REFUSED — merging now would publish a partial \
                              canonical and gossip would advertise it; retrying next tick"
                         ),
-                        sovereign_api::auto_recover::RecoveryOutcome::MergedButNotInstalled {
+                        sovereign_grants::auto_recover::RecoveryOutcome::MergedButNotInstalled {
                             chunks,
                             canonical_path,
                             error,
@@ -319,7 +319,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
                                  next tick short-circuits on AlreadyHasCanonical"
                             )
                         }
-                        sovereign_api::auto_recover::RecoveryOutcome::Failed(err) => {
+                        sovereign_grants::auto_recover::RecoveryOutcome::Failed(err) => {
                             tracing::warn!(
                                 corpus = %corpus_id,
                                 handoff = %cov.handoff_id,
@@ -406,13 +406,13 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
                 }
             }
 
-            let outcome = sovereign_api::auto_recover::try_recover_stranded_partitions(
+            let outcome = sovereign_grants::auto_recover::try_recover_stranded_partitions(
                 engine.index_dir(),
                 corpus_id,
             )
             .await;
             match outcome {
-                sovereign_api::auto_recover::RecoveryOutcome::Recovered {
+                sovereign_grants::auto_recover::RecoveryOutcome::Recovered {
                     chunks,
                     shards_covered,
                 } => {
@@ -424,7 +424,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
                          canonical now exists; gossip will re-advertise"
                     );
                 }
-                sovereign_api::auto_recover::RecoveryOutcome::Failed(err) => {
+                sovereign_grants::auto_recover::RecoveryOutcome::Failed(err) => {
                     tracing::warn!(
                         corpus = %corpus_id,
                         recovery_error = %err,
@@ -433,7 +433,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
                         corpus_id,
                     );
                 }
-                sovereign_api::auto_recover::RecoveryOutcome::IncompleteCoverage { .. } => {
+                sovereign_grants::auto_recover::RecoveryOutcome::IncompleteCoverage { .. } => {
                     // auto_recover already logged the detailed WARN
                     // with covered/total/missing. Stay quiet here so
                     // the 30s tick doesn't spam logs while we wait
@@ -668,7 +668,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
 }
 
 /// Spawn a local ingest for `corpus_id` via the unified
-/// [`sovereign_api::routes_internal::spawn_corpus_install`]
+/// [`crate::routes_internal::spawn_corpus_install`]
 /// helper.
 ///
 /// Used by the auto-collaborate loop to pick up partition-of-self
@@ -759,7 +759,7 @@ async fn publish_local_processed_shards(
 }
 
 async fn spawn_local_ingest(state: AppState, corpus_id: String) {
-    use sovereign_api::routes_internal::spawn_corpus_install;
+    use crate::routes_internal::spawn_corpus_install;
     let spawned = spawn_corpus_install(state, corpus_id.clone()).await;
     if spawned {
         tracing::info!(
@@ -1393,7 +1393,7 @@ pub(crate) struct CanonicalAtlasLead {
 /// local canonical. The ranking is among PEERS, picking the best
 /// remote source.
 async fn find_best_peer_canonical(
-    state: &sovereign_api::state::AppState,
+    state: &crate::state::AppState,
     corpus_id: &str,
 ) -> Option<CanonicalAtlasLead> {
     let mesh = state.inner.fabric.mesh.read().await;

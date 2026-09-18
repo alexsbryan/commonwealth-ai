@@ -37,14 +37,11 @@ corpus-engine = { workspace = true, features = ["treesitter"] }
 # place where `.tsx` vs `.ts` is decided.
 tree-sitter = "0.26"
 corpus-engine-notes = { workspace = true }
-# The SCIP call graph, for `next_edit_symbols` (call-site navigation).
-# A DIRECT dep by the carve-out's own rule: corpus-engine deliberately
-# ships no re-export shim for it ("external consumers import directly
-# from `corpus_engine_scip::*`", corpus-engine/src/lib.rs), precisely so
-# two crates cannot end up on different versions of one logical type
-# (ARCH §8.3). Not a `sovereign-*` edge, so the layer gate's
-# sovereign-api forbid rule does not reach it.
-corpus-engine-scip = { workspace = true }
+# `corpus-engine-scip` (the SCIP call graph) left with the workbench cluster at
+# domains `dm-daemon-api-edge`: the modules that read it (`next_edit_symbols`)
+# live in `code-next-edit` and the route shell that mounts them moved to
+# `sovereign-daemon`, which declares the dep. Dropping it here keeps the
+# crate's fan-in ratchet flat rather than raising it for an unused edge.
 # The next-edit package crate (domains dm-next-edit-move): the five pure
 # workbench modules moved there, and this crate keeps the route shell that
 # mounts them plus the grammar-lookup adapter the package's port takes.

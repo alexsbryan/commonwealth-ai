@@ -1,6 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Commonwealth HTTP API — the `:9741` front door.
 //!
+//! The host cluster left this crate for `sovereign-daemon` at domains
+//! `dm-daemon-api-edge` (2026-09-18): the edge, `state` with its six parts,
+//! `server`, the routes and the crate's own integration tests. What remains
+//! here is the set of shims for the modules that left earlier, kept so any
+//! path this crate still exports resolves until
+//! `REVIEW-build-sovereign-api-retire` deletes the crate. Every consumer was
+//! repointed to the owner in the same commit.
+//!
 //! Panic-ratchet (tech-debt PR4): production code in this crate is held
 //! to `clippy::unwrap_used` / `clippy::expect_used`. A panic in a request
 //! handler surfaces to the caller as an opaque 500, so prefer `?` / typed
@@ -16,41 +24,18 @@
 //! production surface was clean (0 sites) as of the PR4 sweep.
 #![warn(clippy::unwrap_used, clippy::expect_used)]
 
-pub mod admission;
 pub use sovereign_grants::auto_recover; // shim: moved by domains dm-auto-recover-move
-pub mod client_auth;
-pub mod client_surface;
-// The fan-out core is `commonwealth_transport::fanout` since the rails carve
-// (a package-only member fans out too, with none of this crate). Re-exported
-// so `sovereign_api::fanout::…` paths keep resolving.
-pub use commonwealth_transport::fanout;
-pub mod frontdoor;
-pub mod headers;
-pub mod middleware;
+                                        // The fan-out core is `commonwealth_transport::fanout` since the rails carve
+                                        // (a package-only member fans out too, with none of this crate). Re-exported
+                                        // so `sovereign_api::fanout::…` paths keep resolving.
 pub use code_next_edit::next_edit; // shim: moved by domains dm-next-edit-move
 pub use code_next_edit::next_edit_journal; // shim: moved by domains dm-next-edit-move
 pub use code_next_edit::next_edit_model; // shim: moved by domains dm-next-edit-move
 pub use code_next_edit::next_edit_symbols; // shim: moved by domains dm-next-edit-move
 pub use code_next_edit::next_edit_syntax; // shim: moved by domains dm-next-edit-move
+pub use commonwealth_transport::fanout;
 pub use oicp_types::openai_types; // shim: moved by domains dm-wire-openai-types
-pub mod principal;
-pub mod reshaping;
 pub use oicp_types::responses_types; // shim: moved by domains dm-wire-responses-types
-pub mod routes_apps;
-pub mod routes_completions;
-pub mod routes_edit_predictions;
-pub mod routes_inference;
-pub mod routes_internal;
-pub mod routes_knowledge;
-pub mod routes_oicp;
-pub mod routes_oicp_ingest;
-pub mod routes_ollama;
-pub mod routes_rail;
-pub mod routes_responses;
-pub mod routes_status;
-pub mod server;
-pub mod state;
 pub use sovereign_core::answering::turn_fidelity; // shim: moved by domains REVIEW-build-answering-inversion
-pub mod yield_hook;
 
 pub use commonwealth_core::{Error, Result};
