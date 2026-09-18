@@ -1727,3 +1727,58 @@ the copy-per-lane policy, not the correctness of the fix.
 helper and its `run_lane` call, `import shutil`), `scripts/tests/ralph.py` (the
 new test) and this entry; `ralph/NEEDS_HUMAN.md` removed. `git revert <sha>`
 reverts it alone.
+
+## 2026-09-17 · dm-next-edit-move · director: the merge conflict is two appended DECISIONS entries; keep both and complete the merge
+
+**Fork.** The pool halted on `merge conflict merging ralph/dm-next-edit-move —
+resolve in the main tree, then resume` (`ralph/NEEDS_HUMAN.md`). The lane (base
+`239fd535f`) and the main tree (which merged `dm-vocab-compile-fail-test`,
+`faa29914a`) each appended a `## 2026-09-17` entry to the end of
+`ralph/DECISIONS.md`; that file is the merge's only conflict. Options: (a) drop
+one entry to make the merge trivial; (b) keep both, in commit order, and
+complete the merge; (c) re-run the lane on the current base.
+
+**Choice.** (b). The file is an appended decision log — every entry is added at
+the end (`ralph/PROMPT.md:185` instructs "add the DECISIONS entry"), and the
+two entries are independent decisions, neither superseding the other, so
+dropping one loses exactly the record this file exists to keep. Commit order:
+`dm-next-edit-move` (19:02:48) before `dm-vocab-compile-fail-test` (19:06:29,
+the director commit `aa6a12dd8`). The merge is completed by hand including the
+pool's bookkeeping (row `[x]`, lane worktree removed, branch deleted); leaving
+the row `[ ]` would re-run a finished lane on a base that no longer matches
+main — the condition that produced the conflict.
+
+**Evidence** (reproduced this session, on `ralph/domains-campaign`).
+- `git merge-tree --write-tree ralph/domains-campaign ralph/dm-next-edit-move`
+  → conflict in `ralph/DECISIONS.md` only; `Cargo.lock` and `ralph/STATE.md`
+  auto-merge.
+- The lane's own checks re-run on the MERGED tree, not trusted from the lane:
+  `./scripts/sovereign-lint.sh --human` → exit 0, `errors: 0`, `cargo exit: 0`,
+  scope WORKSPACE; `cargo xtask layer-gate` → exit 0, "every edge points down or
+  sideways, fan-in within caps".
+- The lane's row correction is in the merged `ralph/STATE.md:260` (three false
+  premises, the registry port, the shell deferral) and the moved files are at
+  `code-next-edit/src/` (`next_edit.rs`, `next_edit_model.rs`,
+  `next_edit_symbols.rs`, `next_edit_syntax.rs`, `next_edit_journal.rs`,
+  `grammar.rs`, `prompts/`) with the `sovereign-api` shims.
+
+**Falsified by.** A `ralph/DECISIONS.md` conflict that is not two appends (then a
+content decision, not an ordering one); or the merged tree failing the row's
+checks; or the pool re-running the lane despite the `[x]`.
+
+**REVIEW-AFTER:** a commit `78acad3c4` ("ralph: a lane with commits gets the
+base merged IN, not skipped") landed on main at 19:25:53, after this halt
+(19:24:04) and before this resolution's merge, and it is NOT in
+`ralph/.director-commits` (whose last row is the vocab-lane attempt ending at
+`aa6a12dd8`); the domains supervisor was blocked in `resolver_run`
+(`~/.svrnmesh/ralph/commonwealth-ai-domains/launchd.log` ends at "dispatching
+resolution session 1", 02:24:05Z) and no other `ralph.py` process writes this
+tree, so the writer is a concurrent opencode session outside the pool. The
+merge takes it as the first parent and its harness change is in the merged
+tree; the morning should explain its provenance, because a second writer on the
+campaign's main tree is the failure the atlas exists to prevent.
+
+**Landed in.** `8fe3b48b4` (the merge, `ralph/DECISIONS.md` resolved with both
+entries, the lane's `.done` included), `71061ce26` (`dm-next-edit-move: merged
+(pool)`, the row `[x]`), and this entry. `git revert -m 1 8fe3b48b4` reverts the
+merge.
