@@ -45,6 +45,10 @@ corpus-engine-notes = { workspace = true }
 # (ARCH §8.3). Not a `sovereign-*` edge, so the layer gate's
 # sovereign-api forbid rule does not reach it.
 corpus-engine-scip = { workspace = true }
+# The next-edit package crate (domains dm-next-edit-move): the five pure
+# workbench modules moved there, and this crate keeps the route shell that
+# mounts them plus the grammar-lookup adapter the package's port takes.
+code-next-edit = { path = "../../../code-next-edit" }
 # Staging recipe TOML to a throwaway file for the OICP recipe-test route
 # (the engine's `test_recipe` reads from a path). Also used in dev-deps.
 tempfile = "3"

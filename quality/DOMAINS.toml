@@ -533,8 +533,14 @@ note = ""
 [[module]]
 path = "code-next-edit/src/lib.rs"
 context = "workbench"
-lines = 63
-note = "the code-intel package's next-edit stub crate root (REVIEW-build-next-edit-crate); nothing has moved in yet. The row was missing, so crate-lines/misnamed/queue exited 4 on a coverage hole (REVIEW-audit-daemon-1)"
+lines = 50
+note = "the code-intel package's next-edit crate root; the five pure workbench modules landed here at dm-next-edit-move. The row was missing, so crate-lines/misnamed/queue exited 4 on a coverage hole (REVIEW-audit-daemon-1)"
+
+[[module]]
+path = "code-next-edit/src/grammar.rs"
+context = "workbench"
+lines = 30
+note = "the grammar port the lanes take (dm-next-edit-move): the registry stays corpus-engine's, and the host supplies the lookup"
 
 [[module]]
 path = "sovereign/crates/sovereign-mesh/src/lib.rs"
@@ -1161,34 +1167,34 @@ lines = 136
 note = "moved from sovereign-api/src/turn_fidelity.rs at REVIEW-build-answering-inversion"
 
 [[module]]
-path = "sovereign/crates/sovereign-api/src/next_edit.rs"
+path = "code-next-edit/src/next_edit.rs"
 context = "workbench"
 lines = 983
-note = ""
+note = "moved from sovereign-api/src/next_edit.rs at dm-next-edit-move (the pure rule lane)"
 
 [[module]]
-path = "sovereign/crates/sovereign-api/src/next_edit_journal.rs"
+path = "code-next-edit/src/next_edit_journal.rs"
 context = "workbench"
-lines = 381
-note = ""
+lines = 243
+note = "moved from sovereign-api/src/next_edit_journal.rs at dm-next-edit-move; the route shell (OutcomeWire + edit_prediction_outcome) stayed host-side in routes_edit_predictions.rs"
 
 [[module]]
-path = "sovereign/crates/sovereign-api/src/next_edit_model.rs"
+path = "code-next-edit/src/next_edit_model.rs"
 context = "workbench"
 lines = 2462
-note = ""
+note = "moved from sovereign-api/src/next_edit_model.rs at dm-next-edit-move (the model lane's pure half)"
 
 [[module]]
-path = "sovereign/crates/sovereign-api/src/next_edit_symbols.rs"
+path = "code-next-edit/src/next_edit_symbols.rs"
 context = "workbench"
-lines = 714
-note = ""
+lines = 739
+note = "moved from sovereign-api/src/next_edit_symbols.rs at dm-next-edit-move; the tree-sitter grammar arrives through code_next_edit::grammar::GrammarLookup, supplied by the host"
 
 [[module]]
-path = "sovereign/crates/sovereign-api/src/next_edit_syntax.rs"
+path = "code-next-edit/src/next_edit_syntax.rs"
 context = "workbench"
-lines = 342
-note = ""
+lines = 362
+note = "moved from sovereign-api/src/next_edit_syntax.rs at dm-next-edit-move; the grammar arrives through code_next_edit::grammar::GrammarLookup"
 
 [[module]]
 path = "oicp-types/src/openai_types.rs"
@@ -1235,8 +1241,14 @@ note = "was serving; route shell — DAEMON_CORE.md §4 placement test (2026-09-
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_edit_predictions.rs"
 context = "workbench"
-lines = 1458
-note = ""
+lines = 1474
+note = "the host route shell (DAEMON_CORE.md §4.1 placement test) for POST /v1/edit_predictions; its grammar lookup adapter (grammar_for) is the port the package crate takes. It moves to sovereign-daemon with server.rs at dm-daemon-api-edge"
+
+[[module]]
+path = "sovereign/crates/sovereign-api/src/routes_edit_predictions/outcome.rs"
+context = "workbench"
+lines = 159
+note = "the host route shell for POST /v1/edit_predictions/outcome, split out of next_edit_journal.rs at dm-next-edit-move so the pure journal policy could leave for code-next-edit"
 
 [[module]]
 path = "sovereign/crates/sovereign-api/src/routes_inference.rs"

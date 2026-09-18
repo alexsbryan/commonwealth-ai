@@ -173,7 +173,7 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
             // failure rather than protection (decision note `09599af1`).
             .route(
                 "/v1/edit_predictions/outcome",
-                post(crate::next_edit_journal::edit_prediction_outcome),
+                post(routes_edit_predictions::outcome::edit_prediction_outcome),
             )
             // Behind `admission()` for the same reason `/v1/edit_predictions`
             // is: it drives local inference on this box. It was the ONE

@@ -111,7 +111,7 @@ So the feature is two lanes behind one contract:
   Ships the demo case with zero model risk and zero extra RAM.
 - **Model lane (v2, eval-gated — SHIPPED, default-on)**: prompted
   region-rewrite on the resident edit slot
-  (`commonwealth-api/src/next_edit_model.rs`). Mellum2-Instruct is
+  (`code-next-edit/src/next_edit_model.rs`). Mellum2-Instruct is
   **not next-edit-trained**; the §6 bank answered the open question
   empirically: 30/30 correct with zero wrong edits on fan-out /
   per-site-varying / multi-line-insert generalizations, correct

@@ -55,6 +55,8 @@
 
 use corpus_engine_scip::scip_graph::{Caller, ScipGraph};
 
+use crate::grammar::GrammarLookup;
+
 /// Sites returned to the client. A jump list longer than this is not a
 /// navigation affordance any more; the response says it was truncated
 /// rather than silently shortening (ARCH §18.3).
@@ -189,18 +191,17 @@ pub struct Trigger {
 /// if this lane covers that language. One parse helper, so the trigger
 /// and the saved-declaration comparison cannot disagree about what a
 /// parameter list is.
-fn parse(path: &str, text: &str) -> Option<tree_sitter::Tree> {
+fn parse(path: &str, text: &str, lookup: GrammarLookup) -> Option<tree_sitter::Tree> {
     if text.len() > MAX_PARSE_BYTES {
         return None;
     }
     let ext = path.rsplit('.').next()?;
-    let cfg = corpus_engine::extractors::code::language_for_extension(ext)?;
+    let cfg = lookup(ext)?;
     if !TRIGGER_LANGUAGES.contains(&cfg.id) {
         return None;
     }
-    let language: tree_sitter::Language = cfg.lang.into();
     let mut parser = tree_sitter::Parser::new();
-    parser.set_language(&language).ok()?;
+    parser.set_language(&cfg.language).ok()?;
     parser.parse(text, None)
 }
 
@@ -225,7 +226,12 @@ fn normalise(s: &str) -> String {
 /// PURE — no graph, no filesystem, no clock. Anchoring on the parameter
 /// LIST rather than on the declaration is what keeps a body edit, which
 /// obliges no caller to change, from reaching the graph at all.
-pub fn trigger_at(path: Option<&str>, text: &str, cursor: usize) -> Result<Trigger, Decline> {
+pub fn trigger_at(
+    path: Option<&str>,
+    text: &str,
+    cursor: usize,
+    lookup: GrammarLookup,
+) -> Result<Trigger, Decline> {
     let path = path.ok_or(Decline::NoPath)?;
     if text.len() > MAX_PARSE_BYTES {
         return Err(Decline::NotParsed);
@@ -234,12 +240,11 @@ pub fn trigger_at(path: Option<&str>, text: &str, cursor: usize) -> Result<Trigg
         .rsplit('.')
         .next()
         .ok_or(Decline::UnsupportedLanguage)?;
-    let cfg = corpus_engine::extractors::code::language_for_extension(ext)
-        .ok_or(Decline::UnsupportedLanguage)?;
+    let cfg = lookup(ext).ok_or(Decline::UnsupportedLanguage)?;
     if !TRIGGER_LANGUAGES.contains(&cfg.id) {
         return Err(Decline::UnsupportedLanguage);
     }
-    let tree = parse(path, text).ok_or(Decline::NotParsed)?;
+    let tree = parse(path, text, lookup).ok_or(Decline::NotParsed)?;
 
     let mut node = tree
         .root_node()
@@ -285,8 +290,8 @@ pub fn trigger_at(path: Option<&str>, text: &str, cursor: usize) -> Result<Trigg
 /// treat as "cannot judge" rather than as "unchanged": firing on an
 /// unreadable save would be guessing, and declining costs one missed
 /// offer (ARCH §18.3).
-pub fn params_of(path: &str, snippet: &str, name: &str) -> Option<String> {
-    let tree = parse(path, snippet)?;
+pub fn params_of(path: &str, snippet: &str, name: &str, lookup: GrammarLookup) -> Option<String> {
+    let tree = parse(path, snippet, lookup)?;
     let mut stack = vec![tree.root_node()];
     while let Some(n) = stack.pop() {
         if is_function_node(n.kind())
@@ -481,12 +486,13 @@ pub async fn navigate<R>(
     path: Option<&str>,
     text: &str,
     cursor: usize,
+    lookup: GrammarLookup,
     read_saved: R,
 ) -> Result<Navigation, Decline>
 where
     R: Fn(&str) -> Option<String>,
 {
-    let trigger = trigger_at(path, text, cursor)?;
+    let trigger = trigger_at(path, text, cursor, lookup)?;
     let decl_path = path.ok_or(Decline::NoPath)?;
     let (callers, decl_span) = resolve(graph, decl_path, &trigger.name).await?;
 
@@ -495,7 +501,7 @@ where
     // declines rather than assuming a change.
     let saved = read_saved(decl_path).ok_or(Decline::SignatureUnchanged)?;
     let saved_params =
-        params_of(decl_path, &saved, &trigger.name).ok_or(Decline::SignatureUnchanged)?;
+        params_of(decl_path, &saved, &trigger.name, lookup).ok_or(Decline::SignatureUnchanged)?;
     if saved_params == trigger.params {
         return Err(Decline::SignatureUnchanged);
     }
@@ -526,6 +532,21 @@ where
 mod tests {
     use super::*;
 
+    /// Test-only grammar lookup — the real registry is `corpus-engine`'s and
+    /// this package may not name it. Rust and TypeScript are all the fixtures
+    /// here parse.
+    fn lookup(ext: &str) -> Option<crate::grammar::Grammar> {
+        let (id, language): (&'static str, tree_sitter::Language) = match ext {
+            "rs" => ("rust", tree_sitter_rust::LANGUAGE.into()),
+            "ts" => (
+                "typescript",
+                tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+            ),
+            _ => return None,
+        };
+        Some(crate::grammar::Grammar { id, language })
+    }
+
     const SRC: &str = r#"
 fn helper(a: usize, b: usize) -> usize {
     a + b
@@ -543,7 +564,7 @@ fn caller() {
     #[test]
     fn cursor_in_a_parameter_list_names_the_function_and_its_params() {
         let cursor = at("b: usize");
-        let t = trigger_at(Some("x.rs"), SRC, cursor).unwrap();
+        let t = trigger_at(Some("x.rs"), SRC, cursor, lookup).unwrap();
         assert_eq!(t.name, "helper");
         assert_eq!(t.params, "(a:usize,b:usize)");
     }
@@ -551,7 +572,7 @@ fn caller() {
     #[test]
     fn cursor_in_the_body_does_not_trigger() {
         assert_eq!(
-            trigger_at(Some("x.rs"), SRC, at("a + b")),
+            trigger_at(Some("x.rs"), SRC, at("a + b"), lookup),
             Err(Decline::CursorNotInParameterList)
         );
     }
@@ -559,10 +580,10 @@ fn caller() {
     #[test]
     fn a_language_the_graph_does_not_index_declines_rather_than_finding_nothing() {
         assert_eq!(
-            trigger_at(Some("x.ts"), "function f(a) {}", 11),
+            trigger_at(Some("x.ts"), "function f(a) {}", 11, lookup),
             Err(Decline::UnsupportedLanguage)
         );
-        assert_eq!(trigger_at(None, SRC, 5), Err(Decline::NoPath));
+        assert_eq!(trigger_at(None, SRC, 5, lookup), Err(Decline::NoPath));
     }
 
     #[test]
@@ -570,9 +591,9 @@ fn caller() {
         // The comparison the trigger turns on: identical source must
         // normalise to an identical parameter list, or the lane would
         // fire on every keystroke in an untouched signature.
-        let t = trigger_at(Some("x.rs"), SRC, at("b: usize")).unwrap();
+        let t = trigger_at(Some("x.rs"), SRC, at("b: usize"), lookup).unwrap();
         assert_eq!(
-            params_of("x.rs", SRC, "helper").as_deref(),
+            params_of("x.rs", SRC, "helper", lookup).as_deref(),
             Some(t.params.as_str())
         );
     }
@@ -582,17 +603,18 @@ fn caller() {
         // rustfmt rewrapping a long signature must not read as an edit
         // callers have to follow.
         let wrapped = "fn helper(\n    a: usize,\n    b: usize,\n) -> usize { a }";
-        let flat = params_of("x.rs", SRC, "helper").unwrap();
-        assert_eq!(params_of("x.rs", wrapped, "helper").unwrap(), flat);
+        let flat = params_of("x.rs", SRC, "helper", lookup).unwrap();
+        assert_eq!(params_of("x.rs", wrapped, "helper", lookup).unwrap(), flat);
     }
 
     #[test]
     fn a_changed_parameter_list_is_visible_as_a_difference() {
-        let before = params_of("x.rs", SRC, "helper").unwrap();
+        let before = params_of("x.rs", SRC, "helper", lookup).unwrap();
         let after = params_of(
             "x.rs",
             "fn helper(a: usize, b: usize, c: u8) -> usize { a }",
             "helper",
+            lookup,
         )
         .unwrap();
         assert_ne!(before, after);
@@ -602,8 +624,11 @@ fn caller() {
     fn params_of_a_function_that_is_not_there_is_none_not_empty() {
         // "cannot judge" and "no parameters" are different answers and
         // the caller branches on them differently (ARCH §18.3).
-        assert_eq!(params_of("x.rs", SRC, "absent"), None);
-        assert_eq!(params_of("x.rs", "fn f() {}", "f").as_deref(), Some("()"));
+        assert_eq!(params_of("x.rs", SRC, "absent", lookup), None);
+        assert_eq!(
+            params_of("x.rs", "fn f() {}", "f", lookup).as_deref(),
+            Some("()")
+        );
     }
 
     #[test]
