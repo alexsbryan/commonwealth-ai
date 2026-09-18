@@ -40,7 +40,7 @@ use crate::state::AppState;
 /// One peer's affinity preference, in the shape the desktop's Mesh Health
 /// panel renders.
 ///
-/// Field names are the desktop `PeerPreferenceDto`'s verbatim and carry no
+/// Field names are the desktop `VenuePreferenceDto`'s verbatim and carry no
 /// serde renames, so a rename on either side blanks the panel rather than
 /// mistyping it — the same contract `NodeContributionsView` keeps with
 /// `NodeContributionsDto`, and pinned the same way, by a parse test on the

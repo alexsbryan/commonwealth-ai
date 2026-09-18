@@ -364,7 +364,7 @@ pub async fn mesh_leave(state: State<'_, Arc<AppState>>) -> Result<(), String> {
 // successful join with silent peer invisibility.
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DiscoveredPeerDto {
+pub struct DiscoveredMemberDto {
     pub node_id: String,
     pub mesh_id_hex: String,
     /// The peer's *mesh* name (e.g. "Masonic Mesh"). Surfaced in the
@@ -379,7 +379,7 @@ pub struct DiscoveredPeerDto {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MeshDiagnostics {
-    pub discovered_peers: Vec<DiscoveredPeerDto>,
+    pub discovered_peers: Vec<DiscoveredMemberDto>,
     pub daemon_running: bool,
 }
 
@@ -568,7 +568,7 @@ pub struct CorpusHostingDto {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PeerPreferenceDto {
+pub struct VenuePreferenceDto {
     pub node_id: String,
     pub multiplier: f64,
     pub reason: Option<String>,
@@ -697,7 +697,7 @@ pub async fn mesh_clear_peer_preference(
 #[tauri::command]
 pub async fn mesh_list_peer_preferences(
     state: State<'_, Arc<AppState>>,
-) -> Result<Vec<PeerPreferenceDto>, String> {
+) -> Result<Vec<VenuePreferenceDto>, String> {
     let attached = attached(&state);
     if !attached {
         tracing::debug!(
@@ -714,7 +714,7 @@ pub async fn mesh_list_peer_preferences(
         "mesh_list_peer_preferences: asking the daemon for the preference list"
     );
     sovereign_turn_client::TurnClient::new(state.internal_base_url())
-        .peer_preferences::<PeerPreferenceDto>()
+        .peer_preferences::<VenuePreferenceDto>()
         .await
         .map_err(|e| format!("mesh_list_peer_preferences: {e}"))
 }
@@ -996,7 +996,7 @@ mod contribution_view_tests {
           }
         ]"#;
 
-        let got: Vec<PeerPreferenceDto> =
+        let got: Vec<VenuePreferenceDto> =
             serde_json::from_str(DAEMON_PREFS_JSON).expect("the daemon's own shape parses");
         assert_eq!(got.len(), 2);
 
