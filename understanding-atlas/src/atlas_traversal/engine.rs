@@ -638,7 +638,7 @@ mod tests {
         AtomId, ChunkRef, Claim, Entity, Question, Relation, ResolutionStatus, SectionRange, State,
     };
     use crate::enrichment::atlas::edges::{Edge, EdgeId, EdgeProvenance, EdgeType};
-    use crate::enrichment::pipeline::atlas::{
+    use crate::taxonomy::{
         ClaimScope, DiscourseAct, EnrichmentDepth, EntityType, EpistemicStatus, QuestionType,
         RelationType, StateType,
     };
@@ -665,7 +665,7 @@ mod tests {
 
     // ── ontology-v1 P5: declared-type walks ──────────────────
 
-    use crate::recipe_templates::numismatics_policies as numismatics;
+    use crate::atlas_traversal::test_fixtures::numismatics_policies as numismatics;
 
     /// A coin atom typed under the AUTHOR'S noun, with declared attributes.
     fn coin(idx: usize, name: &str, subtype: &str, metal: &str, salience: f32) -> Entity {

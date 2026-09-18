@@ -39,8 +39,16 @@ pub use understanding_vocab::canonical as atlas_canonical;
 // stability half stays with Ingest). The pure files' `crate::stream_axes::
 // Articulation*` reaches repoint here in the batch rows.
 pub use understanding_vocab::articulation;
+// The atom-kind taxonomy (`EnrichmentDepth`, `EntityType`, …). The pure files
+// historically reached it through `crate::enrichment::pipeline::atlas`, a
+// corpus-engine module that merely re-exports the language; the batch rows
+// repoint those reaches here (`crate::taxonomy::*`) so the pure tier names the
+// language directly. `dm-understanding-pure-1`, ralph/DECISIONS.md.
+pub use understanding_vocab::taxonomy;
 
+pub mod atlas_traversal;
 pub mod enrichment;
+pub mod meta_atlas;
 
 #[cfg(test)]
 mod tests {

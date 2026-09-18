@@ -33,8 +33,8 @@ use regex::Regex;
 
 use crate::enrichment::atlas::AtomEnvelope;
 use crate::enrichment::ontology::{OntologyPolicies, TypeIndex};
-use crate::enrichment::pipeline::atlas::{DiscourseAct, EntityType, EventType};
-use crate::stream_axes::ArticulationVector;
+use crate::taxonomy::{DiscourseAct, EntityType, EventType};
+use crate::articulation::ArticulationVector;
 
 /// Top-level entry. Classify a single atom into an articulation
 /// distribution.
@@ -344,11 +344,11 @@ mod tests {
         },
         AtomEnvelope, AtomId, ChunkRef, SectionPosition, SectionRange,
     };
-    use crate::enrichment::pipeline::atlas::{
+    use crate::taxonomy::{
         ClaimScope, DiscourseAct, EnrichmentDepth, EntityType, EpistemicStatus, EventType,
         QuestionType, RelationType, StateType,
     };
-    use crate::stream_axes::Articulation;
+    use crate::articulation::Articulation;
 
     fn entity(
         et: EntityType,

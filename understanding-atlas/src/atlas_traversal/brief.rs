@@ -25,7 +25,7 @@
 //! traversal. Keep it under ~60 lines for readability.
 
 use crate::enrichment::atlas::edges::{Edge, EdgeType};
-use crate::enrichment::pipeline::atlas::EnrichmentDepth;
+use crate::taxonomy::EnrichmentDepth;
 
 use super::engine::TraversalResult;
 
@@ -549,7 +549,7 @@ mod tests {
     use crate::enrichment::atlas::atoms::{
         AtomId, ChunkRef, Configuration, Entity, SectionRange, State,
     };
-    use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType, StateType};
+    use crate::taxonomy::{EnrichmentDepth, EntityType, StateType};
 
     fn extracted_entity(name: &str) -> Entity {
         Entity {
@@ -600,9 +600,9 @@ mod tests {
             subject: None,
             id: AtomId::claim(1),
             content: "Faith is a habit".into(),
-            discourse_act: crate::enrichment::pipeline::atlas::DiscourseAct::Assert,
-            epistemic_status: crate::enrichment::pipeline::atlas::EpistemicStatus::Tentative,
-            scope: crate::enrichment::pipeline::atlas::ClaimScope::Universal,
+            discourse_act: crate::taxonomy::DiscourseAct::Assert,
+            epistemic_status: crate::taxonomy::EpistemicStatus::Tentative,
+            scope: crate::taxonomy::ClaimScope::Universal,
             evidence: vec![],
             quotable_excerpt: None,
             attributed_to: Some(e.id.clone()),

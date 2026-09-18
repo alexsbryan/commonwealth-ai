@@ -4012,11 +4012,11 @@ dest = "understanding-atlas"
 files = 96
 lines = 43982
 paths = [
-    "corpus-engine/src/atlas_traversal/brief.rs",
-    "corpus-engine/src/atlas_traversal/classifier.rs",
-    "corpus-engine/src/atlas_traversal/engine.rs",
+    "understanding-atlas/src/atlas_traversal/brief.rs",
+    "understanding-atlas/src/atlas_traversal/classifier.rs",
+    "understanding-atlas/src/atlas_traversal/engine.rs",
     "corpus-engine/src/atlas_traversal/mod.rs",
-    "corpus-engine/src/atlas_traversal/spans.rs",
+    "understanding-atlas/src/atlas_traversal/spans.rs",
     "corpus-engine/src/enrichment/atlas/analysis/configuration.rs",
     "corpus-engine/src/enrichment/atlas/analysis/gaps.rs",
     "corpus-engine/src/enrichment/atlas/analysis/holistic_classifier.rs",
@@ -4102,11 +4102,11 @@ paths = [
     "corpus-engine/src/enrichment/reconciliation/oplog.rs",
     "corpus-engine/src/enrichment/reconciliation/reified.rs",
     "corpus-engine/src/enrichment/reconciliation/signals.rs",
-    "corpus-engine/src/meta_atlas/bridge/adjudicate.rs",
+    "understanding-atlas/src/meta_atlas/bridge/adjudicate.rs",
     "corpus-engine/src/meta_atlas/bridge/mod.rs",
-    "corpus-engine/src/meta_atlas/bridge/signals.rs",
-    "corpus-engine/src/meta_atlas/bridge/topic_node.rs",
-    "corpus-engine/src/meta_atlas/classifier.rs",
+    "understanding-atlas/src/meta_atlas/bridge/signals.rs",
+    "understanding-atlas/src/meta_atlas/bridge/topic_node.rs",
+    "understanding-atlas/src/meta_atlas/classifier.rs",
     "corpus-engine/src/meta_atlas/mod.rs",
 ]
 

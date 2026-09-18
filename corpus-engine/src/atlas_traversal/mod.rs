@@ -30,11 +30,12 @@
 //! Not yet covered in this module (follow-ups): cross-corpus
 //! traversal, query battery runner, benchmarks, manifest writes.
 
-pub mod brief;
-pub mod classifier;
-pub mod engine;
+// `brief`, `classifier`, `engine` and `spans` are PURE and moved to
+// `understanding-atlas` by domains `dm-understanding-pure-1` (the batch row
+// for the `pure` tier). Re-exported at the historical paths so every
+// in-engine reach keeps resolving; `question_kind` stays host (it embeds).
+pub use understanding_atlas::atlas_traversal::{brief, classifier, engine, spans};
 pub mod question_kind;
-pub mod spans;
 
 pub use brief::{assemble_brief, depth_frame_records, Brief};
 pub use classifier::{classify_query, classify_query_with, QueryPlan, QueryTarget};

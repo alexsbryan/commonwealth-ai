@@ -30,9 +30,9 @@ use serde::{Deserialize, Serialize};
 use crate::atlas_canonical::lookup_key;
 use crate::enrichment::atlas::atoms::AtomType;
 use crate::enrichment::atlas::{read_atlas_atoms, AtomEnvelope};
-use crate::enrichment::pipeline::atlas::EntityType;
+use crate::taxonomy::EntityType;
 use crate::meta_atlas::classifier::{classify_articulation, classify_by_chunk_preview};
-use crate::stream_axes::ArticulationVector;
+use crate::articulation::ArticulationVector;
 use crate::types::ScoredChunk;
 
 /// One article on one side of the alignment.
@@ -275,10 +275,10 @@ mod tests {
         ArgumentReconstruction, Claim, Entity, Question, ResolutionStatus,
     };
     use crate::enrichment::atlas::{AtomId, ChunkRef, SectionPosition};
-    use crate::enrichment::pipeline::atlas::{
+    use crate::taxonomy::{
         ClaimScope, DiscourseAct, EnrichmentDepth, EpistemicStatus, QuestionType,
     };
-    use crate::stream_axes::Articulation;
+    use crate::articulation::Articulation;
 
     fn entity(name: &str, et: EntityType, salience: f32, quote: Option<&str>) -> AtomEnvelope {
         AtomEnvelope::Entity(Entity {
@@ -415,7 +415,7 @@ mod tests {
             source_doc_id: Some("12345".into()),
             vector_distance: Some(0.2),
             // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
-            provenance: crate::index::ChunkProvenance::manufactured("test_fixture"),
+            provenance: corpus_index::index::ChunkProvenance::manufactured("test_fixture"),
         };
         let t = topic_from_chunk("wikipedia", &hit).unwrap();
         assert_eq!(t.corpus_id, "wikipedia");
@@ -424,7 +424,7 @@ mod tests {
         assert!(t.entity_keys.contains("abductive reasoning"));
         assert_eq!(
             t.articulation.dominant(),
-            crate::stream_axes::Articulation::Inventory
+            crate::articulation::Articulation::Inventory
         );
 
         // A titleless hit yields no topic.

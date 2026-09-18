@@ -24,12 +24,15 @@
 //! stages.
 
 pub mod builder;
-pub mod classifier;
+// `classifier` is PURE and moved to `understanding-atlas` by domains
+// `dm-understanding-pure-1`. Re-exported at the historical path.
+pub use understanding_atlas::meta_atlas::classifier;
 pub mod index;
 
 /// Cross-corpus topic-to-topic ontological bridge (SEP ↔ Wikipedia) —
 /// promotes the name-equality meta-atom into a typed concept-alignment
-/// graph. See [`bridge`] module docs.
+/// graph. See [`bridge`] module docs. The shell keeps the host submodules and
+/// shims the pure ones (`dm-understanding-pure-1`).
 pub mod bridge;
 
 pub use bridge::BridgeIndex;
