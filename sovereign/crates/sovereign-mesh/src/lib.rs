@@ -57,11 +57,9 @@ pub use sovereign_serving_host::inference_adapter; // shim: moved by domains REV
 pub mod iroh_access;
 pub mod iroh_watchdog;
 pub mod join;
-pub use corpus_engine_scip::lsp_tier; // shim: moved by domains dm-mesh-workbench-move-scip
 pub use sovereign_turn_client::knowledge_client; // shim: moved by domains REVIEW-build-mesh-client-pair
 pub mod measurements_rail;
 pub mod mesh_discovery;
-pub(crate) use sovereign_scheduler::oicp_select; // shim: moved by domains REVIEW-build-sched-move
 pub use sovereign_serving_host::model_fetch; // shim: moved by domains dm-serving-move-leaves
 /// The mesh implementations of `sovereign-contracts::peer`'s two ports — the
 /// N>1 half of what the daemon speaks to its peers through (cw-lift 3b).
@@ -81,9 +79,6 @@ pub use understanding_vocab::reading_formatters; // shim: moved by domains dm-me
 pub mod reindexer;
 pub mod ring_roster;
 pub mod ring_sync;
-/// The routing decision as a pure function — shared by the production
-/// selector and the Tier-1 simulator (`SCHEDULER_QUALITY.md` §5).
-pub(crate) use sovereign_scheduler::scheduler_core; // shim: moved by domains REVIEW-build-sched-move
 pub mod state;
 /// Capability bands — the tier floor of `SCHEDULER_QUALITY.md` §4.1:
 /// capability filters the candidate set, predicted cost ranks what
