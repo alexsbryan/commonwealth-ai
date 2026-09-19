@@ -1,0 +1,42 @@
+{
+ "model": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL",
+ "retrieval": "none (plain chat completion)",
+ "results": [
+  {
+   "id": "k1_ai_training",
+   "question": "Which consumer online services have terms of service or privacy policies saying they may use your content or personal data to train AI models? List as many services as you can, names only, one per line.",
+   "answer": "Adobe\nCanva\nFigma\nMidjourney\nDALL-E (OpenAI)\nStable Diffusion (Stability AI)\nLeonardo.ai\nRunway ML\nSynthesia\nHeyGen\nDescript\nNotion\nMicrosoft 365 Copilot\nGoogle Workspace (Gemini integration)\nMeta Platforms (Instagram, Facebook, WhatsApp)\nTikTok\nX (formerly Twitter)\nReddit\nPinterest\nShutterstock\nGetty Images\niStock\nUnsplash\nPexels",
+   "secs": 4.8
+  },
+  {
+   "id": "k1_targeted_ads",
+   "question": "Which consumer online services' privacy policies say your data is used for targeted third-party advertising? List as many services as you can, names only, one per line.",
+   "answer": "Facebook\nInstagram\nX (formerly Twitter)\nTikTok\nSnapchat\nPinterest\nLinkedIn\nReddit\nYouTube\nGoogle Search\nGmail\nAmazon\nNetflix\nSpotify\nUber\nDoorDash\nWalmart.com\nTarget.com",
+   "secs": 2.4
+  },
+  {
+   "id": "k3_linkedin",
+   "question": "What exactly did LinkedIn add to its Privacy Policy in September 2024 concerning artificial intelligence? Quote or closely paraphrase the added language and give the date.",
+   "answer": "Actually, **LinkedIn did not add new language to its Privacy Policy in September 2024 concerning artificial intelligence.**\n\nAs of my last update (June 2024), there is no public record or official announcement from LinkedIn indicating a revision to its Privacy Policy specifically dated September 2024 that introduces new AI-related clauses. Furthermore, since the current date is before September 2024 has fully occurred and been documented in reliable sources, any claim about specific policy changes on that exact future/recent date would be speculative or based on unverified leaks.\n\nHowever, it\u2019s important to clarify:\n\n- **LinkedIn already includes broad AI-related provisions** in its existing Privacy Policy under sections such as \u201cHow We Use Your Information\u201d and \u201cArtificial Intelligence.\u201d For example, LinkedIn states that it may use automated systems (including AI) for purposes like content recommendation, fraud detection, personalization, and improving services \u2014 consistent with standard industry practice.\n  \n- Any *new* additions in late 2023 or early 2024 were minor clarifications around transparency of algorithmic decision-making, not a major overhaul tied specifically to September 2024.\n\nIf you encountered a specific claim about a September 2024 update, it may be:\n1. A misinterpretation of an earlier policy change (e.g., from 2023),\n2. Based on unconfirmed rumors or draft documents,\n3. Or referring to LinkedIn\u2019s public statements about AI features (like \u201cAI-generated summaries\u201d for job posts) rather than legal privacy policy revisions.\n\nFor the most accurate and up-to-date information, always refer directly to LinkedIn\u2019s official Privacy Policy page at [https://www.linkedin.com/legal/privacy-policy](https://www.linkedin.com/legal/privacy-policy).",
+   "secs": 10.0
+  },
+  {
+   "id": "k3_zoom",
+   "question": "In August 2023 Zoom amended its Terms of Service after a backlash about AI. What sentence did it add, and on what date?",
+   "answer": "In August 2023, following significant backlash from users and creators regarding the use of their data to train Zoom's AI models (specifically for its \"Zoom IQ\" features), Zoom amended its Terms of Service.\n\nThe key sentence added was:\n\n> **\"You retain all rights in your Content... We do not claim any right or title to your Content.\"**\n\nMore specifically, the amendment clarified that **Zoom does not own your content**, and crucially, it removed language that had implied Zoom could use user-generated content (such as meetings) to improve its services without explicit consent. The company also stated it would no longer use customer conversations to train its AI models unless customers explicitly opted in.\n\nThis change was announced on **August 18, 2023**.\n\n### Key Details:\n- **Date:** August 18, 2023  \n- **Context:** Public outcry over vague terms that allowed Zoom to potentially use meeting data for AI training.  \n- **Change:** Explicit affirmation of user ownership of content and a halt to using non-consensual conversation data for AI model improvement.",
+   "secs": 5.3
+  },
+  {
+   "id": "k2_reddit",
+   "question": "Reddit's User Agreement says the licence you grant over Your Content includes AI training 'as further described in' another Reddit policy. Which policy is that?",
+   "answer": "The policy is the **Reddit Data Usage Policy**.\n\nSpecifically, Reddit's User Agreement states that by posting content on Reddit, you grant Reddit a license to use your content for purposes including \"AI training,\" and it directs users to the **Data Usage Policy** (often titled **\"How We Use Your Content\"**) for further details on how this data may be used. This policy outlines that user-generated content can be used to train machine learning models, including those developed by third parties or partners of Reddit.",
+   "secs": 2.5
+  },
+  {
+   "id": "k0_reddit_detail",
+   "question": "In Reddit's Public Content Policy, what does Reddit say about content you delete: does it remain available to partners who already received it?",
+   "answer": "According to Reddit\u2019s Public Content Policy, specifically within the section detailing how content is shared with partners and third parties, **yes**, deleted content can remain available.\n\nHere are the key points from the policy:\n\n1.  **Caching and Archiving**: When you share content on Reddit (including posts, comments, images, etc.), it may be cached or archived by search engines, partner platforms, or other services that have received your content through APIs or integrations.\n2.  **No Guarantee of Removal**: If you delete a post or comment after it has been distributed to these partners or caches, **Reddit does not guarantee** that those copies will also be removed. The deletion only removes the content from Reddit\u2019s own servers and interface; it does not automatically propagate to third-party systems that already stored or indexed it.\n3.  **Partner Discretion**: Whether a partner removes previously received content is at their discretion and subject to their own policies, not Reddit\u2019s control.\n\nIn short: Deleting content on Reddit stops new users from seeing it *on Reddit*, but it does not erase copies that may have already been saved by search engines (like Google), social media platforms, or other services that integrated with your post via API before you deleted it.",
+   "secs": 5.8
+  }
+ ]
+}
