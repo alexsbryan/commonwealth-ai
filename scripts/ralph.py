@@ -431,6 +431,11 @@ class Paths:
     waiting: str = "ralph/waiting"
     models: str = "ralph/models.env"
     heartbeat: str = "ralph/.heartbeat"
+    charter: str = "ralph/CHARTER.md"
+    conflicts: str = "ralph/conflicts.txt"
+    heavy: str = "ralph/heavy.txt"
+    queue: str = ""                       # the --queue name; "" on a legacy launch line
+    manifest: QueueManifest | None = None
 
     def p(self, rel):
         return self.workdir / rel
@@ -622,7 +627,7 @@ class Campaign:
             model_args = select_model_args(unit.id, self.model, self.review_model, self.variant)
             say(f"unit {unit.id} — {' '.join(model_args) or 'configured default'}")
             before = head_of(self.paths.workdir)
-            note = (f"Your unit: {unit.id} — its row in ralph/STATE.md is the [~] row, "
+            note = (f"Your unit: {unit.id} — its row in {self.paths.state} is the [~] row, "
                     "or the first ready [ ] row. Open only that row; do not scan the "
                     "queue for another.\n\n")
             self.session_run(model_args, note + self._prompt_text(), self._log_path(iteration))
@@ -1193,7 +1198,7 @@ RUNTIME_MARKERS = ("ralph/DONE", "ralph/STOP", "ralph/NEEDS_HUMAN.md",
 
 
 def cmd_plan(args):
-    paths = Paths(pathlib.Path(args.workdir).resolve())
+    paths = paths_for(args)
     queue = Queue(paths.p(paths.state))
     models = load_models(paths.p(paths.models))
     model = args.model or models.get("MODEL", "")
@@ -1228,7 +1233,7 @@ def staged_campaigns(paths):
 
 
 def cmd_promote(args):
-    paths = Paths(pathlib.Path(args.workdir).resolve())
+    paths = paths_for(args)
     staged = paths.p(f"{STAGED_DIR}/{args.name}")
     missing = [f for f in ("STATE.md", "PROMPT.md") if not (staged / f).is_file()]
     if missing:
@@ -1283,7 +1288,7 @@ def cmd_promote(args):
 
 
 def cmd_models(args):
-    paths = Paths(pathlib.Path(args.workdir).resolve())
+    paths = paths_for(args)
     file = paths.p(paths.models)
     current = load_models(file)
     if args.model or args.review_model or args.resolve_model or args.variant:
@@ -1317,7 +1322,7 @@ def cmd_models(args):
 
 
 def cmd_pool(args):
-    paths = Paths(pathlib.Path(args.workdir).resolve())
+    paths = paths_for(args)
     models = load_models(paths.p(paths.models))
     base = args.base_branch or subprocess.run(
         ["git", "-C", str(paths.workdir), "rev-parse", "--abbrev-ref", "HEAD"],
@@ -1351,7 +1356,7 @@ def cmd_pool(args):
 
 
 def cmd_report(args):
-    paths = Paths(pathlib.Path(args.workdir).resolve())
+    paths = paths_for(args)
     queue = Queue(paths.p(paths.state))
     done = queue.done_count()
     active = sum(1 for r in queue.rows if r.status is Status.ACTIVE)
@@ -1398,7 +1403,7 @@ def cmd_report(args):
 
 
 def cmd_watch(args):
-    paths = Paths(pathlib.Path(args.workdir).resolve())
+    paths = paths_for(args)
     state_dir = state_dir_for(paths, args.label)
     watch = Watch(paths, label=args.label, dry=os.environ.get("RALPH_WATCH_DRY") == "1")
     if args.install_launchd:
@@ -1413,17 +1418,46 @@ def cmd_watch(args):
     return 0
 
 
+LEGACY_PATH_FLAGS = ("prompt", "state", "charter", "conflicts")
+
+
 def paths_for(args):
-    """The one place a subcommand turns its flags into `Paths`.
+    """The one place a subcommand turns its flags into `Paths`: `--queue` wins,
+    the legacy flags are next, the legacy defaults are last.
 
     `run` and `supervise` accept `--prompt` and `--state` and, until
     2026-09-17, built `Paths(workdir)` with the DEFAULTS - so a staged queue
     passed by flag was silently swapped for `ralph/STATE.md` (ARCH 6). Found
     the expensive way: a ring-doc launch spent six minutes on a domains row.
+    `plan`, `stop`, `start`, `watch`, `models` and `report` still did that
+    until 2026-09-19; they take `--queue` now and come through here too.
     """
-    return Paths(pathlib.Path(args.workdir).resolve(),
-                 prompt=getattr(args, "prompt", None) or "ralph/PROMPT.md",
-                 state=getattr(args, "state", None) or "ralph/STATE.md")
+    workdir = pathlib.Path(args.workdir).resolve()
+    name = getattr(args, "queue", None)
+    if not name:
+        if getattr(args, "label", "") is None:
+            args.label = "campaign"
+        return Paths(workdir,
+                     prompt=getattr(args, "prompt", None) or "ralph/PROMPT.md",
+                     state=getattr(args, "state", None) or "ralph/STATE.md",
+                     charter=getattr(args, "charter", None) or "ralph/CHARTER.md",
+                     conflicts=getattr(args, "conflicts", None) or "ralph/conflicts.txt")
+    m = load_manifest(workdir, name)
+    for flag in LEGACY_PATH_FLAGS:
+        if getattr(args, flag, None):
+            say(f"--queue {name} wins: ignoring --{flag} {getattr(args, flag)} "
+                f"({m.path} names {getattr(m, flag)})")
+    if getattr(args, "label", "") is None:
+        args.label = m.label
+    return Paths(workdir, prompt=m.prompt, state=m.state, charter=m.charter,
+                 conflicts=m.conflicts, heavy=m.heavy, queue=name, manifest=m)
+
+
+def queue_flags(paths):
+    """How a re-invocation (an installed job) names the same queue."""
+    if paths.queue:
+        return ["--queue", paths.queue]
+    return ["--prompt", paths.prompt, "--state", paths.state]
 
 
 def cmd_run(args):
@@ -1446,7 +1480,7 @@ def cmd_run(args):
             f"dev.ralph.{paths.workdir.name}-{args.label}",
             [sys.executable, str(pathlib.Path(__file__).resolve()), "run",
              "--workdir", str(paths.workdir), "--label", args.label,
-             "--prompt", args.prompt, "--state", args.state],
+             *queue_flags(paths)],
             paths.workdir, str(state_dir_for(paths, args.label) / "launchd.log"))
         print(f"wrote {plist}")
         return 0
@@ -1468,7 +1502,7 @@ def cmd_supervise(args):
     if not campaign:
         print("ralph supervise: the campaign command is required after --", file=sys.stderr)
         return 2
-    charter_path = pathlib.Path(args.charter) if args.charter else paths.p("ralph/CHARTER.md")
+    charter_path = paths.p(paths.charter)
     charter = charter_path.read_text() if charter_path.exists() else None
     if charter:
         say(f"supervisor: director charter loaded from {charter_path}")
@@ -1502,7 +1536,7 @@ def cmd_supervise(args):
 
 
 def cmd_stop(args):
-    paths = Paths(pathlib.Path(args.workdir).resolve())
+    paths = paths_for(args)
     stop = paths.p(paths.stop)
     stop.parent.mkdir(parents=True, exist_ok=True)
     stop.write_text("")
@@ -1531,7 +1565,7 @@ def cmd_stop(args):
 
 
 def cmd_start(args):
-    paths = Paths(pathlib.Path(args.workdir).resolve())
+    paths = paths_for(args)
     plist = (pathlib.Path.home() / "Library" / "LaunchAgents"
              / f"{job_name(paths, args.label)}.plist")
     if not plist.exists():
@@ -1561,14 +1595,24 @@ def cmd_start(args):
     return 0
 
 
-def main(argv=None):
-    _install_signal_handlers()
+def build_parser():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    def common(p, notify_default=False):
+    def queue_flag(p, label_default=None):
         p.add_argument("--workdir", default=".")
-        p.add_argument("--label", default="campaign")
+        p.add_argument("--queue", default="",
+                       help="a queue under ralph/next/<name>/ with a queue.toml: state, prompt, "
+                            "charter, models, checks and control files all come from it")
+        # None = not given: paths_for fills in the manifest's label, else "campaign".
+        p.add_argument("--label", default=label_default)
+
+    def common(p, notify_default=False, queue=True):
+        if queue:
+            queue_flag(p)
+        else:
+            p.add_argument("--workdir", default=".")
+            p.add_argument("--label", default="campaign")
         p.add_argument("--session-timeout", type=int, default=3600)
         p.add_argument("--marker-timeout", type=int, default=7200)
         p.add_argument("--notify", action="store_true", default=notify_default)
@@ -1578,8 +1622,8 @@ def main(argv=None):
 
     p = sub.add_parser("run")
     common(p)
-    p.add_argument("--prompt", default="ralph/PROMPT.md")
-    p.add_argument("--state", default="ralph/STATE.md")
+    p.add_argument("--prompt", default=None, help="default: ralph/PROMPT.md")
+    p.add_argument("--state", default=None, help="default: ralph/STATE.md")
     p.add_argument("--max-stall", type=int, default=3)
     p.add_argument("--max-iter", type=int, default=200)
     p.add_argument("--install-launchd", action="store_true")
@@ -1587,8 +1631,8 @@ def main(argv=None):
 
     p = sub.add_parser("supervise")
     common(p, notify_default=True)
-    p.add_argument("--prompt", default="ralph/PROMPT.md")
-    p.add_argument("--state", default="ralph/STATE.md")
+    p.add_argument("--prompt", default=None, help="default: ralph/PROMPT.md")
+    p.add_argument("--state", default=None, help="default: ralph/STATE.md")
     p.add_argument("--resolve-model", default="")
     p.add_argument("--resolve-variant", default="")
     p.add_argument("--resolve-max", type=int, default=4)
@@ -1598,7 +1642,7 @@ def main(argv=None):
     p.set_defaults(fn=cmd_supervise)
 
     p = sub.add_parser("pool")
-    common(p)
+    common(p, queue=False)          # another repo drives this verb; it stays on its flags
     p.add_argument("--prompt", default="ralph/PROMPT.md")
     p.add_argument("--state", default="ralph/STATE.md")
     p.add_argument("--lanes", type=int, default=2)
@@ -1608,14 +1652,12 @@ def main(argv=None):
     p.set_defaults(fn=cmd_pool)
 
     p = sub.add_parser("watch")
-    p.add_argument("--workdir", default=".")
-    p.add_argument("--label", default="campaign")
+    queue_flag(p)
     p.add_argument("--install-launchd", action="store_true")
     p.set_defaults(fn=cmd_watch)
 
     p = sub.add_parser("stop")
-    p.add_argument("--workdir", default=".")
-    p.add_argument("--label", default="campaign")
+    queue_flag(p)
     p.add_argument("--timeout", type=int, default=180,
                    help="seconds to wait for the loop to go down before suggesting --hard")
     p.add_argument("--hard", action="store_true",
@@ -1623,13 +1665,11 @@ def main(argv=None):
     p.set_defaults(fn=cmd_stop)
 
     p = sub.add_parser("start")
-    p.add_argument("--workdir", default=".")
-    p.add_argument("--label", default="campaign")
+    queue_flag(p)
     p.set_defaults(fn=cmd_start)
 
     p = sub.add_parser("models")
-    p.add_argument("--workdir", default=".")
-    p.add_argument("--label", default="")
+    queue_flag(p, label_default="")
     p.add_argument("--model", default="")
     p.add_argument("--review-model", default="")
     p.add_argument("--resolve-model", default="")
@@ -1638,7 +1678,7 @@ def main(argv=None):
     p.set_defaults(fn=cmd_models)
 
     p = sub.add_parser("report")
-    p.add_argument("--workdir", default=".")
+    queue_flag(p)
     p.add_argument("--lines", type=int, default=40)
     p.set_defaults(fn=cmd_report)
 
@@ -1654,8 +1694,19 @@ def main(argv=None):
                    help="parse the staged queue and print its head; change nothing")
     p.set_defaults(fn=cmd_promote)
 
-    args = ap.parse_args(argv)
-    return args.fn(args)
+    return ap
+
+
+def main(argv=None):
+    _install_signal_handlers()
+    args = build_parser().parse_args(argv)
+    try:
+        return args.fn(args)
+    except ValueError as e:
+        if not getattr(args, "queue", None):
+            raise
+        print(f"ralph {args.cmd}: {e}", file=sys.stderr)      # a refused manifest, by name
+        return 2
 
 
 if __name__ == "__main__":

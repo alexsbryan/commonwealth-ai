@@ -285,6 +285,17 @@ class CampaignTests(unittest.TestCase):
             self.assertIn("no ready unit", result.reason)
             self.assertTrue((pathlib.Path(tmp) / "ralph/NEEDS_HUMAN.md").exists())
 
+    def test_the_unit_note_names_the_queue_it_was_launched_on(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            seen = []
+            c = self.make(tmp, "", session_run=lambda args, prompt, log: seen.append(prompt),
+                          max_stall=1)
+            write(tmp, "ralph/next/x/STATE.md", "- [ ] qx-1 — depends []\n")
+            c.paths.state = "ralph/next/x/STATE.md"
+            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
+                c.run()
+            self.assertIn("its row in ralph/next/x/STATE.md is", seen[0])
+
     def test_stall_halts_after_max_stall(self):
         with tempfile.TemporaryDirectory() as tmp:
             c = self.make(tmp, "- [ ] dm-a — depends []\n",
@@ -647,7 +658,118 @@ class GuardTests(unittest.TestCase):
                           (pathlib.Path(tmp) / "ralph/NEEDS_HUMAN.md").read_text())
 
 
+REPO = pathlib.Path(os.environ.get("RALPH_TEST_REPO")
+                    or pathlib.Path(__file__).resolve().parents[2])
+
+
+def launch_lines(state_rel):
+    """The `ralph.py <verb> ...` argvs inside a staged queue's fenced launch block."""
+    import shlex
+    text = (REPO / state_rel).read_text()
+    block = next(b for b in text.split("```")[1::2] if "scripts/ralph.py" in b)
+    tokens = shlex.split(block.replace("\\\n", " "), comments=True)
+    starts = [i for i, t in enumerate(tokens) if t == "scripts/ralph.py"]
+    out = []
+    for n, i in enumerate(starts):
+        end = starts[n + 1] if n + 1 < len(starts) else len(tokens)
+        argv = tokens[i + 1:end]
+        for stopper in ("--", ">>"):
+            if stopper in argv:
+                argv = argv[:argv.index(stopper)]
+        out.append(argv)
+    return out
+
+
+def quiet_main(argv):
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        rc = ralph.main(argv)
+    return rc, out.getvalue(), err.getvalue()
+
+
+def two_queues(tmp):
+    subprocess.run(["git", "init", "-q", tmp], check=True)
+    for name, row in (("a", "qa-1"), ("b", "qb-1")):
+        write(tmp, f"ralph/next/{name}/queue.toml",
+              f'[checks]\nhello = ["sh", "-c", "echo from-{name}"]\n')
+        write(tmp, f"ralph/next/{name}/STATE.md", f"- [ ] {row} — depends [] — do it\n")
+        write(tmp, f"ralph/next/{name}/PROMPT.md", f"prompt of {name}\n")
+    write(tmp, "ralph/STATE.md", "- [ ] legacy-1 — depends [] — the default queue\n")
+
+
 class PathsForTests(unittest.TestCase):
+    def test_a_queue_by_flag_is_never_swapped_for_the_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            two_queues(tmp)
+            for verb in ("run", "supervise", "watch", "stop", "start", "models", "plan",
+                         "report"):
+                args = ralph.build_parser().parse_args([verb, "--workdir", tmp, "--queue", "b"])
+                p = ralph.paths_for(args)
+                self.assertEqual((verb, p.state, p.queue),
+                                 (verb, "ralph/next/b/STATE.md", "b"))
+                self.assertEqual(p.charter, "ralph/next/b/CHARTER.md")
+                if verb != "models":
+                    self.assertEqual(args.label, "b")
+
+    def test_plan_prints_the_named_queues_head(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            two_queues(tmp)
+            rc, out, _ = quiet_main(["plan", "--workdir", tmp, "--queue", "b"])
+            self.assertEqual(rc, 0)
+            self.assertIn("unit qb-1", out)
+            self.assertIn("queue: ralph/next/b/STATE.md", out)
+            self.assertNotIn("legacy-1", out)
+
+    def test_queue_wins_over_a_legacy_flag_and_says_so(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            two_queues(tmp)
+            args = ralph.build_parser().parse_args(
+                ["run", "--workdir", tmp, "--queue", "a", "--state", "ralph/STATE.md"])
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                p = ralph.paths_for(args)
+            self.assertEqual(p.state, "ralph/next/a/STATE.md")
+            self.assertIn("ignoring --state ralph/STATE.md", buf.getvalue())
+
+    def test_a_missing_manifest_is_exit_two_not_the_default_queue(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            two_queues(tmp)
+            rc, out, err = quiet_main(["plan", "--workdir", tmp, "--queue", "ghost"])
+            self.assertEqual(rc, 2)
+            self.assertIn("ralph/next/ghost/queue.toml", err)
+            self.assertNotIn("legacy-1", out)
+
+    def test_no_subcommand_builds_paths_beside_paths_for(self):
+        src = pathlib.Path(ralph.__file__).read_text()
+        body = src.replace(src[src.index("def paths_for("):src.index("def queue_flags(")], "")
+        self.assertNotRegex(body, r"[^`\w]Paths\(")
+
+    def test_the_staged_launch_lines_resolve_as_they_always_did(self):
+        # The order's kill condition: these lines are not edited, so they must parse
+        # and land on their own queue with the per-checkout control files.
+        for name in ("ring-doc", "ring-room", "ring-room-rr2", "ei7-stage0"):
+            lines = launch_lines(f"ralph/next/{name}/STATE.md")
+            self.assertEqual([argv[0] for argv in lines], ["supervise", "run"])
+            for argv in lines:
+                args = ralph.build_parser().parse_args(argv)
+                p = ralph.paths_for(args)
+                self.assertEqual((p.queue, p.manifest), ("", None))
+                self.assertEqual(p.state, f"ralph/next/{name}/STATE.md")
+                self.assertEqual(p.prompt, f"ralph/next/{name}/PROMPT.md")
+                self.assertEqual(args.label, name)
+                self.assertEqual((p.done, p.stop, p.needs_human, p.heartbeat, p.models),
+                                 ("ralph/DONE", "ralph/STOP", "ralph/NEEDS_HUMAN.md",
+                                  "ralph/.heartbeat", "ralph/models.env"))
+            sup = ralph.paths_for(ralph.build_parser().parse_args(lines[0]))
+            self.assertEqual(sup.charter, f"ralph/next/{name}/CHARTER.md")
+
+    def test_the_default_launch_line_is_the_legacy_queue(self):
+        args = ralph.build_parser().parse_args(["run"])
+        p = ralph.paths_for(args)
+        self.assertEqual((p.state, p.prompt, p.charter, args.label, args.session_timeout),
+                         ("ralph/STATE.md", "ralph/PROMPT.md", "ralph/CHARTER.md",
+                          "campaign", 3600))
+
     def test_run_flags_reach_paths(self):
         import argparse, tempfile
         with tempfile.TemporaryDirectory() as d:
