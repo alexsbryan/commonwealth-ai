@@ -544,10 +544,6 @@ class PoolTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = self.fixture(tmp, "- [ ] dm-a — depends []\n- [ ] dm-b — depends []\n")
             pool = self.make(root, lambda cwd, env=None: FakeLane(cwd, body=cwd.name, shared=True))
-    def test_merge_conflict_halts(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = self.fixture(tmp, "- [ ] dm-a — depends []\n- [ ] dm-b — depends []\n")
-            pool = self.make(root, lambda cwd: FakeLane(cwd, body=cwd.name, shared=True))
             self.assertEqual(pool.run(), 3)
             pkg = (root / "ralph/NEEDS_HUMAN.md").read_text()
             self.assertIn("merge conflict", pkg)
