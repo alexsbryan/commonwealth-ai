@@ -559,6 +559,27 @@ def _install_signal_handlers():
     signal.signal(signal.SIGINT, _term)
 
 
+def session_env(paths):
+    """What every worker session is told about the loop that spawned it, so
+    ralph-mark.sh and ralph-check.sh need no per-campaign default. RALPH_QUEUE
+    is set even when empty: a legacy loop launched from inside a queue's
+    session must not inherit that queue."""
+    env = {"RALPH_QUEUE": paths.queue, "RALPH_STATE": paths.state,
+           "RALPH_CONTROL_DIR": paths.control_dir}
+    if paths.manifest and paths.manifest.settings:
+        env["RALPH_CLAUDE_SETTINGS"] = str(paths.p(paths.manifest.settings))
+    return env
+
+
+def worker_bin(paths):
+    """The manifest's worker_bin (a path is relative to the workdir), then
+    RALPH_OPENCODE_BIN, then opencode."""
+    declared = paths.manifest.worker_bin if paths.manifest else ""
+    if declared:
+        return str(paths.p(declared)) if "/" in declared else declared
+    return os.environ.get("RALPH_OPENCODE_BIN", "opencode")
+
+
 class Session:
     """One opencode session in its own process group, with a wall-clock
     timeout, a STOP check, a heartbeat, and permission-reject detection."""
@@ -567,7 +588,7 @@ class Session:
                  notifier=notify, notify_enabled=True, cwd=None, env=None):
         self.paths = paths
         self.timeout = timeout
-        self.opencode = opencode or os.environ.get("RALPH_OPENCODE_BIN", "opencode")
+        self.opencode = opencode or worker_bin(paths)
         self.poll = poll
         self.notifier = notifier
         self.notify_enabled = notify_enabled
@@ -596,7 +617,7 @@ class Session:
         with open(log, "w") as fh:
             proc = subprocess.Popen(
                 [self.opencode, "run", *model_args, note + prompt_text],
-                cwd=workdir, env={**os.environ, **self.env},
+                cwd=workdir, env={**os.environ, **session_env(self.paths), **self.env},
                 stdout=fh, stderr=subprocess.STDOUT, start_new_session=True)
         _ACTIVE_SESSIONS.add(proc)
         waited = 0

@@ -4,8 +4,11 @@
 #   scripts/ralph-mark.sh <unit-id> <short-sha> [state-file]
 #
 # Rewrites `- [~] <unit-id> — depends` (or `- [ ]`) to `- [x] <unit-id> <sha> — depends`
-# in the state file (default ralph/next/ring-doc/STATE.md), stages that file
-# alone, and commits `ralph: <unit-id> done`. Why a script: under the claude
+# in the state file, stages that file alone, and commits `ralph: <unit-id> done`.
+# The state file is the third argument, else $RALPH_STATE (scripts/ralph.py
+# exports it into every worker session), else a refusal: the default used to be
+# ring-doc's queue, so a two-argument call from any other queue could not find
+# its row (ring-room's PROMPT.md:67 still makes that call). Why a script: under the claude
 # harness a python heredoc never matches an allow rule, so every row mark
 # asked the operator (log-permissions.txt 23:49:58Z) — seated, seconds;
 # unattended, a 600 s timeout, a deny, and a stall on the last step of a unit
@@ -13,8 +16,9 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-unit="${1:-}"; sha="${2:-}"; state="${3:-ralph/next/ring-doc/STATE.md}"
+unit="${1:-}"; sha="${2:-}"; state="${3:-${RALPH_STATE:-}}"
 [ -n "$unit" ] && [ -n "$sha" ] || { echo "usage: scripts/ralph-mark.sh <unit-id> <short-sha> [state-file]" >&2; exit 2; }
+[ -n "$state" ] || { echo "ralph-mark: no state file — pass it as the third argument, or run under scripts/ralph.py, which sets RALPH_STATE" >&2; exit 2; }
 git cat-file -e "${sha}^{commit}" 2>/dev/null || { echo "ralph-mark: $sha is not a commit in this repo" >&2; exit 2; }
 
 n=$(grep -c -E "^- \[[~ ]\] ${unit} — depends" "$state" || true)

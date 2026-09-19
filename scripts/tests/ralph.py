@@ -469,6 +469,121 @@ class TwoQueueControlTests(unittest.TestCase):
             self.assertIn("markers: NEEDS_HUMAN.md", out)
 
 
+SCRIPTS = pathlib.Path(os.environ.get("RALPH_TEST_SCRIPTS")
+                       or pathlib.Path(__file__).resolve().parents[1])
+
+
+def git_repo(tmp):
+    subprocess.run(["git", "init", "-q", "-b", "main", tmp], check=True)
+    subprocess.run(["git", "-C", tmp, "config", "user.email", "t@t"], check=True)
+    subprocess.run(["git", "-C", tmp, "config", "user.name", "t"], check=True)
+
+
+def commit_all(tmp, msg="seed"):
+    subprocess.run(["git", "-C", tmp, "add", "-A"], check=True)
+    subprocess.run(["git", "-C", tmp, "commit", "-q", "-m", msg], check=True)
+    return subprocess.run(["git", "-C", tmp, "rev-parse", "--short", "HEAD"],
+                          capture_output=True, text=True).stdout.strip()
+
+
+def install_script(tmp, name):
+    dst = pathlib.Path(tmp) / "scripts" / name
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.write_text((SCRIPTS / name).read_text())
+    dst.chmod(0o755)
+    return dst
+
+
+def stub_worker(tmp, body):
+    """A worker binary that spends no tokens: `<bin> run [flags] <prompt>` runs `body`."""
+    stub = write(tmp, "stub-worker.sh", "#!/usr/bin/env bash\n" + body)
+    stub.chmod(0o755)
+    return stub
+
+
+class SessionEnvTests(unittest.TestCase):
+    def run_session(self, tmp, argv):
+        args = ralph.build_parser().parse_args(argv)
+        paths = ralph.paths_for(args)
+        session = ralph.Session(paths, timeout=20, poll=0.2, notify_enabled=False)
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc = session.run([], "the prompt", str(pathlib.Path(tmp) / "target/out.log"))
+        return rc, (pathlib.Path(tmp) / "env.txt").read_text().split("|")
+
+    DUMP = ('printf "%s|%s|%s|%s" "$RALPH_QUEUE" "$RALPH_STATE" "$RALPH_CONTROL_DIR" '
+            '"${RALPH_CLAUDE_SETTINGS:-}" > env.txt\n')
+
+    def test_a_queue_session_is_told_its_queue_state_and_control_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = str(pathlib.Path(tmp).resolve())
+            git_repo(tmp)
+            stub_worker(tmp, self.DUMP)
+            write(tmp, "ralph/next/a/queue.toml",
+                  'worker_bin = "./stub-worker.sh"\nsettings = "ralph/next/a/settings.json"\n')
+            with mock.patch.dict(os.environ, {"RALPH_OPENCODE_BIN": "/nonexistent/worker"}):
+                rc, env = self.run_session(tmp, ["run", "--workdir", tmp, "--queue", "a"])
+            self.assertEqual(rc, 0)
+            self.assertEqual(env, ["a", "ralph/next/a/STATE.md", "ralph/next/a/ctl",
+                                   f"{tmp}/ralph/next/a/settings.json"])
+
+    def test_a_legacy_session_is_told_its_state_too(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            git_repo(tmp)
+            stub = stub_worker(tmp, self.DUMP)
+            with mock.patch.dict(os.environ, {"RALPH_OPENCODE_BIN": str(stub),
+                                              "RALPH_QUEUE": "leaked-from-a-parent-loop"}):
+                rc, env = self.run_session(
+                    tmp, ["run", "--workdir", tmp, "--state", "ralph/next/ring-room/STATE.md"])
+            self.assertEqual(rc, 0)
+            self.assertEqual(env, ["", "ralph/next/ring-room/STATE.md", "ralph", ""])
+
+
+class RalphMarkTests(unittest.TestCase):
+    ROWS = "- [~] qa-1 — depends [] — do it\n- [ ] qa-2 — depends [qa-1] — next\n"
+
+    def fixture(self, tmp):
+        git_repo(tmp)
+        install_script(tmp, "ralph-mark.sh")
+        write(tmp, "ralph/next/a/STATE.md", self.ROWS)
+        write(tmp, "ralph/next/b/STATE.md", self.ROWS)
+        return commit_all(tmp)
+
+    def mark(self, tmp, *argv, state_env=None):
+        env = {k: v for k, v in os.environ.items() if k != "RALPH_STATE"}
+        if state_env is not None:
+            env["RALPH_STATE"] = state_env
+        return subprocess.run([str(pathlib.Path(tmp) / "scripts/ralph-mark.sh"), *argv],
+                              capture_output=True, text=True, env=env)
+
+    def test_the_explicit_third_argument_still_works_and_wins(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            sha = self.fixture(tmp)
+            r = self.mark(tmp, "qa-1", sha, "ralph/next/a/STATE.md",
+                          state_env="ralph/next/b/STATE.md")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            root = pathlib.Path(tmp)
+            self.assertIn(f"- [x] qa-1 {sha} — depends", (root / "ralph/next/a/STATE.md").read_text())
+            self.assertEqual((root / "ralph/next/b/STATE.md").read_text(), self.ROWS)
+
+    def test_ralph_state_names_the_queue_when_no_argument_does(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            sha = self.fixture(tmp)
+            r = self.mark(tmp, "qa-1", sha, state_env="ralph/next/b/STATE.md")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn(f"- [x] qa-1 {sha}",
+                          (pathlib.Path(tmp) / "ralph/next/b/STATE.md").read_text())
+
+    def test_no_argument_and_no_ralph_state_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            sha = self.fixture(tmp)
+            write(tmp, "ralph/next/ring-doc/STATE.md", self.ROWS)   # the old default's path
+            r = self.mark(tmp, "qa-1", sha)
+            self.assertEqual(r.returncode, 2)
+            self.assertIn("RALPH_STATE", r.stderr)
+            self.assertEqual((pathlib.Path(tmp) / "ralph/next/ring-doc/STATE.md").read_text(),
+                             self.ROWS)
+
+
 class SupervisorTests(unittest.TestCase):
     def make(self, tmp, *, run_inner, resolver_run, resolve_max=2):
         write(tmp, "ralph/STATE.md", "- [ ] dm-a — depends []\n")
