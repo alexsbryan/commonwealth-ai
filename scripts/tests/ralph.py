@@ -6,6 +6,7 @@ notifiers are injected, so every gate runs in milliseconds and its failing
 input is explicit.
 """
 import contextlib
+from dataclasses import replace as dataclasses_replace
 import io
 import os
 import pathlib
@@ -829,6 +830,51 @@ class ReviewRoutingTests(unittest.TestCase):
                                       "qa-hard": "r", "qa-prose": "w"})
             self.assertEqual(ralph.select_model_args("qa-peer-review-form", "w", "r", ""),
                              ["--model", "w"])
+
+
+class Ei7Stage0MigrationTests(unittest.TestCase):
+    """The first queue on a manifest. Its STATE.md launch block and PROMPT.md are
+    not edited (a running loop reads them); the manifest must agree with both."""
+
+    def paths(self, verb="run"):
+        args = ralph.build_parser().parse_args([verb, "--workdir", str(REPO),
+                                                "--queue", "ei7-stage0"])
+        with contextlib.redirect_stdout(io.StringIO()):
+            return args, ralph.paths_for(args)
+
+    def test_the_manifest_carries_what_the_launch_line_carried_by_flag_and_env(self):
+        args, paths = self.paths("supervise")
+        legacy = ralph.paths_for(ralph.build_parser().parse_args(
+            launch_lines("ralph/next/ei7-stage0/STATE.md")[0]))
+        self.assertEqual((paths.state, paths.charter), (legacy.state, legacy.charter))
+        self.assertEqual((args.label, args.session_timeout), ("ei7-stage0", 7200))
+        self.assertEqual(ralph.resolve_models(args, paths),
+                         {"MODEL": "claude-opus-5", "REVIEW_MODEL": "claude-opus-5",
+                          "RESOLVE_MODEL": "claude-opus-5", "VARIANT": "high"})
+        self.assertEqual(ralph.worker_bin(paths), str(REPO / "scripts/ralph-claude-shim.sh"))
+        self.assertEqual(paths.control_dir, "ralph/next/ei7-stage0/ctl")
+        for check in ("desktop", "pilot", "py", "campaign", "node"):
+            self.assertIn(check, paths.manifest.checks)
+        self.assertEqual(paths.manifest.checks["pilot"],
+                         ("research/ontology-retrieval/pilot/run-pilot.sh",))
+
+    def test_the_rendered_prompt_keeps_every_line_of_the_hand_made_one(self):
+        _, paths = self.paths()
+        self.assertEqual(paths.prompt_addendum, "ralph/next/ei7-stage0/PROMPT.addendum.md")
+        legacy = dataclasses_replace(paths, **ralph.Paths.control_files("ralph"),
+                                     log_dir="target/ralph")
+        rendered = set(ralph.prompt_text(legacy)[0].splitlines())
+        # The two lines the render is MEANT to change: the mark call no longer needs the
+        # third argument (RALPH_STATE), and a sed-made anecdote that never happened to e7.
+        meant = ("ralph-mark.sh <unit-id> <short-hash> ralph/next/ei7-stage0/STATE.md",
+                 "e7-1-scaffold")
+        lost = [l for l in (REPO / "ralph/next/ei7-stage0/PROMPT.md").read_text().splitlines()
+                if l not in rendered and not any(m in l for m in meant)]
+        self.assertEqual(lost, [])
+        live = ralph.prompt_text(paths)[0]
+        self.assertNotIn("{{", live)
+        self.assertIn("`ralph/next/ei7-stage0/ctl/NEEDS_HUMAN.md`", live)
+        self.assertNotIn("`ralph/NEEDS_HUMAN.md`", live)
 
 
 class SupervisorTests(unittest.TestCase):

@@ -7,6 +7,11 @@ drivers this replaces (`ralph/NEEDS_HUMAN.md`, `ralph/STOP`, `ralph/DONE`,
 is DONE, an operator stop, or an escalation — the machine cannot resolve to
 quietly stuck.
 
+`--queue <name>` runs `ralph/next/<name>/` from its `queue.toml` instead: its
+own state, prompt, charter, models, checks and control files (`ctl/` beside
+the manifest), so two loops share a checkout. Without it every flag and
+default is the legacy one.
+
 Subcommands:
   run        the serial campaign driver: one unit per session
   supervise  wrap a campaign command: bounded resolutions, progress by unit
@@ -16,6 +21,8 @@ Subcommands:
   models     show or set ralph/models.env and kickstart the loaded job
   plan       print the queue's head and the model it routes to
   promote    make a staged campaign (ralph/next/<name>/) the active one
+  prompt     print the worker prompt a queue runs on (rendered or as written)
+  check-argv the argv a queue's [checks] declares (scripts/ralph-check.sh asks)
 """
 from __future__ import annotations
 
