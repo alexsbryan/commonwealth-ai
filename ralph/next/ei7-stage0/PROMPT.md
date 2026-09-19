@@ -64,7 +64,7 @@ comment beyond the one the row asks for (ARCH principle 2).
    `<unit-id>: <one line>`; body = the `exit=` lines, every PLANT's red line,
    and anything the row says to paste.
 7. Mark the row and commit the queue with ONE command:
-   `scripts/ralph-mark.sh <unit-id> <short-hash>` — it rewrites the row to
+   `scripts/ralph-mark.sh <unit-id> <short-hash> ralph/next/ei7-stage0/STATE.md` (the THIRD argument is required: the script's default is another campaign's queue) — it rewrites the row to
    `- [x] <unit-id> <short-hash> — depends [...] — ...` and commits
    `ralph/next/ei7-stage0/STATE.md` alone as `ralph: <unit-id> done`. In a POOL
    LANE, write `ralph/lanes/<unit-id>.done` and commit that instead.
