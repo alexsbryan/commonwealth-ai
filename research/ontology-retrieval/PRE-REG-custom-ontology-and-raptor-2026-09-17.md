@@ -200,8 +200,17 @@ The arc is authored on camera, so its record is data.
 - **Model and host.** The manifest also records the synthesis model id, the
   judge model id and the host. The comparison refuses a corpus whose arms
   differ on any of the three: the closed-book exclusion set is a property of
-  one model, so arms run on two models do not share a bank. The model is named
-  at ratification (**open: not yet chosen**).
+  one model, so arms run on two models do not share a bank.
+  - **Synthesis and the in-loop judge: the Qwen MoE MTP** (operator,
+    2026-09-18: iteration speed decides). Its exact id and context are taken
+    from the pilot's manifest and written here at ratification.
+  - **Proposed, open: the Qwen3.8 27B re-judges the frozen answers once, at the
+    gate.** It is the fleet's most accurate model and too slow for the loop. No
+    `eval run` flag re-judges a saved run today, and the judge prompt lives in
+    Rust, so this needs a `--judge-only <eval.json>` mode over the ONE existing
+    judge, never a second judge in python. If it is built, bar 2 is read on the
+    27B's verdicts and the MoE's are reported beside them; if it is not, the
+    MoE's verdicts stand and bar 4 (people) is the check on the judge.
 
 ## Arms — one shape for every corpus
 
