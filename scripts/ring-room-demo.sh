@@ -22,8 +22,8 @@
 #
 # No member name, port, host or corpus id is written here: names and N come
 # from `svrn mesh status` on the nodes, ports from ring-doc-demo.sh's node
-# door, the corpus id from a folder name generated at run time, the origin
-# from cw-media-demo.sh. The census greps this file for each and prints hits.
+# door, the corpus id from a folder name generated at run time, the media origin
+# found by the offer verb. The census greps this file for each and prints hits.
 #
 #   scripts/ring-room-demo.sh up | down | verdict <bar|all>
 #
@@ -70,10 +70,19 @@ RING_ROOM_LEGS="${RING_ROOM_LEGS:-answer,doc,film,join}"
 eval "ring_doc_$(declare -f node_exec)"
 node_exec() { printf '%s\t%s\t%s\n' "$STAGE" "$1" "${*:2}" >> "$CMDLOG"; ring_doc_node_exec "$@"; }
 
-# typed <node> <leg> <string> [note] [secret] — a string the person would have
+# typed <node> <leg> <string> [note] [secret] [provenance] — a string the person would have
 # typed. The class is decided in ONE place, `classify` in the report, from the
 # string itself; only a credential cannot be recognised by shape, so it says so.
-typed() { printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$STAGE" "$1" "$2" "${5:-}" "$3" "${4:-}" >> "$TYPED"; }
+typed() { printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$STAGE" "$1" "$2" "${5:-}" "$3" "${4:-}" "${6:-}" >> "$TYPED"; }
+
+# opened <node> <leg> <stdout-file> <label> — a URL the person OPENED: taken
+# verbatim from the tool's `open   :` stdout line, never assembled here. The
+# file rides along as provenance; the report re-reads it and counts the URL
+# unless that line is there.
+opened() {
+  local url; url=$(sed -n 's/^ *open *: *\([^ ]*\).*/\1/p' "$3" | tail -1)
+  typed "$1" "$2" "$url" "$4" "" "$3"
+}
 
 # ── weights: ring-doc's config, then a [models] table on a and b ────────────
 eval "ring_doc_$(declare -f mkcfg)"
@@ -122,18 +131,12 @@ share_folder() {
 import json, os, sys
 for i, (fact, _, _) in enumerate(json.loads(os.environ['BANK'])):
     open(os.path.join(sys.argv[1], f'note-{i}.md'), 'w').write(fact + '\n')" "$folder"
-  typed "$n" "$leg" "corpus ingest $folder"
-  node_exec "$n" "$CLI" corpus ingest "$folder" > "$D/room-ingest-$n.out" 2>&1
+  # `--share` sets the corpus's query_sharing (corpus_store.rs creates it
+  # local-only); the next gossip tick advertises it, no restart.
+  typed "$n" "$leg" "corpus ingest --share $folder"
+  node_exec "$n" "$CLI" corpus ingest --share "$folder" > "$D/room-ingest-$n.out" 2>&1
   rc=$?
   meta=$(find "$D/$n" -name _corpus_meta.json -path "*/$id/*" 2>/dev/null | head -1)
-  # No verb turns query sharing on for an ingested folder (corpus_store.rs
-  # creates it local-only): the driver writes the flag, and the census counts it.
-  if [ -n "$meta" ]; then
-    python3 -c "import json,sys; p=sys.argv[1]; m=json.load(open(p)); m['query_sharing']=True; json.dump(m,open(p,'w'))" "$meta"
-    typed "$n" "$leg" '"query_sharing": true' "written into $meta — no verb shares an ingested folder"
-  fi
-  # The daemon resolves query_sharing at open: the script restarts it, as D does.
-  stop_node "$n"; start_node "$n" > /dev/null && wait_homed "$n"
   echo "$id $rc $meta"
 }
 
@@ -198,7 +201,7 @@ PY
 leg_doc() {
   sv a ring roster "$RING" > "$D/room-roster-a.txt"
   local n
-  for n in a b c; do typed "$n" doc "$(tab_url "$n")/" "the ring-doc page, as ring dev printed it"; done
+  for n in a b c; do opened "$n" doc "$D/$n/dev.out" "the ring-doc page, as ring dev printed it"; done
   run_session
 }
 
@@ -228,20 +231,18 @@ sys.exit(0 if o and sorted(o[0].get('offered_to') or []) == sorted(json.loads(sy
 # loopback, where holder-setup and the node's daemon reach it), then
 # holder-setup inside the node: wizard, the declared key, the offer verb.
 media_holder() {
-  local n=$1 leg=$2 origin
-  origin=$(sed -n 's/^ORIGIN="\(.*\)"$/\1/p' "$MEDIA_SCRIPT")
+  local n=$1 leg=$2
   "${HOSTRUN[@]}" env CW_MEDIA_ROOT="$4" CW_MEDIA_NAME="$3" CW_MEDIA_NETWORK="container:ring-doc-$n" \
     bash "$MEDIA_SCRIPT" holder-up > "$D/room-holder-up-$n.out" 2>&1 || return 1
   typed "$n" "$leg" "demo / demo" "Jellyfin's own login (holder-setup's wizard, and the key it mints from it and declares) — the ONE excluded credential" secret
-  typed "$n" "$leg" "mesh media offer $origin" "holder-setup's one verb"
+  typed "$n" "$leg" "mesh media offer" "holder-setup's one verb; it finds the origin itself"
   node_exec "$n" env SVRN="$CLI" CW_MEDIA_ROOT="$4" bash "$MEDIA_SCRIPT" holder-setup > "$D/room-holder-setup-$n.out" 2>&1
 }
 
 leg_film() {
   local out="$D/room-film.json"
   if [ "$BACKEND" != podman ]; then echo '{"skipped":"backend local: Jellyfin needs a node netns to sit in"}' > "$out"; return; fi
-  local origin bname aname cname first narrowed url item fb
-  origin=$(sed -n 's/^ORIGIN="\(.*\)"$/\1/p' "$MEDIA_SCRIPT")
+  local bname aname cname first narrowed url item fb
   bname=$(self_name b); aname=$(self_name a); cname=$(self_name c)
   cp "$D/b/config.toml" "$D/room-b-config.before"; cp "$D/c/config.toml" "$D/room-c-config.before"
   rm -rf "$MEDIA_ROOT/config" "$MEDIA_ROOT/cache" # a cold holder each run; the generated title is kept
@@ -250,8 +251,8 @@ leg_film() {
   # The clock starts when the verb returns: its own restart of b's daemon, and
   # b's return to the mesh, are inside the window.
   first=$(poll_offer "$bname" '[]' 30)
-  typed b film "mesh media offer $origin --admit $aname $cname" "the narrowing, one verb"
-  node_exec b "$CLI" mesh media offer "$origin" --admit "$aname" "$cname" > "$D/room-narrow.out" 2>&1
+  typed b film "mesh media admit $aname $cname" "the narrowing, one verb; the origin is the stored one"
+  node_exec b "$CLI" mesh media admit "$aname" "$cname" > "$D/room-narrow.out" 2>&1
   narrowed=$(poll_offer "$bname" "[\"$aname\",\"$cname\"]" 30)
   # The pick, as the rail makes it: the reach for that member (re-read every
   # poll, as the rail does — the narrowing just restarted b), then a title. The
@@ -388,7 +389,7 @@ leg_join() {
 
   # (a) the doc: its page names it, and its edit is attributed on a.
   start_proxy d 2> "$D/room-join-proxy.err"
-  typed d join "$(tab_url d)/" "the ring-doc page, as ring dev printed it"
+  opened d join "$D/d/dev.out" "the ring-doc page, as ring dev printed it"
   join_doc_js
   REPO="$REPO" PD="$(tab_url d)" PA="$(tab_url a)" POLL_S="$JOIN_POLL_S" WATCH_S="$JOIN_WATCH_S" \
     node "$D/join-doc.mjs" > "$D/room-join-doc.json" 2> "$D/room-join-doc.err"
@@ -463,8 +464,13 @@ def load(name):
 
 entries = []
 for line in open(typed_p).read().splitlines() if os.path.exists(typed_p) else []:
-    stage, node, leg, secret, s, note = (line.split("\t") + [""] * 6)[:6]
-    entries.append(dict(stage=stage, node=node, leg=leg, string=s, note=note, cls=classify(s, secret),
+    stage, node, leg, secret, s, note, prov = (line.split("\t") + [""] * 7)[:7]
+    # `opened`: the string came VERBATIM from a tool's stdout line, and that
+    # line is re-read here rather than trusted. Assembled, or no such line: counts.
+    src = next((l.strip() for l in (open(prov).read().splitlines() if prov and os.path.exists(prov) else [])
+                if s and s in l.split()), "")
+    entries.append(dict(stage=stage, node=node, leg=leg, string=s, note=note,
+                        cls="opened" if src else classify(s, secret), src=src and f"{prov}: {src}",
                         excluded=bool(secret) and "Jellyfin" in note))
 # INSTALL: what bring-up wrote where the daemons read it, before the walk.
 install = []
@@ -504,6 +510,7 @@ print("== census: WALK (typed on the person's behalf during the walk) ==")
 for e in walk:
     flag = "EXCLUDED" if e["excluded"] else ("COUNTS" if e["cls"] in COUNTED else "")
     print(f"  walk  {e['leg']:<6} {e['node']}  {e['cls']:<11} {flag:<8} {e['string']}" + (f"   ({e['note']})" if e["note"] else ""))
+    if e["src"]: print(f"        from the tool's stdout, verbatim: {e['src']}")
 print(f"  walk count: {walk_count}")
 print(f"== census: this script names {len(hits)} of {len(needles)} member names/ports/addresses/corpus ids: {hits} ==")
 

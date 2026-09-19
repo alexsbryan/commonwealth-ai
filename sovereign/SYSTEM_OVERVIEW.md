@@ -5996,8 +5996,10 @@ wires the old ALPN-only routing and gets a 200 for a stranger presenting nothing
 **Federated media rides that fifth slot end to end** (`TrafficClass::Media`,
 `commonwealth/crates/commonwealth-media/src/reach.rs`, the route and daemon
 glue in `sovereign-daemon/src/media_reach.rs`, 2026-09-11). The holder declares
-`[iroh] media_origin = "127.0.0.1:8096"` — `svrn mesh media offer <origin>
-[--admit <member>...]` writes it (and `media_allow`) and runs `daemon reload`,
+`[iroh] media_origin = "127.0.0.1:8096"` — `svrn mesh media offer [<origin>]
+[--admit <member>...]` writes it (and `media_allow`; with no origin it probes
+127.0.0.1:8096 then 8920; `mesh media admit <member>...` narrows the stored
+origin) and runs `daemon reload`,
 which swaps the live `MediaRoute` (`sovereign-mesh/src/media_route.rs`) with no
 restart; a value that does not parse refuses the boot or the reload. The viewer asks its own daemon — `GET /v1/mesh/media?peer=<name-or-id>`,
 `svrn mesh media <peer>` — and gets back `http://127.0.0.1:<port>`: the

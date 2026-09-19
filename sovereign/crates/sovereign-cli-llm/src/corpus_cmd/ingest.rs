@@ -29,10 +29,12 @@ pub async fn cmd_corpus_ingest(args: &[String]) -> i32 {
     let mut glob: Option<String> = None;
     let mut concurrency = 4usize;
     let mut no_cache = false;
+    let mut share = false;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
             "--no-cache" => no_cache = true,
+            "--share" => share = true,
             "--corpus" => {
                 i += 1;
                 corpus = args.get(i).cloned();
@@ -60,7 +62,7 @@ pub async fn cmd_corpus_ingest(args: &[String]) -> i32 {
     let Some(folder) = folder else {
         eprintln!(
             "Usage: svrn corpus ingest <folder> [--corpus <id>] [--glob '*.pdf,*.md'] \
-             [--concurrency N] [--no-cache]"
+             [--concurrency N] [--no-cache] [--share]"
         );
         return 1;
     };
@@ -106,15 +108,158 @@ pub async fn cmd_corpus_ingest(args: &[String]) -> i32 {
     let daemon = default_daemon_base();
     let code =
         crate::workflow_cmd::run_assembled(&toml, &daemon, concurrency, no_cache, params).await;
-    if code == 0 {
-        eprintln!("\nDone. Query it:  svrn corpus search {corpus} \"<your question>\"");
+    if code != 0 {
+        return code;
     }
-    code
+    eprintln!("\nDone. Query it:  svrn corpus search {corpus} \"<your question>\"");
+    if share {
+        return report_share(
+            &corpus,
+            share_corpus(&super::inventory::indexes_dir(), &corpus),
+        );
+    }
+    0
+}
+
+/// `svrn corpus share <id>` — let this mesh's members search an installed
+/// corpus. It sets `query_sharing` in the corpus's meta, the one key
+/// `build_hosted_corpora` (sovereign-mesh/src/capabilities.rs) filters the
+/// fan-out on. The meta's mtime invalidates the engine's info cache
+/// (`installed_indexes`), so the next gossip tick advertises it; no restart.
+pub async fn cmd_corpus_share(args: &[String]) -> i32 {
+    let [id] = args else {
+        eprintln!("Usage: svrn corpus share <id>");
+        eprintln!();
+        eprintln!("Let the members of this mesh search an installed corpus. Its text stays");
+        eprintln!("here; members get cited passages back. `svrn corpus list` names the ids.");
+        return if args.is_empty() { 1 } else { 0 };
+    };
+    report_share(id, share_corpus(&super::inventory::indexes_dir(), id))
+}
+
+fn report_share(id: &str, result: Result<std::path::PathBuf, String>) -> i32 {
+    match result {
+        Ok(meta) => {
+            tracing::info!(corpus = id, meta = %meta.display(), "corpus shared: query_sharing set");
+            println!(
+                "Shared `{id}` with this mesh's members. ({})",
+                meta.display()
+            );
+            0
+        }
+        Err(e) => {
+            tracing::warn!(corpus = id, error = %e, "corpus share refused");
+            eprintln!("corpus share: {e}");
+            1
+        }
+    }
+}
+
+/// Set `query_sharing = true` in `<indexes_dir>/<id>`'s meta, every other
+/// field kept as written. Returns the meta's path.
+pub(super) fn share_corpus(
+    indexes_dir: &std::path::Path,
+    id: &str,
+) -> Result<std::path::PathBuf, String> {
+    let corpus =
+        corpus_engine::Corpus::named(indexes_dir, id).ok_or("corpus id must not be empty")?;
+    if !corpus.is_installed() {
+        return Err(format!(
+            "no installed corpus `{id}` under {} — `svrn corpus list`",
+            indexes_dir.display()
+        ));
+    }
+    let path = corpus.meta_path();
+    let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let mut meta: serde_json::Value =
+        serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+    let obj = meta
+        .as_object_mut()
+        .ok_or_else(|| format!("{} is not a JSON object", path.display()))?;
+    obj.insert("query_sharing".into(), serde_json::Value::Bool(true));
+    let out = serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())?;
+    std::fs::write(&path, out).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(path)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct NoClaims;
+
+    #[async_trait::async_trait]
+    impl sovereign_contracts::self_claims::SelfClaims for NoClaims {
+        async fn claims(&self) -> sovereign_contracts::self_claims::LocalClaims {
+            sovereign_contracts::self_claims::LocalClaims {
+                availability: 1.0,
+                in_flight: None,
+                storage_remaining: None,
+                embed_model: None,
+            }
+        }
+        fn record_storage_used(&self, _used: u64) {}
+    }
+
+    /// The fan-out's corpus list, as gossip builds it from this index root.
+    async fn hosted(engine: &std::sync::Arc<corpus_engine::CorpusEngine>) -> Vec<String> {
+        sovereign_mesh::capabilities::build_local_capabilities(Some(engine), 0, &NoClaims)
+            .await
+            .hosted_corpora
+            .into_iter()
+            .map(|c| c.corpus_id)
+            .collect()
+    }
+
+    /// `corpus share` sets the key and the fan-out lists the corpus — on the
+    /// SAME engine, so the meta write must invalidate its info cache. The
+    /// failing input is a local-only corpus (what `corpus_store` creates)
+    /// that the verb leaves unadvertised.
+    #[tokio::test]
+    async fn share_sets_query_sharing_and_the_fanout_lists_the_corpus() {
+        let dir = tempfile::tempdir().unwrap();
+        let indexes = dir.path().join("indexes");
+        let root = indexes.join("larkspur");
+        let idx = corpus_engine::index::CorpusIndex::create_with_sharing(
+            &root,
+            "larkspur",
+            "larkspur",
+            "test-embed",
+            8,
+            false,
+            Some(false),
+            "private",
+        )
+        .await
+        .unwrap();
+        idx.mark_ingestion_complete().unwrap();
+        drop(idx);
+        let embed: corpus_engine::EmbedFn =
+            std::sync::Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.0_f32; 8]) }));
+        let engine = std::sync::Arc::new(corpus_engine::CorpusEngine::new(
+            dir.path().join("recipes"),
+            indexes.clone(),
+            embed,
+        ));
+        assert!(
+            hosted(&engine).await.is_empty(),
+            "local-only is not advertised"
+        );
+
+        // A distinct mtime on filesystems with coarse timestamps.
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        let meta = share_corpus(&indexes, "larkspur").unwrap();
+        let written: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&meta).unwrap()).unwrap();
+        assert_eq!(written["query_sharing"], serde_json::Value::Bool(true));
+        assert_eq!(written["corpus_id"], "larkspur", "other fields kept");
+        assert_eq!(hosted(&engine).await, vec!["larkspur".to_string()]);
+
+        assert!(
+            share_corpus(&indexes, "absent").is_err(),
+            "refused, not created"
+        );
+    }
 
     /// `corpus ingest` runs the shipped `notebook` definition — the
     /// document-capable shape (`extract → chunk → embed → store`), not the old

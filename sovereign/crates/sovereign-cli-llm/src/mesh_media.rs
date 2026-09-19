@@ -22,9 +22,13 @@ pub(crate) async fn cmd_media(args: &[String]) -> i32 {
     if args.first().map(String::as_str) == Some("offer") {
         return cmd_media_offer(&args[1..]);
     }
+    if args.first().map(String::as_str) == Some("admit") {
+        return cmd_media_admit(&args[1..]);
+    }
     if sovereign_cli_shared::help::wants_help(args) {
         eprintln!("Usage: svrn mesh media [<peer>] [--json] [--no-probe]");
-        eprintln!("       svrn mesh media offer <origin> [--admit <member>...]");
+        eprintln!("       svrn mesh media offer [<origin>] [--admit <member>...]");
+        eprintln!("       svrn mesh media admit <member>...");
         eprintln!("       svrn mesh media fanout <path> [--peers a,b] [--method M] [--timeout-ms N] [--json]");
         eprintln!(
             "       svrn mesh media declare <header-name>   # value on stdin; --list / --clear"
@@ -479,21 +483,56 @@ fn set_offer(
     Ok(())
 }
 
-/// `svrn mesh media offer <origin> [--admit <member>...]` — offer this node's
-/// media origin to the mesh, then `svrn daemon reload` so the running
-/// acceptor serves it. Both keys reload live (`MediaRoute`), so no restart:
+/// Where a media server listens when nobody said: Jellyfin's HTTP port, then
+/// its HTTPS port, on this machine's loopback. The address is the tool's to
+/// know, not the person's to type (ring-room census, 99ca7e4cb).
+const WELL_KNOWN_ORIGINS: [&str; 2] = ["127.0.0.1:8096", "127.0.0.1:8920"];
+
+/// The first candidate something accepts a TCP connection on.
+fn probe_origin(candidates: &[&str]) -> Option<std::net::SocketAddr> {
+    candidates
+        .iter()
+        .filter_map(|c| c.parse::<std::net::SocketAddr>().ok())
+        .find(|addr| {
+            let up = std::net::TcpStream::connect_timeout(addr, Duration::from_millis(500)).is_ok();
+            tracing::debug!(%addr, up, "media offer: probed a well-known origin");
+            up
+        })
+}
+
+/// The origin a previous `offer` stored in `[iroh] media_origin`.
+/// `Ok(None)` when nothing was offered; a value that does not parse is an
+/// error, not "nothing offered".
+fn stored_origin(doc: &toml_edit::DocumentMut) -> Result<Option<std::net::SocketAddr>, String> {
+    let Some(item) = doc.get("iroh").and_then(|i| i.get("media_origin")) else {
+        return Ok(None);
+    };
+    let text = item
+        .as_str()
+        .ok_or_else(|| format!("[iroh] media_origin is not a string: {item}"))?;
+    text.parse()
+        .map(Some)
+        .map_err(|e| format!("[iroh] media_origin = {text:?} does not parse: {e}"))
+}
+
+/// `svrn mesh media offer [<origin>] [--admit <member>...]` — offer this
+/// node's media origin to the mesh, then `svrn daemon reload` so the running
+/// acceptor serves it. With no origin it probes [`WELL_KNOWN_ORIGINS`] and
+/// says what it found. Both keys reload live (`MediaRoute`), so no restart:
 /// a restart left peers dialing the holder's endpoint for 120 s (ring-room
 /// 99ca7e4cb leg 3).
 fn cmd_media_offer(args: &[String]) -> i32 {
-    if sovereign_cli_shared::help::wants_help(args) || args.is_empty() {
-        eprintln!("Usage: svrn mesh media offer <origin> [--admit <member>...]");
+    if sovereign_cli_shared::help::wants_help(args) {
+        eprintln!("Usage: svrn mesh media offer [<origin>] [--admit <member>...]");
         eprintln!();
         eprintln!("Offer a media server on this machine to the members of this mesh.");
-        eprintln!("<origin> is a port (8096) or a loopback host:port. With no --admit");
-        eprintln!("every member may reach it; --admit names the only members who may,");
-        eprintln!("by member name or a node-id prefix, as `svrn mesh status` shows them.");
+        eprintln!("<origin> is a port (8096) or a loopback host:port; with none, the");
+        eprintln!("well-known local media ports (Jellyfin's 8096, then 8920) are tried.");
+        eprintln!("With no --admit every member may reach it; --admit names the only");
+        eprintln!("members who may, by member name or a node-id prefix, as `svrn mesh");
+        eprintln!("status` shows them (`svrn mesh media admit` narrows a standing offer).");
         eprintln!("The running daemon is reloaded to publish the offer.");
-        return if args.is_empty() { 1 } else { 0 };
+        return 0;
     }
     let mut origin: Option<&str> = None;
     let mut admit: Vec<String> = Vec::new();
@@ -517,26 +556,91 @@ fn cmd_media_offer(args: &[String]) -> i32 {
         eprintln!("mesh media offer: --admit names at least one member");
         return 1;
     }
-    let Some(origin) = origin else {
-        eprintln!("mesh media offer: which origin? `svrn mesh media offer 8096`");
-        return 1;
+    let origin = match origin {
+        Some(origin) => match crate::publish_cmd::resolve_target(origin) {
+            Ok(a) => a,
+            Err(e) => {
+                eprintln!("mesh media offer: {e}");
+                return 1;
+            }
+        },
+        None => match probe_origin(&WELL_KNOWN_ORIGINS) {
+            Some(found) => {
+                tracing::info!(%found, "media offer: no origin given, found a listener");
+                println!("No origin given; found a media server listening on {found}.");
+                found
+            }
+            None => {
+                tracing::warn!(tried = ?WELL_KNOWN_ORIGINS, "media offer: no origin given, none found");
+                eprintln!(
+                    "mesh media offer: no origin given, and nothing listens on {}. \
+                     Name it: `svrn mesh media offer <port>`.",
+                    WELL_KNOWN_ORIGINS.join(" or ")
+                );
+                return 1;
+            }
+        },
     };
-    let origin = match crate::publish_cmd::resolve_target(origin) {
-        Ok(a) => a,
-        Err(e) => {
-            eprintln!("mesh media offer: {e}");
-            return 1;
-        }
-    };
-    let (path, mut doc) = match crate::publish_cmd::load_doc() {
+    let (path, doc) = match crate::publish_cmd::load_doc() {
         Ok(d) => d,
         Err(e) => {
             eprintln!("mesh media offer: {e}");
             return 1;
         }
     };
-    if let Err(e) = set_offer(&mut doc, origin, &admit)
-        .and_then(|()| crate::publish_cmd::write_doc(&path, &doc))
+    write_offer(path, doc, origin, &admit)
+}
+
+/// `svrn mesh media admit <member>...` — narrow a standing offer to the named
+/// members, reading the origin `offer` stored rather than asking for it again.
+fn cmd_media_admit(args: &[String]) -> i32 {
+    if sovereign_cli_shared::help::wants_help(args) || args.is_empty() {
+        eprintln!("Usage: svrn mesh media admit <member>...");
+        eprintln!();
+        eprintln!("Narrow this machine's media offer to the named members (member name or");
+        eprintln!("node-id prefix, as `svrn mesh status` shows them). The origin is the one");
+        eprintln!("`svrn mesh media offer` stored; `offer` with no --admit widens back.");
+        return if args.is_empty() { 1 } else { 0 };
+    }
+    if let Some(flag) = args.iter().find(|a| a.starts_with("--")) {
+        eprintln!("mesh media admit: unknown flag {flag}");
+        return 1;
+    }
+    let (path, doc) = match crate::publish_cmd::load_doc() {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("mesh media admit: {e}");
+            return 1;
+        }
+    };
+    let origin = match stored_origin(&doc) {
+        Ok(Some(origin)) => origin,
+        Ok(None) => {
+            tracing::warn!(config = %path.display(), "media admit: no stored media_origin");
+            eprintln!(
+                "mesh media admit: this machine offers no media yet — `svrn mesh media offer` first."
+            );
+            return 1;
+        }
+        Err(e) => {
+            tracing::warn!(config = %path.display(), error = %e, "media admit: stored media_origin unreadable");
+            eprintln!("mesh media admit: {e} ({})", path.display());
+            return 1;
+        }
+    };
+    write_offer(path, doc, origin, args)
+}
+
+/// Write the offer into the config and reload the daemon — the one tail
+/// `offer` and `admit` share.
+fn write_offer(
+    path: std::path::PathBuf,
+    mut doc: toml_edit::DocumentMut,
+    origin: std::net::SocketAddr,
+    admit: &[String],
+) -> i32 {
+    if let Err(e) =
+        set_offer(&mut doc, origin, admit).and_then(|()| crate::publish_cmd::write_doc(&path, &doc))
     {
         eprintln!("mesh media offer: could not write the config — {e}");
         return 1;
@@ -778,6 +882,42 @@ mod tests {
         let everyone = offered(&[]);
         assert!(everyone.media_allow.is_empty());
         assert!(reaches(&everyone, &mac) && reaches(&everyone, &quiet));
+    }
+
+    /// `admit` restates no origin: it narrows the one `offer` stored. The
+    /// failing input is an admit that loses or rewrites the origin.
+    #[test]
+    fn admit_narrows_the_stored_origin() {
+        let mut doc: toml_edit::DocumentMut = "[iroh]\nenabled = true\n".parse().unwrap();
+        assert_eq!(
+            stored_origin(&doc),
+            Ok(None),
+            "nothing offered, nothing to narrow"
+        );
+        let broken: toml_edit::DocumentMut =
+            "[iroh]\nmedia_origin = \"jellyfin\"\n".parse().unwrap();
+        assert!(stored_origin(&broken).is_err(), "unparseable is not absent");
+        set_offer(&mut doc, "127.0.0.1:8920".parse().unwrap(), &[]).unwrap();
+        let origin = stored_origin(&doc)
+            .unwrap()
+            .expect("offer stored its origin");
+        set_offer(&mut doc, origin, &["LittleMac".into()]).unwrap();
+        let iroh: IrohSection = toml::from_str(&doc["iroh"].to_string()).unwrap();
+        assert_eq!(iroh.media_origin.as_deref(), Some("127.0.0.1:8920"));
+        assert!(reaches(&iroh, &member("LittleMac", 0xb0b252e4 << 96)));
+        assert!(!reaches(&iroh, &member("Quiet", 0xc0de << 96)));
+    }
+
+    /// `offer` with no origin finds a listener on Jellyfin's port. A server
+    /// already on 8096 (a real Jellyfin on this host) is the same listener.
+    #[test]
+    fn offer_with_no_origin_finds_a_listener_on_8096() {
+        let _held = std::net::TcpListener::bind("127.0.0.1:8096");
+        assert_eq!(
+            probe_origin(&WELL_KNOWN_ORIGINS),
+            Some("127.0.0.1:8096".parse().unwrap())
+        );
+        assert_eq!(probe_origin(&[]), None, "no candidates, nothing found");
     }
 
     #[test]

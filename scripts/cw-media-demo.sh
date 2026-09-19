@@ -7,7 +7,7 @@
 #   HOLDER (the machine with the library):
 #     scripts/cw-media-demo.sh holder-up        # Jellyfin on 127.0.0.1:8096 + one test title (podman)
 #     scripts/cw-media-demo.sh holder-setup     # wizard, the declared key, then the offer
-#     # holder-setup runs `svrn mesh media offer 127.0.0.1:8096`, which writes [iroh] media_origin
+#     # holder-setup runs `svrn mesh media offer` (it finds 127.0.0.1:8096), which writes [iroh] media_origin
 #     # and restarts the daemon itself -- the acceptor then advertises cwth/media/0 to members.
 #     # holder-setup needs no podman: ring-room-demo.sh runs it inside a node whose netns the
 #     # Jellyfin container shares (CW_MEDIA_NETWORK=container:<node>, CW_MEDIA_NAME to keep
@@ -137,7 +137,8 @@ holder_setup() {
   # a cold 12.x: "Scan Media Library ... Cancelled", /Items empty for 90 s), so
   # a fresh holder lists no title until something scans again.
   [ -n "$TOKEN" ] && api POST /Library/Refresh >/dev/null
-  "${SVRN:-svrn}" mesh media offer "$ORIGIN" \
+  # No origin: the verb finds Jellyfin on its well-known port.
+  "${SVRN:-svrn}" mesh media offer \
     || say "offer failed -- run \`svrn mesh media offer $ORIGIN\` by hand"
 
   cat >&2 <<EOF
@@ -147,8 +148,8 @@ library:      $ROOT/media
 credential:   declared as \`authorization\` under ~/.svrnmesh/secrets/media/
               (0600, never leaves this machine, never printed back)
 
-offered:      \`svrn mesh media offer $ORIGIN\` wrote [iroh] media_origin and
-              restarted the daemon (narrow it with --admit <member>...)
+offered:      \`svrn mesh media offer\` found $ORIGIN, wrote [iroh] media_origin and
+              reloaded the daemon (narrow it with \`svrn mesh media admit <member>...\`)
 
 a member then runs:  svrn mesh media <this node's name>
 and a shim fans out:  POST /v1/mesh/media/fanout {"path":"/Items?..."} — which
