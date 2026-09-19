@@ -60,8 +60,22 @@ pub fn live_rail_grants(store: &GuestGrantStore, now_ms: u64) -> usize {
 
 /// The router the door serves: the Guest surface, and the page if a
 /// directory is configured.
-pub fn door_router(state: AppState, page_dir: Option<PathBuf>) -> Router {
-    let guest = crate::server::client_router_for(state, ClientSurface::Guest);
+///
+/// `turn_host` is the daemon that will run `POST /v1/guest/ask` in-process.
+/// It is a parameter rather than something the router reaches for because
+/// `AppState` holds no `Runtime` — the turn surface is built from
+/// `Arc<EmbeddedDaemon>` everywhere else in this crate too
+/// (`turn_http::turn_router`). `None` builds a door whose ask route names its
+/// own absence rather than one that silently 404s.
+pub fn door_router(
+    state: AppState,
+    page_dir: Option<PathBuf>,
+    turn_host: Option<Arc<crate::daemon::EmbeddedDaemon>>,
+) -> Router {
+    let mut guest = crate::server::client_router_for(state, ClientSurface::Guest);
+    if let Some(host) = turn_host {
+        guest = guest.layer(axum::Extension(host));
+    }
     match page_dir {
         Some(dir) => guest.merge(
             Router::new()
@@ -79,7 +93,12 @@ pub fn door_router(state: AppState, page_dir: Option<PathBuf>) -> Router {
 /// Never returns — it sits in the daemon's serve `select!`, where returning
 /// would end every other listener with it. An unparseable bind is reported
 /// once and the door stays shut; an unset one is the default, off.
-pub async fn serve(state: AppState, bind: Option<String>, page_dir: Option<PathBuf>) {
+pub async fn serve(
+    state: AppState,
+    bind: Option<String>,
+    page_dir: Option<PathBuf>,
+    turn_host: Option<Arc<crate::daemon::EmbeddedDaemon>>,
+) {
     let Some(bind) = bind else {
         tracing::debug!("guest door: off ([daemon] guest_bind unset)");
         return std::future::pending().await;
@@ -114,7 +133,7 @@ pub async fn serve(state: AppState, bind: Option<String>, page_dir: Option<PathB
         // `ConnectInfo` for the same reason as every other client bind:
         // without it the auth layer cannot identify the caller and fails
         // closed with a 500.
-        let service = door_router(state.clone(), page_dir.clone())
+        let service = door_router(state.clone(), page_dir.clone(), turn_host.clone())
             .into_make_service_with_connect_info::<SocketAddr>();
         let closing = store.clone();
         if let Err(e) = axum::serve(listener, service)
@@ -258,6 +277,7 @@ const RING_SHIM: &str = r#"(function () {
   const ROUTES = {
     log: ['GET', '/v1/rail/log'], append: ['POST', '/v1/rail/append'],
     live: ['POST', '/v1/rail/live'], 'live-drain': ['GET', '/v1/rail/live'],
+    ask: ['POST', '/v1/guest/ask'],
   };
   const send = (op, ctype, body) => {
     if (RAIL === null) {
@@ -313,6 +333,18 @@ const RING_SHIM: &str = r#"(function () {
       },
       // A drain, not a read: the daemon hands each payload out once.
       drain: () => call('live-drain', {}),
+    },
+    // Ask the room. The door runs the turn as its OWN principal and hands
+    // back `{answer, epistemic_state}` — never a conversation id, so there is
+    // no handle here to point at anyone else's.
+    //
+    // Only over the bearer transport. Under `svrn ring dev` the grant is held
+    // by the dev server and the browser has none, so this REFUSES by name
+    // rather than posting a fifth op at a proxy whose table is the rail's
+    // three routes — the ask is the guest DOOR's route, not the rail's.
+    ask: (question) => {
+      if (RAIL === null) throw new Error('ring: ask is the guest door\'s route; `ring dev` holds no grant to present');
+      return call('ask', { question });
     },
     // Fold the journal with your reducer.
     //
@@ -386,6 +418,25 @@ mod tests {
             "the live send stopped returning the daemon's answer — without \
              `peers` the page cannot name a peer that did not get its presence"
         );
+    }
+
+    /// **The ask verb reaches the door's route, and only over the bearer
+    /// transport.** Under `ring dev` the browser holds no grant, so a shim
+    /// that posted `/__ring/ask` anyway would hit a proxy op table that is
+    /// the rail's three routes and fail with the proxy's words instead of
+    /// its own.
+    #[test]
+    fn the_ask_verb_is_the_doors_route_and_refuses_without_a_bearer() {
+        assert!(RING_SHIM.contains("ask: ['POST', '/v1/guest/ask']"));
+        assert!(RING_SHIM.contains("ask: (question) =>"));
+        assert!(
+            RING_SHIM.contains("if (RAIL === null) throw new Error('ring: ask"),
+            "the ask verb stopped refusing the grantless transport — under \
+             `ring dev` it would post at the rail proxy and fail obscurely"
+        );
+        assert!(sovereign_grants::Scope::Rails("x".into())
+            .paths()
+            .contains(&crate::routes_guest_ask::GUEST_ASK_PATH));
     }
 
     /// **Every rail route the bearer transport names is one a rail grant

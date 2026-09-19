@@ -32,6 +32,13 @@
       #gaps h2 { font-size: .9rem; margin: 0 0 .5rem; text-transform: uppercase; letter-spacing: .04em; }
       #gaps li { opacity: .8; }
       #err { color: #b91c1c; }
+      #ask { margin-top: 2rem; padding: .75rem 1rem; border: 1px solid var(--line); border-radius: .4rem; }
+      #ask[hidden] { display: none; }
+      #ask h2 { font-size: .9rem; margin: 0 0 .5rem; text-transform: uppercase; letter-spacing: .04em; }
+      #ask-q { width: min(22rem, 70%); }
+      /* Every source says which house held it. Never hidden, for the same
+         reason the attribution gutter is never hidden. */
+      #ask-sources { font-size: .78rem; opacity: .7; margin: .5rem 0 0; }
     </style>
   </head>
   <body>
@@ -48,6 +55,12 @@
         <div id="attribution"></div>
       </div>
       <p class="sub">Each paragraph says who last edited it, taken from the signature on the change. Colouring inside a paragraph, per character, is not shown: the author marks Yjs keeps inside the text are written by the page that sent them and cannot be checked here, so a colour would say more than this ring can prove.</p>
+      <section id="ask" hidden>
+        <h2>Ask this room</h2>
+        <p><input id="ask-q" placeholder="what do these houses know?" /> <button id="ask-go">Ask</button></p>
+        <p id="ask-a"></p>
+        <ul id="ask-sources"></ul>
+      </section>
       <p id="err"></p>
       <section id="gaps" hidden>
         <h2>This total covers a subset</h2>

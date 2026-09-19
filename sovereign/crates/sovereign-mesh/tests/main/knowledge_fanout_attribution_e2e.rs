@@ -544,3 +544,233 @@ async fn corpus_read_is_served_while_the_inference_slot_is_held() {
         "Bo's chunk must come back. Got: {body}"
     );
 }
+
+/// **The door answers for the guest, and the answer names the house that
+/// held the evidence.**
+///
+/// The same two-daemon shape as
+/// [`a_daemon_served_chat_turn_names_the_peer_whose_corpus_answered`], driven
+/// through `POST /v1/guest/ask` with a wall grant's bearer instead of through
+/// the conversation socket. Four things are asserted at once, because they are
+/// one property: a guest standing in the room gets a grounded answer, the
+/// answering node holds no copy of the corpus, the citation names the MEMBER
+/// whose shelf it came from, and the reply hands back no handle on the
+/// conversation it ran in.
+///
+/// The guest surface is `UNTRUSTED_LOOPBACK`, so the bearer is load-bearing
+/// even over `127.0.0.1` — which is what makes this a real exercise of the
+/// auth layer rather than of routing.
+#[tokio::test]
+async fn a_guest_ask_is_answered_by_the_room_and_names_the_member_who_held_it() {
+    std::env::set_var("SOVEREIGN_LONGFORM_CHARS", "0");
+    const FACT: &str =
+        "The Larkspur Lane cooperative keeps its bees in four hives painted teal, ochre, plum and slate.";
+
+    // === Host (Bo): the corpus lives only here ===
+    let tmp_host = tempfile::tempdir().unwrap();
+    let indexes_host = tmp_host.path().join("indexes");
+    std::fs::create_dir_all(&indexes_host).unwrap();
+    install_corpus(&indexes_host, "larkspur", "note-0", FACT).await;
+    let engine_host = Arc::new(
+        CorpusEngine::new(
+            tmp_host.path().join("recipes"),
+            indexes_host,
+            mock_embed_fn(),
+        )
+        .with_embedding_model("qwen3-embedding-0.6b"),
+    );
+    let id_host = NodeId::from_u128(0xB0B0_B0B0_B0B0_B0B1);
+    let mut host_self = common::member(id_host, "Bo", "127.0.0.1:9742".parse().unwrap());
+    host_self.capabilities = caps_with_hosted(&["larkspur"]);
+    let mut mesh_host = common::solo_mesh(id_host, "room");
+    mesh_host.members.insert(id_host, host_self);
+    let addr_host = spawn_router(internal_router(AppState::new_with_platform_and_engine(
+        id_host,
+        mesh_host,
+        Arc::new(MeshStore::in_memory().unwrap()),
+        Arc::new(AppRegistry::new()),
+        Some(engine_host),
+    )))
+    .await;
+
+    // === The door's node: nothing installed, and it is the one a guest
+    // reaches. ONE `AppState`, because the grant the auth layer reads and the
+    // fan-out the turn drives have to be the same node's.
+    let id_ask = NodeId::from_u128(0xA5A5_A5A5_A5A5_A5A6);
+    let mut mesh_ask = common::solo_mesh(id_ask, "room");
+    let mut bo = common::member(id_host, "Bo", addr_host);
+    bo.capabilities = caps_with_hosted(&["larkspur"]);
+    mesh_ask.members.insert(id_host, bo);
+    let state_ask = AppState::new_with_platform_and_engine(
+        id_ask,
+        mesh_ask,
+        Arc::new(MeshStore::in_memory().unwrap()),
+        Arc::new(AppRegistry::new()),
+        None,
+    );
+    let addr_ask = spawn_router(client_router(state_ask.clone())).await;
+
+    let tmp_ask = tempfile::tempdir().unwrap();
+    let engine_ask = Arc::new(CorpusEngine::new(
+        tmp_ask.path().join("recipes"),
+        tmp_ask.path().join("indexes"),
+        mock_embed_fn(),
+    ));
+    let provider: Arc<dyn sovereign_core::traits::InferenceProvider> = Arc::new(
+        common::TestProvider::new()
+            .with_embed_marker(|_| vec![0.0_f32; EMBED_DIM])
+            .with_complete_text("teal, ochre, plum and slate")
+            .with_stream_chunks(vec!["The hives are teal, ochre, plum and slate.".into()]),
+    );
+    let store: Arc<dyn sovereign_core::traits::StateStore> =
+        Arc::new(sovereign_store::memory::InMemoryStateStore::new());
+    let mut runtime = sovereign_core::runtime::Runtime::new(sovereign_core::RuntimeParts::new(
+        Arc::clone(&provider),
+        Box::new(KnowledgeRouter),
+        Box::new(sovereign_core::stubs::NoOpPlanner),
+        Arc::new(sovereign_core::ToolRegistry::new()),
+        Arc::clone(&store),
+        Arc::new(sovereign_core::SkillRegistry::new()),
+        Arc::new(sovereign_core::executor::AutoApprovalChannel),
+        sovereign_core::types::InferenceConfig::default(),
+        sovereign_core::runtime::lane::LaneSources::none(),
+    ));
+    runtime.corpus_engine = Some(Arc::clone(&engine_ask));
+    runtime.mesh_knowledge =
+        sovereign_mesh::knowledge_client::daemon_knowledge_source(&format!("http://{addr_ask}"));
+    let daemon = sovereign_daemon::EmbeddedDaemon::new(
+        tmp_ask.path().to_path_buf(),
+        sovereign_core::setup_config::SetupConfig::unconfigured(),
+        common::desktop_services(common::DesktopParts {
+            provider,
+            store,
+            runtime: Arc::new(runtime),
+            ..common::DesktopParts::new(engine_ask)
+        }),
+    );
+
+    // The wall grant, and a second one handed to somebody else in the room.
+    let now = commonwealth_core::clock::unix_now_millis();
+    let scopes = vec![sovereign_grants::Scope::Rails("wall".to_string())];
+    state_ask.inner.node.guest_grants.issue(
+        "bearer-first",
+        scopes.clone(),
+        Some("phone".into()),
+        600,
+        now,
+    );
+    state_ask.inner.node.guest_grants.issue(
+        "bearer-second",
+        scopes,
+        Some("other phone".into()),
+        600,
+        now,
+    );
+
+    // The door: the Guest surface with the turn host, exactly as
+    // `guest_door::door_router` builds it.
+    let addr_door = spawn_router(sovereign_daemon::guest_door::door_router(
+        state_ask,
+        None,
+        Some(daemon),
+    ))
+    .await;
+
+    let http = reqwest::Client::new();
+    let ask = |bearer: &'static str, q: &'static str| {
+        let http = http.clone();
+        async move {
+            http.post(format!("http://{addr_door}/v1/guest/ask"))
+                .bearer_auth(bearer)
+                .json(&serde_json::json!({ "question": q }))
+                .send()
+                .await
+                .expect("the door is reachable")
+        }
+    };
+
+    let resp = ask(
+        "bearer-first",
+        "What colours are the four hives of the Larkspur Lane cooperative painted?",
+    )
+    .await;
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::OK,
+        "a live wall grant must reach the ask door"
+    );
+    let body: serde_json::Value = resp.json().await.unwrap();
+    std::env::remove_var("SOVEREIGN_LONGFORM_CHARS");
+
+    // Exactly two keys: an answer and its ledger. `conversation_id` and
+    // `message_id` are handles onto state a guest must not reach, and a reply
+    // that never carries them cannot be asked for them.
+    let keys: Vec<&str> = body
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(|k| k.as_str())
+        .collect();
+    assert_eq!(
+        keys,
+        vec!["answer", "epistemic_state"],
+        "the door handed a guest more than the answer and its ledger"
+    );
+
+    // The asker installs nothing, so a holding naming Bo can only have come
+    // from the fan-out — which is the whole claim: the room answered, out of
+    // another house's shelf.
+    let holdings = body["epistemic_state"]["holdings"]
+        .as_array()
+        .expect("the turn assembled a ledger");
+    let members: Vec<Option<&str>> = holdings
+        .iter()
+        // `provenance.corpus.member` — the same path the room demo's census
+        // reads (`scripts/ring-room-demo.sh`), because `Provenance` is an
+        // externally-tagged enum and `Corpus` is its one grounded arm.
+        .filter_map(|h| h["provenance"]["corpus"].get("member"))
+        .map(|m| m.as_str())
+        .collect();
+    assert!(
+        !members.is_empty() && members.iter().all(|m| *m == Some("Bo")),
+        "every corpus holding over an all-Bo pool must name Bo — the door's node \
+         installs nothing, so anything else means the guest's turn never fanned \
+         out. Got: {members:?}"
+    );
+
+    // A second grant's bearer opens its OWN conversation. The ids are derived
+    // from the bearers, so this is arithmetic rather than a table somebody
+    // keyed right.
+    assert_ne!(
+        sovereign_daemon::routes_guest_ask::conversation_for_grant("bearer-first"),
+        sovereign_daemon::routes_guest_ask::conversation_for_grant("bearer-second"),
+        "two bearers collided onto one conversation — each could read the other's"
+    );
+
+    // And the conversation surface itself is not the guest's, by any spelling.
+    // `Scope::Rails` names the ask route and nothing under `/v1/conversations`,
+    // so the auth layer refuses before routing.
+    for path in [
+        "/v1/conversations",
+        "/v1/conversations/search",
+        &format!(
+            "/v1/conversations/{}",
+            sovereign_daemon::routes_guest_ask::conversation_for_grant("bearer-first")
+        ),
+    ] {
+        let status = http
+            .get(format!("http://{addr_door}{path}"))
+            .bearer_auth("bearer-first")
+            .send()
+            .await
+            .expect("the door is reachable")
+            .status();
+        assert!(
+            status == reqwest::StatusCode::UNAUTHORIZED
+                || status == reqwest::StatusCode::FORBIDDEN
+                || status == reqwest::StatusCode::NOT_FOUND,
+            "a guest reached {path} with status {status} — the conversation surface \
+             is not in any grant's scope and is not mounted on the door"
+        );
+    }
+}

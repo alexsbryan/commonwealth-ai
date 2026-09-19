@@ -7,7 +7,7 @@
 //! (ARCH §3.1), and a security-load-bearing closed set was buried in the
 //! middle of a mounting function.
 //!
-//! The type is one enum and four total `match`es over it. That is the point:
+//! The type is one enum and five total `match`es over it. That is the point:
 //! adding a principal class breaks every one of them, so a new surface cannot
 //! inherit a posture by silence.
 
@@ -115,6 +115,33 @@ impl ClientSurface {
         match self {
             Self::Operator | Self::Rail | Self::Guest => true,
             Self::Peer => false,
+        }
+    }
+
+    /// Whether the guest door's own answer route (`POST /v1/guest/ask`) is
+    /// mounted.
+    ///
+    /// `Guest` because that is the door, and the route exists for the person
+    /// standing in the room. `Operator` because a local caller already
+    /// reaches every route on this daemon, and because `Scope::Rails` names
+    /// this path — `every_scope_paths_are_mounted_and_never_privileged`
+    /// drives the operator router and a grant naming an unmounted path would
+    /// be born broken.
+    ///
+    /// **`Rail` is false and that is the whole point.** The route drives
+    /// inference on this box; a deployed ring app reaching it would turn a
+    /// rail listener into a compute surface. Same discipline as
+    /// [`Self::serves_general_client_routes`]: not a predicate that has to be
+    /// right, a mount that is absent. `Peer` is false because a member has
+    /// `/v1/chat/completions` and needs no door.
+    ///
+    /// Mounting it is necessary and not sufficient: the handler refuses any
+    /// caller the auth layer did not attach a `Guest` grant to, so the
+    /// operator mount answers "not a guest" rather than serving.
+    pub fn serves_guest_ask_route(self) -> bool {
+        match self {
+            Self::Operator | Self::Guest => true,
+            Self::Peer | Self::Rail => false,
         }
     }
 }

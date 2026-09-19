@@ -18,6 +18,7 @@ import {
   PROSE_FRAGMENT,
   applyNew,
   applyPresence,
+  citationLines,
   b64ToBytes,
   bytesToB64,
   changeAct,
@@ -441,4 +442,38 @@ test("two pages that absorbed the same acts in different orders name the same au
   const expected = ["last edited by bo 3s ago"];
   assert.deepEqual(alexFirst.lines(MEMBERS, NOW_SEC * 1000), expected);
   assert.deepEqual(boFirst.lines(MEMBERS, NOW_SEC * 1000), expected);
+});
+
+// ── the ask: which house held the evidence ────────────────────────────────
+
+test("a citation from a mesh member names the corpus AND the member", () => {
+  assert.deepEqual(
+    citationLines({
+      citations: [
+        { target: { corpus_id: "sep", chunk_id: 1 }, member: "littlemac" },
+        { target: { corpus_id: "wikipedia", chunk_id: 2 }, member: "halo" },
+      ],
+    }),
+    ["sep on littlemac", "wikipedia on halo"],
+  );
+});
+
+// `ReleasedCitation.member` is `None` for a passage from the answering
+// daemon's own corpus. Rendering the answering node's name there would be a
+// guess the page cannot check — the one failure this column exists to rule
+// out — so the corpus stands alone.
+test("a local citation names the corpus and invents no member", () => {
+  const lines = citationLines({
+    citations: [{ target: { corpus_id: "house-notes", chunk_id: 9 } }],
+  });
+  assert.deepEqual(lines, ["house-notes"]);
+  assert.ok(!lines[0].includes(" on "));
+});
+
+// An ungrounded turn and a turn that sent no ledger are different facts, and
+// both render as nothing rather than as a fabricated source.
+test("no ledger and no citations both render as no sources", () => {
+  assert.deepEqual(citationLines(null), []);
+  assert.deepEqual(citationLines({}), []);
+  assert.deepEqual(citationLines({ citations: [] }), []);
 });

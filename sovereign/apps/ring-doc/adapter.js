@@ -270,6 +270,33 @@ export function attributionLine(entry, members, nowMs) {
 }
 
 // ---------------------------------------------------------------------------
+// The ask — what the room answered, and which house held the evidence.
+//
+// The door runs the turn and hands back `{answer, epistemic_state}` and
+// nothing else (`routes_guest_ask.rs`). What makes that worth showing on a
+// guest's phone is not the prose: it is that each released citation names the
+// MESH MEMBER whose corpus the passage came from, so a person standing in one
+// room can see the answer was assembled out of several houses' shelves.
+
+/// One line per released citation: `<corpus> on <member>`, in release order.
+///
+/// A citation with no `member` came from the corpus on the daemon that
+/// answered — `ReleasedCitation.member` is documented as "`None` = local" —
+/// and renders as the corpus alone. It is NOT given the answering node's name:
+/// the page does not know it, and printing a guess would be the one failure
+/// this column exists to rule out. Absence reported, never defaulted.
+///
+/// An epistemic state with no citations yields an empty list, which is a real
+/// answer about an ungrounded turn and not the same thing as "no ledger".
+export function citationLines(epistemicState) {
+  const cites = (epistemicState && epistemicState.citations) || [];
+  return cites.map((c) => {
+    const corpus = (c.target && c.target.corpus_id) || "an unnamed corpus";
+    return c.member ? `${corpus} on ${c.member}` : corpus;
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Presence — the LIVE lane, not the rail.
 //
 // A cursor is delivery, never record: y-protocols drops a peer whose last

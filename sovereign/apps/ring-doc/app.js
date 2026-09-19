@@ -21,6 +21,7 @@ import {
   applyNew,
   applyPresence,
   changeAct,
+  citationLines,
   colorFor,
   createAttribution,
   decodeActs,
@@ -299,6 +300,42 @@ if (GUEST) {
     flush();
   });
   el("guest").hidden = false;
+}
+// The ask. A guest has a bearer in the fragment, so the shim can reach the
+// door's route; a member reading this page under `ring dev` has no grant and
+// the shim refuses by name, which is why the box is guest-only.
+if (GUEST) {
+  el("ask").hidden = false;
+  el("ask-go").addEventListener("click", async () => {
+    const question = el("ask-q").value.trim();
+    if (!question) return;
+    el("ask-go").disabled = true;
+    el("ask-a").textContent = "asking the room…";
+    el("ask-sources").replaceChildren();
+    try {
+      const { answer, epistemic_state } = await window.ring.ask(question);
+      el("ask-a").textContent = answer || "";
+      // Each source names the corpus and the mesh member that held it — the
+      // whole point of asking a room rather than a box. A turn with no
+      // citations shows none, and says so rather than showing an unsourced
+      // answer as if it were sourced.
+      const lines = citationLines(epistemic_state);
+      el("ask-sources").replaceChildren(
+        ...(lines.length
+          ? lines.map((line) => {
+              const li = document.createElement("li");
+              li.textContent = line;
+              return li;
+            })
+          : [Object.assign(document.createElement("li"), { textContent: "no sources cited" })]),
+      );
+    } catch (e) {
+      el("ask-a").textContent = "";
+      el("err").textContent = String(e.message || e);
+    } finally {
+      el("ask-go").disabled = false;
+    }
+  });
 }
 if (WALL) {
   el("wall").hidden = false;

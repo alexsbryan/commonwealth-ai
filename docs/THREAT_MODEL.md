@@ -51,7 +51,8 @@ Three zones, from most to least trusted:
   2026-08-27) is strictly weaker than a member and strictly weaker than a
   `client_token` holder. They present a short-lived, revocable bearer,
   may call only the exact paths their `Scope` set names (today
-  `/v1/models` + `/v1/chat/completions`) and only the models it lists.
+  `/v1/models` + `/v1/chat/completions` for a model scope; the three rail
+  routes + `/v1/guest/ask` for a rail scope) and only the models it lists.
   They never enter `Mesh.members`, never receive `mesh_secret`, and never
   learn the invite key — so "a guest cannot invite people" is structural:
   `Scope` has no variant that could express it. The grant lives only in
@@ -67,6 +68,19 @@ Three zones, from most to least trusted:
   the page reads the bearer from the URL fragment, which the browser never
   sends. The door also answers `/status` and `/oicp/v1/capabilities` to
   anyone on that network, as every non-loopback bind does.
+  A rail scope also carries `POST /v1/guest/ask`
+  (`sovereign/crates/sovereign-daemon/src/routes_guest_ask.rs`), which is how
+  the room answers a question for someone who holds no membership. Its bound
+  is the handler, not the path: the turn runs IN-PROCESS as the door's own
+  principal, in one conversation whose id is `sha256(bearer)` — so a second
+  grant's holder cannot name the first's — and the reply carries only
+  `{answer, epistemic_state}`. No conversation id and no message id leave the
+  door, and no `/v1/conversations*` route is in any `Scope`, so the surface a
+  guest would need to read somebody else's chat is neither granted nor
+  mounted for them. The grounded turn fans out across the mesh exactly as a
+  member's does, which means a guest's question can reach a sibling node's
+  corpus — that is the capability, and the citation says which member held
+  the passage.
 - **Everything else.** Nothing here is designed to face the public
   internet. The fail-closed defaults below exist so that crossing this
   line requires a deliberate operator decision, never an accident.

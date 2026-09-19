@@ -102,7 +102,22 @@ impl Scope {
     pub fn paths(&self) -> &'static [&'static str] {
         match self {
             Scope::Models(_) => &["/v1/models", "/v1/chat/completions"],
-            Scope::Rails(_) => &["/v1/rail/append", "/v1/rail/log", "/v1/rail/live"],
+            Scope::Rails(_) => &[
+                "/v1/rail/append",
+                "/v1/rail/log",
+                "/v1/rail/live",
+                // The door's own answer route. It rides with the rail rather
+                // than being a scope of its own for the same reason
+                // `/v1/models` rides with `/v1/chat/completions`: a guest who
+                // may write on the wall is a guest the room is willing to
+                // answer, and a second scope would make "the wall" two
+                // decisions an operator has to get right instead of one.
+                // Bounded by the handler, not by the path: it runs the turn as
+                // the DOOR's own principal in one conversation per grant, and
+                // returns only the answer and its ledger — no conversation id,
+                // no history, nothing a guest could use to reach another's.
+                "/v1/guest/ask",
+            ],
         }
     }
 
@@ -352,6 +367,9 @@ mod tests {
         assert!(g.permits_path("/v1/models"));
         // The whole point: everything else is refused with no per-route work.
         assert!(!g.permits_path("/v1/knowledge/search"));
+        // A model scope is not a door: the ask route belongs to the rail arm,
+        // so a plain lend-me-your-GPU grant cannot reach the room's answer.
+        assert!(!g.permits_path("/v1/guest/ask"));
         assert!(!g.permits_path("/v1/embeddings"));
         assert!(!g.permits_path("/v1/apps"));
         assert!(!g.permits_path("/internal/guest/grant"));
@@ -371,6 +389,7 @@ mod tests {
             "/v1/rail/append",
             "/v1/rail/log",
             "/v1/rail/live",
+            "/v1/guest/ask",
             "/v1/models",
             "/v1/chat/completions",
         ]

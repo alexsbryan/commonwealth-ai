@@ -281,8 +281,25 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
         Router::new()
     };
 
+    // The guest door's own answer route. Its own block rather than a line in
+    // `general` because the surfaces differ: `general` is everything-but-Rail,
+    // and this is Operator + Guest. See
+    // `ClientSurface::serves_guest_ask_route` for why each is what it is, and
+    // `routes_guest_ask` for what the handler refuses.
+    let guest_ask: Router<AppState> = if surface.serves_guest_ask_route() {
+        Router::new().route(
+            crate::routes_guest_ask::GUEST_ASK_PATH,
+            post(crate::routes_guest_ask::guest_ask)
+                .layer(admission())
+                .layer(fair_share()),
+        )
+    } else {
+        Router::new()
+    };
+
     general
         .merge(rail)
+        .merge(guest_ask)
         // OUTERMOST layer: bearer-token auth for non-loopback callers.
         // Wraps the whole client surface (including the per-route
         // admission gates), so authentication runs BEFORE load-shedding

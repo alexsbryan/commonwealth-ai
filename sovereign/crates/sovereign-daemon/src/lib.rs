@@ -168,6 +168,7 @@ pub mod reshaping;
 pub mod routes_apps;
 pub mod routes_completions;
 pub mod routes_edit_predictions;
+pub mod routes_guest_ask;
 pub mod routes_inference;
 pub mod routes_internal;
 pub mod routes_knowledge;

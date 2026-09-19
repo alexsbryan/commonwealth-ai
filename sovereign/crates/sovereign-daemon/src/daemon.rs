@@ -3690,6 +3690,14 @@ impl EmbeddedDaemon {
         let app_state_clone = app_state.clone();
         // The guest door — `crate::guest_door` says why it is its own bind.
         let door_state = app_state.clone();
+        // The turn host for `POST /v1/guest/ask`, on both binds a guest can
+        // reach: the door and the `GUEST_ALPN` forward. `AppState` carries no
+        // `Runtime`, so the handler is built from this the way every other
+        // turn surface in this crate is. A mesh-admin daemon upgrades fine
+        // and answers 503 naming itself — the absence is reported, not
+        // dressed as a 404.
+        let turn_host = self.self_weak.upgrade();
+        let door_turn_host = turn_host.clone();
         let (guest_bind, guest_page_dir) = {
             let c = self.setup_config.read().await;
             (c.daemon.guest_bind.clone(), c.daemon.guest_page_dir.clone())
@@ -3729,10 +3737,13 @@ impl EmbeddedDaemon {
                 app_state_clone.clone(),
                 crate::server::ClientSurface::Peer,
             );
-            let guest_router = crate::server::client_router_for(
+            let mut guest_router = crate::server::client_router_for(
                 app_state_clone.clone(),
                 crate::server::ClientSurface::Guest,
             );
+            if let Some(host) = turn_host {
+                guest_router = guest_router.layer(axum::Extension(host));
+            }
             let rail_router = crate::server::client_router_for(
                 app_state_clone,
                 crate::server::ClientSurface::Rail,
@@ -3845,7 +3856,7 @@ impl EmbeddedDaemon {
                 _ = guest_serve => {}
                 _ = peer_serve => {}
                 _ = rail_serve => {}
-                _ = crate::guest_door::serve(door_state, guest_bind, guest_page_dir) => {}
+                _ = crate::guest_door::serve(door_state, guest_bind, guest_page_dir, door_turn_host) => {}
                 _ = shutdown_rx => {
                     info!("Commonwealth daemon shutting down");
                 }
