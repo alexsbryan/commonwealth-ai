@@ -169,6 +169,31 @@ today's path, in parallel with ANS. Its K3 (what a policy update changed) waits
 for the product rung (stage 1b), as does Virco, which is supersession
 throughout.
 
+## Feasibility spikes — before ratification, and what they may not touch
+
+Four spikes run before the bars are ratified (operator, 2026-09-19). They may
+change which corpus is used, how banks are sized, and whether a kind is
+attempted at all. They may not set or move a bar's threshold, and none of them
+runs an arm against a study bank — no study bank exists yet. Each result is
+recorded under Deviations with its data under `spikes/`.
+
+1. **K1 ceiling.** On an installed atlas corpus, one enumeration question over
+   a type with 30 or more atoms: how many members reach the prompt, and how
+   many reach the answer. The enumeration path takes the top 16 atoms
+   (`SOVEREIGN_ATOM_ENUM_TOPK`) and its chunks still pass `KQ_MERGED_LIMIT` and
+   `MAX_KNOWLEDGE_CHARS`, so the full arm's ceiling on "list them all" may sit
+   near 16 whatever the ontology declares. If it does, K1 needs a product rung
+   as K3 does, and the study says so before it is built.
+2. **Fine-print data.** Five services: the share of ToS;DR quotes that
+   re-anchor into Open Terms Archive text, the overlap of the two archives, and
+   real K1 set sizes.
+3. **Extraction census.** A throwaway adaptation of the `contracts` template
+   over three services' policies: atom count per declared type. This lets the
+   author see extraction before the on-camera authoring, so that record
+   measures adaptation, not first contact, and says so.
+4. **Closed-book screen.** Ten detail questions to the synthesis model with no
+   retrieval.
+
 ## Corpora and held-out truth
 
 Truth never enters a corpus. Figures below come from the 2026-09-17 scouting
