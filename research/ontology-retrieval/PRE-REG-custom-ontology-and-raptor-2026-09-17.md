@@ -194,6 +194,50 @@ recorded under Deviations with its data under `spikes/`.
 4. **Closed-book screen.** Ten detail questions to the synthesis model with no
    retrieval.
 
+## Decision tree after the spikes
+
+Written 2026-09-19 at 14:45 PDT, after spikes 1, 2, 4 and the local 108-section
+census, and BEFORE the full 449-section census on the rented pod returned. The
+thresholds for that census are fixed here so its result selects a branch
+instead of inspiring one. None of these is a bar; they decide what is built and
+attempted, not what is claimed.
+
+| # | Question | Evidence in hand | Branch |
+|---|---|---|---|
+| D1 | Is the enumeration mechanism worth a study? | Spike 1: 1/40 → 20/40 members named | **Go.** Settled. Capacity only; quality is what the study measures. |
+| D2 | Can K1 arms run on today's path? | Spike 1: at top-K 40 every merge slot is a virtual chunk | **No, until passages hold a reserved share of the merge.** Without it K1 arms are never-ran, not nulls. |
+| D3 | Does declared extraction support fine-print K1 over `data_type`? | Local: Spotify 10/10 against its own table, LinkedIn weak | **Full census decides.** `data_type` recall against each service's own published list ≥ 0.7 on at least 2 of the 3 services → go. Otherwise fine print loses K1 and D6 applies. |
+| D4 | Are `recipient` questions attempted? | Local: Spotify 4/13 by name; "partners" absorbed four distinct recipients | **Full census decides.** Spotify recall by name < 0.5 → not attempted until the head-noun merge is fixed and re-censused. ≥ 0.5 → attempted. |
+| D5 | Are obligation and K3 questions attempted on any declared corpus? | Local: deontic filled on 2.5% of 320 claims | **No, until the fill rate is ≥ 70% on a re-census.** This is an engine defect (the prompt's claim example omits the attribute), so it blocks Virco and fine-print K3 alike. |
+| D6 | Does fine print keep the stage? | Spikes 2 and 4 passed for detail questions | Keeps it if D3 is go. If D3 fails after one fix round, **ANS takes the stage**, as already written; no new candidate is scouted. |
+| D7 | Does the quantisation matter? | Local ran IQ4_NL, the pod runs Q6_K | On the 108 sections both runs cover, if any declared type's atom count differs by more than 2× → the quant is part of the model freeze and is chosen deliberately. Otherwise either serves. |
+| D8 | Where do the arms run? | Pod: 4.7 s a section, no refusals, $0.72/h. Shared local daemon: 20–30 s, 9 of 108 sections refused | **On a rented pod, one per corpus,** if the pilot's per-question synth latency there is at most half the local figure. Otherwise local, in a reserved window. |
+
+**The product rung the spikes require (lane X of the stage-0 queue).** Each is
+pre-registered as mechanism, judged on a fixture and a re-census, never on a
+study bank:
+
+- required before any arm: the passage reservation (D2); the deontic attribute
+  shown in the extraction prompt's claim example (D5); document and service
+  context carried into the extraction prompt, not the section title alone
+  (18–33% of atoms had no service);
+- required for within-service K1: the 15-entities-a-section cap, which
+  Spotify's data table hit;
+- conditional on D4: the head-noun merge;
+- deferred unless check A2 shows a declared type under 0.5: the 83 junk
+  `person` atoms and the 56% orphan rate.
+
+**The spike services are a development set.** Reddit, Spotify and LinkedIn
+have now shaped both a declaration and the engine fixes. They stay in the
+corpus, their questions are reported as their own scoreboard row, and they are
+excluded from every bar. The re-census that gates D3–D5 runs on three services
+that were not in the spike, chosen by the corpus rule.
+
+**Ratification waits for:** lane X landed, the re-census meeting D3 and D5, and
+the pilot. If the re-census fails after ONE fix round, the failing question
+family is dropped from the study and named in Non-goals; there is no second
+round.
+
 ## Corpora and held-out truth
 
 Truth never enters a corpus. Figures below come from the 2026-09-17 scouting
