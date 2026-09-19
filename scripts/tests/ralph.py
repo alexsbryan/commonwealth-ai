@@ -145,6 +145,64 @@ class ModelTests(unittest.TestCase):
                              ["--model", "r", "--variant", "high"])
 
 
+class ModelPrecedenceTests(unittest.TestCase):
+    def resolved(self, tmp, argv):
+        args = ralph.build_parser().parse_args(argv)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            paths = ralph.paths_for(args)
+            models = ralph.resolve_models(args, paths)
+        return args, models, buf.getvalue()
+
+    def test_manifest_then_flag_then_models_env(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "ralph/next/a/queue.toml",
+                  'session_timeout = 7200\n[models]\nworker = "m/worker"\nvariant = "high"\n')
+            write(tmp, "ralph/models.env", "MODEL=e/worker\nREVIEW_MODEL=e/review\n"
+                                           "RESOLVE_MODEL=e/resolve\nVARIANT=low\n")
+            args, models, said = self.resolved(
+                tmp, ["supervise", "--workdir", tmp, "--queue", "a", "--model", "f/worker",
+                      "--review-model", "f/review", "--session-timeout", "60"])
+            self.assertEqual(models, {"MODEL": "m/worker", "REVIEW_MODEL": "f/review",
+                                      "RESOLVE_MODEL": "e/resolve", "VARIANT": "high"})
+            self.assertEqual(args.session_timeout, 7200)
+            self.assertIn("ignoring --model f/worker", said)
+            self.assertIn("ignoring --session-timeout 60", said)
+
+    def test_a_legacy_line_is_flag_then_models_env(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "ralph/models.env", "MODEL=e/worker\nREVIEW_MODEL=e/review\n")
+            args, models, said = self.resolved(
+                tmp, ["run", "--workdir", tmp, "--model", "f/worker", "--session-timeout", "7200"])
+            self.assertEqual(models, {"MODEL": "f/worker", "REVIEW_MODEL": "e/review",
+                                      "RESOLVE_MODEL": "", "VARIANT": ""})
+            self.assertEqual((args.session_timeout, said), (7200, ""))
+
+    def test_models_with_a_queue_rewrites_the_manifest_and_not_the_shared_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest = write(tmp, "ralph/next/a/queue.toml",
+                             '# the a queue\nlabel = "alpha"\n\n[models]\n'
+                             'worker = "old/worker"  # was cheap\nvariant = "high"\n\n'
+                             '[checks]\nhello = ["echo", "hi"]\n')
+            write(tmp, "ralph/next/b/queue.toml", 'label = "beta"\n')
+            rc, out, _ = quiet_main(["models", "--workdir", tmp, "--queue", "a",
+                                     "--model", "new/worker", "--review-model", 'r/"q"'])
+            self.assertEqual(rc, 0)
+            self.assertIn("ralph/next/a/queue.toml", out)
+            self.assertFalse((pathlib.Path(tmp) / "ralph/models.env").exists())
+            text = manifest.read_text()
+            self.assertIn("# the a queue\n", text)
+            self.assertIn('[checks]\nhello = ["echo", "hi"]\n', text)
+            self.assertNotIn("old/worker", text)
+            m = ralph.load_manifest(tmp, "a")
+            self.assertEqual(m.models, {"MODEL": "new/worker", "REVIEW_MODEL": 'r/"q"',
+                                        "VARIANT": "high"})
+            self.assertEqual((m.label, m.checks), ("alpha", {"hello": ("echo", "hi")}))
+            quiet_main(["models", "--workdir", tmp, "--queue", "b", "--resolve-model", "d/z"])
+            self.assertEqual(ralph.load_manifest(tmp, "b").models, {"RESOLVE_MODEL": "d/z"})
+            self.assertEqual(ralph.load_manifest(tmp, "b").label, "beta")
+
+
 class ResolverPromptTests(unittest.TestCase):
     def test_without_charter_the_resolver_defers(self):
         paths = ralph.Paths(pathlib.Path("/tmp/x"))

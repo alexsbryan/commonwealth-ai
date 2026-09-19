@@ -420,6 +420,63 @@ def load_manifest(workdir, name):
            for key, default in MANIFEST_PATH_KEYS.items()})
 
 
+MODEL_FLAGS = {"MODEL": "model", "REVIEW_MODEL": "review_model",
+               "RESOLVE_MODEL": "resolve_model", "VARIANT": "variant"}
+
+
+def resolve_models(args, paths):
+    """The one model decider: the queue's `[models]`, then the flag, then the
+    per-checkout models.env. A flag the manifest overrides is named, not dropped."""
+    shared = load_models(paths.p(paths.models))
+    declared = paths.manifest.models if paths.manifest else {}
+    out = {}
+    for key, flag in MODEL_FLAGS.items():
+        given = getattr(args, flag, "") or ""
+        if declared.get(key):
+            if given and given != declared[key]:
+                say(f"--queue {paths.queue} wins: ignoring --{flag.replace('_', '-')} {given} "
+                    f"({paths.manifest.path} [models] names {declared[key]})")
+            out[key] = declared[key]
+        else:
+            out[key] = given or shared.get(key, "")
+    return out
+
+
+def write_manifest_models(file, updates):
+    """Set `[models]` keys in a queue.toml by line, leaving every other line as
+    written (tomllib reads only; a re-serialise would drop the comments). The
+    result must load, or the file is put back."""
+    import json
+    import tomllib
+    original = file.read_text()
+    lines = original.splitlines()
+    header = next((i for i, l in enumerate(lines) if l.strip() == "[models]"), None)
+    if header is None:
+        if lines and lines[-1].strip():
+            lines.append("")
+        lines.append("[models]")
+        header = len(lines) - 1
+    end = next((i for i in range(header + 1, len(lines)) if lines[i].lstrip().startswith("[")),
+               len(lines))
+    while end > header + 1 and not lines[end - 1].strip():
+        end -= 1                      # new keys go above the blank lines that close the table
+    for key, value in updates.items():
+        entry = f"{key} = {json.dumps(value, ensure_ascii=False)}"
+        at = next((i for i in range(header + 1, end)
+                   if re.match(rf"\s*{re.escape(key)}\s*=", lines[i])), None)
+        if at is None:
+            lines.insert(end, entry)
+            end += 1
+        else:
+            lines[at] = entry
+    file.write_text("\n".join(lines) + "\n")
+    try:
+        tomllib.loads(file.read_text())
+    except tomllib.TOMLDecodeError as e:
+        file.write_text(original)
+        raise ValueError(f"{file}: the [models] rewrite did not parse ({e}); file restored") from e
+
+
 @dataclasses.dataclass
 class Paths:
     workdir: pathlib.Path
@@ -1224,10 +1281,7 @@ def runtime_markers(paths):
 def cmd_plan(args):
     paths = paths_for(args)
     queue = Queue(paths.p(paths.state))
-    models = load_models(paths.p(paths.models))
-    model = args.model or models.get("MODEL", "")
-    review = args.review_model or models.get("REVIEW_MODEL", "")
-    variant = args.variant or models.get("VARIANT", "")
+    models = resolve_models(args, paths)
     unit = queue.current()
     print(f"prompt: {paths.prompt}  queue: {paths.state}")
     print(f"commits since review: n/a  head: {head_of(paths.workdir)[:9]}")
@@ -1235,7 +1289,8 @@ def cmd_plan(args):
     if unit is None:
         print("no ready unit")
         return 0
-    routed = select_model_args(unit.id, model, review, variant)
+    routed = select_model_args(unit.id, models["MODEL"], models["REVIEW_MODEL"],
+                               models["VARIANT"])
     print(f"unit {unit.id} — {' '.join(routed) or 'configured default'}")
     return 0
 
@@ -1311,8 +1366,26 @@ def cmd_promote(args):
     return 0
 
 
+def models_in_manifest(args, paths):
+    """`models --queue`: the queue's own `[models]`, never the shared models.env."""
+    toml_keys = {v: k for k, v in MANIFEST_MODEL_KEYS.items()}
+    updates = {toml_keys[key]: getattr(args, flag) for key, flag in MODEL_FLAGS.items()
+               if getattr(args, flag)}
+    if updates:
+        write_manifest_models(paths.p(paths.manifest.path), updates)
+        say(f"models: wrote [models] {', '.join(updates)} in {paths.manifest.path} — "
+            "a running loop reads it on its next start")
+    current = load_manifest(paths.workdir, paths.queue).models
+    print(f"models: {paths.manifest.path} [models]")
+    for key in MODEL_KEYS:
+        print(f"  {toml_keys[key]}={current.get(key) or '<unset>'}")
+    return 0
+
+
 def cmd_models(args):
     paths = paths_for(args)
+    if paths.manifest:
+        return models_in_manifest(args, paths)
     file = paths.p(paths.models)
     current = load_models(file)
     if args.model or args.review_model or args.resolve_model or args.variant:
@@ -1347,7 +1420,7 @@ def cmd_models(args):
 
 def cmd_pool(args):
     paths = paths_for(args)
-    models = load_models(paths.p(paths.models))
+    models = resolve_models(args, paths)
     base = args.base_branch or subprocess.run(
         ["git", "-C", str(paths.workdir), "rev-parse", "--abbrev-ref", "HEAD"],
         capture_output=True, text=True).stdout.strip()
@@ -1360,9 +1433,8 @@ def cmd_pool(args):
                 lanes=args.lanes, base_branch=base, conflicts=args.conflicts,
                 prompt=args.prompt, state=args.state,
                 marker_timeout=args.marker_timeout,
-                model=args.model or models.get("MODEL", ""),
-                review_model=args.review_model or models.get("REVIEW_MODEL", ""),
-                variant=args.variant or models.get("VARIANT", ""))
+                model=models["MODEL"], review_model=models["REVIEW_MODEL"],
+                variant=models["VARIANT"])
     if args.install_launchd:
         ensure_excludes(paths.workdir, RUNTIME_MARKERS + (".ralph/",))
         inner = [sys.executable, str(pathlib.Path(__file__).resolve()), "pool",
@@ -1435,7 +1507,8 @@ def cmd_watch(args):
         plist = install_launchd(
             f"dev.ralphwatch.{paths.workdir.name}-{args.label}",
             [sys.executable, str(pathlib.Path(__file__).resolve()),
-             "watch", "--workdir", str(paths.workdir), "--label", args.label],
+             "watch", "--workdir", str(paths.workdir), "--label", args.label,
+             *(["--queue", paths.queue] if paths.queue else [])],
             paths.workdir, state_dir / "watch.log", interval=120)
         print(f"wrote {plist}")
         return 0
@@ -1443,6 +1516,7 @@ def cmd_watch(args):
     return 0
 
 
+DEFAULT_SESSION_TIMEOUT = 3600
 LEGACY_PATH_FLAGS = ("prompt", "state", "charter", "conflicts")
 
 
@@ -1462,6 +1536,8 @@ def paths_for(args):
     if not name:
         if getattr(args, "label", "") is None:
             args.label = "campaign"
+        if getattr(args, "session_timeout", 0) is None:
+            args.session_timeout = DEFAULT_SESSION_TIMEOUT
         return Paths(workdir,
                      prompt=getattr(args, "prompt", None) or "ralph/PROMPT.md",
                      state=getattr(args, "state", None) or "ralph/STATE.md",
@@ -1474,6 +1550,14 @@ def paths_for(args):
                 f"({m.path} names {getattr(m, flag)})")
     if getattr(args, "label", "") is None:
         args.label = m.label
+    given = getattr(args, "session_timeout", 0)
+    if m.session_timeout:
+        if given and given != m.session_timeout:
+            say(f"--queue {name} wins: ignoring --session-timeout {given} "
+                f"({m.path} names {m.session_timeout})")
+        args.session_timeout = m.session_timeout
+    elif given is None:
+        args.session_timeout = DEFAULT_SESSION_TIMEOUT
     return Paths(workdir, prompt=m.prompt, state=m.state, charter=m.charter,
                  conflicts=m.conflicts, heavy=m.heavy, queue=name, manifest=m,
                  log_dir=f"target/ralph/{name}", **Paths.control_files(m.control_dir))
@@ -1488,7 +1572,7 @@ def queue_flags(paths):
 
 def cmd_run(args):
     paths = paths_for(args)
-    models = load_models(paths.p(paths.models))
+    models = resolve_models(args, paths)
     session = Session(paths, timeout=args.session_timeout,
                       notify_enabled=args.notify)
     campaign = Campaign(
@@ -1497,9 +1581,7 @@ def cmd_run(args):
         notify_enabled=args.notify,
         max_stall=args.max_stall, max_iter=args.max_iter,
         marker_timeout=args.marker_timeout,
-        model=args.model or models.get("MODEL", ""),
-        review_model=args.review_model or models.get("REVIEW_MODEL", ""),
-        variant=args.variant or models.get("VARIANT", ""))
+        model=models["MODEL"], review_model=models["REVIEW_MODEL"], variant=models["VARIANT"])
     if args.install_launchd:
         ensure_excludes(paths.workdir, runtime_markers(paths))
         plist = install_launchd(
@@ -1520,7 +1602,7 @@ def cmd_run(args):
 
 def cmd_supervise(args):
     paths = paths_for(args)
-    models = load_models(paths.p(paths.models))
+    models = resolve_models(args, paths)
     session = Session(paths, timeout=args.session_timeout, notify_enabled=args.notify)
     campaign = list(args.campaign)
     if campaign and campaign[0] == "--":
@@ -1538,9 +1620,8 @@ def cmd_supervise(args):
         subprocess.run(campaign, cwd=str(paths.workdir))
 
     def resolver_run(attempt, reason):
-        resolve_model = (args.resolve_model or models.get("RESOLVE_MODEL", "")
-                         or args.review_model or models.get("REVIEW_MODEL", ""))
-        resolve_variant = args.resolve_variant or args.variant or models.get("VARIANT", "")
+        resolve_model = models["RESOLVE_MODEL"] or models["REVIEW_MODEL"]
+        resolve_variant = args.resolve_variant or models["VARIANT"]
         model_args = select_model_args("review", resolve_model, "", resolve_variant)
         prompt = resolver_prompt(paths, attempt, args.resolve_max, reason, charter)
         session.run(model_args, prompt,
@@ -1554,7 +1635,8 @@ def cmd_supervise(args):
             f"dev.ralph.{paths.workdir.name}-{args.label}",
             [sys.executable, str(pathlib.Path(__file__).resolve()), "supervise",
              "--workdir", str(paths.workdir), "--label", args.label,
-             "--session-timeout", str(args.session_timeout)] + campaign,
+             "--session-timeout", str(args.session_timeout),
+             *(["--queue", paths.queue] if paths.queue else [])] + campaign,
             paths.workdir, str(state_dir_for(paths, args.label) / "launchd.log"))
         print(f"wrote {plist}")
         return 0
@@ -1639,7 +1721,8 @@ def build_parser():
         else:
             p.add_argument("--workdir", default=".")
             p.add_argument("--label", default="campaign")
-        p.add_argument("--session-timeout", type=int, default=3600)
+        p.add_argument("--session-timeout", type=int, default=None if queue else 3600,
+                       help="default: 3600")
         p.add_argument("--marker-timeout", type=int, default=7200)
         p.add_argument("--notify", action="store_true", default=notify_default)
         p.add_argument("--model", default="")
