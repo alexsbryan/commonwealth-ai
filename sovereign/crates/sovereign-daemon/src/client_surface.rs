@@ -24,7 +24,7 @@ use crate::client_auth::ClientAuthPolicy;
 /// |---|---|---|---|---|
 /// | `Operator` | a real local caller on `:9741` | yes | yes | yes |
 /// | `Peer` | a MEMBER dialling `CLIENT_ALPN` | yes | yes | **no** |
-/// | `Guest` | `GUEST_ALPN`, and a downgraded stranger | no | yes | no |
+/// | `Guest` | `GUEST_ALPN`, a downgraded stranger, and the guest door | no | yes | no |
 /// | `Rail` | a deployed ring app, on its own loopback bind | no | **no** | no |
 ///
 /// **`Peer` exists because "is the caller loopback" is meaningless on a
@@ -105,13 +105,16 @@ impl ClientSurface {
     ///
     /// `Operator` serves them too — a local caller can already reach every
     /// route on this daemon, so withholding them there would buy nothing
-    /// and would leave `svrn ring` unable to read its own ledger. `Peer`
-    /// and `Guest` do not: a ring rail is loopback-only in M0, so a mesh
-    /// member reaching this daemon has no business on it.
+    /// and would leave `svrn ring` unable to read its own ledger. `Guest`
+    /// serves them because the guest door (`crate::guest_door`) is this
+    /// surface, and a guest holding a wall grant writes to the ring: the
+    /// grant's `Scope::Rails` names the one namespace, and a guest with no
+    /// rail scope is refused by the auth layer before routing. `Peer` does
+    /// not: a mesh member reaching this daemon has no business on its rail.
     pub fn serves_rail_routes(self) -> bool {
         match self {
-            Self::Operator | Self::Rail => true,
-            Self::Peer | Self::Guest => false,
+            Self::Operator | Self::Rail | Self::Guest => true,
+            Self::Peer => false,
         }
     }
 }

@@ -411,6 +411,7 @@ impl Runtime {
             demand_plan,
             unavailable_corpora,
             atlas_summaries,
+            peer_attribution,
             ..
         } = pipeline_state;
 
@@ -573,6 +574,7 @@ impl Runtime {
                 search_ms,
                 retrieved_chunks: Vec::new(),
                 source_map: HashMap::new(),
+                peer_attribution: HashMap::new(),
                 result_quality: "empty",
                 // Parametric request — tiny prompt, can't overflow.
                 prompt_budget_note: None,
@@ -845,6 +847,7 @@ impl Runtime {
                 search_ms,
                 retrieved_chunks: Vec::new(),
                 source_map: HashMap::new(),
+                peer_attribution: HashMap::new(),
                 result_quality: "weak_evidence",
                 prompt_budget_note: None,
                 folder_meta: std::collections::HashMap::new(),
@@ -1604,6 +1607,7 @@ impl Runtime {
             search_ms,
             retrieved_chunks,
             source_map,
+            peer_attribution,
             result_quality,
             prompt_budget_note,
             folder_meta,
@@ -1751,6 +1755,7 @@ impl Runtime {
                 // have no custody row and read as unknown by index.
                 chunk_custodies: gate_parts.chunk_custodies,
                 chunk_urls: gate_parts.chunk_urls,
+                chunk_members: gate_parts.chunk_members,
                 searcher: Some(std::sync::Arc::new(
                     self.claim_searcher(
                         context.conversation.enabled_corpora.as_deref(),
@@ -1916,7 +1921,7 @@ impl Runtime {
         let mut authority_guard_meta: Option<serde_json::Value> = None;
         let final_content = if let Some(armed) = crate::runtime::authority_guard::armed_for_evidence(
             &self.tools,
-            &crate::runtime::epistemic::pool_corpora(&plan.chunks),
+            &crate::runtime::epistemic::pool_context(&plan.chunks).corpora,
             "knowledge_query",
         ) {
             let basis = crate::runtime::authority_guard::GuardBasis {
@@ -1945,7 +1950,7 @@ impl Runtime {
 
         let (sources_for_prov, coverage_for_prov) = build_provenance_components(
             &plan.source_map,
-            &std::collections::HashMap::new(),
+            &plan.peer_attribution,
             &plan.folder_meta,
             // KnowledgeQueryPlan doesn't yet carry a display-category
             // lookup. See the matching note in the streaming path
@@ -2077,10 +2082,11 @@ impl Runtime {
                     gate_meta: grounding_gate_meta.as_ref(),
                     gate_claims: gate_claims.as_deref(),
                     general_knowledge,
-                    pool_corpora: crate::runtime::epistemic::pool_corpora(&plan.chunks),
                     demands,
                     gaps,
-                    ..Default::default()
+                    ..crate::runtime::epistemic::EpistemicInputs::over(
+                        crate::runtime::epistemic::pool_context(&plan.chunks),
+                    )
                 },
             ))
         } else {

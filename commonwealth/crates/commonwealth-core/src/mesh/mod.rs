@@ -348,6 +348,9 @@ pub struct IrohDialInfo {
     /// acceptor, not the config, so a declared origin whose endpoint never
     /// bound is not advertised.
     pub origins: Vec<crate::capabilities::OriginKind>,
+    /// See [`crate::capabilities::NodeCapabilities::media_allow`]; empty
+    /// when no media route is live.
+    pub media_allow: Vec<String>,
 }
 
 /// Current status of a node as observed by the mesh.

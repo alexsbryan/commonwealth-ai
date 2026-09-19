@@ -285,6 +285,9 @@ pub struct EmbeddedDaemon {
     /// registries would make a published app reachable or unreachable
     /// depending on which half you asked.
     published_apps: commonwealth_media::PublishedApps,
+    /// `[iroh] media_origin` + `media_allow`, live: boot seeds it, reload
+    /// replaces it, the acceptor reads it per dial — one route, as above.
+    media_route: sovereign_mesh::iroh_access::MediaRoute,
     /// Per-node sticky endpoint choice for RPC-worker discovery — the hysteresis
     /// state that stops a single transient direct-ip probe miss from flipping a
     /// worker's transport identity (direct-ip ↔ iroh-bridge loopback). Both the
@@ -613,6 +616,7 @@ impl EmbeddedDaemon {
             fabric: std::sync::RwLock::new(None),
             rpc_endpoint_nodes: std::sync::RwLock::new(std::collections::HashMap::new()),
             published_apps: commonwealth_media::PublishedApps::default(),
+            media_route: sovereign_mesh::iroh_access::MediaRoute::default(),
             rpc_worker_sticky: std::sync::RwLock::new(std::collections::HashMap::new()),
             rpc_worker_last_seen: std::sync::RwLock::new(std::collections::HashMap::new()),
         })
@@ -650,6 +654,12 @@ impl EmbeddedDaemon {
     /// routes take and release claims in it.
     pub fn published_apps(&self) -> &commonwealth_media::PublishedApps {
         &self.published_apps
+    }
+
+    /// The live media route the acceptor reads per dial.
+    #[cfg(test)]
+    pub(crate) fn media_route(&self) -> &sovereign_mesh::iroh_access::MediaRoute {
+        &self.media_route
     }
 
     /// This node's `[iroh] media_origin` as configured, for the surface that
@@ -917,6 +927,22 @@ impl EmbeddedDaemon {
                 changed = ?diff.models_changed,
                 "admin_reload: inference provider swapped"
             );
+        }
+
+        if !diff.media_changed.is_empty() {
+            // Parsed by the one decider boot uses; an origin that does not
+            // parse fails the reload before the baseline advances.
+            let (origin, allow) = sovereign_mesh::iroh_access::MediaRoute::parse(
+                fresh.iroh.media_origin.as_deref(),
+                &fresh.iroh.media_allow,
+            )?;
+            self.media_route.set(origin, allow);
+            self.media_route
+                .set_declared(commonwealth_media::read_declared_in(
+                    &commonwealth_media::dir_under(&self.data_dir),
+                ));
+            reloaded.extend(diff.media_changed.iter().map(|f| (*f).to_string()));
+            info!(changed = ?diff.media_changed, "admin_reload: media route swapped live");
         }
 
         let restart_required_fields: Vec<String> = diff
@@ -3272,11 +3298,19 @@ impl EmbeddedDaemon {
         // ceiling (default 1) regardless of whether a corpus engine is present,
         // so a storage-only or inference-only node is still bounded.
         {
-            let max = self.setup_config.read().await.daemon.max_peer_inflight;
+            let (max, reads) = {
+                let cfg = self.setup_config.read().await;
+                (
+                    cfg.daemon.max_peer_inflight,
+                    cfg.daemon.max_peer_knowledge_reads,
+                )
+            };
             app_state.set_contribution_max_peer_inflight(max);
+            app_state.set_contribution_max_peer_knowledge_reads(reads);
             info!(
                 max_peer_inflight = max,
-                "admission: peer-inflight ceiling configured"
+                max_peer_knowledge_reads = reads,
+                "admission: peer-inflight and knowledge-read ceilings configured"
             );
         }
 
@@ -3654,6 +3688,12 @@ impl EmbeddedDaemon {
         // teardown — dropping the old `:9741`/`:9742` listeners — before an
         // in-process re-create (`leave_to_solo`) rebinds the same ports.
         let app_state_clone = app_state.clone();
+        // The guest door — `crate::guest_door` says why it is its own bind.
+        let door_state = app_state.clone();
+        let (guest_bind, guest_page_dir) = {
+            let c = self.setup_config.read().await;
+            (c.daemon.guest_bind.clone(), c.daemon.guest_page_dir.clone())
+        };
         // Each start (including an in-process re-create) answers the bind
         // question afresh; the serve task publishes the outcome below.
         self.client_listener.send_replace(ClientListener::Pending);
@@ -3805,6 +3845,7 @@ impl EmbeddedDaemon {
                 _ = guest_serve => {}
                 _ = peer_serve => {}
                 _ = rail_serve => {}
+                _ = crate::guest_door::serve(door_state, guest_bind, guest_page_dir) => {}
                 _ = shutdown_rx => {
                     info!("Commonwealth daemon shutting down");
                 }
@@ -4214,24 +4255,15 @@ impl EmbeddedDaemon {
         // Parsed here and REFUSED by name if it does not parse: a media library
         // silently not served is the shape of a demo that fails at the worst
         // moment, and a dropped config value is the §18.3 substitution.
-        let media_origin: Option<std::net::SocketAddr> = {
-            let raw = self.setup_config.read().await.iroh.media_origin.clone();
-            match raw {
-                None => None,
-                Some(raw) => match raw.parse() {
-                    Ok(addr) => Some(addr),
-                    Err(e) => {
-                        return Err(MeshError::Config(format!(
-                            "[iroh] media_origin = \"{raw}\" is not a host:port ({e}) — a node \
-                             that cannot parse what it would serve must not boot pretending to \
-                             serve it"
-                        )))
-                    }
-                },
-            }
-        };
-        // Who may reach it, by the names the roster shows. Empty = every member.
-        let media_allow: Vec<String> = self.setup_config.read().await.iroh.media_allow.clone();
+        {
+            let cfg = self.setup_config.read().await;
+            let (origin, allow) = sovereign_mesh::iroh_access::MediaRoute::parse(
+                cfg.iroh.media_origin.as_deref(),
+                &cfg.iroh.media_allow,
+            )
+            .map_err(MeshError::Config)?;
+            self.media_route.set(origin, allow);
+        }
         // AN OFFER ORIGIN A MEMBER MAY REACH — what this operator has going
         // spare. Parsed here and REFUSED by name if it does not parse, for
         // media's reason: a node that cannot parse what it would serve must
@@ -4293,8 +4325,7 @@ impl EmbeddedDaemon {
             internal_port,
             peer_addr,
             guest_addr,
-            media_origin,
-            media_allow.clone(),
+            self.media_route.clone(),
             apps.clone(),
             offer.clone(),
             member_check.clone(),
@@ -4376,7 +4407,7 @@ impl EmbeddedDaemon {
             let routed = iroh_routed_classes.clone();
             let required = iroh_required_classes.clone();
             let member_check = member_check.clone();
-            let media_allow = media_allow.clone();
+            let media = self.media_route.clone();
             let rebuild: sovereign_mesh::iroh_watchdog::RebuildFn = Arc::new(move || {
                 let state = state.clone();
                 let data_dir = data_dir.clone();
@@ -4385,7 +4416,7 @@ impl EmbeddedDaemon {
                 let routed = routed.clone();
                 let required = required.clone();
                 let member_check = member_check.clone();
-                let media_allow = media_allow.clone();
+                let media = media.clone();
                 let apps = apps.clone();
                 let offer = offer.clone();
                 Box::pin(async move {
@@ -4394,8 +4425,7 @@ impl EmbeddedDaemon {
                         internal_port,
                         peer_addr,
                         guest_addr,
-                        media_origin,
-                        media_allow.clone(),
+                        media.clone(),
                         apps.clone(),
                         offer.clone(),
                         member_check.clone(),

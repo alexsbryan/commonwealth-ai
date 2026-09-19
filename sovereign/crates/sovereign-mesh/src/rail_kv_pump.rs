@@ -21,7 +21,7 @@
 //! Rung 4a recorded that WHEN to seal is the operator's call. That holds for
 //! an APP's ring: sealing forgets history, and an app's history is the app's.
 //! It does not hold here. The namespaces in
-//! [`DAEMON_OWN_NAMESPACES`](crate::ring_roster::DAEMON_OWN_NAMESPACES) are
+//! `DAEMON_OWN_NAMESPACES` (retired: membership is now every ring's default roster, `crate::ring_roster`) are
 //! ones the daemon writes on its own behalf, on a cadence no person chose, and
 //! nobody is going to run `svrn ring seal inference` every few weeks. A journal
 //! nobody seals grows without bound on every node in the mesh, so leaving the
@@ -836,7 +836,7 @@ pub enum Projector {
 /// `measurements_rail` knows only its own.
 ///
 /// **Not keyed on
-/// [`DAEMON_OWN_NAMESPACES`](crate::ring_roster::DAEMON_OWN_NAMESPACES).**
+/// `DAEMON_OWN_NAMESPACES` (retired: membership is now every ring's default roster, `crate::ring_roster`).**
 /// That list answers a different question — whose roster the daemon derives,
 /// and which journals it seals on its own cadence — and an app ring is on
 /// neither side of it. Keying the projector on membership of that list would

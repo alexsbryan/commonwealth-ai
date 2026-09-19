@@ -75,6 +75,26 @@ impl MeshKnowledgeClient {
     }
 }
 
+/// A serving daemon's mesh seam: its OWN `/v1/knowledge/search`, over loopback
+/// (TOPOLOGY §3.5). That route is the one decider for which corpora an ask can
+/// reach — local installed ∪ every queryable member's `hosted_corpora` — so the
+/// Runtime asks it rather than keeping a list of its own. Until 2026-09-18 the
+/// daemon left the slot `None` and every daemon-served turn skipped the fan-out.
+pub fn daemon_knowledge_source(
+    client_base: &str,
+) -> Option<std::sync::Arc<dyn MeshKnowledgeSource>> {
+    match MeshKnowledgeClient::new(client_base) {
+        Ok(c) => {
+            tracing::info!(base = %client_base, "mesh knowledge: daemon seam is its own knowledge route");
+            Some(std::sync::Arc::new(c))
+        }
+        Err(e) => {
+            tracing::warn!(base = %client_base, error = %e, "mesh knowledge: client build failed — turns will not fan out");
+            None
+        }
+    }
+}
+
 #[async_trait]
 impl MeshKnowledgeSource for MeshKnowledgeClient {
     async fn search(
@@ -155,21 +175,25 @@ impl MeshKnowledgeSource for MeshKnowledgeClient {
         };
 
         // The daemon computed this one function away from the response and
-        // we used to throw it on the floor. It is the §9.6 red.
+        // we used to throw it on the floor. It is the §9.6 red. A corpus the
+        // daemon also lists as unhosted had no host to be unreachable.
         let unavailable: Vec<CorpusUnavailable> = parsed
             .corpora_unavailable
             .iter()
-            .map(|c| CorpusUnavailable::new(c.clone(), UnavailabilityReason::PeerUnreachable))
+            .map(|c| {
+                let reason = if parsed.corpora_unhosted.contains(c) {
+                    UnavailabilityReason::NotHosted
+                } else {
+                    UnavailabilityReason::PeerUnreachable
+                };
+                CorpusUnavailable::new(c.clone(), reason)
+            })
             .collect();
         let total = parsed.results.len();
         let results: Vec<MeshScoredChunk> = parsed
             .results
             .into_iter()
             .map(|r| {
-                // `/v1/knowledge/search` stashes peer attribution
-                // in `metadata["peer_name"]` when the hit came from
-                // a fan-out leg. Absent for locally-served hits.
-                let peer_name = r.metadata.get("peer_name").cloned();
                 // The wire spelling is parsed HERE and nowhere else: one
                 // boundary, the canonical parsers, and a typo reads as absent
                 // rather than as a class (TOPOLOGY §10 rung 9.1).
@@ -187,7 +211,9 @@ impl MeshKnowledgeSource for MeshKnowledgeClient {
                     corpus_id: r.corpus_id,
                     url: r.url,
                     score: r.score,
-                    peer_name,
+                    // Stamped by the daemon's fan-out on a peer-served hit;
+                    // absent for locally-served hits.
+                    peer_name: r.peer_name,
                     chunk_id: r.chunk_id,
                     source_doc_id: r.source_doc_id,
                     custody,

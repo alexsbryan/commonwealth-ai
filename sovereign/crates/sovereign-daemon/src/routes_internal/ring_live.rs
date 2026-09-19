@@ -50,13 +50,14 @@ pub async fn ring_live(State(state): State<AppState>, body: axum::body::Bytes) -
     let envelope: LiveEnvelope = match serde_json::from_slice(&body) {
         Ok(e) => e,
         Err(e) => {
+            tracing::warn!(error = %e, "internal ring live: refused a malformed envelope");
             return err(
                 StatusCode::UNPROCESSABLE_ENTITY,
                 format!(
                     "live envelope is not {{\"namespace\", \"payload\"}} JSON ({e}) — \
                      a peer on an older daemon sends a bare payload; rebuild it"
                 ),
-            )
+            );
         }
     };
     let LiveEnvelope { namespace, payload } = envelope;

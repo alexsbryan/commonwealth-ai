@@ -261,9 +261,10 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
     };
 
     // The ring-app rail. Present on `Rail` (where it is the ONLY thing
-    // served) and on `Operator` (a local caller already reaches everything,
-    // and `svrn ring` has to be able to read its own ledger). Absent on
-    // `Peer` and `Guest`: a ring rail is loopback-only in M0.
+    // served), on `Operator` (a local caller already reaches everything,
+    // and `svrn ring` has to be able to read its own ledger) and on `Guest`
+    // (the guest door; a rail grant names its one namespace). Absent on
+    // `Peer`. See `ClientSurface::serves_rail_routes`.
     let rail: Router<AppState> = if surface.serves_rail_routes() {
         Router::new()
             .route("/v1/rail/append", post(routes_rail::append))
@@ -303,16 +304,14 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
 
 /// Build the internal mesh API router (port 9742).
 pub fn internal_router(state: AppState) -> Router {
-    // Same admission gate as the client router — applied to peer-
-    // fan-out routes so a busy operator's machine 503s knowledge
-    // searches from peers rather than starving local chat. See
-    // `crate::admission`.
-    let admission = || {
-        axum::middleware::from_fn_with_state(
-            state.clone(),
-            crate::admission::peer_admission_layer::<AppState>,
-        )
-    };
+    // The peer gate for fan-out corpus reads: pause still refuses, but a read
+    // is admitted under its own `max_peer_knowledge_reads` budget, never the
+    // inference ceiling or the foreground yield (seat A23). See
+    // `crate::admission::PeerWork`.
+    let knowledge_read_admission = axum::middleware::from_fn_with_state(
+        state.clone(),
+        crate::admission::peer_knowledge_read_layer::<AppState>,
+    );
 
     Router::new()
         .route("/internal/gossip", post(routes_internal::gossip))
@@ -349,7 +348,7 @@ pub fn internal_router(state: AppState) -> Router {
         .route("/internal/index/serve", get(routes_internal::index_serve))
         .route(
             "/internal/knowledge/search",
-            post(routes_internal::knowledge_search).layer(admission()),
+            post(routes_internal::knowledge_search).layer(knowledge_read_admission),
         )
         .route("/internal/atlas/status", get(routes_internal::atlas_status))
         .route(

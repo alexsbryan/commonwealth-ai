@@ -57,10 +57,15 @@ export function b64ToBytes(b64) {
 
 /// The act this app writes. One act per debounce window, never one per
 /// keystroke.
-export const changeAct = (update, doc = DOC_ID) => ({
+///
+/// `guest` is the name a guest typed on the door's page, or absent for a
+/// member. The rail does not read it; the door refuses one that is a roster
+/// member's name (`routes_rail::append`), and [`displayName`] renders it.
+export const changeAct = (update, doc = DOC_ID, guest = null) => ({
   kind: DOC_CHANGE,
   doc,
   update: bytesToB64(update),
+  ...(guest ? { guest } : {}),
 });
 
 /// The reducer half of the read path, over ONE act at a time.
@@ -85,6 +90,7 @@ export function docReducer(acc, payload, op) {
     person: op.person,
     seq: op.seq,
     ts: op.ts_unix,
+    guest: typeof payload.guest === "string" ? payload.guest : null,
     update: payload.update,
   });
   return acc;
@@ -190,7 +196,7 @@ export function createAttribution() {
     by = m;
   };
   const replay = (act) => {
-    current = { actor: act.actor, ts: act.ts };
+    current = { actor: act.actor, ts: act.ts, guest: act.guest || null };
     Y.applyUpdate(frag.doc, b64ToBytes(act.update));
   };
   reset();
@@ -256,7 +262,7 @@ function touchedBlocks(event, frag) {
 /// log read signs acts this node cannot yet name.
 export function attributionLine(entry, members, nowMs) {
   if (!entry) return null;
-  const name = personFor(members, entry.actor);
+  const name = displayName(members, entry.actor, entry.guest);
   const ago = Math.max(0, Math.round(nowMs / 1000 - entry.ts));
   return name === null
     ? `last edited by a key this node's roster does not name, ${ago}s ago`
@@ -308,6 +314,22 @@ export function personFor(members, key) {
     if ((keys || []).includes(key)) return person;
   }
   return null;
+}
+
+/// The name an act or a cursor is shown under: the signer's roster name for a
+/// member, `<guest>, guest of <signer>` when the act names a guest, `null`
+/// when the roster does not name the signer.
+///
+/// A guest writes through a member's door, so the rail's signer is that
+/// member. Showing the signer alone would put the member's name on the
+/// guest's words; the guest's name alone would be a name nothing checked.
+/// Both, always together, is the one rendering, for the gutter and the caret.
+export function displayName(members, key, guest = null) {
+  const signer = personFor(members, key);
+  if (!guest) return signer;
+  return signer === null
+    ? `${guest}, guest of a key this node's roster does not name`
+    : `${guest}, guest of ${signer}`;
 }
 
 /// A stable colour for a name, so one person is the same colour on all three

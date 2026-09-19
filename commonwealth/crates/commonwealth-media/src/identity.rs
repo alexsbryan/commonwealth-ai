@@ -402,6 +402,22 @@ mod tests {
         assert!(admit_media(Some(&who()), dialer(), origin(), &["nod".to_string()], &[]).is_none());
     }
 
+    /// `svrn mesh media offer --admit` narrows through this list: a member it
+    /// does not name is refused, and an empty list admits every member.
+    #[test]
+    fn an_offer_admit_list_refuses_the_unnamed_and_empty_admits_everyone() {
+        let quiet = MemberIdentity {
+            name: "Quiet".into(),
+            node_id: NodeId::from_u128(0xC0DE << 96),
+        };
+        let named = vec!["LittleMac".to_string()];
+        assert!(admit_media(Some(&who()), dialer(), origin(), &named, &[]).is_some());
+        assert!(admit_media(Some(&quiet), dialer(), origin(), &named, &[]).is_none());
+        assert!(admit_media(Some(&quiet), dialer(), origin(), &[], &[]).is_some());
+        assert!(admit_offer(Some(&quiet), dialer(), origin(), &named, &[]).is_none());
+        assert!(admit_offer(Some(&quiet), dialer(), origin(), &[], &[]).is_some());
+    }
+
     /// No declared origin means the protocol is not advertised; a member's
     /// dial is closed, not forwarded to a port nothing listens on.
     #[test]

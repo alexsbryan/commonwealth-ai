@@ -274,6 +274,12 @@ async fn offer_peer(
             }
         }
     }
+    tracing::debug!(
+        node,
+        endpoints = endpoints.len(),
+        error = %last_error,
+        "rail live: peer not reached"
+    );
     PeerDelivery {
         node,
         name,
@@ -299,6 +305,11 @@ pub async fn live_push(
         Err(refusal) => return refusal,
     };
     if body.len() > LIVE_PAYLOAD_MAX_BYTES {
+        tracing::debug!(
+            namespace,
+            bytes = body.len(),
+            "rail live: refused an oversize payload"
+        );
         return err(
             StatusCode::PAYLOAD_TOO_LARGE,
             format!(
@@ -312,13 +323,14 @@ pub async fn live_push(
     let payload = match std::str::from_utf8(&body) {
         Ok(s) => s,
         Err(e) => {
+            tracing::debug!(namespace, error = %e, "rail live: refused a non-UTF-8 payload");
             return err(
                 StatusCode::UNPROCESSABLE_ENTITY,
                 format!(
                     "live payload is not UTF-8 ({e}) — the lane carries text \
                      (base64 your bytes, as a rail act does)"
                 ),
-            )
+            );
         }
     };
     let peers = push_ephemeral(&state, &namespace, payload).await;

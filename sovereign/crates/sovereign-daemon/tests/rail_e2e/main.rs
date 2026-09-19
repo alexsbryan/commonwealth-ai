@@ -754,3 +754,6 @@ async fn an_app_seals_through_the_append_door_and_the_journal_shrinks() {
 }
 
 mod ceiling;
+
+// The guest door rides the same helpers: the rail on a LAN-reachable bind.
+mod guest_door;

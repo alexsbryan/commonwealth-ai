@@ -34,7 +34,9 @@
 //! for the guest to resolve.
 
 use sovereign_cli_shared::help::{Help, HelpSection};
-use sovereign_mesh::deep_link::{build_guest_link, parse_deep_link, DeepLink};
+use sovereign_mesh::deep_link::{
+    build_guest_link, build_https_guest_link, parse_deep_link, DeepLink,
+};
 
 use crate::guest_link::{self, GuestLink};
 
@@ -296,7 +298,8 @@ pub(crate) const HELP_MESH_GRANT: Help = Help {
     summary: "Lend named models to someone who is NOT a mesh member, for a bounded window.",
     sections: &[
         HelpSection::Usage(
-            "svrn mesh grant --model <id> [--model <id>…] [--ttl 2h] [--label <text>] [--url <base>]\n\
+            "svrn mesh grant --model <id> [--model <id>…] [--rail <ns>] [--ttl 2h] [--label <text>]\n\
+             \x20               [--url <base>] [--qr-svg <path>]\n\
              svrn mesh grant --list\n\
              svrn mesh grant --revoke <token>",
         ),
@@ -306,6 +309,10 @@ pub(crate) const HELP_MESH_GRANT: Help = Help {
                 "A model this grant may dispatch. Repeatable. Exact ids from `/v1/models`.",
             ),
             (
+                "--rail <ns>",
+                "Also read and write this one ring-app rail namespace (the wall grant).",
+            ),
+            (
                 "--ttl <dur>",
                 "Lifetime: 30m, 2h, 1d, or bare seconds. Default 2h, capped at 24h.",
             ),
@@ -313,6 +320,10 @@ pub(crate) const HELP_MESH_GRANT: Help = Help {
             (
                 "--url <base>",
                 "Base URL the guest should reach you at. Default: this node's published address.",
+            ),
+            (
+                "--qr-svg <path>",
+                "Write the https link (<url>#token=…) to <path> as an SVG QR code. Needs --url.",
             ),
             ("--list", "Show outstanding grants, including revoked and expired ones."),
             ("--revoke <token>", "Kill a link immediately. The token is the one in the link."),
@@ -340,6 +351,8 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
     let mut ttl_secs: Option<u64> = None;
     let mut label: Option<String> = None;
     let mut url_override: Option<String> = None;
+    let mut rail: Option<String> = None;
+    let mut qr_svg: Option<String> = None;
     let mut list = false;
     let mut revoke: Option<String> = None;
 
@@ -394,6 +407,26 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
                     }
                 };
             }
+            "--rail" => {
+                i += 1;
+                rail = match args.get(i) {
+                    Some(v) => Some(v.clone()),
+                    None => {
+                        eprintln!("--rail needs a namespace");
+                        return 2;
+                    }
+                };
+            }
+            "--qr-svg" => {
+                i += 1;
+                qr_svg = match args.get(i) {
+                    Some(v) => Some(v.clone()),
+                    None => {
+                        eprintln!("--qr-svg needs a file path");
+                        return 2;
+                    }
+                };
+            }
             "--list" => list = true,
             "--revoke" => {
                 i += 1;
@@ -410,6 +443,13 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
             }
         }
         i += 1;
+    }
+
+    // The https link's base is the address the operator typed; there is no
+    // default a phone could open, so refuse rather than guess one.
+    if qr_svg.is_some() && url_override.is_none() {
+        eprintln!("--qr-svg needs --url <base>: the address a phone opens.");
+        return 2;
     }
 
     let port = daemon_client_port();
@@ -466,8 +506,12 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
             return 1;
         }
     };
+    let mut scopes = serde_json::json!({ "models": models });
+    if let Some(ns) = &rail {
+        scopes["rail"] = serde_json::json!(ns);
+    }
     let body = serde_json::json!({
-        "scopes": { "models": models },
+        "scopes": scopes,
         "ttl_secs": ttl_secs,
         "label": label,
     });
@@ -548,11 +592,49 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
     println!();
     println!("  svrn mesh use '{link}'");
     println!();
+    if let (Some(path), Some(base)) = (&qr_svg, &url_override) {
+        let https = build_https_guest_link(
+            token,
+            base,
+            expires_at_secs,
+            (!summary.is_empty()).then_some(summary),
+        );
+        let written = wall_qr_svg(&https).and_then(|svg| {
+            std::fs::write(path, svg).map_err(|e| format!("cannot write {path}: {e}"))
+        });
+        match written {
+            Ok(()) => {
+                println!("Or open (the QR code in {path} carries this):");
+                println!();
+                println!("  {https}");
+                println!();
+            }
+            Err(e) => {
+                eprintln!("The grant was minted but its QR code was not written: {e}");
+                eprintln!("Revoke it with `svrn mesh grant --revoke {token}` and re-run.");
+                return 1;
+            }
+        }
+    }
     println!("Revoke at any time with:");
     println!();
     println!("  svrn mesh grant --revoke {token}");
     println!();
     0
+}
+
+/// The QR module margin, in modules. Four is the quiet zone the QR standard
+/// requires; a scanner cannot find the finder patterns without it.
+const QR_QUIET_ZONE: usize = 4;
+
+/// Render `link` as an SVG QR code, square modules, with the standard quiet
+/// zone.
+fn wall_qr_svg(link: &str) -> Result<String, String> {
+    use fast_qr::convert::{svg::SvgBuilder, Builder};
+    let qr = fast_qr::QRBuilder::new(link)
+        .build()
+        .map_err(|e| format!("cannot encode the link as a QR code: {e}"))?;
+    Ok(SvgBuilder::default().margin(QR_QUIET_ZONE).to_str(&qr))
 }
 
 async fn grant_list(port: u16) -> i32 {
@@ -939,6 +1021,55 @@ async fn verify_link(link: &GuestLink) -> Result<Vec<String>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Rasterise the SVG `wall_qr_svg` writes — its `viewBox` and one
+    /// `M{x},{y}h1v1h-1` per dark module — onto a DARK surround, and decode
+    /// it. The surround is the point: on an all-white canvas rqrr decodes a
+    /// code with no quiet zone at all (measured), so only a page that is not
+    /// white shows whether the SVG carries its own.
+    #[test]
+    fn the_wall_qr_svg_decodes_back_to_the_exact_link() {
+        let link = build_https_guest_link(
+            "0123456789abcdef0123456789abcdef",
+            "http://192.168.1.10:9750/app/ring-doc/",
+            1_787_900_000,
+            Some("big, rail:wall"),
+        );
+        let svg = wall_qr_svg(&link).expect("encodes");
+        let n: usize = svg
+            .split_once(r#"viewBox="0 0 "#)
+            .and_then(|(_, rest)| rest.split(' ').next())
+            .and_then(|s| s.parse().ok())
+            .expect("a viewBox");
+        let mut dark = vec![false; n * n];
+        for cmd in svg.split('M').skip(1) {
+            let Some((xy, _)) = cmd.split_once('h') else {
+                continue;
+            };
+            let Some((x, y)) = xy.split_once(',') else {
+                continue;
+            };
+            let (x, y): (usize, usize) = (x.parse().unwrap(), y.parse().unwrap());
+            dark[y * n + x] = true;
+        }
+        const PX: usize = 4;
+        const SURROUND: usize = 4;
+        let side = (n + 2 * SURROUND) * PX;
+        let mut img = rqrr::PreparedImage::prepare_from_greyscale(side, side, |x, y| {
+            let (mx, my) = (x / PX, y / PX);
+            let inside =
+                (SURROUND..SURROUND + n).contains(&mx) && (SURROUND..SURROUND + n).contains(&my);
+            if !inside || dark[(my - SURROUND) * n + (mx - SURROUND)] {
+                0
+            } else {
+                255
+            }
+        });
+        let grids = img.detect_grids();
+        assert_eq!(grids.len(), 1, "exactly one QR code found in the SVG");
+        let (_, decoded) = grids[0].decode().expect("decodes");
+        assert_eq!(decoded, link);
+    }
 
     #[test]
     fn ttl_accepts_the_suffixes_the_help_advertises() {

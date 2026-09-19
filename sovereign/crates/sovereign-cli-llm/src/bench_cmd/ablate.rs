@@ -345,7 +345,7 @@ fn daemon_lock_path() -> PathBuf {
 /// dispatcher. Handing `daemon run` to our own exe fails with
 /// "unknown subcommand 'daemon'" (observed 2026-08-03). Look for the
 /// dispatcher beside us first, then the deployed symlink.
-fn dispatcher_exe(current: &std::path::Path) -> Result<PathBuf, String> {
+pub(crate) fn dispatcher_exe(current: &std::path::Path) -> Result<PathBuf, String> {
     if let Some(dir) = current.parent() {
         for name in ["sovereign-cli", "svrn"] {
             let c = dir.join(name);

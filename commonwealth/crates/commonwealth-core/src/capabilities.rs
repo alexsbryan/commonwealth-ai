@@ -72,6 +72,13 @@ pub struct NodeCapabilities {
     )]
     pub origins: Vec<OriginKind>,
 
+    /// Member names (or node-id prefixes) the holder admits to its media
+    /// origin; empty = everyone in the mesh. Mirrors `[iroh] media_allow`
+    /// (`sovereign-contracts/src/setup_config_iroh.rs`), the one config the
+    /// offer verb writes. Empty from a peer whose build predates the field.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub media_allow: Vec<String>,
+
     /// Advertised embedding model for this node. Populated when the
     /// daemon has an embed slot loaded; `None` before bootstrap
     /// completes or on nodes that run no embed model at all.
@@ -394,6 +401,21 @@ mod tests {
         assert!(out.get("origins").is_none());
     }
 
+    /// An old peer's capabilities carry no `media_allow`: it reads empty
+    /// (everyone here), and an empty list stays off the wire.
+    #[test]
+    fn media_allow_defaults_to_empty_when_absent_and_reads_the_names_when_present() {
+        let json = minimal_capabilities_json(None, None);
+        let caps: NodeCapabilities = serde_json::from_str(&json).unwrap();
+        assert!(caps.media_allow.is_empty());
+        let out = serde_json::to_value(&caps).unwrap();
+        assert!(out.get("media_allow").is_none());
+        let mut v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        v["media_allow"] = serde_json::json!(["LittleMac"]);
+        let caps: NodeCapabilities = serde_json::from_value(v).unwrap();
+        assert_eq!(caps.media_allow, vec!["LittleMac".to_string()]);
+    }
+
     #[test]
     fn embed_model_defaults_to_none_when_absent() {
         // Old peers (pre-field) don't include embed_model. Must
@@ -428,6 +450,7 @@ mod tests {
             inference_capable: false,
             loaded_models: vec![],
             origins: Vec::new(),
+            media_allow: Vec::new(),
             embed_model: Some(EmbedModelInfo {
                 model_id: "qwen3-embedding-0.6b".into(),
                 dimensions: 1024,

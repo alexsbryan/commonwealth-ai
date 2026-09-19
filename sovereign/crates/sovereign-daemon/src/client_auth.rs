@@ -251,6 +251,15 @@ pub async fn client_auth_layer(
                 let now = commonwealth_core::clock::unix_now_millis();
                 match state.inner.node.guest_grants.live(p, now) {
                     Some(grant) if grant.permits_path(request.uri().path()) => {
+                        // Debug, not info: the ring page drains its live lane
+                        // on a timer, so this fires several times a second.
+                        tracing::debug!(
+                            peer = %peer,
+                            path = %request.uri().path(),
+                            label = ?grant.label,
+                            scopes = %grant.summary(),
+                            "client_auth: guest grant admitted"
+                        );
                         request.extensions_mut().insert(Guest(Arc::new(grant)));
                         return next.run(request).await;
                     }

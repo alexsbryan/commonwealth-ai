@@ -57,6 +57,8 @@ fn substituted_hit(score: f32) -> KnowledgeResult {
         metadata: HashMap::new(),
         chunk_id: Some(1),
         source_doc_id: None,
+        peer_name: None,
+        peer_node_id: None,
     }
 }
 
@@ -103,6 +105,7 @@ async fn the_9_6_shape_carries_every_unavailable_corpus_to_the_caller() {
             ],
             corpora_searched: vec!["sf-assessor-roll".into()],
             corpora_unavailable: corpora(),
+            corpora_unhosted: Vec::new(),
             total_chunks_searched: None,
         },
     )
@@ -208,6 +211,7 @@ async fn a_healthy_fanout_reports_no_losses_at_all() {
             results: vec![substituted_hit(0.8)],
             corpora_searched: vec!["sf-assessor-roll".into()],
             corpora_unavailable: Vec::new(),
+            corpora_unhosted: Vec::new(),
             total_chunks_searched: Some(1),
         },
     )
@@ -223,5 +227,43 @@ async fn a_healthy_fanout_reports_no_losses_at_all() {
         outcome.unavailable.is_empty(),
         "nothing was lost, so nothing may be reported lost; got {:?}",
         outcome.unavailable
+    );
+}
+
+/// The member name the daemon's fan-out stamps is a FIELD on the wire now,
+/// and a corpus no member hosts is its own reason — not "that machine could
+/// not be reached", which would promise the corpus comes back on its own.
+#[tokio::test]
+async fn the_serving_member_and_an_unhosted_corpus_each_arrive_named() {
+    let base = stub_daemon(
+        axum::http::StatusCode::OK,
+        KnowledgeSearchResponse {
+            results: vec![KnowledgeResult {
+                peer_name: Some("mac-peer".into()),
+                ..substituted_hit(0.8)
+            }],
+            corpora_searched: vec!["sf-assessor-roll".into()],
+            corpora_unavailable: vec!["sep".into(), "wikipedia".into()],
+            corpora_unhosted: vec!["sep".into()],
+            total_chunks_searched: Some(1),
+        },
+    )
+    .await;
+
+    let client = MeshKnowledgeClient::new(base).expect("build client");
+    let outcome = client.search("parcel", &[0.1], 10, None).await;
+
+    assert_eq!(outcome.chunks[0].peer_name.as_deref(), Some("mac-peer"));
+    let reason_of = |id: &str| {
+        outcome
+            .unavailable
+            .iter()
+            .find(|u| u.corpus_id == id)
+            .map(|u| u.reason.clone())
+    };
+    assert_eq!(reason_of("sep"), Some(UnavailabilityReason::NotHosted));
+    assert_eq!(
+        reason_of("wikipedia"),
+        Some(UnavailabilityReason::PeerUnreachable)
     );
 }

@@ -82,6 +82,7 @@ fn empty_node_capabilities() -> NodeCapabilities {
         inference_capable: false,
         loaded_models: vec![],
         origins: Vec::new(),
+        media_allow: Vec::new(),
 
         embed_model: None,
         benchmark: None,
@@ -185,4 +186,69 @@ async fn gossip_round_publishes_live_hosted_corpora() {
         "hardware should have been detected: {:?}",
         caps.hardware
     );
+}
+
+/// The holder's `[iroh] media_allow` rides the gossip self-stamp beside
+/// `origins`, and a member's offer list reads it as `offered_to`.
+#[tokio::test]
+async fn gossip_round_carries_media_allow_into_offered_to() {
+    let holder = NodeId::from_u128(1);
+    let viewer = NodeId::from_u128(2);
+    let record = MemberRecord {
+        removed_at: None,
+        node_pubkey: None,
+        relay_url: None,
+        iroh_direct_addrs: Vec::new(),
+        dial_info_version: 0,
+        dial_info_sig: None,
+        node_id: holder,
+        name: "Host".into(),
+        invited_by: holder,
+        joined_at: 0,
+        last_seen: 100,
+        status: NodeStatus::Online,
+        capabilities: empty_node_capabilities(),
+        addresses: vec!["127.0.0.1:9742".parse().unwrap()],
+    };
+    let mesh = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
+        id: MeshId::from_u128(42),
+        name: "Test".into(),
+        invite_key_hash: [1u8; 32],
+        invite_version: 0,
+        require_encryption: false,
+        members: HashMap::from([(holder, record)]),
+        peers: vec![],
+    };
+    let state = AppState::new(holder, mesh);
+    state
+        .inner
+        .fabric
+        .dial_info
+        .publish(Arc::new(|| commonwealth_core::mesh::IrohDialInfo {
+            relay_url: None,
+            direct_addrs: Vec::new(),
+            origins: vec![commonwealth_core::capabilities::OriginKind::Media],
+            media_allow: vec!["LittleMac".into()],
+        }));
+
+    gossip::run_one_round(
+        &*state.inner.fabric,
+        state.inner.node.corpus_engine.as_ref(),
+        &state,
+        Duration::from_secs(60),
+    )
+    .await
+    .expect("gossip round must succeed even with no peers");
+
+    let m = state.inner.fabric.mesh.read().await;
+    let rows = commonwealth_media::offers(
+        viewer,
+        &commonwealth_media::roster_of(&m),
+        &[],
+        commonwealth_core::capabilities::OriginKind::Media,
+    );
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    assert_eq!(rows[0].offered_to, vec!["LittleMac".to_string()]);
 }

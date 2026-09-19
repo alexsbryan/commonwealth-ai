@@ -1654,6 +1654,10 @@ pub enum UnavailabilityReason {
     /// refused (503, yielding to its local user), timed out, or the
     /// fan-out never reached it.
     PeerUnreachable,
+    /// No live member advertises the corpus at all — nothing was asked,
+    /// so nothing was offline. Distinct from `PeerUnreachable` so the answer
+    /// does not promise the corpus "should come back".
+    NotHosted,
 }
 
 impl UnavailabilityReason {
@@ -1666,6 +1670,7 @@ impl UnavailabilityReason {
             Self::NoVectorIndex => "vector_index_missing",
             Self::DimMismatch { .. } => "dim_mismatch",
             Self::PeerUnreachable => "peer_unreachable",
+            Self::NotHosted => "not_hosted",
         }
     }
 
@@ -1681,6 +1686,7 @@ impl UnavailabilityReason {
             Self::NoVectorIndex => "isn't fully indexed for search yet",
             Self::DimMismatch { .. } => "needs a quick rebuild first",
             Self::PeerUnreachable => "is on another machine that couldn't be reached just now",
+            Self::NotHosted => "isn't shared by any machine in the mesh right now",
         }
     }
 
@@ -1697,6 +1703,7 @@ impl UnavailabilityReason {
             Self::PeerUnreachable => {
                 "it should come back on its own once that machine is available"
             }
+            Self::NotHosted => "the machine that holds it has to share it first",
         }
     }
 

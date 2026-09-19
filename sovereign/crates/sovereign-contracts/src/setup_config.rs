@@ -1288,6 +1288,14 @@ pub struct DaemonSection {
     #[serde(default = "default_max_peer_inflight")]
     pub max_peer_inflight: usize,
 
+    /// Maximum concurrent peer corpus reads (`/internal/knowledge/search`)
+    /// this node admits — a budget of its own, never `max_peer_inflight`: a
+    /// read is ~ms of I/O, and one offloaded judge holding the inference slot
+    /// must not blind every member's fan-out to this node's corpora (seat A23).
+    /// Default `4`: bounded, but more than one member can read at once.
+    #[serde(default = "default_max_peer_knowledge_reads")]
+    pub max_peer_knowledge_reads: usize,
+
     /// Enable background freshness watchers (currently:
     /// `wikipedia-newsworthy`'s daily portal-ingest + article-refresh
     /// loop; future entries will share this gate). When true, the
@@ -1366,6 +1374,22 @@ pub struct DaemonSection {
     #[serde(default)]
     pub client_token: Option<String>,
 
+    /// The guest door: a `host:port` on which the `Guest` client surface
+    /// listens directly — reachable from the room's WiFi — while at least one
+    /// guest grant with a rail scope is live, and closed at the last expiry.
+    /// `None` (default) is off. Unlike `client_bind` it is NOT forced to
+    /// loopback on an encrypted mesh: the Guest surface never trusts a
+    /// loopback address and admits only a live grant, within its scope. See
+    /// `sovereign_daemon::guest_door`.
+    #[serde(default)]
+    pub guest_bind: Option<String>,
+
+    /// The ring page the guest door serves at `/ring/` (a bundle directory
+    /// such as `sovereign/apps/ring-doc`). `None` serves no page; the door's
+    /// rail routes are unaffected.
+    #[serde(default)]
+    pub guest_page_dir: Option<PathBuf>,
+
     /// **Local-only profile: no discovery, no transport, no mesh loops.**
     ///
     /// `false` (the default) is the historical behaviour: a daemon that
@@ -1420,11 +1444,14 @@ impl Default for DaemonSection {
             embed_idle_secs: default_embed_idle_secs(),
             yield_to_foreground_secs: default_yield_to_foreground_secs(),
             max_peer_inflight: default_max_peer_inflight(),
+            max_peer_knowledge_reads: default_max_peer_knowledge_reads(),
             freshness_watchers_enabled: default_freshness_watchers_enabled(),
             force_tool_calls: default_force_tool_calls(),
             alternation_grammar: default_alternation_grammar(),
             client_bind: default_client_bind(),
             client_token: None,
+            guest_bind: None,
+            guest_page_dir: None,
             internal_bind: default_internal_bind(),
             local_only: default_local_only(),
         }
@@ -1727,6 +1754,9 @@ fn default_local_only() -> bool {
 /// construction so a CLI daemon is never an unbounded peer fan-out target.
 fn default_max_peer_inflight() -> usize {
     1
+}
+fn default_max_peer_knowledge_reads() -> usize {
+    4
 }
 fn default_freshness_watchers_enabled() -> bool {
     true

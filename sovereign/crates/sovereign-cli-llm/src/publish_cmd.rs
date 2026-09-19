@@ -107,7 +107,7 @@ pub async fn run_unpublish(args: &[String]) -> i32 {
 /// `SetupConfig` would reject, and writing a key into a config that does not
 /// load leaves a person with two problems. The parse is the gate; the document
 /// is what gets edited.
-fn load_doc() -> Result<(PathBuf, DocumentMut), String> {
+pub(crate) fn load_doc() -> Result<(PathBuf, DocumentMut), String> {
     let path = SetupConfig::default_path();
     SetupConfig::load().map_err(|e| {
         format!(
@@ -174,7 +174,7 @@ fn published_names(doc: &DocumentMut) -> Vec<String> {
 /// that can brick a node is worse than editing the file yourself, which is the
 /// thing it replaces (ARCH §5 — the failing input is any edit that does not
 /// round-trip).
-fn write_doc(path: &std::path::Path, doc: &DocumentMut) -> Result<(), String> {
+pub(crate) fn write_doc(path: &std::path::Path, doc: &DocumentMut) -> Result<(), String> {
     let original = std::fs::read_to_string(path).ok();
     std::fs::write(path, doc.to_string()).map_err(|e| format!("write {}: {e}", path.display()))?;
     if let Err(e) = SetupConfig::load_from(path) {
@@ -410,7 +410,7 @@ fn publish(args: &[String]) -> i32 {
 /// is that the app stays bound to this machine and is reached by mesh key. A
 /// `0.0.0.0` target would already be on the LAN to anyone, with no identity
 /// attached, which is the thing the mesh replaces.
-fn resolve_target(port: &str) -> Result<SocketAddr, String> {
+pub(crate) fn resolve_target(port: &str) -> Result<SocketAddr, String> {
     if let Ok(p) = port.parse::<u16>() {
         if p == 0 {
             return Err("port 0 is not a port a server listens on".to_string());

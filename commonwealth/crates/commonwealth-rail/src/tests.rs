@@ -252,6 +252,45 @@ fn a_derived_roster_answers_for_its_namespace_and_the_file_for_every_other() {
     );
 }
 
+/// **Registered > file > default.** Three namespaces, one per rung, under one
+/// rail with a default installed: the registered one ignores its file, the
+/// narrowed one reads its file, and the one nobody touched answers with the
+/// default on its very first read — no file, no directory, nothing on disk.
+#[test]
+fn a_registered_source_beats_the_file_and_the_file_beats_the_default() {
+    let dir = tempfile::tempdir().unwrap();
+    let rail = RingRail::new(dir.path(), Arc::new(key(1)));
+    let everyone = ring();
+    let narrowed = Roster::new(
+        [(Person::from("alex"), vec![actor_of(&key(1))])]
+            .into_iter()
+            .collect(),
+    );
+    rail.default_roster(Arc::new(Fixed(everyone.clone())));
+
+    let registered = rail.journal("daemon-owned").unwrap();
+    registered.set_roster(&Roster::default()).unwrap();
+    rail.derive_roster("daemon-owned", Arc::new(Fixed(narrowed.clone())))
+        .unwrap();
+    let by_hand = rail.journal("house").unwrap();
+    by_hand.set_roster(&narrowed).unwrap();
+    let untouched = rail.journal("fresh-app").unwrap();
+
+    assert_eq!(rail.roster_origin("daemon-owned"), RosterOrigin::Derived);
+    assert_eq!(rail.roster_origin("house"), RosterOrigin::File);
+    assert_eq!(rail.roster_origin("fresh-app"), RosterOrigin::Derived);
+
+    assert_eq!(block_on(rail.roster(&registered)).unwrap(), narrowed);
+    assert_eq!(block_on(rail.roster(&by_hand)).unwrap(), narrowed);
+    assert!(!untouched.dir().exists(), "never written to");
+    assert_eq!(block_on(rail.roster(&untouched)).unwrap(), everyone);
+
+    // Narrowing is writing the file, and it takes effect on the next read.
+    untouched.set_roster(&narrowed).unwrap();
+    assert_eq!(rail.roster_origin("fresh-app"), RosterOrigin::File);
+    assert_eq!(block_on(rail.roster(&untouched)).unwrap(), narrowed);
+}
+
 // ── the two-node drill ───────────────────────────────────────
 
 /// **Partition, write on both sides, heal — and agree.**

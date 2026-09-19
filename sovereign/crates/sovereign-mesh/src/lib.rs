@@ -58,6 +58,7 @@ pub mod iroh_watchdog;
 pub mod join;
 pub use sovereign_turn_client::knowledge_client; // shim: moved by domains REVIEW-build-mesh-client-pair
 pub mod measurements_rail;
+pub mod media_route;
 pub mod mesh_discovery;
 pub use sovereign_serving_host::model_fetch; // shim: moved by domains dm-serving-move-leaves
 /// The mesh implementations of `sovereign-contracts::peer`'s two ports — the

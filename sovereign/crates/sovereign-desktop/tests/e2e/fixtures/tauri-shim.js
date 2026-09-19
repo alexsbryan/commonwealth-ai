@@ -216,6 +216,7 @@
       return true;
     },
     mesh_list_peer_preferences: () => [],
+    mesh_media_offers: () => [],
     get_config: () => ({
       embedding_model: null,
       chat_model: null,

@@ -150,6 +150,7 @@ pub fn init_mesh_with_identity(
             inference_capable: false,
             loaded_models: vec![],
             origins: Vec::new(),
+            media_allow: Vec::new(),
 
             embed_model: None,
             benchmark: None,
@@ -325,6 +326,7 @@ pub fn accept_join_with_identity(
             inference_capable: false,
             loaded_models: vec![],
             origins: Vec::new(),
+            media_allow: Vec::new(),
 
             embed_model: None,
             benchmark: None,

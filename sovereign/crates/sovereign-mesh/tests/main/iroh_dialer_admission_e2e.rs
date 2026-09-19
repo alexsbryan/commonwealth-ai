@@ -29,7 +29,7 @@ use commonwealth_transport::iroh::{
     CLIENT_ALPN, MEDIA_ALPN, OFFER_ALPN, RPC_ALPN,
 };
 use sovereign_daemon::server::{client_router, client_router_for, ClientSurface};
-use sovereign_mesh::iroh_access::{AcceptorRoutes, MemberCheck, MemberIdentity};
+use sovereign_mesh::iroh_access::{AcceptorRoutes, MediaRoute, MemberCheck, MemberIdentity};
 
 use crate::common;
 use crate::common::{client_app_state, spawn_router};
@@ -122,11 +122,9 @@ async fn lender(with_guest: bool) -> (Endpoint, IrohAcceptor) {
         rpc: Some("127.0.0.1:2".parse().unwrap()),
         peer,
         guest,
-        media: None,
-        media_allow: Arc::new(Vec::new()),
+        media: MediaRoute::fixed(None, Vec::new()),
         // Nothing declared: these cases are about WHO is admitted,
         // not what the holder adds on the way to its own origin.
-        media_declared: std::sync::Arc::new(Vec::new()),
         offer: Default::default(),
     };
     let endpoint = lender_endpoint(vec![CLIENT_ALPN.to_vec(), RPC_ALPN.to_vec()]).await;
@@ -337,11 +335,9 @@ async fn routing_a_member_at_the_operator_listener_is_the_hole_this_closes() {
         // client router, `/internal/*` and all.
         peer: Some(spawn_router(client_router(state.clone())).await),
         guest: Some(spawn_router(client_router_for(state, ClientSurface::Guest)).await),
-        media: None,
-        media_allow: Arc::new(Vec::new()),
+        media: MediaRoute::fixed(None, Vec::new()),
         // Nothing declared: these cases are about WHO is admitted,
         // not what the holder adds on the way to its own origin.
-        media_declared: std::sync::Arc::new(Vec::new()),
         offer: Default::default(),
     };
     let endpoint = lender_endpoint(vec![CLIENT_ALPN.to_vec(), RPC_ALPN.to_vec()]).await;
@@ -411,9 +407,7 @@ async fn lender_with_apps(allow: Vec<String>) -> (Endpoint, IrohAcceptor) {
         rpc: None,
         peer: Some(spawn_router(client_router_for(state.clone(), ClientSurface::Peer)).await),
         guest: Some(spawn_router(client_router_for(state, ClientSurface::Guest)).await),
-        media: None,
-        media_allow: Arc::new(Vec::new()),
-        media_declared: std::sync::Arc::new(Vec::new()),
+        media: MediaRoute::fixed(None, Vec::new()),
         offer: Default::default(),
     };
     let endpoint = lender_endpoint(vec![CLIENT_ALPN.to_vec(), APP_ALPN.to_vec()]).await;
@@ -526,9 +520,7 @@ async fn an_app_claimed_at_runtime_becomes_reachable_and_stops_when_released() {
         rpc: None,
         peer: Some(spawn_router(client_router_for(state.clone(), ClientSurface::Peer)).await),
         guest: Some(spawn_router(client_router_for(state, ClientSurface::Guest)).await),
-        media: None,
-        media_allow: Arc::new(Vec::new()),
-        media_declared: std::sync::Arc::new(Vec::new()),
+        media: MediaRoute::fixed(None, Vec::new()),
         offer: Default::default(),
     };
     // No APP_ALPN at bind — exactly the state of a node whose config
@@ -673,11 +665,9 @@ async fn lender_with_media_allowing(
         rpc: None,
         peer: Some(spawn_router(client_router_for(state.clone(), ClientSurface::Peer)).await),
         guest: Some(spawn_router(client_router_for(state, ClientSurface::Guest)).await),
-        media: Some(origin),
-        media_allow: Arc::new(media_allow),
+        media: MediaRoute::fixed(Some(origin), media_allow),
         // Nothing declared: these cases are about WHO is admitted,
         // not what the holder adds on the way to its own origin.
-        media_declared: std::sync::Arc::new(Vec::new()),
         offer: Default::default(),
     };
     let endpoint = lender_endpoint(vec![CLIENT_ALPN.to_vec(), MEDIA_ALPN.to_vec()]).await;
@@ -851,9 +841,7 @@ async fn lender_with_offers(offer_allow: Vec<String>) -> (Endpoint, IrohAcceptor
         // NO media origin: an offer dial must not be able to reach one, and a
         // regression that routed it there would otherwise pass on a lender
         // that happened to serve both.
-        media: None,
-        media_allow: Arc::new(Vec::new()),
-        media_declared: std::sync::Arc::new(Vec::new()),
+        media: MediaRoute::fixed(None, Vec::new()),
         offer: sovereign_mesh::iroh_access::OfferRoutes {
             origin: Some(origin),
             allow: offer_allow,

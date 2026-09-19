@@ -36,6 +36,8 @@
 #
 # BACKENDS (`--backend <b>` first, or env RING_DOC_BACKEND; default local).
 #   local   the three daemons as processes on this host, as above.
+#           RING_DOC_GPU_NODES="b" gives the named nodes the host's render
+#           node (`--device /dev/dri`); empty (the default) is all-CPU.
 #   podman  three containers ring-doc-a|b|c on a `ring-doc` network, the repo
 #           bind-mounted at its own path so target/debug/* runs unchanged. Each
 #           daemon and its `ring dev` run INSIDE their container and stay on
@@ -89,6 +91,10 @@ declare -A IP=([a]=10.89.49.11 [b]=10.89.49.12 [c]=10.89.49.13)
 # when the tag has moved on (it is not pulled here), the toolbox's own image
 # is used and the substitution is printed.
 IMAGE="${RING_DOC_IMAGE:-docker.io/kyuz0/amd-strix-halo-toolboxes:vulkan-radv}"
+# Space-separated node letters that get the host's GPU (`--device /dev/dri`).
+# Empty = every node CPU, the rehearsed topology. The image already carries the
+# RADV Vulkan driver; only the device is withheld.
+RING_DOC_GPU_NODES="${RING_DOC_GPU_NODES:-}"
 
 # A command on node n, with n's data dir. Plain on local; in n's container on podman.
 node_exec() {
@@ -171,8 +177,26 @@ containers_up() {
   "${PODMAN[@]}" network create --subnet "$SUBNET" "$NET" >/dev/null || { echo "podman: could not create network $NET" >&2; return 1; }
   for n in a b c; do
     # label=disable, as the toolbox runs: relabelling a bind-mounted repo is not ours to do.
+    # HOME is the node's own data dir: with keep-id and no HOME the container resolved
+    # HOME to the workdir, and every binary's startup migrator renames $HOME/.sovereign
+    # to .svrnmesh (rebrand.rs) — on 2026-09-18 it renamed the REPO's tracked project dir
+    # (restored by hand). Note 746c91f2 carries the product-side guard.
+    # RING_DOC_GPU_NODES: the room's laptop. A knob of the INSTRUMENT, not a
+    # product change — nothing in the daemon reads it; it only decides which
+    # containers see the host's render node, exactly as the `sovereign-vulkan`
+    # toolbox does (`--volume /dev:/dev`). Every node is CPU by default, which
+    # is the rehearsed topology and what every recorded run so far measured.
+    #
+    # Measured before use, with a control (2026-09-19, this host):
+    #   with `--device /dev/dri`:  vulkaninfo GPU0 vendorID 0x1002 deviceID 0x1586
+    #   without (same image):      vulkaninfo GPU0 vendorID 0x10005 deviceID 0x0000
+    # The second is lavapipe, Mesa's software rasteriser — which is why a node
+    # with no device reports `ggml_vulkan: No devices found` and runs on CPU.
+    local dev=()
+    case " $RING_DOC_GPU_NODES " in *" $n "*) dev=(--device /dev/dri) ;; esac
     "${PODMAN[@]}" run -d --name "ring-doc-$n" --hostname "ring-doc-$n" --network "$NET" --ip "${IP[$n]}" \
       --init --userns=keep-id --security-opt label=disable -v "$REPO:$REPO" -w "$REPO" \
+      -e HOME="$D/$n" "${dev[@]+"${dev[@]}"}" \
       -p "${DPORT[$n]}:${DPORT[$n]}" --pull=never "$IMAGE" sleep infinity >/dev/null \
       || { echo "podman: could not start ring-doc-$n" >&2; return 1; }
     start_forwarder "$n"
@@ -280,22 +304,22 @@ join_one() { # node
     > "$D/join-$n.json"
 }
 
-# Every key on every node: a node whose roster lacks a signer reads that
-# signer's acts as gaps, which is not the property under test.
-roster_all() {
-  local n m key
-  declare -A KEY
-  for n in a b c; do
-    key=$(sv $n ring roster add "${PERSON[$n]}" --self --ring $RING | awk '/→/{print $3; exit}')
-    [ -z "$key" ] && { echo "roster: node $n printed no key" >&2; return 1; }
-    KEY[$n]=$key; echo "$key" > "$D/$n/roster.key"
+# No roster step: an app applies to everyone in the mesh by default. What
+# this records is who the mesh says is in it — each member's key and name,
+# as mesh status reports them — so the attribution leg's expected names come
+# from membership, never from a list this script wrote. A member whose key
+# has not been gossiped yet is waited for, not skipped.
+members_from_mesh() {
+  local deadline=$(( $(date +%s) + 90 ))
+  while [ "$(date +%s)" -lt "$deadline" ]; do
+    node_curl a -s --max-time 3 "$(at "${CPORT[a]}")/v1/mesh/status" 2>/dev/null \
+      | python3 -c "import sys,json; m={x['node_pubkey']:x['name'] for x in json.load(sys.stdin)['members'] if x.get('node_pubkey')}; sys.exit(1) if len(m)<3 else json.dump(m,sys.stdout)" \
+      > "$D/members.json" 2>/dev/null && break
+    sleep 3
   done
-  for n in a b c; do
-    for m in a b c; do
-      [ "$n" = "$m" ] && continue
-      sv $n ring roster add "${PERSON[$m]}" --key "${KEY[$m]}" --ring $RING > /dev/null || { echo "roster: $n could not add ${PERSON[$m]}" >&2; return 1; }
-    done
-  done
+  [ -s "$D/members.json" ] || { echo "roster: a never saw three members with keys inside 90s" >&2; return 1; }
+  sv a ring roster $RING | grep -qx 'everyone in the mesh' \
+    || { echo "roster: \`ring roster $RING\` on a does not say everyone in the mesh" >&2; return 1; }
 }
 
 start_proxy() { # node — the page's door to its daemon, holding the grant
@@ -340,7 +364,7 @@ cmd_up() {
   join_one c && wait_online Cy || exit 3
   # One more gossip round, so B has heard about C from A.
   sleep 12
-  roster_all || exit 3
+  members_from_mesh || exit 3
   for n in a b c; do start_proxy $n || exit 3; done
   echo "up ($BACKEND): a(${PERSON[a]}) b(${PERSON[b]}) c(${PERSON[c]}) — proxies on ${DPORT[a]} ${DPORT[b]} ${DPORT[c]}"
 }
@@ -359,12 +383,12 @@ heal_node() { # node
   fi
 }
 
-cmd_tabs() { # each page's URL on this host, and the roster name its node signs as
+cmd_tabs() { # each page's URL on this host, and the mesh name its node signs as
   local n name
   for n in a b c; do
-    # `roster show` prints the name, then its key indented on the next line.
-    name=$(sv $n ring roster show --ring $RING | awk -v k="$(cat "$D/$n/roster.key" 2>/dev/null || echo '<no key>')" '$1 == k {print prev; exit} {prev = $1}')
-    echo "$n  $(tab_url $n)/  ${name:-<not on its own roster>}"
+    name=$(node_curl "$n" -s --max-time 3 "$(at "${CPORT[$n]}")/v1/mesh/status" 2>/dev/null \
+      | python3 -c "import sys,json; print(next((m['name'] for m in json.load(sys.stdin)['members'] if m.get('is_self')), ''))" 2>/dev/null)
+    echo "$n  $(tab_url $n)/  ${name:-<not in the mesh>}"
   done
 }
 
@@ -418,6 +442,9 @@ const SPLIT_S = 60;         // phase 2, C's daemon down
 const PANEL_SAMPLE_S = 5;   // gap panels sampled this often during the split
 const PRE_SPLIT_S = 12;     // and every 3 s for this long before it: they must be EMPTY
 const SEED = 17;
+// RING_DOC_PHASES (default all): phases 2 and 4 run only when listed; 1 and 3
+// always do. ring-room-demo.sh runs "1,3" — the drive and the attribution leg.
+const PHASES = new Set((process.env.RING_DOC_PHASES || "1,2,3,4").split(","));
 
 let rng = SEED;
 const rand = () => { rng = (rng + 0x6d2b79f5) | 0; let t = Math.imul(rng ^ (rng >>> 15), 1 | rng);
@@ -659,6 +686,7 @@ out.cursor = { samples: cur.length, p50: pct(cur, 0.5), p99: pct(cur, 0.99) };
 out.converge = { sv_equal: svs1.every((s) => s === svs1[0]), text_equal: all.every((p) => p.text() === pages.a.text()),
   union: unionCheck(p1tokens), tokens: p1tokens.length };
 
+if (PHASES.has("2")) {
 // ── phase 2: the split. All three type throughout, C included (its flushes
 // fail and are re-queued, as the page does).
 phase = 2;
@@ -707,6 +735,7 @@ out.partition = { sv_equal: svs2.every((s) => s === svs2[0]), text_equal: all.ev
   pre_split_examples: Object.fromEntries(Object.entries(prePanels).map(([n, xs]) => [n, (xs.find((g) => g.length) || []).slice(0, 2)])),
   names_c: Object.fromEntries(["a", "b"].map((n) => [n, panels[n].filter((g) => g.some((l) => l.includes("Cy"))).length])),
   panel_examples: Object.fromEntries(Object.entries(panels).map(([n, xs]) => [n, (xs.find((g) => g.length) || []).slice(0, 2)])) };
+}
 
 // ── phase 3: B's page announces A's Yjs clientID and appends that update.
 phase = 3;
@@ -726,6 +755,10 @@ const forged = [...ledger].find(([, e]) => e.forged);
 const forgedClients = forged ? [...new Set(Y.decodeUpdate(forged[1].update).structs.map((s) => s.id.client))] : [];
 let lines = 0, right = 0;
 const wrong = [];
+// Expected names are the MESH's (members.json, written by `up` from mesh
+// status), not the roster the page renders from — so a page that named the
+// wrong person out of a wrong roster cannot agree with itself.
+const members = JSON.parse(readFileSync(`${D}/members.json`, "utf8"));
 for (const p of all) {
   // The oracle: the driver's own ledger of which act carried which paragraph,
   // walked in the rail's order — nothing read out of Yjs's observation.
@@ -737,7 +770,7 @@ for (const p of all) {
   shown.forEach((line, i) => {
     lines += 1;
     const name = line && (line.match(/^last edited by (\S+) \d+s ago$/) || [])[1];
-    const want = A.personFor(p.roster, expect[i]);
+    const want = members[expect[i]];
     if (name && want && name === want) right += 1; else wrong.push({ node: p.name, para: i, line, want });
   });
 }
@@ -745,6 +778,7 @@ out.attribution = { forged_act: forged ? forged[0] : null, forged_clients: forge
   forged_held_everywhere: !!forged && all.every((p) => p.applied.has(forged[0])),
   lines, right, wrong };
 
+if (PHASES.has("4")) {
 // ── phase 4: presence only, then B restarts. Nobody types.
 phase = 4;
 const j0 = await sh("_journals");
@@ -764,6 +798,7 @@ try { afterRestart = await pages.b.call("live-drain", {}); } catch (e) { afterRe
 const j1 = await sh("_journals");
 out.live = { cursor_p99: out.cursor.p99, delivered_to_b_before_stop: toB, drain_after_restart: afterRestart,
   journals_before: j0, journals_after: j1 };
+}
 
 writeFileSync(`${D}/session.json`, JSON.stringify(out, null, 2));
 process.exit(0);
@@ -820,7 +855,10 @@ row("ra-doc-append-nudges-sync", None if fatal or not n.get("samples") else n["p
 rail_commits = [l.split(" ", 1) for l in open(os.path.join(cen, "rail.commits")).read().splitlines() if l.strip()]
 # A rail diff made only by commits outside this campaign says nothing about
 # this campaign: the instrument could not judge, it did not fail.
-ours = [h for h, *subj in rail_commits if (subj or [""])[0].startswith(("rd-1-", "REVIEW-", "ralph", "ring-doc"))]
+# "ours" = ring-doc's own rows (every one is rd-1-* / REVIEW-*-rd-1-* / HUMAN-rd-1-*) or the
+# seat's "ring-doc:" commits. A bare "REVIEW-" prefix matched ring-room's rows too
+# (e94b26826) and turned a foreign hunk into FAILED (seat, 2026-09-18).
+ours = [h for h, *subj in rail_commits if any(k in (subj or [""])[0] for k in ("rd-1-", "ring-doc"))]
 foreign = bool(rail_diff) and bool(rail_commits) and not ours
 c = s.get("converge") or {}
 row("ra-doc-three-machines-converge", None if fatal or not c or foreign else
@@ -902,6 +940,8 @@ sys.exit(4 if rows[want]["value"] is None else 0)
 PY
 }
 
+# Sourced (ring-room-demo.sh reuses the node door and backend): define only.
+[[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
 case "${1:-}" in
   up)   cmd_up ;;
   down) cmd_down; echo "stopped" ;;

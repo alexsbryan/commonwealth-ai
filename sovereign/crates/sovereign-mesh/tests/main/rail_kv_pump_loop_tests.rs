@@ -10,8 +10,21 @@ use commonwealth_rail::{Ed25519Verifier, RailAct, RingRail, SigningKey};
 use sovereign_daemon::state::AppState;
 use sovereign_mesh::rail_kv_pump::*;
 use sovereign_mesh::ring_roster::tests::{member, mesh_of, pubkey_of};
-use sovereign_mesh::ring_roster::DAEMON_OWN_NAMESPACES;
 use std::sync::Arc;
+
+/// The rings the daemon writes on its own behalf. No longer a declaration the
+/// roster reads — every ring nobody narrowed derives from membership now
+/// (`ring_roster::MeshRosterSource::install`) — but still the set whose
+/// charset and store routing must agree, which is what the test below checks.
+const DAEMON_OWN_NAMESPACES: &[&str] = &[
+    sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID,
+    commonwealth_state::store_adapter::INFERENCE_APP_ID,
+    commonwealth_state::CONTRIBUTIONS_APP_ID,
+    commonwealth_state::PROCESSED_SHARDS_APP_ID,
+    corpus_engine_notes::NOTES_APP_ID,
+    sovereign_work_atlas::model::APP_ID_PUBLIC,
+    corpus_engine::update::newsworthy_watcher::APP_ID_TRACKED,
+];
 
 /// **The declaration is checkable, and this is the check.**
 ///
@@ -45,6 +58,8 @@ async fn every_declared_namespace_is_one_the_rail_and_the_store_agree_about() {
     let mut seen = std::collections::BTreeSet::new();
     for ns in DAEMON_OWN_NAMESPACES {
         assert!(seen.insert(*ns), "{ns} is declared twice");
+        // The charset check: a namespace the rail would refuse to open.
+        rail.journal(ns).unwrap_or_else(|e| panic!("{ns}: {e}"));
         assert_eq!(
             rail.roster_origin(ns),
             commonwealth_rail::RosterOrigin::Derived,
@@ -199,14 +214,6 @@ async fn work_namespace_seals_and_keeps_live_leases() {
     )
     .unwrap();
 
-    // The roster in v0 is the operator's file, and it stays that way:
-    // `work` is deliberately not in `DAEMON_OWN_NAMESPACES`, so nothing
-    // derived it out from under the file this test is about to write.
-    assert_eq!(
-        rail.roster_origin(WORK_NAMESPACE),
-        commonwealth_rail::RosterOrigin::File,
-        "joining DAEMON_OWN_NAMESPACES would orphan the operator's roster.json"
-    );
     assert_eq!(projector_for(WORK_NAMESPACE), Some(Projector::Work));
 
     let journal = rail.journal(WORK_NAMESPACE).unwrap();
@@ -215,6 +222,13 @@ async fn work_namespace_seals_and_keeps_live_leases() {
     members.insert(Person::from("submitter"), vec![submitter.actor()]);
     let roster = Roster::new(members);
     journal.set_roster(&roster).unwrap();
+    // The operator's file narrows `work` and the membership default must
+    // not outrank it — the submitter is in no mesh row, only in this file.
+    assert_eq!(
+        rail.roster_origin(WORK_NAMESPACE),
+        commonwealth_rail::RosterOrigin::File,
+        "the default roster would orphan the operator's roster.json"
+    );
 
     // ── the peer submits, this node leases and offers ──
     let kind = JobKind::parse("process:v1").unwrap();

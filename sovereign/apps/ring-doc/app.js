@@ -25,12 +25,23 @@ import {
   createAttribution,
   decodeActs,
   decodePresence,
+  displayName,
   encodeSelf,
-  personFor,
   presenceEnvelope,
 } from "./adapter.js";
 
 const el = (id) => document.getElementById(id);
+
+// Guest mode: the page was opened from the wall grant's link, whose bearer
+// rides the fragment (`guest_door::ring_shim`). The name is asked once and
+// kept on this phone; it goes into every act and nothing is written until
+// there is one. Wall mode (`?wall`) is the member's screen: the roster and
+// the grant's QR, which `svrn mesh grant --qr-svg` writes as `wall-qr.svg`
+// beside this page.
+const GUEST = new URLSearchParams(location.hash.slice(1)).has("token");
+const WALL = new URLSearchParams(location.search).has("wall");
+const GUEST_NAME_KEY = "ring-doc-guest-name";
+const guestName = () => (GUEST ? el("guest-name").value.trim() : null);
 
 // One act per window, not one per keystroke. A keystroke is 18–19 bytes of
 // Yjs update and a journal line is signed, so the debounce is the difference
@@ -88,8 +99,16 @@ async function flush() {
   const batch = pending;
   pending = [];
   if (batch.length === 0) return;
+  if (GUEST && !guestName()) {
+    // Held, not dropped: the text is written the moment there is a name.
+    pending = batch.concat(pending);
+    el("err").textContent = "not recorded yet: type your name above";
+    return;
+  }
   try {
-    const written = await window.ring.record(changeAct(Y.mergeUpdates(batch), DOC_ID));
+    const written = await window.ring.record(
+      changeAct(Y.mergeUpdates(batch), DOC_ID, guestName()),
+    );
     // The one place the rail says which key THIS daemon signs with. Keep it
     // and name the cursor from it.
     if (written && written.actor && written.actor !== myActor) {
@@ -123,7 +142,7 @@ ydoc.on("update", (update, origin) => {
 /// checkable by the peer that receives it — awareness is unauthenticated, and
 /// the attribution a reader can verify is the act-level one under the text.
 function nameSelf() {
-  const name = personFor(rosterMembers, myActor);
+  const name = displayName(rosterMembers, myActor, guestName());
   if (name === null) return;
   awareness.setLocalStateField("user", { name, color: colorFor(name) });
 }
@@ -221,6 +240,7 @@ async function poll() {
   // the name lookup wants the person→keys map inside it.
   rosterMembers = (log.roster || {}).members || {};
   nameSelf();
+  if (WALL) el("roster").textContent = Object.keys(rosterMembers).join(", ");
 
   const read = decodeActs(log, window.ring.fold, DOC_ID);
   applyNew(ydoc, read.acts, applied);
@@ -269,6 +289,25 @@ new Editor({
     CollaborationCaret.configure({ provider: { awareness } }),
   ],
 });
+
+if (GUEST) {
+  const input = el("guest-name");
+  input.value = localStorage.getItem(GUEST_NAME_KEY) || "";
+  input.addEventListener("change", () => {
+    localStorage.setItem(GUEST_NAME_KEY, input.value.trim());
+    nameSelf();
+    flush();
+  });
+  el("guest").hidden = false;
+}
+if (WALL) {
+  el("wall").hidden = false;
+  // An absent QR is said, not left as a broken image.
+  el("wall-qr").addEventListener("error", () => {
+    el("wall-qr").hidden = true;
+    el("err").textContent = "no wall-qr.svg beside this page: svrn mesh grant --qr-svg writes it";
+  });
+}
 
 poll();
 setInterval(poll, POLL_MS);

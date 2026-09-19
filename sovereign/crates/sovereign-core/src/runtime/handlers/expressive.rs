@@ -449,7 +449,9 @@ impl Runtime {
                         crate::runtime::epistemic::EpistemicInputs {
                             recalled: &recalled_memories,
                             recall_verification: recall_verification.as_ref(),
-                            ..Default::default()
+                            ..crate::runtime::epistemic::EpistemicInputs::over(
+                                crate::runtime::epistemic::PoolContext::none(),
+                            )
                         },
                     ));
             }
@@ -935,7 +937,9 @@ impl Runtime {
                             crate::runtime::epistemic::EpistemicInputs {
                                 recalled: &recalled_for_ledger,
                                 recall_verification: Some(&rv),
-                                ..Default::default()
+                                ..crate::runtime::epistemic::EpistemicInputs::over(
+                                    crate::runtime::epistemic::PoolContext::none(),
+                                )
                             },
                         ));
                 }

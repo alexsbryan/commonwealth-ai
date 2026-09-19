@@ -1358,6 +1358,7 @@ impl Runtime {
             search_ms,
             retrieved_chunks,
             source_map,
+            peer_attribution,
             result_quality,
             prompt_budget_note,
             folder_meta,
@@ -1391,10 +1392,10 @@ impl Runtime {
             );
         }
         let documents_found = chunks.len();
-        // Distinct corpus ids for the epistemic ledger's provenance
-        // attribution — computed here (chunks are moved into the gate
-        // evidence inside the spawn) and moved into the spawn.
-        let pool_corpora_for_ledger = crate::runtime::epistemic::pool_corpora(&chunks);
+        // The epistemic ledger's pool (corpora + members) — computed here
+        // (chunks are moved into the gate evidence inside the spawn) and
+        // moved into the spawn.
+        let pool_for_ledger = crate::runtime::epistemic::pool_context(&chunks);
         // Authority guard arming (order authority-guard-at-exit): armed
         // off the corpora this answer's evidence actually draws on — the
         // same pool the epistemic ledger attributes. Computed pre-spawn
@@ -1404,7 +1405,7 @@ impl Runtime {
         // those turns are byte-identical to pre-guard behaviour.
         let authority_armed = crate::runtime::authority_guard::armed_for_evidence(
             &self.tools,
-            &pool_corpora_for_ledger,
+            &pool_for_ledger.corpora,
             "kq_stream",
         );
         // Ledger inputs that ride into the spawn: the plan's retained
@@ -1511,6 +1512,7 @@ impl Runtime {
             gate_chunk_targets,
             gate_chunk_custodies,
             gate_chunk_urls,
+            gate_chunk_members,
         ) = if gate_on {
             // T1 P1.4: one builder, one ordering for chunks + labels +
             // provenance. Late appends (trace, sealed conversation
@@ -1538,9 +1540,11 @@ impl Runtime {
                 parts.chunk_targets,
                 parts.chunk_custodies,
                 parts.chunk_urls,
+                parts.chunk_members,
             )
         } else {
             (
+                Vec::new(),
                 Vec::new(),
                 Vec::new(),
                 Vec::new(),
@@ -1566,6 +1570,7 @@ impl Runtime {
             // have no custody row and read as unknown by index.
             chunk_custodies: gate_chunk_custodies,
             chunk_urls: gate_chunk_urls,
+            chunk_members: gate_chunk_members,
             searcher: if gate_on {
                 Some(std::sync::Arc::new(
                     self.claim_searcher(context.conversation.enabled_corpora.as_deref(), &chunks)
@@ -2186,7 +2191,7 @@ impl Runtime {
             // have everything they had on the non-streaming path.
             let (sources_for_prov, coverage_for_prov) = build_provenance_components(
                 &source_map,
-                &std::collections::HashMap::new(),
+                &peer_attribution,
                 &folder_meta,
                 // KnowledgeQueryPlan doesn't carry the
                 // display-category lookup; the chip-label rename
@@ -2329,10 +2334,9 @@ impl Runtime {
                         gate_meta: grounding_gate_meta.as_ref(),
                         gate_claims: gate_claims.as_deref(),
                         general_knowledge,
-                        pool_corpora: pool_corpora_for_ledger,
                         demands: demands_for_ledger,
                         gaps,
-                        ..Default::default()
+                        ..crate::runtime::epistemic::EpistemicInputs::over(pool_for_ledger)
                     },
                 ))
             } else {
@@ -3097,12 +3101,12 @@ impl Runtime {
         // buffer-until-verdict is the precedent; full citation at the
         // KQ seam's `hold`). Unarmed turns: deep_hold == deep_gate_on,
         // byte-identical.
-        // Distinct corpus ids for the epistemic ledger (moved into the
-        // spawn; kc.chunks is consumed by the evidence build below).
-        let deep_pool_corpora = crate::runtime::epistemic::pool_corpora(&kc.chunks);
+        // The epistemic ledger's pool (moved into the spawn; kc.chunks is
+        // consumed by the evidence build below).
+        let deep_pool = crate::runtime::epistemic::pool_context(&kc.chunks);
         let authority_armed = crate::runtime::authority_guard::armed_for_evidence(
             &self.tools,
-            &deep_pool_corpora,
+            &deep_pool.corpora,
             "deep_stream",
         );
         let deep_hold = deep_gate_on || authority_armed.is_some();
@@ -3132,6 +3136,7 @@ impl Runtime {
             deep_chunk_targets,
             deep_chunk_custodies,
             deep_chunk_urls,
+            deep_chunk_members,
         ) = if deep_gate_on {
             // T1 P1.4: one builder, one ordering (see KnowledgeQuery
             // sibling above). Late appends read as Leaf.
@@ -3158,9 +3163,11 @@ impl Runtime {
                 parts.chunk_targets,
                 parts.chunk_custodies,
                 parts.chunk_urls,
+                parts.chunk_members,
             )
         } else {
             (
+                Vec::new(),
                 Vec::new(),
                 Vec::new(),
                 Vec::new(),
@@ -3184,6 +3191,7 @@ impl Runtime {
             // Builder-ordered stamps; late appends read as unknown.
             chunk_custodies: deep_chunk_custodies,
             chunk_urls: deep_chunk_urls,
+            chunk_members: deep_chunk_members,
             searcher: if deep_gate_on {
                 Some(std::sync::Arc::new(
                     self.claim_searcher(
@@ -3454,8 +3462,7 @@ impl Runtime {
                     crate::runtime::epistemic::EpistemicInputs {
                         gate_meta: grounding_gate_meta.as_ref(),
                         gate_claims: gate_claims.as_deref(),
-                        pool_corpora: deep_pool_corpora,
-                        ..Default::default()
+                        ..crate::runtime::epistemic::EpistemicInputs::over(deep_pool)
                     },
                 )
             });

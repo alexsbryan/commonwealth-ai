@@ -404,68 +404,9 @@ async fn static_handler(State(ctx): State<Arc<DevCtx>>, uri: Uri) -> Response {
     serve_under(&ctx.bundle_dir, rel, shim)
 }
 
-/// Serve `rel` from inside `root`, or 404 — **never from outside it**.
-///
-/// The guard is not "reject `..`": a request path can spell an escape many
-/// ways, and a check on the spelling is a check on what the caller authored
-/// (ARCH §18.1). Both sides are canonicalized and the result must still be
-/// under the root, so what is asserted is where the file actually IS.
-///
-/// Until this landed, both dev servers joined the request path onto the
-/// bundle directory and read whatever came out.
-pub(crate) fn serve_under(root: &Path, rel: &str, shim_src: Option<&str>) -> Response {
-    let joined = root.join(rel);
-    let Ok(real_root) = std::fs::canonicalize(root) else {
-        return (StatusCode::NOT_FOUND, "bundle directory is gone").into_response();
-    };
-    let Ok(real) = std::fs::canonicalize(&joined) else {
-        return (StatusCode::NOT_FOUND, format!("not found: {rel}")).into_response();
-    };
-    if !real.starts_with(&real_root) {
-        // Say nothing about what is out there. A 404 and a refusal look the
-        // same to a caller who should not have asked.
-        tracing::warn!(rel, root = %real_root.display(), "dev server: refused a path outside the bundle");
-        return (StatusCode::NOT_FOUND, format!("not found: {rel}")).into_response();
-    }
-    serve_file(&real, shim_src)
-}
-
-pub(crate) fn serve_file(file: &Path, shim_src: Option<&str>) -> Response {
-    let bytes = match std::fs::read(file) {
-        Ok(b) => b,
-        Err(_) => {
-            return (
-                StatusCode::NOT_FOUND,
-                format!("not found: {}", file.display()),
-            )
-                .into_response()
-        }
-    };
-    let ct = content_type(file);
-    if let Some(src) = shim_src {
-        let html = String::from_utf8_lossy(&bytes);
-        let tag = format!("<script src=\"{src}\"></script>");
-        let injected = if let Some(idx) = html.find("</head>") {
-            format!("{}{}{}", &html[..idx], tag, &html[idx..])
-        } else {
-            format!("{tag}{html}")
-        };
-        return ([(header::CONTENT_TYPE, ct)], injected).into_response();
-    }
-    ([(header::CONTENT_TYPE, ct)], bytes).into_response()
-}
-
-pub(crate) fn content_type(file: &Path) -> &'static str {
-    match file.extension().and_then(|e| e.to_str()) {
-        Some("html") => "text/html; charset=utf-8",
-        Some("js") => "text/javascript; charset=utf-8",
-        Some("css") => "text/css; charset=utf-8",
-        Some("json") => "application/json",
-        Some("svg") => "image/svg+xml",
-        Some("woff2") => "font/woff2",
-        _ => "application/octet-stream",
-    }
-}
+/// The bundle-escape guard now faces the LAN through the guest door, so it
+/// has one implementation, there.
+pub(crate) use sovereign_daemon::guest_door::serve_under;
 
 /// The dev `window.meshApp`: same method surface as `meshapp_shim.js`, but over
 /// `fetch('/__meshapp/<op>')` instead of Tauri IPC. The corpus id the bundle

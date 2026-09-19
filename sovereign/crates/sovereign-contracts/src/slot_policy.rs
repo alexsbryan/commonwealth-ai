@@ -177,9 +177,18 @@ impl Workload {
     /// literal), the class think budget, and emits the glassbox `workload=`
     /// tracing event.
     ///
-    /// Privacy: LocalOnly. Internal machinery uses this; it is provably
-    /// routing-neutral at the mesh privacy gate. Session-posture-aware callers
-    /// (grounding judges, EnrichBulk fan-out) use [`Self::request_shared`].
+    /// Privacy: LocalOnly — which means `offload_verdict` refuses the request
+    /// on its FIRST check and no latency, capability or scorer decision is ever
+    /// reached for it. That is the right default for machinery whose prompt the
+    /// session never consented to share, and it is NOT "routing-neutral": this
+    /// comment claimed that until 2026-09-19, and the claim hid a 38-second
+    /// intent classify on a CPU node with an idle peer 37 ms away
+    /// (`ralph/DECISIONS.md` A33). A call site whose prompt the session's own
+    /// synthesis already carries should thread the posture instead —
+    /// [`Self::request_shared`] with `SkillRegistry::session_sharding()`, which
+    /// is SLOT_POLICY §2.4 and what `LlmRouter`'s three classify calls now do.
+    /// The sibling spelling is [`Self::requirements`] taking the same posture,
+    /// used by the grounding judges and the synthesis envelope builder.
     ///
     /// Was `CompletionRequest::for_workload` until 2026-08-20. It could not
     /// stay an inherent constructor once `CompletionRequest` moved down to

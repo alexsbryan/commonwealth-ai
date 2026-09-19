@@ -131,4 +131,62 @@ test.describe("Library shelf", () => {
     await expect(page.getByTestId("notebook-tab-explore")).toHaveClass(/active/);
     await expect(page.getByTestId("notebook-make-explorable")).toBeVisible();
   });
+
+  test("Libraries on the mesh lists offers and plays one without showing its URL", async ({
+    sovereignPage: page,
+    chat,
+  }) => {
+    await bootToChat(page, chat);
+    await seedNotebooks(page, NOTEBOOKS);
+    await page.evaluate(() => {
+      const w = window as unknown as {
+        __sovereign_test__: {
+          setHandler: (cmd: string, fn: (args: unknown) => unknown) => void;
+          _opened?: string[];
+        };
+      };
+      w.__sovereign_test__._opened = [];
+      w.__sovereign_test__.setHandler("mesh_media_offers", () => [
+        {
+          peer: "b",
+          node_id: "bbbb",
+          status: "online",
+          offered_to: ["a", "c"],
+          player_url: "http://127.0.0.1:41231",
+          unreachable: null,
+        },
+      ]);
+      w.__sovereign_test__.setHandler("plugin:shell|open", (args) => {
+        w.__sovereign_test__._opened!.push((args as { path: string }).path);
+      });
+    });
+    await page.getByTestId("nav-library").click();
+
+    const lib = page.getByTestId("mesh-library");
+    await expect(lib).toHaveCount(1);
+    await expect(lib.getByTestId("mesh-library-offered-to")).toHaveText("offered to: a, c");
+    await expect(page.getByTestId("mesh-libraries")).not.toContainText("127.0.0.1");
+
+    await lib.getByRole("button").click();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as unknown as { __sovereign_test__: { _opened: string[] } })
+            .__sovereign_test__._opened,
+        ),
+      )
+      .toEqual(["http://127.0.0.1:41231"]);
+  });
+
+  test("Libraries on the mesh says so when no member offers one", async ({
+    sovereignPage: page,
+    chat,
+  }) => {
+    await bootToChat(page, chat);
+    await seedNotebooks(page, NOTEBOOKS);
+    await page.getByTestId("nav-library").click();
+    await expect(page.getByTestId("mesh-libraries-empty")).toHaveText(
+      "no member is offering a library",
+    );
+  });
 });

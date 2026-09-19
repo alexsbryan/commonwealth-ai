@@ -1425,7 +1425,7 @@ impl Runtime {
         });
         // I2-A: assemble the epistemic ledger for the attached-doc surface.
         // The sealed universe is the attached asset itself, not a corpus —
-        // chunks here are `DocumentChunk`, so `pool_corpora()` (a `ScoredChunk`
+        // chunks here are `DocumentChunk`, so `pool_context()` (a `ScoredChunk`
         // reader) can't derive it; we set the pool to the asset's source_key
         // manually. When `SOVEREIGN_EPISTEMIC_STATE` is off the key is absent
         // (I1/I6). With the gate off (`gate_claims: None`) and evidence present
@@ -1446,8 +1446,13 @@ impl Runtime {
                 crate::runtime::epistemic::EpistemicInputs {
                     gate_meta: grounding_gate_meta.as_ref(),
                     gate_claims: gate_claims.as_deref(),
-                    pool_corpora,
-                    ..Default::default()
+                    // The attached asset is local: no member.
+                    ..crate::runtime::epistemic::EpistemicInputs::over(
+                        crate::runtime::epistemic::PoolContext {
+                            corpora: pool_corpora,
+                            members: Vec::new(),
+                        },
+                    )
                 },
             );
             metadata["epistemic_state"] =

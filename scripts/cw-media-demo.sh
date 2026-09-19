@@ -5,9 +5,13 @@
 # Two roles, three lines each.
 #
 #   HOLDER (the machine with the library):
-#     scripts/cw-media-demo.sh holder-up        # Jellyfin on 127.0.0.1:8096 + one test title + wizard done
-#     # add to ~/.svrnmesh/config.toml under [iroh]:   media_origin = "127.0.0.1:8096"
-#     svrn daemon stop; svrn daemon start       # the acceptor now advertises cwth/media/0 to members
+#     scripts/cw-media-demo.sh holder-up        # Jellyfin on 127.0.0.1:8096 + one test title (podman)
+#     scripts/cw-media-demo.sh holder-setup     # wizard, the declared key, then the offer
+#     # holder-setup runs `svrn mesh media offer` (it finds 127.0.0.1:8096), which writes [iroh] media_origin
+#     # and restarts the daemon itself -- the acceptor then advertises cwth/media/0 to members.
+#     # holder-setup needs no podman: ring-room-demo.sh runs it inside a node whose netns the
+#     # Jellyfin container shares (CW_MEDIA_NETWORK=container:<node>, CW_MEDIA_NAME to keep
+#     # clear of a cw-jellyfin already on the host).
 #
 #   VIEWER (any other member):
 #     svrn mesh media <holder-name>             # prints http://127.0.0.1:NNNNN + path (direct/relayed) + a probe
@@ -22,7 +26,7 @@ set -euo pipefail
 
 ROOT="${CW_MEDIA_ROOT:-$HOME/.svrnmesh/media-demo}"
 IMAGE="${CW_MEDIA_IMAGE:-docker.io/jellyfin/jellyfin:latest}"
-NAME="cw-jellyfin"
+NAME="${CW_MEDIA_NAME:-cw-jellyfin}"
 ORIGIN="127.0.0.1:8096"
 AUTH='MediaBrowser Client="cw-media-demo", Device="cli", DeviceId="cw-media-demo", Version="1"'
 
@@ -69,12 +73,8 @@ holder_key() {
   printf 'MediaBrowser Token="%s"' "$key" | "$cli" mesh media declare authorization || return 1
   # Declaring is not serving. `read_declared_in` runs once, while the acceptor
   # is built (sovereign-mesh/src/iroh_access.rs:620), so the key reaches no
-  # request until the daemon is rebuilt -- and `reload` reports "no config
-  # changes detected" rather than saying so. Restart here, or holder-up ends
-  # with a stored credential and a library that still 401s the house.
-  say "restarting the daemon so the declaration reaches the acceptor…"
-  "$cli" daemon stop >/dev/null 2>&1 || true
-  "$cli" daemon start >/dev/null || { say "daemon did not come back -- \`$cli daemon start\`"; return 1; }
+  # request until the daemon is rebuilt. No restart here: the offer verb that
+  # follows restarts the daemon itself, and one restart carries both.
 }
 
 holder_up() {
@@ -93,11 +93,17 @@ holder_up() {
   if podman container exists "$NAME"; then
     podman start "$NAME" >/dev/null
   else
-    podman run -d --name "$NAME" -p "$ORIGIN:8096" \
+    local net=(-p "$ORIGIN:8096")
+    [ -n "${CW_MEDIA_NETWORK:-}" ] && net=(--network "$CW_MEDIA_NETWORK")
+    podman run -d --name "$NAME" "${net[@]}" \
       -v "$ROOT/media:/media:Z" -v "$ROOT/config:/config:Z" -v "$ROOT/cache:/cache:Z" \
       "$IMAGE" >/dev/null
   fi
+}
 
+# Everything after the container, and nothing that needs podman: it runs where
+# the origin is loopback (the holder itself, or a node sharing its netns).
+holder_setup() {
   say "waiting for Jellyfin on $ORIGIN…"
   # Kestrel accepts (and resets) before the app answers, so a single 200 is
   # not "ready": require the public-info document itself, twice in a row.
@@ -127,6 +133,13 @@ holder_up() {
   fi
 
   holder_key || say "declaration skipped -- viewers will get 401 from /Items until you run it by hand"
+  # The wizard's own scan is cancelled when setup completes (seen 2026-09-18 on
+  # a cold 12.x: "Scan Media Library ... Cancelled", /Items empty for 90 s), so
+  # a fresh holder lists no title until something scans again.
+  [ -n "$TOKEN" ] && api POST /Library/Refresh >/dev/null
+  # No origin: the verb finds Jellyfin on its well-known port.
+  "${SVRN:-svrn}" mesh media offer \
+    || say "offer failed -- run \`svrn mesh media offer $ORIGIN\` by hand"
 
   cat >&2 <<EOF
 
@@ -135,11 +148,8 @@ library:      $ROOT/media
 credential:   declared as \`authorization\` under ~/.svrnmesh/secrets/media/
               (0600, never leaves this machine, never printed back)
 
-one line left, and it is a config edit because publishing an ORIGIN is still a
-config line — \`svrn mesh media declare\` declares a CREDENTIAL, not an origin.
-In ~/.svrnmesh/config.toml under [iroh]:
-  media_origin = "$ORIGIN"
-then:  svrn daemon stop; svrn daemon start
+offered:      \`svrn mesh media offer\` found $ORIGIN, wrote [iroh] media_origin and
+              reloaded the daemon (narrow it with \`svrn mesh media admit <member>...\`)
 
 a member then runs:  svrn mesh media <this node's name>
 and a shim fans out:  POST /v1/mesh/media/fanout {"path":"/Items?..."} — which
@@ -153,6 +163,7 @@ holder_down() {
 
 case "${1:-}" in
   holder-up)   holder_up ;;
+  holder-setup) holder_setup ;;
   holder-down) holder_down ;;
   *) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac

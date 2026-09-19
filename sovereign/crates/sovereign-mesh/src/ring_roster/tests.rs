@@ -41,6 +41,7 @@ pub fn member(node_id: NodeId, name: &str, pubkey: Option<NodePubkey>) -> Member
             inference_capable: false,
             loaded_models: vec![],
             origins: Vec::new(),
+            media_allow: Vec::new(),
             embed_model: None,
             benchmark: None,
             current_in_flight: None,
@@ -203,5 +204,139 @@ fn a_blank_name_falls_back_to_the_node_id_rather_than_dropping_the_key() {
     assert_eq!(
         r.roster().person_for(&RingSigner::actor(&k)),
         Some(&Person::from(id.to_string()))
+    );
+}
+
+/// **A ring nobody has written to answers with the mesh on first touch.** The
+/// namespace has no directory, no file and no registration — it is what a
+/// fresh app's first append looks like to the rail — and its roster is the
+/// membership, so that append is admitted rather than refused `NotInRoster`
+/// before anything reaches disk.
+#[tokio::test]
+async fn a_namespace_never_written_to_answers_with_the_mesh_roster_on_first_touch() {
+    let me = NodeId::from_u128(1);
+    let k = key(21);
+    let state = sovereign_daemon::state::AppState::new(
+        me,
+        mesh_of(vec![member(me, "alex", Some(pubkey_of(&k)))]),
+    );
+    let dir = tempfile::tempdir().unwrap();
+    let rail = commonwealth_rail::RingRail::new(dir.path(), std::sync::Arc::new(k.clone()));
+    super::MeshRosterSource::install(
+        &rail,
+        &state.inner.fabric.mesh,
+        &state.inner.fabric.identity,
+        state.self_node_pubkey(),
+    )
+    .unwrap();
+
+    let journal = rail.journal("fresh-app").unwrap();
+    assert!(!journal.dir().exists(), "never written to");
+    assert_eq!(
+        rail.roster_origin("fresh-app"),
+        commonwealth_rail::RosterOrigin::Derived
+    );
+    let roster = rail.roster(&journal).await.unwrap();
+    assert_eq!(
+        roster.person_for(&RingSigner::actor(&k)),
+        Some(&Person::from("alex")),
+        "everyone in the mesh, on the first read"
+    );
+}
+
+/// **The registered namespace cannot be narrowed by a file.** The reason
+/// `REGISTERED_NAMESPACES` exists: a hand roster on one node would drop
+/// peers' measurements there and nowhere else. The file is written and the
+/// door still answers with the membership.
+#[tokio::test]
+async fn a_registered_namespace_ignores_a_hand_roster() {
+    let me = NodeId::from_u128(1);
+    let k = key(22);
+    let state = sovereign_daemon::state::AppState::new(
+        me,
+        mesh_of(vec![member(me, "alex", Some(pubkey_of(&k)))]),
+    );
+    let dir = tempfile::tempdir().unwrap();
+    let rail = commonwealth_rail::RingRail::new(dir.path(), std::sync::Arc::new(k.clone()));
+    super::MeshRosterSource::install(
+        &rail,
+        &state.inner.fabric.mesh,
+        &state.inner.fabric.identity,
+        state.self_node_pubkey(),
+    )
+    .unwrap();
+
+    for ns in super::REGISTERED_NAMESPACES {
+        let journal = rail.journal(ns).unwrap();
+        journal
+            .set_roster(&commonwealth_rail::Roster::default())
+            .unwrap();
+        assert_eq!(
+            rail.roster_origin(ns),
+            commonwealth_rail::RosterOrigin::Derived,
+            "{ns}"
+        );
+        let roster = rail.roster(&journal).await.unwrap();
+        assert_eq!(
+            roster.person_for(&RingSigner::actor(&k)),
+            Some(&Person::from("alex")),
+            "{ns}: the empty file must not narrow a registered ring"
+        );
+    }
+}
+
+/// **A stray file narrows an app ring and nothing else.** The same
+/// `roster.json` — one person, not us — is ignored under a daemon namespace,
+/// where the roster is the mesh's, and narrows an app namespace, where the
+/// file is the narrowing primitive.
+#[tokio::test]
+async fn a_stray_roster_file_narrows_an_app_ring_but_not_a_daemon_ring() {
+    let me = NodeId::from_u128(1);
+    let k = key(23);
+    let state = sovereign_daemon::state::AppState::new(
+        me,
+        mesh_of(vec![member(me, "alex", Some(pubkey_of(&k)))]),
+    );
+    let dir = tempfile::tempdir().unwrap();
+    let rail = commonwealth_rail::RingRail::new(dir.path(), std::sync::Arc::new(k.clone()));
+    super::MeshRosterSource::install(
+        &rail,
+        &state.inner.fabric.mesh,
+        &state.inner.fabric.identity,
+        state.self_node_pubkey(),
+    )
+    .unwrap();
+
+    let stray = commonwealth_rail::Roster::new(std::collections::BTreeMap::from([(
+        Person::from("someone-else"),
+        vec![RingSigner::actor(&key(24))],
+    )]));
+    let daemon_ns = commonwealth_state::store_adapter::INFERENCE_APP_ID;
+    for ns in [daemon_ns, "house-expenses"] {
+        rail.journal(ns).unwrap().set_roster(&stray).unwrap();
+    }
+
+    let daemon = rail.journal(daemon_ns).unwrap();
+    assert_eq!(
+        rail.roster(&daemon)
+            .await
+            .unwrap()
+            .person_for(&RingSigner::actor(&k)),
+        Some(&Person::from("alex")),
+        "a daemon ring's roster is the mesh's; the stray file is ignored"
+    );
+
+    let app = rail.journal("house-expenses").unwrap();
+    assert_eq!(
+        rail.roster_origin("house-expenses"),
+        commonwealth_rail::RosterOrigin::File
+    );
+    assert_eq!(
+        rail.roster(&app)
+            .await
+            .unwrap()
+            .person_for(&RingSigner::actor(&k)),
+        None,
+        "the same file narrows an app ring"
     );
 }

@@ -1322,6 +1322,23 @@ export async function meshRelayCandidates(): Promise<
   return invoke("mesh_relay_candidates");
 }
 
+/** One library a member offers on the mesh (Rust `MeshMediaOffer`).
+ *  `offered_to` empty = everyone here; `player_url` null = the host
+ *  refused the reach, and `unreachable` says why. */
+export interface MeshMediaOffer {
+  peer: string;
+  node_id: string;
+  status: string;
+  offered_to: string[];
+  player_url: string | null;
+  unreachable: string | null;
+}
+
+/** The libraries `svrn mesh media` lists, each with its player URL. */
+export async function meshMediaOffers(): Promise<MeshMediaOffer[]> {
+  return invoke("mesh_media_offers");
+}
+
 /** Roll a fresh memorable node-name suggestion (e.g. "mac-peer").
  *  The 🎲 button next to the node-name input calls this; the user
  *  still has to press Save for the name to persist. */

@@ -25,6 +25,7 @@ import {
   createAttribution,
   decodeActs,
   decodePresence,
+  displayName,
   encodeSelf,
   personFor,
   presenceEnvelope,
@@ -372,6 +373,38 @@ test("a key the roster does not name is said to be unnamed, never invented", () 
   const [line] = attribution.lines(MEMBERS, NOW_SEC * 1000);
   assert.match(line, /does not name/);
   assert.doesNotMatch(line, /alex|bo|dddd/);
+});
+
+test("a guest's paragraph names the guest and the member whose door signed it", () => {
+  // The door signs with its member's key, so the signer alone would put the
+  // member's name on the guest's words. A member's act, beside it, renders
+  // exactly as it did before guests existed.
+  const first = typedParagraphs(["one", "two"]);
+  const second = edit(first, undefined, (frag) => frag.get(1).get(0).insert(3, " more"));
+  const attribution = createAttribution();
+  attribution.absorb(
+    decodeActs(
+      {
+        ops: [
+          op("ring-a", changeAct(first), { actor: BO_KEY, ts_unix: NOW_SEC - 12 }),
+          op("ring-b", changeAct(second, DOC_ID, "ana"), { actor: ALEX_KEY, ts_unix: NOW_SEC - 4 }),
+        ],
+      },
+      fold,
+    ).acts,
+  );
+
+  assert.deepEqual(attribution.lines(MEMBERS, NOW_SEC * 1000), [
+    "last edited by bo 12s ago",
+    "last edited by ana, guest of alex 4s ago",
+  ]);
+});
+
+test("a member's act carries no guest field, and a guest's caret names both", () => {
+  assert.equal("guest" in changeAct(new Uint8Array([1])), false);
+  assert.equal(displayName(MEMBERS, ALEX_KEY), "alex");
+  assert.equal(displayName(MEMBERS, ALEX_KEY, "ana"), "ana, guest of alex");
+  assert.match(displayName(MEMBERS, "dd".repeat(32), "ana"), /^ana, guest of a key .* does not name$/);
 });
 
 test("two pages that absorbed the same acts in different orders name the same author", () => {

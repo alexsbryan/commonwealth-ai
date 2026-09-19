@@ -208,6 +208,10 @@ crate  = "oicp-types"
 weight = 29
 test   = "capability_hint_standardized_constructors"
 
+# The three sum bars carry `start` and a ledger, no floor: the number is a
+# before/after table and a threshold is operator-ratified (§18.6). Until one is
+# ratified their instrument lines are comments so the registry loads (2026-09-18);
+# score.sh is still the one decider through the LEDGER below.
 # ── SUCCESS — one definition, no composition ────────────────────────────────
 # Operator 2026-09-17: the definition of success has zero room for debate.
 # It is a per-file table. For every [[probe]] file, three seconds-counts,
@@ -232,9 +236,10 @@ test   = "capability_hint_standardized_constructors"
 
 [[bar]]
 id           = "bl-noise"
+goodhart     = "can read inside the band while the ruler is still blind if the A/A pair is two idle runs on one settled tree rather than an edit-and-restore around each probe; the pair must bracket the same restore the real probes pay"
 one_line     = "Two warm runs on an unchanged tree agree — the ruler can tell a move from nothing"
 derives_from = "ARCH_PRINCIPLES 7; 2026-09-17-baseline-29/score.aa.json (28 probes): warm 413.9 vs 419.8, band 1.42%, max per-file delta 5.6 s; the 11-probe pair was 0.66% / 1.3 s"
-status       = "met"
+status       = "open"
 target       = 0.03
 direction    = "lower_is_better"
 kill         = "a move is banked only if the sum of the column it targets (warm for edge-cut/cohesion-split/test-layout, fresh for build-graph) falls by more than this band while neither other sum rises by more than it; if an A/A pair ever exceeds it, stop and fix the instrument before any move"
@@ -242,34 +247,40 @@ instrument   = "scripts/build-probe/score.sh --aa"
 
 [[bar]]
 id           = "bl-warm"
+derives_from = "the SUCCESS section above: warm is the second of two runs of scoped lint + focused test per probe file on the shared target/, summed; the census (gate-census-30d.json) says this is the column a session pays most often"
+goodhart     = "can fall while nothing got cheaper if a probe's focused test was renamed to a smaller one or its file moved so the scoped lint resolved fewer crates; the ruler is frozen, and a probe whose test or file changed is a re-freeze reported at both scores"
 one_line     = "Σ over probe files of (scoped lint + focused test) seconds, steady state"
 start        = 419.8   # 2026-09-17-baseline-29 (28 probes), HEAD 525a5a940; the 11-probe sub-table was 227.5 (2026-09-17-baseline)
 status       = "open"
 direction    = "lower_is_better"
-instrument   = "scripts/build-probe/score.sh          # .warm_s in target/build-probe/score.json"
+# instrument = "scripts/build-probe/score.sh          # .warm_s in target/build-probe/score.json"
 
 [[bar]]
 id           = "bl-fresh"
+goodhart     = "can fall while a session still pays the cold cost if target/fresh-probe was not wiped or the three full gates were not run on it first; the run names the dir it wiped and the gate commands it ran"
 one_line     = "Σ over probe crates of the first focused test's seconds on a full-gates-only target dir"
 derives_from = "quality/BUILD_LATENCY.md D1; the tail of the census"
 start        = 2204.2   # 2026-09-17-baseline-29; 11-probe sub-table 1130.2
 status       = "open"
 direction    = "lower_is_better"
-instrument   = "scripts/build-probe/score.sh --fresh  # .fresh_s in target/build-probe/score.fresh.json; ~45 min; needs ~105 GB free (target/fresh-probe, removed after)"
+# instrument = "scripts/build-probe/score.sh --fresh  # .fresh_s in target/build-probe/score.fresh.json; ~45 min; needs ~105 GB free (target/fresh-probe, removed after)"
 
 [[bar]]
 id           = "bl-build"
+derives_from = "the SUCCESS section above: build is `cargo build --workspace` after the one-statement edit, tree settled; the column the pre-push gate and every daemon rebuild pay"
+goodhart     = "can fall while the build is no cheaper if the edit landed in a comment, a cfg-off body or a file no crate reaches; the edit is one statement in the first function body and the log shows the crate recompiled"
 one_line     = "Σ over probe files of `cargo build --workspace` seconds after the edit"
 start        = 473.4   # 2026-09-17-baseline-29; 11-probe sub-table 210.6
 status       = "open"
 direction    = "lower_is_better"
-instrument   = "scripts/build-probe/score.sh --build  # .build_s in target/build-probe/score.build.json"
+# instrument = "scripts/build-probe/score.sh --build  # .build_s in target/build-probe/score.build.json"
 
 [[bar]]
 id           = "bl-noop-floor"
+goodhart     = "can read under 2 s while a real no-op still rebuilds if the measured run is the second invocation after the same command already warmed it; the noop run is the FIRST check after a settled full build, and a build.rs with a bare rerun-if-changed=. would pass it while re-running everywhere else"
 one_line     = "A full check with nothing edited is the fingerprint scan and nothing else"
 derives_from = "quality/BUILD_LATENCY.md D3 — 7.4 s → 0.8 s after the build.rs path fix (93eef92bf)"
-status       = "met"
+status       = "open"
 target       = 2.0
 direction    = "lower_is_better"
 instrument   = "scripts/build-probe/score.sh --noop"

@@ -1,0 +1,224 @@
+# Flight rules — read raw. Verdicts come from measurement rows, never prose here.
+#
+# CHILD of ring-apps, the second after ring-doc. THE mesh demo in one sitting
+# on three machines: D13 (an answer that names the machine it depended on),
+# D5 (the doc, landed by ring-doc, now attributed from MEMBERSHIP), D3 (a film
+# from another machine's library) and the CONVERSION - a person in the room
+# joins by one scan and all three legs see them. Orders under it
+# `serves: ring-room <bar-id ...>`.
+id        = "ring-room"
+parent    = "ring-apps"
+objective = "Three machines, one sitting, one person watching: ask the house AI and the citation names the machine the passage lives on; edit the shared doc and your name is on the other screens without anyone having typed a roster; open a member's library from the Library rail and start a film on the projector; then someone in the room scans one QR and within a minute their name is on the doc, their library is in the rail and their corpus answers - and across the whole walk nobody typed an address, a port, a URL, a config line or a credential. Everything generalized: the member set is read from `svrn mesh status`, never from a list, so the people in the room can plug their own machines in"
+spec      = "quality/campaigns/ring-apps.toml demos D13 (rungs ra-9, ra-12), D5 (ra-13, landed by ring-doc rd-1), D3 (ra-18, ra-7) and D1's join (ra-11); quality/campaigns/ring-apps-shelf.md; .sovereign/features/ring-room/campaign.md (the brief: every leg's file:line anchors from the three scouts of 2026-09-18, and the two operator decisions - membership IS the mesh; scopes shown fluently on the media leg only). The DEMO SCRIPT is in .sovereign/features/ring-room-week1/order.md and is the definition of done."
+declared  = "2026-09-18"
+status    = "active"
+
+# ── THE PREDICATE ────────────────────────────────────────────────────────────
+# Two-sided. The affirmative half is the four legs at N=3 and again at N=4
+# after a join mid-run. The negative half is the census: nothing typed, and
+# the rail still learned nothing.
+[predicate]
+statement = "From three daemons on one mesh where A holds no copy of B's corpus, `scripts/ring-room-demo.sh verdict all` reads PASSED on every bar at N=3 and again at N=4 after a fourth member joined by one invite link during the run, with the member set read from `svrn mesh status` on every leg; the driver's typed-string log names zero addresses, ports, URLs, config lines or credentials; and `git diff --stat origin/main -- commonwealth/crates/commonwealth-rail commonwealth/crates/commonwealth-rail-core` (the ring rail; `commonwealth-rails` is the rails daemon, outside this clause) names ONLY the roster-door hunk in commonwealth-rail/src/lib.rs (the default RosterSource, operator 2026-09-18) - the rail learned nothing about any app's payload"
+check     = "./scripts/sovereign-test.sh --human --package sovereign-api --package sovereign-mesh --package commonwealth-media"
+# `check` decides only the code legs (fan-out attribution, derived roster,
+# media admit). The three-node run is `scripts/ring-room-demo.sh verdict all`,
+# OWED by rr-1-instrument; until it exists every bar below reads
+# could-not-judge, never a fabricated verdict (ARCH 5, ARCH 6).
+
+# ── BARS ─────────────────────────────────────────────────────────────────────
+
+[[bar]]
+id           = "ra-room-answer-names-the-machine"
+demo         = "Ask the house AI on machine A; the answer cites a passage that lives only on machine B, and the citation names B"
+rung         = "rr-1"
+one_line     = "CLAIM: for a 5-question bank whose answers live ONLY in a corpus B hosts, A answers each with a citation whose member name is B's mesh name"
+derives_from = "the fan-out already exists and already stamps the peer: routes_knowledge.rs:262-281 fans out only for corpora NOT held locally, :430-517 posts /internal/knowledge/search and writes peer_node_id/peer_name into free-form passage metadata (:503-505); the name reaches the UI at per-corpus source-summary level (formatters.rs:436-458 -> SourceSummary.from_peer, ui.rs:159-169). The row is 'peer_name first-class on the passage and on the citation', not a new fan-out (ARCH 11). A corpus nobody hosts is reported like an offline peer (:559) - the bar makes the two distinguishable by name."
+floor        = 1.0
+floor_basis  = "structural: FRACTION of the 5 answers whose citation carries B's member name for the B-hosted passage, over a run where the instrument first asserts the corpus is ABSENT from A's installed_indexes. A passage that arrived without a member name is 0 for that question. 1.0 or the bar is not met."
+target       = 1.0
+direction    = "higher_is_better"
+# instrument   = (none yet) — owed by rr-1-instrument: `scripts/ring-room-demo.sh verdict ra-room-answer-names-the-machine`
+instrument_note = "B ingests a small folder (`svrn corpus ingest`) with query_sharing on; A never installs it; the 5 questions are answerable only from that folder. The instrument reads A's installed_indexes before asking. Order: ring-room-week1 step 2."
+goodhart     = "can read 1.0 while the person still cannot tell where an answer came from if A also holds a copy of the corpus (then the answer is local and the name is decoration) - the absence check is the positive control; or if the name is stamped at the source-summary level only, which the person never sees next to the sentence - the bar reads the CITATION"
+status       = "open"
+
+[[bar]]
+id           = "ra-room-doc-name-from-membership"
+demo         = "Type in the shared doc on A; on B and C the paragraph says your name, and nobody ever ran a roster command"
+rung         = "rr-1"
+one_line     = "CLAIM: an edit on A lands on B and C within 2 s (p99 over 100 edits) attributed to A's MESH member name through a roster whose origin is Derived, with `svrn ring roster add` never run for the ring (it is now the NARROWING primitive; the demo never narrows the doc)"
+derives_from = "OPERATOR 2026-09-18: membership IS the mesh. A derived roster exists (sovereign-mesh/src/ring_roster.rs:106 MeshRoster::derive, name = mesh record name) but is installed only over DAEMON_OWN_NAMESPACES (:271-292) and refused for one hard-coded id (ring_cmd/mod.rs:149-165); routes_rail.rs:205/:317 already serve roster.members through RingRail::roster, so a derived source flows to ring-doc's page with NO page change. OPERATOR 2026-09-18 (second reading, after the worker showed the rail has no default source and a fresh ring's first append is refused before it reaches disk): an app applies to everyone in the mesh by default, and narrowing is a primitive - the rail's roster door gains a DEFAULT source (the one permitted hunk under commonwealth-rail*, lib.rs:130-205), precedence registered > roster.json (the hand roster IS the narrowing primitive) > default."
+floor        = 1.0
+floor_basis  = "structural: 1.0 iff (a) every 'last edited by' line on B and C equals the mesh member name of the signer for the latest act on that paragraph, (b) the ring's roster reports RosterOrigin::Derived, (c) the driver's command log contains no `ring roster add`, and (d) p99 propagation <= 2 s over 100 edits. Any false is 0.0."
+target       = 1.0
+direction    = "higher_is_better"
+# instrument   = (none yet) — owed by rr-1-instrument: `scripts/ring-room-demo.sh verdict ra-room-doc-name-from-membership`
+instrument_note = "reuses ring-doc-demo.sh's 100-edit drive and its attribution leg, with the roster step REMOVED and the expected names read from `svrn mesh status`. Order: ring-room-week1 step 1."
+goodhart     = "can read 1.0 while the roster is still hand-typed if the instrument seeds a File roster whose names happen to equal the mesh names - leg (b) reads the origin and leg (c) reads the command log; and a mesh whose member names are the node ids passes trivially - the three daemons are named at `svrn mesh init`/`join` and the names on screen must be those words"
+status       = "open"
+
+[[bar]]
+id           = "ra-room-film-from-the-library-rail"
+demo         = "Open the Library rail on the machine wired to the projector; a library that lives on another machine is listed with who may reach it; pick a title and it plays"
+rung         = "rr-1"
+one_line     = "CLAIM: the holder offers its library with ONE verb and no config edit; within 30 s the viewer's Library rail lists it by membership and shows who it is offered to; picking a title streams with first byte <= 5 s through the mesh tunnel; the viewer typed no URL"
+derives_from = "the offer already rides membership: MeshMember.origins (daemon_wire/mesh.rs:93-95) advertises MEDIA_ALPN when [iroh] media_origin is Some (iroh_access.rs:556-561), `svrn mesh media` lists offers from gossip and reaches by name (mesh_media.rs:15-70, :181-249), commonwealth-media reach.rs has MediaOffer/pick_member/player_url and identity.rs:75 admit_media is the decider. What is missing: the holder's step is a config edit + restart (cw-media-demo.sh:131-142), and the desktop Library rail (NavRail.svelte:24-29) lists corpora only - no Tauri command lists MediaOffer. OPERATOR 2026-09-18: scopes shown fluently on THIS leg only - offer admits members by default, narrowed in one verb, the rail shows 'offered to'."
+floor        = 1.0
+floor_basis  = "structural: 1.0 iff (a) the holder's offer took one CLI verb and the holder's config was not edited by the driver, (b) the viewer's Library rail (or its Tauri command, headless) lists the offer within 30 s with an 'offered to' line, (c) first media byte <= 5 s after pick, and (d) the viewer's typed-string log holds no URL. Any false is 0.0."
+target       = 1.0
+direction    = "higher_is_better"
+# instrument   = (none yet) — owed by rr-1-instrument: `scripts/ring-room-demo.sh verdict ra-room-film-from-the-library-rail`
+instrument_note = "the holder container runs the Jellyfin stand-in cw-media-demo.sh already brings up; the driver calls the offer verb, then polls the viewer's offers command and times the first byte of player_url. cw-media-demo.sh has no verdict lines - this instrument adds the measurement. Order: ring-room-week1 steps 3-4."
+goodhart     = "can read 1.0 with the tunnel unused if the viewer resolved the holder's origin directly (a pinned holder URL in any config is 0.0 - leg (a) diffs the configs); and 'offered to: everyone here' printed unconditionally proves nothing - the run narrows the offer to two names once and the rail must show those two"
+status       = "open"
+
+[[bar]]
+id           = "ra-room-plug-in-live"
+demo         = "Someone in the room scans one QR; within a minute their name is on the doc, their library is in the rail, and their corpus answers"
+rung         = "rr-1"
+one_line     = "CLAIM: a fourth member joins by ONE invite link during the sitting and within 60 s all three legs see them, with the instrument running the SAME script at N=3 and N=4 and the member set read from `svrn mesh status`"
+derives_from = "the join is one link today: build_join_link (commonwealth-discovery/src/deep_link.rs:337-350) and `svrn mesh join` accepting bare key / https / sovereign:// (mesh_cmd.rs:2806-2832); MeshSettings.svelte:650-673 shows the link as text + copy. No QR renderer exists in the repo (the render is rung rr-2, fast_qr per the shelf). The generalization is the campaign's conversion point: nothing in the script or the configs names a member, a port, a corpus id or a host."
+floor        = 1.0
+floor_basis  = "structural: 1.0 iff after the join (a) the doc on the fourth shows their mesh name and an edit from them is attributed on A within 60 s, (b) their library (offered with the one verb) is listed in A's rail within 60 s, (c) a question answerable only from their corpus is answered on A with their name within 60 s, and (d) the script's diff against its N=3 invocation is the mesh status output alone. Any false is 0.0."
+target       = 1.0
+direction    = "higher_is_better"
+# instrument   = (none yet) — owed by rr-1-instrument: `scripts/ring-room-demo.sh verdict ra-room-plug-in-live`
+instrument_note = "N=3 run, then a fourth podman node joins with the link the first node minted, then the same verdict functions re-run over the N read from `svrn mesh status`. Order: ring-room-week1 step 6."
+goodhart     = "can read 1.0 while the room still cannot plug in if the fourth node was pre-rostered, pre-configured or named anywhere in the script (any name, port, corpus id or host written in the script or a config is 0.0 - the census greps for them); and a 60 s window measured from the driver's clock on the JOINER hides the gossip round the other three pay - the clocks are the observers' on A"
+status       = "open"
+
+[[bar]]
+id           = "ra-room-nothing-typed"
+demo         = "Across the whole walk the person types no address, port, URL, config line or credential - and the verdict names each one they did"
+rung         = "rr-1"
+one_line     = "CLAIM: the COUNT of addresses, ports, URLs, config lines and credentials typed by the person across the four legs is zero, and every one that is typed is NAMED in the verdict"
+derives_from = "the campaign's cross-cutting bar and the AWS-shaped proposition in ring-apps: the end user barely feels the infrastructure. Today's count is at least three: the holder's media_origin config line + restart (cw-media-demo.sh:131-142), the roster command, and Jellyfin's own login - the last is the one credential named honestly until identity pass-through exists (a seam, not a fix, this week)."
+floor        = 1.0
+floor_basis  = "structural: the driver logs every string it 'types' on the person's behalf and classifies each (address / port / URL / config line / credential / other); the value is the count in the first five classes, excluding the ONE Jellyfin login the Seams section names. The human walk's journal lists them the same way. Floor 1 is the honest ceiling this week (the Jellyfin login); target 0."
+target       = 0.0
+direction    = "lower_is_better"
+# instrument   = (none yet) — owed by rr-1-instrument: `scripts/ring-room-demo.sh verdict ra-room-nothing-typed`
+instrument_note = "the typed-string log is a side effect of every other leg; this bar reads it and prints the classified list. Order: ring-room-week1 step 5."
+goodhart     = "can read 0 while the person typed plenty if the driver hid strings in env vars, config files it wrote, or a wrapper script (the census counts what the driver WROTE anywhere the daemons read, not only what it passed on a command line); and a count with no list is a number nobody can dispute - the list is the verdict"
+status       = "open"
+
+# ── rr-2 BARS — the room as it will actually be ──────────────────────────────
+# Topology (operator 2026-09-19): ONE member machine in the room, BeefyMac
+# (M-series), on the room's WiFi, plugged into the wall. The Halo (RuggedFox)
+# is a member on a DIFFERENT network and is reached only over the mesh (iroh,
+# relayed when no direct path holds). LittleMac is a member elsewhere on the
+# mesh and holds the Jellyfin library. Phones are GUESTS of BeefyMac: no
+# daemon, no mesh secret, a bearer scoped by `Scope` (sovereign-grants/src/
+# guest_grant.rs:76 - `Models` + `Rails(<one namespace>)`, TTL clamped to
+# MAX_GUEST_TTL_SECS), which is the posture the threat model already grants
+# guests and which rr-2 does not widen. Preconditions the instrument checks
+# and names: BeefyMac reads `retired` and LittleMac `offline` in `svrn mesh
+# status` on 2026-09-19 - both must be members again before any row is read.
+
+[[bar]]
+id           = "ra-room-scan-to-name"
+demo         = "The wall shows one QR. A phone with nothing installed scans it, the person types a name, and the name is on the wall"
+rung         = "rr-2"
+one_line     = "CLAIM: a phone with no app scans the QR BeefyMac renders, opens a page served by BeefyMac over the room's WiFi, types a name and nothing else, and that name is in the doc's roster on the wall within 5 s on BeefyMac's clock - the QR is a GUEST grant of one member, never the mesh invite"
+derives_from = "guest grants exist and are strictly weaker than membership (docs/THREAT_MODEL.md 'Guests'; sovereign-grants/src/guest_grant.rs: bearer, revocable, TTL <= 24 h, never in Mesh.members, never the invite key, `Scope::Rails` unlocks /v1/rail/append|log|live for ONE namespace); the guest deep link already has the QR shape (`build_guest_link`, commonwealth-discovery/src/deep_link.rs:195); a non-loopback caller must carry Authorization (THREAT_MODEL.md, client API row) and the bearer IS that header. NOT in the repo: a QR renderer (fast_qr per the shelf), a page BeefyMac serves to a guest browser, a guest label on a roster entry. The join link a prints today (222 chars, sovereign://join/...) is a MEMBER invite and is inert to a phone camera without the app - this bar is what rr-1's plug-in leg becomes when the joiner is a person, not a container."
+floor        = 1.0
+floor_basis  = "structural: 1.0 iff (a) the QR payload parses as a guest grant minted by BeefyMac (`Scope::Rails(ring-doc)` + `Scope::Models`, expiry within the sitting), and `svrn mesh status` on BeefyMac shows Mesh.members UNCHANGED after the scan, (b) BeefyMac's access log shows the phone's requests under that bearer and NO other node's log shows the phone at all, (c) the name the person typed appears in the wall page's roster within 5 s on BeefyMac's clock from the tap, (d) the phone's typed census is exactly one string, the name. Any false is 0.0."
+target       = 1.0
+direction    = "higher_is_better"
+# instrument   = (none yet) — owed by the rr-2 order: `scripts/ring-room-demo.sh verdict ra-room-scan-to-name` with a `--room` topology (real machines, no podman)
+instrument_note = "BeefyMac renders the QR (rr-2's `svrn mesh invite --qr` generalized: the QR carries what the caller minted, a guest grant here); the driver on a phone-shaped client (a browser with no daemon, on the room's WiFi, NOT on the tailnet) scans by reading the payload, opens it, types the name; the roster is read from the wall page on BeefyMac with a wall-clock stamp per poll. The 5 s is BeefyMac's clock, the observer's."
+goodhart     = "reads 1.0 for a conversion that never happened if the phone had the app installed or was paired before the sitting; reads 1.0 while the posture leaked if the QR carried the member invite (the phone would appear in Mesh.members - clause (a) is 0.0 for that); reads 1.0 over the tailnet or a VPN while the room's WiFi would have failed - the phone's only path to BeefyMac is the room's WiFi, and clause (b) proves nobody else was reachable"
+status       = "open"
+
+[[bar]]
+id           = "ra-room-guest-edit-attributed"
+demo         = "The guest types a word into the doc on their phone; the wall reads it as theirs, marked as a guest of the member who let them in"
+rung         = "rr-2"
+one_line     = "CLAIM: a guest's edit lands on the wall within ring-doc's p99 with the attribution '<name>, guest of BeefyMac', the act signed by BeefyMac's key, the ring rail unchanged, and the Halo's replica holding the same act once it syncs"
+derives_from = "the rail signs acts with the node's key and the roster maps key to member name (commonwealth-rail/src/lib.rs, the roster door); a guest has no key, so the honest attribution is the signer plus a guest label the APP carries in its payload - the rail learns nothing (the campaign's zero-rail-diff clause, kept); ring-doc's attribution leg reads 'last edited by' from the roster today and must learn ONE thing: an act whose payload names a guest reads '<guest>, guest of <signer>'. ring-doc's held p99 was 1.398 s over 100 acts (rr-1 second run) and is the window."
+floor        = 1.0
+floor_basis  = "structural: 1.0 iff (a) the edit is on the wall within 1.4 s (ring-doc's recorded p99) of the phone's append as stamped by BeefyMac's rail listener, (b) the wall's attribution line reads the guest's name AND the word 'guest' AND BeefyMac's mesh name, never the guest's name alone (a guest must not be mistakable for a member), (c) `git diff --stat origin/main -- commonwealth/crates/commonwealth-rail commonwealth/crates/commonwealth-rail-core` is empty for rr-2, (d) after the Halo's next sync the act is in its replica byte-equal. Any false is 0.0."
+target       = 1.0
+direction    = "higher_is_better"
+# instrument   = (none yet) — owed by the rr-2 order
+instrument_note = "same driver as scan-to-name, one append after the name lands; the wall page is polled with stamps; the Halo's replica is read by `svrn ring log` on RuggedFox over ssh and compared. Clause (d) is COULD-NOT-JUDGE, not FAILED, while the relay is down - the offline bar owns that case."
+goodhart     = "reads 1.0 while the guest is impersonating a member if the label is a name the guest chose that equals a member's name - the roster check refuses a guest name that collides with a member name, and the census shows the refusal; reads 1.0 with the rail widened if a 'guest' role was added to the roster instead of carried in the payload - clause (c) catches it"
+status       = "open"
+
+[[bar]]
+id           = "ra-room-guest-ask-served-by-the-room"
+demo         = "The guest asks the room a question only the Halo's folder can answer; the answer on the phone names RuggedFox, and the Halo is not in the building"
+rung         = "rr-2"
+one_line     = "CLAIM: a guest's ask through BeefyMac is answered on the phone within 60 s with released evidence naming RuggedFox, the corpus absent on BeefyMac, and BeefyMac's decision log naming which node served each call and by which path (direct or relayed) - the phone never runs a model"
+derives_from = "the answer leg of rr-1 (`ra-room-answer-names-the-machine`, 5/5 named Bo across podman nodes on one host); the fan-out reads hosted corpora from gossip (routes_knowledge.rs) and the scheduler scores local vs peers with the decision log naming the winner (decision_log.rs); the iroh path is known per peer (`PeerPath::Relayed`, iroh_access.rs). The CPU-node finding (docs/RING_ROOM_DEMO.md part two: ~7,400 prompt tokens, ~33 tok/s, ~250 s per ask) does not apply to a GUEST - the guest has no node, so BeefyMac's M-series serves classify and judges and the scorer decides whether synthesis crosses to the Halo. The relay round-trip per call is the new cost and is measured, not assumed. A34 (operator 2026-09-19): a guest's `Scope::Models` reaches only `/v1/chat/completions`, which runs no retrieval - so the ask goes to ONE id-less `POST /v1/guest/ask` on the door, the door runs the grounded turn as itself with one conversation per grant, and returns answer + epistemic_state only; THREAT_MODEL.md names it."
+floor        = 1.0
+floor_basis  = "structural: 1.0 iff (a) `svrn corpus list` on BeefyMac never held the corpus (recorded before the ask), (b) the released answer on the phone carries a citation or a verified holding whose member is RuggedFox, (c) first token on the phone within 60 s of the tap on BeefyMac's clock, (d) BeefyMac's decision log for that ask names served_by and the iroh path for every model call and for the fan-out. A release with claims_checked 0 is 0.0 (rr-1's rule). Any false is 0.0."
+target       = 1.0
+direction    = "higher_is_better"
+# instrument   = (none yet) — owed by the rr-2 order
+instrument_note = "the corpus is generated at run time and ingested with `corpus ingest --share` on RuggedFox over ssh, never on BeefyMac; the ask goes through the guest page; the decision log lines are pasted in the row. Report the path column (direct/relayed) beside the wall time - a direct path in the pre-registration run and a relayed one in the demo are different measurements (principle 7)."
+goodhart     = "reads 1.0 while the Halo did nothing if BeefyMac held a copy of the corpus (clause (a)); reads 1.0 for the wrong claim if the ask was answered from parametric knowledge and the member name is decoration (clause (b) reads the released evidence, not the prose); reads 1.0 over the tailnet while the room's real path would relay - the path is recorded and a relayed run is the one that counts"
+status       = "open"
+
+[[bar]]
+id           = "ra-room-film-from-littlemac"
+demo         = "LittleMac is not in the room. Its library is in the wall's Library rail, a film starts on the wall, and nobody in the room typed Jellyfin's login"
+rung         = "rr-2"
+one_line     = "CLAIM: LittleMac's offer reaches BeefyMac's Library rail within 30 s, a title plays on the wall with first byte within 5 s over the mesh tunnel, and the holder's Jellyfin login never appears in the census - the member's identity is passed through (rr-2's second deferred item)"
+derives_from = "rr-1's film leg (offer verb restart-free, `ra-room-film-from-the-library-rail` 1.0: listed 8.39 s, narrowed 10.47 s, first byte 0.33 s on one host); MEDIA_ALPN over iroh (iroh_access.rs:466); the one excluded credential in rr-1's census was Jellyfin's demo/demo login minted by holder-setup - rr-2 removes it by passing the member's identity through to the library (rr-2 rung note). Cross-host first byte was never measured; 0.33 s was a netns sibling."
+floor        = 1.0
+floor_basis  = "structural: 1.0 iff (a) BeefyMac's rail lists LittleMac's library with 'offered to' within 30 s of the offer verb on LittleMac, (b) a title's first byte reaches BeefyMac within 5 s over MEDIA_ALPN with the path (direct/relayed) recorded, (c) the census excluded list is EMPTY - no credential anywhere in the walk, on either machine, (d) LittleMac's config was not edited by the driver, (e) the key the offer declared is a READ-ONLY Jellyfin user (its policy read back: no library management, no deletion) so a viewer can only play, (f) while LittleMac's own Jellyfin session is playing, BeefyMac's rail shows the library as in use and does not start a stream (the same availability shape inference_availability already gossips, capabilities.rs:186), and (g) `svrn mesh media withdraw` on LittleMac removes the offer from BeefyMac's rail within one gossip round. Any false is 0.0."
+target       = 1.0
+direction    = "higher_is_better"
+# instrument   = (none yet) — owed by the rr-2 order
+instrument_note = "LittleMac runs the holder side over ssh (the offer verb only); BeefyMac's Tauri command lists offers and the player fetches the first byte; the census is rr-1's with the exclusion list now required empty. 5 s first byte is the ring-room objective's number; if the relayed path cannot meet it the row says relayed and FAILS - the bar is not widened for the path."
+goodhart     = "reads 1.0 with the credential merely hidden if the driver wrote it into a config or env on either machine (the census greps what the daemons read); reads 1.0 without the tunnel if BeefyMac reached Jellyfin's origin directly (a pinned origin in any config is 0.0)"
+status       = "open"
+
+[[bar]]
+id           = "ra-room-offline-room-says-so"
+demo         = "The venue's internet drops. The doc keeps working for everyone in the room, the room's AI says which knowledge is out of reach instead of guessing, and when the internet returns the Halo catches up"
+rung         = "rr-2"
+one_line     = "CLAIM: with BeefyMac's path to the Halo cut mid-sitting, the guest edit bar still passes, a guest ask that needed the Halo's corpus is answered by BeefyMac alone and NAMES that corpus as unavailable in the released evidence (never a parametric answer dressed as grounded), and after the path returns the Halo's replica converges byte-equal"
+derives_from = "ARCH 6 (absence is reported, never defaulted): the fan-out already records `corpora_unavailable` (retrieval_pipeline.rs) and A27 required the `did not serve` line to name its cause; ring-doc's phase 2 (60 s cut, reconvergence, gap panels) is the same negative leg on the doc; every member holds a ring replica via ring_sync so the keeper's absence does not stop the doc. Nothing new - this bar reads the existing absence lines on the real topology."
+floor        = 1.0
+floor_basis  = "structural: 1.0 iff during the cut (a) `ra-room-guest-edit-attributed` clauses (a)-(c) hold, (b) the guest ask's release names the Halo's corpus under corpora_unavailable AND the answer carries the general-knowledge caveat or abstains - a release that cites RuggedFox during the cut is 0.0, (c) within 60 s of the path returning, `svrn ring log` on RuggedFox holds every act made during the cut, byte-equal with BeefyMac's. Any false is 0.0."
+target       = 1.0
+direction    = "higher_is_better"
+# instrument   = (none yet) — owed by the rr-2 order
+instrument_note = "the cut is BeefyMac's uplink (a firewall rule to the relay and to RuggedFox's addresses on BeefyMac, applied and removed by the driver over ssh - the room's WiFi stays up, so the phones keep reaching BeefyMac); stamps on the cut and the heal; the Halo's log read over ssh after the heal."
+goodhart     = "reads 1.0 while the room lied if the ask during the cut answered from memory without the caveat (clause (b) reads the epistemic state, not the prose); reads 1.0 without testing anything if the cut also took the WiFi (then the guests could not act and there is nothing to converge - the instrument checks the phones still reach BeefyMac during the cut)"
+status       = "open"
+
+[[bar]]
+id           = "ra-room-member-only-by-vouch"
+demo         = "After the sitting, the guest installs the app. They become a member because someone in the room tapped 'vouch', not because they scanned the wall"
+rung         = "rr-2"
+one_line     = "CLAIM: the QR alone never yields a member - after N scans Mesh.members is unchanged - and a phone becomes a member only through a member's introduce; the affirmative half (the phone shell joining as a linked device) is COULD-NOT-JUDGE until ra-11's first measurement (iroh inside Tauri mobile) exists"
+derives_from = "'a guest cannot invite people' is structural (THREAT_MODEL.md: Scope has no variant for it); `introduce` on the rail (commonwealth-rail-core/src/introduce.rs) is a member's act; ring-apps ra-11 (day zero) names the phone key as a linked device and says mobile transport is UNPROVEN on this host - this bar's negative half is judged now, its affirmative half waits for that measurement and says so (ARCH 5: four verdicts)."
+floor        = 1.0
+floor_basis  = "structural, negative half: 1.0 iff after the scan-to-name run `svrn mesh status` on BeefyMac and on RuggedFox both list the same members as before the sitting, and BeefyMac's grant list shows the guests with their expiry. Affirmative half: COULD-NOT-JUDGE until the phone shell runs a node; when it does, 1.0 iff the phone appears in Mesh.members only after a member's introduce act, stamped after the tap."
+target       = 1.0
+direction    = "higher_is_better"
+# instrument   = (none yet) — owed by the rr-2 order
+instrument_note = "member sets read before and after from both machines; the grant list from BeefyMac (`svrn mesh grant --list`). The affirmative half is not attempted in rr-2 unless ra-11's measurement lands first."
+goodhart     = "reads 1.0 while membership leaked by another door if a guest could reach /v1/rail/append on a namespace other than the one granted (`every_scope_paths_are_mounted_and_never_privileged` in sovereign-daemon/tests/main/client_auth.rs:463 is the check, cited in the row); reads 1.0 for nothing if the negative half is judged with zero scans - the row states N >= 2 phones"
+status       = "open"
+
+# ── THE LADDER ───────────────────────────────────────────────────────────────
+
+[[rung]]
+id     = "rr-1"
+title  = "week one - three podman nodes, four legs, a fourth joins mid-run, the room on day six"
+status = "open"
+demo   = "D13"
+moves  = ["ra-room-answer-names-the-machine", "ra-room-doc-name-from-membership", "ra-room-film-from-the-library-rail", "ra-room-plug-in-live", "ra-room-nothing-typed"]
+note   = "Order ring-room-week1. Moves D13, D3 and D1's join beside the landed D5. Six working days. Daemon work: derived roster as the app default (registry of exceptions), peer_name first-class on the passage and the citation, the media offer verb with an admit narrowing, a Tauri offers command + Library section. Instrument: scripts/ring-room-demo.sh REUSING ring-doc-demo.sh's node door and podman backend, N from mesh status. NOT in this rung: a QR renderer (rr-2), identity pass-through to Jellyfin, the phone, `svrn ring deploy`, any change under the ring rail (commonwealth-rail, commonwealth-rail-core) beyond the roster-door default (lib.rs:130-205, operator 2026-09-18)."
+
+[[rung]]
+id     = "rr-2"
+title  = "week two - the room as it will be: BeefyMac in the room, the Halo on another network, LittleMac's library, phones as guests"
+status = "open"
+demo   = "D13"
+moves  = ["ra-room-scan-to-name", "ra-room-guest-edit-attributed", "ra-room-guest-ask-served-by-the-room", "ra-room-film-from-littlemac", "ra-room-offline-room-says-so", "ra-room-member-only-by-vouch"]
+note   = "Declared 2026-09-19 (operator: the Halo will not be on the room's WiFi; only one mesh machine is in the room). JELLYFIN POSTURE (operator, same day): the holder surfaces the library READ-ONLY and decides WHEN it is offered - `offer` / `withdraw` are the holder's two verbs, and a library the holder is watching reads 'in use' on every rail and is not contended, the same availability shape the inference layer already gossips (`NodeCapabilities.inference_availability`, written by ActivityReporter, sovereign-server/src/activity.rs:59; docs/MESH_LOAD_AWARENESS.md). Queue: ralph/next/ring-room-rr2/STATE.md. TOPOLOGY: BeefyMac (M-series) is the one member present, on the room's WiFi, driving the wall; it mints guest grants, serves the guest page, signs guest acts, and is the scheduler for every guest ask. RuggedFox (the Halo) is a member on a different network, reached over iroh (relayed when no direct path holds): it hosts the corpus the answer leg cites and catches up as keeper. LittleMac is a member elsewhere on the mesh and holds Jellyfin. Phones are guests: no daemon, a bearer scoped to one ring + the models, TTL within the sitting - the posture THREAT_MODEL.md already grants guests, not widened. What week one deferred lands here: the QR render (`svrn mesh invite --qr`, generalized to render whatever the caller minted - a guest grant on the wall, the member invite for a laptop), Jellyfin behind the member's identity (the census's one excluded credential goes to zero), and the four legs across real machines. NEW SURFACE, named before drafting (ARCH 11 inventory in each bar's derives_from): the guest page BeefyMac serves over the room's WiFi to bearer holders (page-over-rails, ra-10 M4 - `svrn ring dev` binds loopback today and stays so; the guest page is its own listener under client_auth), and ONE app-level rule in ring-doc: a payload that names a guest renders '<guest>, guest of <signer>'. NOT in rr-2: any change under the ring rail; a guest role on the roster; the phone as a node (ra-11's measurement first); widening any window - the CPU-node ask (docs/RING_ROOM_DEMO.md part two) is the scheduler's row and runs beside this rung, and a guest never meets it because a guest has no node. PRECONDITIONS the instrument names: BeefyMac reads `retired` and LittleMac `offline` in `svrn mesh status` on 2026-09-19; both rejoin before any row; the room's WiFi must not be the tailnet."

@@ -239,6 +239,12 @@ pub struct ServingPart {
     /// contribution ledger's key, not admission's.
     pub peer_sched: Mutex<SchedCore<Principal>>,
 
+    /// Peer corpus reads' own budget (`[daemon] max_peer_knowledge_reads`) —
+    /// never `peer_sched`: a read is ~ms of I/O, and one offloaded judge holding
+    /// the inference slot must not blind every member's fan-out to this node's
+    /// corpora (seat A23). No per-principal cap; the global slots bound it.
+    pub knowledge_read_sched: Mutex<SchedCore<Principal>>,
+
     /// Fair admission for **client**-served inference — the same `SchedCore`
     /// policy as `peer_sched`, keyed by [`Principal`]
     /// instead of `NodeId`, so the population `MESH_SCALE_100_USERS_1000_CORPORA.md`

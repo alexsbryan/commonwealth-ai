@@ -38,7 +38,10 @@ pub(crate) fn epistemic_state_enabled() -> bool {
 
 /// Everything the assembler collates. All fields are turn-local data
 /// already computed by the pipeline — the assembler adds no judgment.
-#[derive(Default)]
+///
+/// No `Default`: the only way in is [`EpistemicInputs::over`], which takes
+/// the turn's [`PoolContext`], so no ledger site can leave its pool (and
+/// with it the member attribution) on a default.
 pub(crate) struct EpistemicInputs<'a> {
     /// The gate's `grounding_gate` meta blob (reads `action` only).
     pub gate_meta: Option<&'a serde_json::Value>,
@@ -46,9 +49,8 @@ pub(crate) struct EpistemicInputs<'a> {
     pub gate_claims: Option<&'a [GateClaim]>,
     /// Why the plan answered from general knowledge, when it did.
     pub general_knowledge: Option<GkReason>,
-    /// Distinct corpus ids in the evidence pool the answer drew on
-    /// (empty on parametric turns).
-    pub pool_corpora: Vec<String>,
+    /// The evidence pool the answer drew on; see [`pool_context`].
+    pub pool: PoolContext,
     /// Memories recalled into the turn (relational surfaces).
     pub recalled: &'a [RecalledMemoryProv],
     /// Outcome of the recall-grounding verifier, when it ran.
@@ -63,6 +65,45 @@ pub(crate) struct EpistemicInputs<'a> {
     /// visible on the ledger). Each is emitted as a
     /// [`Provenance::ToolDerived`] holding; skipped on abstained turns.
     pub tool_holdings: Vec<Holding>,
+}
+
+impl<'a> EpistemicInputs<'a> {
+    /// Inputs over `pool`, every other field empty.
+    pub(crate) fn over(pool: PoolContext) -> Self {
+        Self {
+            gate_meta: None,
+            gate_claims: None,
+            general_knowledge: None,
+            pool,
+            recalled: &[],
+            recall_verification: None,
+            demands: Vec::new(),
+            gaps: Vec::new(),
+            tool_holdings: Vec::new(),
+        }
+    }
+}
+
+/// The evidence pool a ledger attributes, built from ONE chunk slice so
+/// its corpora and members cannot come from different pools. No
+/// `Default`: a parametric turn says so with [`PoolContext::none`].
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct PoolContext {
+    /// Distinct corpus ids, order-preserving (empty on parametric turns).
+    pub corpora: Vec<String>,
+    /// The mesh member each pool chunk came from, one entry per chunk
+    /// (`None` = local).
+    pub members: Vec<Option<String>>,
+}
+
+impl PoolContext {
+    /// No evidence pool: a parametric or non-corpus turn.
+    pub(crate) fn none() -> Self {
+        Self {
+            corpora: Vec::new(),
+            members: Vec::new(),
+        }
+    }
 }
 
 /// Actions whose release shipped WITHOUT a completed verification
@@ -94,10 +135,24 @@ pub(crate) fn assemble_epistemic_state(inputs: EpistemicInputs<'_>) -> Epistemic
     // single-corpus (the sealed-notebook common case). Multi-corpus
     // pools carry `corpus_id: None` until claim-level search binding
     // lands (initiative I2).
-    let sole_corpus = match inputs.pool_corpora.as_slice() {
+    let sole_corpus = match inputs.pool.corpora.as_slice() {
         [only] => Some(only.clone()),
         _ => None,
     };
+    // The same rule for members: named only when every chunk in the
+    // pool came from one member; a local or mixed pool stays `None`.
+    let sole_member = match inputs.pool.members.split_first() {
+        Some((Some(first), rest)) if rest.iter().all(|m| m.as_ref() == Some(first)) => {
+            Some(first.clone())
+        }
+        _ => None,
+    };
+    tracing::debug!(
+        target: "sovereign::epistemic",
+        pool_chunks = inputs.pool.members.len(),
+        sole_member = ?sole_member,
+        "holding member attribution"
+    );
 
     let mut holdings: Vec<Holding> = Vec::new();
     // Gate-audited claims → corpus-provenance holdings. An abstained
@@ -120,6 +175,7 @@ pub(crate) fn assemble_epistemic_state(inputs: EpistemicInputs<'_>) -> Epistemic
                 provenance: Provenance::Corpus {
                     corpus_id: sole_corpus.clone(),
                     chunk_id: None,
+                    member: sole_member.clone(),
                 },
                 verification,
             });
@@ -163,7 +219,7 @@ pub(crate) fn assemble_epistemic_state(inputs: EpistemicInputs<'_>) -> Epistemic
         &holdings,
         abstained,
         inputs.general_knowledge.is_some(),
-        !inputs.pool_corpora.is_empty(),
+        !inputs.pool.corpora.is_empty(),
         gate_action.is_empty(),
     );
     // Released passages, read straight off the gate's meta. Collation, not
@@ -660,785 +716,26 @@ pub async fn coverage_probe(
     }
 }
 
-/// Distinct corpus ids in a chunk pool, order-preserving.
-pub(crate) fn pool_corpora(chunks: &[corpus_engine::ScoredChunk]) -> Vec<String> {
+/// The pool a chunk slice is: its distinct corpus ids, order-preserving,
+/// and the mesh member each chunk came from (`metadata["peer"]`, the one
+/// writer being the retrieval pipeline's mesh merge), aligned with
+/// `chunks`; `None` for a local chunk.
+pub(crate) fn pool_context(chunks: &[corpus_engine::ScoredChunk]) -> PoolContext {
     let mut seen = std::collections::HashSet::new();
-    let mut out = Vec::new();
+    let mut corpora = Vec::new();
     for c in chunks {
         if seen.insert(c.corpus_id.clone()) {
-            out.push(c.corpus_id.clone());
+            corpora.push(c.corpus_id.clone());
         }
     }
-    out
+    PoolContext {
+        corpora,
+        members: chunks
+            .iter()
+            .map(|c| c.metadata.get("peer").cloned())
+            .collect(),
+    }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Invariant I1 (EPISTEMIC_STATE §7) — every ANSWER surface persists
-    /// an `epistemic_state`. This is the closed-set pin on the
-    /// `GateSurface` precedent: the match below is exhaustive, so adding
-    /// a surface variant FAILS COMPILATION here until its ledger story
-    /// is decided and recorded. The strings name the persistence sites
-    /// (grep for `"epistemic_state"` to verify them).
-    #[test]
-    fn every_answer_surface_has_a_ledger_story() {
-        use crate::runtime::grounding::GateSurface;
-        fn ledger_site(s: GateSurface) -> Option<&'static str> {
-            match s {
-                GateSurface::KnowledgeQuery => {
-                    Some("handlers/knowledge_query.rs (sync) + streaming.rs (KQ spawn)")
-                }
-                GateSurface::DeepQuery => Some("streaming.rs (deep spawn)"),
-                GateSurface::AttachedDoc => Some("handlers/attached_doc.rs"),
-                GateSurface::ComplexTask => Some("handlers/complex_task.rs"),
-                GateSurface::SimpleQuery => Some("handlers/simple.rs"),
-                // Not standalone answer surfaces: Refinement re-verifies
-                // an existing answer inside its owning surface's turn;
-                // Governance/ProxyArgument are gate-calibration profiles
-                // that fire inside the KQ handler and inherit its
-                // persistence site.
-                GateSurface::Refinement => None,
-                GateSurface::Governance => None,
-                GateSurface::ProxyArgument => None,
-            }
-        }
-        // Every answer surface must name a persistence site.
-        for s in [
-            GateSurface::KnowledgeQuery,
-            GateSurface::DeepQuery,
-            GateSurface::AttachedDoc,
-            GateSurface::ComplexTask,
-            GateSurface::SimpleQuery,
-        ] {
-            assert!(
-                ledger_site(s).is_some(),
-                "answer surface {s:?} has no ledger site"
-            );
-        }
-    }
-
-    fn corpus_holding(verification: Verification) -> Holding {
-        Holding {
-            claim: "c".into(),
-            provenance: Provenance::Corpus {
-                corpus_id: Some("wiki".into()),
-                chunk_id: None,
-            },
-            verification,
-        }
-    }
-
-    fn memory_holding(verification: Verification) -> Holding {
-        Holding {
-            claim: "m".into(),
-            provenance: Provenance::Memory {
-                band: MemoryBand::ToldDirectly,
-                entry_id: "id".into(),
-            },
-            verification,
-        }
-    }
-
-    #[test]
-    fn verdict_truth_table() {
-        // Abstention dominates everything.
-        assert_eq!(
-            derive_verdict(
-                &[corpus_holding(Verification::Verified)],
-                true,
-                false,
-                true,
-                false
-            ),
-            TurnVerdict::CannotKnowFromHere
-        );
-        // All corpus-verified → Grounded.
-        assert_eq!(
-            derive_verdict(
-                &[
-                    corpus_holding(Verification::Verified),
-                    corpus_holding(Verification::Verified)
-                ],
-                false,
-                false,
-                true,
-                false
-            ),
-            TurnVerdict::Grounded
-        );
-        // A fail-open corpus holding degrades to Mixed, never Grounded.
-        assert_eq!(
-            derive_verdict(
-                &[
-                    corpus_holding(Verification::Verified),
-                    corpus_holding(Verification::FailOpen)
-                ],
-                false,
-                false,
-                true,
-                false
-            ),
-            TurnVerdict::Mixed
-        );
-        // Memory-only → MemoryRecall regardless of verification.
-        assert_eq!(
-            derive_verdict(
-                &[memory_holding(Verification::FailOpen)],
-                false,
-                false,
-                false,
-                false
-            ),
-            TurnVerdict::MemoryRecall
-        );
-        // Corpus + memory → Mixed.
-        assert_eq!(
-            derive_verdict(
-                &[
-                    corpus_holding(Verification::Verified),
-                    memory_holding(Verification::Verified)
-                ],
-                false,
-                false,
-                true,
-                false
-            ),
-            TurnVerdict::Mixed
-        );
-        // GK with no corpus holdings → GeneralKnowledge.
-        assert_eq!(
-            derive_verdict(&[], false, true, false, false),
-            TurnVerdict::GeneralKnowledge
-        );
-        // Evidence used, nothing audited → Unverified (honesty about
-        // the absent check, not a judgment).
-        assert_eq!(
-            derive_verdict(&[], false, false, true, true),
-            TurnVerdict::Unverified
-        );
-    }
-
-    fn tool_holding() -> Holding {
-        Holding {
-            claim: "Total assessed value = $1.2B".into(),
-            provenance: Provenance::ToolDerived {
-                tool: "parcel_analytics".into(),
-            },
-            verification: Verification::Verified,
-        }
-    }
-
-    #[test]
-    fn coverage_probe_scope_respects_enabled_corpora() {
-        let enabled = vec!["chaos-secret-agent".to_string()];
-        // Sealed turn: only the enabled corpus is in scope; an unrelated
-        // installed corpus (wikipedia) is excluded — so a sealed-novel query
-        // for "Australia" can't be called ClaimUncovered off a wikipedia hit.
-        assert!(corpus_in_probe_scope("chaos-secret-agent", Some(&enabled)));
-        assert!(!corpus_in_probe_scope("wikipedia", Some(&enabled)));
-        // No scope (None) or empty → every installed corpus is admitted.
-        assert!(corpus_in_probe_scope("wikipedia", None));
-        assert!(corpus_in_probe_scope("wikipedia", Some(&[])));
-    }
-
-    /// covers: GR-47
-    #[test]
-    fn tool_derived_verdicts() {
-        // Tool-only → Mixed (never overclaims Grounded; the figures are
-        // system-originated, not corpus-backed).
-        assert_eq!(
-            derive_verdict(&[tool_holding()], false, false, false, false),
-            TurnVerdict::Mixed
-        );
-        // Corpus + tool → Mixed (bases mix).
-        assert_eq!(
-            derive_verdict(
-                &[corpus_holding(Verification::Verified), tool_holding()],
-                false,
-                false,
-                true,
-                false
-            ),
-            TurnVerdict::Mixed
-        );
-        // GK signal but tool holdings present → NOT GeneralKnowledge.
-        assert_eq!(
-            derive_verdict(&[tool_holding()], false, true, false, false),
-            TurnVerdict::Mixed
-        );
-    }
-
-    #[test]
-    fn tool_holdings_flow_through_assembler() {
-        let meta = serde_json::json!({"action": "released"});
-        let state = assemble_epistemic_state(EpistemicInputs {
-            gate_meta: Some(&meta),
-            tool_holdings: vec![tool_holding()],
-            ..Default::default()
-        });
-        assert_eq!(state.holdings.len(), 1);
-        assert!(matches!(
-            &state.holdings[0].provenance,
-            Provenance::ToolDerived { tool } if tool == "parcel_analytics"
-        ));
-        assert_eq!(state.verdict, TurnVerdict::Mixed);
-    }
-
-    #[test]
-    fn abstained_turn_drops_tool_holdings() {
-        let meta = serde_json::json!({"action": "abstained"});
-        let state = assemble_epistemic_state(EpistemicInputs {
-            gate_meta: Some(&meta),
-            tool_holdings: vec![tool_holding()],
-            ..Default::default()
-        });
-        assert!(state.holdings.is_empty());
-        assert_eq!(state.verdict, TurnVerdict::CannotKnowFromHere);
-    }
-
-    /// covers: GR-46
-    ///
-    /// The three halves of the ledger are assembled in ONE pass and must agree
-    /// with each other. Every other test here exercises a single slice —
-    /// verdict truth table, holdings-only, gaps-only — so the failure this one
-    /// catches is invisible to all of them: a change that populates `gaps`
-    /// correctly while leaving `holdings` stale, or a verdict that disagrees
-    /// with the holdings it is derived from.
-    #[test]
-    fn one_assembly_returns_holdings_verdict_and_gaps_that_agree_with_each_other() {
-        let meta = serde_json::json!({"action": "released", "retried": false});
-        let claims = vec![GateClaim {
-            text: "The ferry leaves Ardrossan at 07:00".into(),
-            supported: true,
-            failed_once: false,
-            unjudged: false,
-            violation_prob: Some(0.02),
-            address: None,
-        }];
-        // Two demands: one the answer actually covered, one nothing in the
-        // pool reached. The gap row names the second by index.
-        let demands = vec![
-            Demand {
-                facet: DemandFacet::Query,
-                text: "when does the ferry leave Ardrossan".into(),
-                covered: CoverageLevel::Supported,
-            },
-            Demand {
-                facet: DemandFacet::Entity,
-                text: "Brodick pier reconstruction".into(),
-                covered: CoverageLevel::Absent,
-            },
-        ];
-        let gaps = vec![Gap {
-            demand_idx: 1,
-            statement: "no installed corpus covers the Brodick pier works".into(),
-            coverage: GapCoverage::TopicUncovered,
-            routes: Vec::new(),
-        }];
-
-        let state = assemble_epistemic_state(EpistemicInputs {
-            gate_meta: Some(&meta),
-            gate_claims: Some(&claims),
-            pool_corpora: vec!["arran-ferries".into()],
-            demands,
-            gaps,
-            ..Default::default()
-        });
-
-        // 1. All three are populated by the SAME call. A ledger carrying gaps
-        //    but no holdings (or the reverse) is the stale-half failure.
-        assert_eq!(
-            state.holdings.len(),
-            1,
-            "the audited claim must reach holdings in the same pass that carries the gaps"
-        );
-        assert_eq!(state.demands.len(), 2);
-        assert_eq!(state.gaps.len(), 1);
-
-        // 2. The verdict agrees with the holdings it derives from: one
-        //    corpus holding, verified, single-corpus pool.
-        assert_eq!(state.holdings[0].verification, Verification::Verified);
-        assert!(matches!(
-            state.holdings[0].provenance,
-            Provenance::Corpus { .. }
-        ));
-        assert_eq!(
-            state.verdict,
-            derive_verdict(&state.holdings, false, false, true, false),
-            "the verdict must be the derivation over the holdings actually shipped, not a stale one"
-        );
-        assert_eq!(state.verdict, TurnVerdict::Grounded);
-
-        // 3. Every gap resolves to a real demand, and that demand is not one
-        //    the same assembly called covered. A gap pointing at a Supported
-        //    demand is the two halves disagreeing.
-        for gap in &state.gaps {
-            let demand = state
-                .demands
-                .get(gap.demand_idx)
-                .expect("every gap must index a demand in the same ledger");
-            assert_ne!(
-                demand.covered,
-                CoverageLevel::Supported,
-                "gap {:?} points at a demand this same assembly reported covered",
-                gap.statement
-            );
-        }
-
-        // 4. And the converse: nothing marked covered acquires a gap row.
-        for (i, demand) in state.demands.iter().enumerate() {
-            if demand.covered == CoverageLevel::Supported {
-                assert!(
-                    !state.gaps.iter().any(|g| g.demand_idx == i),
-                    "covered demand {i} must not also be reported as a gap"
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn abstained_turn_asserts_nothing() {
-        let meta = serde_json::json!({"action": "abstained", "retried": true});
-        let claims = vec![GateClaim {
-            text: "Heat's first name is Vernon".into(),
-            supported: false,
-            failed_once: true,
-            unjudged: false,
-            violation_prob: Some(0.97),
-            address: None,
-        }];
-        let state = assemble_epistemic_state(EpistemicInputs {
-            gate_meta: Some(&meta),
-            gate_claims: Some(&claims),
-            pool_corpora: vec!["secret-agent".into()],
-            ..Default::default()
-        });
-        assert!(state.holdings.is_empty());
-        assert_eq!(state.verdict, TurnVerdict::CannotKnowFromHere);
-    }
-
-    /// Issue #57: eight per-claim judges were shed by the admission queue,
-    /// the gate exited `released`, and every holding rendered Verified. The
-    /// per-claim record now carries `unjudged`, and it wins over the gate's
-    /// action string: a claim nobody judged is FailOpen even on a `released`
-    /// turn, and such a turn is never `Grounded`.
-    #[test]
-    fn an_unjudged_claim_is_fail_open_even_when_the_gate_action_is_released() {
-        let meta = serde_json::json!({"action": "released", "retried": false});
-        let claims = vec![
-            GateClaim {
-                text: "The shop is on Harbour Row".into(),
-                supported: true,
-                failed_once: false,
-                unjudged: false,
-                violation_prob: Some(0.1),
-                address: None,
-            },
-            GateClaim {
-                text: "The shop opens at dawn".into(),
-                supported: false,
-                failed_once: false,
-                unjudged: true,
-                violation_prob: None,
-                address: None,
-            },
-        ];
-        let state = assemble_epistemic_state(EpistemicInputs {
-            gate_meta: Some(&meta),
-            gate_claims: Some(&claims),
-            pool_corpora: vec!["shop".into()],
-            ..Default::default()
-        });
-        assert_eq!(state.holdings.len(), 2);
-        assert_eq!(state.holdings[0].verification, Verification::Verified);
-        assert_eq!(
-            state.holdings[1].verification,
-            Verification::FailOpen,
-            "a claim the judge never reached must not read as verified"
-        );
-        assert_ne!(
-            state.verdict,
-            TurnVerdict::Grounded,
-            "one unjudged holding is enough to withhold Grounded"
-        );
-    }
-
-    /// The released passages reach the ledger as structured rows a reading
-    /// surface can open. Before this, the gate's citation existed downstream
-    /// only as prose inside the answer string — the system's best-attested
-    /// citation was the one citation a user could not click.
-    #[test]
-    fn released_citations_reach_the_ledger() {
-        let meta = serde_json::json!({
-            "action": "citation_grounded",
-            "citations": [
-                {
-                    "text": "The Cold Lantern stood at the head of the quay.",
-                    "locator": "CHAPTER VII",
-                    "target": {"corpus_id": "chaos-saltgrass", "chunk_id": 41}
-                },
-                {
-                    // No locator: a corpus with no section structure is still
-                    // openable. The two facts are independent.
-                    "text": "Tabb Orrison found the body in the basin.",
-                    "target": {"corpus_id": "chaos-saltgrass", "chunk_id": 77}
-                }
-            ]
-        });
-        let state = assemble_epistemic_state(EpistemicInputs {
-            gate_meta: Some(&meta),
-            pool_corpora: vec!["chaos-saltgrass".into()],
-            ..Default::default()
-        });
-        assert_eq!(state.citations.len(), 2);
-        assert_eq!(state.citations[0].locator.as_deref(), Some("CHAPTER VII"));
-        assert_eq!(state.citations[0].target.chunk_id, 41);
-        assert_eq!(state.citations[0].target.corpus_id, "chaos-saltgrass");
-        assert_eq!(
-            state.citations[1].locator, None,
-            "a passage with no chapter heading is still openable"
-        );
-        assert_eq!(state.citations[1].target.chunk_id, 77);
-    }
-
-    /// An abstained turn asserts nothing, so it cites nothing — the same rule
-    /// holdings follow. Without this, a turn that declined to answer would
-    /// still offer the reader passages as though they grounded a claim.
-    #[test]
-    fn an_abstained_turn_cites_nothing() {
-        let meta = serde_json::json!({
-            "action": "abstained_specifics",
-            "citations": [{
-                "text": "The Cold Lantern stood at the head of the quay.",
-                "target": {"corpus_id": "chaos-saltgrass", "chunk_id": 41}
-            }]
-        });
-        let state = assemble_epistemic_state(EpistemicInputs {
-            gate_meta: Some(&meta),
-            pool_corpora: vec!["chaos-saltgrass".into()],
-            ..Default::default()
-        });
-        assert!(state.citations.is_empty());
-    }
-
-    /// Legacy-ladder releases, parametric turns and any transcript banked
-    /// before this field existed carry no `citations` key. Empty is the
-    /// honest reading — nothing is shown as openable rather than a guess
-    /// being rendered.
-    #[test]
-    fn a_turn_without_citations_reads_as_empty_not_as_a_failure() {
-        for meta in [
-            serde_json::json!({"action": "released"}),
-            serde_json::json!({"action": "released", "citations": "not-an-array"}),
-        ] {
-            let state = assemble_epistemic_state(EpistemicInputs {
-                gate_meta: Some(&meta),
-                pool_corpora: vec!["chaos-saltgrass".into()],
-                ..Default::default()
-            });
-            assert!(state.citations.is_empty(), "meta: {meta}");
-        }
-    }
-
-    #[test]
-    fn single_corpus_pool_attributes_corpus_id() {
-        let meta = serde_json::json!({"action": "released"});
-        let claims = vec![GateClaim {
-            text: "The knife was a carving knife".into(),
-            supported: true,
-            failed_once: false,
-            unjudged: false,
-            violation_prob: Some(0.02),
-            address: None,
-        }];
-        let state = assemble_epistemic_state(EpistemicInputs {
-            gate_meta: Some(&meta),
-            gate_claims: Some(&claims),
-            pool_corpora: vec!["secret-agent".into()],
-            ..Default::default()
-        });
-        assert_eq!(state.holdings.len(), 1);
-        assert!(matches!(
-            &state.holdings[0].provenance,
-            Provenance::Corpus { corpus_id: Some(id), .. } if id == "secret-agent"
-        ));
-        assert_eq!(state.holdings[0].verification, Verification::Verified);
-        assert_eq!(state.verdict, TurnVerdict::Grounded);
-    }
-
-    #[test]
-    fn multi_corpus_pool_leaves_attribution_open() {
-        let meta = serde_json::json!({"action": "released"});
-        let claims = vec![GateClaim {
-            text: "x".into(),
-            supported: true,
-            failed_once: false,
-            unjudged: false,
-            violation_prob: None,
-            address: None,
-        }];
-        let state = assemble_epistemic_state(EpistemicInputs {
-            gate_meta: Some(&meta),
-            gate_claims: Some(&claims),
-            pool_corpora: vec!["wikipedia".into(), "sep".into()],
-            ..Default::default()
-        });
-        assert!(matches!(
-            &state.holdings[0].provenance,
-            Provenance::Corpus {
-                corpus_id: None,
-                ..
-            }
-        ));
-    }
-
-    #[test]
-    fn referenced_memory_becomes_banded_holding() {
-        let recalled = vec![RecalledMemoryProv {
-            id: "mem-1".into(),
-            content: "started a woodworking class in March".into(),
-            created_at: 0,
-            kind: Some("raw".into()),
-            source_memory_ids: vec![],
-            confidence: Some(0.9),
-        }];
-        let rv = RecallVerificationProv {
-            grounded: true,
-            fail_open: false,
-            referenced: Some(1),
-        };
-        let state = assemble_epistemic_state(EpistemicInputs {
-            recalled: &recalled,
-            recall_verification: Some(&rv),
-            ..Default::default()
-        });
-        assert_eq!(state.holdings.len(), 1);
-        assert!(matches!(
-            &state.holdings[0].provenance,
-            Provenance::Memory { band: MemoryBand::ToldDirectly, entry_id } if entry_id == "mem-1"
-        ));
-        assert_eq!(state.holdings[0].verification, Verification::Verified);
-        assert_eq!(state.verdict, TurnVerdict::MemoryRecall);
-    }
-
-    fn chunk(title: &str, content: &str, corpus: &str) -> corpus_engine::ScoredChunk {
-        corpus_engine::ScoredChunk {
-            content: content.to_string(),
-            title: Some(title.to_string()),
-            url: None,
-            corpus_id: corpus.to_string(),
-            score: 1.0,
-            metadata: std::collections::HashMap::new(),
-            chunk_id: None,
-            source_doc_id: None,
-            vector_distance: None,
-            // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
-            provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
-        }
-    }
-
-    #[test]
-    fn demands_build_and_stamp() {
-        let entities = vec!["Isaac Newton".to_string(), "Einstein".to_string()];
-        let mut demands = build_demands(
-            "How did Newton and Einstein differ on gravity?",
-            &Intent::KnowledgeQuery,
-            &entities,
-            None,
-        );
-        assert_eq!(demands[0].facet, DemandFacet::Query);
-        assert!(demands
-            .iter()
-            .any(|d| d.facet == DemandFacet::Entity && d.text == "Isaac Newton"));
-        let chunks = vec![chunk(
-            "Isaac Newton",
-            "newton's law of universal gravitation",
-            "wikipedia",
-        )];
-        stamp_coverage(&mut demands, &chunks);
-        assert_eq!(demands[0].covered, CoverageLevel::Retrieved); // pool non-empty
-        let newton = demands
-            .iter()
-            .find(|d| d.text == "Isaac Newton")
-            .expect("newton demand");
-        assert_eq!(newton.covered, CoverageLevel::Retrieved);
-        let einstein = demands
-            .iter()
-            .find(|d| d.text == "Einstein")
-            .expect("einstein demand");
-        assert_eq!(einstein.covered, CoverageLevel::Absent);
-    }
-
-    #[test]
-    fn build_demands_folds_in_the_llm_plan() {
-        use crate::runtime::retrieval_pipeline::{DemandPlan, StanceContrast};
-        let plan = DemandPlan {
-            sub_queries: vec!["general relativity gravity".into()],
-            entities: vec![],
-            stance_contrast: Some(StanceContrast {
-                axis: "the nature of gravity".into(),
-                poles: vec!["action at a distance".into(), "spacetime curvature".into()],
-            }),
-            section_terms: vec!["reception".into()],
-        };
-        let demands = build_demands(
-            "How did Newton and Einstein differ on gravity?",
-            &Intent::KnowledgeQuery,
-            &[],
-            Some(&plan),
-        );
-        // Stance poles → both sides demanded.
-        assert!(demands
-            .iter()
-            .any(|d| d.facet == DemandFacet::Stance && d.text == "action at a distance"));
-        assert!(demands
-            .iter()
-            .any(|d| d.facet == DemandFacet::Stance && d.text == "spacetime curvature"));
-        // Section term.
-        assert!(demands
-            .iter()
-            .any(|d| d.facet == DemandFacet::Section && d.text == "reception"));
-        // Plan sub-query.
-        assert!(
-            demands
-                .iter()
-                .any(|d| d.facet == DemandFacet::SubQuestion
-                    && d.text == "general relativity gravity")
-        );
-    }
-
-    #[test]
-    fn stance_and_section_facets_stamp_and_gap() {
-        let mut demands = vec![
-            Demand {
-                facet: DemandFacet::Stance,
-                text: "spacetime curvature".into(),
-                covered: CoverageLevel::Absent,
-            },
-            Demand {
-                facet: DemandFacet::Section,
-                text: "reception".into(),
-                covered: CoverageLevel::Absent,
-            },
-        ];
-        // A chunk covering the stance pole (surface-form containment).
-        let chunks = vec![chunk(
-            "General relativity",
-            "gravity as spacetime curvature, per Einstein",
-            "wikipedia",
-        )];
-        stamp_coverage(&mut demands, &chunks);
-        assert_eq!(demands[0].covered, CoverageLevel::Retrieved); // stance pole present
-        assert_eq!(demands[1].covered, CoverageLevel::Absent); // no "reception" text
-                                                               // The uncovered Section facet emits a gap with its own statement.
-        let gaps = finish_demands(&mut demands, None, false, Some(GapCoverage::TopicUncovered));
-        assert!(gaps
-            .iter()
-            .any(|g| g.statement.contains("reception") && g.statement.contains("section")));
-    }
-
-    #[test]
-    fn finish_upgrades_supported_and_emits_gaps() {
-        let mut demands = vec![
-            Demand {
-                facet: DemandFacet::Query,
-                text: "q".into(),
-                covered: CoverageLevel::Retrieved,
-            },
-            Demand {
-                facet: DemandFacet::Entity,
-                text: "Szilard".into(),
-                covered: CoverageLevel::Absent,
-            },
-        ];
-        let claims = vec![GateClaim {
-            text: "supported claim".into(),
-            supported: true,
-            failed_once: false,
-            unjudged: false,
-            violation_prob: None,
-            address: None,
-        }];
-        let gaps = finish_demands(
-            &mut demands,
-            Some(&claims),
-            false,
-            Some(GapCoverage::TopicUncovered),
-        );
-        assert_eq!(demands[0].covered, CoverageLevel::Supported);
-        assert_eq!(gaps.len(), 1);
-        assert_eq!(gaps[0].demand_idx, 1);
-        assert_eq!(gaps[0].coverage, GapCoverage::TopicUncovered);
-    }
-
-    #[test]
-    fn abstained_turn_gaps_the_query_as_claim_uncovered() {
-        let mut demands = vec![Demand {
-            facet: DemandFacet::Query,
-            text: "who is Heat".into(),
-            covered: CoverageLevel::Retrieved,
-        }];
-        let gaps = finish_demands(&mut demands, None, true, None);
-        assert_eq!(demands[0].covered, CoverageLevel::Retrieved); // never upgraded on abstain
-        assert_eq!(gaps.len(), 1);
-        assert_eq!(gaps[0].coverage, GapCoverage::ClaimUncovered);
-    }
-
-    /// The probe's calibrated verdict outranks the weak `Retrieved`
-    /// affinity stamp on abstained turns: top-k retrieval returns
-    /// SOMETHING for any query, so an OOD question over distractors
-    /// still stamps Retrieved — but the probe read the sealed corpus at
-    /// 0.17-0.49 and its TopicUncovered must reach the gap (observed
-    /// mis-route: ood-australia-capital, 2026-07-20).
-    #[test]
-    fn probe_verdict_outranks_retrieved_stamp_on_abstained_turns() {
-        let mut demands = vec![Demand {
-            facet: DemandFacet::Query,
-            text: "what is the capital of Australia".into(),
-            covered: CoverageLevel::Retrieved,
-        }];
-        let gaps = finish_demands(&mut demands, None, true, Some(GapCoverage::TopicUncovered));
-        assert_eq!(gaps.len(), 1);
-        assert_eq!(gaps[0].coverage, GapCoverage::TopicUncovered);
-        // And an in-topic probe verdict keeps the claim-level routing.
-        let mut demands = vec![Demand {
-            facet: DemandFacet::Query,
-            text: "who is Verloc's wife".into(),
-            covered: CoverageLevel::Retrieved,
-        }];
-        let gaps = finish_demands(&mut demands, None, true, Some(GapCoverage::ClaimUncovered));
-        assert_eq!(gaps[0].coverage, GapCoverage::ClaimUncovered);
-    }
-
-    #[test]
-    fn fail_open_recall_is_visible() {
-        let recalled = vec![RecalledMemoryProv {
-            id: "mem-2".into(),
-            content: "mentioned a trip".into(),
-            created_at: 0,
-            kind: None,
-            source_memory_ids: vec![],
-            confidence: Some(0.4),
-        }];
-        let rv = RecallVerificationProv {
-            grounded: true,
-            fail_open: true,
-            referenced: Some(1),
-        };
-        let state = assemble_epistemic_state(EpistemicInputs {
-            recalled: &recalled,
-            recall_verification: Some(&rv),
-            ..Default::default()
-        });
-        assert_eq!(state.holdings[0].verification, Verification::FailOpen);
-        assert!(matches!(
-            &state.holdings[0].provenance,
-            Provenance::Memory {
-                band: MemoryBand::Tentative,
-                ..
-            }
-        ));
-    }
-}
+mod tests;

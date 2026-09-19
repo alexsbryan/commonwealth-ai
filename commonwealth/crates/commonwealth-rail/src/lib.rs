@@ -112,6 +112,37 @@ pub struct RingRail {
     /// was first touched still takes effect — boot order cannot leave a
     /// namespace reading the wrong roster.
     derived: Mutex<BTreeMap<String, Arc<dyn RosterSource>>>,
+    /// Who is in a ring nobody narrowed: the answer for every namespace with
+    /// neither a registered source nor a `roster.json`. Unset, such a ring
+    /// reads its (absent, so empty) file, which is what it did before this
+    /// existed.
+    default: Mutex<Option<Arc<dyn RosterSource>>>,
+}
+
+/// Which of the three readers answers a namespace — ONE decider, read by both
+/// [`RingRail::roster_origin`] and [`RingRail::roster`] so the origin a caller
+/// is told and the roster it is admitted against cannot disagree.
+enum Answerer {
+    Registered(Arc<dyn RosterSource>),
+    File,
+    Default(Arc<dyn RosterSource>),
+}
+
+impl Answerer {
+    fn origin(&self) -> RosterOrigin {
+        match self {
+            Answerer::File => RosterOrigin::File,
+            Answerer::Registered(_) | Answerer::Default(_) => RosterOrigin::Derived,
+        }
+    }
+
+    fn name(&self) -> &'static str {
+        match self {
+            Answerer::Registered(_) => "registered",
+            Answerer::File => "file",
+            Answerer::Default(_) => "default",
+        }
+    }
 }
 
 impl RingRail {
@@ -121,6 +152,47 @@ impl RingRail {
             signer,
             open: Mutex::new(BTreeMap::new()),
             derived: Mutex::new(BTreeMap::new()),
+            default: Mutex::new(None),
+        }
+    }
+
+    /// Answer every ring nobody narrowed with `source` — an app applies to
+    /// everyone in the mesh until someone writes its `roster.json`.
+    ///
+    /// Precedence is registered ([`Self::derive_roster`]) > the file > this.
+    /// The file outranks it because the hand roster IS the narrowing
+    /// primitive; a registered source outranks the file because a namespace
+    /// is registered precisely so that no file can narrow it. Installing a
+    /// second default replaces the first.
+    pub fn default_roster(&self, source: Arc<dyn RosterSource>) {
+        *self.default.lock().unwrap_or_else(|e| e.into_inner()) = Some(source);
+        tracing::debug!("ring rail: rings nobody narrowed derive their roster by default");
+    }
+
+    fn answerer(&self, namespace: &str) -> Answerer {
+        if let Some(source) = self
+            .derived
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(namespace)
+            .cloned()
+        {
+            return Answerer::Registered(source);
+        }
+        // An unreadable path is NOT "no file": the file answers, and its
+        // reader reports the error rather than the default admitting
+        // everyone in its place.
+        let file_present = RingJournal::open(&self.root, namespace)
+            .map(|j| j.roster_path().try_exists().unwrap_or(true))
+            .unwrap_or(false);
+        let default = self
+            .default
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        match default {
+            Some(source) if !file_present => Answerer::Default(source),
+            _ => Answerer::File,
         }
     }
 
@@ -151,16 +223,7 @@ impl RingRail {
 
     /// Where `namespace`'s roster comes from, without reading it.
     pub fn roster_origin(&self, namespace: &str) -> RosterOrigin {
-        if self
-            .derived
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .contains_key(namespace)
-        {
-            RosterOrigin::Derived
-        } else {
-            RosterOrigin::File
-        }
+        self.answerer(namespace).origin()
     }
 
     /// The roster `journal` is admitted against — THE door, and the only
@@ -174,35 +237,20 @@ impl RingRail {
     /// (what every read actually rendered). One reader, and the file is the
     /// fallback rather than a competitor.
     pub async fn roster(&self, journal: &RingJournal) -> Result<Roster, RailError> {
-        // Cloned out so the std lock is not held across the await.
-        let source = self
-            .derived
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .get(journal.namespace())
-            .cloned();
-        match source {
-            Some(source) => {
-                let roster = source.roster().await?;
-                tracing::debug!(
-                    namespace = journal.namespace(),
-                    origin = ?RosterOrigin::Derived,
-                    people = roster.members.len(),
-                    "ring rail: roster read"
-                );
-                Ok(roster)
-            }
-            None => {
-                let roster = journal.roster_file()?;
-                tracing::debug!(
-                    namespace = journal.namespace(),
-                    origin = ?RosterOrigin::File,
-                    people = roster.members.len(),
-                    "ring rail: roster read"
-                );
-                Ok(roster)
-            }
-        }
+        // The answerer holds clones, so no std lock is held across the await.
+        let answerer = self.answerer(journal.namespace());
+        let roster = match &answerer {
+            Answerer::Registered(source) | Answerer::Default(source) => source.roster().await?,
+            Answerer::File => journal.roster_file()?,
+        };
+        tracing::debug!(
+            namespace = journal.namespace(),
+            origin = ?answerer.origin(),
+            answered = answerer.name(),
+            people = roster.members.len(),
+            "ring rail: roster read"
+        );
+        Ok(roster)
     }
 
     /// Every namespace this node holds a journal for, read from disk.

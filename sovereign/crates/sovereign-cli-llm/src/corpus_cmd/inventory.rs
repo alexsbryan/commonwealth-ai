@@ -197,7 +197,7 @@ pub(super) async fn cmd_corpus_install(args: &[String]) -> i32 {
 
 /// Where `corpus_readiness` looks. One resolution, so the pre-check and the
 /// wait cannot disagree about which directory they are talking about (§10.6).
-fn indexes_dir() -> PathBuf {
+pub(super) fn indexes_dir() -> PathBuf {
     sovereign_core::setup_config::SetupConfig::load()
         .map(|c| c.data.dir)
         .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root())

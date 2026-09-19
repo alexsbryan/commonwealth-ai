@@ -94,10 +94,7 @@ def main():
     print(f"# {len(rows)} probes over {len({r['crate'] for r in rows})} crates cover {cum/total*100:.0f}% of {total} .rs file-edits {since}..{until}", file=sys.stderr)
     if "--write" in sys.argv:
         t = open(TOML).read()
-        # Anchored at line start: the file's own header comment says "[[probe]]",
-        # and an unanchored index() cut the header (id, objective, predicate) off
-        # at that comment in 525a5a940, which broke co-lineage for every order.
-        s, e = t.index("\n[[probe]]") + 1, t.index("# ── SUCCESS")
+        s, e = t.index("\n[[probe]]") + 1, t.index("# ── SUCCESS")  # line-anchored: the header comment also says "[[probe]]" (525a5a940 cut the header off here)
         open(TOML, "w").write(t[:s] + text + "\n" + t[e:])
         print("written", file=sys.stderr)
     else:

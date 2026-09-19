@@ -45,6 +45,9 @@ pub(crate) async fn gate_answer_inner(
     // the wrong passage (or worse, read a stamped chunk as unstamped).
     let leaf_custodies: Vec<Option<crate::types::Custody>>;
     let leaf_urls: Vec<Option<String>>;
+    // Members travel through the SAME filter for the same reason: a member
+    // read off the unfiltered list names the wrong machine on a citation.
+    let leaf_members: Vec<Option<String>>;
     // Grain travels through the SAME filter, for the reason above and one
     // more: it is what the released citation's [`kernel_types::Origin`]
     // carries, so a grain read off the unfiltered list would stamp a quote
@@ -55,13 +58,14 @@ pub(crate) async fn gate_answer_inner(
     // `_urls`: the leaf view's URLs exist for the ledger's locator
     // fallback, which the funnel derives from the FULL evidence; nothing
     // in the ladder reads the filtered view, so it is not bound.
-    let (chunks, locators, targets, custodies, _urls, grains): (
+    let (chunks, locators, targets, custodies, _urls, grains, members): (
         &[String],
         &[Option<String>],
         &[Option<CitationTarget>],
         &[Option<crate::types::Custody>],
         &[Option<String>],
         &[Grain],
+        &[Option<String>],
     ) = if evidence.has_summary_evidence() {
         let keep: Vec<usize> = (0..evidence.chunks.len())
             .filter(|i| evidence.source_of(*i).may_be_quoted())
@@ -83,6 +87,10 @@ pub(crate) async fn gate_answer_inner(
             .iter()
             .map(|i| evidence.chunk_urls.get(*i).cloned().flatten())
             .collect();
+        leaf_members = keep
+            .iter()
+            .map(|i| evidence.chunk_members.get(*i).cloned().flatten())
+            .collect();
         leaf_grains = keep.iter().map(|i| evidence.source_of(*i)).collect();
         (
             &leaf_owned,
@@ -91,6 +99,7 @@ pub(crate) async fn gate_answer_inner(
             &leaf_custodies,
             &leaf_urls,
             &leaf_grains,
+            &leaf_members,
         )
     } else {
         leaf_grains = (0..evidence.chunks.len())
@@ -103,6 +112,7 @@ pub(crate) async fn gate_answer_inner(
             &evidence.chunk_custodies,
             &evidence.chunk_urls,
             &leaf_grains,
+            &evidence.chunk_members,
         )
     };
     let entity_anchored = evidence.entity_anchored;
@@ -345,6 +355,9 @@ pub(crate) async fn gate_answer_inner(
             // display half of a citation, which the kernel `Origin` deliberately
             // does not carry (its `Locator` is the machine handle).
             let mut headings: Vec<Option<String>> = Vec::new();
+            // Mesh members, index-parallel to `turn_citations` — the member
+            // of the leaf chunk the quote's target names (`None` = local).
+            let mut cited_members: Vec<Option<String>> = Vec::new();
             let mut refusals: Vec<kernel_types::Refused> = Vec::new();
             for q in &quotes {
                 // No handle => no seal member => no row, exactly as the
@@ -362,6 +375,12 @@ pub(crate) async fn gate_answer_inner(
                     Ok(c) => {
                         turn_citations.push(c);
                         headings.push(q.locator.clone());
+                        cited_members.push(
+                            targets
+                                .iter()
+                                .position(|t| t.as_ref() == Some(target))
+                                .and_then(|i| members.get(i).cloned().flatten()),
+                        );
                     }
                     Err(r) => refusals.push(r),
                 }
@@ -495,7 +514,7 @@ pub(crate) async fn gate_answer_inner(
             // (ARCH §10.6). Before this, `meta["citations"]` and the answer's
             // own citations were two hand-built lists that happened to agree.
             let released_citations =
-                crate::types::EpistemicState::citations_of(&released, &headings);
+                crate::types::EpistemicState::citations_of(&released, &headings, &cited_members);
             let openable = released_citations.len();
             tracing::debug!(
                 target: "grounding.seal",

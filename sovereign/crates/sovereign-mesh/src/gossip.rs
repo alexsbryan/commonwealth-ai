@@ -551,6 +551,7 @@ pub async fn run_one_round(
                 // from hardware and corpora and knows nothing about the
                 // acceptor, so the origins are stamped here, after it.
                 me.capabilities.origins = info.origins;
+                me.capabilities.media_allow = info.media_allow;
                 // WS-D anti-downgrade: SIGN our dial info so peers can
                 // verify only we changed it (a gossip-strip attacker past
                 // the join-key gate can't force us unreachable / downgrade

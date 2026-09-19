@@ -50,6 +50,12 @@ pub struct KnowledgeSearchResponse {
     pub corpora_searched: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub corpora_unavailable: Vec<String>,
+    /// The subset of `corpora_unavailable` that NO live member advertises —
+    /// named apart so "nobody hosts it" reads differently from "its host is
+    /// offline". Every entry here is also in `corpora_unavailable`, so a
+    /// reader that predates this field still sees the corpus as missing.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub corpora_unhosted: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub total_chunks_searched: Option<u64>,
 }
@@ -103,6 +109,13 @@ pub struct KnowledgeResult {
     /// which is the direction that fabricates.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub grain: Option<String>,
+    /// The member name of the peer that served this passage, stamped by the
+    /// requester's fan-out. `None` for a locally-served hit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub peer_name: Option<String>,
+    /// That peer's node id, stamped beside `peer_name`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub peer_node_id: Option<String>,
 }
 
 // -----------------------------------------------------------------
@@ -213,6 +226,8 @@ mod tests {
             source_doc_id: Some("bk-ch01".into()),
             custody: Some("public-web".into()),
             grain: Some("summary".into()),
+            peer_name: None,
+            peer_node_id: None,
         };
         let json = serde_json::to_string(&modern).unwrap();
         let back: KnowledgeResult = serde_json::from_str(&json).unwrap();

@@ -290,9 +290,9 @@ pub struct MeshIrohAccess {
     /// Whether this acceptor routes [`RPC_ALPN`] to a local ggml
     /// rpc-server — the truth behind `/status`'s `rpc_worker.iroh` flag.
     rpc_route_active: bool,
-    /// Whether this acceptor routes [`MEDIA_ALPN`] to a local media origin —
-    /// the fact the gossip self-stamp advertises as `origins: [media]`.
-    media_route_active: bool,
+    /// The live media route: whether the gossip self-stamp advertises
+    /// `origins: [media]`, and the `media_allow` gossiped beside it.
+    media: MediaRoute,
     /// The live app registry this acceptor routes [`APP_ALPN`] against —
     /// held rather than sampled, because whether this node publishes an app
     /// is advertised as `origins: [app]` in gossip and changes while the
@@ -332,18 +332,11 @@ pub struct AcceptorRoutes {
     /// A local ggml rpc-server, when this node serves one.
     pub rpc: Option<SocketAddr>,
     /// A local HTTP media origin, when this node's operator declared one
-    /// (`[iroh] media_origin`). `None` means the protocol is not advertised at
-    /// all, so a dial is closed rather than left hanging on a route to nowhere.
-    pub media: Option<SocketAddr>,
-    /// Headers this node adds to requests reaching its OWN media origin,
-    /// read once at construction from `<data_dir>/secrets/media/` (0600 files,
-    /// `commonwealth_media::declared`). This is how a holder authenticates to
-    /// its own Jellyfin without any viewer holding its key — see that module
-    /// for why the value is not in config.
-    pub media_declared: std::sync::Arc<Vec<(String, String)>>,
-    /// `[iroh] media_allow`: which members may reach `media`, by name or id
-    /// prefix. Empty admits every member. A non-member is refused either way.
-    pub media_allow: std::sync::Arc<Vec<String>>,
+    /// (`[iroh] media_origin`), and `[iroh] media_allow`: which members may
+    /// reach it, by name or id prefix (empty admits every member; a non-member
+    /// is refused either way). Read per dial. No origin means the protocol is
+    /// not advertised, so a dial is closed rather than left hanging.
+    pub media: MediaRoute,
     /// The named HTTP apps this node publishes, and who may reach them.
     pub apps: AppRoutes,
     /// A local HTTP origin listing what this operator has to sell or lend
@@ -370,6 +363,8 @@ pub struct OfferRoutes {
     /// member; a non-member is refused either way.
     pub allow: Vec<String>,
 }
+
+pub use crate::media_route::MediaRoute;
 
 /// The live app registry and `[iroh] app_allow`, carried together.
 ///
@@ -478,9 +473,9 @@ impl AcceptorRoutes {
             return commonwealth_media::admit_media(
                 is_member(dialer).await.as_ref(),
                 dialer,
-                self.media,
-                &self.media_allow,
-                &self.media_declared,
+                self.media.origin(),
+                &self.media.allow(),
+                &self.media.declared(),
             );
         }
         if alpn == APP_ALPN {
@@ -531,7 +526,9 @@ impl AcceptorRoutes {
 /// dial into a HANG. Unlike the others, apps change while the daemon runs —
 /// a housemate's `svrn run` publishes one without touching config — so the
 /// app arm is re-decided by `on_serving_change`, which is why there are two
-/// sets and not one.
+/// sets and not one. The media arm is re-decided the same way since
+/// `[iroh] media_origin` became reloadable ([`MediaRoute`]); `start` calls
+/// this with the live answers rather than keeping a snapshot.
 ///
 /// **The second set is `full` minus `APP_ALPN`, and that is the whole point
 /// of returning it from here.** `Endpoint::set_alpns` REPLACES the list, so
@@ -596,8 +593,7 @@ impl MeshIrohAccess {
         internal_port: u16,
         peer_addr: Option<SocketAddr>,
         guest_addr: Option<SocketAddr>,
-        media_origin: Option<SocketAddr>,
-        media_allow: Vec<String>,
+        media: MediaRoute,
         apps: AppRoutes,
         offer: OfferRoutes,
         member_check: MemberCheck,
@@ -628,11 +624,11 @@ impl MeshIrohAccess {
         // advertise an ALPN they can't forward.
         let rpc_forward: Option<SocketAddr> = rpc_serve_port().map(|p| ([127, 0, 0, 1], p).into());
         let published = apps.apps.snapshot();
-        let (alpns, base_alpns) = alpn_sets(
+        let (alpns, _) = alpn_sets(
             rpc_forward.is_some(),
             !published.is_empty(),
             offer.origin.is_some(),
-            media_origin.is_some(),
+            media.origin().is_some(),
             guest_addr.is_some(),
         );
         if !published.is_empty() {
@@ -653,7 +649,7 @@ impl MeshIrohAccess {
                  of this node's"
             );
         }
-        if let Some(origin) = media_origin {
+        if let Some(origin) = media.origin() {
             tracing::info!(
                 target: "transport",
                 media_origin = %origin,
@@ -701,42 +697,50 @@ impl MeshIrohAccess {
                  will be closed (federated inference from peers is off)"
             ),
         }
+        media.set_declared(commonwealth_media::read_declared_in(
+            &commonwealth_media::dir_under(data_dir),
+        ));
         let routes = AcceptorRoutes {
             internal: internal_addr,
             peer: peer_addr,
             guest: guest_addr,
             rpc: rpc_forward,
-            media: media_origin,
-            media_allow: std::sync::Arc::new(media_allow),
+            media: media.clone(),
             apps: apps.clone(),
             offer: offer.clone(),
-            media_declared: std::sync::Arc::new(commonwealth_media::read_declared_in(
-                &commonwealth_media::dir_under(data_dir),
-            )),
         };
-        // The endpoint's accepted protocols now track the registry. iroh
-        // applies a new set to NEW incoming connections only, which is
-        // exactly the grain wanted: a dial already in flight keeps the
-        // protocol it negotiated.
-        {
+        // The endpoint's accepted protocols now track the registry and the
+        // media route. iroh applies a new set to NEW incoming connections
+        // only, which is exactly the grain wanted: a dial already in flight
+        // keeps the protocol it negotiated.
+        let live_alpns = {
             let endpoint = endpoint.clone();
-            let base_alpns = base_alpns.clone();
-            apps.apps
-                .on_serving_change(std::sync::Arc::new(move |serving| {
-                    let mut set = base_alpns.clone();
-                    if serving {
-                        set.push(APP_ALPN.to_vec());
-                    }
-                    tracing::info!(
-                        target: "transport",
-                        serving_apps = serving,
-                        "iroh(mesh): app publishing changed — \
-                         {} APP_ALPN on the live endpoint",
-                        if serving { "advertising" } else { "withdrawing" }
-                    );
-                    endpoint.set_alpns(set);
-                }));
+            let media = media.clone();
+            let (rpc, offer_on, guest) = (
+                rpc_forward.is_some(),
+                offer.origin.is_some(),
+                guest_addr.is_some(),
+            );
+            move |serving: bool| {
+                let media_on = media.origin().is_some();
+                tracing::info!(
+                    target: "transport",
+                    serving_apps = serving,
+                    serving_media = media_on,
+                    "iroh(mesh): app publishing or media route changed — \
+                     re-deciding APP_ALPN and MEDIA_ALPN on the live endpoint"
+                );
+                endpoint.set_alpns(alpn_sets(rpc, serving, offer_on, media_on, guest).0);
+            }
+        };
+        {
+            let live_alpns = live_alpns.clone();
+            let registry = apps.apps.clone();
+            media.on_change(std::sync::Arc::new(move || {
+                live_alpns(registry.is_serving())
+            }));
         }
+        apps.apps.on_serving_change(std::sync::Arc::new(live_alpns));
         let acceptor =
             IrohAcceptor::spawn_admitting_forward(endpoint.clone(), move |alpn, dialer| {
                 let is_member = member_check.clone();
@@ -756,7 +760,7 @@ impl MeshIrohAccess {
             endpoint,
             _acceptor: acceptor,
             rpc_route_active: rpc_forward.is_some(),
-            media_route_active: media_origin.is_some(),
+            media,
             offer_route_active: offer.origin.is_some(),
             apps: apps.apps.clone(),
         })
@@ -790,19 +794,22 @@ impl MeshIrohAccess {
         &self,
     ) -> std::sync::Arc<dyn Fn() -> commonwealth_core::mesh::IrohDialInfo + Send + Sync> {
         let endpoint = self.endpoint.clone();
-        let media_route_active = self.media_route_active;
+        // The live route, read per stamp — a reload that sets or clears the
+        // origin republishes on the next gossip round.
+        let media = self.media.clone();
         // The app registry itself, not a boolean read off it now: this
         // closure is called once per gossip stamp, and the whole point of the
         // claimed tier is that the answer changes between two of them.
         let apps = self.apps.clone();
         let offer_route_active = self.offer_route_active;
         std::sync::Arc::new(move || {
+            let media_origin = media.origin();
             // One kind per live route. Order is Media, App, Offer — the
             // enum's own order — so the gossiped array is stable across
             // restarts; a set that reorders makes every roster diff look like
             // a change.
             let mut origins = Vec::new();
-            if media_route_active {
+            if media_origin.is_some() {
                 origins.push(commonwealth_core::capabilities::OriginKind::Media);
             }
             if apps.is_serving() {
@@ -821,6 +828,12 @@ impl MeshIrohAccess {
                 relay_url,
                 direct_addrs,
                 origins,
+                // Empty when no media route is live.
+                media_allow: if media_origin.is_some() {
+                    media.allow().as_ref().clone()
+                } else {
+                    Vec::new()
+                },
             }
         })
     }
@@ -1153,11 +1166,9 @@ mod tests {
             peer: Some(addr(41001)),
             guest: Some(addr(41000)),
             rpc: Some(addr(50052)),
-            media: Some(addr(8096)),
-            media_allow: std::sync::Arc::new(Vec::new()),
-            // Nothing declared: these cases are about WHO is admitted,
-            // not what the holder adds on the way to its own origin.
-            media_declared: std::sync::Arc::new(Vec::new()),
+            media: MediaRoute::fixed(Some(addr(8096)), Vec::new()),
+            // Nothing declared (`fixed`): these cases are about WHO is
+            // admitted, not what the holder adds on the way to its own origin.
             offer: OfferRoutes {
                 origin: Some(addr(8710)),
                 allow: Vec::new(),
@@ -1194,7 +1205,7 @@ mod tests {
                 apps: published(),
                 allow: Vec::new(),
             },
-            media_allow: std::sync::Arc::new(nobody()),
+            media: MediaRoute::fixed(Some(addr(8096)), nobody()),
             ..routes()
         };
         assert!(
@@ -1218,7 +1229,7 @@ mod tests {
                 apps: published(),
                 allow: nobody(),
             },
-            media_allow: std::sync::Arc::new(Vec::new()),
+            media: MediaRoute::fixed(Some(addr(8096)), Vec::new()),
             ..routes()
         };
         assert!(
@@ -1245,7 +1256,7 @@ mod tests {
                 apps: published(),
                 allow: nobody(),
             },
-            media_allow: std::sync::Arc::new(nobody()),
+            media: MediaRoute::fixed(Some(addr(8096)), nobody()),
             offer: OfferRoutes {
                 origin: Some(addr(8710)),
                 allow: Vec::new(),
@@ -1487,7 +1498,7 @@ mod tests {
             .expect("a member reaches the origin");
         match &forward {
             Forward::Http { origin, headers } => {
-                assert_eq!(Some(*origin), r.media);
+                assert_eq!(Some(*origin), r.media.origin());
                 assert!(
                     headers.contains(&("X-Mesh-Member".to_string(), "LittleMac".to_string())),
                     "{headers:?}"
@@ -1500,7 +1511,7 @@ mod tests {
             other => panic!("a media dial must be an identity forward, got {other:?}"),
         }
         assert!(
-            r.media.is_some(),
+            r.media.origin().is_some(),
             "the fixture must actually serve media, or the assertion above passes on a shared None"
         );
         assert_eq!(
@@ -1511,7 +1522,7 @@ mod tests {
         // A node that declares no origin advertises nothing and closes even a
         // member's dial — no route to nowhere.
         let unserved = AcceptorRoutes {
-            media: None,
+            media: MediaRoute::fixed(None, Vec::new()),
             ..routes()
         };
         assert_eq!(
@@ -1529,10 +1540,12 @@ mod tests {
     #[tokio::test]
     async fn the_media_allow_list_admits_by_name_or_id_prefix_and_refuses_the_rest() {
         let allow = |entries: &[&str]| AcceptorRoutes {
-            media_allow: std::sync::Arc::new(entries.iter().map(|s| s.to_string()).collect()),
-            // Nothing declared: these cases are about WHO is admitted,
-            // not what the holder adds on the way to its own origin.
-            media_declared: std::sync::Arc::new(Vec::new()),
+            media: MediaRoute::fixed(
+                Some(addr(8096)),
+                entries.iter().map(|s| s.to_string()).collect(),
+            ),
+            // Nothing declared (`fixed`): these cases are about WHO is
+            // admitted, not what the holder adds on the way to its own origin.
             ..routes()
         };
         assert!(

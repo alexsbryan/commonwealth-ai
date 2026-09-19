@@ -92,6 +92,8 @@ mod join_key_persistence;
 mod join_parks_not_leaves;
 #[path = "main/knowledge_client_unavailability.rs"]
 mod knowledge_client_unavailability;
+#[path = "main/knowledge_fanout_attribution_e2e.rs"]
+mod knowledge_fanout_attribution_e2e;
 #[path = "main/knowledge_fanout_e2e.rs"]
 mod knowledge_fanout_e2e;
 #[path = "main/knowledge_served_e2e.rs"]

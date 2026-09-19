@@ -1,3 +1,28 @@
+# ring-doc — review findings
+
+One row per finding: principle, path:line, fixed-in hash (or why not fixed).
+
+## REVIEW-audit-rd-1 (2026-09-18, range d8cd7bb9f..18c7f405b)
+
+| # | principle | path:line | fixed in | finding |
+|---|---|---|---|---|
+| 1 | 5 (gate) | sovereign/crates/sovereign-core/tests/main/f26_egress_census.rs:835 | e88a71212 | `routes_rail_live.rs` (6ac1fd39f) added an HTTP client construction site the F26 census did not know; TESTALL red. Registered Mesh, 1. |
+| 2 | 1 | sovereign/crates/sovereign-api/src/routes_rail_live.rs:278 | e88a71212 | `offer_peer` gave up on a peer with no tracing event; the reason reached only the HTTP body. |
+| 3 | 1 | sovereign/crates/sovereign-api/src/routes_rail_live.rs:308 | e88a71212 | `live_push`'s 413 and 422 refusals had no tracing event. |
+| 4 | 1 | sovereign/crates/sovereign-api/src/routes_internal/ring_live.rs:53 | e88a71212 | the receiver's malformed-envelope refusal was silent while its two sibling refusals warn. |
+| 5 | 8 | sovereign/crates/sovereign-grants/src/guest_grant.rs:105, sovereign/crates/sovereign-api/src/server.rs:271, sovereign/crates/sovereign-cli-shared/src/rail.rs:50 | not fixed | `/v1/rail/live` is spelled three times (grant scope, route, client const), extending the same triple spelling append/log already had before the queue. `sovereign-grants` does not depend on `sovereign-cli-shared`, so one const needs a home both layers can read — a design call, carried to NEEDS_HUMAN. Divergence is caught end-to-end by `ring_live_non_durable` (a guest grant drives the route). |
+| 6 | 9 | sovereign/crates/sovereign-cli-llm/src/ring_cmd/dev.rs:148 | no change | `upstream` matches four string ops (smell: >3 arms). Kept: it is the one parse of a URL path segment into the route table, and a test asserts the table; an enum would move the same match into `FromStr`. |
+
+Foreign reds seen by this audit (outside the campaign, not fixed here): see
+the audit's NEEDS_HUMAN package — conformance tags stale since 30293904f,
+`ingest_failure_modes::a_stopped_ingest_is_listed_but_not_usable`,
+`every_journey_cites_a_doc_that_exists` (gitignored RING_APPLICATIONS.md
+absent on the Halo), arch-gate (AGENTS.md +399 B, approach band +59; campaign
+net 0), env-gate (`SOVEREIGN_SIDECAR_FEATURES` declared twice since e3474619c).
+
+
+---
+
 # ralph/REVIEW_FINDINGS.md — domains campaign
 
 Each finding: principle · path:line · fixed-in. Recorded-not-changed entries
@@ -1274,3 +1299,69 @@ Recorded, not changed:
 - **`size-gate` (advisory)** · 69 keys grew, the campaign's accretion;
   `warn_gate` by design. Not re-pinned.
 - **`concept-gate` could-not-judge** · exit 4, declared; not blocking.
+
+## ring-room — REVIEW-audit-rr-1
+
+Range audited: `git log --first-parent efe2aa080..HEAD` (the queue's start), 54
+non-merge commits; the domains merge `cf1638ca6` is foreign and was read only to
+attribute reds. Checks: TESTALL exit=100 (13425 pass, 2 fail); PREPUSH exit=1
+(arch-gate blocking). Rail predicate holds: the campaign's `commonwealth-rail`
+diff is the roster door (`lib.rs` :112-290) plus its test (`tests.rs:252`); the
+two `RingJournal` doc hunks (:545, :608) are `e9db0b96c`'s path renames.
+
+Findings, fixed (commit `9a2194f5d`):
+
+- **ARCH 6 (an `Err` collapsed into a success-shaped value)** ·
+  `sovereign/crates/sovereign-cli-llm/src/ring_cmd/mod.rs:466` · `roster show`
+  read an unopenable journal as "no roster.json" and printed "everyone in the
+  mesh". Now names the error and exits 1 (from `e94b26826`).
+- **ARCH 3 (a generated record not landed with the code)** ·
+  `quality/conformance/sovereign-daemon.toml` · three tags stale on lines this
+  campaign moved (`admission.rs` 771→796, 1093→1118; `daemon.rs` 5367→5375).
+  Regenerated.
+
+Open, operator's call (`ralph/NEEDS_HUMAN.md`):
+
+- **arch-gate (blocking), campaign growth** · `sovereign-core/src/runtime/epistemic.rs`
+  1444→1574 (`2ae717138`, `7c2ecdc94`); `sovereign-daemon/src/admin_http.rs`
+  1308→1387 (rr-1-media-origin-live, carried by the merge); approach band
+  207→209 files, 202703→204979 lines. The files that entered the band are
+  `commonwealth-rail/src/lib.rs` 798→846 (the permitted hunk, untouchable here),
+  `sovereign-cli-llm/src/mesh_media.rs` 595→931 and
+  `sovereign-mesh/tests/main/knowledge_fanout_e2e.rs` 644→987.
+
+Foreign reds seen by this audit (outside the campaign, not fixed here):
+`every_journey_cites_a_doc_that_exists` (gitignored `RING_APPLICATIONS.md`, as
+before); `hakari-verify` (`.config/hakari.toml:54` names `corpus-engine-vocab`,
+removed by `e9db0b96c`); `size-gate` (advisory, mostly new unbaselined crates
+from the domains landing); `concept-gate` could-not-judge (stale graph).
+
+### Second pass — after REVIEW-build-rr-1-band-split (range `9a2194f5d..7cf49fc9d`)
+
+Checks: TESTALL exit=100 (13424 pass, 3 fail) before the fixes below; PREPUSH
+exit=0 (arch-gate passed, 206 files / 201889 lines in the band; size-gate and
+hakari-verify advisory-red, concept-gate could-not-judge — all three foreign,
+as in the first pass). The one red left in TESTALL is
+`every_journey_cites_a_doc_that_exists`: `sovereign/docs/cli-contract.toml`
+cites the gitignored `docs/internal/RING_APPLICATIONS.md` (`.gitignore:67`),
+added by `a3bd715f5`, an ancestor of the queue start `efe2aa080` — foreign,
+under the DECISIONS.md:605 reading.
+
+Findings, fixed (commits `b606f9587`, `7cf49fc9d`):
+
+- **ARCH 5 (a gate that stopped seeing its subject)** ·
+  `sovereign/crates/sovereign-desktop/src-tauri/tests/mesh_status_one_decider.rs:28`
+  · the guard read only `mesh_commands.rs`; `e85076537` moved
+  `MemberStatus::deserialize` to `mesh_commands/state_response.rs`, so it went
+  red, and a hand `"online" =>` arm in any child file would have sailed past.
+  Now reads the whole module; planted in the child file, watched red.
+- **ARCH 3/8 (a registry row not moved with the code)** ·
+  `sovereign/crates/sovereign-core/tests/main/f26_egress_census.rs:280` · the
+  F26 row for `admin_http.rs` (14 loopback test sites) went stale when
+  `e85076537` moved its test module; replaced by rows for `admin_http/tests.rs`
+  (6) and `admin_http/tests/reload.rs` (8), same `Class::Mesh`.
+- **ARCH 4 (a claim with no citation)** · `e85076537`'s body says
+  "behaviour-preserving" citing lint and arch-gate only; the two guards above
+  scan source text, so a file move is not behaviour-preserving for them. No
+  code fix — recorded so a split row names the source-scanning tests in its
+  checks.

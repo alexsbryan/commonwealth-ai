@@ -272,7 +272,18 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // loopback in the same process. `Class::Mesh` is unchanged and correct:
     // no third-party host is dialed, and no estate content crosses a
     // boundary — there is no boundary to cross.
-    ("sovereign/crates/sovereign-daemon/src/admin_http.rs", Class::Mesh, 13),
+    //
+    // 13 -> 14 (2026-09-18, recorded by rr-1-claim-support-names-the-member,
+    // NOT its change): 031a32294's `reload_moves_the_media_origin_without_a_restart`
+    // POSTs /v1/admin/reload (:1281) to the router it spawned on loopback,
+    // inside `mod tests` — same class, no new egress.
+    //
+    // 14 -> split (2026-09-18, REVIEW-build-rr-1-band-split e85076537): the
+    // test module moved verbatim to child files, so the fourteen sites moved
+    // with it — the eight reload tests to `tests/reload.rs`, the other six to
+    // `tests.rs`. Same sites, same class; `admin_http.rs` itself has none.
+    ("sovereign/crates/sovereign-daemon/src/admin_http/tests.rs", Class::Mesh, 6),
+    ("sovereign/crates/sovereign-daemon/src/admin_http/tests/reload.rs", Class::Mesh, 8),
     // NEW ROW 2026-09-12 (sv-surface svt-7). `assets_http.rs` is the daemon's
     // weights surface — hardware / catalog / slot / NER reads plus the one
     // asset-download job. All five constructions are inside its
@@ -852,6 +863,11 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-daemon/src/routes_internal/corpus_collaborate.rs", Class::Mesh, 1),
     ("sovereign/crates/sovereign-daemon/src/routes_knowledge.rs", Class::Mesh, 1),
     ("sovereign/crates/sovereign-daemon/src/routes_internal/pipeline_pause.rs", Class::LocalDaemon, 1),
+    // NEW (2026-09-18, ring-doc REVIEW-build-rd-1-live, 6ac1fd39f; re-keyed to
+    // sovereign-daemon with the api host cluster): the ring live lane's fan-out.
+    // `push_ephemeral` POSTs a namespaced envelope to `/internal/ring/live` on each
+    // Online mesh member through the `PeerTransport` seam — ring peers, never a third party.
+    ("sovereign/crates/sovereign-daemon/src/routes_rail_live.rs", Class::Mesh, 1),
     ("oicp-conformance/src/checks.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-meshapp-registry/src/proxy.rs", Class::LocalDaemon, 1),
     // Federated media's catalogue half. The row was

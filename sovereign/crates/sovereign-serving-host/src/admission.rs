@@ -106,6 +106,27 @@ impl AdmissionReason {
     }
 }
 
+/// What a peer request spends — two resources, two budgets (seat A23). A corpus
+/// read (`/internal/knowledge/search`, ~ms of I/O) is not an inference, so one
+/// offloaded judge holding the inference slot must not blind every member's
+/// fan-out to this node's corpora.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PeerWork {
+    Inference,
+    KnowledgeRead,
+}
+
+impl PeerWork {
+    /// The `[daemon]` key of the ceiling that decides this work, named on every
+    /// admission event.
+    pub const fn ceiling(self) -> &'static str {
+        match self {
+            Self::Inference => "max_peer_inflight",
+            Self::KnowledgeRead => "max_peer_knowledge_reads",
+        }
+    }
+}
+
 /// How many seconds of spread a shed's `Retry-After` hint carries on top of its
 /// base value.
 ///
@@ -274,6 +295,10 @@ pub enum AdmissionVerdict {
 pub trait Admission: Send + Sync {
     /// Decide whether `who` may be served at `now_unix_ms`.
     fn admit(&self, who: &Principal, now_unix_ms: u64) -> AdmissionVerdict;
+
+    /// Decide a member's corpus read ([`PeerWork::KnowledgeRead`]) — under its
+    /// own ceiling, never the inference one.
+    fn admit_knowledge_read(&self, who: &Principal, now_unix_ms: u64) -> AdmissionVerdict;
 
     /// The current posture, for `/status`.
     fn posture(&self) -> AdmissionPosture;
@@ -496,6 +521,33 @@ pub async fn peer_admission_layer<S>(
 where
     S: AdmissionHost + Clone + Send + Sync + 'static,
 {
+    peer_gate(state, headers, req, next, PeerWork::Inference).await
+}
+
+/// The same peer gate for `/internal/knowledge/search`, decided by
+/// [`Admission::admit_knowledge_read`] under its own ceiling (seat A23).
+pub async fn peer_knowledge_read_layer<S>(
+    State(state): State<S>,
+    headers: HeaderMap,
+    req: Request<Body>,
+    next: Next,
+) -> Response
+where
+    S: AdmissionHost + Clone + Send + Sync + 'static,
+{
+    peer_gate(state, headers, req, next, PeerWork::KnowledgeRead).await
+}
+
+async fn peer_gate<S>(
+    state: S,
+    headers: HeaderMap,
+    req: Request<Body>,
+    next: Next,
+    work: PeerWork,
+) -> Response
+where
+    S: AdmissionHost + Clone + Send + Sync + 'static,
+{
     if headers.get("x-node-id").is_none() {
         return next.run(req).await;
     }
@@ -521,7 +573,12 @@ where
         }
     };
     let who = Principal::Member { node_id: node };
-    match state.admit(&who, sovereign_time::unix_millis()) {
+    let now = sovereign_time::unix_millis();
+    let verdict = match work {
+        PeerWork::Inference => state.admit(&who, now),
+        PeerWork::KnowledgeRead => state.admit_knowledge_read(&who, now),
+    };
+    match verdict {
         AdmissionVerdict::Admitted(slot) => {
             // The tally row opens for the whole serving window, before the
             // handler runs; the slot releases at headers time (below), the
@@ -536,6 +593,7 @@ where
             // not read as serving on /status.
             tracing::info!(
                 reason = ?rejection.reason,
+                ceiling = work.ceiling(),
                 retry_after_secs = rejection.retry_after_secs,
                 "admission: 503 — peer request gated"
             );

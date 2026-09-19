@@ -10,7 +10,7 @@
 //! The test proves the whole feature in one shot: Joiner queries its
 //! own `/v1/knowledge/search`, the handler walks `hosted_corpora`,
 //! fires `/internal/knowledge/search` at Host, gets the SEP chunk
-//! back, and surfaces it with `metadata["peer_name"] = "Host"` so
+//! back, and surfaces it with the `peer_name` field set to `"Host"` so
 //! the UI can render `sep (1) via Host`. Also exercises the
 //! resilience path — an offline peer must not tank the query.
 use std::collections::HashMap;
@@ -148,6 +148,7 @@ fn member(
             inference_capable: false,
             loaded_models: vec![],
             origins: Vec::new(),
+            media_allow: Vec::new(),
 
             embed_model: None,
             benchmark: None,
@@ -287,8 +288,17 @@ async fn fanout_fetches_sep_chunk_from_peer_with_attribution() {
     let first = &results[0];
     assert_eq!(first["corpus_id"], "sep", "hit must be from the sep corpus");
     assert_eq!(
-        first["metadata"]["peer_name"], "mac-peer",
-        "peer attribution must survive fan-out: {first:?}"
+        first["peer_name"], "mac-peer",
+        "peer attribution must survive fan-out as a field: {first:?}"
+    );
+    assert_eq!(
+        first["peer_node_id"],
+        host_id.to_string(),
+        "the serving node's id rides beside its name: {first:?}"
+    );
+    assert!(
+        first["metadata"].get("peer_name").is_none(),
+        "one write site: the retired metadata key must not come back: {first:?}"
     );
     assert!(body["corpora_searched"]
         .as_array()
@@ -329,6 +339,10 @@ async fn fanout_survives_offline_peer() {
     assert!(
         unavailable.iter().any(|c| c == "sep"),
         "sep should be reported unavailable, got {unavailable:?}"
+    );
+    assert!(
+        body.get("corpora_unhosted").is_none(),
+        "an offline host is not an unhosted corpus: {body}"
     );
 }
 
@@ -382,6 +396,11 @@ async fn a_named_corpus_nobody_hosts_is_reported_unavailable_not_empty() {
         "a corpus the caller NAMED that nobody searched must be reported \
          unavailable — an empty result set alone reads as `searched, found \
          nothing`; got {unavailable:?}"
+    );
+    let unhosted = body["corpora_unhosted"].as_array().unwrap();
+    assert!(
+        unhosted.iter().any(|c| c == "sep"),
+        "nobody hosts sep, which must read apart from an offline host; got {body}"
     );
 }
 

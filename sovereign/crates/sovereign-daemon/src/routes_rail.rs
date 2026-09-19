@@ -169,6 +169,26 @@ fn retire(retired: &Result<Compaction, RailError>) -> serde_json::Value {
     }
 }
 
+/// The `guest` a ring page put in an act's payload (or a correction's
+/// replacement), if any. The one field of an app payload this route reads.
+fn guest_name_in(body: &serde_json::Value) -> Option<String> {
+    ["payload", "replacement"]
+        .iter()
+        .find_map(|k| body.get(*k)?.get("guest")?.as_str())
+        .map(str::to_string)
+}
+
+/// Whether `name` is a roster member's — the door's one refusal of a guest,
+/// so a guest is never shown under a member's name. Case and surrounding
+/// space do not make a different name to a reader.
+fn names_a_member(roster: &commonwealth_rail::Roster, name: &str) -> bool {
+    let name = name.trim();
+    roster
+        .members
+        .keys()
+        .any(|p| p.as_str().eq_ignore_ascii_case(name))
+}
+
 /// POST /v1/rail/append — sign and append one act to this caller's namespace.
 ///
 /// The body is the act alone. `seq`, the signature, the timestamp and the id
@@ -176,8 +196,10 @@ fn retire(retired: &Result<Compaction, RailError>) -> serde_json::Value {
 /// number or actor could write as somebody else, and the whole point of the
 /// grant is that it cannot.
 ///
-/// The act's payload is the app's, and this route does not read inside it.
-/// What it does check is that the payload has a canonical form — see
+/// The act's payload is the app's, and this route reads exactly one field of
+/// it — `guest`, refused when it is a roster member's name ([`names_a_member`])
+/// so a guest's words are never shown under a member's.
+/// What it also checks is that the payload has a canonical form — see
 /// [`Payload`](commonwealth_rail::Payload) — because a body whose bytes
 /// two nodes would spell differently cannot be signed once and verified
 /// everywhere.
@@ -192,6 +214,8 @@ pub async fn append(
         Ok(pair) => pair,
         Err(refusal) => return refusal,
     };
+    // Read before the body becomes an act: the payload is otherwise opaque here.
+    let claimed_guest = guest_name_in(&body);
     // Taken as a `Value` and converted here rather than as `Json<RailAct>`,
     // so a refusal is the rail's own sentence instead of axum's rejection
     // prose wrapped around serde's prose wrapped around it (ARCH §10.6).
@@ -206,6 +230,17 @@ pub async fn append(
         Ok(r) => r,
         Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     };
+    if let Some(name) = claimed_guest.filter(|n| names_a_member(&roster, n)) {
+        tracing::warn!(
+            namespace = journal.namespace(),
+            guest = name,
+            "rail: refused a guest name that is a roster member's"
+        );
+        return err(
+            StatusCode::CONFLICT,
+            format!("'{name}' is a member of this ring; a guest writes under a name of their own"),
+        );
+    }
     // Sealing is the one act with a second half, and the pair lives on the
     // journal (`RingJournal::seal`) rather than here — the daemon's own KV
     // pump seals too, and two spellings of "seal, then compact, and a refused

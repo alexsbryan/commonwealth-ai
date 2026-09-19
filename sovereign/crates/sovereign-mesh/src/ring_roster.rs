@@ -11,9 +11,8 @@
 //! > the ring — including its own. That is a property of the route set rather
 //! > than a check, which is the same move the rail itself makes (ARCH §7.1).
 //!
-//! A namespace the daemon publishes to on its own — `mesh-measurements` was
-//! the first, and cw-lift 4 added the six KV namespaces in
-//! [`DAEMON_OWN_NAMESPACES`] — still needs a roster, and the obvious way to
+//! A ring nobody narrowed — the daemon's own and every app's alike — still
+//! needs a roster, and the obvious way to
 //! get one is the one that must not exist: a peer handing us the membership it
 //! thinks we have. Admitting a roster over the wire hands any peer the ability to
 //! admit signers to a ring, which is exactly what §7.1 put out of reach.
@@ -63,7 +62,8 @@
 //! The rail's namespace-generic paths — the append and log routes, the
 //! sync-side prune — hold a journal and a namespace and nothing of the mesh.
 //! They read the roster through `RingRail::roster`, the rail's ONE reader,
-//! and [`MeshRosterSource`] is what that reader calls for these namespaces. It
+//! and [`MeshRosterSource`] is what that reader calls for any ring without a
+//! `roster.json`. It
 //! is installed once, beside the rail itself, by [`MeshRosterSource::install`];
 //! until it existed those paths read the file (empty, for these namespaces) and
 //! the daemon's own rings refused its own key at the door.
@@ -229,30 +229,24 @@ impl MeshRoster {
     }
 }
 
-/// The ring namespaces this daemon authors on its own behalf, and whose roster
-/// is therefore the mesh's membership rather than a hand-written `roster.json`.
+/// The daemon's own rings — the namespaces no `roster.json` may narrow,
+/// registered with the rail so they outrank the file
+/// (`RingRail::default_roster` documents the order).
 ///
-/// **This list is what separates the daemon's rings from an app's.** A ring an
-/// app was granted (`Scope::Rails`) keeps a roster FILE, written by
-/// `svrn ring roster add`; nothing here may name one, because installing a
-/// membership-derived roster on an app's ring would admit every mesh member as
-/// an author of that app's journal — an authority change, made by accident, in
-/// a place nobody would look for it. So the set is DECLARED rather than
-/// inferred: there is no property of a namespace string that distinguishes
-/// `inference` from `house-expenses`, and a fallback like "derive when the
-/// roster file is empty" would guess exactly that (ARCH §7.1).
+/// A peer's write counts on these rings because its key is in this roster,
+/// and the roster heals an unplaceable signer the moment that node advertises
+/// a key. A file written by hand — or left behind — on one node would drop
+/// peers' writes there and nowhere else, and the ring would stop agreeing
+/// across the mesh. Every app ring is answered by the default and may be
+/// narrowed. `svrn ring roster` refuses exactly this list, and
+/// `a_registered_namespace_ignores_a_hand_roster` pins the reason.
 ///
 /// Every entry is a constant owned by the subsystem that writes the namespace,
 /// never a literal repeated here (ARCH §10.6) — that is what makes a rename on
 /// the writing side a compile error rather than a namespace that quietly stops
 /// replicating. `wikipedia-newsworthy-tracked` is the worked example: it was
 /// renamed off a colon in cw-lift 4 and this row followed the constant.
-///
-/// A `MeshStore` `app_id` that is NOT here appends nothing: the pump's first
-/// attempt is refused `NotInRoster` and says so (`crate::rail_kv_pump`). That
-/// is the loud failure, and it is the intended one — a namespace reaches the
-/// ring by being declared, not by being written to.
-pub const DAEMON_OWN_NAMESPACES: &[&str] = &[
+pub const REGISTERED_NAMESPACES: &[&str] = &[
     // The daemon's own measurements, on the rail since cw-lift 2d. Not
     // KV-shaped — see `crate::rail_kv_pump::projector_for`.
     sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID,
@@ -281,8 +275,9 @@ pub struct MeshRosterSource {
 }
 
 impl MeshRosterSource {
-    /// Declare to `rail` that every namespace in [`DAEMON_OWN_NAMESPACES`]
-    /// derives its roster from membership.
+    /// Install `state`'s membership as `rail`'s DEFAULT roster — every ring
+    /// nobody narrowed admits everyone in the mesh — and register it for
+    /// [`REGISTERED_NAMESPACES`], which no file may narrow.
     ///
     /// The ONE place a namespace and its source meet, so the daemon and the
     /// tests that stand in for it cannot register different pairs.
@@ -297,12 +292,13 @@ impl MeshRosterSource {
             identity: identity.clone(),
             self_pubkey,
         });
-        for namespace in DAEMON_OWN_NAMESPACES {
+        rail.default_roster(Arc::clone(&source));
+        for namespace in REGISTERED_NAMESPACES {
             rail.derive_roster(namespace, Arc::clone(&source))?;
         }
         tracing::debug!(
-            namespaces = DAEMON_OWN_NAMESPACES.len(),
-            "ring roster: the daemon's own namespaces derive their roster from membership"
+            registered = REGISTERED_NAMESPACES.len(),
+            "ring roster: membership is every ring's default roster"
         );
         Ok(())
     }

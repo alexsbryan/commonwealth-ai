@@ -76,6 +76,10 @@ impl Admission for StubHost {
         }
     }
 
+    fn admit_knowledge_read(&self, who: &Principal, now_unix_ms: u64) -> AdmissionVerdict {
+        self.admit(who, now_unix_ms)
+    }
+
     fn posture(&self) -> AdmissionPosture {
         AdmissionPosture::Open
     }

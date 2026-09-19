@@ -73,6 +73,7 @@ pub mod documents_http;
 pub mod enrich_http;
 pub mod features_http;
 pub mod governance_http;
+pub mod guest_door;
 pub mod http_response;
 /// The `ingest:v1` `JobExecutor` — one corpus partition per unit
 /// (DAEMON_CORE.md §3.2, `jobs`).
