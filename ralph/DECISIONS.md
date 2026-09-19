@@ -162,6 +162,11 @@ exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 - Chose: ESCALATION STANDS, for the third time. No row, code or baseline change. The row stays `[~]` and `ralph/NEEDS_HUMAN.md` stays in place. A fourth resolution will reach the same result unless the operator acts first.
 - Because: At 34a005f7f, `cargo xtask arch-gate` exits 1 with the same numbers as A29 and A30: 209 files / 204987 lines, epistemic.rs +130, admin_http.rs +79. The branch is 66 ahead of origin/main and 0 behind. Getting to green still takes either a baseline raise (PROMPT §7; charter: operator's) or a rail diff (charter: operator's), and the next row, HUMAN-rr-1-the-room, is the operator's in either case.
 
+**A32 · 2026-09-18 · REVIEW-audit-rr-1 · director (supervisor resolution 4)** — this commit
+- Needed: A29–A31 escalated because the band could not reach 202703 lines without raising a baseline or editing the rail. That premise was false.
+- Chose: ONE row, `REVIEW-build-rr-1-band-split`, above the audit: split the five campaign-grown files (epistemic.rs and admin_http.rs test modules out; mesh_media.rs, knowledge_fanout_e2e.rs and mesh_commands.rs under 800). The audit depends on it and re-runs. No baseline is touched, and the rail is not edited.
+- Because: `mesh_commands.rs` is in arch-gate scope (`quality/source-tree.toml` excludes only .git/.sovereign/vendor/node_modules) and sits in the band at 1180, +164 from rr-1-library-rail. Taking it out along with the other two entrants gives 206 files / 201889 lines, 814 under the baseline, and that absorbs the rail's 846 without touching the rail. A shrinking oversized file never fails the gate (`arch_gate.rs:258-271`), so the loop can reach green by itself. REVIEW-AFTER: the operator may prefer A29's accept-the-residue over a third split.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -5310,5 +5315,29 @@ campaign files, then hand-raise the band by the ~366-line rail residue, with a �
 Falsified if: the operator has chosen (NEEDS_HUMAN removed by them, or a baseline or split commit
 is on the branch), or an arch-gate run reads ≤202703 band lines with both per-file rows inside
 slack.
+
+</details>
+
+## A32 · 2026-09-18 — REVIEW-audit-rr-1: the rail residue is absorbable; one split row, no raise
+
+<details>
+
+Fork: A29's. Accept the campaign's arch-gate growth (a baseline raise, which is the operator's call) or split files. A29–A31 held that splitting could not reach green because the rail's `lib.rs` (846) stays in the band, and so they escalated.
+
+Evidence (this session, at 3d47bd337, 67 ahead of origin/main, 0 behind, no `ralph/STOP`):
+- `scripts/with-cargo-lock.sh cargo xtask arch-gate` from `corpus-engine/` exit 1: 209 files / 204987 lines; epistemic.rs 1444→1574; admin_http.rs 1308→1387. Same as A29.
+- Band files this branch changed (origin/main→HEAD, `wc -l`): mesh_media.rs 595→931, knowledge_fanout_e2e.rs 644→987, commonwealth-rail/src/lib.rs 798→846, and **sovereign-desktop/src-tauri/src/mesh_commands.rs 1016→1180** (c76653c84 rr-1-library-rail, carried through the merge cf1638ca6). The earlier arithmetic only counted entrants to the band, and missed campaign growth inside it.
+- Scope: `approach_band` (`corpus-engine/xtask/src/arch_gate.rs:72-100`) walks every `.rs` not under an excluded dir name. `quality/source-tree.toml` excludes only `.git`, `.sovereign`, `vendor` and `node_modules`, so mesh_commands.rs counts.
+- Arithmetic: 204987 − 931 − 987 − 1180 = 201889 lines over 206 files, against 207 / 202703, leaving 814 lines and 1 file of headroom. Every extracted test file must still land under 800 lines, which the row states as its bar.
+- A tracked oversized file that shrinks never fails (`arch_gate.rs:258-271` fails only on NEW or GREW past slack). So once the test modules leave epistemic.rs (~743) and admin_http.rs (~389), the per-file reds clear with no baseline edit.
+- Tail test modules: mesh_media.rs :837, mesh_commands.rs :803 and :887. Extracting tests alone leaves both files at roughly 800–836 lines, so the row also allows a child-module move for production code, re-exported.
+
+Why this is in the charter: "fixing the code the gate names" (the two per-file reds) and the gate's own instruction for the band ("Trim one back under 800"), done through one row. It is behaviour-preserving (ARCH 2). There is no `[[exception]]`, no baseline edit, and no rail diff. One row, not A29's four, because PROMPT §4 prefers rows at the ten-file end and all five files share the verb and the bar.
+
+REVIEW-AFTER: A29 option 2 would have hand-raised the band by the rail residue. This resolution absorbs the residue with a third campaign file instead. If the operator would rather keep mesh_commands.rs whole and accept the residue, revert this commit and apply A29.
+
+Falsified if: after the row, arch-gate still reads the band above 202703 or 207 files (a new file landed ≥800, or the gate's count disagrees with `wc -l`), or the split changes behaviour (TESTALL red on a campaign test).
+
+Worker's package: `ralph/NEEDS_HUMAN.md` at 3d47bd337 (A29–A31 verdicts over the REVIEW-audit-rr-1 package), removed by this commit. Its foreign items (hakari `corpus-engine-vocab`, cli-contract.toml:3571) stay recorded in A29 and REVIEW_FINDINGS.
 
 </details>
