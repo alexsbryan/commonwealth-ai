@@ -138,9 +138,18 @@ narrated (principle 6).
 
 **Consequence for sequencing.** The ANS corpus runs first on today's path. Its
 primitives are types, attributes, identity keys and graded attribution claims.
-Its K3 is narrated only if check A3 shows reach. Hollinger and Virco lean on
-patterns, supersession and declared tension, so they are built only after the
-product rung (Order of work, stage 1b) lands.
+Its K3 is narrated only if check A3 shows reach.
+
+**Hollinger is the stage domain, and it splits at the same line** (operator,
+2026-09-18). The due-diligence template
+(`sovereign-recipes/_templates/ontology-v1/due-diligence/recipe.toml`) declares
+`organization`, `person`, `counterparty` as a role of organization, `payment`
+as an event, and one circular-flow pattern. Types, roles and attributes are
+rendered into atom text and reach answers today, so Hollinger's K0, K1
+(payments by recipient) and K2 (a buyer controlled by an insider, where control
+is an attribute the author adds to `organization`) run on today's path, in
+parallel with ANS. Its circular-flow narration and its K3 wait for the product
+rung (stage 1b). Virco is supersession throughout and waits whole.
 
 ## Corpora and held-out truth
 
@@ -151,7 +160,7 @@ Deviations, never silently.
 | Corpus | Text | Truth (held out) | Kinds | Primitives it narrates | Licence → recipe |
 |---|---|---|---|---|---|
 | **ANS numismatics** | American Numismatic Society TEI monographs, ~19 works (Newell's Alexander hoards and mint studies, Thompson, Troxell 1997) | CoinHoards/IGCH NUDS, PELLA, Seleucid Coins Online (ODbL); nomisma.org labels (CC BY) | K0 K1 K2 K3 | `hoard`, `mint`, `ruler`, `coin` with Price-number identity; `attribution` graded die-link / hoard-context | CC BY-NC 4.0 → `scope="local"`, `mesh_sharing=false`; `query_sharing` set per showing |
-| **Hollinger International** | FY1999–2003 10-Ks, proxies, 8-Ks | Breeden Special Committee report (2004), SEC complaint v. Black, Delaware Chancery opinion | K0 K1 K2 K3 | `counterparty` role, `payment` events, circular-flow `pattern` | SEC public |
+| **Hollinger International** (stage domain) | 10-Ks, proxies, 8-Ks for FY1999–2003, cut at a filing date (notes below) | Breeden Special Committee report (2004), SEC complaint v. Black, Delaware Chancery opinion | K0 K1 K2 now; K3 after stage 1b | `counterparty` role, `payment` events, control as an `organization` attribute; circular-flow `pattern` after 1b | SEC public |
 | **Virco–PNC credit agreement** | 2011 original + amendment exhibits | conformed copies, 8-K Item 1.01 summaries, 10-K debt footnotes | K0 K1 K3 | `defined_term`, `obligation` (deontic), `change` / supersession | SEC public |
 | **Literary** | 3 Project Gutenberg books from NarrativeQA's test split (github.com/google-deepmind/narrativeqa, Apache-2.0), each ≥ 150 chunks | `answer1`; the Wikipedia plot summary is held out as the oracle context and the faithfulness reference | K0 K4 | RAPTOR summaries | public domain (US) |
 
@@ -164,6 +173,29 @@ Deviations, never silently.
   - K3 truth has no structured source. Two annotators work independently from
     the named passages, the operator adjudicates, and the result is frozen
     before any arm.
+- **Hollinger is on stage because the room can judge it.** Nobody in the
+  audience reads numismatics, so an ANS side-by-side asks them to trust our
+  marks; and ANS text is CC BY-NC, so its snippets may be withheld. "List every
+  payment to an insider" and "which buyers were controlled by executives" need
+  no gloss. ANS stays the first measured corpus and appears as a scoreboard
+  row. Three probes run at acquisition, before any Hollinger bank is written,
+  and each result is recorded under Deviations:
+  1. **Truth leak.** Filings made after the Special Committee reported may
+     restate its findings (unverified 2026-09-18: the FY2003 10-K and the
+     late-2003 8-Ks are the suspects). The corpus is cut at a filing date that
+     keeps the report's content out; anything after the cut is truth-side, or
+     the "amendment" half of a K3 pair. The cut date is fixed from the EDGAR
+     filing index, not from memory.
+  2. **Attestation drop.** Much of what the report found was undisclosed, so
+     gold that no filing attests is dropped and counted. If K1 or K2 falls
+     under 20 surviving questions, Hollinger pools with ANS for that kind and
+     the stage says so.
+  3. **Closed-book screen.** The scandal was widely covered. Ten questions per
+     kind through the closed-book arm; a kind scoring 0.5 or more is not staged
+     from this corpus.
+
+  If probes 2 and 3 leave no stageable kind, ANS takes the stage and the
+  outside reader changes with it; that is a deviation, written before any arm.
 - **Stage book.** Several recognizable NarrativeQA titles are probed with the
   closed-book arm on 10 questions each. The first to score below 0.5 is the
   stage book. The other two books are drawn by a seeded script across length
@@ -186,8 +218,10 @@ The arc is authored on camera, so its record is data.
   product's own steps: `svrn recipe new --ontology`, edit, `svrn recipe validate`.
   They are adapted from the domain and the corpus's table of contents only,
   before any question exists. Gaps known now: the numismatics template has no
-  `hoard` type, and the due-diligence template has no control or partnership
-  relation.
+  `hoard` type, and the due-diligence template has no control attribute on
+  `organization` (the language has no relation primitive; control and
+  partnership are authored as attributes, which is what reaches answers).
+  The Hollinger declaration is the one authored on camera.
 - **Recorded and committed at freeze:**
   - the author;
   - wall-clock authoring minutes;
@@ -323,7 +357,7 @@ exclusions and kind-rule drops, or its verdict is could-not-judge. Banks hold
 
 K2 is sized apart because only ANS and Hollinger carry it. At 10 per cell it
 pooled to exactly 20 before any exclusion, so one excluded question made the
-kind unjudgeable, and an unbuilt Hollinger (stage 1b slipping) left it at 10.
+kind unjudgeable, and a Hollinger that fails its probes left it at 10.
 At 20 per cell, ANS alone clears the floor with no exclusions and the pair
 survives a 50% drop. The other kinds pool across three corpora or three books
 and survive a 55% drop at 15.
@@ -341,8 +375,8 @@ and survive a 55% drop at 15.
    - The operator reads every corpus. Full must be preferred in at least 7 of
      10, in at least 3 of the 4 corpora (literary counts as one).
    - One outside domain reader reads the same pairs for the stage domain,
-     independently: a securities lawyer for Hollinger, or a numismatist for
-     ANS. Full must be preferred in at least 7 of 10.
+     independently: a securities lawyer or forensic accountant, for Hollinger.
+     Full must be preferred in at least 7 of 10.
    - The reader is recruited before any arm runs, because the operator can
      recognise the system's style and that weakens the blinding.
 
@@ -374,7 +408,9 @@ second scorer is written. It emits:
      persisted fetch ledger.
 
   It is captured with `sovereign/crates/sovereign-desktop/playwright.demo.config.ts`
-  by extending `sovereign/crates/sovereign-desktop/tests/e2e/real/numismatics.real.spec.ts`.
+  as a demo beat under `sovereign/crates/sovereign-desktop/tests/e2e/demo/`.
+  (Corrected 2026-09-18: `numismatics.real.spec.ts` never opens the Map, and the
+  real config keeps video only on failure.)
   The path is replayed from the study's own data, not computed live.
 - **The deck, for pick a card:** for each claimed kind, the frozen bank minus
   closed-book exclusions, each question carrying its measured win count (full
@@ -421,8 +457,13 @@ second scorer is written. It emits:
   Pattern findings, supersession and declared tension. The design extends
   `sovereign/docs/specs/EPISTEMIC_INDEX.md`. The rung is pre-registered as
   mechanism, and its bar is A3 reach on a fixture corpus, never answer quality
-  on these banks. It lands before any Hollinger or Virco bank is written.
-- **Stage 2 — Hollinger, then Virco**, through the same steps as 1a.
+  on these banks. It lands before any K3 bank or any Virco bank is written.
+- **Stage 1c — Hollinger on today's path, in parallel with 1a.** The three
+  probes first (Corpus notes), then the steps of 1a for K0, K1 and K2. The
+  declaration is authored on camera.
+- **Stage 2 — Hollinger K3 and its pattern narration, then Virco**, after 1b,
+  through the same steps as 1a. Adding K3 questions to a frozen Hollinger bank
+  is a new bank file, never an edit to the frozen one.
 - **Stage 3 — literary.** Select the stage book, draw two more books, build,
   copy and project summaries, run the arms.
 - **Stage 4 — close.** The report, the demo outputs, the `ATOM_ENUM` default
