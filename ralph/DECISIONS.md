@@ -117,6 +117,11 @@ exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 - Chose: Mark the row done; mint rr-1-pool-members-every-ledger — one `PoolContext` helper feeds corpora and members together at every ledger site, and `EpistemicInputs` cannot be built without it. The demo runs twice, 2B and 4B, both pasted; the bar is judged on the 4B with the 2B recorded as the bank's floor; the gk-rescue-over-a-present-passage is filed as a note, not fixed.
 - Because: A defaultable field is the seam that was forgotten — make it structural (10). The two evidence-less releases are a synthesis outcome of a CPU 2B the room's machine does not run; declaring the instrument's model is an environment fact, reported in both directions (7), not a knob turned to flip a number — and nothing in the gate, the prompt or the bank moves.
 
+**A23 · 2026-09-19 · rr-1-pool-members-every-ledger · seat** — commit 7c2ecdc94 2817aace6 af3000697 (row) + the STATE commit that follows
+- Needed: The pool-context feed landed (no ledger site can carry corpora without members; the two-daemon chat e2e forces the per-claim gate and asserts Bo; the PLANT went red). The 2B run read 0.8 with q0 released unverified. The 4B run read 0.0 and could not judge attribution: with the 4B on every node, a's gate judge was offloaded to Bo, took Bo's single peer-inflight slot, and Bo then refused a's corpus read with 503 under the same ceiling, so the fan-out recorded the corpus unavailable.
+- Chose: Mark the row done with the 2B 0.8 on record and the 4B as could-not-judge; mint rr-1-corpus-read-not-inference-gated — a knowledge search is admitted under its own small read ceiling, never the inference peer-inflight ceiling, with a two-daemon test watched failing and the 4B demo re-run with the model on every node as before.
+- Because: A corpus read and an offloaded inference are different resources a member owns about itself (12); one ceiling for both means the strongest machine in a room goes blind to everyone the moment it judges for one of them — the D13 sentence fails exactly when the room is busiest. Putting the 4B on a alone would have hidden the finding the instrument just caught; keeping the judge local would hide it with a routing flag.
+
 ## Flags for the operator
 
 - A18: the nothing-typed census classes a URL a tool printed and the person opens verbatim as `opened`, not typed (the driver shows the stdout line it came from; an assembled string still counts).
@@ -1395,6 +1400,88 @@ stamp (`gate_chunk_members`, `streaming.rs:1523`).
    that did not" ends at q0 and q1. That is a synthesis/gate outcome on the 2B, not attribution.
 3. `ra-room-plug-in-live` c_answer_names reads false on the same mechanism (d's join answer). I
    expect (1) to move it only if that answer released on the per-claim path. Not measured.
+
+## (d) Then
+
+Edit or mark the row in ralph/next/ring-room/STATE.md, then
+`rm ralph/STOP ralph/NEEDS_HUMAN.md`.
+
+
+</details>
+
+## A23 · 2026-09-19 — rr-1-pool-members-every-ledger: the 4B run could not judge — an offloaded judge blinded the corpus read
+
+<details><summary>reasoning, evidence, package</summary>
+
+See the ledger entry. The worker's package:
+
+# NEEDS_HUMAN — rr-1-pool-members-every-ledger
+
+## (a) The unit
+
+`rr-1-pool-members-every-ledger` is row 61 of `ralph/next/ring-room/STATE.md` and is left `[~]`.
+Everything except the 4B DEMO is done, committed and green:
+
+- `7c2ecdc94`: one `pool_context(&chunks) -> PoolContext { corpora, members }`.
+  `EpistemicInputs` has no `Default` and takes `pool: PoolContext`, and the only
+  constructor for the rest is `EpistemicInputs::over(pool)`. `PoolContext` has no
+  `Default` either; `PoolContext::none()` is the explicit empty. Every site is
+  migrated: streaming KQ and deep, knowledge_query, simple, attached_doc (asset
+  key, no members), complex_task and expressive (none), and the authority-guard
+  callers read `.corpora`.
+- `2817aace6`: the two-daemon chat e2e forces the per-claim gate
+  (`SOVEREIGN_LONGFORM_CHARS=0`) and asserts that every Corpus holding names Bo.
+  The PLANT (empty members at streaming.rs:2347) went red with `Got: [None]`.
+- `af3000697`: the demo comment names both models, and the commit body carries the 2B run.
+- Note `83b7de19`: the gk_rescue-over-a-present-passage finding.
+
+## (b) What I ran, and what came back
+
+CLEAN exit=0 · LINT exit=0 · TEST(sovereign-core) 1626/0 · TEST(sovereign-mesh) 1221/0 ·
+TEST(sovereign-contracts) 382/0 · PLANT red then reverted.
+
+**The 2B demo** (`target/ralph/demo-2b.log`) gave exit=1. Answer bar 0.8 (was 0.4). q2 and q3's
+per-claim holdings now read `[Bo,...]` (was `[null,null]`). The one miss is q0, released on
+per_claim with claims_checked 0. doc 1.0 PASSED, film 1.0 PASSED, plug-in 0.0, nothing-typed 10.
+
+**The 4B demo** (`RING_ROOM_CHAT=.../Qwen3.5-4B.Q6_K.gguf`, `target/ralph/demo-4b.log`) gave
+exit=1 with answer bar **0.0**. That run cannot judge attribution:
+
+```
+q0 released 0 claims_checked 0  grounded   (citation mode; synth took 23:39:57 -> ~23:47)
+q1 error: Expecting value (room-answer-1.json is 0 bytes)
+q2..q4 released 0, sources [], "can't search room-hRSnpb ... machine isn't accessible"
+a/daemon.err  23:58:08 mesh-inference: routing to peer(s) by OICP selection   (q1's gate judge -> Bo)
+a/daemon.err  23:58:44 / 00:01:38 / 00:04:18  fan-out complete corpora_unavailable={"room-hRSnpb"}
+b/daemon.err  23:58:44 admission: 503 — peer request gated reason=YieldedToLocal
+b/daemon.err  00:01:38 admission: 503 — peer request gated reason=CeilingExceeded   (max_peer_inflight=1)
+b/daemon.err  00:04:18 admission: 503 — peer request gated reason=CeilingExceeded
+```
+
+The mechanism, read from the logs:
+
+1. `RING_ROOM_CHAT` puts the 4B on a, b and d, not on a alone.
+2. The 4B's CPU synthesis on a is slow (q0 took about 8 min), and a sends its gate judge to Bo.
+3. That judge takes Bo's single peer-inflight slot.
+4. Bo's admission then refuses a's knowledge_search, a cheap corpus read, with 503 under the
+   same ceiling. The fan-out records the corpus as unavailable and a answers with no pool.
+
+The 2B run did not collide.
+
+## (c) What the operator must decide
+
+1. **How the bar gets its 4B judgment.** Options:
+   - (i) Run the 4B on a only and keep the 2B on b and d. That is a demo-script change at
+     `scripts/ring-room-demo.sh:53` (CHAT_GGUF is read for every node). It avoids the
+     collision without touching admission.
+   - (ii) Keep a's judge local for the demo.
+   - (iii) Accept the 2B 0.8 run (q0 named) as this row's result and record the 4B as
+     could-not-judge.
+2. **Is the admission finding a campaign item?** `knowledge_search` is gated by the inference
+   peer-inflight ceiling (`admission: ... CeilingExceeded`, max_peer_inflight=1). One offloaded
+   judge on a CPU member therefore blinds every other member's fan-out to that member's corpora.
+   Fixing it is admission work (sovereign-mesh / sovereign-api `routes_knowledge.rs:195-250`),
+   outside this row. It needs a row, or a Decisions entry beside note 83b7de19.
 
 ## (d) Then
 
