@@ -173,6 +173,12 @@ exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 - Chose: Fix BOTH gates, in the order they fire, at one decider each. (1) Privacy: the classify threads `SkillRegistry::session_sharding()` — one new accessor that `Runtime::session_sharding` now also delegates to, so the rule has one implementation. (2) Latency: `offload_verdict_with_local` stands the Fast gate down when the node's own measured `tg_tok_s_ewma` is below the existing `THROUGHPUT_REFERENCE_TG_TOK_S`, reported as its own gate name `fast_latency_yielded`; an unmeasured node keeps the standing rule. REFUSED the order's suggested shape — a startup benchmark probe on every node — citing canon `dc3c9856` and `SCHEDULER_QUALITY.md` §4.5 / F10. Instrument: `RING_DOC_GPU_NODES` gives one named podman node the host's render device.
 - Because: The order's own method binds the diagnosis to a run, and the run falsified the premise both it and the doc inherited — the two verdicts share the reported gate name `not_offload_eligible`, which is what let the misreading stand, and fixing only the named gate would have moved nothing (pinned by its own test). Reviving `run_baseline_benchmark` is the measured regression canon forbids (−56 % mean latency bought with capability, declined upgrades 31 → 67), so the speed signal used is the one this fleet already collects; it is a rate, so unlike a measured TTFT it does not conflate job sizes, and it mints no constant, config key or probe. Standing the gate down only lets the scorer LOOK — local still ranks and still wins where no peer is better — which is what bounds a change to a privacy-adjacent path.
 
+**A34 · 2026-09-19 · rr-2-guest-ask-carries-the-member · operator (director package from REVIEW-build-rr-2-inventory)** — this commit
+- Needed: The inventory (a443f2a1e) measured that a guest's `Scope::Models` unlocks `/v1/chat/completions` only, which runs no retrieval and returns no citation (`routes_inference.rs:32`); the grounded turn with `epistemic_state.citations[].member` lives on the conversation routes no `Scope` can name (exact-path match, `guest_grant.rs:94-99`). O2 Demo step 3 (the phone's answer cites RuggedFox) contradicted O2's 'posture not widened'.
+- Chose: The door answers for the guest — ONE id-less route `POST /v1/guest/ask` on the guest door; the door runs the grounded turn as itself, one conversation per grant bound to the token, returns only answer + epistemic_state; no listing, no ids, no history reachable; THREAT_MODEL.md rewritten in the same commit. Not a new turn-route scope (larger surface, path templates), not 'no grounding' (guts D13 for the phone).
+- Because: What a guest reads is what members already share with the mesh; the widening is one exact path with a per-grant bound, the smallest reversible step (ARCH 11/12: the door owns the conversation, the guest owns nothing).
+
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -5498,5 +5504,21 @@ on a measured-slow node.
 would ordinarily require of routing behaviour. The mitigation is that it changes no ranking and only
 widens the candidate set on a node that measured itself slow; the arm (`mesh_sim` can feed a local
 observation from `Hardware.tg_tok_s`) is the honest next step and is not done here.
+
+</details>
+
+## A34 · 2026-09-19 — rr-2: the door answers for the guest; one exact route, one conversation per grant
+
+<details>
+
+**Fork.** (A) a new `Scope` variant unlocking `POST /v1/conversations` + `/messages` with a per-request refinement (path templates in `Scope::paths`, more routes); (B) one id-less ask route on the door, the door running the turn as itself; (C) keep chat completions, drop the citation clause from `ra-room-guest-ask-served-by-the-room` and Demo step 3.
+
+**Evidence.** `ralph/NEEDS_HUMAN.md` of 2026-09-19 (the inventory's package, inline below): `/v1/chat/completions` at `sovereign-daemon/src/routes_inference.rs:32` — grep for knowledge/corpus/retriev/citation/epistemic over 1745 lines finds comments only; `svrn chat ask` reads `epistemic_state` from the turn routes via `TurnClient` (`turn_http.rs:122-132`, `chat_cmd/ask.rs:393-404`); `Scope::paths` matches by exact equality (`guest_grant.rs:94-99`); `docs/THREAT_MODEL.md:49-59` names the two paths guests may call today.
+
+**Decision.** (B), operator, in session. The route is exact so `Scope::paths` names it without a template; the conversation is created by the door on the first ask and bound to the grant token, so a second grant never reaches it; the response carries answer + `epistemic_state` only. The threat model's guest paragraph is rewritten in the commit that adds the route.
+
+**Falsified if** a guest bearer can reach any `/v1/conversations*` path (the row's test), or a second grant can read the first grant's conversation (the PLANT), or the guest's evidence includes a corpus no member shares (`query_sharing` false).
+
+**Worker's package (ralph/NEEDS_HUMAN.md, removed by this commit).** Options (A)/(B)/(C) as above, with the measured facts; question 2 (one bearer via `--rail` or a separate flag) answered: the wall grant minted by `rr-2-grant-for-the-room` carries the ask route with its rail scope — one bearer for the wall.
 
 </details>
