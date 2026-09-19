@@ -142,6 +142,11 @@ exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 - Chose: Fix the two instruments. First, the driver records an empty `mesh status --json` as a null count with a named reason instead of crashing on `int('')`. Replayed on run 2's artifacts, plug-in now reads FAILED on `c_answer_names` and `d_n` only; the doc leg (1.198 s) and the library leg (8.36 s) passed. Second, each fan-out peer that does not serve logs its reason on the captured `knowledge` target. The synthesis budget goes back to the operator; the row stays `[~]`.
 - Because: A crash that turns a FAILED into could-not-judge, and throws away two legs that passed, violates principle 6. A corpus marked unavailable with no cause beside it is dark (principle 1), and guessing at q3's cause would be whack-a-mole (2). The 60 s window and the room's model are a design change that B §Tuning escalates (A26), and this charter leaves bar windows to the operator.
 
+**A28 · 2026-09-18 · REVIEW-DEMO-rr-1-run · director (supervisor resolution 2)** — this commit
+- Needed: After A27, the plug-in bar's `c_answer_names` leg cannot read PASSED on the rr-1 topology. On a's CPU 2B, the route classify alone takes 38.4 s and synthesis runs past the 120 s watch, while the fan-out is served in 37 ms. The row expected five PASSED.
+- Chose: Option 1. The bar keeps its 60 s window and floor. The row's expectation becomes "every bar emits a verdict", with plug-in allowed to read FAILED on `c_answer_names` alone when a's log shows that ask still synthesizing at the watch's end. That leg is owed to rr-2's Halo-and-Mac walk. No code change.
+- Because: The order's Done-when asks that the five bars "each have a verdict emitted", not that all five pass, and the order fixes both the topology (three podman nodes on the Halo) and the model budget (local daemon, fast slot). "Five PASSED" was the row's own premise, and the tree contradicts it. The other three options widen a bar (charter: operator's), change the topology (a design change), or tune a knob that B §Tuning excludes. REVIEW-AFTER: the campaign predicate ("PASSED on every bar") stays unmet at rr-1's close, and that should be said, not buried.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -5170,5 +5175,23 @@ Edit or mark the row in ralph/next/ring-room/STATE.md, then
 **Falsified if** the next demo's q3-class miss still shows `corpora_unavailable` with no `did not serve` line beside it. Also falsified if an empty member count again produces `phase-missing`.
 
 **Worker's package (ralph/NEEDS_HUMAN.md, rewritten by this commit to fork (1) only).** Run 1: answer 0.6, doc 1.0, film 1.0, plug-in 0.0, nothing-typed 0. Run 2: answer 0.8 (q3 unverified, "knowledge base inaccessible"), doc 1.0, film 1.0, plug-in COULD-NOT-JUDGE `phase-missing`, nothing-typed 0 with only the Jellyfin login excluded. Asks: (1) the synthesis budget; (2) a named fatal for the member count; (3) whether the empty `mesh status --json` is a daemon defect.
+
+</details>
+
+## A28 · 2026-09-18 — REVIEW-DEMO-rr-1-run: the plug-in answer leg is owed to rr-2; the bar is not widened
+
+<details>
+
+**Fork.** Package option 1 (keep the 60 s window, owe `c_answer_names` to rr-2), option 2 (widen the window or `JOIN_WATCH_S`), option 3 (Vulkan/GPU into the podman nodes), or option 4 (shrink the route classify's 1,288-token prompt).
+
+**Evidence, reproduced.** In a/daemon.err for run 2, the `wl-route-44a274c6` decision is at 03:43:54.13Z and its outcome at 03:44:32.52Z (38.4 s, served by `local_fallback:Qwen3.5-2B.Q6_K`). Fan-out to Bo and ring-doc-d was served 03:44:32.792 → .828, and synthesis `wl-synthesize-9c6da05b` was routed at 03:44:33.03 with no outcome line before the kill. The ask runs under `timeout "$JOIN_WATCH_S"`, which is 120 (`scripts/ring-room-demo.sh:65,411`). `target/ring-room-demo-join.log` ends in A27's two tracebacks, so run 2's own verdict line reads `phase-missing`. The replay of FAILED on c and d only is A27's. The order (`.sovereign/features/ring-room-week1/order.md`) says under Done-when "the five bars each have a verdict emitted by `scripts/ring-room-demo.sh verdict <bar-id>`", under Demo "Three podman nodes on the Halo", and under Budget "local daemon, the fast slot". The campaign lists the Halo-and-Mac walk as rr-2 (campaign.md §Ladder).
+
+**Why not the others.** Option 2 weakens a bar, and the charter leaves that to the operator. Option 3 is a topology change outside the order. Option 4 is product latency outside this campaign, and even at zero classify time, synthesis alone ran more than 60 s.
+
+**What stays owed.** The campaign predicate's "PASSED on every bar" is not met at rr-1 close, and `c_answer_names` is rr-2's to read on the GPU. The answer bar's q3 miss is NOT covered by this amendment. It remains §6, and A27's `did not serve` line has to name its cause.
+
+**Falsified if** a's log on the next run shows the plug-in ask's synthesis finishing inside 60 s while the leg still reads false (then it is an instrument fault, not latency), or plug-in fails on any leg other than `c_answer_names`.
+
+**Worker's package (ralph/NEEDS_HUMAN.md, removed by this commit).** The same four options, with option 1 recommended. It also noted the answer bar's 0.8 on q3 as a fan-out failure within `PEER_TIMEOUT` 3 s, with the cause to be named by A27's log line.
 
 </details>
