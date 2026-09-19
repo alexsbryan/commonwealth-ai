@@ -1,6 +1,39 @@
 # Flight rules — read raw. Verdicts come from the instruments below, never
 # from prose. The one decider of the score is scripts/build-probe/score.sh;
-# it reads the [[probe]]
+# it reads the [[probe]] rows here (file, crate, test) so the ruler is data.
+#
+# Prose, measurements and the lever list: quality/BUILD_LATENCY.md.
+# The loop this campaign runs (measure → one move → gates → re-measure →
+# bank or revert → until plateau) is in .sovereign/features/build-latency/campaign.md.
+id        = "build-latency"
+objective = "Quality checking on a campaign of work orders stops being the thing that gets skipped: the gate-seconds a session pays per order — scoped lint, focused test, full lint, full test, pre-push, in the multiplicities sessions actually run them — fall step by step through build-graph and architecture moves until the next move is inside the instrument's noise band. Measured 2026-09-17: 181 sessions waited 48.7 h on 3495 gate runs in 30 days, 68% of it in the 475 runs over two minutes."
+spec      = "quality/BUILD_LATENCY.md"
+declared  = "2026-09-17"
+status    = "active"
+
+# ── THE PREDICATE (structural check; success is the SUCCESS section) ────────
+# A structural statement a program decides. It is deliberately NOT "the score
+# is low": a score can fall through profile knobs, a faster machine, or a
+# cache that happened to be warm. The predicate is about the dependency
+# graph, which is what architecture actually changes: no crate whose 30-day
+# edit weight is in the top five sits on the critical chain of an edit in a
+# crate it does not use. Concretely, after an edit in sovereign-mesh the
+# workspace-build critical path (critpath.py over cargo --timings) contains no
+# unit of sovereign-cli-llm except the verb crates that import sovereign_mesh,
+# and after an edit in sovereign-core it contains no sovereign-tools unit.
+[predicate]
+statement = "After a body edit in sovereign-mesh/src/daemon.rs, the critical path of `cargo build --workspace` contains no sovereign-cli-llm library unit; after a body edit in sovereign-core/src/runtime/mod.rs it contains no sovereign-tools unit; and `scripts/build-probe/scope-drift.py` prints 0"
+check     = "scripts/build-probe/score.sh --predicate"
+
+# ── PROBES — the ruler, frozen ───────────────────────────────────────────────
+# One file per hot crate, the most-edited file with a function body. Weight =
+# commits touching the crate's .rs files, 2026-08-18..2026-09-17 (git log at
+# HEAD dcb65856d). Frozen for the campaign: a ruler that re-weights itself
+# every step cannot tell a real fall from a shift in where the edits went
+# (ARCH_PRINCIPLES 7). Re-freeze only at a declared campaign checkpoint, and
+# report both scores at that step. `test` names the focused test the
+# probe runs through sovereign-test.sh --package <crate> --filter <test>.
+[[probe]]
 file   = "sovereign/crates/sovereign-mesh/src/daemon.rs"
 crate  = "sovereign-mesh"
 weight = 181
