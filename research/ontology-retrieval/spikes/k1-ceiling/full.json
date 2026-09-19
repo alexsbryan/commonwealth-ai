@@ -1,0 +1,344 @@
+{
+  "bank_name": "spike-k1-ceiling",
+  "corpus": "enron-sample-multi-wide",
+  "limit": 0,
+  "started_at_unix": 1789846505,
+  "results": [
+    {
+      "question_id": "k1_institutions",
+      "category": "K1",
+      "question": "List every company and organization that appears in this email collection. Be exhaustive: name as many distinct ones as the evidence supports.",
+      "retrieved": [
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Re: 2- SURVEY/INFORMATION EMAIL",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Re: 2- SURVEY/INFORMATION EMAIL\n\nOutlook Migration Team\n04/30/2001 02:08 PM\nTo: Rebecca Ford/HOU/ECT@ECT, Adrian Ausucua/NA/Enron@Enron, Brian \nZatarain/Corp/Enron@Enron, Carol..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "REMOVE FROM E-MAIL LIST!! Re: Outsource Your Investor Relations",
+          "url": null,
+          "score": 0.0,
+          "snippet": "REMOVE FROM E-MAIL LIST!! Re: Outsource Your Investor Relations\n\nyou can find our client roster, prices, case \nstudies, references and services on our web site at http://www.ctaonline.com, \nor skim..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "2- SURVEY/INFORMATION EMAIL",
+          "url": null,
+          "score": 0.0,
+          "snippet": "2- SURVEY/INFORMATION EMAIL\n\nFrom: outlook.team@enron.com\nTo: rebecca.ford@enron.com, adrian.ausucua@enron.com, brian.zatarain@enron.com,  carol.howes@enron.com, david.shields@enron.com, ..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Name overlay 0223",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Name overlay 0223\n\ntana.jones@enron.com, katherine.kelly@enron.com, nanette.kettler@enron.com, troy.klussmann@enron.com, victor.lamadrid@enron.com, karen.lambert@enron.com, gary.lamphier@enron.com,..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "RE: Welcome",
+          "url": null,
+          "score": 0.0,
+          "snippet": "RE: Welcome\n\nFrom: kdrouet@molecularelectronics.com\nTo: piernot@enron.com, wpiernot@keller.edu\nDate: Fri, 4 Jan 2002 11:12:00 -0800 (PST)\nSubject: RE: Welcome\n\nI blind copied the whole group to let..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Re: New CTPY Request",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Re: New CTPY Request\n\nFrom: melissa.murphy@enron.com; Melissa Ann Murphy\nTo: kate.symes@enron.com; Kate Symes\nDate: Mon, 9 Apr 2001 09:08:00 -0700 (PDT)\nSubject: Re: New CTPY Request\n\nHello, I have..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "4/30 Checkout",
+          "url": null,
+          "score": 0.0,
+          "snippet": "4/30 Checkout\n\nFrom: evelyn.metoyer@enron.com; Evelyn Metoyer\nTo: kate.symes@enron.com; Kate Symes\nDate: Mon, 30 Apr 2001 09:35:00 -0700 (PDT)\nSubject: 4/30 Checkout\n\nBLOOMBERG\naLL O.K.\n\n\n\n\nPREBON...",
+          "source": "atom-enum"
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "1-URGENT - Outlook Email Notification (new)",
+          "url": null,
+          "score": 0.0,
+          "snippet": "1-URGENT - Outlook Email Notification (new)\n\nOUTLOOK EMAIL NOTIFICATION\n\nYour Date of Migration is: May 2nd\n\nYOU WILL BE UNABLE TO SEND E-MAIL unless you take the following action:\nPlease go through...",
+          "source": "atom-enum"
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "PowerMarketers.com Daily Power Report for 11 April 2001",
+          "url": null,
+          "score": 0.0,
+          "snippet": "PowerMarketers.com Daily Power Report for 11 April 2001\n\nlot among themselves this spring about the \ncoming power squeeze caused by overloaded electric transmission lines.\n\nTRANSALTA BEGINS...",
+          "source": "atom-enum"
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "United Way of America's New President and CEO",
+          "url": null,
+          "score": 0.0,
+          "snippet": "United Way of America's New President and CEO\n\nEastern Standard Time, on Friday, November 9, 2001.  If you have any\nquestions in the meantime, please contact Diane Grzyb-Soper...",
+          "source": "atom-enum"
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "1/10/01 Checkout part deaux",
+          "url": null,
+          "score": 0.0,
+          "snippet": "1/10/01 Checkout part deaux\n\nFrom: evelyn.metoyer@enron.com; Evelyn Metoyer\nTo: kate.symes@enron.com; Kate Symes\nDate: Wed, 10 Jan 2001 08:22:00 -0800 (PST)\nSubject: 1/10/01 Checkout part deaux\n\nJeff...",
+          "source": "atom-enum"
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Hope all is well...",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Hope all is well...\n\nFrom: wes.carberry@enron.com\nTo: jeff.skilling@enron.com\nDate: Tue, 14 Aug 2001 14:30:32 -0700 (PDT)\nSubject: Hope all is well...\n\nJeff:\n\nI was actually on the phone with my Dad...",
+          "source": "atom-enum"
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Name Overlay and Name Correction 0227",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Name Overlay and Name Correction 0227\n\nAttached are the name correction for Minerals Managment Services and the name \noverlay from CNG Retail Services Corporation to Dominion Retail, Inc.\n\nShortname...",
+          "source": "atom-enum"
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Update for Wednesday/Thursday?",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Update for Wednesday/Thursday?\n\nFrom: amita.gosalia@enron.com\nTo: kenneth.lay@enron.com\nDate: Thu, 8 Nov 2001 10:29:54 -0800 (PST)\nSubject: Update for Wednesday/Thursday?\n\nHello Ken\n\nAs we have not...",
+          "source": "atom-enum"
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": null,
+          "url": null,
+          "score": 0.0,
+          "snippet": "From: mvalles@houston.rr.com\nTo: kenneth.lay@enron.com\nCc: judy.gray@enron.com, scott.gahn@enron.com\nDate: Tue, 4 Dec 2001 09:01:31 -0800 (PST)\n\n\nMr. Lay and Dave Delainey:\n \nSince, I was terminated...",
+          "source": "atom-enum"
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "1/28 Checkout-update",
+          "url": null,
+          "score": 0.0,
+          "snippet": "1/28 Checkout-update\n\nFrom: evelyn.metoyer@enron.com; Evelyn Metoyer\nTo: kate.symes@enron.com; Kate Symes\nDate: Wed, 28 Feb 2001 08:37:00 -0800 (PST)\nSubject: 1/28 Checkout-update\n\nAMEREX WEST\n\nChris...",
+          "source": "atom-enum"
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Weekend Outage Report for 11-9-01 through 11-11-01",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Weekend Outage Report for 11-9-01 through 11-11-01\n\nAll\nPurpose: Bad port - affects performance of Intuity Voicemail\nBackout: None\nContact(s): \tCynthia Siniard    713-853-0558\n \nTERMINAL SERVER:  No...",
+          "source": "atom-enum"
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Los Angeles Department of Water and Power",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Los Angeles Department of Water and Power\n\nFrom: rhonda.denton@enron.com; Rhonda L Denton\nTo: geir.solberg@enron.com; Geir Solberg\nCc: kate.symes@enron.com; Kate Symes\nDate: Thu, 18 Jan 2001 06:47:00...",
+          "source": "atom-enum"
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "The Source",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Source\n\nIndustries\nMarket Research Reports\tAnalyst Reports\tStrategic Alliances/JVs\nGlobal Credit Ratings\tMergers & Acquisitions\tSyndicated Loans\nRestructures\tCorporate Governance\tVenture...",
+          "source": "atom-enum"
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "552071",
+          "url": null,
+          "score": 0.0,
+          "snippet": "552071\n\nFrom: rhonda.denton@enron.com; Rhonda L Denton\nTo: kate.symes@enron.com; Kate Symes\nDate: Fri, 16 Mar 2001 03:14:00 -0800 (PST)\nSubject: 552071\n\nCan you check this deal with Pacific Gas and...",
+          "source": "atom-enum"
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Re: New CTPY Request",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Re: New CTPY Request\n\nFrom: melissa.murphy@enron.com; Melissa Ann Murphy\nTo: kate.symes@enron.com; Kate Symes\nDate: Wed, 11 Apr 2001 05:27:00 -0700 (PDT)\nSubject: Re: New CTPY Request\n\nHello, Samuel..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Re: New CTPY Request",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Re: New CTPY Request\n\nFrom: rhonda.denton@enron.com; Rhonda L Denton\nTo: kate.symes@enron.com; Kate Symes\nCc: chris.foster@enron.com; Chris H Foster\nDate: Thu, 12 Apr 2001 02:22:00 -0700..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Re: New CTPY Request",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Re: New CTPY Request\n\nthe original of this contract?\n\nKate Symes                04/09/2001 03:09 PM\n\nTo: Rhonda L Denton/HOU/ECT@ECT, Melissa Ann Murphy/HOU/ECT@ECT\ncc: Samuel Schott/HOU/ECT@ECT..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "1-URGENT - Outlook Email Notification (new)",
+          "url": null,
+          "score": 0.0,
+          "snippet": "1-URGENT - Outlook Email Notification (new)\n\nFrom: outlook.team@enron.com\nTo: rebecca.ford@enron.com, adrian.ausucua@enron.com, brian.zatarain@enron.com,  carol.howes@enron.com,..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "1-URGENT - Outlook Email Notification (new)",
+          "url": null,
+          "score": 0.0,
+          "snippet": "1-URGENT - Outlook Email Notification (new)\n\nsherri.sera@enron.com,  suzanne.danz@enron.com, tori.wells@enron.com, vineet.arora@enron.com,  bob.klide@enron.com, ed.bracco@enron.com,..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "PowerMarketers.com Daily Power Report for 11 April 2001",
+          "url": null,
+          "score": 0.0,
+          "snippet": "PowerMarketers.com Daily Power Report for 11 April 2001\n\nPrices\n\nMidwest States Try to Capitalize on California Power Woes\n\nPhiladelphia Residents Protest Gas Company's Rate Increases\n\nEnergy..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "PowerMarketers.com Daily Power Report for 11 April 2001",
+          "url": null,
+          "score": 0.0,
+          "snippet": "PowerMarketers.com Daily Power Report for 11 April 2001\n\nService extends Palo Verde nuke outage\n\nUPDATE 1-New Polish minister cautious on energy sell-offs\n\nPoland to start power price liberalisation..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "PowerMarketers.com Daily Power Report for 11 April 2001",
+          "url": null,
+          "score": 0.0,
+          "snippet": "PowerMarketers.com Daily Power Report for 11 April 2001\n\nFrom: pmadpr@worldnet.att.net; \"The Power Marketing Association\" <pmadpr@worldnet.att.net>\nDate: Tue, 10 Apr 2001 16:15:00 -0700..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "El Paso",
+          "Los Angeles Department of Water and Power",
+          "Williams Bal of PV",
+          "Dynegy",
+          "Edison International",
+          "Prebon West",
+          "Pacific Gas and Electric",
+          "Sempra",
+          "Duke",
+          "California Department of Water Resources",
+          "Mirant",
+          "Amerex",
+          "California ISO",
+          "Public Utilities Commission",
+          "PG&E Corp",
+          "BLOOMBERG",
+          "FPL Group Inc.",
+          "Sierra Pacific Resources",
+          "Entergy Corp.",
+          "Cantabrico"
+        ],
+        "missing": [
+          "George W. Bush Administration Special Energy Task Force",
+          "FERC",
+          "Calpine",
+          "Morgan",
+          "Wisconsin Power & Light Co.",
+          "PacifiCorp",
+          "CalPX",
+          "Allegheny",
+          "Dominion Resources Inc.",
+          "GE Power Systems' Energy Services unit",
+          "Bonneville Power Administration",
+          "Midcoast Energy Resources Inc.",
+          "NewPower Holdings",
+          "Xcel Energy Inc.",
+          "Exelon Energy Company",
+          "Chase",
+          "Datacentric Broadband",
+          "Power Marketing Association",
+          "Smith Graham & Company",
+          "ERMS IT"
+        ],
+        "total_expected": 40,
+        "ratio": 0.5
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "enron-sample-multi-wide"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Based on the retrieved email collection, here are the distinct companies and organizations identified. I have separated them into **Entities explicitly named as businesses/organizations** (including counterparties, vendors, and news subjects) and **Internal Enron Departments/Teams**.\n\n### 1. External Companies & Organizations\n*Note: This list is exhaustive based on the text provided. It includes direct counterparts in deals, entities mentioned in news reports, and service providers.*\n\n**Energy Traders, Utilities & Power Generators:**\n*   Reliant Energy / Reliant [Source: 4/30 Checkout]\n*   Duke Energy / Duke [Source: 1/28 Checkout-update]\n*   Sempra [Source: 1/28 Checkout-update]\n*   Williams (specifically \"Williams Bal of PV\") [Source: 1/28 Checkout-update]\n*   Constellation [Source: 1/28 Checkout-update]\n*   Enron Energy Service (EES) [Source: enron-sample-multi-wide]\n*   Sierra Pacific Holding Company / Sierra Pacific Industries, Inc. [Source: Re: New CTPY Request]\n*   El Paso [Source: 1/10/01 Checkout part deaux]\n*   Los Angeles Department of Water and Power (LADWP) [Source: Los Angeles Department of Water and Power]\n*   Southern Co. Unit [Source: PowerMarketers.com Daily Power Report for 11 April 2001]\n*   FPL Group / Florida Power Lines / FPL Energy [Source: PowerMarketers.com Daily Power Report for 11 April 2001]\n*   Entergy [Source: PowerMarketers.com Daily Power Report for 11 April 2001]\n*   PG&E (Pacific Gas and Electric) [Source: PowerMarketers.com Daily Power Report for 11 April 2001]\n*   Dynegy [Source: Update for Wednesday/Thursday?, PowerMarketers.com Daily Power Report for 11 April 2001]\n*   Mirant [Source: PowerMarketers.com Daily Power Report for 11 April 2001]\n*   NRG Energy / NRG [Source: PowerMarketers.com Daily Power Report for 11 April 2001]\n*   TransAlta [Source: PowerMarketers.com Daily Power Report for 11 April 2001]\n*   UtiliCorp [Source: PowerMarketers.com Daily Power Report for 11 April 2001]\n*   PSEG (Public Service Enterprise Group) [Source: PowerMarketers.com Daily Power Report for 11 April 2001]\n*   Con Ed (Consolidated Edison) [Source: PowerMarketers.com Daily Power Report for 11 April 2001]\n*   SCE&G (South Carolina Electric & Gas) [Source: PowerMarketers.com Daily Power Report for 11 April 2001]\n*   Duke/Fluor Daniel [Source: PowerMarketers.com Daily Power Report for 11 April 2001]\n*   W-H Energy Services [Source: PowerMarketers.com Daily Power Report for 11 April 2001]\n*   IntercontinentalExchange [Source: PowerMarketers.com Daily Power Report for 11 April 2001]\n\n**Financial, Rating Agencies & Data Providers:**\n*   Moody's / Moody's Investors Service [Source: PowerMarketers.com Daily Power Report for 11 April 2001]\n*   Standard & Poors' (S&P) [Source: PowerMarketers.com Daily Power Report for 11 April 2001]\n*   Bloomberg [Source: 4/30 Checkout, The Source]\n*   Hoovers / Hoover's [Source: The Source]\n*   Dow Jones News / Dow Jones Interactive [Source: The Source]\n*   Nexis-Company Dossier / Nexis [Source: The Source]\n*   Yahoo Market Guide / Yahoo! [Source: The Source]\n*   FirstCall [Source: The Source]\n*   Investex [Source: The Source]\n*   Multex [Source: The Source]\n*   Global Disclosure [Source: The Source]\n*   Dunn & Bradstreet [Source: The Source]\n*   Million Dollar Database [Source: The Source]\n*   Dialog (DIALOG) [Source: The Source]\n*   FactSet [Source: The Source]\n*   FIS Online [Source: The Source]\n*   SDC (likely SDC Platinum, M&A database) [Source: The Source]\n\n**Consulting, Legal & Other Service Providers:**\n*   McKinsey [Source: Hope all is well...]\n*   Korn/Ferry International [Source: United Way of America's New President and CEO]\n*   CTA Online / CTAonline.com [Source: REMOVE FROM E-MAIL LIST!! Re: Outsource Your Investor Relations]\n*   Molecular Electronics Corp. [Source: RE: Welcome]\n*   Prebon West / Prebon [Source: 4/30 Checkout, 1/28 Checkout-update] (Prebon was a major energy trading firm acquired by UBS)\n*   Amerex West / Amerex [Source: 4/30 Checkout, 1/10/01 Checkout part deaux, 1/28 Checkout-update]\n\n**Government & Non-Profit Entities:**\n*   United Way of America (UWA) [Source: United Way of America's New President and CEO]\n*   United Way of the Texas Gulf Coast [Source: United Way of America's New President and CEO]\n*   Houston Christian Business Group [Source: RE: Welcome]\n*   California ISO (CAISO) [Source: PowerMarketers.com Daily Report for 11 April 2001 - Presentation title]\n*   Skipping Stone [Source: PowerMarketers.com Daily Report for 11 April 2001 - Presentation title]\n*   Element Re [Source: PowerMarketers.com Daily Report for 11 April 2001 - Presentation title]\n*   Derigen Consulting [Source: PowerMarketers.com Daily Report for 11 April 2001 - Presentation title]\n*   Friedwire [Source: PowerMarketers.com Daily Report for 11 April 2001 - Presentation title]\n*   Optiron [Source: PowerMarketers.com Daily Report for 11 April 2001 - Presentation title]\n\n**Other / Ambiguous:**\n*   HEW (Mentioned in \"Mirant Wants Block Bewag Sale To HEW\") [Source: PowerMarketers.com Daily Power Report for 11 April 2001]\n*   Cantabrico (Likely a typo or specific entity name, possibly related to Iberdrola/Cantabrian holdings) [Source: PowerMarketers.com Daily Power Report for 11 April 2001]\n*   CNMV (Comisión Nacional del Mercado de Valores - Spanish Securities Commission) [Source: PowerMarketers.com Daily Power Report for 11 April 2001]\n\n### 2. Internal Enron Departments & Teams\nThese are internal functional groups within Enron mentioned in the headers and body text:\n*   Outlook Migration Team / outlook.team@enron.com [Source: Re: 2- SURVEY/INFORMATION EMAIL], [Source: 1-URGENT - Outlook Email Notification (new)]\n*   ENRON_DEVELOPMENT [Source: Re: 2- SURVEY/INFORMATION EMAIL]\n*   GPGFIN (Global Power Generation Finance?) [Source: Re: 2- SURVEY/INFORMATION EMAIL]\n*   NPNG (Enron North America Corp? Or specific trading desk) [Source: Re: 2- SURVEY/INFORMATION EMAIL]\n*   ECT (Enron Capital & Trade Resources?) [Source: Re: 2- SURVEY/INFORMATION EMAIL], [Source: Re: New CTPY Request]\n*   OTS (Office of the Treasurer / Other Trading Services?) [Source: Re: 2- SURVEY/INFORMATION EMAIL]\n*   HOU (Houston HQ) [Source: Re: 2- SURVEY/INFORMATION EMAIL]\n*   PDX (Portland Office) [Source: 1/28 Checkout-update]\n*   Corp (Corporate Headquarters) [Source: RE: Welcome], [Source: 1/28 Checkout-update]\n\n### Important Distinctions & Caveats\n*   **Person Names vs. Companies:** Many names in the \"To:\" and \"Cc:\" fields are individuals (e.g., Kenneth Lay, Jeff Skilling, Kate Symes). These have been excluded from the company list above as they represent people, not organizations.\n*   **\"Enpower\":** Mentioned in one email (\"Sierra Pacific Industries, Inc. is in Enpower\"). This likely refers to a software platform or database used by Enron rather than an external company name itself, but it could be a proprietary system name. I have listed Sierra Pacific Industries instead.\n*   **\"Bewag\":** In the headline \"Mirant Wants Block Bewag Sale To HEW,\" Bewag was a major German utility (Berliner Elektrizitäts-Werke AG), now part of Vattenfall. It appears only in this news snippet title [Source: PowerMarketers.com Daily Power Report for 11 April 2001].\n\nI am certain that no other distinct corporate entities are named in these passages beyond those listed above.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- Williams, specifically Williams Bal of PV, appears as a counterparty in the evidence.\n- Moody's Investors Service and Standard & Poors' are identified as rating agencies in the text.\n- Prebon was a major energy trading firm acquired by UBS\n- Bewag was a major German utility (Berliner Elektrizitäts-Werke AG), now part of Vattenfall.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 146567,
+        "total_latency_ms": 130887,
+        "intent": "KnowledgeQuery",
+        "source_origins": [
+          "enron-sample-multi-wide"
+        ],
+        "retrieved_chunk_count": 28,
+        "chunks_fact_score": {
+          "matched": [
+            "Los Angeles Department of Water and Power",
+            "Prebon West",
+            "Pacific Gas and Electric",
+            "Amerex",
+            "PG&E Corp",
+            "BLOOMBERG",
+            "Power Marketing Association"
+          ],
+          "missing": [
+            "El Paso",
+            "Williams Bal of PV",
+            "Dynegy",
+            "Edison International",
+            "George W. Bush Administration Special Energy Task Force",
+            "Sempra",
+            "FERC",
+            "Calpine",
+            "Duke",
+            "Morgan",
+            "California Department of Water Resources",
+            "Mirant",
+            "Wisconsin Power & Light Co.",
+            "PacifiCorp",
+            "California ISO",
+            "CalPX",
+            "Allegheny",
+            "Public Utilities Commission",
+            "Dominion Resources Inc.",
+            "GE Power Systems' Energy Services unit",
+            "Bonneville Power Administration",
+            "Midcoast Energy Resources Inc.",
+            "NewPower Holdings",
+            "Xcel Energy Inc.",
+            "FPL Group Inc.",
+            "Exelon Energy Company",
+            "Sierra Pacific Resources",
+            "Entergy Corp.",
+            "Chase",
+            "Datacentric Broadband",
+            "Smith Graham & Company",
+            "Cantabrico",
+            "ERMS IT"
+          ],
+          "total_expected": 40,
+          "ratio": 0.175
+        }
+      }
+    }
+  ]
+}
