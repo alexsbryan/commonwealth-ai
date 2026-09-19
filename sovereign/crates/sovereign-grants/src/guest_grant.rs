@@ -357,6 +357,29 @@ mod tests {
         assert!(!g.permits_path("/internal/guest/grant"));
     }
 
+    /// The wall grant `svrn mesh grant --model … --rail <ns>` mints: its
+    /// paths are exactly the rail's and the model scope's, nothing else.
+    #[test]
+    fn a_wall_grant_permits_exactly_the_rail_and_model_paths() {
+        let mut scopes = models(&["big"]);
+        scopes.push(Scope::Rails("wall".to_string()));
+        let store = GuestGrantStore::new();
+        store.issue("tok", scopes, None, 60, T0);
+        let g = store.live("tok", T0).expect("live");
+        let paths: HashSet<&str> = g.scopes.iter().flat_map(|s| s.paths()).copied().collect();
+        let want: HashSet<&str> = [
+            "/v1/rail/append",
+            "/v1/rail/log",
+            "/v1/rail/live",
+            "/v1/models",
+            "/v1/chat/completions",
+        ]
+        .into_iter()
+        .collect();
+        assert_eq!(paths, want);
+        assert_eq!(g.rail_namespace(), Some("wall"));
+    }
+
     /// Absence of permission must never read as permission.
     #[test]
     fn a_scopeless_grant_permits_nothing() {

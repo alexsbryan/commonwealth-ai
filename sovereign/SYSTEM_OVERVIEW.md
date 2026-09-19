@@ -5568,8 +5568,10 @@ An **ephemeral guest grant** (`commonwealth-knowledge::guest_grant`,
 closed `Scope` enum whose `paths()` is the only route allowlist there is.
 A guest is not a mesh member — no `mesh_secret`, no gossip, no invite key
 — and cannot mint further grants, because no `Scope` variant names
-`/internal/*`. `svrn mesh grant` mints one and prints a
-`sovereign://guest/…` link; `svrn mesh use` accepts it and repoints
+`/internal/*`. `svrn mesh grant` mints one (`--rail <ns>` adds the rail
+scope) and prints a `sovereign://guest/…` link, plus with `--qr-svg` the
+https form (`<url>#token=…`, the bearer in the fragment) as an SVG QR
+code; `svrn mesh use` accepts the first and repoints
 `svrn chat`. The auth layer never matches on a `Scope` variant: it asks
 `GuestGrant::permits_path` and inserts the grant, so a future scope is a
 variant plus its `paths()` arm and touches neither auth nor the wire.

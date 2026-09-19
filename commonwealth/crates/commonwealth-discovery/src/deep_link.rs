@@ -215,6 +215,49 @@ pub fn build_guest_link(
     link
 }
 
+/// Build the https form of a guest link: `<base>#token=…&exp=…[&s=…]`.
+///
+/// What a phone opens. The bearer rides the URL FRAGMENT, never the path or
+/// query: a browser does not send the fragment to the server, so the token
+/// stays out of access logs and `Referer` headers, and only the page's own
+/// script reads it. `base` is kept verbatim — it is the page's address.
+pub fn build_https_guest_link(
+    token: &str,
+    base: &str,
+    expires_at: u64,
+    summary: Option<&str>,
+) -> String {
+    let mut params = vec![
+        format!("token={}", percent_encode(token)),
+        format!("exp={expires_at}"),
+    ];
+    if let Some(s) = summary {
+        params.push(format!("s={}", percent_encode(s).replace(' ', "+")));
+    }
+    format!("{base}#{}", params.join("&"))
+}
+
+/// Parse the https form built by [`build_https_guest_link`] into a
+/// [`DeepLink::Guest`] whose `url` is the part before the fragment and whose
+/// `dial` is `None`. `token` and `exp` are required, as for the
+/// `sovereign://guest` form; a token anywhere but the fragment is not read.
+pub fn parse_https_guest_link(link: &str) -> Option<DeepLink> {
+    let (base, fragment) = link.split_once('#')?;
+    if !(base.starts_with("https://") || base.starts_with("http://")) {
+        return None;
+    }
+    let params = parse_query_params(Some(fragment));
+    let token = params.get("token").filter(|t| !t.is_empty())?.clone();
+    let expires_at = params.get("exp").and_then(|s| s.parse::<u64>().ok())?;
+    Some(DeepLink::Guest {
+        token,
+        url: base.to_string(),
+        dial: None,
+        expires_at,
+        summary: params.get("s").cloned(),
+    })
+}
+
 /// Parse an HTTPS join URL: `https://sovereign.dev/join/<key>[?...]`.
 ///
 /// The host is validated against `SOVEREIGN_JOIN_HOST` (or the
@@ -765,6 +808,35 @@ mod tests {
     // A guest link is not an invite. These pin the two properties that make
     // that true on the wire: it round-trips without carrying a scope, and it
     // cannot be mistaken for something joinable.
+
+    #[test]
+    fn https_guest_link_round_trips_with_the_token_only_in_the_fragment() {
+        let base = "http://192.168.1.10:9750/app/ring-doc/";
+        let link = build_https_guest_link("deadbeef", base, 1_787_900_000, Some("rail:wall"));
+        let (before, fragment) = link.split_once('#').expect("a fragment");
+        assert!(
+            !before.contains("deadbeef"),
+            "the token must never reach the path or query: {link}"
+        );
+        assert!(fragment.contains("token=deadbeef"), "{link}");
+        let DeepLink::Guest {
+            token,
+            url,
+            dial,
+            expires_at,
+            summary,
+        } = parse_https_guest_link(&link).unwrap()
+        else {
+            panic!("expected a guest link")
+        };
+        assert_eq!(token, "deadbeef");
+        assert_eq!(url, base);
+        assert!(dial.is_none());
+        assert_eq!(expires_at, 1_787_900_000);
+        assert_eq!(summary.as_deref(), Some("rail:wall"));
+        // A token outside the fragment is not a guest link.
+        assert!(parse_https_guest_link("http://h/?token=deadbeef&exp=1").is_none());
+    }
 
     #[test]
     fn guest_link_round_trips() {
