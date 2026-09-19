@@ -315,3 +315,67 @@ async fn the_door_opens_at_the_first_rail_grant_and_closes_at_the_last_expiry() 
         tokio::time::sleep(Duration::from_millis(200)).await;
     }
 }
+
+/// **A guest cannot write under a member's name.** The door signs with its
+/// member's key, so the name a guest types is the only thing telling the two
+/// apart on the wall; one that IS a member's name (any case) is refused, and
+/// nothing reaches the journal. The control: a name of their own is admitted.
+#[tokio::test]
+async fn a_guest_name_that_is_a_members_is_refused_at_the_door() {
+    let dir = tempfile::tempdir().unwrap();
+    let key = SigningKey::from_bytes(&[1u8; 32]);
+    let a = with_guest(
+        state_with_rail(dir.path(), &key),
+        vec![Scope::Rails(NS.into())],
+    );
+    let (_root, page) = page_dir();
+    let act = |guest: &str| {
+        serde_json::json!({
+            "op": "record",
+            "payload": { "kind": "doc-change", "doc": "ring-doc", "update": "AA==", "guest": guest },
+        })
+    };
+    for member in ["bo", "Alex"] {
+        let (status, body) = door(
+            a.clone(),
+            &page,
+            request(
+                "POST",
+                "/v1/rail/append",
+                LAN_PEER,
+                Some(GUEST_TOKEN),
+                Some(act(member)),
+            ),
+        )
+        .await;
+        assert_eq!(
+            status,
+            StatusCode::CONFLICT,
+            "a guest wrote as member {member}: {body}"
+        );
+    }
+    let (_, log) = door(
+        a.clone(),
+        &page,
+        request("GET", "/v1/rail/log", LAN_PEER, Some(GUEST_TOKEN), None),
+    )
+    .await;
+    assert!(
+        !log.contains("\"guest\""),
+        "a refused act reached the journal: {log}"
+    );
+
+    let (status, body) = door(
+        a,
+        &page,
+        request(
+            "POST",
+            "/v1/rail/append",
+            LAN_PEER,
+            Some(GUEST_TOKEN),
+            Some(act("ana")),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+}
