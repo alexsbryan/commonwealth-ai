@@ -56,7 +56,17 @@ Three zones, from most to least trusted:
   learn the invite key — so "a guest cannot invite people" is structural:
   `Scope` has no variant that could express it. The grant lives only in
   the issuing node's memory and is never gossiped, so revocation is
-  immediate rather than eventually-consistent.
+  immediate rather than eventually-consistent. A grant with a rail scope
+  (`/v1/rail/append|log|live`, one namespace) is also the key to the
+  **guest door**: `[daemon] guest_bind = "host:port"` (default off) puts
+  the same Guest router on a bind the room's WiFi reaches, listening only
+  while such a grant is live and closed at the last expiry
+  (`sovereign/crates/sovereign-daemon/src/guest_door.rs`), even on an
+  encrypted mesh. It adds one unauthenticated route, the ring page at
+  `/ring/` served from `[daemon] guest_page_dir` and never from outside it;
+  the page reads the bearer from the URL fragment, which the browser never
+  sends. The door also answers `/status` and `/oicp/v1/capabilities` to
+  anyone on that network, as every non-loopback bind does.
 - **Everything else.** Nothing here is designed to face the public
   internet. The fail-closed defaults below exist so that crossing this
   line requires a deliberate operator decision, never an accident.

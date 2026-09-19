@@ -6280,7 +6280,7 @@ client router three times:
 |---|---|---|---|
 | `Operator` | a real local caller on `:9741` | yes | yes |
 | `Peer` | a MEMBER dialling `cwth/client/0` | yes | **no** |
-| `Guest` | `cwth/guest/0`, and a downgraded stranger | no | no |
+| `Guest` | `cwth/guest/0`, a downgraded stranger, and the guest door on `[daemon] guest_bind` (open only while a rail grant is live; also serves `/v1/rail/*` and the ring page at `/ring/` — `sovereign-daemon/src/guest_door.rs`) | no | no |
 | `Rail` | a deployed ring app, on `127.0.0.1:rail_port(client_port)` (9743 by default) | no (`UNTRUSTED_LOOPBACK`) | no — and it serves NOTHING but `/v1/rail/*` |
 
 The `Rail` bind is the only one of the three that is a real TCP listener on a

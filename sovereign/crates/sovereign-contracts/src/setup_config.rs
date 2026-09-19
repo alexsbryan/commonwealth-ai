@@ -1374,6 +1374,22 @@ pub struct DaemonSection {
     #[serde(default)]
     pub client_token: Option<String>,
 
+    /// The guest door: a `host:port` on which the `Guest` client surface
+    /// listens directly — reachable from the room's WiFi — while at least one
+    /// guest grant with a rail scope is live, and closed at the last expiry.
+    /// `None` (default) is off. Unlike `client_bind` it is NOT forced to
+    /// loopback on an encrypted mesh: the Guest surface never trusts a
+    /// loopback address and admits only a live grant, within its scope. See
+    /// `sovereign_daemon::guest_door`.
+    #[serde(default)]
+    pub guest_bind: Option<String>,
+
+    /// The ring page the guest door serves at `/ring/` (a bundle directory
+    /// such as `sovereign/apps/ring-doc`). `None` serves no page; the door's
+    /// rail routes are unaffected.
+    #[serde(default)]
+    pub guest_page_dir: Option<PathBuf>,
+
     /// **Local-only profile: no discovery, no transport, no mesh loops.**
     ///
     /// `false` (the default) is the historical behaviour: a daemon that
@@ -1434,6 +1450,8 @@ impl Default for DaemonSection {
             alternation_grammar: default_alternation_grammar(),
             client_bind: default_client_bind(),
             client_token: None,
+            guest_bind: None,
+            guest_page_dir: None,
             internal_bind: default_internal_bind(),
             local_only: default_local_only(),
         }

@@ -261,9 +261,10 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
     };
 
     // The ring-app rail. Present on `Rail` (where it is the ONLY thing
-    // served) and on `Operator` (a local caller already reaches everything,
-    // and `svrn ring` has to be able to read its own ledger). Absent on
-    // `Peer` and `Guest`: a ring rail is loopback-only in M0.
+    // served), on `Operator` (a local caller already reaches everything,
+    // and `svrn ring` has to be able to read its own ledger) and on `Guest`
+    // (the guest door; a rail grant names its one namespace). Absent on
+    // `Peer`. See `ClientSurface::serves_rail_routes`.
     let rail: Router<AppState> = if surface.serves_rail_routes() {
         Router::new()
             .route("/v1/rail/append", post(routes_rail::append))

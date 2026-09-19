@@ -3688,6 +3688,12 @@ impl EmbeddedDaemon {
         // teardown — dropping the old `:9741`/`:9742` listeners — before an
         // in-process re-create (`leave_to_solo`) rebinds the same ports.
         let app_state_clone = app_state.clone();
+        // The guest door — `crate::guest_door` says why it is its own bind.
+        let door_state = app_state.clone();
+        let (guest_bind, guest_page_dir) = {
+            let c = self.setup_config.read().await;
+            (c.daemon.guest_bind.clone(), c.daemon.guest_page_dir.clone())
+        };
         // Each start (including an in-process re-create) answers the bind
         // question afresh; the serve task publishes the outcome below.
         self.client_listener.send_replace(ClientListener::Pending);
@@ -3839,6 +3845,7 @@ impl EmbeddedDaemon {
                 _ = guest_serve => {}
                 _ = peer_serve => {}
                 _ = rail_serve => {}
+                _ = crate::guest_door::serve(door_state, guest_bind, guest_page_dir) => {}
                 _ = shutdown_rx => {
                     info!("Commonwealth daemon shutting down");
                 }

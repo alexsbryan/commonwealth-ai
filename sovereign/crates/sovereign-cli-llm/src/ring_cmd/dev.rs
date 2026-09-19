@@ -208,7 +208,7 @@ async fn op_handler(
 }
 
 async fn shim_handler(State(ctx): State<Arc<RingCtx>>) -> Response {
-    let js = DEV_SHIM.replace("{{NAMESPACE}}", &ctx.namespace);
+    let js = sovereign_daemon::guest_door::ring_shim(&ctx.namespace, None);
     ([(header::CONTENT_TYPE, "text/javascript")], js).into_response()
 }
 
@@ -219,117 +219,9 @@ async fn static_handler(State(ctx): State<Arc<RingCtx>>, uri: Uri) -> Response {
     crate::meshapp_cmd::serve_under(&ctx.bundle_dir, rel, shim)
 }
 
-/// `window.ring` — the whole client surface, and it is small on purpose.
-///
-/// **It ships the fold, not just the transport.** `log()` and `record()` are
-/// the two routes; `fold()` is the third thing, and it is the reason this is
-/// an SDK rather than a fetch wrapper. The rail computes the order and the
-/// void set server-side, and `fold` is what makes an app author consume that
-/// rather than re-derive it: they write a reducer over one act at a time and
-/// never touch `log.ops` directly. Hand somebody a raw log and hope, and the
-/// first thing they write is `ops.filter(...).sort(...)` — and their house
-/// disagrees with itself about who owes what.
-///
-/// `live` is the fourth thing and it is a different kind: it writes nothing
-/// down, so it is namespaced apart rather than sitting beside `record`.
-const DEV_SHIM: &str = r#"(function () {
-  const call = async (op, body) => {
-    const r = await fetch('/__ring/' + op, {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body || {}),
-    });
-    const t = await r.text();
-    let v = null;
-    try { v = t ? JSON.parse(t) : null; } catch (_) { v = { error: t }; }
-    if (!r.ok) throw new Error((v && v.error) || ('ring: ' + op + ' failed'));
-    return v;
-  };
-  window.ring = {
-    namespace: "{{NAMESPACE}}",
-    // The whole journal in one call: the admitted acts in the order every
-    // node applies them, the gaps, and the roster. `complete === false` means
-    // those acts are a subset; an app that hides that is lying to the person
-    // reading it.
-    log: () => call('log', {}),
-    // Write one act. The payload is yours and the rail never reads inside it
-    // — but it must be a JSON object of whole numbers and strings, because
-    // two nodes have to derive identical bytes from it and JSON does not
-    // promise that for fractions. Use cents, grams, milliseconds.
-    record: (payload) => call('append', { op: 'record', payload }),
-    // Void an earlier act, optionally re-stating it. The void is PERMANENT:
-    // correcting a correction cancels its replacement and leaves the original
-    // gone. To bring something back, write it again.
-    correct: (correctsId, replacement) =>
-      call('append', { op: 'correct', corrects: correctsId, replacement: replacement || null }),
-    // The live lane: delivery, not record. Nothing here reaches a journal.
-    //
-    // `send` is a raw fetch and NOT the `call` helper on purpose: the daemon
-    // reads the push body as opaque text, so `call`'s JSON.stringify would
-    // wrap an already-stringified envelope in quotes and every peer would
-    // skip it without saying anything.
-    live: {
-      send: async (payload) => {
-        const r = await fetch('/__ring/live', {
-          method: 'POST', headers: { 'content-type': 'text/plain' }, body: payload,
-        });
-        if (!r.ok) throw new Error('ring: live send failed (' + r.status + ')');
-        return r.json();
-      },
-      // A drain, not a read: the daemon hands each payload out once.
-      drain: () => call('live-drain', {}),
-    },
-    // Fold the journal with your reducer.
-    //
-    // Skips the acts a correction voided and the corrections that state no
-    // replacement, and walks the rest in the rail's order — which is the same
-    // order on every node in the ring. Use this instead of iterating
-    // `log.ops`: the guarantee is in the traversal, not in the array.
-    fold: (log, reducer, initial) => {
-      let acc = initial;
-      for (const op of (log && log.ops) || []) {
-        if (op.voided || op.payload == null) continue;
-        acc = reducer(acc, op.payload, op);
-      }
-      return acc;
-    },
-  };
-})();
-"#;
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// **The SDK must ship the fold, and the fold must skip both kinds of
-    /// non-act.** A `fold` that forgot `voided` would double-count every
-    /// corrected entry in every ring app on this rail, and it would look
-    /// right until somebody made a correction.
-    ///
-    /// A string assertion because the shim is JS inside a Rust const; the
-    /// behaviour itself is exercised for real by `expenses.test.mjs` and by
-    /// the rail's own `a_voided_op_is_still_visible_but_is_never_applied`.
-    #[test]
-    fn the_shim_ships_a_fold_that_skips_voided_and_empty_acts() {
-        assert!(DEV_SHIM.contains("fold: (log, reducer, initial)"));
-        assert!(
-            DEV_SHIM.contains("if (op.voided || op.payload == null) continue;"),
-            "the fold stopped skipping a non-act — corrections would be counted"
-        );
-    }
-
-    /// The shim carries the two routes and nothing that pretends to be a
-    /// third. An app's vocabulary is built out of `record` and `correct`; a
-    /// verb here that the rail does not have is a verb that fails at runtime.
-    #[test]
-    fn the_shim_offers_exactly_the_rails_two_writes() {
-        assert!(DEV_SHIM.contains("record: (payload)"));
-        assert!(DEV_SHIM.contains("correct: (correctsId, replacement)"));
-        assert!(
-            !DEV_SHIM.contains("expense:") && !DEV_SHIM.contains("settle:"),
-            "the shim knows about money again — that belongs in the app's own \
-             module, where it has tests"
-        );
-    }
 
     /// **The live lane's two ops must point at the live route, and only at
     /// it.** A `live` row pointing anywhere else is presence written down —
@@ -358,30 +250,5 @@ mod tests {
             ))
         );
         assert!(upstream("nope").is_none());
-    }
-
-    /// **The push body must leave the browser exactly as the app wrote it.**
-    /// `call` would `JSON.stringify` an envelope the app already stringified,
-    /// and `decodePresence` on the other side would skip every payload
-    /// silently — no error, no cursor, nothing to read.
-    ///
-    /// A string assertion for the same reason as the two tests above: the
-    /// shim is JS inside a Rust const, and the double-encode is what it is
-    /// watching for.
-    #[test]
-    fn the_shim_reaches_the_live_lane_without_re_encoding() {
-        assert!(DEV_SHIM.contains("live: {"));
-        assert!(DEV_SHIM.contains("send: async (payload)"));
-        assert!(DEV_SHIM.contains("drain: () => call('live-drain', {})"));
-        assert!(
-            DEV_SHIM.contains("body: payload,"),
-            "the live send stopped handing the payload through verbatim — a \
-             `call(` here would double-encode it and every peer would skip it"
-        );
-        assert!(
-            DEV_SHIM.contains("return r.json();"),
-            "the live send stopped returning the daemon's answer — without \
-             `peers` the page cannot name a peer that did not get its presence"
-        );
     }
 }
