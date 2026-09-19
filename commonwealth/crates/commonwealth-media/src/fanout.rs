@@ -194,7 +194,10 @@ pub struct FanoutResponse {
 
 /// Which members the request selects, with refusals kept — a refused name
 /// is a row the caller reads, never a silent omission.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// `Eq` came off with [`MediaCandidate`]'s, which it wraps: `media_available`
+/// is an `f32`.
+#[derive(Debug, Clone, PartialEq)]
 pub enum Selected {
     Ask(MediaCandidate),
     Refused {
@@ -520,6 +523,7 @@ mod tests {
                 Vec::new()
             },
             media_allow: Vec::new(),
+            media_available: None,
         }
     }
 

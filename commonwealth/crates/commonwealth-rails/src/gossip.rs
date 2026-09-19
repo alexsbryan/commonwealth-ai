@@ -76,6 +76,7 @@ pub fn minimal_capabilities(now: u64, origins: &[OriginKind]) -> NodeCapabilitie
         loaded_models: Vec::new(),
         origins: origins.to_vec(),
         media_allow: Vec::new(),
+        media_available: None,
         embed_model: None,
         benchmark: None,
         current_in_flight: None,

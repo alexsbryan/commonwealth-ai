@@ -358,6 +358,14 @@ impl ConfigDiff {
         if old.iroh.media_allow != new.iroh.media_allow {
             d.media_changed.push("iroh.media_allow");
         }
+        // Compared IN THE SAME COMMIT that adds the key, for the reason the
+        // paragraph above records: the presence poll reads it per tick, so a
+        // reload that did not notice would leave the poll pointed at the
+        // previous viewer account and publish the house's playback as the
+        // holder's.
+        if old.iroh.media_viewer_user != new.iroh.media_viewer_user {
+            d.media_changed.push("iroh.media_viewer_user");
+        }
         if old.iroh.apps != new.iroh.apps {
             // `[iroh.apps]` is the durable publish tier; the ephemeral one
             // (`svrn run`) goes through `PublishedApps` and needs no restart.

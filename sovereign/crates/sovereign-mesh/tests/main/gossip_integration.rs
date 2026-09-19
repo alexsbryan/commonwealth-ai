@@ -54,6 +54,7 @@ fn member_at(id: NodeId, name: &str, last_seen: u64, addr: SocketAddr) -> Member
             loaded_models: vec![],
             origins: Vec::new(),
             media_allow: Vec::new(),
+            media_available: None,
 
             embed_model: None,
             benchmark: None,

@@ -216,6 +216,7 @@ fn planner_member(id: u128, free_storage_gb: u32) -> MemberRecord {
             loaded_models: vec![],
             origins: Vec::new(),
             media_allow: Vec::new(),
+            media_available: None,
             embed_model: Some(embed()),
             benchmark: None,
             current_in_flight: None,

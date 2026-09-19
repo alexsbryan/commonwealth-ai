@@ -91,6 +91,7 @@ pub mod local_only;
 pub mod loopback_guard;
 pub mod mcp_config_http;
 pub mod mcp_router;
+pub mod media_presence;
 pub mod media_reach;
 pub mod mesh_http;
 pub mod meshapp_http;

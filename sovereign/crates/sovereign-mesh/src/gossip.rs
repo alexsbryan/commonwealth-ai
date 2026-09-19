@@ -552,6 +552,17 @@ pub async fn run_one_round(
                 // acceptor, so the origins are stamped here, after it.
                 me.capabilities.origins = info.origins;
                 me.capabilities.media_allow = info.media_allow;
+                // Presence is a claim ABOUT a library. A node that serves no
+                // media origin this round publishes none, so a reading left
+                // over from an offer since withdrawn cannot outlive the offer
+                // it described.
+                if !me
+                    .capabilities
+                    .origins
+                    .contains(&oicp_types::origin::OriginKind::Media)
+                {
+                    me.capabilities.media_available = None;
+                }
                 // WS-D anti-downgrade: SIGN our dial info so peers can
                 // verify only we changed it (a gossip-strip attacker past
                 // the join-key gate can't force us unreachable / downgrade

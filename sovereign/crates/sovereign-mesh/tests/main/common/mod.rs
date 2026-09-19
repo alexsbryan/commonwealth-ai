@@ -69,6 +69,7 @@ pub fn empty_capabilities() -> NodeCapabilities {
         loaded_models: vec![],
         origins: Vec::new(),
         media_allow: Vec::new(),
+        media_available: None,
         embed_model: None,
         benchmark: None,
         current_in_flight: None,

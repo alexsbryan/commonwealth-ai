@@ -17,6 +17,13 @@ pub struct MediaRoute {
     /// holding its key. Re-read at acceptor build and by a reload that moves
     /// the origin, so `declare` then `offer` needs no restart.
     declared: std::sync::Arc<std::sync::RwLock<std::sync::Arc<Vec<(String, String)>>>>,
+    /// `[iroh] media_viewer_user` — the origin's own id for the read-only
+    /// account every member reaches this library as. Held here beside the
+    /// origin and the credential because the presence poll needs all three
+    /// per tick and a reload moves them together. `None` until an offer has
+    /// created one, which the poll reads as "cannot tell the holder from the
+    /// house" and publishes as no presence at all.
+    viewer_user: std::sync::Arc<std::sync::RwLock<Option<String>>>,
     hook: std::sync::Arc<std::sync::Mutex<Option<std::sync::Arc<dyn Fn() + Send + Sync>>>>,
 }
 
@@ -113,6 +120,28 @@ impl MediaRoute {
     /// The declared headers the next media dial carries.
     pub fn declared(&self) -> std::sync::Arc<Vec<(String, String)>> {
         self.declared
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
+    /// Replace the viewer account the presence poll reads sessions against.
+    /// The id is not a credential and is logged.
+    pub fn set_viewer_user(&self, viewer_user: Option<String>) {
+        tracing::info!(
+            target: "transport",
+            ?viewer_user,
+            "iroh(mesh): media viewer account set — the next presence poll reads it"
+        );
+        *self
+            .viewer_user
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = viewer_user;
+    }
+
+    /// The viewer account the next presence poll reads sessions against.
+    pub fn viewer_user(&self) -> Option<String> {
+        self.viewer_user
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone()

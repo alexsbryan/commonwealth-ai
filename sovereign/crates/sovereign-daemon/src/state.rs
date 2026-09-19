@@ -1092,6 +1092,7 @@ impl AppState {
                     servable_model_files: serving::ServableModelFilesReader::default(),
                     local_inference_availability: RwLock::new(1.0_f32),
                     activity_inference_availability: RwLock::new(1.0_f32),
+                    local_media_available: RwLock::new(None),
                     local_inference: serving_seed.local_inference,
                     // usize::MAX = unlimited. The desktop overwrites this
                     // at boot with the user's persisted setting (default
@@ -1310,6 +1311,28 @@ impl AppState {
             published,
             "inference_availability: activity input updated by sovereign-server"
         );
+    }
+
+    /// Record what this node's MEDIA origin can serve a member right now.
+    ///
+    /// The one writer of `local_media_available`; the media-presence poll
+    /// calls it through POST /internal/node/activity after each read of the
+    /// origin's sessions, and gossip publishes the value on its next round.
+    /// `None` is written when the origin could not be asked, so a stale `1.0`
+    /// cannot outlive the answer that produced it.
+    pub async fn update_local_media_available(&self, media_available: Option<f32>) {
+        *self.inner.serving.local_media_available.write().await = media_available;
+        tracing::debug!(
+            ?media_available,
+            "media_available: origin presence updated by the media poll"
+        );
+    }
+
+    /// What this node last claimed its media origin can serve, or `None` when
+    /// nothing has answered. Read by the `SelfClaims` port once per gossip
+    /// round.
+    pub async fn local_media_available(&self) -> Option<f32> {
+        *self.inner.serving.local_media_available.read().await
     }
 
     /// The yield half of the availability composite: what this node can
@@ -1973,6 +1996,7 @@ impl sovereign_core::self_claims::SelfClaims for AppState {
             in_flight: self.current_local_in_flight(),
             storage_remaining: self.storage_remaining_bytes(),
             embed_model: self.inner.store.inference_store.get_local_embed_model(),
+            media_available: self.local_media_available().await,
         }
     }
 

@@ -188,6 +188,10 @@ pub async fn build_local_capabilities(
         loaded_models: Vec::new(),
         origins: Vec::new(),
         media_allow: Vec::new(),
+        // What the origin can serve right now is the NODE's answer, not a
+        // hardware fact: it rides the claims port beside availability, and
+        // `None` here means this node was not asked or offers no media.
+        media_available: claims.media_available,
         // The collaborative-ingestion planner filters candidates by
         // exact match against this field. `None` means "don't include
         // me in distribution" — safe default for nodes that haven't
@@ -381,6 +385,7 @@ mod tests {
                 in_flight: None,
                 storage_remaining: None,
                 embed_model: None,
+                media_available: None,
             }
         }
 

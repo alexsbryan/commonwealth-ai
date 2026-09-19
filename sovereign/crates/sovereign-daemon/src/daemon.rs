@@ -938,6 +938,8 @@ impl EmbeddedDaemon {
             )?;
             self.media_route.set(origin, allow);
             self.media_route
+                .set_viewer_user(fresh.iroh.media_viewer_user.clone());
+            self.media_route
                 .set_declared(commonwealth_media::read_declared_in(
                     &commonwealth_media::dir_under(&self.data_dir),
                 ));
@@ -3381,6 +3383,13 @@ impl EmbeddedDaemon {
             internal_port,
         );
 
+        // The holder's media-presence poll (`crate::media_presence`): this
+        // process reporting to itself, so loopback regardless of internal_bind.
+        tokio::spawn(crate::media_presence::run(
+            self.media_route.clone(),
+            format!("http://127.0.0.1:{internal_port}"),
+        ));
+
         let mesh_state = Arc::new(RwLock::new(MeshState::from_membership(
             &*app_state.inner.fabric.mesh.read().await,
             app_state.inner.fabric.identity.current(),
@@ -4274,6 +4283,8 @@ impl EmbeddedDaemon {
             )
             .map_err(MeshError::Config)?;
             self.media_route.set(origin, allow);
+            self.media_route
+                .set_viewer_user(cfg.iroh.media_viewer_user.clone());
         }
         // AN OFFER ORIGIN A MEMBER MAY REACH — what this operator has going
         // spare. Parsed here and REFUSED by name if it does not parse, for

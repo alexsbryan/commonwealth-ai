@@ -42,6 +42,7 @@ pub fn member(node_id: NodeId, name: &str, pubkey: Option<NodePubkey>) -> Member
             loaded_models: vec![],
             origins: Vec::new(),
             media_allow: Vec::new(),
+            media_available: None,
             embed_model: None,
             benchmark: None,
             current_in_flight: None,
