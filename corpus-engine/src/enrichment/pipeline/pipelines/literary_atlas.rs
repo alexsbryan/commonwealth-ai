@@ -1030,6 +1030,26 @@ pub(super) fn render_phase1_user_body(
     user.push_str("# Chapter to analyse\n\n");
     user.push_str(&format!("**Section id:** {}\n", chapter.chapter_id));
     user.push_str(&format!("**Title:** {}\n", chapter.title));
+    // A section title names the section, never the document it sits in —
+    // "Personal data we collect" does not say whose. A `--from-corpus` build
+    // carries both keys (sovereign-enrichment-build/src/corpus_io.rs:542-544),
+    // and "" (a lead section, corpus_io.rs:433) is as silent as absent.
+    if let Some(doc) = chapter
+        .metadata
+        .get("article_title")
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
+        user.push_str(&format!("**Document:** {doc}\n"));
+    }
+    if let Some(path) = chapter
+        .metadata
+        .get("section_path")
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
+        user.push_str(&format!("**Section path:** {path}\n"));
+    }
     if let Some(ord) = chapter.metadata.get("ordinal") {
         user.push_str(&format!("**Position:** chapter {ord}\n"));
     }
@@ -1772,6 +1792,35 @@ mod tests {
             metadata: HashMap::new(),
             approx_tokens: 10,
         }
+    }
+
+    #[test]
+    fn phase1_user_body_names_the_document_when_known() {
+        // Absent — the literary path builds chapters with no corpus metadata.
+        let bare = render_phase1_user_body(&sample_chapter(), &[], false, None);
+        assert!(!bare.contains("**Document:**"), "{bare}");
+        assert!(!bare.contains("**Section path:**"), "{bare}");
+        // Present — every `--from-corpus` build carries both keys.
+        let mut c = sample_chapter();
+        c.metadata
+            .insert("article_title".into(), "Spotify Privacy Policy".into());
+        c.metadata
+            .insert("section_path".into(), "Your data › What we collect".into());
+        let body = render_phase1_user_body(&c, &[], false, None);
+        assert!(
+            body.contains("**Document:** Spotify Privacy Policy"),
+            "{body}"
+        );
+        assert!(
+            body.contains("**Section path:** Your data › What we collect"),
+            "{body}"
+        );
+        // Empty tells the model no more than absent does: a lead section joins
+        // an empty path vector into "" (corpus_io.rs:433).
+        let mut lead = sample_chapter();
+        lead.metadata.insert("section_path".into(), String::new());
+        let body = render_phase1_user_body(&lead, &[], false, None);
+        assert!(!body.contains("**Section path:**"), "{body}");
     }
 
     #[test]

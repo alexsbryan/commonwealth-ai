@@ -146,8 +146,10 @@ pub(crate) fn assert_golden(path: &Path, rendered: &str, module: &str) {
 }
 
 /// One fixed section. `render_phase1_user_body` reads only `chapter_id`,
-/// `title`, `metadata["ordinal"]` and `text`, so this is the whole user
-/// body's input.
+/// `title`, `text` and the `ordinal`, `article_title` and `section_path`
+/// metadata keys, so this is the whole user body's input. This chapter
+/// carries no corpus provenance, which is why the goldens show no
+/// `**Document:**` line.
 fn fixed_chapter() -> ChapterInput {
     let text = "Article II — Quiet hours. Quiet hours begin at 11 PM every night. \
                 Members may not play amplified music in the common spaces after that \
