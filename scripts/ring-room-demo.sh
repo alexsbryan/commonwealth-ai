@@ -48,6 +48,8 @@ ROOM_CAMPAIGN="$REPO/quality/campaigns/ring-room.toml"
 ROOM_SCRIPT="$REPO/scripts/ring-room-demo.sh"
 MEDIA_SCRIPT="$REPO/scripts/cw-media-demo.sh"
 EMBED_GGUF="$REPO/sovereign/models/Qwen3-Embedding-0.6B-Q8_0.gguf"
+# The 2B is the bank's floor and the default; the answer bar is judged with
+# RING_ROOM_CHAT=$REPO/sovereign/models/Qwen3.5-4B.Q6_K.gguf (seat A22).
 CHAT_GGUF="${RING_ROOM_CHAT:-$REPO/sovereign/models/Qwen3.5-2B.Q6_K.gguf}"
 # Beside $D, not in it: bring-up empties $D.
 CMDLOG="$D-commands.log"
