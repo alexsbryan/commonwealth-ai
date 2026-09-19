@@ -1436,7 +1436,7 @@ status       = "open"
 # treated quitting as a way to free it. A user never wants the daemon DOWN;
 # they want not to pay for idle, and that is the daemon's own policy, which
 # already exists: `[daemon] primary_idle_secs` defaults to 300 and
-# `extras_idle_secs` to 0, applied in daemon_cmd/build/inference.rs:293,347.
+# `extras_idle_secs` to 0, applied in sovereign-daemon/src/build/inference.rs:293,347.
 # The real gap is that the fast and embed slots have NO idle monitor at all.
 # That is a daemon-side fix in the place that should be deciding, not an
 # argument about lifecycle.
@@ -1480,7 +1480,7 @@ status       = "open"
 # idle-UNLOAD policy this file already named and nothing else: hold close to
 # nothing while nobody is asking, load on demand for a peer or a user. That
 # moves `[daemon] extras_idle_secs` + the missing fast/embed monitors
-# (daemon_cmd/build/inference.rs:293,347) from a nicety to a REQUIREMENT of
+# (sovereign-daemon/src/build/inference.rs:293,347) from a nicety to a REQUIREMENT of
 # always-on: until they exist, "always available" and "tens of GB pinned"
 # are the same sentence, which is what makes users ask to turn the daemon
 # off in the first place.
@@ -1613,8 +1613,8 @@ status       = "open"
 #     ReconnectBanner's attach-down state. The OS-managed topology is the
 #     path the desktop already takes when it finds a daemon running.
 #   * THE SHARED SUPERVISOR IS NOT DELETED, only its desktop caller.
-#     `sovereign_compute::supervisor` is consumed by sovereign-cli-daemon
-#     (daemon_cmd/bootstrap.rs:592, discovery_policy.rs:24) for its own
+#     `sovereign_compute::supervisor` is consumed by sovereign-daemon
+#     (bootstrap.rs:592, discovery_policy.rs:24) for its own
 #     compute children. A daemon supervising its compute children is right;
 #     a desktop supervising a daemon is not.
 #   * FIRST LAUNCH ALREADY NEEDS NONE OF IT, on the default path. The wizard

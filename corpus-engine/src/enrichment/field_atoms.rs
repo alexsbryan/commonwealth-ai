@@ -84,7 +84,7 @@
 //! writes no ANN seed row, so the walk is unchanged and the SEP retrieval lane
 //! measures the digest move alone.
 
-use corpus_engine_vocab::taxonomy::{EnrichmentDepth, QuestionType};
+use understanding_vocab::taxonomy::{EnrichmentDepth, QuestionType};
 
 use super::atlas::atoms::{
     AtomEnvelope, AtomId, ChunkRef, Opposition, Position, Question, ResolutionStatus,
@@ -411,8 +411,8 @@ pub fn publish_to_atlas(
     skel: &FieldSkeleton,
 ) -> std::io::Result<FieldAtomsPublished> {
     use super::atlas::{append_atoms_and_edges, read_atlas_atoms, write_atlas_atoms};
-    use corpus_engine_vocab::atoms::AtomsFile;
-    use corpus_engine_vocab::edges::EdgesFile;
+    use understanding_vocab::atoms::AtomsFile;
+    use understanding_vocab::edges::EdgesFile;
 
     std::fs::create_dir_all(atlas_dir)?;
     if !atlas_dir.join("edges.json").exists() {
@@ -430,7 +430,7 @@ pub fn publish_to_atlas(
 
     let existing = read_atlas_atoms(atlas_dir)?;
     let held: std::collections::HashSet<String> = existing
-        .atoms
+        .atoms()
         .iter()
         .map(|a| a.id().as_str().to_string())
         .collect();
@@ -444,7 +444,7 @@ pub fn publish_to_atlas(
         projected: projected.len(),
         written: fresh.len(),
         already_present: projected.len() - fresh.len(),
-        atoms_before: existing.atoms.len(),
+        atoms_before: existing.atoms().len(),
     };
     append_atoms_and_edges(atlas_dir, &fresh, &[])?;
     tracing::info!(
@@ -521,7 +521,7 @@ pub fn load_field_model(
     if !census_says_none {
         match read_atlas_atoms(&atlas_dir) {
             Ok(file) => {
-                let view = skeleton_from_atoms(corpus_id, &file.atoms);
+                let view = skeleton_from_atoms(corpus_id, &file.atoms());
                 if !view.is_empty() {
                     return Some((view, FieldModelSource::Atlas));
                 }
@@ -569,7 +569,7 @@ pub fn load_field_model(
 
 /// The pre-ei-7b artifact name. One spelling, here, so the fallback and the
 /// index accessor cannot disagree about which file they mean.
-pub const LEGACY_ARTIFACT: &str = crate::index::enrichment::FIELD_SKELETON_FILENAME;
+pub const LEGACY_ARTIFACT: &str = crate::index::field_skeleton::FIELD_SKELETON_FILENAME;
 
 #[cfg(test)]
 mod tests {
@@ -797,9 +797,9 @@ mod tests {
 
         // And what landed renders the same digest the v1 file would have.
         let on_disk = super::super::atlas::read_atlas_atoms(&atlas).unwrap();
-        assert_eq!(on_disk.atoms.len(), first.written);
+        assert_eq!(on_disk.atoms().len(), first.written);
         assert_eq!(
-            skeleton_from_atoms("sep", &on_disk.atoms).render_landscape(HEADING, BUDGET),
+            skeleton_from_atoms("sep", &on_disk.atoms()).render_landscape(HEADING, BUDGET),
             skel.render_landscape(HEADING, BUDGET),
         );
     }

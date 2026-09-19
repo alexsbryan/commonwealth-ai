@@ -179,7 +179,7 @@ Workbench or delete it" is a live answer, and the §2 test is what says so.
 
 ### Not contexts
 
-The **published language** — `oicp-types`, `kernel-types`, `corpus-engine-vocab`
+The **published language** — `oicp-types`, `kernel-types`, `understanding-vocab`
 — is the shared kernel between contexts, not an eleventh.
 The **Host** is the composition root: `DAEMON_CORE.md`'s four things plus the
 app surfaces. "What belongs in the daemon" was hard to answer until that file
@@ -202,7 +202,7 @@ imports mesh types for a roster inherits llama-cpp.
 **Understanding needs a published read model, and it is already half-built.**
 Its language leaks: `Atom*` is 23 definitions with only 10 inside
 `enrichment/`, `Seed*` 6 of 12, `Cluster*` 4 of 13. Consumers re-derived its
-nouns because the context published nothing. `corpus-engine-vocab` (5,161
+nouns because the context published nothing. `understanding-vocab` (5,161
 lines) exists so a host can read `atlas/atoms.json` without linking
 `corpus-engine` — that is the read model, and finishing it is what stops the
 leak.
@@ -214,7 +214,7 @@ So the two calls:
    `Source`. This is structural rather than policing: once the words differ the
    accidental type sharing cannot be expressed, and the crate graph has to state
    what it means.
-2. **Finish `corpus-engine-vocab` as Understanding's published language**, and
+2. **Finish `understanding-vocab` as Understanding's published language**, and
    make every consumer outside the context read through it.
 
 ## 6. Where layers and domains part company
@@ -289,7 +289,7 @@ deliverable is this file plus the rename of `Peer*` per context (§5, call 1).
 State made unrepresentable: a type that is a mesh member and a serving candidate
 at once.
 
-**Phase B — Understanding publishes.** Finish `corpus-engine-vocab` as the read
+**Phase B — Understanding publishes.** Finish `understanding-vocab` as the read
 model; every consumer outside the context reads through it. State made
 unrepresentable: a crate re-deriving `Atom` because it could not read one.
 
@@ -335,7 +335,7 @@ floors as the baseline:
   kernel-types (egress custody, kept). The seven concepts in §3 hold and are
   nine: replicated KV and egress custody were missing.
 - Row 2 would read green today while the defect stands. All 20 `atoms.json`
-  readers already use `corpus-engine-vocab`'s `AtomsFile`; none declares its
+  readers already use `understanding-vocab`'s `AtomsFile`; none declares its
   own struct. The leak is the DOOR: `read_atlas_atoms` is at
   `corpus-engine/src/enrichment/atlas/writer.rs:595`, not in vocab, so
   `corpus-mcp/src/tools.rs:873` hand-rolls one and nine sites bypass it. The
@@ -356,7 +356,9 @@ floors as the baseline:
   tag leaves, and the host's 25,432 is a daemon-core campaign's to move.
 - §4 Serving measures **44,485 lines** module by module (38,665 if
   `frontdoor.rs`, which reshapes prompts for third-party harnesses, is Host).
-  The scheduler half (6,356) already imports nothing foreign; the knot is
+  The scheduler half (6,559, seven modules — `throughput_tracking` is host-tier,
+  not scheduler: it names `commonwealth-state`; SERVING_BOUNDARY.md "Corrected
+  2026-09-14") already imports nothing foreign; the knot is
   `peer_inference.rs` (5,399). The anticorruption layer §5 asks for exists at
   `sovereign-mesh/src/daemon.rs:2286-2345` reading nine fields; it is misnamed
   and lives in the host's god object. `sovereign-serving`, the peg, carries
@@ -366,7 +368,7 @@ floors as the baseline:
   crates; `Member` two; `Caller` one; `Source` is already Ingest's by §4 and
   is in the duplicate-name baseline. `Donor` is clean. The words are decided
   in rung `domains-4` against `converge noun` evidence, not here.
-- §9's `corpus-engine-vocab` figure of 5,161 is right; a non-recursive
+- §9's `understanding-vocab` figure of 5,161 is right; a non-recursive
   `wc -l src/*.rs` gives 2,769 and is the trap §2's preamble warns about.
 - `scripts/daemon-route-census.py:25` still names
   `commonwealth/crates/commonwealth-api/src`, gone since `domains-1`; every
@@ -477,7 +479,7 @@ input exists today.
 | `Gap` ×3 | split two, converge two | `quality/CONCEPTS.toml:831-843` already decided it; the atlas detector's `Gap` becomes **`Lacuna`** (49 sites / 11 files; `atlas/gaps.json` and its key stay via serde rename), deep-research's becomes `GapRow` (19 / 8). kernel-types refused: either survivor drags `AtomId`/`ChunkRef` or `AcquisitionRoute` to layer 0 |
 | `Domain` | split; Understanding does not take the word | the atlas noun has no type (`git grep domains.json -- '*.rs'` = 0); the plugin `Domain` → **`FieldModel`** (45 refs), `DomainRegistry` → `FieldModelRegistry`. `Pass` refused: `EnrichmentPassRegistry` is a step, a domain is a genre |
 | `Seed` | split | six homonyms rename (37 refs / 11 files); `SeedError`/`SeedReport` are Understanding's; the outside count is 1 → 0, not 2 |
-| `AtomSpan` ×2 | converge into vocab | owned, `atom_type: AtomType` (closed set at `corpus-engine-vocab/src/atoms.rs:1104`); `AtomType::from_label` must be minted |
+| `AtomSpan` ×2 | converge into vocab | owned, `atom_type: AtomType` (closed set at `understanding-vocab/src/atoms.rs:1104`); `AtomType::from_label` must be minted |
 | `Cluster` (39 defs, six families) | not a noun | `writer.rs` has zero matches; struck from owned words |
 | read model (21 defs, 5 crates) | converge to 16 in 2 | one `AtlasPage<T>`; `SectionRef` + `EvidenceExcerpt` one type; `RelatedAtom`/`CrossCorpusLink` each defined twice; `AtomHead` collapses a four-producer field set; **`AtomCard` deletes** (a lossy mirror of `AtomEnvelope`); `read_atlas_ontology` is minted, not moved (its only inline site is `context_loader.rs:711`) |
 | archaeology `Atom*` | split, not allow-list | `AtomProvenance` → `AnchorHistory` (27 / 4), `AtomWitness` → `WitnessTally` (13 / 1). The allow-list is the three axum binders and nothing else; I1 is 12 → 0 |
@@ -531,7 +533,7 @@ single-owner resource — with no `commonwealth-work` edge and no unit, lease or
 |---|---|---|
 | `commonwealth-work` | vocabulary, fold, lease predicate, executor trait and registry, process executor, sandbox | stays — it is the context |
 | `work_donor`, `ingest_executor` | the node running units off the work fold | `sovereign-daemon`'s `jobs` |
-| rented pods: `worker_pod`, `worker_http`, `worker_controller`, `worker_daemon`, `worker_subprocess_runner`, `multi_pod_coordinator` (5,831 lines) | leasing a rented machine and running work on it — Compute's remote isolation | a new Compute crate, `sovereign-pods` |
+| rented pods: `worker_pod`, `worker_http`, `worker_inference_proxy`, `worker_controller`, `worker_daemon`, `worker_subprocess_runner`, `multi_pod_coordinator` (6,373 lines) | leasing a rented machine and running work on it — Compute's remote isolation | a new Compute crate, `sovereign-pods` — except `worker_pod`'s owner↔pod wire protocol, which moved to the shared `sovereign-contracts` leaf (REVIEW-build-serving-worker-port, 2026-09-15) so the serving host can name it without a third package `[[exception]]` |
 | `worker_eligibility`, `pinned_pod_snapshot`, `pinned_transport` (1,863) | which RPC inference workers may hold a shard; a pinned pod presented as a venue | `sovereign-serving-host` |
 | `guest_tunnel` (134) | an iroh dial to a lender, exposed as a local address | Fabric, `sovereign-mesh` — it is reach |
 | `sovereign-compute` | Serving's local engine | re-tagged `serving`; rename proposed, `sovereign-slots` |

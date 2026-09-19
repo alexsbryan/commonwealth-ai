@@ -162,7 +162,7 @@ pub fn assemble_timelines_from_atlas(
     let atoms_file = read_atlas_atoms(&atlas_dir)?;
     let edges_file = read_atlas_edges(&atlas_dir)?;
     Ok(assemble(
-        &atoms_file.atoms,
+        &atoms_file.atoms(),
         &edges_file.edges,
         chunk_timestamp,
         atos,

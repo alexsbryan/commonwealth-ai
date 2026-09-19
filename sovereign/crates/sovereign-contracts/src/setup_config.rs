@@ -223,7 +223,7 @@ pub struct NodeSection {
     /// there without erroring.
     ///
     /// The identity-keyed design was priced (order `tn-1-terminal-honesty`, D5)
-    /// and deferred: resolving through `PeerEndpointSource` per turn needs a
+    /// and deferred: resolving through `VenueSource` per turn needs a
     /// provider that wraps `SplitInferenceProvider`, and `InferenceProvider`
     /// has 27 methods of which 24 carry defaults — including `embed_batch`,
     /// whose default is the per-item loop `SplitInferenceProvider` overrides
@@ -824,7 +824,7 @@ pub struct ComputeSection {
 /// it a claim the code does not honour. `oicp_types::Isolation` refuses a
 /// `Default` for exactly that reason, and re-spelling it here as a config
 /// enum with an `Unset` arm would be a second speller of a closed set
-/// (ARCH §10.6). `sovereign_mesh::work_donor::DONOR_ISOLATION` is the one
+/// (ARCH §10.6). `sovereign_daemon::work_donor::DONOR_ISOLATION` is the one
 /// answer.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkOfferSection {
@@ -946,7 +946,7 @@ impl WorkOfferSection {
     /// Only the KIND spellings are validated here, because that is all this
     /// crate can see: whether a kind resolves to a registered executor is the
     /// donor's check, and it runs at boot against the registry
-    /// (`sovereign_mesh::work_donor::resolve_offer`).
+    /// (`sovereign_daemon::work_donor::resolve_offer`).
     pub fn to_offer(
         &self,
         os: &str,
@@ -1288,14 +1288,6 @@ pub struct DaemonSection {
     #[serde(default = "default_max_peer_inflight")]
     pub max_peer_inflight: usize,
 
-    /// Maximum concurrent peer corpus reads (`/internal/knowledge/search`)
-    /// this node admits — a budget of its own, never `max_peer_inflight`: a
-    /// read is ~ms of I/O, and one offloaded judge holding the inference slot
-    /// must not blind every member's fan-out to this node's corpora (seat A23).
-    /// Default `4`: bounded, but more than one member can read at once.
-    #[serde(default = "default_max_peer_knowledge_reads")]
-    pub max_peer_knowledge_reads: usize,
-
     /// Enable background freshness watchers (currently:
     /// `wikipedia-newsworthy`'s daily portal-ingest + article-refresh
     /// loop; future entries will share this gate). When true, the
@@ -1359,7 +1351,7 @@ pub struct DaemonSection {
     /// bound non-loopback, the daemon REQUIRES a bearer token of every
     /// non-loopback caller (auto-generated to `<data.dir>/client-token`
     /// unless `client_token` is set) — see `client_token` and
-    /// `sovereign_api::client_auth`. The internal mesh port
+    /// `sovereign_daemon::client_auth`. The internal mesh port
     /// (`:9742`, mTLS) always binds `0.0.0.0` independently of this.
     #[serde(default = "default_client_bind")]
     pub client_bind: String,
@@ -1389,7 +1381,7 @@ pub struct DaemonSection {
     /// A `[discovery] join_key` is then a contradiction and the daemon
     /// refuses to boot rather than dialing a seed anyway.
     ///
-    /// Resolved once per boot by `sovereign_mesh::LocalOnlyProfile`, which is
+    /// Resolved once per boot by `sovereign_daemon::LocalOnlyProfile`, which is
     /// the ONE decider the mDNS and iroh gates also read. Env override in
     /// both directions: `SOVEREIGN_LOCAL_ONLY=1|0`.
     #[serde(default = "default_local_only")]
@@ -1428,7 +1420,6 @@ impl Default for DaemonSection {
             embed_idle_secs: default_embed_idle_secs(),
             yield_to_foreground_secs: default_yield_to_foreground_secs(),
             max_peer_inflight: default_max_peer_inflight(),
-            max_peer_knowledge_reads: default_max_peer_knowledge_reads(),
             freshness_watchers_enabled: default_freshness_watchers_enabled(),
             force_tool_calls: default_force_tool_calls(),
             alternation_grammar: default_alternation_grammar(),
@@ -1736,9 +1727,6 @@ fn default_local_only() -> bool {
 /// construction so a CLI daemon is never an unbounded peer fan-out target.
 fn default_max_peer_inflight() -> usize {
     1
-}
-fn default_max_peer_knowledge_reads() -> usize {
-    4
 }
 fn default_freshness_watchers_enabled() -> bool {
     true

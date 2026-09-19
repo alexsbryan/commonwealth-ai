@@ -1,0 +1,27 @@
+unit: dm-rename-leaf-words
+commits: 27fc0d846 (the renames + the row correction)
+what: the two leaf types whose DT [[noun]] rows say decided:rename are renamed
+  and every referrer repointed (re-exports, the routes_oicp construction, and
+  the atom_detail test construction):
+    PeerDescriptor -> FederatedMeshDescriptor  (oicp-types/src/manifest.rs:316, :312)
+    PeerAtomRef    -> CrossCorpusAtomRef        (corpus-engine/src/enrichment/atlas/cross_corpus.rs:71, :63, :94, :493)
+  Identifiers only, no behaviour change; serde names untouched (no container
+  rename; the wire carries field names, not the type name).
+  The row's third target, PeerAnswer -> AnswerEnvelope, is NOT applied: its
+  premise ("a post-adjudication type with no DT row") is false. PeerAnswer HAS
+  a DT row, quality/DOMAINS.toml:1818-1827, disposition decided:keep, and the
+  campaign registers it as a carve-out (quality/campaigns/domains.toml:142-145,
+  C9 egress custody); peer_defs subtracts decided:keep names
+  (scripts/domains-census.py:329-336), so it is no peer-outside straggler.
+  Renaming it would overturn a registry keep and touch the custody gate the
+  bar protects. Row corrected per PROMPT §6 (ralph/DECISIONS.md, 2026-09-17).
+checks: CLEAN exit=0 (disk gate, cache under threshold); LINT exit=0 (scoped
+  to corpus-engine, oicp-types, sovereign-api, sovereign-tools and their
+  dependents); CENSUS --self-test exit=0 (11 axes, 11/11 positives caught,
+  11/11 negatives refused).
+census: peer-outside 6 in 5 crates -> 4 in 3 crates (corpus-engine and
+  oicp-types leave the list; the remaining four are the later rename rows'
+  work):
+    sovereign/crates/sovereign-cli-llm               1
+    sovereign/crates/sovereign-daemon                1
+    sovereign/crates/sovereign-desktop/src-tauri     2

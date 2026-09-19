@@ -218,7 +218,7 @@ fn write_opencode_config(client_port: u16) {
 /// no daemon here yet — setup's whole job is to write the config the
 /// daemon will boot from. So this writes the entry directly, through the
 /// registry's OWN `load`/`upsert`/`save` (never a hand-rolled JSON
-/// write), and the daemon adopts it: `daemon_cmd/bootstrap.rs` does
+/// write), and the daemon adopts it: `sovereign-daemon/src/bootstrap.rs` does
 /// `Registry::load()` → `reindexer.register(entry)` for every entry at
 /// startup, and `Reindexer::register` schedules a
 /// `RebuildReason::Startup`. The index therefore exists after the `svrn

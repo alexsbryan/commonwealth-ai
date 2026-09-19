@@ -109,13 +109,13 @@ pub async fn run(args: &[String]) -> i32 {
         if target_state && !force && atoms_present {
             match read_atlas_atoms(&atlas_dir) {
                 Ok(file)
-                    if !file.atoms.is_empty()
-                        && !file.atoms.iter().all(|env| env.id().is_content_hash()) =>
+                    if !file.atoms().is_empty()
+                        && !file.atoms().iter().all(|env| env.id().is_content_hash()) =>
                 {
                     println!(
                         "{:<36} {:>10} ✗ sequential-id atoms; run migrate-ids first",
                         corpus_id,
-                        file.atoms.len()
+                        file.atoms().len()
                     );
                     skipped += 1;
                     continue;
@@ -141,7 +141,7 @@ pub async fn run(args: &[String]) -> i32 {
             Ok(()) => {
                 let atom_count = if atoms_present {
                     read_atlas_atoms(&atlas_dir)
-                        .map(|f| f.atoms.len())
+                        .map(|f| f.atoms().len())
                         .unwrap_or(0)
                 } else {
                     0

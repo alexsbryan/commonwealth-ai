@@ -244,7 +244,7 @@ pub async fn write_summary_atoms(
         let existing = read_atlas_atoms(&atlas_dir)
             .map_err(|e| format!("read {}: {e}", atlas_dir.join("atoms.json").display()))?;
         let present: HashSet<String> = existing
-            .atoms
+            .atoms()
             .iter()
             .map(|a| a.id().as_str().to_string())
             .collect();
@@ -433,10 +433,7 @@ mod tests {
     /// per-article atlas has before anything has been written into it.
     fn empty_atlas(dir: &Path) {
         std::fs::create_dir_all(dir).unwrap();
-        let atoms = AtomsFile {
-            schema_version: AtomsFile::SCHEMA_VERSION.to_string(),
-            atoms: Vec::new(),
-        };
+        let atoms = AtomsFile::new(Vec::new());
         std::fs::write(
             dir.join("atoms.json"),
             serde_json::to_vec_pretty(&atoms).unwrap(),
@@ -532,7 +529,7 @@ mod tests {
 
         let article_atlas = root.path().join("sep-abduction").join("atlas");
         let on_disk = read_atlas_atoms(&article_atlas).unwrap();
-        assert_eq!(on_disk.atoms.len(), 4, "atoms.json doubled");
+        assert_eq!(on_disk.atoms().len(), 4, "atoms.json doubled");
 
         // The marker, and it is not bookkeeping. ei-7a bumped
         // `SEED_POPULATION_SCHEMA` 1 -> 2, so every marker on disk is stale by
@@ -558,7 +555,7 @@ mod tests {
         );
         // The stub parent stayed empty: nothing leaked into `sep/atlas`.
         let stub = read_atlas_atoms(&corpus_dir.join("atlas")).unwrap();
-        assert!(stub.atoms.is_empty());
+        assert!(stub.atoms().is_empty());
     }
 
     /// A corpus with no summary table is an ABSENCE, reported in words — not

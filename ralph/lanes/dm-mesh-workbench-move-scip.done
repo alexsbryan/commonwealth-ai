@@ -1,0 +1,30 @@
+unit: dm-mesh-workbench-move-scip
+commits: 9b8f9ea4a (the move)
+what: MOVE sovereign/crates/sovereign-mesh/src/lsp_tier.rs (761) ->
+  corpus-engine-scip (§3a). Premise held as measured 2026-09-16: `grep -n
+  'crate::'` over it is empty, and its only external deps are
+  corpus-engine-scip, serde_json and tokio — all already in the destination, so
+  corpus-engine-scip's Cargo.toml is untouched.
+  Two rewrites the move itself forced, both disclosed in the commit body:
+    - the three `corpus_engine_scip::` reaches become `crate::` (§3a step 7);
+      a crate cannot name itself (a scratch crate reproduces E0432 on
+      `use corpus_engine_scip::…` inside corpus-engine-scip).
+    - the module doc's `[super::reindexer::run_overlay_merge]` intra-doc link
+      goes plain-text, since reindexer stays in sovereign-mesh (ARCH 3).
+  The `#[cfg(feature = "treesitter")]` gate is dropped; mesh keeps
+  `pub use corpus_engine_scip::lsp_tier;` ungated as the shim (§3a step 5),
+  and reindexer's two reaches (`LspTier` :797, `run_edge_pass` :979) repoint
+  to `corpus_engine_scip::lsp_tier`. No external consumer existed: a repo-wide
+  grep finds lsp_tier only in mesh's lib.rs and reindexer.rs.
+  Registry: DT [[module]] path re-keyed to corpus-engine-scip/src/lsp_tier.rs,
+  context unchanged (workbench; its crates already include corpus-engine-scip),
+  lines 761 unchanged. The DT [[cluster]] own_deps cite at DOMAINS.toml:5920
+  is the frozen 2026-09-14 measurement and is left alone.
+checks: CLEAN exit=0 (debug target 0G, under 50G — cache kept); LINT exit=0
+  (13 crates incl. corpus-engine-scip + sovereign-mesh; 0 errors; --all-targets
+  so test code compiled); LAYER exit=0; TOML exit=0; CENSUS misnamed exit=0.
+evidence: misnamed sovereign-mesh 13100/20990 (62.4%) -> 13100/20229 (64.8%);
+  crate-lines --crate corpus-engine-scip 12075 -> 12836 (+761).
+note: the post-edit rustfmt hook reorders imports, so the lsp_tier shim sits
+  above the knowledge_client shim (alphabetical) with its trailing comment
+  intact.

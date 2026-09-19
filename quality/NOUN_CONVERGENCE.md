@@ -1108,7 +1108,7 @@ Named targets, deletable with `code redirect` today:
     285-line mirror of `complete_stream_with_finish`, and its own doc comment
     said so ("Mirrors `complete_stream`'s slot-routing dance"). Cosines
     0.952-0.965 across three sub-region pairs at 120 / 110 / 101 lines.
-  - `sovereign-mesh/src/peer_inference.rs` — the same split one level up:
+  - `sovereign-serving-host/src/peer_inference.rs` — the same split one level up:
     `complete_stream_with_id` was a 197-line mirror of
     `complete_stream_with_id_and_finish`, cosine 0.969.
 

@@ -1,0 +1,35 @@
+### POST /models/unload sweep-1.5b
+{"success":true} [http=200]
+[{"id":"qwen35-2b","status":"unloaded","failed":null,"exit_code":null},{"id":"sweep-1.5b","status":"unloaded","failed":null,"exit_code":null}]
+### POST /models/load qwen35-2b
+{"success":true} [http=200 t=0.001502s]
+[{"id":"qwen35-2b","status":"loading","failed":null,"exit_code":null},{"id":"sweep-1.5b","status":"unloaded","failed":null,"exit_code":null}]
+after poll:
+[{"id":"qwen35-2b","status":"loaded","failed":null,"exit_code":null},{"id":"sweep-1.5b","status":"unloaded","failed":null,"exit_code":null}]
+### POST /models/load sweep-1.5b while qwen loaded (models-max=1)
+{"success":true} [http=200]
+[{"id":"qwen35-2b","status":"unloaded","failed":null,"exit_code":null},{"id":"sweep-1.5b","status":"loaded","failed":null,"exit_code":null}]
+### GET /props?model=sweep-1.5b
+{"is_sleeping":false,"model_alias":"sweep-1.5b","total_slots":1,"build_info":"b11026-b49650adb"}
+### GET /metrics?model=sweep-1.5b
+llamacpp:prompt_tokens_total 0
+llamacpp:prompt_tokens_cached_total 0
+llamacpp:prompt_seconds_total 0
+llamacpp:tokens_predicted_total 0
+llamacpp:tokens_predicted_seconds_total 0
+### GET /props without model
+{"role":"router","max_instances":1,"models_autoload":true,"model_alias":"llama-server","model_path":"none","default_generation_settings":{"params":null,"n_ctx":0},"ui_settings":{},"build_info":"b11026-b49650adb","cors_proxy_enabled":false} [http=200]
+### autoload=false for unloaded model
+{"error":{"code":400,"message":"model is not loaded","type":"invalid_request_error"}} [http=400]
+### wait 40s for --sleep-idle-seconds 30
+[{"id":"qwen35-2b","status":"unloaded","failed":null,"exit_code":null},{"id":"sweep-1.5b","status":"sleeping","failed":null,"exit_code":null}]
+### props after idle
+{"is_sleeping":true}
+### child RSS after sleep
+  PID  PPID    RSS
+13212     1  76544
+14795 13212 102528
+### wake with request
+jq: parse error: Invalid numeric literal at line 1, column 641
+{"model":"sweep-1.5b","content":"hienso\nhi"}
+[{"id":"qwen35-2b","status":"unloaded","failed":null,"exit_code":null},{"id":"sweep-1.5b","status":"loaded","failed":null,"exit_code":null}]

@@ -1,0 +1,25 @@
+unit: REVIEW-build-daemon-membership-lifecycle
+commits: 8a8936b87 (the running-only half)
+what: the running-only half of DC §4.1's membership split, landed by attempt 1
+  and finalized by attempt 2. Fabric now owns the active mesh's cached plaintext
+  join key (`fabric::JoinKeyReader`, created first and shared into `FabricPart`
+  via `FabricSeed`, DC §4.2), the roster+identity adoption
+  (`FabricPart::adopt`), and `forget_member`'s tombstone core
+  (`FabricPart::forget_member` + `ForgottenMember` + `ForgetMemberError`, with
+  `MeshError` mapped at the daemon boundary). Behaviour-preserving.
+corrections (PROMPT §6, ralph/DECISIONS.md 2026-09-18):
+  the row is two units. The stopped-state operations (`known_meshes`,
+  `forget_mesh`, `switch_mesh`, `try_resume`, `create_mesh`, `join_mesh`,
+  `leave`, `rotate_invite`, `current_invite`) answer while the daemon is
+  `Stopped`, but `FabricPart` is reachable only as `AppStateInner.fabric`
+  (`state.rs:291`) and is constructed inside `AppStateInner` (`:993-1015`),
+  while `join_key_plaintext` is cleared in `stop_inner` (`daemon.rs:1886`) after
+  the running `AppState` drops (`:1807`). Fabric must become a standalone object
+  the daemon holds across stop (DC §4.2 "Construction is staged"). That is minted
+  as `REVIEW-build-daemon-fabric-standalone`, and `DEMO-d5-misnamed` is
+  re-pointed to it. The row is marked `[x]` for its landed half, per the
+  `REVIEW-build-daemon-embedded-split` precedent (`306005a82`).
+checks: CLEAN exit=0 (debug target 38G, under 50G); LINT exit=0 (WORKSPACE,
+  --all-targets, errors 0); LAYER exit=0 ("every edge points down or sideways,
+  fan-in within caps"); TEST(sovereign-mesh) exit=0 (613 pass);
+  TEST(sovereign-daemon) exit=0 (706 pass).

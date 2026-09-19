@@ -9,9 +9,9 @@
 3	corpus-engine/src/sharding.rs
 1	corpus-engine/src/snapshot.rs
 6	corpus-engine/xtask/src/layout_gate.rs
-4	sovereign/crates/sovereign-api/src/auto_recover.rs
-2	sovereign/crates/sovereign-api/src/routes_internal/corpus_queue.rs
-4	sovereign/crates/sovereign-api/src/routes_internal/corpus_sync.rs
+4	sovereign/crates/sovereign-grants/src/auto_recover.rs
+2	sovereign/crates/sovereign-daemon/src/routes_internal/corpus_queue.rs
+4	sovereign/crates/sovereign-daemon/src/routes_internal/corpus_sync.rs
 1	sovereign/crates/sovereign-cli-dev/src/code_cmd.rs
 1	sovereign/crates/sovereign-cli-dev/src/code_fieldglass/assemble.rs
 1	sovereign/crates/sovereign-cli-dev/src/converge_cmd.rs
@@ -33,8 +33,8 @@
 2	sovereign/crates/sovereign-desktop/src-tauri/src/commands/corpus_install.rs
 2	sovereign/crates/sovereign-desktop/src-tauri/src/import_commands.rs
 8	sovereign/crates/sovereign-grants/src/shard_manager.rs
-1	sovereign/crates/sovereign-mesh/src/auto_resume.rs
-3	sovereign/crates/sovereign-mesh/src/reading_http.rs
+1	sovereign/crates/sovereign-daemon/src/auto_resume.rs
+3	sovereign/crates/sovereign-daemon/src/reading_http.rs
 1	sovereign/crates/sovereign-meshapp/src/wrapped.rs
 1	sovereign/crates/sovereign-meshapp/src/wrapped/tests.rs
 3	sovereign/crates/sovereign-tools/src/atlas_view/reader.rs

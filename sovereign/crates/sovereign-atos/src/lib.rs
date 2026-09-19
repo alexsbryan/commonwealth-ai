@@ -36,6 +36,7 @@ use corpus_engine_notes::{Note, NoteStore};
 pub mod approval;
 pub mod charter;
 pub mod local;
+pub mod middleware;
 pub mod report;
 pub mod session;
 

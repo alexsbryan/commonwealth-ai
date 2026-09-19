@@ -30,8 +30,8 @@ use serde_json::json;
 
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh};
-use sovereign_api::server::internal_router;
-use sovereign_api::state::AppState;
+use sovereign_daemon::server::internal_router;
+use sovereign_daemon::state::AppState;
 
 use crate::common;
 use crate::common::{member_with_last_seen as member, spawn_router};
@@ -65,15 +65,26 @@ fn build_founder(
         members,
         peers: vec![],
     };
-    let state = AppState::new(founder_id, mesh);
-
     let counter = Arc::new(AtomicUsize::new(0));
     let counter_clone = Arc::clone(&counter);
-    let hook: sovereign_api::state::MeshMutationHook =
+    let hook: sovereign_daemon::state::MeshMutationHook =
         Arc::new(move |_mesh: &Mesh, _self_id: NodeId| {
             counter_clone.fetch_add(1, Ordering::Relaxed);
         });
-    let state = state.with_mesh_mutation_hook(hook);
+    // The mutation hook is a construction argument now (DC §4.2 "Construction
+    // is staged"), not a post-construction install.
+    let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric(
+        founder_id,
+        mesh,
+        Arc::new(commonwealth_state::MeshStore::in_memory().unwrap()),
+        Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new()),
+        None,
+        None,
+        sovereign_daemon::state::FabricSeed {
+            mesh_mutation_hook: Some(hook),
+            ..Default::default()
+        },
+    );
 
     (state, founder_id, counter)
 }
@@ -148,7 +159,7 @@ async fn wrong_mesh_id_rejects_with_401_and_no_mutation() {
     );
 
     // No mutation on auth failure.
-    let mesh = state.inner.mesh.read().await;
+    let mesh = state.inner.fabric.mesh.read().await;
     assert_eq!(
         mesh.members.len(),
         1,
@@ -216,7 +227,7 @@ async fn wrong_invite_key_hash_rejects_with_401_and_no_mutation() {
         resp.status()
     );
 
-    let mesh = state.inner.mesh.read().await;
+    let mesh = state.inner.fabric.mesh.read().await;
     assert_eq!(mesh.members.len(), 1);
     assert!(!mesh.members.contains_key(&intruder));
     drop(mesh);
@@ -260,7 +271,7 @@ async fn matching_credentials_accept_new_member_and_fire_hook() {
         .expect("internal/gossip reachable");
     assert_eq!(resp.status(), reqwest::StatusCode::OK);
 
-    let mesh = state.inner.mesh.read().await;
+    let mesh = state.inner.fabric.mesh.read().await;
     assert_eq!(
         mesh.members.len(),
         2,

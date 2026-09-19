@@ -230,7 +230,7 @@ impl LaneScope {
 /// it, in two different ways, and which is correct depends on the host:
 ///
 /// - `sovereign daemon run` installs it as a slot **inside its embedded
-///   llama.cpp engine** (`install_rerank_slot`, `daemon_cmd/build/inference.rs`).
+///   llama.cpp engine** (`install_rerank_slot`, `sovereign-daemon/src/build/inference.rs`).
 /// - `svrn chat` loads a **standalone** `StandaloneReranker`, because its
 ///   provider is remote — a `SplitInferenceProvider` speaks HTTP to the daemon
 ///   and does not support rerank at all.
@@ -390,8 +390,8 @@ pub fn commission(parts: RuntimeParts) -> Arc<Runtime> {
 /// classifier stack, the planner, and the enrichment lane.
 ///
 /// Optional slots are left at named absence. A host with one — the desktop's
-/// compaction worker, the server's principal resolver — writes it as a
-/// struct-update override on [`CommonParts::parts`].
+/// compaction worker, the daemon's and the server's principal resolvers —
+/// writes it as a struct-update override on [`CommonParts::parts`].
 pub async fn common_parts(inputs: RecipeInputs, progress: &dyn RecipeProgress) -> CommonParts {
     let RecipeInputs {
         inference,

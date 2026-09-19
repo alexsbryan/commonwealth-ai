@@ -191,7 +191,7 @@ fn load_atlas_as_investigation(
 
     let mut entities = Vec::new();
     let mut entity_ids: HashSet<String> = HashSet::new();
-    for env in &file.atoms {
+    for env in file.atoms() {
         if let AtomEnvelope::Entity(e) = env {
             let id = e.id.as_str().to_string();
             entity_ids.insert(id.clone());
@@ -221,7 +221,7 @@ fn load_atlas_as_investigation(
     }
 
     let mut rels = Vec::new();
-    for env in &file.atoms {
+    for env in file.atoms() {
         match env {
             AtomEnvelope::Relation(r) => {
                 let participants = entity_participants(&r.participants, &entity_ids);
@@ -555,9 +555,9 @@ pub fn load_claims(index_path: &Path, limit: usize) -> Result<Vec<ClaimDto>, Mes
     let file = corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir)
         .map_err(|e| MeshAppError::io("read atoms", e))?;
     let sec_to_chunk = read_chapter_chunk_map(index_path)?;
-    let names = entity_name_map(&file.atoms);
+    let names = entity_name_map(&file.atoms());
     let mut out = Vec::new();
-    for env in &file.atoms {
+    for env in file.atoms() {
         if let AtomEnvelope::Claim(c) = env {
             let (excerpt, source_chunk) = first_evidence(c.evidence.first(), &sec_to_chunk);
             out.push(ClaimDto {
@@ -591,7 +591,7 @@ pub fn load_questions(index_path: &Path, limit: usize) -> Result<Vec<QuestionDto
         .map_err(|e| MeshAppError::io("read atoms", e))?;
     let sec_to_chunk = read_chapter_chunk_map(index_path)?;
     let mut out = Vec::new();
-    for env in &file.atoms {
+    for env in file.atoms() {
         if let AtomEnvelope::Question(q) = env {
             let (_, source_chunk) = first_evidence(q.raised_at.first(), &sec_to_chunk);
             out.push(QuestionDto {

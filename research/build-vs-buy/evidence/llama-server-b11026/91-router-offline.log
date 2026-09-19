@@ -1,0 +1,49 @@
+0.00.057.375 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.076.650 I srv   load_models: Loaded 3 cached model presets
+0.00.076.937 I srv   load_models: Loaded 2 local model presets from $EVIDENCE/router-models
+0.00.077.753 I srv    operator(): Available models (5) (*: custom preset)
+0.00.077.756 I srv    operator():     ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF:Q8_0
+0.00.077.756 I srv    operator():     lrsbrgrn/HalluGuard-Qwen3-4B-GGUF:4B
+0.00.077.757 I srv    operator():     qwen35-2b
+0.00.077.757 I srv    operator():     sweep-1.5b
+0.00.077.757 I srv    operator():     unsloth/Qwen3-8B-GGUF:Q4_K_M
+0.00.077.801 W srv  llama_server: -----------------
+0.00.077.801 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.077.801 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.077.801 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.077.802 W srv  llama_server: -----------------
+0.00.077.807 W srv  llama_server: -----------------
+0.00.077.807 W srv  llama_server: the following feature(s) are enabled:
+0.00.077.808 W srv  llama_server:     router mode
+0.00.077.808 W srv  llama_server: do not expose the server to untrusted environments
+0.00.077.808 W srv  llama_server: -----------------
+0.00.077.808 I srv  llama_server: starting server in router mode. models will be automatically loaded on-demand
+0.00.079.126 I srv  llama_server: listening on http://127.0.0.1:18432
+0.01.272.562 E get_repo_commit: error: GET failed (401): Invalid username or password.
+0.01.272.722 W get_repo_files: failed to resolve commit for ggml-org/SmolLM2-135M-Instruct-GGUF
+0.01.273.018 I srv    operator(): starting download for model 'ggml-org/SmolLM2-135M-Instruct-GGUF:Q8_0'
+0.01.273.109 I srv          load: spawning server instance with name=ggml-org/SmolLM2-135M-Instruct-GGUF:Q8_0 on port 49933
+0.01.273.127 I srv          load: spawning server instance with args:
+0.01.273.128 I srv          load:   $EVIDENCE/mac/llama-b11026/llama-server
+0.01.273.128 I srv          load:   --host
+0.01.273.128 I srv          load:   127.0.0.1
+0.01.273.128 I srv          load:   --port
+0.01.273.129 I srv          load:   49933
+0.01.273.129 I srv          load:   --alias
+0.01.273.129 I srv          load:   ggml-org/SmolLM2-135M-Instruct-GGUF:Q8_0
+[49933] 0.00.296.139 E get_repo_commit: error: GET failed (401): Invalid username or password.
+[49933] 0.00.296.287 W get_repo_files: failed to resolve commit for ggml-org/SmolLM2-135M-Instruct-GGUF
+[49933] 0.00.296.580 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+[49933] 0.00.296.797 W srv  llama_server: -----------------
+[49933] 0.00.296.800 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+[49933] 0.00.296.800 W srv  llama_server: this can be a security risk (cross-origin attacks)
+[49933] 0.00.296.800 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+[49933] 0.00.296.800 W srv  llama_server: -----------------
+[49933] 0.00.296.836 I srv    operator(): child server monitoring thread started, waiting for EOF on stdin...
+[49933] 0.00.498.289 E get_repo_commit: error: GET failed (401): Invalid username or password.
+[49933] 0.00.498.293 W get_repo_files: failed to resolve commit for ggml-org/SmolLM2-135M-Instruct-GGUF
+[49933] 
+[49933] 0.00.506.167 I srv    operator(): exit command received, exiting...
+[49933] 0.00.506.185 I srv  run_download: download completed successfully
+0.01.847.534 I srv           run: instance name=ggml-org/SmolLM2-135M-Instruct-GGUF:Q8_0 exited with status 0
+0.04.355.753 I srv    operator(): operator(): cleaning up before exit...

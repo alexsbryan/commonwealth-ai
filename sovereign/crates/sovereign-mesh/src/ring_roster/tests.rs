@@ -8,15 +8,15 @@ use commonwealth_rail::{Person, RingSigner, SigningKey};
 
 use super::MeshRoster;
 
-pub(crate) fn key(seed: u8) -> SigningKey {
+pub fn key(seed: u8) -> SigningKey {
     SigningKey::from_bytes(&[seed; 32])
 }
 
-pub(crate) fn pubkey_of(k: &SigningKey) -> NodePubkey {
+pub fn pubkey_of(k: &SigningKey) -> NodePubkey {
     commonwealth_transport::identity::node_pubkey(k)
 }
 
-pub(crate) fn member(node_id: NodeId, name: &str, pubkey: Option<NodePubkey>) -> MemberRecord {
+pub fn member(node_id: NodeId, name: &str, pubkey: Option<NodePubkey>) -> MemberRecord {
     MemberRecord {
         node_id,
         name: name.to_string(),
@@ -57,7 +57,7 @@ pub(crate) fn member(node_id: NodeId, name: &str, pubkey: Option<NodePubkey>) ->
     }
 }
 
-pub(crate) fn mesh_of(members: Vec<MemberRecord>) -> Mesh {
+pub fn mesh_of(members: Vec<MemberRecord>) -> Mesh {
     Mesh {
         id: MeshId::generate(),
         name: "test".into(),
@@ -216,13 +216,19 @@ fn a_blank_name_falls_back_to_the_node_id_rather_than_dropping_the_key() {
 async fn a_namespace_never_written_to_answers_with_the_mesh_roster_on_first_touch() {
     let me = NodeId::from_u128(1);
     let k = key(21);
-    let state = sovereign_api::state::AppState::new(
+    let state = sovereign_daemon::state::AppState::new(
         me,
         mesh_of(vec![member(me, "alex", Some(pubkey_of(&k)))]),
     );
     let dir = tempfile::tempdir().unwrap();
     let rail = commonwealth_rail::RingRail::new(dir.path(), std::sync::Arc::new(k.clone()));
-    super::MeshRosterSource::install(&rail, &state).unwrap();
+    super::MeshRosterSource::install(
+        &rail,
+        &state.inner.fabric.mesh,
+        &state.inner.fabric.identity,
+        state.self_node_pubkey(),
+    )
+    .unwrap();
 
     let journal = rail.journal("fresh-app").unwrap();
     assert!(!journal.dir().exists(), "never written to");
@@ -246,13 +252,19 @@ async fn a_namespace_never_written_to_answers_with_the_mesh_roster_on_first_touc
 async fn a_registered_namespace_ignores_a_hand_roster() {
     let me = NodeId::from_u128(1);
     let k = key(22);
-    let state = sovereign_api::state::AppState::new(
+    let state = sovereign_daemon::state::AppState::new(
         me,
         mesh_of(vec![member(me, "alex", Some(pubkey_of(&k)))]),
     );
     let dir = tempfile::tempdir().unwrap();
     let rail = commonwealth_rail::RingRail::new(dir.path(), std::sync::Arc::new(k.clone()));
-    super::MeshRosterSource::install(&rail, &state).unwrap();
+    super::MeshRosterSource::install(
+        &rail,
+        &state.inner.fabric.mesh,
+        &state.inner.fabric.identity,
+        state.self_node_pubkey(),
+    )
+    .unwrap();
 
     for ns in super::REGISTERED_NAMESPACES {
         let journal = rail.journal(ns).unwrap();
@@ -281,19 +293,25 @@ async fn a_registered_namespace_ignores_a_hand_roster() {
 async fn a_stray_roster_file_narrows_an_app_ring_but_not_a_daemon_ring() {
     let me = NodeId::from_u128(1);
     let k = key(23);
-    let state = sovereign_api::state::AppState::new(
+    let state = sovereign_daemon::state::AppState::new(
         me,
         mesh_of(vec![member(me, "alex", Some(pubkey_of(&k)))]),
     );
     let dir = tempfile::tempdir().unwrap();
     let rail = commonwealth_rail::RingRail::new(dir.path(), std::sync::Arc::new(k.clone()));
-    super::MeshRosterSource::install(&rail, &state).unwrap();
+    super::MeshRosterSource::install(
+        &rail,
+        &state.inner.fabric.mesh,
+        &state.inner.fabric.identity,
+        state.self_node_pubkey(),
+    )
+    .unwrap();
 
     let stray = commonwealth_rail::Roster::new(std::collections::BTreeMap::from([(
         Person::from("someone-else"),
         vec![RingSigner::actor(&key(24))],
     )]));
-    let daemon_ns = sovereign_serving::INFERENCE_APP_ID;
+    let daemon_ns = commonwealth_state::store_adapter::INFERENCE_APP_ID;
     for ns in [daemon_ns, "house-expenses"] {
         rail.journal(ns).unwrap().set_roster(&stray).unwrap();
     }

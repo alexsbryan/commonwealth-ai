@@ -19,7 +19,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::Deserialize;
 
 /// Minimal projection of `GET /v1/mesh/status`
-/// (`sovereign_mesh::mesh_http::StatusResponse`). We deserialize only the
+/// (`sovereign_daemon::mesh_http::StatusResponse`). We deserialize only the
 /// fields the invariants need, so the checker is decoupled from the full DTO
 /// and tolerant of additions.
 #[derive(Debug, Clone, Deserialize)]

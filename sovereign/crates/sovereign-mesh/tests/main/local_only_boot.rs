@@ -44,7 +44,7 @@
 //!
 //! The mesh-of-one. `create_mesh` succeeds, the mesh persists with exactly
 //! one member, and `/v1/models` answers — the solo case is the honest N=1,
-//! never an `Option<Mesh>` (see `sovereign_mesh::local_only`). Both are
+//! never an `Option<Mesh>` (see `sovereign_daemon::local_only`). Both are
 //! asserted here, because a profile that made the daemon local-only by making
 //! it useless would satisfy the census and fail the product.
 //!
@@ -62,8 +62,8 @@ use sovereign_core::setup_config::{
     DaemonSection, DataSection, DiscoverySection, IrohSection, ModelsSection, SetupConfig,
     WorkOfferSection,
 };
-use sovereign_mesh::daemon::EmbeddedDaemon;
-use sovereign_mesh::local_only::MeshService;
+use sovereign_daemon::daemon::EmbeddedDaemon;
+use sovereign_daemon::local_only::MeshService;
 
 /// The four loops the profile newly gates, plus the two that already had
 /// runtime off-switches and now read the same decider.
@@ -188,15 +188,15 @@ async fn a_local_only_daemon_does_not_donate() {
     // `process:v1` donation row in `sovereign/DEFAULTS_LEDGER.md`; that row
     // graduating and this control staying in its negative form is the thing
     // to catch.
-    let resolved = sovereign_mesh::work_donor::resolve_offer(
+    let resolved = sovereign_daemon::work_donor::resolve_offer(
         &cfg_donating(39661, 39662, false).compute.work_offer,
-        &sovereign_mesh::work_donor::donor_registry(
+        &sovereign_daemon::work_donor::donor_registry(
             None,
             commonwealth_work::sandbox::Sandbox::Direct,
         ),
         "linux",
         "x86_64",
-        sovereign_mesh::work_donor::DONOR_ISOLATION,
+        sovereign_daemon::work_donor::DONOR_ISOLATION,
     )
     .expect("the floor drops the kind rather than taking the daemon down");
     assert_eq!(
@@ -283,7 +283,7 @@ async fn a_local_only_daemon_spawns_no_network_service() {
 
     let state = daemon.app_state().await.expect("running daemon has state");
     assert_eq!(
-        state.inner.mesh.read().await.members.len(),
+        state.inner.fabric.mesh.read().await.members.len(),
         1,
         "the mesh-of-one is still minted — the profile skips the network, not the model"
     );

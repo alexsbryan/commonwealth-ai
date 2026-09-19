@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Typed facade over a [`PeerStore`].
+//! Typed facade over a [`ReplicatedKv`].
 //!
 //! Hides the bytes/app_id/serde dance from callers. Every mutating
 //! method routes through `Privacy::app_id()` so a Private record
@@ -11,7 +11,7 @@
 //! the four methods it calls (`get`/`set`/`delete`/`scan`) are the same four
 //! a node with no peers answers correctly on its own. A daemon on a live mesh
 //! passes the mesh adapter and every record gossips; a solo one passes
-//! `SoloPeerStore` and the atlas still works, because replication to zero
+//! `SoloReplicatedKv` and the atlas still works, because replication to zero
 //! peers is the identity function.
 
 use std::collections::HashMap;
@@ -21,7 +21,7 @@ use std::sync::{Arc, Mutex};
 use bytes::Bytes;
 use kernel_types::NodeId;
 use serde::Serialize;
-use sovereign_contracts::peer::{PeerStore, PeerStoreError};
+use sovereign_contracts::peer::{ReplicatedKv, ReplicatedKvError};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -41,7 +41,7 @@ pub enum WorkAtlasError {
     ClaimNotFound(Uuid),
 
     #[error("peer store error: {0}")]
-    Store(#[from] PeerStoreError),
+    Store(#[from] ReplicatedKvError),
 
     #[error("serialize: {0}")]
     Serde(#[from] serde_json::Error),
@@ -56,10 +56,10 @@ pub struct SessionIdentity {
     pub repo_id: String,
 }
 
-/// Typed wrapper around a [`PeerStore`] for the work atlas.
+/// Typed wrapper around a [`ReplicatedKv`] for the work atlas.
 #[derive(Clone)]
 pub struct WorkAtlasStore {
-    store: Arc<dyn PeerStore>,
+    store: Arc<dyn ReplicatedKv>,
     node_id: NodeId,
     /// Claims-rail receipt stamps (order `commons-fluency` fix 3b):
     /// `claim_id -> unix seconds` of THIS node's first local
@@ -72,7 +72,7 @@ pub struct WorkAtlasStore {
     received_at: Arc<Mutex<HashMap<Uuid, u64>>>,
 }
 
-// `PeerStore` is not a `Debug` bound — surface a placeholder shape so
+// `ReplicatedKv` is not a `Debug` bound — surface a placeholder shape so
 // the work-atlas tools (which derive `Debug`) compile.
 impl std::fmt::Debug for WorkAtlasStore {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -83,7 +83,7 @@ impl std::fmt::Debug for WorkAtlasStore {
 }
 
 impl WorkAtlasStore {
-    pub fn new(store: Arc<dyn PeerStore>, node_id: NodeId) -> Self {
+    pub fn new(store: Arc<dyn ReplicatedKv>, node_id: NodeId) -> Self {
         Self {
             store,
             node_id,
@@ -495,7 +495,7 @@ fn matches_scope(sr: &SymbolRef, scope: &str, mode: ScopeMatch) -> bool {
 }
 
 fn write_record<T: Serialize>(
-    store: &dyn PeerStore,
+    store: &dyn ReplicatedKv,
     app_id: &str,
     key: &str,
     rec: &T,
@@ -516,11 +516,11 @@ fn short_hash(s: &str) -> &str {
 mod tests {
     use super::*;
     use crate::model::AgentKind;
-    use sovereign_contracts::peer::{PeerStore, SoloPeerStore};
+    use sovereign_contracts::peer::{ReplicatedKv, SoloReplicatedKv};
 
     fn mk_store() -> WorkAtlasStore {
-        let mesh = Arc::new(SoloPeerStore::new());
-        WorkAtlasStore::new(mesh as Arc<dyn PeerStore>, NodeId::from_u128(1))
+        let mesh = Arc::new(SoloReplicatedKv::new());
+        WorkAtlasStore::new(mesh as Arc<dyn ReplicatedKv>, NodeId::from_u128(1))
     }
 
     fn sample_session(privacy: Privacy) -> SessionRecord {

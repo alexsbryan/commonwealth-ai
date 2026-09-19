@@ -4,7 +4,7 @@
 //!
 //! This is the only place in `enrich_cmd/` that knows about
 //! reqwest and the wire shape — every other subcommand just
-//! takes the pair of closures (`EmbedFn` + `ChatCompletionFn`)
+//! takes the pair of closures (`EmbedFn` + `InferenceFn`)
 //! produced by `build_client_pair`.
 
 use std::collections::BTreeMap;
@@ -12,11 +12,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use corpus_engine::enrichment::pipeline::{
-    ChatCompletionFn, ChatCompletionWithTokensFn, ChatPrompt,
-};
+use corpus_engine::enrichment::pipeline::ChatPrompt;
 use corpus_engine::error::{Error, Result};
 use corpus_engine::types::EmbedFn;
+use corpus_engine::InferenceFn;
 
 use sovereign_contracts::egress::{model_client, verify, ConsentGrant, EgressPayload};
 use sovereign_contracts::types::{Custody, SearchPrivacy};
@@ -94,7 +93,7 @@ pub struct DaemonInferenceClient {
     /// Phase D2 — token ledger. Atomic counters bumped on every
     /// successful `complete_inner` call. Cloned across `Clone`d
     /// clients (Arc-wrapped), so the extract loop sees a unified
-    /// total even when `EmbedFn` / `ChatCompletionFn` closures are
+    /// total even when `EmbedFn` / `InferenceFn` closures are
     /// constructed from a clone (`build_client_pair` does this).
     /// Cheap (relaxed atomics; no lock) so the hot path stays hot.
     usage: Arc<TokenUsageLedger>,
@@ -551,21 +550,14 @@ impl DaemonInferenceClient {
         Ok(out)
     }
 
-    /// Wrap this client as the `(EmbedFn, ChatCompletionFn)` pair that
-    /// `PhaseRunner::new` expects.
-    pub fn into_closures(self) -> (EmbedFn, ChatCompletionFn) {
-        let (embed, chat, _) = self.into_closures_with_tokens();
-        (embed, chat)
-    }
-
-    /// Wrap this client as an `(EmbedFn, ChatCompletionFn,
-    /// ChatCompletionWithTokensFn)` triple. The third closure
-    /// routes through `complete_with_tokens`, letting the runner
-    /// raise the output budget for specific retries without
-    /// rebuilding the HTTP client.
-    pub fn into_closures_with_tokens(
-        self,
-    ) -> (EmbedFn, ChatCompletionFn, ChatCompletionWithTokensFn) {
+    /// Wrap this client as the `(EmbedFn, InferenceFn)` pair that
+    /// `PhaseRunner::new` expects. The one chat closure carries the
+    /// per-call `max_tokens` override in its second argument — `Some(n)`
+    /// routes through `complete_with_tokens`, `None` through `complete`
+    /// — so the runner's retry paths call the same closure the default
+    /// path does (the `into_closures_with_tokens` triple collapsed onto
+    /// this pair 2026-09-17, ARCH 8).
+    pub fn into_closures(self) -> (EmbedFn, InferenceFn) {
         let arc = Arc::new(self);
         let embed_arc = arc.clone();
         let embed: EmbedFn = Arc::new(move |text: &str| {
@@ -573,20 +565,18 @@ impl DaemonInferenceClient {
             let text = text.to_string();
             Box::pin(async move { this.embed_one(&text).await })
         });
-        let chat_arc = arc.clone();
-        let chat: ChatCompletionFn = Arc::new(move |prompt: &ChatPrompt| {
+        let chat_arc = arc;
+        let chat: InferenceFn = Arc::new(move |prompt: &ChatPrompt, max_tokens: Option<u32>| {
             let this = chat_arc.clone();
             let prompt = prompt.clone();
-            Box::pin(async move { this.complete(&prompt).await })
+            Box::pin(async move {
+                match max_tokens {
+                    Some(tokens) => this.complete_with_tokens(&prompt, tokens).await,
+                    None => this.complete(&prompt).await,
+                }
+            })
         });
-        let chat_tokens_arc = arc;
-        let chat_with_tokens: ChatCompletionWithTokensFn =
-            Arc::new(move |prompt: &ChatPrompt, tokens: u32| {
-                let this = chat_tokens_arc.clone();
-                let prompt = prompt.clone();
-                Box::pin(async move { this.complete_with_tokens(&prompt, tokens).await })
-            });
-        (embed, chat, chat_with_tokens)
+        (embed, chat)
     }
 }
 

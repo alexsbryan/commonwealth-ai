@@ -24,11 +24,10 @@ pub trait Chunker: Send + Sync {
 /// content-hash that the index recorded for it. Used by
 /// [`chunk_delta`] to compute what's changed between an old
 /// version of a document and its new content.
-#[derive(Debug, Clone)]
-pub struct CommittedChunk {
-    pub id: u64,
-    pub content_hash: String,
-}
+///
+/// The row the index reads is DEFINED in the `corpus-index` leaf and
+/// re-exported here (DE "The read-port leaf, measured again").
+pub use corpus_index::chunkers::CommittedChunk; // shim: moved by domains REVIEW-build-index-read-port
 
 /// Difference between an old set of committed chunks and the
 /// re-chunked new content. Move 6 P6 — pairs with

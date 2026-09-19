@@ -48,7 +48,7 @@ use sovereign_contracts::types::{
 };
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::StateStore;
-use sovereign_mesh::{
+use sovereign_daemon::{
     turn_http::{turn_router, turn_router_with, SocketTimers},
     EmbeddedDaemon,
 };

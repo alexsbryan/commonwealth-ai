@@ -132,11 +132,12 @@ Done, all live-verified and suite-green:
 `corpus-engine-scip/src/scip_export.rs` (export_all fail-closed,
 export_changed), `scip_graph.rs` (replace_all/replace_files/
 replace_file_symbols + corpus-scoped variant);
-`sovereign/crates/sovereign-mesh/src/reindexer.rs` (overlay wiring, spawned
-rebuilds, cooldown); `corpus-engine/src/facts.rs` (extract_symbol_defs,
-per-file facts, walk skip) + `facts_store.rs` (FactStore);
+`corpus-engine-watchers/src/reindexer.rs` (overlay wiring, spawned
+rebuilds, cooldown); `code-facts/src/facts.rs` (extract_symbol_defs,
+per-file facts, walk skip) + `code-facts/src/facts_store.rs` (FactStore);
 `sovereign-tools/src/code/facts_tool.rs`;
-`sovereign-cli-daemon/src/daemon_cmd/{tool_registry,mod,bootstrap}.rs` (shared
+`sovereign-daemon/src/{tool_registry,bootstrap}.rs` +
+`sovereign-cli-daemon/src/daemon_cmd/mod.rs` (shared
 merged handle); `.claude/hooks/inject-notes.sh`;
 `quality/agent-preflight.golden.json`; SYSTEM_OVERVIEW.md +
 docs/CHECK_CODE_AGAINST_SPEC.md updated.

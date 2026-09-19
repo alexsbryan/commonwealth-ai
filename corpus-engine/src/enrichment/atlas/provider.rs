@@ -65,7 +65,7 @@ use super::ann_store::AnnSeedTable;
 use super::context::{AtlasGraph, AtomView, EdgeView, EvidenceRef};
 use super::evidence_site::EvidenceSite;
 use super::inventory::AtlasInventory;
-use corpus_engine_vocab::ontology::NavigationPolicy;
+use understanding_vocab::ontology::NavigationPolicy;
 
 /// Where an atlas's navigation map came from — the two ways a map reaches
 /// the walk short of the pre-registered defaults.

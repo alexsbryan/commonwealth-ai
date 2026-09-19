@@ -32,8 +32,8 @@
 3146	corpus-engine-scip::tests
 212	corpus-engine-sections
 180	corpus-engine-sections::tests
-2484	corpus-engine-vocab
-522	corpus-engine-vocab::tests
+2484	understanding-vocab
+522	understanding-vocab::tests
 1744	corpus-engine-watchers
 505	corpus-engine-watchers::tests
 102	corpus-engine-yield

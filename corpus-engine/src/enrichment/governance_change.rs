@@ -33,7 +33,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use super::governance::{derive_active, ActiveSet, GovernanceOpKind, RuleStatus};
-use crate::enrichment::atlas::atoms::{AtomEnvelope, AtomId, AtomsFile, Claim};
+use crate::enrichment::atlas::atoms::{AtomEnvelope, AtomId, Claim};
 use crate::enrichment::ontology::{
     clock::section_date, AttrFamily, ChangePolicy, OntologyPolicies,
 };
@@ -208,15 +208,14 @@ pub(crate) fn read_rule_facts(dir: &Path, policies: &OntologyPolicies) -> Result
     if !path.exists() {
         return Ok(Vec::new());
     }
-    let bytes = std::fs::read(&path).map_err(Error::Io)?;
-    let file: AtomsFile = serde_json::from_slice(&bytes)
+    let file = crate::enrichment::atlas::read_atlas_atoms(dir)
         .map_err(|e| Error::Extraction(format!("governance_view: atoms.json: {e}")))?;
 
     // The reified merges, indexed by the rules they join, so a `same_as`
     // Claim written by the Phase-6 classifier or the reconciler links its
     // two endpoints.
     let mut same_as: BTreeMap<AtomId, Vec<AtomId>> = BTreeMap::new();
-    for a in &file.atoms {
+    for a in file.atoms() {
         let AtomEnvelope::Claim(c) = a else { continue };
         if c.claim_kind.as_deref() != Some("same_as") {
             continue;
@@ -239,7 +238,7 @@ pub(crate) fn read_rule_facts(dir: &Path, policies: &OntologyPolicies) -> Result
     }
 
     Ok(file
-        .atoms
+        .atoms()
         .iter()
         .filter_map(|a| match a {
             AtomEnvelope::Claim(c) => Some(c),

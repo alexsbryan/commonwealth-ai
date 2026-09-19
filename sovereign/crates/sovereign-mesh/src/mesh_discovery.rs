@@ -127,7 +127,7 @@ pub fn relay_candidates(internal_port: u16) -> Vec<RelayCandidate> {
 /// at least lets a solo-on-localhost founder start up. Peers that
 /// receive a wildcard address will see self-loopback behavior; the
 /// warning log below makes that case visible.
-pub(crate) fn reachable_addresses(port: u16) -> Vec<SocketAddr> {
+pub fn reachable_addresses(port: u16) -> Vec<SocketAddr> {
     if let Some(override_list) = read_advertise_addr_override(port) {
         info!(
             addrs = ?override_list,

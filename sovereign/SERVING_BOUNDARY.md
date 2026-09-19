@@ -22,15 +22,16 @@ a `commonwealth-*` dep acquired the day after; `layer-gate` cannot see it. So th
 declaration lands first and is **watched failing on the fused tree** (ARCH §18.1).
 
 Unlike `commonwealth`, this package is **red the day it is declared**, and that is the
-point. The scheduler half (the eight modules in the tier table below, 6,356 lines)
-imports zero `commonwealth_*`, zero `sovereign-inference`, zero `axum`, and carries one
-non-Serving `crate::` reference between them (`decision_replay.rs:75`, feature-gated, in
-a doc comment). **That half is already a crate; it has not been given a manifest.** The
+point. The scheduler half (the seven modules in the tier table below, 6,559 lines)
+imports zero `commonwealth_*`, zero `sovereign-inference`, zero `axum`. **That half is
+already a crate; it has not been given a manifest.** The
 knot is `peer_inference.rs` (5,399 lines, 38% of Serving's mesh lines) and, api-side,
-`admission` + `routes_inference` + `routes_responses`.
+`admission` (moved host-side by `REVIEW-build-serving-move-admission`) +
+`routes_inference` + `routes_responses`.
 
 The anticorruption layer `DOMAINS.md` §5 asks for **already exists and is already the
-only door**: `PeerEndpointSource` (`sovereign-mesh/src/peer_inference.rs:337`) plus the
+only door**: `PeerEndpointSource` (`sovereign-serving-host/src/peer_inference.rs:337`, moved host-side
+by `REVIEW-build-serving-move-peer`) plus the
 `MemberRecord → PeerInferenceEndpoint` translation at `sovereign-mesh/src/daemon.rs:2286-2345`
 — nine fields, three predicates, one transport call, sixty lines. Phase C does not invent
 that seam; it renames it and moves it to the Fabric side.
@@ -47,7 +48,10 @@ daemon-side half of the argument. Leading with what was wrong:
   reads), and `oicp_select`'s local slot pick. Drawn again by what each piece does:
   `sovereign-scheduler` holds the ranker, the decision and outcome record *types*, replay, and
   trackers that take `now` as an argument the way `finish_at` already does; the recording sink —
-  file, env, clock, ids — is `sovereign-serving-host`'s.
+  file, env, clock, ids — and the throughput stream observer (whose `LedgerEmission` names
+  `commonwealth-state`, so it cannot enter the scheduler's `commonwealth-*` forbid) are
+  `sovereign-serving-host`'s. `yield_backoff`'s own monotonic clock read is still owed a `now`
+  argument and rides a later row.
 - **`pick_slot_for_oicp` is host code living in the scheduler.** It picks the *local* slot
   through `sovereign-core`'s `DEFAULT_MANIFEST`, and its only production caller is the host's
   inference adapter. It moves to `sovereign-serving-host`; until it does,
@@ -74,7 +78,14 @@ daemon-side half of the argument. Leading with what was wrong:
   emit `null`, so converging them is a `/status` wire change with a golden, not a deduplication.
 - **`PeerInferenceEndpoint`, the `Venue` record, is defined in the mesh host's `daemon` module.**
   Its definition belongs to `sovereign-scheduler`; the `MemberRecord` translation that produces
-  it is the daemon's adapter.
+  it is the daemon's adapter. Corrected 2026-09-15: the record's `transport:
+  Option<PinnedTransport>` field (`daemon.rs:4852`) does NOT travel with it. The scheduler may
+  not name `PinnedTransport` — rule 2 (`quality/ARCH_LAYERS.toml:426-429`) and layer direction
+  (`contract` vs host `runtime`) both refuse it — and it has no use for it: its whole view of
+  that fact is `PeerCandidateView.pinned_transport: bool`
+  (`sovereign-scheduler/src/scheduler_core.rs:244,:532`, the only transport mention in the
+  crate). `Venue` carries the bool; the host resolves the handle by `node_id` through a
+  host-defined resolver, supplied by `PinnedWorkerEndpointSource`.
 - **The host half receives more than its crate row says:** `worker_eligibility`,
   `pinned_pod_snapshot` and `pinned_transport` (tagged `compute`, but they decide which RPC
   inference workers may hold a shard and present a pinned pod as a venue) and
@@ -100,20 +111,23 @@ daemon-side half of the argument. Leading with what was wrong:
 
 | Crate | Lines | Role |
 |---|---:|---|
-| `sovereign-scheduler` | ~6,800 | **Arithmetic over the published language.** `scheduler_core`, `oicp_select`, `predicted_time`, `tier`, `decision_log`, `decision_replay`, `decision_trace`, `throughput_tracking`, `slot_aliases`, `yield_backoff`. The ranking decision reads no clock and does no I/O; the recorder sink and the local slot pick move to the host (corrected above). |
-| `sovereign-serving-host` | ~11,000 | **The ports and the knot.** `peer_inference`, `inference_adapter`, `oicp_synthesis`, `guest_lender`, `pinned_worker_source`, `entry_endpoint`, plus `sovereign-api`'s `admission`. Opens connections, holds the HTTP surface, receives every candidate through a port. |
-| `serving-policy` | 1,241 | Already exists, already tier-0, ZERO in-repo deps. `fair_sched` left `commonwealth-core` 2026-09-03; two `[[forbid]]` rows pin it both ways (`quality/ARCH_LAYERS.toml:381-389`). **The precedent Phase C copies.** |
-| `sovereign-serving` | 720 → 0 | The peg: eleven exported types with zero external references, plus 771 lines of shard assignment that drag `corpus-engine`. Emptied by rung 9. |
+| `sovereign-scheduler` | ~6,450 | **Arithmetic over the published language.** `scheduler_core`, `oicp_select`, `predicted_time`, `tier`, `decision_log`, `decision_replay`, `decision_trace`, `slot_aliases`, `yield_backoff`. The ranking decision reads no clock and does no I/O; the recorder sink, the local slot pick and the throughput stream observer move to the host (corrected above). |
+| `sovereign-serving-host` | ~11,350 | **The ports and the knot.** `peer_inference`, `inference_adapter`, `oicp_synthesis`, `guest_lender`, `pinned_worker_source`, `entry_endpoint`, `throughput_tracking`, plus `admission` (moved out of `sovereign-api` by `REVIEW-build-serving-move-admission`). Opens connections, holds the HTTP surface, receives every candidate through a port. |
+| `serving-policy` | 1,241 | Already exists, already tier-0; names only `oicp-types`, the family-neutral floor — never `sovereign-*` or `commonwealth-*`, which two `[[forbid]]` rows pin both ways (`quality/ARCH_LAYERS.toml`). `fair_sched` left `commonwealth-core` 2026-09-03; `PipelineContextConfig` moved down to `oicp-types` 2026-09-16 so the middleware seam can name it (domains `REVIEW-build-middleware-seam`). **The precedent Phase C copies.** |
+| `sovereign-serving` | 0 (deleted) | The peg: eleven exported types with zero external references, plus 771 lines of shard assignment that drag `corpus-engine`. Emptied to zero and deleted by `REVIEW-build-serving-empty-peg` (2026-09-15): its two live modules (`inference_plan`, `store_adapter`) moved to `sovereign-mesh` and its re-exports went to `oicp-types`/`commonwealth-core`. |
 
 **Shared leaves the package may reach — `oicp-types`, `kernel-types`,
 `sovereign-contracts`, `serving-policy`. Nothing else.** `oicp-types/src/scoring.rs`
 already holds the scorer (`ScoredClaim` :438, `pick_better` :458,
 `best_claim_for_request` :481, `SCORING_EPSILON` :431); `oicp_select.rs` is a shim over it.
 
-**Grandfathered `[[exception]]` rows — exactly two, each with a `tracking` burn-down.** A
+**Grandfathered `[[exception]]` rows — at most two, each with a `tracking` burn-down.** A
 third means the boundary is drawn in the wrong place (K4).
 `sovereign-serving-host → sovereign-inference` (`RemoteApiProvider`, `peer_inference.rs:64`)
-clears when the remote provider is reached through `oicp-client`;
+cleared when the remote provider is reached through `oicp-client` — RETIRED 2026-09-15 by
+`REVIEW-build-serving-drop-inference`: the provider now names `oicp-client` directly, the
+tool-call parser moved DOWN to `oicp-types::tool_calls` and the FIM prompt/stop text to
+`sovereign-contracts::fim`, and the host's `sovereign-inference` dep is gone (one row left).
 `sovereign-serving-host → commonwealth-core` (`PeerHealthTracker`, `ids::NodeId`) clears
 when quarantine state is the host's own and identity is `kernel_types::NodeId`.
 `sovereign-scheduler → sovereign-core` is **zero once `pick_slot_for_oicp` leaves** (corrected
@@ -154,6 +168,10 @@ pub trait VenueSource: Send + Sync {
 // kernel_types::NodeId (join adoption swaps the id in a running daemon), burning exception #2 down. ledger_emission_for() (:365,
 // #[doc(hidden)] — the tell) -> the host mints emissions from RoutingOutcome instead.
 // Serving emits facts; Fabric prices them.
+// OFF the port, corrected 2026-09-15: the transport HANDLE. `Venue` carries
+// `pinned_transport: bool` only; the host resolves `PinnedTransport` by `node_id` through a
+// host-defined resolver (`PinnedWorkerEndpointSource` supplies it), because the scheduler may
+// not name the type and never reads it.
 // sovereign-serving-host — a PIN, not a candidate. NamedModelLocation (:3104) has
 // separate Peer(..)/Guest(..) variants; :3116 says "Not a scoring outcome ... a PIN".
 #[async_trait]
@@ -167,7 +185,7 @@ pub trait GuestLenderSource: Send + Sync + std::fmt::Debug {
 **(b) The scheduler entry** — free-standing over an assembled snapshot, not the
 `route(&self, req, candidates)` the order sketched.
 ```rust
-// sovereign-mesh/src/scheduler_core.rs:339 — pub(crate) today, becomes pub.
+// sovereign-scheduler/src/scheduler_core.rs:339 — pub(crate) before the move, pub after.
 pub fn rank(rec: RoutingDecisionBuilder, inputs: RankInputs<'_>) -> RankResult;
 pub struct RankInputs<'a> {          // :267
     pub now_unix: u64,               // PASSED, so a sim runs on virtual time
@@ -235,7 +253,7 @@ pub fn replay_trace(t: &SchedulerTrace) -> ReplayReport;                        
 crate; `sovereign-core` has zero, its seam being `InferenceProvider`, already a leaf at
 `sovereign-contracts/src/traits.rs:281`.
 ```rust
-// provider.rs:111              dyn sovereign_mesh::peer_inference::PeerEndpointSource
+// provider.rs:111              dyn sovereign_mesh::peer_inference::VenueSource
 //                          ->  dyn sovereign_scheduler::VenueSource
 // provider.rs:117,:128,:136    with_peer_source{,_and_publisher}(raw, src[, publisher])
 //                          ->  InferenceRouter::builder(raw).candidates(src)
@@ -274,7 +292,14 @@ Adjudicated 2026-09-14; rows, prices and evidence are the `[[collision]]` rows w
 A clean dependency closure is not a clean lift — the caveat `studio/BOUNDARY.md` earned
 by performing one: its gate was green while `sovereign-contracts` embedded a file from
 outside its crate root and the sandbox had to preserve the monorepo's directory shape to
-compile. The way to know Serving carries no such embed is to lift it. Nor does the gate
+compile. The way to know Serving carries no such embed is to lift it. **Serving carried
+one, measured 2026-09-15 and removed 2026-09-16:** `sovereign-contracts` `include_str!`d
+`sovereign-recipes/registry.toml` and `sovereign-recipes/schema/recipe_schema_descriptor.json`
+from outside its crate root (`recipe/registry.rs:31`, `recipe/schema.rs:25`), so the
+flat-copy sandbox could not compile the shared leaf — the embedder was a leaf, not a
+package member. The two artifacts are now vendored by `corpus-engine`'s `build.rs` into
+`OUT_DIR` and injected at the call site (`REVIEW-build-serving-leaf-embed`); the leaf
+keeps the parser and the view types, and the package's tools take the values. Nor does the gate
 prove the package **routes**: `boundary-gate` reads manifests and cannot tell a scheduler
 that ranks from one that returns the first candidate. Until `serving-lift.sh`'s later
 steps stop abstaining, green means "the edges are legal".

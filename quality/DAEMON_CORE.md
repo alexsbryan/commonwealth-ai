@@ -103,7 +103,8 @@ implementations. Two are a second host: `/v1/conversations/{id}/messages` and
 are `/v1/chat/completions`, `/v1/models`, `/v1/embeddings` and
 `/oicp/v1/capabilities` in both commonwealth-api and sovereign-mesh; the
 sovereign-mesh copies are the worker-mode inference proxy
-(`worker_inference_proxy.rs`), a different process, and stay. One non-turn
+(`worker_inference_proxy.rs`), the pod's `:9742` tunnel, a different process —
+not a turn path; it moves with the rented pods to `sovereign-pods`. One non-turn
 duplicate is inside one process: `/internal/corpus/status` is registered by
 both commonwealth-api and sovereign-mesh in the same daemon, and Phase 1
 removes one of them.
@@ -195,6 +196,22 @@ admission on `X-Node-Id`; the turn's tenant-prefix `PrincipalResolver`; the sens
 oracle. Which callers other than the owner can start a turn on the node was not measured, so the
 exposure is not sized here. The absence is a defect, not a design choice, and no code move fixes
 it.
+
+**Wired 2026-09-16 (Wave 0, `REVIEW-build-corpus-ceiling`).** The daemon now commissions its
+`Runtime` with `sensitive_corpora` = its own `LocalCorpusManager` and `corpus_principal` =
+`LocalOwnerPrincipal` (`sovereign-daemon/src/principal.rs`), so the turn's ceiling is
+a resolved `Some(..)` rather than an absent `None`. `build_context` now takes a `PrincipalScope`
+and distinguishes "no resolver on this host" (`Unscoped`, single-user, ceiling absent) from "a
+resolver that could not name the caller" (`Unresolved`, ceiling `Some(empty)` — it refuses). The
+caller classes the tree actually serves, measured: the turn surface is `.localhost_only_with`
+(`turn_http.rs:142`), so only loopback callers — the attached desktop, `svrn chat`, MCP, other
+local processes — reach a turn, and every one is the single local owner; remote callers reach the
+OpenAI-compat surface (`/v1/chat/completions`), which performs no corpus retrieval, or the
+peer-admission-gated mesh routes. The full edge resolver below landed as `AppState::resolve`
+(`sovereign-daemon/src/client_principal.rs` after the host cluster moved at `dm-daemon-api-edge`,
+2026-09-18; `sovereign-api/src/principal.rs` before that), the one resolution over all five `Principal` arms, which
+`client_auth_layer`, the host's `AdmissionHost::resolve` port and `peer_admission_layer` all call
+(`REVIEW-build-principal-one-resolver`, 2026-09-16).
 
 The resolver, decided:
 
@@ -320,9 +337,9 @@ name, and a decider can land in the crate green.
 
 `AppState` (63 public fields, 88 public methods) is passed whole to every handler and into five
 non-host clusters. It is built before most of what it holds exists: its identity key, dial
-signer, ring rail, transport, client token, convergence recorder and in-flight gauge arrive
-afterwards through `install_*` and `with_*` calls, so a reader of any of them handles a slot the
-daemon may not have filled. The design item framed it as one port trait per consuming context.
+signer, ring rail, transport, client token, convergence recorder and in-flight gauge arrived
+afterwards through `install_*`/`with_*` calls; Fabric's eight and the gauge are construction
+arguments now. The design item framed it as one port trait per consuming context.
 That is seven mirrors of one god object, and it leaves every field where it is. Assigned instead
 by what each field *is*, the 63 fall to six owners:
 
@@ -331,7 +348,7 @@ by what each field *is*, the 63 fall to six owners:
 | Fabric | 20 | node id with its public key, dial-info provider and dial signer; the roster; the ring rail and its write nudge; the replicated KV; transport; clock; gossip's liveness maps; the mutation persistence hook; the convergence recorder; the fan-out gauge; the mesh-app registry and port map; the contribution emitter; the RPC-over-iroh flag | `sovereign-mesh` |
 | Serving | 20 | model, pipeline and slot aliases; servable model files; the local inference handle and RPC shard warmer; the inference store; peer and client admission schedulers with their caps, switch, tallies, rejected-header record and reciprocity weights; the contribution pause and yield-peers switch; the availability composite; the in-flight gauge; venue preferences | `sovereign-serving-host` |
 | collaborative ingest | 9 | active ingests, progress, pull loops, verify reports, the work queue, ingest grants, the quiesce and throttle dials, the newsworthy tick handle | `jobs` (§3.2) |
-| Answering | 3 | the ATOS middleware registry, session store and repo root | `sovereign-core`'s pipeline, after the ATOS inversion |
+| Answering | 3 | the ATOS middleware registry, session store and repo root | `sovereign-core`'s pipeline, after the ATOS inversion. The inversion landed 2026-09-16: the ATOS middlewares moved to `sovereign-atos` (which gained the registration entry point the daemon bootstrap calls) and the tool injector / turn-fidelity switches to `sovereign-core/src/answering`; `MiddlewareRegistry` is host composition, so the three fields dissolved rather than moved as one part (`REVIEW-build-daemon-answering-part`, 2026-09-18) — the registry stays a daemon field, the session store arrives from `sovereign_atos::middleware::session_store`, the repo root from `sovereign_core::answering::repo_root` |
 | Workbench | 1 | the next-edit model slot | next-edit's crate |
 | node | 10 | client token, guest grants, start instant, the corpus-engine handle, the foreground signal (last active, window, in-flight), storage budget and used, the activity emitter | `sovereign-daemon` |
 
@@ -367,9 +384,9 @@ This corrects SERVING_BOUNDARY entry (a), which called `local_node_id` a process
 store and recomputes availability on its own — Fabric reaching into Serving and the node for its
 own advertisement, the `fabric -> host` backflow in the cluster graph. It inverts into one port
 Fabric declares and the daemon implements, answering what this node claims right now:
-availability, in-flight, storage remaining, loaded models, hosted corpora. Working name
-`SelfClaims`, which `converge noun` finds undefined. Fabric publishes the claims and does not know
-who computed them.
+availability, in-flight, storage remaining, embed model. Hosted corpora is not part of this port:
+it comes from the `CorpusEngine` handle Fabric already names, not node state; `loaded_models` is an
+honest empty; the port is `SelfClaims`. Fabric publishes the claims and does not know who computed them.
 
 *The facts rule.* No context outside Fabric names `ContributionEmitter` or `ActivityEmitter`. Each
 context emits its own outcome — Serving's `RoutingOutcome`, a unit's completion, an ingest's
@@ -387,7 +404,7 @@ stays inside its owner and is published as a reader: the roster and node id at a
 aliases and servable files on a models reload, the provider on `replace_models_and_reload`.
 
 Where an install slot breaks a cycle today, the cycle is the finding. The in-flight gauge is the
-worked case: `MeshInferenceProvider` creates it, the bootstrap installs it into `AppState` so
+worked case: `InferenceRouter` creates it, the bootstrap installs it into `AppState` so
 gossip can read it, and a reload hands the same `Arc` back to the new provider so the count
 survives. The gauge wants to exist before the provider, so the node creates it and gives it to
 both — a signal object created first, never a slot filled later.
@@ -402,7 +419,13 @@ assembly with fakes at the ports.
 part holding Serving's provider rather than its reader serves the old model after a reload — the
 shape of the wrong-slot incident ARCH 8 records. And `sovereign-api`'s middleware seam
 (`Middleware`, `PipelineContext`) is Answering's port, named by Workspace's decision extractor
-and the ATOS middlewares; it lifts with Answering and is not host code.
+and the ATOS middlewares; it lifted to `sovereign-contracts` (2026-09-16) and is not host code.
+The inversion that followed is the same rule read backwards: because the ATOS-naming middlewares
+cannot land in `sovereign-core` without a new runtime→capabilities edge, they moved WITH ATOS —
+`sovereign-atos` owns them and exposes the registration entry point the daemon's bootstrap calls,
+so the host never names an ATOS middleware type. The two files that name neither ATOS nor the host
+(the tool injector, the turn-fidelity switches) landed in `sovereign-core/src/answering`; the
+composition (`MiddlewareRegistry`, `Pipeline`) stayed host.
 
 ### 4.3 Adapters, and the forbid that stays
 
@@ -575,7 +598,7 @@ Named so the next reader does not take them as measured.
   rule is a claim, not a measurement.
 - Which callers other than the owner can start a turn on the daemon (§3.3):
   the size of the unwired-ceiling exposure.
-- `SelfClaims`' exact inputs. §4.2's five come from reading gossip and the
-  capabilities builder, not from a port drafted against them.
+- `SelfClaims`' exact inputs — RESOLVED 2026-09-16: four answers (availability,
+  in-flight, storage remaining, embed model); hosted corpora is not part of it.
 - How `EmbeddedDaemon`'s lines split between Fabric and the daemon; §4.1's
   69,000 counts all of `daemon`.

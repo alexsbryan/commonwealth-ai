@@ -30,7 +30,7 @@ use corpus_engine::ScoredChunk;
 use serde::Deserialize;
 
 // The reading surface's OWN response types — the host's, not a mirror.
-use sovereign_mesh::reading_http::{AtomCard, AtomSpan, SectionRef};
+use sovereign_daemon::reading_http::{AtomCard, AtomSpan, SectionRef};
 use sovereign_turn_client::TurnClient;
 
 /// Local error/result alias — keeps the harness independent of any

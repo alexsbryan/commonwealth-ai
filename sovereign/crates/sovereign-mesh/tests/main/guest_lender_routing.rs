@@ -7,7 +7,7 @@
 //! listener at all. The fix is that the guest's OWN daemon holds the link and
 //! only the completion crosses.
 //!
-//! These drive a real `MeshInferenceProvider` against a real HTTP lender, and
+//! These drive a real `InferenceRouter` against a real HTTP lender, and
 //! pin the two things that must differ from the peer route. Both are live
 //! defects if `provider_for_peer` is copied:
 //!
@@ -27,9 +27,9 @@ use axum::{Json, Router};
 use sovereign_core::guest_link::{save_in, GuestLink};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::CompletionRequest;
-use sovereign_mesh::daemon::PeerInferenceEndpoint;
-use sovereign_mesh::guest_lender::StoredGuestLink;
-use sovereign_mesh::peer_inference::{MeshInferenceProvider, PeerEndpointSource};
+use sovereign_daemon::daemon::InferenceVenue;
+use sovereign_mesh::guest_source::stored_guest_source_in;
+use sovereign_mesh::peer_inference::{InferenceRouter, VenueHost, VenueSource};
 
 use crate::common;
 use crate::common::spawn_router;
@@ -54,14 +54,17 @@ const GRANTED: &str = "lender-only-model";
 const TOKEN: &str = "aa11bb22cc33dd44ee55ff66aa77bb88cc99dd00ee11ff22aa33bb44cc55dd66";
 
 #[derive(Debug)]
-struct NoPeers;
+struct NoVenues;
 
 #[async_trait]
-impl PeerEndpointSource for NoPeers {
-    async fn peer_inference_endpoints(&self) -> Vec<PeerInferenceEndpoint> {
+impl VenueSource for NoVenues {
+    async fn candidates(&self) -> Vec<InferenceVenue> {
         Vec::new()
     }
 }
+
+#[async_trait]
+impl VenueHost for NoVenues {}
 
 /// What the lender observed about the request it served.
 #[derive(Default)]
@@ -123,12 +126,14 @@ fn local_without_the_model() -> Arc<dyn InferenceProvider> {
     Arc::new(common::TestProvider::new().with_model_id("something-else"))
 }
 
-fn provider_with_link(root: &std::path::Path) -> MeshInferenceProvider {
-    let p = MeshInferenceProvider::with_peer_source(
+fn provider_with_link(root: &std::path::Path) -> InferenceRouter {
+    let p = InferenceRouter::with_peer_source(
         local_without_the_model(),
-        Arc::new(NoPeers) as Arc<dyn PeerEndpointSource>,
+        Arc::new(NoVenues) as Arc<dyn VenueSource>,
+        Arc::new(NoVenues) as Arc<dyn VenueHost>,
+        Arc::new(sovereign_daemon::slot_manifest::CoreSlotManifest),
     );
-    p.set_guest_source(Arc::new(StoredGuestLink::new_in(root.to_path_buf())));
+    p.set_guest_source(stored_guest_source_in(root.to_path_buf()));
     p
 }
 
@@ -194,7 +199,7 @@ async fn the_granted_ids_are_advertised_for_the_models_listing() {
     let dir = tempfile::tempdir().unwrap();
     store_link(dir.path(), &lender);
 
-    let src = StoredGuestLink::new_in(dir.path().to_path_buf());
+    let src = stored_guest_source_in(dir.path().to_path_buf());
     let (who, ids) = src
         .posture()
         .await
@@ -214,7 +219,7 @@ async fn a_node_without_a_link_advertises_nothing_extra() {
     use sovereign_mesh::guest_lender::GuestLenderSource;
     let dir = tempfile::tempdir().unwrap();
     assert_eq!(
-        StoredGuestLink::new_in(dir.path().to_path_buf())
+        stored_guest_source_in(dir.path().to_path_buf())
             .posture()
             .await,
         sovereign_mesh::guest_lender::GrantPosture::NoLink,
@@ -279,12 +284,14 @@ fn local_that_answers() -> Arc<dyn InferenceProvider> {
     )
 }
 
-fn provider_with_link_and_answering_local(root: &std::path::Path) -> MeshInferenceProvider {
-    let p = MeshInferenceProvider::with_peer_source(
+fn provider_with_link_and_answering_local(root: &std::path::Path) -> InferenceRouter {
+    let p = InferenceRouter::with_peer_source(
         local_that_answers(),
-        Arc::new(NoPeers) as Arc<dyn PeerEndpointSource>,
+        Arc::new(NoVenues) as Arc<dyn VenueSource>,
+        Arc::new(NoVenues) as Arc<dyn VenueHost>,
+        Arc::new(sovereign_daemon::slot_manifest::CoreSlotManifest),
     );
-    p.set_guest_source(Arc::new(StoredGuestLink::new_in(root.to_path_buf())));
+    p.set_guest_source(stored_guest_source_in(root.to_path_buf()));
     p
 }
 
@@ -418,7 +425,7 @@ async fn a_refused_grant_advertises_nothing() {
     let dir = tempfile::tempdir().unwrap();
     store_link(dir.path(), &lender);
 
-    let posture = StoredGuestLink::new_in(dir.path().to_path_buf())
+    let posture = stored_guest_source_in(dir.path().to_path_buf())
         .posture()
         .await;
     match posture {

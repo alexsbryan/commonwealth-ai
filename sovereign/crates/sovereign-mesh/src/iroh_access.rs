@@ -196,12 +196,12 @@ fn rpc_serve_port() -> Option<u16> {
 /// hard-fails later if the endpoint won't bind, rather than silently
 /// downgrading).
 pub fn resolve_enabled(
-    profile: crate::local_only::LocalOnlyProfile,
+    local_only: bool,
     cfg_enabled: Option<bool>,
     mesh_participant: bool,
     require_encryption: bool,
 ) -> bool {
-    if profile.is_local_only() {
+    if local_only {
         return false;
     }
     cfg_enabled.unwrap_or(mesh_participant) || require_encryption
@@ -229,15 +229,15 @@ fn env_kill_switch() -> bool {
 /// watchdog is holding, not against whatever the daemon state last recorded.
 /// Members without a pubkey are not iroh-dialable and are left out entirely —
 /// counting them would make an IP-only peer look like a lost path.
-pub(crate) async fn observe_peer_paths(
-    app_state: &sovereign_api::state::AppState,
+pub async fn observe_peer_paths(
+    mesh: &tokio::sync::RwLock<commonwealth_core::mesh::Mesh>,
+    self_id: commonwealth_core::ids::NodeId,
     endpoint: &Endpoint,
-) -> Vec<crate::iroh_watchdog::PeerPathObservation> {
-    let self_id = *app_state.inner.self_node_id_swap.load_full().as_ref();
+) -> Vec<crate::iroh_watchdog::ReachPathObservation> {
     // Clone the members out before awaiting — the codebase's
     // clone-out-then-await rule; `peer_path_snapshot` awaits per peer.
     let members: Vec<commonwealth_core::mesh::MemberRecord> = {
-        let mesh = app_state.inner.mesh.read().await;
+        let mesh = mesh.read().await;
         mesh.members
             .values()
             .filter(|m| m.node_id != self_id && m.node_pubkey.is_some())
@@ -270,7 +270,7 @@ pub(crate) async fn observe_peer_paths(
                 None
             }
         };
-        out.push(crate::iroh_watchdog::PeerPathObservation {
+        out.push(crate::iroh_watchdog::ReachPathObservation {
             node_id: m.node_id.to_string(),
             name: m.name.clone(),
             believed_online: m.status != commonwealth_core::mesh::NodeStatus::Offline,
@@ -1011,8 +1011,7 @@ mod tests {
 
     #[test]
     fn resolve_enabled_matrix() {
-        use crate::local_only::LocalOnlyProfile;
-        let net = LocalOnlyProfile::default();
+        let net = false;
         // Explicit config wins over the participation marker…
         assert!(resolve_enabled(net, Some(true), false, false));
         assert!(!resolve_enabled(net, Some(false), true, false));
@@ -1031,9 +1030,7 @@ mod tests {
     /// `start_daemon` refuses that pair before reaching here.
     #[test]
     fn local_only_profile_beats_every_other_iroh_input() {
-        use crate::local_only::LocalOnlyProfile;
-        let local = LocalOnlyProfile::decide(None, true);
-        assert!(local.is_local_only());
+        let local = true;
         for cfg in [None, Some(true), Some(false)] {
             for participant in [true, false] {
                 for encrypted in [true, false] {

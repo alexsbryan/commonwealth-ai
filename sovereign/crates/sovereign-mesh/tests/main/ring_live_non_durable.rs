@@ -23,8 +23,8 @@ use std::sync::Arc;
 use commonwealth_core::ids::NodeId;
 use commonwealth_rail::{Person, RingRail, RingSigner, Roster};
 use ed25519_dalek::SigningKey;
-use sovereign_api::server::{client_router, client_router_for, internal_router, ClientSurface};
-use sovereign_api::state::AppState;
+use sovereign_daemon::server::{client_router, client_router_for, internal_router, ClientSurface};
+use sovereign_daemon::state::AppState;
 use sovereign_grants::Scope;
 
 use crate::common;
@@ -46,8 +46,9 @@ fn envelope(namespace: &str, payload: &str) -> String {
 /// `ring_append_nudges_sync.rs` builds, so the rail here is the production
 /// one and not a stub that could not write even if the handler asked it to.
 fn node(dir: &std::path::Path, key: &SigningKey, self_id: NodeId) -> AppState {
-    let state = AppState::new(self_id, common::solo_mesh(self_id, "a"));
-    state.install_client_token(Some(Arc::<str>::from(TOKEN)));
+    // The token and the rail are construction arguments now (domains
+    // REVIEW-build-appstate-*-installs); the seed-shaped entry point is the
+    // tests' door.
     let rail = Arc::new(RingRail::new(dir, Arc::new(key.clone())));
     let mut members = BTreeMap::new();
     members.insert(Person::from("alex"), vec![key.actor()]);
@@ -55,7 +56,22 @@ fn node(dir: &std::path::Path, key: &SigningKey, self_id: NodeId) -> AppState {
         .unwrap()
         .set_roster(&Roster::new(members))
         .unwrap();
-    state.install_ring_rail(rail);
+    let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric_and_serving_and_node(
+        self_id,
+        common::solo_mesh(self_id, "a"),
+        Arc::new(commonwealth_state::MeshStore::in_memory().expect("in-memory MeshStore")),
+        Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new()),
+        None,
+        None,
+        sovereign_daemon::state::fabric::FabricSeed {
+            ring_rail: Some(Arc::clone(&rail)),
+            ..Default::default()
+        },
+        Default::default(),
+        sovereign_daemon::state::node::NodeSeed {
+            client_token: Some(Arc::<str>::from(TOKEN)),
+        },
+    );
     // `/internal/ring/live` refuses a namespace no live rail grant names.
     grant(&state, GRANT_A, NS);
     state
@@ -63,7 +79,7 @@ fn node(dir: &std::path::Path, key: &SigningKey, self_id: NodeId) -> AppState {
 
 fn grant(state: &AppState, token: &str, namespace: &str) {
     let now = commonwealth_core::clock::unix_now_millis();
-    state.inner.guest_grants.issue(
+    state.inner.node.guest_grants.issue(
         token,
         vec![Scope::Rails(namespace.into())],
         Some("ring app".into()),

@@ -29,7 +29,9 @@
 //! down (the same shape as `arch-gate`), and it is the closure loop for the
 //! migration rather than a hope that the next reader remembers.
 //!
-//! `corpus-engine/src/corpus.rs` is exempt: it is where the spelling lives.
+//! `corpus-index/src/corpus.rs` is exempt: it is where the spelling lives
+//! (the read-port carve moved the decider there at
+//! `REVIEW-build-index-read-port`; `corpus-engine/src/corpus.rs` is a shim).
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -37,7 +39,7 @@ use std::path::Path;
 use crate::common;
 
 /// The file that is ALLOWED to spell the layout, because it is the decider.
-const DECIDER: &str = "corpus-engine/src/corpus.rs";
+const DECIDER: &str = "corpus-index/src/corpus.rs";
 
 /// Repo-relative prefixes whose layout knowledge this gate governs. The gate
 /// covers the whole source tree; this list exists only so the message can name

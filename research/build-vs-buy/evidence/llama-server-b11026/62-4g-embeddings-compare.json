@@ -1,0 +1,100 @@
+{
+ "texts": [
+  "The quick brown fox jumps over the lazy dog.",
+  "Instruct: Given a web search query, retrieve relevant passages that answer the query\nQuery: how do vaccines train the immune system",
+  "fn main() { println!(\"hello, world\"); }"
+ ],
+ "ls_f16_default_pooling_http": 200,
+ "ls_q8_http": 200,
+ "ls_native_embedding_http": 200,
+ "ls_native_embedding_norm": 0.9999999576948203,
+ "ls_native_embedding_dim": 1024,
+ "daemon_http": 200,
+ "daemon_model_echo": "qwen-embedding-0.6b",
+ "per_source": {
+  "llama-server F16 (same file as daemon), default pooling, /v1/embeddings": {
+   "dims": [
+    1024,
+    1024,
+    1024
+   ],
+   "l2_norms": [
+    1.0,
+    1.0,
+    1.0
+   ]
+  },
+  "llama-server Q8_0, --pooling last, /v1/embeddings": {
+   "dims": [
+    1024,
+    1024,
+    1024
+   ],
+   "l2_norms": [
+    1.0,
+    1.0,
+    1.0
+   ]
+  },
+  "sovereign daemon :9741 /v1/embeddings (embedded engine, qwen-embedding-0.6b.gguf F16)": {
+   "dims": [
+    1024,
+    1024,
+    1024
+   ],
+   "l2_norms": [
+    1.0,
+    1.0,
+    1.0
+   ]
+  }
+ },
+ "pairs": {
+  "llama-server F16 (same file as daemon), default pooling, /v1/embeddings  VS  llama-server Q8_0, --pooling last, /v1/embeddings": [
+   {
+    "cos": 0.999683,
+    "max_abs_diff": 0.002766
+   },
+   {
+    "cos": 0.999685,
+    "max_abs_diff": 0.003393
+   },
+   {
+    "cos": 0.99968,
+    "max_abs_diff": 0.003125
+   }
+  ],
+  "llama-server F16 (same file as daemon), default pooling, /v1/embeddings  VS  sovereign daemon :9741 /v1/embeddings (embedded engine, qwen-embedding-0.6b.gguf F16)": [
+   {
+    "cos": 0.989157,
+    "max_abs_diff": 0.014764
+   },
+   {
+    "cos": 0.989474,
+    "max_abs_diff": 0.019687
+   },
+   {
+    "cos": 0.988941,
+    "max_abs_diff": 0.01759
+   }
+  ],
+  "llama-server Q8_0, --pooling last, /v1/embeddings  VS  sovereign daemon :9741 /v1/embeddings (embedded engine, qwen-embedding-0.6b.gguf F16)": [
+   {
+    "cos": 0.989194,
+    "max_abs_diff": 0.013914
+   },
+   {
+    "cos": 0.988949,
+    "max_abs_diff": 0.019881
+   },
+   {
+    "cos": 0.988426,
+    "max_abs_diff": 0.017063
+   }
+  ]
+ },
+ "cross_text_cos_daemon": [
+  0.1864,
+  0.3366
+ ]
+}

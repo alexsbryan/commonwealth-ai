@@ -792,7 +792,7 @@ via load-balance skew on the next big-model validation).
   - **Finding 3 (three crash-loop respawns) CLOSED.** Exactly **1** respawn
     between kill and recovery (pid 1288906), against three (421574/422017/422106)
     in the replay. `RETIRE_GRACE=90s` / `MIN_CHILD_LIFETIME=120s` / `STABLE=20s`
-    in `daemon_cmd/discovery_policy.rs` are what buy this.
+    in `sovereign-daemon/src/discovery_policy.rs` are what buy this.
   - **Containment re-proven, not assumed.** The only ESTABLISHED socket to
     `192.168.1.2:50052` was owned by the `--compute-child` both before the kill
     (pid 1280037, fd 20) and after recovery (pid 1288906, fd 23). The daemon held

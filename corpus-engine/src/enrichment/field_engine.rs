@@ -7,7 +7,11 @@
 
 use std::sync::Arc;
 
+use crate::enrichment::pipeline::types::ChatPrompt;
 use crate::error::{Error, Result};
+use crate::index::field_skeleton::{
+    load_field_checkpoint, write_field_checkpoint, write_field_skeleton,
+};
 use crate::index::CorpusIndex;
 use crate::types::{EmbedFn, InferenceFn};
 
@@ -119,8 +123,7 @@ impl FieldModelEngine {
                 name: "Skeleton extraction",
             });
             // Reload skeleton from file
-            index
-                .load_field_checkpoint()?
+            load_field_checkpoint(&index.path())?
                 .map(|s| {
                     let mut ps = PartialSkeleton::new(self.domain.id());
                     for q in &s.canonical_questions {
@@ -495,7 +498,7 @@ impl FieldModelEngine {
         let resume_from = checkpoint.phase_1_batches_done;
         let mut skeleton = if resume_from > 0 {
             // Load the partial skeleton that was flushed to disk.
-            let existing = index.load_field_checkpoint()?;
+            let existing = load_field_checkpoint(&index.path())?;
             let loaded = existing
                 .map(|fs| {
                     let mut ps = PartialSkeleton::new(self.domain.id());
@@ -552,7 +555,7 @@ impl FieldModelEngine {
                     // here to keep the rest of the field-engine pipeline
                     // unchanged. Future schema work for skeleton extract
                     // would add an analogous domain hook.
-                    let result = (inference)(&prompt, None).await;
+                    let result = (inference)(&ChatPrompt::new("", prompt.as_str()), None).await;
                     (batch_idx, result)
                 })
             };
@@ -679,7 +682,7 @@ impl FieldModelEngine {
             open_questions: Vec::new(),
             field_stats: FieldModelStats::default(),
         };
-        index.write_field_checkpoint(&field_skeleton)
+        write_field_checkpoint(&index.path(), &field_skeleton)
     }
 
     async fn label_clusters_phase(
@@ -708,7 +711,7 @@ impl FieldModelEngine {
             let refs: Vec<&crate::index::StoredChunk> = chunks.iter().collect();
             let prompt = self.domain.cluster_labeling_prompt(&refs);
 
-            match (self.inference)(&prompt, None).await {
+            match (self.inference)(&ChatPrompt::new("", prompt.as_str()), None).await {
                 Ok(response) => {
                     let json_str = extract_json_from_response(&response);
                     match serde_json::from_str(json_str) {
@@ -874,7 +877,7 @@ impl FieldModelEngine {
         open_questions: &[OpenQuestion],
     ) -> Result<()> {
         let field_skeleton = self.complete_skeleton(index, skeleton, stats, open_questions);
-        index.write_field_skeleton(&field_skeleton)?;
+        write_field_skeleton(&index.path(), &field_skeleton)?;
         tracing::info!(
             corpus = %index.corpus_id(),
             domain = %self.domain.id(),
@@ -967,7 +970,7 @@ pub fn reprocess_skeleton_failures(index: &CorpusIndex) -> Result<(usize, usize)
 
     if salvaged_count > 0 {
         // Load existing skeleton and merge.
-        if let Some(mut existing) = index.load_field_checkpoint()? {
+        if let Some(mut existing) = load_field_checkpoint(&index.path())? {
             for q in &salvaged_questions {
                 // Check for duplicate question IDs before merging.
                 if let Some(existing_q) = existing
@@ -996,7 +999,7 @@ pub fn reprocess_skeleton_failures(index: &CorpusIndex) -> Result<(usize, usize)
                 }
             }
             existing.generated_at = chrono::Utc::now().to_rfc3339();
-            index.write_field_checkpoint(&existing)?;
+            write_field_checkpoint(&index.path(), &existing)?;
             tracing::info!(
                 salvaged = salvaged_count,
                 total_questions = existing.canonical_questions.len(),
@@ -1055,7 +1058,7 @@ mod tests {
         let embed: EmbedFn =
             Arc::new(|_| Box::pin(async { Ok(vec![0.0; crate::DEFAULT_EMBED_DIM]) }));
         let inference: InferenceFn =
-            Arc::new(|_, _: Option<&serde_json::Value>| Box::pin(async { Ok(String::new()) }));
+            Arc::new(|_, _: Option<u32>| Box::pin(async { Ok(String::new()) }));
         let result = FieldModelEngine::from_recipe(&recipe, embed, inference);
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -1089,7 +1092,7 @@ enabled = true
         let embed: EmbedFn =
             Arc::new(|_| Box::pin(async { Ok(vec![0.0; crate::DEFAULT_EMBED_DIM]) }));
         let inference: InferenceFn =
-            Arc::new(|_, _: Option<&serde_json::Value>| Box::pin(async { Ok(String::new()) }));
+            Arc::new(|_, _: Option<u32>| Box::pin(async { Ok(String::new()) }));
         let engine = FieldModelEngine::from_recipe(&recipe, embed, inference).unwrap();
         assert_eq!(engine.domain.id(), "philosophy");
     }
@@ -1140,7 +1143,7 @@ domain = "philosophy"
         let embed: EmbedFn =
             Arc::new(|_| Box::pin(async { Ok(vec![0.0; crate::DEFAULT_EMBED_DIM]) }));
         let inference: InferenceFn =
-            Arc::new(|_, _: Option<&serde_json::Value>| Box::pin(async { Ok(String::new()) }));
+            Arc::new(|_, _: Option<u32>| Box::pin(async { Ok(String::new()) }));
         (embed, inference)
     }
 

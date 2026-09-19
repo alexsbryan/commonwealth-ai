@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! sv-surface rung 4's reading family census: the reading surface's
-//! response shapes ARE `sovereign_mesh::reading_http`'s wire types — the
+//! response shapes ARE `sovereign_daemon::reading_http`'s wire types — the
 //! hand-kept `*Dto` mirror set (44 refs, "byte-compatible by comment") is
 //! deleted and cannot come back.
 //!
@@ -59,7 +59,7 @@ fn the_reading_surface_has_one_path_and_no_mirror() {
         definitions.is_empty(),
         "sv-surface rung 4: a struct/enum is defined in commands/reading.rs again \
          ({definitions:?}). The reading surface's response shapes ARE \
-         sovereign_mesh::reading_http's wire types — a local type (mirror \
+         sovereign_daemon::reading_http's wire types — a local type (mirror \
          or otherwise) is a second spelling of a wire shape, and the last \
          one had already drifted when it was deleted."
     );

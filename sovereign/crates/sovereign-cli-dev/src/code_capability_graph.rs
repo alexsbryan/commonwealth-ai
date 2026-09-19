@@ -66,7 +66,7 @@ struct FindingsFile {
 /// `(label, n_entries, n_core)` — see [`finding_key`] — because `label` alone
 /// collides across distinct clusters.
 ///
-/// NOT `sovereign_mesh::source_content_validator::Finding` (a tool-output
+/// NOT `sovereign_serving_host::source_content_validator::Finding` (a tool-output
 /// validation finding); this is a Deserialize-only row of the
 /// capability-graph report file.
 #[derive(Deserialize)]

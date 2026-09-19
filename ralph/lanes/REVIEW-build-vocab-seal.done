@@ -1,0 +1,11 @@
+REVIEW-build-vocab-seal
+commit 31d68f270
+CLEAN exit=0 (debug target 24G, under the 50G gate)
+LINT exit=0 (scoped 27 crates incl. corpus-engine-vocab, corpus-engine, corpus-mcp, sovereign-cli-llm, sovereign-core, sovereign-daemon, sovereign-tools)
+LINT --full exit=0 (whole workspace, 0 errors)
+TEST(corpus-engine-vocab) exit=0 pass=54 fail=0
+CENSUS exit=0 (11 axes · 11/11 positives caught · 11/11 negatives refused)
+atom-outside: 12 (unchanged); allow-list (3) AtomBrowseRequest, AtomLimitQuery, AtomsPageQuery; digest cf85ac1a511d
+TESTALL exit=100 pass=13392 fail=2 -> the census failure was this unit's and is fixed (xtask pass=117 fail=1); conformance_tags_are_fresh is pre-existing (sovereign-api.toml line 90 vs 89, untouched by this unit)
+premise: after the bypass rows `git grep -nE 'from_str::<AtomsFile>|from_slice::<AtomsFile>'` outside vocab = 0; corpus-engine-vocab/tests/atoms_reds.rs used t.pass on both fixtures; DM §10.5 names the wire twin `AtomsFileWire` and DT:3110-3133 names `atoms()/len()/is_empty()` + `from_atoms`
+census: is_atoms_file_decl widened to refuse AtomsFileWire (same home, one declaration) with a planted negative; rationale in ralph/DECISIONS.md

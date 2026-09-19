@@ -79,6 +79,12 @@ source "${SCRIPT_DIR}/lib/cargo-scope.sh"
 # shellcheck source=lib/cargo-jobs.sh
 source "${SCRIPT_DIR}/lib/cargo-jobs.sh"
 
+# resolve_features — the `<pkg>/<feature>` decider, shared with
+# sovereign-test.sh and nextest.sh so every gate resolves the same feature set
+# for one selection. See lib/cargo-scope.sh.
+# shellcheck source=lib/cargo-scope.sh
+source "${SCRIPT_DIR}/lib/cargo-scope.sh"
+
 HUMAN=0
 # Empty ⇒ derived from cores + free memory. `cargo check` is lighter than
 # the test gate's build+link+run, but it is the same unbounded fan against
@@ -319,15 +325,11 @@ cargo_args+=(--all-targets)
 
 # ── 5. Run cargo check ─────────────────────────────────────────────────────
 #
-# `--features corpus-engine/treesitter` matches the test runner's feature
-# set so lint and test stay aligned. Cargo's `pkg/feature` syntax is a
-# no-op only when `pkg` is in the dependency closure of the selection;
-# for a package OUTSIDE the selection it is an error ("does not contain
-# this feature"). corpus-engine sits in every crate's closure, so the
-# treesitter flag is safe under any `-p` scoping. sovereign-cli is a
-# leaf crate, so its dev-tools flag (which re-enables the gated dev-verb
-# surface the test runner exercises) is only added when sovereign-cli is
-# part of the selection.
+# Feature selection goes through `resolve_features` in
+# scripts/lib/cargo-scope.sh — the SAME decider the test runners use, so the
+# two gates cannot drift apart. A differing feature set is not only a coverage
+# gap: cargo fingerprints on features, so alternating lint and test would
+# rebuild the affected crates on every switch.
 #
 # `sovereign-mesh/mesh-sim` (the Tier-1 scheduler simulator,
 # SCHEDULER_QUALITY.md §5) rides along on the same rule. It is
@@ -374,15 +376,24 @@ cargo_args+=(--all-targets)
 # no corpus-engine (sovereign-desktop alone: 409 file-edits in the 30 days
 # before) failed in 32 ms with cargo's "package does not contain this
 # feature" and was reported as a Fedora-host toolchain failure
-# (quality/BUILD_LATENCY.md, D2). One resolver, one list.
+# It emits a `<pkg>/<feature>` flag only when cargo can NAME that package from
+# this selection — a selected package, or a direct dependency of one. An
+# unconditional flag is a hard cargo error, not a no-op, when its package is
+# outside the selection. `corpus-engine/treesitter` was hardcoded here until
+# 2026-09-14; that broke every scoped run reaching sovereign-desktop once the
+# desktop dropped its corpus-engine dependency (svt-6, 2026-09-12), because
+# the always-in-scope desktop crate could not name the flag.
 if (( escalate_to_workspace )) || [[ ${#crates[@]} -eq 0 ]]; then
-    features="$(resolve_features)"
+    feature_list="$(resolve_features)"
 else
-    features="$(resolve_features "${crates[@]}")"
+    feature_list="$(resolve_features ${crates[@]+"${crates[@]}"})"
+fi
+if [[ -n "$feature_list" ]]; then
+    cargo_args+=(--features "$feature_list")
 fi
 if [[ ! -x "$ADAPTER" ]]; then
     echo "sovereign-lint: adapter not found at $ADAPTER — running raw cargo check ($label)" >&2
-    (cd "$REPO_ROOT" && cargo check "${cargo_args[@]}" --features "$features" 2>&1)
+    (cd "$REPO_ROOT" && cargo check "${cargo_args[@]}" 2>&1)
     exit $?
 fi
 
@@ -406,7 +417,7 @@ raw_log="${RUN_DIR}/cargo.raw.log"
 out_jsonl="${RUN_DIR}/lint.jsonl"
 
 start_ns=$(date +%s%N)
-(cd "$REPO_ROOT" && cargo check "${cargo_args[@]}" --features "$features" --message-format json 2>&1) \
+(cd "$REPO_ROOT" && cargo check "${cargo_args[@]}" --message-format json 2>&1) \
     | tee "$raw_log" \
     | "$ADAPTER" "$label" > "$out_jsonl"
 cargo_exit="${PIPESTATUS[0]}"
@@ -490,7 +501,7 @@ if (( escalate_to_workspace )) || [[ ${#crates[@]} -eq 0 ]]; then
 else
     printf " %-12s  %s\n" "scope:" "${#crates[@]} crate(s) — $label"
 fi
-printf " %-12s  %s\n" "features:" "$features"
+printf " %-12s  %s\n" "features:" "${feature_list:-(none — scope names no feature-bearing crate)}"
 # Say that test code is in scope. A reader who does not know this gate covers
 # #[cfg(test)] would reasonably assume it does not — bare `cargo check` never
 # has — and would read a ✓ as narrower than it is.

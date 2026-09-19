@@ -29,7 +29,7 @@ use sovereign_contracts::daemon_wire::{
     ResearchCapabilities, ResearchFrame, ResearchJobAck, ResearchProgress, ResearchRequest,
     ResearchRunSummary,
 };
-use sovereign_mesh::research_http::{research_router_with, LaunchedRun, ResearchLauncher};
+use sovereign_daemon::research_http::{research_router_with, LaunchedRun, ResearchLauncher};
 
 use crate::common::spawn_router;
 

@@ -7,6 +7,7 @@
 
 use std::collections::HashMap;
 
+use crate::enrichment::pipeline::types::ChatPrompt;
 use crate::error::Result;
 use crate::index::CorpusIndex;
 use crate::types::InferenceFn;
@@ -70,7 +71,7 @@ pub async fn detect_fault_lines(
         let refs_b: Vec<&_> = chunks_b.iter().collect();
 
         let prompt = domain.fault_line_detection_prompt(&refs_a, &refs_b, pos_a_id, pos_b_id);
-        let response = match (inference)(&prompt, None).await {
+        let response = match (inference)(&ChatPrompt::new("", prompt.as_str()), None).await {
             Ok(r) => r,
             Err(e) => {
                 tracing::warn!(error = %e, "Fault line detection failed for pair");

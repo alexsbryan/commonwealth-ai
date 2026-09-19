@@ -1431,7 +1431,7 @@ mod tests {
     /// **Why the work atlas's eviction is safe and a sweep is not.**
     ///
     /// `WorkAtlasGc` drops an expired claim through `MeshStore::delete` (via
-    /// `MeshPeerStore`), which queues a TOMBSTONE — so the fold carries the
+    /// `MeshReplicatedKv`), which queues a TOMBSTONE — so the fold carries the
     /// removal instead of undoing it. The same row taken by `gc_app_before`
     /// queues nothing, and on a namespace that declares no retention window
     /// there is no floor either, so the next fold puts it straight back.

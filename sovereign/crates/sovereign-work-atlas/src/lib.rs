@@ -7,7 +7,7 @@
 //!
 //! Public surface:
 //! - [`WorkAtlasStore`] — typed facade over a
-//!   [`sovereign_contracts::peer::PeerStore`].
+//!   [`sovereign_contracts::peer::ReplicatedKv`].
 //! - [`tools`] module — the three MCP tools.
 //! - [`gc::WorkAtlasGc`] — TTL eviction task spawned by the daemon.
 //! - [`config::WorkAtlasConfig`] — toml-backed operator settings.
@@ -29,5 +29,5 @@ pub use config::WorkAtlasConfig;
 pub use model::{AgentKind, ClaimRecord, ObservationRecord, Privacy, SessionRecord, SymbolRef};
 pub use observer::AtlasObserver;
 pub use repo_id::{resolve_repo_id, resolve_repo_id_allowing_local, RepoIdError, RepoIdSource};
-pub use sovereign_contracts::peer::PeerStore;
+pub use sovereign_contracts::peer::ReplicatedKv;
 pub use store::{ScopeMatch, SessionIdentity, WorkAtlasError, WorkAtlasStore};

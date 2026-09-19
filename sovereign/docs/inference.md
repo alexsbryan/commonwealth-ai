@@ -101,14 +101,15 @@ real head tensors degrade with one warn line. Escape hatch:
   ggml-metal lacks the matmul kernels and decode SIGSEGVs. CPU
   fallback via `SOVEREIGN_FORCE_CPU_CHAT=1`.
 - **Slot aliases (`fast`, `primary`, `commonwealth/*`) resolve via
-  `slot_aliases::resolution_alias_keys`** — the daemon installs the
-  alias map at startup (`daemon.rs::start_daemon`,
-  `install_slot_aliases`) and the mesh manifest advertises the same
+  `slot_aliases::resolution_alias_keys`** — the daemon publishes the
+  alias map at startup (`daemon.rs::register_local_model_slots`,
+  `AppState::slot_aliases_reader`) and the mesh manifest advertises the same
   set (`SLOT_ALIAS_POLICY` parity test). Concrete gguf names also
   work.
-- **`AppState::with_*` installers must run before `inner.clone()`**
-  in `EmbeddedDaemon::start_daemon` — `Arc::get_mut` fails silently
-  if `inner` is already shared, and chat returns 503 on every request.
+- **`AppState`'s provider, warmer and Fabric values are construction
+  arguments** (`ServingSeed`/`FabricSeed`), not `with_*` installers, so
+  there is no `Arc::get_mut` silent no-op that could leave chat
+  returning 503 on every request.
 - **FastShort skip for recurrent-arch ggufs** — `from_existing_model`
   doesn't propagate `n_rs_seq`; the daemon skips FastShort
   construction on qwen*moe/mamba/etc. Escape hatch:

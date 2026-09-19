@@ -48,7 +48,7 @@ pub const MIN_PEER_LEAD: u64 = 100;
 /// rule engine. Constructed by callers from `MemberRecord` +
 /// `CorpusShardInfo`.
 #[derive(Debug, Clone)]
-pub struct PeerAtlasView {
+pub struct RemoteAtlasView {
     pub peer_name: String,
     /// `embed_model.id` from `NodeCapabilities.embed_model`. `None`
     /// when the peer hasn't bootstrapped an embed slot — such peers
@@ -60,7 +60,7 @@ pub struct PeerAtlasView {
     pub atlas_fingerprint: Option<String>,
 }
 
-impl PeerAtlasView {
+impl RemoteAtlasView {
     /// Pick the corpus shard relevant to `corpus_id` from a peer's
     /// hosted_corpora. Returns `None` when the peer doesn't host
     /// the corpus or hosts it without atlas info (older peer).
@@ -87,7 +87,7 @@ impl PeerAtlasView {
 /// What [`evaluate_peer_atlas_advice`] returns when at least one
 /// peer is worth pulling from.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PeerAtlasPullCandidate {
+pub struct AtlasPullLead {
     pub peer_name: String,
     pub peer_tier2_count: u64,
     /// Local node's current Tier-2 count. Useful for log lines —
@@ -115,9 +115,9 @@ pub fn evaluate_peer_atlas_advice(
     local_tier2_count: u64,
     local_fingerprint: Option<&str>,
     my_embed_model: Option<&str>,
-    peers: &[PeerAtlasView],
-) -> Option<PeerAtlasPullCandidate> {
-    let mut best: Option<PeerAtlasPullCandidate> = None;
+    peers: &[RemoteAtlasView],
+) -> Option<AtlasPullLead> {
+    let mut best: Option<AtlasPullLead> = None;
     for peer in peers {
         // Embed model gate. If we have a model, the peer must
         // match. If we don't, accept any peer that does (we'll
@@ -147,7 +147,7 @@ pub fn evaluate_peer_atlas_advice(
         // their work (lead < MIN_PEER_LEAD already filtered).
         let _ = (local_fingerprint, peer.atlas_fingerprint.as_deref());
 
-        let candidate = PeerAtlasPullCandidate {
+        let candidate = AtlasPullLead {
             peer_name: peer.peer_name.clone(),
             peer_tier2_count: peer.atlas_tier2_count,
             local_tier2_count,
@@ -169,8 +169,8 @@ pub fn evaluate_peer_atlas_advice(
 mod tests {
     use super::*;
 
-    fn peer(name: &str, model: Option<&str>, tier2: u64) -> PeerAtlasView {
-        PeerAtlasView {
+    fn peer(name: &str, model: Option<&str>, tier2: u64) -> RemoteAtlasView {
+        RemoteAtlasView {
             peer_name: name.into(),
             embed_model: model.map(|s| s.to_string()),
             corpus_id: "wikipedia".into(),
@@ -259,7 +259,9 @@ mod tests {
                 atlas_fingerprint: None,
             },
         ];
-        assert!(PeerAtlasView::from_member("p", Some("e".into()), "wikipedia", &hosted).is_none());
+        assert!(
+            RemoteAtlasView::from_member("p", Some("e".into()), "wikipedia", &hosted).is_none()
+        );
 
         // Add a real one.
         let mut hosted = hosted;
@@ -276,7 +278,7 @@ mod tests {
             atlas_tier2_count: 612,
             atlas_fingerprint: Some("fp-wp".into()),
         });
-        let v = PeerAtlasView::from_member(
+        let v = RemoteAtlasView::from_member(
             "rugged-mac",
             Some("qwen3-embed".into()),
             "wikipedia",

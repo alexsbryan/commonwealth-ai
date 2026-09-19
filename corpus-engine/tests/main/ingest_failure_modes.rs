@@ -496,11 +496,24 @@ async fn a_stopped_ingest_is_listed_but_not_usable() {
     );
 
     // Now reproduce the stranded state: chunks committed, indexes never built.
+    //
+    // All FOUR build flags are cleared, not just `indexes_built`. A stopped
+    // ingest died BEFORE `build_indexes()`, so no sub-index checkpoint was
+    // written either — `reset_for_resume` clears the same four. Clearing only
+    // the aggregate would leave the three sub-index checkpoints true, which
+    // `index::readiness::indexes_searchable` (the one decider, ARCH §10.6)
+    // reads as "every sub-index built, no ingest writing" and calls searchable.
+    // That is the 2026-09-13 fix for corpora refused as "not finished
+    // building": the aggregate is a second write the sub-index checkpoints
+    // subsume. The case the aggregate still decides is this one — nothing built.
     let meta_path = Corpus::meta_in(indexes_dir.join("test_corpus"));
     let raw = std::fs::read_to_string(&meta_path).unwrap();
     let mut meta: serde_json::Value = serde_json::from_str(&raw).unwrap();
     meta["ingestion_in_progress"] = serde_json::json!(false);
     meta["indexes_built"] = serde_json::json!(false);
+    meta["vector_index_built"] = serde_json::json!(false);
+    meta["content_fts_built"] = serde_json::json!(false);
+    meta["title_fts_built"] = serde_json::json!(false);
     std::fs::write(&meta_path, serde_json::to_string(&meta).unwrap()).unwrap();
 
     let engine2 = build_engine(
@@ -517,7 +530,7 @@ async fn a_stopped_ingest_is_listed_but_not_usable() {
     );
     assert!(
         !usable.iter().any(|i| i.corpus_id == "test_corpus"),
-        "indexes_built is false, so usable_indexes() must refuse it — this is \
+        "no index was built, so usable_indexes() must refuse it — this is \
          the assertion that fails if the two questions are collapsed again"
     );
 }

@@ -189,12 +189,18 @@ pub async fn enumerate_symbol_sources(
     // Per-step timing — the whole-corpus enumerate is the per-run setup cost
     // (re-paid on every resume), so make each stage observable.
     let t = std::time::Instant::now();
-    let rows = scip.symbols_in_crate("", "").await?;
+    let rows = scip
+        .symbols_in_crate("", "")
+        .await
+        .map_err(crate::error::from_scip)?;
     tracing::info!(target: "enrichment.code_intel", rows = rows.len(), ms = t.elapsed().as_millis() as u64, "enum step: symbols_in_crate");
     // The call-graph caller-set is the precise function population (the SCIP
     // `kind` field is unreliable). Empty for a graph with no refs → no filter.
     let t = std::time::Instant::now();
-    let caller_set = scip.caller_qualified_names().await?;
+    let caller_set = scip
+        .caller_qualified_names()
+        .await
+        .map_err(crate::error::from_scip)?;
     tracing::info!(target: "enrichment.code_intel", callers = caller_set.len(), ms = t.elapsed().as_millis() as u64, "enum step: caller_qualified_names");
     let t = std::time::Instant::now();
     let out = enumerate_from_rows(&rows, source_root, file_filter, &caller_set);

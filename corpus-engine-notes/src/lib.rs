@@ -19,6 +19,13 @@
 //!   logs and re-rank fingerprints.
 //! - [`project_docs`] — `ProjectDocsStore` indexing DESIGN.md / RFC
 //!   markdown files for the project-status surface.
+//! - [`response_mine`] — the regex response miner (Phase 7.2); scans an
+//!   assistant transcript for decision-shaped sentences.
+//! - [`decision_extractor`] — the per-turn `Middleware` that mines the
+//!   assistant response and persists a `source='extracted'` note on the
+//!   next turn unless the user corrects it. Moved down from
+//!   `sovereign-api::middleware` by domains `dm-decision-extractor-move`
+//!   (the note store's question, not routing's).
 //! - `notes_sync` lives back in `corpus-engine` (the bridge between
 //!   corpus-engine's `ExtractedDoc` and this crate's `NoteStore`).
 //!   Avoids a cyclic workspace dep — see Cargo.toml comment.
@@ -42,11 +49,13 @@
 //! `update::project_index_watcher`) `map_err` explicitly. Avoids
 //! adding a `From` impl that creates a non-obvious flow.
 
+pub mod decision_extractor;
 pub mod error;
 pub mod note;
 pub mod notes;
 mod notes_schema;
 pub mod project_docs;
+pub mod response_mine;
 
 pub use error::{Error, Result};
 pub use note::{is_ephemeral_kind, Note, NoteScope, NoteSource, ScopeFilter, EPHEMERAL_KINDS};

@@ -1,0 +1,20 @@
+unit: dm-pass-registry-field
+what: CorpusEngine gains the enrichment-pass registry as an injected field, so
+  the engine stops resolving builtin() inline (DE "Direction: Understanding
+  reads Ingest and Retrieval, never the reverse", bullet 1). New field
+  `enrichment_passes: crate::engine::pass::EnrichmentPassRegistry`
+  (corpus-engine/src/engine/mod.rs:324), defaulted in `CorpusEngine::new` (:426)
+  to `crate::enrichment::pass::EnrichmentPassRegistry::builtin()` — a TEMPORARY
+  default the move row dm-pass-impls-move flips to `new()` once the assemblers
+  inject — with builder `with_enrichment_passes` (:481) and accessor
+  `enrichment_passes` (:493) beside `with_yield_hook`. The four engine sites now
+  read the field: engine/ingest.rs:1749,:1833; engine/mod.rs:2900 (drift) and the
+  free helper `conversation_enrichment_is_resumable` (:3118), which gained a
+  `passes: &EnrichmentPassRegistry` argument so its two callers
+  (mod.rs:772, the test at :3156) pass the registry. sovereign-tools'
+  src/local_corpus/atlas_dispatch.rs:60 repointed from
+  `EnrichmentPassRegistry::builtin()` to `self.engine.enrichment_passes()`, and
+  the now-unused `EnrichmentPassRegistry` import dropped.
+checks: CLEAN exit=0 (0G, under 50G); LINT exit=0 (corpus-engine, sovereign-tools
+  + 21 dependents, 0 errors); TEST(corpus-engine) exit=0 (pass 2184, fail 0);
+  TEST(sovereign-tools) exit=0 (pass 852, fail 0).

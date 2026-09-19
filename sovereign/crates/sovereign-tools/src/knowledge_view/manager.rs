@@ -482,7 +482,9 @@ impl KnowledgeViewManager {
             }
             rendered
         } else {
-            let Some(skeleton) = index.load_field_skeleton()? else {
+            let Some(skeleton) =
+                corpus_engine::index::field_skeleton::load_field_skeleton(&index.path())?
+            else {
                 let title = ViewKind::from_id(view_id)
                     .map(|k| k.title())
                     .unwrap_or("Knowledge view");
@@ -804,7 +806,7 @@ impl KnowledgeViewManager {
             let Ok(file) = read_atlas_atoms(&atlas_dir) else {
                 continue;
             };
-            for atom in &file.atoms {
+            for atom in file.atoms() {
                 if let AtomEnvelope::Entity(e) = atom {
                     names.push(e.canonical_name.clone());
                     for alias in &e.aliases {
@@ -887,7 +889,7 @@ impl KnowledgeViewManager {
             let mtime = std::fs::metadata(index.path().join("field_skeleton.json"))
                 .and_then(|m| m.modified())
                 .ok();
-            match index.load_field_skeleton()? {
+            match corpus_engine::index::field_skeleton::load_field_skeleton(&index.path())? {
                 Some(sk) => {
                     skeletons.push((view_id.clone(), sk));
                     if let Some(mt) = mtime {
@@ -1153,10 +1155,9 @@ mod tests {
         let embed: corpus_engine::EmbedFn = std::sync::Arc::new(|_| {
             Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 4]) })
         });
-        let infer: corpus_engine::InferenceFn =
-            std::sync::Arc::new(|_, _: Option<&serde_json::Value>| {
-                Box::pin(async { Ok::<String, corpus_engine::Error>("{}".into()) })
-            });
+        let infer: corpus_engine::InferenceFn = std::sync::Arc::new(|_, _: Option<u32>| {
+            Box::pin(async { Ok::<String, corpus_engine::Error>("{}".into()) })
+        });
         let engine = std::sync::Arc::new(corpus_engine::CorpusEngine::new(
             recipes_dir,
             indexes_dir,
@@ -1463,10 +1464,9 @@ mod tests {
         let embed: corpus_engine::EmbedFn = std::sync::Arc::new(|_| {
             Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 4]) })
         });
-        let infer: corpus_engine::InferenceFn =
-            std::sync::Arc::new(|_, _: Option<&serde_json::Value>| {
-                Box::pin(async { Ok::<String, corpus_engine::Error>("{}".into()) })
-            });
+        let infer: corpus_engine::InferenceFn = std::sync::Arc::new(|_, _: Option<u32>| {
+            Box::pin(async { Ok::<String, corpus_engine::Error>("{}".into()) })
+        });
         let engine = std::sync::Arc::new(corpus_engine::CorpusEngine::new(
             recipes_dir,
             indexes_dir.clone(),
@@ -1518,10 +1518,9 @@ mod tests {
         let embed: corpus_engine::EmbedFn = std::sync::Arc::new(|_| {
             Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 4]) })
         });
-        let infer: corpus_engine::InferenceFn =
-            std::sync::Arc::new(|_, _: Option<&serde_json::Value>| {
-                Box::pin(async { Ok::<String, corpus_engine::Error>("{}".into()) })
-            });
+        let infer: corpus_engine::InferenceFn = std::sync::Arc::new(|_, _: Option<u32>| {
+            Box::pin(async { Ok::<String, corpus_engine::Error>("{}".into()) })
+        });
         let engine = std::sync::Arc::new(corpus_engine::CorpusEngine::new(
             recipes_dir,
             indexes_dir,

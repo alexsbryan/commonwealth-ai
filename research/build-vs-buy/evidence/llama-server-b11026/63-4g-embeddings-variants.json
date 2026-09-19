@@ -1,0 +1,77 @@
+{
+ "raw": {
+  "cos_vs_daemon": [
+   0.989157,
+   0.989478,
+   0.988923
+  ],
+  "max_abs_diff": [
+   0.014764,
+   0.019696,
+   0.017616
+  ],
+  "last3_tokens_text0": [
+   " dog",
+   ".",
+   "<|endoftext|>"
+  ]
+ },
+ "text+EOS_literal": {
+  "cos_vs_daemon": [
+   0.999999,
+   1.0,
+   1.0
+  ],
+  "max_abs_diff": [
+   0.000109,
+   0.0001,
+   0.000119
+  ],
+  "last3_tokens_text0": [
+   ".",
+   "<|endoftext|>",
+   "<|endoftext|>"
+  ]
+ },
+ "QI+text": {
+  "cos_vs_daemon": [
+   0.834591,
+   0.987934,
+   0.809391
+  ],
+  "max_abs_diff": [
+   0.06326,
+   0.021496,
+   0.087379
+  ],
+  "last3_tokens_text0": [
+   " dog",
+   ".",
+   "<|endoftext|>"
+  ]
+ },
+ "QI+text+EOS_literal": {
+  "cos_vs_daemon": [
+   0.832222,
+   0.993829,
+   0.814721
+  ],
+  "max_abs_diff": [
+   0.063271,
+   0.014468,
+   0.084312
+  ],
+  "last3_tokens_text0": [
+   ".",
+   "<|endoftext|>",
+   "<|endoftext|>"
+  ]
+ },
+ "daemon_repeat_cos": [
+  1.0,
+  1.0,
+  1.0
+ ],
+ "daemon_single_vs_batch_cos_text0": 1.0,
+ "ls_single_vs_batch_cos_text0": 0.99999968
+}

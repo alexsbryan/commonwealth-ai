@@ -266,7 +266,7 @@ pub fn compute_report(corpus_id: &str) -> Result<SchemaValidationReport, String>
     // Partition atoms so we can feed the deterministic-gap counters.
     let mut claims = Vec::new();
     let mut questions = Vec::new();
-    for a in &atoms.atoms {
+    for a in atoms.atoms() {
         match a {
             AtomEnvelope::Claim(c) => claims.push(c.clone()),
             AtomEnvelope::Question(q) => questions.push(q.clone()),

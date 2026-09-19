@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 /// *absent* (the honest response is to decline).
 ///
 /// Named for what it is, not for where it sits. It was `QuestionType` until
-/// 2026-09-04, which collided with `corpus_engine_vocab::taxonomy::
+/// 2026-09-04, which collided with `understanding_vocab::taxonomy::
 /// QuestionType` — the atlas's kind-of-inquiry (thematic / factual /
 /// interpretive) — and that one has the better claim to the name. Both were
 /// reachable across a crate boundary, so `concept-gate` counted the pair.

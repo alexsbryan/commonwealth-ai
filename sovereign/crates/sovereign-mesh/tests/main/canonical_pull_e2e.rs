@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! End-to-end test for the Phase 6 canonical-sync surface.
 //!
-//! Wires a real `sovereign_api::internal_router` over an
+//! Wires a real `sovereign_daemon::internal_router` over an
 //! ephemeral localhost port with a real `CorpusEngine` holding a
 //! synthetic canonical, then drives `canonical_pull` from a
 //! different node's index dir. Confirms:
@@ -27,8 +27,8 @@ use commonwealth_core::mesh::Mesh;
 use commonwealth_state::MeshStore;
 use corpus_engine::index::{CorpusIndex, EmbeddedChunk, InsertChunk};
 use corpus_engine::{Corpus, CorpusEngine, EmbedFn};
-use sovereign_api::server::internal_router;
-use sovereign_api::state::AppState;
+use sovereign_daemon::server::internal_router;
+use sovereign_daemon::state::AppState;
 use sovereign_mesh::canonical_pull::{pull_canonical_from_peer, PullError};
 use sovereign_meshapp_registry::AppRegistry;
 use tempfile::tempdir;

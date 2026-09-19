@@ -7,7 +7,7 @@
 //! and a thin client parses that answer. `commonwealth-core` and `sovereign-*`
 //! cannot see each other (`quality/ARCH_LAYERS.toml`), so while the enum was
 //! defined in commonwealth-core every wire shape carrying it was pinned above
-//! the contract layer — `sovereign_mesh::mesh_http::MemberDto` could not move
+//! the contract layer — `sovereign_daemon::mesh_http::MemberDto` could not move
 //! to `sovereign_contracts::daemon_wire` for one closed set of one variant.
 //! `oicp-types` is the serde-only crate both already depend on. Moved
 //! 2026-09-11 (sv-surface svt-3); `commonwealth_core::capabilities::OriginKind`
@@ -126,7 +126,7 @@ impl OriginKind {
 
     /// Every kind, for a surface that must enumerate the closed set — the
     /// refusal that names what a build DOES know when it meets a kind it
-    /// does not (see `sovereign_mesh::origin_fanout`).
+    /// does not (see `sovereign_daemon::origin_fanout`).
     ///
     /// A const array rather than a `strum` derive or a hand-written list at
     /// the call site: a fourth variant that forgets to appear here is a

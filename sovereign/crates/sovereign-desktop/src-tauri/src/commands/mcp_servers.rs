@@ -10,7 +10,7 @@
 //!
 //! `mcp_list_servers`, `mcp_test_connection`, `mcp_set_token` and
 //! `mcp_clear_token` hold no `SetupConfig` and no secret store. Each is one
-//! call onto `sovereign_mesh::mcp_config_http`'s `/v1/mcp/servers` routes
+//! call onto `sovereign_daemon::mcp_config_http`'s `/v1/mcp/servers` routes
 //! over [`mcp_client`]. On an attached boot the pane used to render THIS
 //! process's config file and THIS process's secret dir while the daemon
 //! connected servers out of its own — two answers to one question.
@@ -170,7 +170,7 @@ pub async fn mcp_add_server(
 /// The orphaned secret is dropped through the SAME call
 /// [`mcp_clear_token`] makes — `TurnClient::mcp_clear_token`, whose
 /// handler runs `secret_store::delete_token` on the host
-/// (`sovereign-mesh/src/mcp_config_http.rs:270`). It used to call that
+/// (`sovereign-daemon/src/mcp_config_http.rs:270`). It used to call that
 /// function here, in this process, which is the secret store of
 /// whichever machine the WINDOW is on: on an attached boot the server
 /// left the shared config and its token stayed on the daemon's disk,

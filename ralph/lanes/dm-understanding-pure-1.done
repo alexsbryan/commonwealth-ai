@@ -1,0 +1,24 @@
+unit: dm-understanding-pure-1
+commits: 199b60b8e (the move), 9d04d3db5 (rustfmt the moved files)
+what: the eight `pure`-tier files moved to `understanding-atlas` per §3a, with
+  the path-preserving module tree REVIEW-build-understanding-crate-tree decided:
+  atlas_traversal/{brief,classifier,engine,spans}.rs and
+  meta_atlas/{classifier.rs,bridge/{adjudicate,signals,topic_node}.rs}. The
+  engine shells keep their host submodules and re-export the pure ones at the
+  historical paths (`crate::atlas_traversal::{brief,classifier,engine,spans}`,
+  `crate::meta_atlas::classifier`, `crate::meta_atlas::bridge::{adjudicate,
+  signals,topic_node}`); `question_kind` stays host. Two host definitions the
+  moved pure files name moved with them and are re-exported at their historical
+  paths: `fold`/`transliterate_cyrillic` out of
+  `enrichment/atlas/resolution.rs` -> `understanding-atlas/src/enrichment/atlas/fold.rs`,
+  and `BridgeRelation`/`BridgeSignal` out of `meta_atlas/bridge/edges.rs` ->
+  `understanding-atlas/src/meta_atlas/bridge.rs`. The classifier test's
+  `crate::recipe_templates::numismatics_policies` reach (the row's CORRECTED
+  premise) is replaced by a leaf-built `OntologyPolicies` fixture
+  (`atlas_traversal/test_fixtures.rs`), so no dev edge to corpus-engine.
+  DT `[[tier]]` pure paths re-keyed to `understanding-atlas/src/...` (8 paths).
+  Rationale and evidence in ralph/DECISIONS.md (2026-09-18).
+checks: CLEAN exit=0 (debug target 15G, under 50G); LINT exit=0 (WORKSPACE,
+  errors: 0, cargo exit 0); LAYER exit=0; TOML exit=0;
+  TEST(understanding-atlas) exit=0 (118 pass); TEST(corpus-engine) exit=0
+  (2080 pass).

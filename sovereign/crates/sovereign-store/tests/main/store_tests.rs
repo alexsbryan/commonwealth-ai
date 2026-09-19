@@ -3,6 +3,7 @@
 use sovereign_core::traits::*;
 use sovereign_core::types::*;
 
+use sovereign_core::context::{build_context, PrincipalScope};
 use sovereign_core::time::unix_now;
 use sovereign_store::memory::InMemoryStateStore;
 use sovereign_store::sqlite::SqliteStateStore;
@@ -66,7 +67,7 @@ async fn build_context_scopes_corpora_by_principal() {
     );
 
     // A2b: Alice owns the private corpus → she retrieves over both.
-    let alice = sovereign_core::context::build_context(&store, "alice:c", "q", Some("alice"))
+    let alice = build_context(&store, "alice:c", "q", PrincipalScope::resolved("alice"))
         .await
         .unwrap();
     assert!(alice.installed_corpora.contains(&"shared".to_string()));
@@ -83,7 +84,7 @@ async fn build_context_scopes_corpora_by_principal() {
     assert!(alice_ceiling.contains(&"alice-secret".to_string()));
 
     // Bob does NOT own it → he retrieves over the shared `Org` corpus only.
-    let bob = sovereign_core::context::build_context(&store, "bob:c", "q", Some("bob"))
+    let bob = build_context(&store, "bob:c", "q", PrincipalScope::resolved("bob"))
         .await
         .unwrap();
     assert!(bob.installed_corpora.contains(&"shared".to_string()));
@@ -105,7 +106,7 @@ async fn build_context_scopes_corpora_by_principal() {
     );
 
     // No principal (single-user / desktop) → nothing is hidden.
-    let solo = sovereign_core::context::build_context(&store, "c", "q", None)
+    let solo = build_context(&store, "c", "q", PrincipalScope::Unscoped)
         .await
         .unwrap();
     assert!(solo.installed_corpora.contains(&"shared".to_string()));
@@ -116,6 +117,42 @@ async fn build_context_scopes_corpora_by_principal() {
         solo.corpus_ceiling.is_none(),
         "single-user path must carry no ceiling (None), got {:?}",
         solo.corpus_ceiling
+    );
+}
+
+/// The ceiling must REFUSE an unattributable caller, never default to
+/// all-corpora-eligible (ARCH principle 6 — absence refuses). Watched to fail:
+/// map `PrincipalScope::Unresolved` to the `Unscoped` arm and this goes red.
+#[tokio::test]
+async fn build_context_refuses_an_unresolved_principal() {
+    let store = SqliteStateStore::open_in_memory().unwrap();
+    store
+        .save_corpus_state(&corpus_state("shared", CorpusVisibility::Org))
+        .await
+        .unwrap();
+    store
+        .save_corpus_state(&corpus_state(
+            "alice-secret",
+            CorpusVisibility::Private {
+                owner: "alice".to_string(),
+            },
+        ))
+        .await
+        .unwrap();
+
+    let unresolved = build_context(&store, "c", "q", PrincipalScope::Unresolved)
+        .await
+        .unwrap();
+    assert!(
+        unresolved.installed_corpora.is_empty(),
+        "an unattributable caller must see no corpus, got {:?}",
+        unresolved.installed_corpora
+    );
+    assert_eq!(
+        unresolved.corpus_ceiling,
+        Some(Vec::new()),
+        "an unattributable caller's ceiling must be Some(empty) — fail-closed — \
+         not None (all-corpora-eligible)"
     );
 }
 

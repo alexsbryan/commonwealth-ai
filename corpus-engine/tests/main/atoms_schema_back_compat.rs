@@ -16,6 +16,17 @@
 //! Each fixture below pins a wire shape from a past schema version.
 
 use corpus_engine::enrichment::atlas::atoms::{Asset, AtomEnvelope, AtomsFile};
+use corpus_engine::enrichment::atlas::read_atlas_atoms;
+
+/// Parse a fixture the way production does — through the door. `AtomsFile` is
+/// deliberately not `Deserialize` (domains `REVIEW-build-vocab-seal`), so the
+/// fixture is written to a temp atlas dir and read back. This suite still pins
+/// the wire shape; it just takes the one path a real `atoms.json` takes.
+fn parse_atoms(json: &str) -> AtomsFile {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("atoms.json"), json).unwrap();
+    read_atlas_atoms(dir.path()).expect("parse atoms.json")
+}
 
 // ---------------------------------------------------------------------------
 // 2.0 atoms file — no Asset variant; should still deserialise.
@@ -40,9 +51,9 @@ const V2_0_ATOMS: &str = r#"{
 
 #[test]
 fn v2_0_atoms_file_round_trips_with_2_1_reader() {
-    let file: AtomsFile = serde_json::from_str(V2_0_ATOMS).expect("parse v2.0 atoms");
-    assert_eq!(file.atoms.len(), 1);
-    match &file.atoms[0] {
+    let file = parse_atoms(V2_0_ATOMS);
+    assert_eq!(file.atoms().len(), 1);
+    match &file.atoms()[0] {
         AtomEnvelope::Entity(e) => {
             assert_eq!(e.canonical_name, "Albert Einstein");
         }
@@ -70,9 +81,9 @@ fn v2_1_atoms_file_with_asset_variant_round_trips() {
     };
     let file = AtomsFile::new(vec![AtomEnvelope::Asset(atom.clone())]);
     let json = serde_json::to_string(&file).expect("serialise 2.1 atoms");
-    let back: AtomsFile = serde_json::from_str(&json).expect("re-parse 2.1 atoms");
+    let back = parse_atoms(&json);
     assert_eq!(back.schema_version, AtomsFile::SCHEMA_VERSION);
-    match &back.atoms[0] {
+    match &back.atoms()[0] {
         AtomEnvelope::Asset(a) => {
             assert_eq!(a.sha256, atom.sha256);
             assert_eq!(a.asset_kind, "xlsx");
@@ -122,8 +133,8 @@ fn v2_1_entity_without_provenance_loads_with_default() {
         }
       ]
     }"#;
-    let file: AtomsFile = serde_json::from_str(toml_2_1_entity).expect("parse 2.1 entity");
-    match &file.atoms[0] {
+    let file = parse_atoms(toml_2_1_entity);
+    match &file.atoms()[0] {
         AtomEnvelope::Entity(e) => {
             assert!(e.provenance.extractor_id.is_empty());
             assert!(e.provenance.source_chunk_id.is_none());
@@ -154,8 +165,8 @@ fn v2_2_entity_without_attributes_loads_with_default() {
         }
       ]
     }"#;
-    let file: AtomsFile = serde_json::from_str(json_2_2_entity).expect("parse 2.2 entity");
-    match &file.atoms[0] {
+    let file = parse_atoms(json_2_2_entity);
+    match &file.atoms()[0] {
         AtomEnvelope::Entity(e) => {
             assert!(e.attributes.is_empty(), "absent attributes → empty map");
         }
@@ -206,23 +217,23 @@ fn v2_3_claim_relation_event_without_attributes_load_with_default() {
         }
       ]
     }"#;
-    let file: AtomsFile = serde_json::from_str(json_2_3).expect("parse 2.3 atoms");
-    assert_eq!(file.atoms.len(), 3);
-    match &file.atoms[0] {
+    let file = parse_atoms(json_2_3);
+    assert_eq!(file.atoms().len(), 3);
+    match &file.atoms()[0] {
         AtomEnvelope::Relation(r) => {
             assert_eq!(r.label, "struck at");
             assert!(r.attributes.is_empty(), "absent attributes → empty map");
         }
         other => panic!("expected Relation, got {other:?}"),
     }
-    match &file.atoms[1] {
+    match &file.atoms()[1] {
         AtomEnvelope::Event(e) => {
             assert_eq!(e.description, "The mint opens.");
             assert!(e.attributes.is_empty(), "absent attributes → empty map");
         }
         other => panic!("expected Event, got {other:?}"),
     }
-    match &file.atoms[2] {
+    match &file.atoms()[2] {
         AtomEnvelope::Claim(c) => {
             assert_eq!(
                 c.attributed_to.as_ref().map(|a| a.as_str()),

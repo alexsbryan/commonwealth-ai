@@ -12,8 +12,8 @@
 //! that language — never this module — decides what the rest of the keys
 //! mean (ARCH §6.2, §4). The languages are recipe parsing, so they live in
 //! [`language`] beside the block; what they parse INTO — `OntologyPolicies`
-//! and the declaration types — is the `corpus-engine-vocab` leaf
-//! (`corpus_engine_vocab::ontology`), so a reader of `atlas/ontology.json`
+//! and the declaration types — is the `understanding-vocab` leaf
+//! (`understanding_vocab::ontology`), so a reader of `atlas/ontology.json`
 //! needs neither this crate nor the languages.
 
 pub mod language;
@@ -64,7 +64,7 @@ impl OntologyBlock {
     /// Parse the block into policies through its language. `Recipe::from_toml`
     /// has already run this once (eager, so structural errors surface at load);
     /// callers after load may treat `Err` as unreachable but must not hide it.
-    pub fn policies(&self) -> Result<corpus_engine_vocab::ontology::OntologyPolicies> {
+    pub fn policies(&self) -> Result<understanding_vocab::ontology::OntologyPolicies> {
         self.language()?.parse(&self.body)
     }
 }
@@ -92,11 +92,11 @@ pub struct OntologyConfig {
     pub vocabulary: Option<OntologyVocabulary>,
 }
 
-// `OntologyVocabulary` lives in the `corpus-engine-vocab` leaf since
-// 2026-09-03 (`corpus_engine_vocab::ontology::decl`): the policies it feeds
+// `OntologyVocabulary` lives in the `understanding-vocab` leaf since
+// 2026-09-03 (`understanding_vocab::ontology::decl`): the policies it feeds
 // are there, and a thin host reading `atlas/ontology.json` needs the type
 // without this crate. Re-exported at the historical path.
-pub use corpus_engine_vocab::ontology::decl::OntologyVocabulary;
+pub use understanding_vocab::ontology::decl::OntologyVocabulary;
 
 #[cfg(test)]
 mod tests {

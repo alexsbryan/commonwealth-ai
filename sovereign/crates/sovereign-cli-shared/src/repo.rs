@@ -75,21 +75,14 @@ pub fn find_repo_root_in(start: &Path) -> Option<PathBuf> {
 /// `git rev-parse --abbrev-ref HEAD` for the given repo. `None` on
 /// unborn HEAD, detached HEAD, or git failure. Best-effort: callers
 /// just leave the field empty when this returns `None`.
+///
+/// Delegates to the SSOT in `sovereign-contracts::git`: the daemon's
+/// work-atlas wiring asks the same question and `sovereign-daemon`
+/// (`mesh-api`) may not name this crate (`hosts`), so the body moved
+/// down at domains `dm-daemon-cli-composition` (2026-09-17) and this
+/// stays as the CLI's historical path (§10.6 — one derivation).
 pub fn current_branch(repo_root: &Path) -> Option<String> {
-    let out = std::process::Command::new("git")
-        .args(["rev-parse", "--abbrev-ref", "HEAD"])
-        .current_dir(repo_root)
-        .output()
-        .ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    if s.is_empty() {
-        None
-    } else {
-        Some(s)
-    }
+    sovereign_contracts::git::current_branch(repo_root)
 }
 
 // ─── Legacy post-commit hook ─────────────────────────────────────────────────

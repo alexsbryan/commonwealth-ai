@@ -122,7 +122,7 @@ pub enum LedgerEventKind {
     ///
     /// **Emitted once, by the donor, when its own signed `Complete`
     /// act appends.** It is NOT derived by every node that folds that
-    /// act; `sovereign_mesh::work_donor::credit_for` carries the full
+    /// act; `sovereign_daemon::work_donor::credit_for` carries the full
     /// argument for why, and the short form is that this log converges
     /// by "one write site, one event" (principle 2) while the work
     /// journal converges by total order — deriving here would put one

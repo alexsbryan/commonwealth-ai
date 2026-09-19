@@ -80,6 +80,14 @@ fn walk_rs(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
         if p.is_dir() {
             walk_rs(&p, out);
         } else if p.extension().map(|e| e == "rs").unwrap_or(false) {
+            // A split-out test module (`mod tests;` under `#[cfg(test)]` in its
+            // parent) carries no `#[cfg(test)]` of its own, so the truncation
+            // below cannot see it. Exclude it by the convention's filename, or
+            // a fake peer's URL in one reads as a production sender.
+            let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if name == "tests.rs" || name.ends_with("_tests.rs") {
+                continue;
+            }
             out.push(p);
         }
     }

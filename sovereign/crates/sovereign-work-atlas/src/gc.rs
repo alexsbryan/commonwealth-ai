@@ -7,8 +7,8 @@
 //! every 60s and drops anything past its deadline. Cheap: a handful
 //! of records per node.
 //!
-//! **Every drop here goes through `PeerStore::delete`, and that is what makes
-//! it stick.** On a meshed node the port is `MeshPeerStore`, whose store is a
+//! **Every drop here goes through `ReplicatedKv::delete`, and that is what makes
+//! it stick.** On a meshed node the port is `MeshReplicatedKv`, whose store is a
 //! PROJECTION of the ring journal: `delete` queues a tombstone, so the fold
 //! carries the removal, while a sweep of the same rows would leave no act
 //! anywhere and the next round would put them back. That is not hypothetical —
@@ -205,7 +205,7 @@ mod tests {
     use std::path::PathBuf;
 
     use kernel_types::NodeId;
-    use sovereign_contracts::peer::{PeerStore, SoloPeerStore};
+    use sovereign_contracts::peer::{ReplicatedKv, SoloReplicatedKv};
     use uuid::Uuid;
 
     use crate::model::{
@@ -215,9 +215,9 @@ mod tests {
     use super::*;
 
     fn mk_store() -> Arc<WorkAtlasStore> {
-        let mesh = Arc::new(SoloPeerStore::new());
+        let mesh = Arc::new(SoloReplicatedKv::new());
         Arc::new(WorkAtlasStore::new(
-            mesh as Arc<dyn PeerStore>,
+            mesh as Arc<dyn ReplicatedKv>,
             NodeId::from_u128(1),
         ))
     }

@@ -11,7 +11,7 @@
 //! [`commonwealth_core::mesh::aliased_endpoint_keys`]; nothing here compares
 //! keys (§10.6).
 
-use sovereign_mesh::mesh_http::MemberDto;
+use sovereign_daemon::mesh_http::MemberDto;
 
 use crate::mesh_cmd::{daemon_client_port, daemon_listening_on};
 
@@ -127,7 +127,7 @@ pub(crate) async fn cmd_forget_member(args: &[String]) -> i32 {
         eprintln!("{msg}");
         return 1;
     }
-    let out: sovereign_mesh::roster_repair::ForgottenMember = match serde_json::from_str(&body) {
+    let out: sovereign_daemon::roster_repair::ForgottenMember = match serde_json::from_str(&body) {
         Ok(o) => o,
         Err(e) => {
             eprintln!("mesh forget-member: response shape mismatch ({e}): {body}");

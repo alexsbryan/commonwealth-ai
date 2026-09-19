@@ -108,7 +108,7 @@ pub async fn cmd_triage(args: &[String]) -> i32 {
         is_placeholder: bool,
     }
     let mut entities: HashMap<String, EntityRef> = HashMap::new();
-    for atom in &atoms_file.atoms {
+    for atom in atoms_file.atoms() {
         if let AtomEnvelope::Entity(e) = atom {
             let is_placeholder = e.description.is_empty() && e.salience == 0.0;
             entities.insert(

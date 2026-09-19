@@ -30,7 +30,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::json;
 
-use corpus_engine::facts_store::FactStore;
+use code_facts::facts_store::FactStore;
 use sovereign_core::error::{Error, Result};
 use sovereign_core::tool_manifest::DeclaredTool;
 use sovereign_core::types::*;
@@ -268,7 +268,7 @@ fn mtime_secs(path: &Path) -> Option<i64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use corpus_engine::facts::{CtorField, Facts, FnDef, StrLit};
+    use code_facts::facts::{CtorField, Facts, FnDef, StrLit};
 
     fn write_facts(dir: &Path, corpus: &str, facts: &Facts) -> PathBuf {
         let cdir = dir.join(corpus);

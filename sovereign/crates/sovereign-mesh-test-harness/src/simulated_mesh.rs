@@ -1,24 +1,26 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use std::collections::HashMap;
-use std::time::Duration;
+use std::net::SocketAddr;
 
-use bytes::Bytes;
+use axum::Router;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::latency::{LatencyMatrix, LatencyRecord};
 use commonwealth_core::mesh::Mesh;
-use sovereign_meshapp_registry::manifest::MeshAppManifest;
-use sovereign_serving::plan::MeshPlan;
 
 use crate::simulated_node::{SimulatedNode, SimulatedNodeBuilder};
 
 /// A simulated mesh of multiple in-process nodes for integration testing.
-pub struct SimulatedMesh {
+///
+/// Generic over the node state for the same reason [`SimulatedNode`] is: the
+/// harness meets the runtime at the OICP/contracts seam, so the caller binds
+/// the concrete state and supplies the routers.
+pub struct SimulatedMesh<S> {
     pub mesh_state: Mesh,
-    pub nodes: Vec<SimulatedNode>,
+    pub nodes: Vec<SimulatedNode<S>>,
     pub latency_matrix: LatencyMatrix,
 }
 
-impl SimulatedMesh {
+impl<S> SimulatedMesh<S> {
     /// Create a new empty mesh.
     pub fn new(name: &str) -> Self {
         let mesh = Mesh {
@@ -39,9 +41,14 @@ impl SimulatedMesh {
         }
     }
 
-    /// Add a node to the mesh using a builder.
-    pub fn add_node(&mut self, builder: SimulatedNodeBuilder) -> usize {
-        let node = builder.build_and_register(&mut self.mesh_state);
+    /// Add a node to the mesh using a builder, creating its state with
+    /// `make_state`.
+    pub fn add_node(
+        &mut self,
+        builder: SimulatedNodeBuilder,
+        make_state: impl Fn(NodeId, Mesh) -> S,
+    ) -> usize {
+        let node = builder.build_and_register(&mut self.mesh_state, &make_state);
         let idx = self.nodes.len();
         self.nodes.push(node);
         idx
@@ -83,20 +90,19 @@ impl SimulatedMesh {
     }
 
     /// Start all node servers. Returns vec of (client_addr, internal_addr).
-    pub async fn start_all(&mut self) -> Vec<(std::net::SocketAddr, std::net::SocketAddr)> {
+    ///
+    /// The caller supplies each node's two routers, built from its own state.
+    pub async fn start_all(
+        &mut self,
+        make_routers: impl Fn(&S) -> (Router, Router),
+    ) -> Vec<(SocketAddr, SocketAddr)> {
         let mut addrs = Vec::new();
         for node in &mut self.nodes {
-            let addr = node.start_servers().await;
+            let (client_app, internal_app) = make_routers(&node.state);
+            let addr = node.start_servers(client_app, internal_app).await;
             addrs.push(addr);
         }
         addrs
-    }
-
-    /// Update all nodes' mesh state to the current mesh_state.
-    pub async fn sync_mesh_state(&self) {
-        for node in &self.nodes {
-            *node.state.inner.mesh.write().await = self.mesh_state.clone();
-        }
     }
 
     /// Get node capabilities as a HashMap (for scheduler input).
@@ -120,112 +126,6 @@ impl SimulatedMesh {
             node.shutdown();
         }
     }
-
-    // ── Platform helpers ──────────────────────────────────────────────────────
-
-    /// Register a mock app manifest on the given node's AppRegistry.
-    pub async fn register_mock_app(&mut self, node_idx: usize, manifest: MeshAppManifest) {
-        self.nodes[node_idx]
-            .state
-            .inner
-            .app_registry
-            .register(manifest)
-            .await;
-    }
-
-    /// Write a value into the MeshStore on the given node.
-    pub fn store_set(&self, node_idx: usize, app_id: &str, key: &str, value: &[u8]) {
-        let origin = self.nodes[node_idx].node_id;
-        self.nodes[node_idx]
-            .state
-            .inner
-            .mesh_store
-            .set(app_id, key, Bytes::copy_from_slice(value), origin)
-            .expect("store_set failed");
-    }
-
-    /// Read a value from the MeshStore on the given node.
-    pub fn store_get(&self, node_idx: usize, app_id: &str, key: &str) -> Option<Vec<u8>> {
-        self.nodes[node_idx]
-            .state
-            .inner
-            .mesh_store
-            .get(app_id, key)
-            .expect("store_get failed")
-            .map(|e| e.value.to_vec())
-    }
-
-    /// Poll until every node has the expected key/value, or until timeout expires.
-    ///
-    /// Returns `true` if all nodes converged, `false` if timed out.
-    pub async fn wait_store_converged(
-        &self,
-        app_id: &str,
-        key: &str,
-        expected: &[u8],
-        timeout: Duration,
-    ) -> bool {
-        let deadline = tokio::time::Instant::now() + timeout;
-        loop {
-            let all_match = self.nodes.iter().all(|node| {
-                node.state
-                    .inner
-                    .mesh_store
-                    .get(app_id, key)
-                    .ok()
-                    .flatten()
-                    .map(|e| e.value.as_ref() == expected)
-                    .unwrap_or(false)
-            });
-            if all_match {
-                return true;
-            }
-            if tokio::time::Instant::now() >= deadline {
-                return false;
-            }
-            tokio::time::sleep(Duration::from_millis(50)).await;
-        }
-    }
-
-    // (The adaptive-scheduler helpers that lived here died with the
-    // dead-twin scheduler — 2026-06-10 rationalization; see
-    // commonwealth-inference/src/scheduler/mod.rs.)
-
-    /// Write a MeshPlan to all nodes' stores (simulating gossip propagation).
-    pub fn propagate_mesh_plan(&self, plan: &MeshPlan) {
-        for node in &self.nodes {
-            node.state.inner.inference_store.set_mesh_plan(plan);
-        }
-    }
-
-    /// Read the current MeshPlan from the first node (all should agree after propagation).
-    pub fn current_mesh_plan(&self) -> Option<MeshPlan> {
-        self.nodes
-            .first()
-            .and_then(|n| n.state.inner.inference_store.get_mesh_plan())
-    }
-
-    /// Check if all nodes have the same MeshPlan version.
-    pub fn plans_converged(&self) -> bool {
-        let versions: Vec<Option<u64>> = self
-            .nodes
-            .iter()
-            .map(|n| {
-                n.state
-                    .inner
-                    .inference_store
-                    .get_mesh_plan()
-                    .map(|p| p.version)
-            })
-            .collect();
-
-        if versions.is_empty() {
-            return false;
-        }
-
-        let first = versions[0];
-        first.is_some() && versions.iter().all(|v| *v == first)
-    }
 }
 
 /// Builder for the twenty-node hacker collective demo scenario.
@@ -235,7 +135,9 @@ impl SimulatedMesh {
 /// - 5 x M3 Pro 18GB
 /// - 2 x M3 Max 48GB
 /// - 1 x M3 Max 96GB
-pub fn twenty_node_hacker_collective() -> SimulatedMesh {
+pub fn twenty_node_hacker_collective<S>(
+    make_state: impl Fn(NodeId, Mesh) -> S,
+) -> SimulatedMesh<S> {
     let mut mesh = SimulatedMesh::new("hacker-collective");
 
     // 12 x M3 Pro 36GB — the core workhorses.
@@ -247,7 +149,7 @@ pub fn twenty_node_hacker_collective() -> SimulatedMesh {
                 commonwealth_core::capabilities::ComputeType::Metal,
             )
             .ram_gb(36);
-        mesh.add_node(node);
+        mesh.add_node(node, &make_state);
     }
 
     // 5 x M3 Pro 18GB — smaller machines.
@@ -259,7 +161,7 @@ pub fn twenty_node_hacker_collective() -> SimulatedMesh {
                 commonwealth_core::capabilities::ComputeType::Metal,
             )
             .ram_gb(18);
-        mesh.add_node(node);
+        mesh.add_node(node, &make_state);
     }
 
     // 2 x M3 Max 48GB.
@@ -271,7 +173,7 @@ pub fn twenty_node_hacker_collective() -> SimulatedMesh {
                 commonwealth_core::capabilities::ComputeType::Metal,
             )
             .ram_gb(48);
-        mesh.add_node(node);
+        mesh.add_node(node, &make_state);
     }
 
     // 1 x M3 Max 96GB.
@@ -282,7 +184,7 @@ pub fn twenty_node_hacker_collective() -> SimulatedMesh {
             commonwealth_core::capabilities::ComputeType::Metal,
         )
         .ram_gb(96);
-    mesh.add_node(node);
+    mesh.add_node(node, &make_state);
 
     // Set uniform LAN latency.
     mesh.set_lan_latency(2.0);
@@ -290,7 +192,7 @@ pub fn twenty_node_hacker_collective() -> SimulatedMesh {
     mesh
 }
 
-impl Drop for SimulatedMesh {
+impl<S> Drop for SimulatedMesh<S> {
     fn drop(&mut self) {
         self.shutdown_all();
     }

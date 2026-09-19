@@ -56,9 +56,9 @@ use commonwealth_work::projection::{WorkProjection, WorkUnitStatus};
 use commonwealth_work::{Submission, WorkAct};
 use corpus_engine::index::CorpusIndex;
 use oicp_types::JobKind;
-use sovereign_api::auto_recover::{merge_from_fold_coverage, RecoveryOutcome};
-use sovereign_api::server::internal_router;
-use sovereign_mesh::ingest_executor::{fold_coverage_for, FoldCoverage, INGEST_KIND};
+use sovereign_daemon::ingest_executor::{fold_coverage_for, FoldCoverage, INGEST_KIND};
+use sovereign_daemon::server::internal_router;
+use sovereign_grants::auto_recover::{merge_from_fold_coverage, RecoveryOutcome};
 use tempfile::TempDir;
 
 use crate::common;
@@ -304,8 +304,9 @@ async fn the_merge_proceeds_with_the_slices_that_exist() {
         "precondition: this handoff is partial"
     );
 
+    let node = sovereign_daemon::routes_internal::fold_recovery(&leader_state).await;
     let outcome = merge_from_fold_coverage(
-        &leader_state,
+        node,
         CORPUS,
         coverage.handoff_id,
         &coverage.nodes,
@@ -519,9 +520,10 @@ async fn a_corpus_missing_an_abandoned_slice_records_nothing_that_says_so() {
 
 /// Merge one corpus from a coverage, asserting the merge itself succeeded —
 /// a precondition for the gossip reading, not the reading's own bar.
-async fn merge_one(state: &sovereign_api::state::AppState, corpus: &str, cov: &FoldCoverage) {
+async fn merge_one(state: &sovereign_daemon::state::AppState, corpus: &str, cov: &FoldCoverage) {
+    let node = sovereign_daemon::routes_internal::fold_recovery(state).await;
     let outcome =
-        merge_from_fold_coverage(state, corpus, cov.handoff_id, &cov.nodes, cov.expected).await;
+        merge_from_fold_coverage(node, corpus, cov.handoff_id, &cov.nodes, cov.expected).await;
     assert!(
         matches!(outcome, RecoveryOutcome::Recovered { .. }),
         "precondition for the gossip reading: {corpus} must have a canonical \

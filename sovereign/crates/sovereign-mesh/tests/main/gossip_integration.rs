@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! End-to-end gossip convergence test.
 //!
-//! Binds two real `sovereign_api::internal_router` instances on
+//! Binds two real `sovereign_daemon::internal_router` instances on
 //! ephemeral localhost ports (skipping `EmbeddedDaemon`'s hardcoded
 //! 9742), seeds each with a distinct `AppState` on the same mesh,
 //! and drives `sovereign_mesh::gossip::run_one_round` between them.
@@ -18,8 +18,8 @@ use std::time::Duration;
 use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
-use sovereign_api::server::internal_router;
-use sovereign_api::state::AppState;
+use sovereign_daemon::server::internal_router;
+use sovereign_daemon::state::AppState;
 use sovereign_mesh::gossip;
 
 fn member_at(id: NodeId, name: &str, last_seen: u64, addr: SocketAddr) -> MemberRecord {
@@ -141,35 +141,40 @@ async fn two_peers_converge_via_one_gossip_round() {
     let _addr_b = spawn_internal_router(state_b.clone()).await;
 
     // Sanity check: before gossip, A has 1 member, B has 2.
-    assert_eq!(state_a.inner.mesh.read().await.members.len(), 1);
-    assert_eq!(state_b.inner.mesh.read().await.members.len(), 2);
+    assert_eq!(state_a.inner.fabric.mesh.read().await.members.len(), 1);
+    assert_eq!(state_b.inner.fabric.mesh.read().await.members.len(), 2);
 
     // Bootstrap A with B's address so A can find B during gossip —
     // this is what the join handshake's `adopt mesh snapshot` step
     // would normally deliver. Simulating it by hand keeps the test
     // focused on gossip and independent of the handshake code path.
     {
-        let mut mesh = state_a.inner.mesh.write().await;
+        let mut mesh = state_a.inner.fabric.mesh.write().await;
         mesh.members
             .insert(b_id, member_at(b_id, "B", 150, _addr_b));
     }
-    assert_eq!(state_a.inner.mesh.read().await.members.len(), 2);
+    assert_eq!(state_a.inner.fabric.mesh.read().await.members.len(), 2);
 
     // Drive one round on A. Inside run_one_round, A picks B (the
     // only non-self peer), POSTs to B's `/internal/gossip`, B
     // merges, and returns its updated view — which A merges in.
     // After this: both sides have the union of views.
-    gossip::run_one_round(&state_a, Duration::from_secs(60))
-        .await
-        .expect("gossip round should succeed");
+    gossip::run_one_round(
+        &*state_a.inner.fabric,
+        state_a.inner.node.corpus_engine.as_ref(),
+        &state_a,
+        Duration::from_secs(60),
+    )
+    .await
+    .expect("gossip round should succeed");
 
     // Both AppStates now contain both members.
-    let a_after = state_a.inner.mesh.read().await;
+    let a_after = state_a.inner.fabric.mesh.read().await;
     assert_eq!(a_after.members.len(), 2);
     assert!(a_after.members.contains_key(&a_id));
     assert!(a_after.members.contains_key(&b_id));
 
-    let b_after = state_b.inner.mesh.read().await;
+    let b_after = state_b.inner.fabric.mesh.read().await;
     assert_eq!(b_after.members.len(), 2);
     assert!(b_after.members.contains_key(&a_id));
     assert!(b_after.members.contains_key(&b_id));
@@ -216,15 +221,21 @@ async fn gossip_decays_peer_after_local_contact_goes_stale() {
     };
     let state = Arc::new(AppState::new(me, mesh));
     let clock = commonwealth_core::TestClock::new(1_000);
-    state.install_clock(Arc::new(clock.clone()));
+    state.clock_reader().publish(Arc::new(clock.clone()));
 
     // Round 1: ghost is lazy-init'd to now (grace window) — NOT decayed yet.
-    gossip::run_one_round(&state, Duration::from_secs(60))
-        .await
-        .expect("gossip round should not error even when peer unreachable");
+    gossip::run_one_round(
+        &*state.inner.fabric,
+        state.inner.node.corpus_engine.as_ref(),
+        &*state,
+        Duration::from_secs(60),
+    )
+    .await
+    .expect("gossip round should not error even when peer unreachable");
     assert_eq!(
         state
             .inner
+            .fabric
             .mesh
             .read()
             .await
@@ -239,11 +250,16 @@ async fn gossip_decays_peer_after_local_contact_goes_stale() {
     // Advance OUR clock past the threshold; the ghost has no server so it is
     // never re-observed → its local-contact stamp goes stale → decay.
     clock.advance(120);
-    gossip::run_one_round(&state, Duration::from_secs(60))
-        .await
-        .expect("gossip round should not error even when peer unreachable");
+    gossip::run_one_round(
+        &*state.inner.fabric,
+        state.inner.node.corpus_engine.as_ref(),
+        &*state,
+        Duration::from_secs(60),
+    )
+    .await
+    .expect("gossip round should not error even when peer unreachable");
 
-    let after = state.inner.mesh.read().await;
+    let after = state.inner.fabric.mesh.read().await;
     assert_eq!(
         after.members.get(&ghost).unwrap().status,
         NodeStatus::Offline,
@@ -284,17 +300,24 @@ async fn gossip_skewed_last_seen_does_not_false_decay() {
         peers: vec![],
     };
     let state = Arc::new(AppState::new(me, mesh));
-    state.install_clock(Arc::new(commonwealth_core::TestClock::new(1_000)));
+    state
+        .clock_reader()
+        .publish(Arc::new(commonwealth_core::TestClock::new(1_000)));
 
     // We observed the peer locally at now (1_000) — a recent exchange — even
     // though its self-stamped last_seen is ancient (skewed clock).
     state.observe_peer_contact(peer, 1_000);
 
-    gossip::run_one_round(&state, Duration::from_secs(60))
-        .await
-        .expect("gossip round should not error");
+    gossip::run_one_round(
+        &*state.inner.fabric,
+        state.inner.node.corpus_engine.as_ref(),
+        &*state,
+        Duration::from_secs(60),
+    )
+    .await
+    .expect("gossip round should not error");
 
-    let after = state.inner.mesh.read().await;
+    let after = state.inner.fabric.mesh.read().await;
     assert_eq!(
         after.members.get(&peer).unwrap().status,
         NodeStatus::Online,
@@ -348,7 +371,9 @@ async fn answering_peer_whose_record_is_frozen_must_not_decay() {
         peers: vec![],
     };
     let state_b = Arc::new(AppState::new(b_id, mesh_b));
-    state_b.install_clock(Arc::new(commonwealth_core::TestClock::new(1_000)));
+    state_b
+        .clock_reader()
+        .publish(Arc::new(commonwealth_core::TestClock::new(1_000)));
     let addr_b = spawn_internal_router((*state_b).clone()).await;
 
     let mesh_a = Mesh {
@@ -372,12 +397,17 @@ async fn answering_peer_whose_record_is_frozen_must_not_decay() {
     };
     let state_a = Arc::new(AppState::new(a_id, mesh_a));
     let clock_a = commonwealth_core::TestClock::new(1_000);
-    state_a.install_clock(Arc::new(clock_a.clone()));
+    state_a.clock_reader().publish(Arc::new(clock_a.clone()));
 
     // Round 1 at t=1000: A reaches B and converges.
-    gossip::run_one_round(&state_a, Duration::from_secs(60))
-        .await
-        .expect("round 1 should succeed");
+    gossip::run_one_round(
+        &*state_a.inner.fabric,
+        state_a.inner.node.corpus_engine.as_ref(),
+        &*state_a,
+        Duration::from_secs(60),
+    )
+    .await
+    .expect("round 1 should succeed");
     assert_eq!(
         state_a.peer_contact_or_init(b_id, 0),
         1_000,
@@ -386,6 +416,7 @@ async fn answering_peer_whose_record_is_frozen_must_not_decay() {
     assert_eq!(
         state_a
             .inner
+            .fabric
             .mesh
             .read()
             .await
@@ -404,9 +435,14 @@ async fn answering_peer_whose_record_is_frozen_must_not_decay() {
 
     // Round 2 at t=1120: A reaches B successfully again. THE ROUND-TRIP
     // ITSELF is the liveness evidence — it must stamp B.
-    gossip::run_one_round(&state_a, Duration::from_secs(60))
-        .await
-        .expect("round 2 should succeed");
+    gossip::run_one_round(
+        &*state_a.inner.fabric,
+        state_a.inner.node.corpus_engine.as_ref(),
+        &*state_a,
+        Duration::from_secs(60),
+    )
+    .await
+    .expect("round 2 should succeed");
     // THE ASSERTION WITH TEETH. Status alone is NOT it: on a successful
     // reach the round unconditionally forces `status = Online` (see the
     // `peer back Online` fix-up in run_one_round), which masks the defect
@@ -431,6 +467,7 @@ async fn answering_peer_whose_record_is_frozen_must_not_decay() {
     assert_eq!(
         state_a
             .inner
+            .fabric
             .mesh
             .read()
             .await
@@ -499,18 +536,18 @@ async fn departure_tombstones_self_on_peers() {
 
     // A learns B (so it has a record to tombstone).
     {
-        let mut mesh = state_a.inner.mesh.write().await;
+        let mut mesh = state_a.inner.fabric.mesh.write().await;
         mesh.members.insert(
             b_id,
             member_at(b_id, "B", 150, "127.0.0.1:2".parse().unwrap()),
         );
     }
-    assert!(state_a.inner.mesh.read().await.members[&b_id].is_active());
+    assert!(state_a.inner.fabric.mesh.read().await.members[&b_id].is_active());
 
     // B departs — pushes its self-tombstone to A.
-    gossip::announce_departure(&state_b).await;
+    gossip::announce_departure(&*state_b.inner.fabric).await;
 
-    let a = state_a.inner.mesh.read().await;
+    let a = state_a.inner.fabric.mesh.read().await;
     let b_rec = a.members.get(&b_id).expect("A retains a record for B");
     assert!(
         b_rec.removed_at.is_some(),

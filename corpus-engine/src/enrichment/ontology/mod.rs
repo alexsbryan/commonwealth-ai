@@ -2,17 +2,20 @@
 //! Ontology — the enrichment side of a recipe's `[enrichment.ontology]`.
 //!
 //! Since 2026-09-03 (enrichment-as-plugin Step 3) this module OWNS only what
-//! reads policies: the type index, the section clock, and `recipe validate`'s
-//! ontology rules. The two halves it used to hold moved, each to the side
-//! that owns it, and are re-exported here so no path changed:
+//! reads policies: `recipe validate`'s ontology rules and the host-side
+//! re-exports. The halves it used to hold moved, each to the side that owns
+//! it, and are re-exported here so no path changed:
 //!
 //! - The parsed policy DATA — [`OntologyPolicies`] and its five axes plus
 //!   prose, and the declaration types an author writes (`OntologyTypeDecl`,
 //!   `TypeKind`, `AttrDecl`, …, `OntologyV1`) — live in the
-//!   `corpus-engine-vocab` leaf (`corpus_engine_vocab::ontology`). They
+//!   `understanding-vocab` leaf (`understanding_vocab::ontology`). They
 //!   derive `Deserialize` for the JSON round trip an atlas records
 //!   (`atlas/ontology.json`), so a thin host can read what a corpus declared
 //!   without linking this crate.
+//! - The section clock and the type index are PURE and live in
+//!   `understanding-atlas` (`understanding_atlas::enrichment::ontology`),
+//!   moved there by domains `REVIEW-build-understanding-crate-tree`.
 //! - The declaration LANGUAGES — [`OntologyLanguage`], its registry, V0 and
 //!   V1 — parse recipe TOML, which makes them recipe parsing; they live in
 //!   [`crate::recipe_ontology::language`]. Before the move `recipe.rs` and
@@ -33,12 +36,17 @@
 //! an [`OntologyLanguage`] that parses TOML into these structs and is never
 //! consulted again. That is what makes a version 2 cheap.
 
-pub mod clock;
-pub mod type_index;
+// `clock` and `type_index` are PURE and moved to `understanding-atlas` by
+// domains REVIEW-build-understanding-crate-tree (the row that split this mixed
+// shell). Re-exported at the historical `enrichment::ontology::{clock,
+// type_index}` paths so every in-engine reach keeps resolving; the batch move
+// rows repoint the importers as they leave.
+pub use understanding_atlas::enrichment::ontology::clock;
+pub use understanding_atlas::enrichment::ontology::type_index;
 mod validate;
 
-pub use clock::section_date;
-pub use type_index::TypeIndex;
+pub use understanding_atlas::enrichment::ontology::clock::section_date;
+pub use understanding_atlas::enrichment::ontology::type_index::TypeIndex;
 pub use validate::{
     validate_block, OntologyValidation, MAX_ATTRS_PER_TYPE, MAX_ENUM_VALUES, MAX_TYPES_PER_KIND,
     RESERVED_CLAIM_KINDS,
@@ -49,12 +57,12 @@ pub use crate::recipe_ontology::language;
 pub use crate::recipe_ontology::language::{OntologyLanguage, OntologyLanguageRegistry};
 
 // The parsed policy data and the author-facing declaration types — the leaf.
-pub use corpus_engine_vocab::ontology::decl::{
+pub use understanding_vocab::ontology::decl::{
     AttrDecl, AttrFamily, ChangeDecl, ClaimScopeDecl, Deontic, DeriveDecl, Force, OntologyTypeDecl,
     OntologyV1, OntologyVocabulary, SourceDecl, SupersessionClock, TensionDecl, TypeKind,
     VoicesDecl,
 };
-pub use corpus_engine_vocab::ontology::{
+pub use understanding_vocab::ontology::{
     AssertionPolicy, ChangePolicy, DerivationPolicy, IdentityPolicy, NavigationPolicy,
     OntologyPolicies, ProsePolicy, QuestionKind, SeedPolicy, ShapePolicy, WalkPolicy,
 };

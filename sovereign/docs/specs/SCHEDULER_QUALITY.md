@@ -87,7 +87,7 @@ relitigate it.
 | D1 / D2 / D3 split — an inbound peer request is served by `SovereignInferenceAdapter` picking a **local** slot, never re-forwarded | ⚠️ **Verified for the DESKTOP only** — see the correction below |
 | Ranked failover — a 503 on the best peer tries the next peer, not straight to local (`peer_inference.rs:1522`) | ✅ Holds |
 | RAII in-flight guards, saturating decrements, drop-order documented (`peer_inference.rs:1597`) | ✅ Holds |
-| DST harness for gossip convergence, seeded faults, quiesce-then-assert (`sovereign-mesh/src/dst.rs`) | ✅ The pattern Tier 1 below should copy |
+| DST harness for gossip convergence, seeded faults, quiesce-then-assert (`sovereign-mesh/tests/main/dst.rs`) | ✅ The pattern Tier 1 below should copy |
 
 **Correction to the re-forwarding row (2026-07-27).** This doc previously
 recorded that row as "✅ Verified: no request-ping-pong hazard at N=12".

@@ -43,7 +43,7 @@ pub use sovereign_contracts::daemon_wire::CreateConversationResponse;
 // two shapes below are the desktop's IN-PROCESS IPC contract, deliberately
 // richer than the wire's — the frontend renders `metadata` raw and reads
 // `enabled_corpora` here. The wire's `ConversationResponse`/`MessageEntry`
-// (sovereign_mesh::turn_http) project metadata into
+// (sovereign_daemon::turn_http) project metadata into
 // provenance/citations/epistemic_state instead. When rung 6 converts the
 // desktop to a pure client, the frontend's renderer moves onto the
 // projections and these locals die — until then they are the frontend's
@@ -87,7 +87,7 @@ pub struct SearchResult {
 /// `/v1/skills` bytes into, so the surface names ONE skill row rather
 /// than a wire mirror plus a frontend struct (§10.6). The field names
 /// are the route's field names; changing one here without changing
-/// `sovereign_mesh::turn_extras_http::SkillWireEntry` breaks the parse
+/// `sovereign_daemon::turn_extras_http::SkillWireEntry` breaks the parse
 /// loudly at the call site.
 #[derive(Serialize, Deserialize)]
 pub struct SkillEntry {

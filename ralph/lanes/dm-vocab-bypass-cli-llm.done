@@ -1,0 +1,16 @@
+unit: dm-vocab-bypass-cli-llm
+commits: b7d22aef6 (the conversion)
+what: sovereign/crates/sovereign-cli-llm — the three atoms.json parses now go
+  through corpus_engine_vocab::read::read_atlas_atoms, the door
+  dm-vocab-door-move moved to the vocab leaf.
+  - corpus_scrub_cmd.rs:174 (was serde_json::from_str::<AtomsFile> at :181);
+    exit codes kept — read failure 3, parse failure 4 (InvalidData branch).
+  - bench_cmd/scaffold.rs:87 (was from_str::<AtomsFile> at :97); ATLAS_DIRNAME
+    imported from corpus_engine_vocab::read, not the engine re-export.
+  - enrich_cmd/diagnose.rs:257 read_atoms_optional wraps the door for the
+    generic Snapshot::load; atoms absent stays None, edges/gaps/configurations/
+    tension_candidates still use the generic read_optional.
+  The row's premise held: those are the only atoms.json parses in the three
+  files (grep -n 'from_str::<AtomsFile>' over them -> the three sites).
+checks: CLEAN exit=0 (0G, under 50G); LINT exit=0 (sovereign-cli-llm clean,
+  1223 warnings pre-existing); TEST(sovereign-cli-llm) exit=0 pass=1105 fail=0.

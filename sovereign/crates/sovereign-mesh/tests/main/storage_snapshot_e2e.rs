@@ -34,7 +34,7 @@ use commonwealth_core::contributions::LedgerEventKind;
 use corpus_engine::index::{CorpusIndex, InsertChunk};
 use corpus_engine::{CorpusEngine, EmbedFn};
 use sovereign_core::setup_config::SetupConfig;
-use sovereign_mesh::daemon::EmbeddedDaemon;
+use sovereign_daemon::daemon::EmbeddedDaemon;
 
 const EMBED_DIM: usize = 8;
 
@@ -128,6 +128,7 @@ async fn first_tick_emits_only_mesh_shared_corpora_to_ledger() {
         .expect("app_state present after create_mesh");
     let events = app_state
         .inner
+        .fabric
         .contribution_emitter
         .events()
         .expect("contribution_emitter.events() reads from in-memory store");
@@ -194,6 +195,7 @@ async fn snapshot_emits_nothing_when_no_corpus_engine_attached() {
         .expect("app_state present after create_mesh");
     let events = app_state
         .inner
+        .fabric
         .contribution_emitter
         .events()
         .expect("emitter.events() ok");

@@ -27,8 +27,8 @@ use serde_json::json;
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::Mesh;
 use commonwealth_discovery::membership;
-use sovereign_api::server::internal_router;
-use sovereign_api::state::AppState;
+use sovereign_daemon::server::internal_router;
+use sovereign_daemon::state::AppState;
 
 async fn spawn_internal_router(state: AppState) -> SocketAddr {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -50,15 +50,27 @@ fn build_founder() -> (AppState, NodeId, String, Arc<AtomicUsize>) {
     let founder_addr: SocketAddr = "127.0.0.1:9742".parse().unwrap();
     let (mesh, join_key) =
         membership::init_mesh_with_node_id("Test Mesh", "Founder", vec![founder_addr], founder_id);
-    let state = AppState::new(founder_id, mesh);
 
     let counter = Arc::new(AtomicUsize::new(0));
     let counter_clone = Arc::clone(&counter);
-    let hook: sovereign_api::state::MeshMutationHook =
+    let hook: sovereign_daemon::state::MeshMutationHook =
         Arc::new(move |_mesh: &Mesh, _self_id: NodeId| {
             counter_clone.fetch_add(1, Ordering::Relaxed);
         });
-    let state = state.with_mesh_mutation_hook(hook);
+    // The mutation hook is a construction argument now (DC §4.2 "Construction
+    // is staged"), not a post-construction install.
+    let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric(
+        founder_id,
+        mesh,
+        Arc::new(commonwealth_state::MeshStore::in_memory().unwrap()),
+        Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new()),
+        None,
+        None,
+        sovereign_daemon::state::FabricSeed {
+            mesh_mutation_hook: Some(hook),
+            ..Default::default()
+        },
+    );
 
     (state, founder_id, join_key, counter)
 }
@@ -69,7 +81,10 @@ async fn valid_join_key_admits_new_member_and_fires_hook() {
     let addr = spawn_internal_router(founder_state.clone()).await;
 
     // Pre-condition: founder is alone, hook hasn't fired.
-    assert_eq!(founder_state.inner.mesh.read().await.members.len(), 1);
+    assert_eq!(
+        founder_state.inner.fabric.mesh.read().await.members.len(),
+        1
+    );
     assert_eq!(hook_counter.load(Ordering::Relaxed), 0);
 
     let joiner_addr: SocketAddr = "127.0.0.1:9876".parse().unwrap();
@@ -125,7 +140,7 @@ async fn valid_join_key_admits_new_member_and_fires_hook() {
     // The founder's live AppState mesh must now contain the joiner
     // — proves the handshake actually mutated state, not just
     // returned a synthesized response.
-    let live = founder_state.inner.mesh.read().await;
+    let live = founder_state.inner.fabric.mesh.read().await;
     assert_eq!(
         live.members.len(),
         2,
@@ -134,11 +149,9 @@ async fn valid_join_key_admits_new_member_and_fires_hook() {
     assert!(live.members.values().any(|m| m.name == "Joiner"));
     drop(live);
 
-    // The mesh-mutation hook fired exactly once for the admission.
-    // Regression target: if `with_mesh_mutation_hook` ever gets
-    // re-ordered after an `Arc::clone(&app_state.inner)`, this
-    // counter stays at zero and on-join persistence falls back to
-    // the 10-second gossip-loop cadence (silent failure today).
+    // The mesh-mutation hook fired exactly once for the admission. The hook is
+    // a construction argument now, so the ordering hazard that used to drop it
+    // is gone; this pins that it still fires.
     assert_eq!(
         hook_counter.load(Ordering::Relaxed),
         1,
@@ -150,12 +163,7 @@ async fn valid_join_key_admits_new_member_and_fires_hook() {
     // unchanged. The handshake admits the joiner; it doesn't
     // re-stamp the founder.
     assert_eq!(
-        founder_state
-            .inner
-            .self_node_id_swap
-            .load_full()
-            .as_ref()
-            .clone(),
+        founder_state.inner.fabric.identity.current(),
         founder_id,
         "founder NodeId must not change under /internal/join"
     );
@@ -191,7 +199,7 @@ async fn join_with_pubkey_and_valid_proof_records_identity() {
 
     // The founder's live mesh records the joiner WITH its pubkey —
     // the identity that a future dial-by-key transport dials.
-    let live = founder_state.inner.mesh.read().await;
+    let live = founder_state.inner.fabric.mesh.read().await;
     let joiner = live
         .members
         .values()
@@ -238,7 +246,7 @@ async fn join_with_pubkey_but_bad_proof_is_rejected_401() {
         "unproven pubkey must be a loud 401, never a silent admit"
     );
     assert_eq!(
-        founder_state.inner.mesh.read().await.members.len(),
+        founder_state.inner.fabric.mesh.read().await.members.len(),
         1,
         "rejected join must not mutate the founder's mesh"
     );
@@ -276,7 +284,7 @@ async fn invalid_join_key_rejects_with_401_and_does_not_mutate() {
     // No mutation, no hook fire. The auth-failure path must short
     // -circuit before any Mesh write.
     assert_eq!(
-        founder_state.inner.mesh.read().await.members.len(),
+        founder_state.inner.fabric.mesh.read().await.members.len(),
         1,
         "rejected join must not mutate the founder's mesh"
     );
@@ -335,7 +343,7 @@ async fn joiner_can_adopt_founder_mesh_after_handshake() {
     // the wire), must match the wire shape. This is the
     // round-trip-equivalence check that catches drift between
     // `Mesh` and `MeshWire`.
-    let live = founder_state.inner.mesh.read().await;
+    let live = founder_state.inner.fabric.mesh.read().await;
     let mut live_names: Vec<&str> = live.members.values().map(|m| m.name.as_str()).collect();
     live_names.sort();
     assert_eq!(

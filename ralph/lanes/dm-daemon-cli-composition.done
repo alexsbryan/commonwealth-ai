@@ -1,0 +1,27 @@
+unit: dm-daemon-cli-composition
+commits: 080404ceb (correct the row's premises), 8ad9a7607 (the move),
+  503c66aac (registry + doc re-keys), 8559c0bbf (treesitter gating)
+what: the composition half of `sovereign-cli-daemon`'s `daemon_cmd` moved to
+  sovereign-daemon per §3a — 17 files / ~8,875 lines: bootstrap, build/,
+  discovery_policy, tool_registry, solve_http, solve_tools, ocr_install,
+  workflow_trigger, atlas_builder, principal, provider, worker, workspace,
+  supervise, watcher_supervisor, listener_watch, corpus_maintenance.
+  The process half stays with the binary (DC §4 preamble): argv dispatch,
+  HELP, `run_daemon` (it spawns log rotation + the memory watchdog and
+  returns the exit code), the lifecycle verbs, vram_plan, rlimit.
+  Row premises corrected first (ralph/DECISIONS.md 2026-09-17): the row's
+  six-file list was false (the composition reaches 8 unnamed source modules);
+  vram_plan.rs cannot move (names sovereign-cli-shared, layer `hosts`, from
+  `mesh-api` — UpwardEdge); bootstrap's `current_branch` moved to
+  sovereign-contracts::git with cli-shared delegating; `run_daemon` does not
+  split. Also: sovereign-mesh::reindexer re-exports ScipGraph so the registry
+  names the type without a new corpus-engine-scip production edge (fan-in
+  stays 10); atos/ocr features moved to sovereign-daemon; the moved modules
+  that need it are gated on `treesitter`; new `startup` module holds
+  daemon_pid_path, warn_orphaned_indexes and rpc_discovery_armed.
+checks: CLEAN exit=0 (disk gate); LINT exit=0 (full workspace, --all-targets);
+  LAYER exit=0 (386 edges, fan-in within caps); BOUNDARY exit=0; DOCS exit=0;
+  CENSUS --self-test exit=0, misnamed exit=0 (sovereign-daemon 100% host);
+  TEST(sovereign-daemon) exit=0 (233 pass); TEST(sovereign-cli-daemon) exit=0
+  (149 pass); TEST(sovereign-contracts) exit=0 (439 pass); TEST(sovereign-mesh)
+  exit=0 (648 pass); TEST(sovereign-cli-shared) exit=0 (85 pass).

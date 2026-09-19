@@ -411,7 +411,7 @@ caps, retention and the four-way single-decider off-switch for free. The
 stream is local-only and never gossips.
 
 **Two line kinds, episode-joined** (the decision→outcome shape next-edit
-and `sovereign_mesh::decision_log` both use, because the gate decision
+and `sovereign_scheduler::decision_log` both use, because the gate decision
 and the escalation resolution happen at different moments and an
 append-only file does not rewrite history):
 

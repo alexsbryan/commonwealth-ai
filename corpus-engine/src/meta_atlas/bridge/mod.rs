@@ -20,12 +20,13 @@
 //! This landing wires the file-driven core (topic nodes + edge store +
 //! oplog); the async candidate/signal/adjudication stages follow.
 
-pub mod adjudicate;
+// `adjudicate`, `signals` and `topic_node` are PURE and moved to
+// `understanding-atlas` by domains `dm-understanding-pure-1`. Re-exported at
+// the historical paths; `build`, `edges` and `lookup` stay host (they do IO).
+pub use understanding_atlas::meta_atlas::bridge::{adjudicate, signals, topic_node};
 pub mod build;
 pub mod edges;
 pub mod lookup;
-pub mod signals;
-pub mod topic_node;
 
 pub use adjudicate::{
     adjudication_schema, build_adjudication_prompt, parse_adjudication_response, AdjudicateFn,

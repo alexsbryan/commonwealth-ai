@@ -5,15 +5,18 @@
 //! corpus-engine owns the recipe types (`recipe.rs`), so `tests/recipe_schema.rs`
 //! regenerates the checked-in artifact
 //! `sovereign-recipes/schema/recipe_schema_descriptor.json` from those types
-//! (drift-gated). The raw artifact itself is embedded once in
-//! [`sovereign_contracts::recipe::schema`] — the contract crate both this engine
-//! and the recipe-authoring package depend on — and re-exported here so existing
-//! `corpus_engine::recipe_schema::RECIPE_SCHEMA_DESCRIPTOR_JSON` callers are
-//! unaffected. Housing the const in contracts is what lets the recipe-author
-//! stack read it without a `corpus-engine` dependency.
+//! (drift-gated). `build.rs` vendors that artifact into `OUT_DIR`, and this
+//! module embeds it from there — no cross-crate source-tree path.
 //!
-//! (This replaced a `sovereign-tools/build.rs` that reached *across* the crate
-//! boundary to parse `corpus-engine/src/recipe.rs` with `syn` at build time — a
-//! source-tree path no package split survived.)
+//! The recipe-authoring package cannot carry a `corpus-engine` dependency, so
+//! it receives this descriptor INJECTED (the monolith holds both sides). The
+//! shared leaf `sovereign-contracts` used to embed the artifact itself; that
+//! embed climbed out of the leaf's crate root, which is why the package lift
+//! could not resolve it in a flat-copy sandbox.
+//!
+//! (The descriptor itself replaced a `sovereign-tools/build.rs` that reached
+//! *across* the crate boundary to parse `corpus-engine/src/recipe.rs` with
+//! `syn` at build time — a source-tree path no package split survived.)
 
-pub use sovereign_contracts::recipe::schema::RECIPE_SCHEMA_DESCRIPTOR_JSON;
+pub const RECIPE_SCHEMA_DESCRIPTOR_JSON: &str =
+    include_str!(concat!(env!("OUT_DIR"), "/recipe_schema_descriptor.json"));

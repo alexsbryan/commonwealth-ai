@@ -48,7 +48,7 @@ fn read_atoms(index_path: &Path, corpus_id: &str) -> Result<Vec<AtomEnvelope>, M
     }
     let file = corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir)
         .map_err(|e| MeshAppError::io("read atoms", e))?;
-    Ok(file.atoms)
+    Ok(file.atoms().to_vec())
 }
 
 fn parcel_dto(e: &Entity) -> ParcelDto {

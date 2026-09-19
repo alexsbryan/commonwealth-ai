@@ -24,9 +24,9 @@ use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
 use super::types::{
-    AudienceRelation, ChapterInput, ChatCompletionFn, ChatPrompt, DiscourseMode,
-    DiscourseModeDistribution, EpistemicPosture, SectionClassification,
-    SectionClassificationVector, SectionType, TemporalFrame,
+    AudienceRelation, ChapterInput, ChatPrompt, DiscourseMode, DiscourseModeDistribution,
+    EpistemicPosture, InferenceFn, SectionClassification, SectionClassificationVector, SectionType,
+    TemporalFrame,
 };
 use crate::error::{Error, Result};
 
@@ -246,10 +246,10 @@ pub fn parse_classification_response(
 /// dispatch → parse → return.
 pub async fn classify_section(
     chapter: &ChapterInput,
-    chat: ChatCompletionFn,
+    chat: InferenceFn,
 ) -> Result<SectionClassification> {
     let prompt = compose_classification_prompt(chapter);
-    let response = chat(&prompt).await?;
+    let response = chat(&prompt, None).await?;
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -551,10 +551,10 @@ pub fn parse_axes_classification_response(
 /// shape as `classify_section`: pure ingest → chat → parse.
 pub async fn classify_section_axes(
     chapter: &ChapterInput,
-    chat: ChatCompletionFn,
+    chat: InferenceFn,
 ) -> Result<SectionClassificationVector> {
     let prompt = compose_axes_classification_prompt(chapter);
-    let response = chat(&prompt).await?;
+    let response = chat(&prompt, None).await?;
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())

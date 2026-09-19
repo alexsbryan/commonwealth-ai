@@ -2,9 +2,10 @@
 use std::collections::HashMap;
 
 use commonwealth_core::capabilities::ComputeType;
-use commonwealth_core::ids::ModelId;
-use sovereign_serving::model::{ModelArchitecture, ModelInfo};
-use sovereign_serving::oicp::{Capability, CapabilityProfile};
+use commonwealth_core::ids::{ModelId, NodeId};
+use commonwealth_core::mesh::Mesh;
+use commonwealth_core::model::{ModelArchitecture, ModelInfo};
+use oicp_types::{Capability, CapabilityProfile};
 
 use crate::simulated_mesh::SimulatedMesh;
 use crate::simulated_node::SimulatedNodeBuilder;
@@ -55,8 +56,8 @@ pub fn general_model(id: u128) -> ModelInfo {
 }
 
 /// Build the five-node mesh from the architecture document.
-/// Returns the mesh and node indices: (alice, bob, carol, dave, eve).
-pub fn architecture_five_node_mesh() -> SimulatedMesh {
+/// Nodes are: (alice, bob, carol, dave, eve), in index order.
+pub fn architecture_five_node_mesh<S>(make_state: impl Fn(NodeId, Mesh) -> S) -> SimulatedMesh<S> {
     let mut mesh = SimulatedMesh::new("Sunset District Co-op");
 
     // Alice: Strix Halo, 32 GB shared
@@ -64,6 +65,7 @@ pub fn architecture_five_node_mesh() -> SimulatedMesh {
         SimulatedNodeBuilder::new(1, "Alice's Desktop")
             .gpu("Strix Halo", 32, ComputeType::Vulkan)
             .ram_gb(32),
+        &make_state,
     );
 
     // Bob: RTX 4090, 24 GB
@@ -71,6 +73,7 @@ pub fn architecture_five_node_mesh() -> SimulatedMesh {
         SimulatedNodeBuilder::new(2, "Bob's Build")
             .gpu("RTX 4090", 24, ComputeType::Cuda)
             .ram_gb(64),
+        &make_state,
     );
 
     // Carol: M3 Ultra, 192 GB unified
@@ -79,6 +82,7 @@ pub fn architecture_five_node_mesh() -> SimulatedMesh {
             .gpu("Apple M3 Ultra", 144, ComputeType::Metal)
             .ram_gb(192)
             .storage_gb(2000, 1500),
+        &make_state,
     );
 
     // Dave: 2× RTX 3090, 48 GB total
@@ -87,6 +91,7 @@ pub fn architecture_five_node_mesh() -> SimulatedMesh {
             .gpu("RTX 3090", 24, ComputeType::Cuda)
             .gpu("RTX 3090", 24, ComputeType::Cuda)
             .ram_gb(64),
+        &make_state,
     );
 
     // Eve: MacBook Air, 16 GB shared, integrated
@@ -95,6 +100,7 @@ pub fn architecture_five_node_mesh() -> SimulatedMesh {
             .gpu("Apple M3", 12, ComputeType::Metal)
             .ram_gb(16)
             .storage_gb(256, 100),
+        &make_state,
     );
 
     mesh.set_lan_latency(1.0);

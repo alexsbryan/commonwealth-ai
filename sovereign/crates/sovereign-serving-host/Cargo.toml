@@ -1,0 +1,86 @@
+[package]
+name = "sovereign-serving-host"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+# The host's only in-repo reaches are the shared leaves (SERVING_BOUNDARY.md
+# "The two tiers"): the contract vocabulary (`InferenceProvider`, `Speed`,
+# `CompletionRequest`) and the published OICP language the slot pick is
+# arithmetic over.
+sovereign-contracts = { workspace = true }
+oicp-types = { workspace = true }
+# `worker_state.rs` keys the pinned-worker reader on the neutral identity the
+# roster and the local reader both speak (a shared leaf, so the package
+# reaches it — `SERVING_BOUNDARY.md` "The two tiers").
+kernel-types = { workspace = true }
+tracing = { workspace = true }
+# The recording sink is the host's (SERVING_BOUNDARY.md "Corrected
+# 2026-09-14", bullet 1): it serialises the scheduler's record types, mints
+# decision ids, and stamps them from the tier-0 `sovereign-time` leaf.
+sovereign-scheduler = { workspace = true }
+sovereign-time = { workspace = true }
+# `state.rs` holds Serving's part (DC §4.2), whose admission schedulers are
+# `serving_policy::fair_sched::SchedCore` — a member of the `serving` package,
+# so the edge stays inside the closure (domains REVIEW-build-daemon-parts).
+serving-policy = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+# `guest_lender.rs` publishes the `GuestLenderSource` port as an async trait
+# (SERVING_BOUNDARY.md "The five entries" (a)).
+async-trait = { workspace = true }
+# The four leavers moved host-side by domains dm-serving-move-leaves.
+# `worker_eligibility` and `model_fetch` key on commonwealth's identity and
+# model wire types (the grandfathered `commonwealth-core` edge);
+# `source_content_validator` names the tool-call parser, now reached from
+# `oicp-types` (domains REVIEW-build-serving-drop-inference);
+# `model_fetch` streams a peer file through reqwest and hashes it on the fly.
+commonwealth-core = { workspace = true }
+# The remote provider the router reaches an endpoint through. Was
+# `sovereign_inference::remote::*`, which is itself nothing but
+# `pub use oicp_client::*` — the path swap domains
+# REVIEW-build-serving-drop-inference performed to drop this crate's
+# `sovereign-inference` edge (SERVING_BOUNDARY.md "Grandfathered": the
+# exception cleared when the remote provider was reached through
+# `oicp-client`).
+oicp-client = { workspace = true }
+reqwest = { workspace = true }
+urlencoding = "2"
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+futures = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+# `tool_profile` parses `~/.svrnmesh/tool_profiles.toml` (moved host-side by
+# domains REVIEW-build-serving-move-adapter).
+toml = { workspace = true }
+# `peer_inference` (the knot, moved host-side by domains
+# REVIEW-build-serving-move-peer) holds its self-manifest, per-peer cache and
+# slot-alias map in `ArcSwap`s so the routing read path stays lock-free, and
+# mints the pinned-pod synthetic node id with `sha2` (already a dep).
+arc-swap = { workspace = true }
+# `admission` (moved host-side by domains REVIEW-build-serving-move-admission)
+# is the HTTP surface: the two axum middlewares and the 503 renderer. `axum` was
+# a dev-dep until the module landed; `http-body` carries the `GuardedBody`
+# wrapper the fair-share slot rides for the response BODY's lifetime.
+axum = { workspace = true }
+http-body = "1"
+
+[dev-dependencies]
+# Implementing `InferenceProvider` in the tests needs the trait's async
+# machinery and its stream type.
+futures = { workspace = true }
+# The guest-port controls are async.
+tokio = { workspace = true }
+# `model_fetch`'s tests stand up an in-process axum server over a tempdir, and
+# `admission`'s adapter controls drive a real Router through `oneshot`.
+axum = { workspace = true }
+tower = "0.5"
+tempfile = "3"
+# The pinned-pod snapshot/transport tests mint a bootstrap blob with a fixed
+# owner key (moved host-side by domains REVIEW-build-serving-move-peer).
+ed25519-dalek = { workspace = true }
+
+[lints]
+workspace = true

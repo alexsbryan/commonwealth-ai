@@ -20,7 +20,7 @@
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::{MemberRecord, NodeStatus};
 use sovereign_core::setup_config::SetupConfig;
-use sovereign_mesh::daemon::{EmbeddedDaemon, MeshError};
+use sovereign_daemon::daemon::{EmbeddedDaemon, MeshError};
 
 use crate::common;
 use crate::common::{empty_capabilities, mesh_admin_services};
@@ -51,7 +51,7 @@ async fn daemon_with_online_peer(
         .expect("app_state after create_mesh");
     let peer_id = NodeId::from_u128(0x5150_6060_7070_8080);
     {
-        let mut mesh = state.inner.mesh.write().await;
+        let mut mesh = state.inner.fabric.mesh.write().await;
         mesh.members.insert(
             peer_id,
             MemberRecord {

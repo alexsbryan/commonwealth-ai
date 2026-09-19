@@ -2,7 +2,7 @@
 //! End-to-end test for the `svrn enrich` admin harness.
 //!
 //! Exercises: `init` args parsing → writing config.json + chapters.json →
-//! `extract` with a deterministic `(EmbedFn, ChatCompletionFn)` mock →
+//! `extract` with a deterministic `(EmbedFn, InferenceFn)` mock →
 //! run output file on disk + cache populated on `--full`.
 //!
 //! The test does not spawn the binary; it calls the subcommand
@@ -20,10 +20,10 @@ use crate::config::{EnrichConfig, CONFIG_SCHEMA_VERSION};
 use crate::paths;
 use crate::test_env::{scoped_home, HomeGuard};
 use corpus_engine::enrichment::pipeline::{
-    ChapterManifest, ChapterSelection, ChatCompletionFn, ChatPrompt, Phase1Output, PhaseCache,
-    PipelinePhase,
+    ChapterManifest, ChapterSelection, ChatPrompt, Phase1Output, PhaseCache, PipelinePhase,
 };
 use corpus_engine::types::EmbedFn;
+use corpus_engine::InferenceFn;
 
 fn synthetic_book() -> String {
     let mut s = String::new();
@@ -64,8 +64,8 @@ fn deterministic_embed() -> EmbedFn {
     })
 }
 
-fn canned_chat() -> ChatCompletionFn {
-    Arc::new(move |prompt: &ChatPrompt| {
+fn canned_chat() -> InferenceFn {
+    Arc::new(move |prompt: &ChatPrompt, _max_tokens: Option<u32>| {
         let u = prompt.user.clone();
         let body = if u.contains("Chapter 1") {
             r#"{"questions":["What opens the story?"],"reveals":"framing","thematic_carriers":["Narrator"]}"#

@@ -109,7 +109,7 @@ struct ChatAskQuestion {
 /// Parse the bank. `ChatAsk`-prefixed because the concept ratchet found
 /// `Bank`, `Question` and `TurnResult` already defined elsewhere in this
 /// crate (`bench_cmd::routing_replay`, `eval_cmd::bank`, `book_report`,
-/// `eval_cmd::runner_threads`) and in `corpus-engine-vocab`. None of them is
+/// `eval_cmd::runner_threads`) and in `understanding-vocab`. None of them is
 /// this concept — an eval bank's question carries a category and a gold
 /// answer, this one carries a route, a gate-action set and coverage spans —
 /// so these are named apart rather than converged, which is the other half

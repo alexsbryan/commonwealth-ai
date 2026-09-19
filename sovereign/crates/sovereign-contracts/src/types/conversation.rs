@@ -171,9 +171,12 @@ pub struct ConversationContext {
     /// principal bound — independent of selection — so the two filters
     /// compose orthogonally: selection refines *within* the ceiling.
     ///
-    /// `None` on the single-user / desktop path (no principal injected).
+    /// `None` on the single-user / desktop path (no resolver wired).
     /// Retrieval is then bit-identical to pre-multi-tenant behaviour: no
     /// ceiling, so `None` `enabled_corpora` still searches every index.
+    /// `Some(empty)` when a resolver IS wired but could not name the caller:
+    /// the ceiling refuses rather than defaulting to all-corpora-eligible
+    /// (`PrincipalScope::Unresolved`).
     ///
     /// `#[serde(skip)]` — a per-request security value, never persisted.
     #[serde(skip)]

@@ -26,8 +26,8 @@ use std::time::Duration;
 use commonwealth_core::ids::NodeId;
 use commonwealth_discovery::membership;
 use commonwealth_transport::iroh::{EndpointBuilder, IrohAcceptor, SecretKey, ALPN};
-use sovereign_api::server::internal_router;
-use sovereign_api::state::AppState;
+use sovereign_daemon::server::internal_router;
+use sovereign_daemon::state::AppState;
 
 use sovereign_mesh::join::perform_join;
 
@@ -149,7 +149,7 @@ async fn plaintext_join_completes_over_iroh_tunnel() {
 
     // The founder's live state actually admitted the joiner (real
     // admission over the tunnel, not an echo).
-    let live = founder_state.inner.mesh.read().await;
+    let live = founder_state.inner.fabric.mesh.read().await;
     assert!(
         live.members.values().any(|m| m.name == "IrohJoiner"),
         "founder must have admitted the joiner over iroh"
@@ -184,6 +184,7 @@ async fn bad_iroh_dial_falls_back_to_direct_hint() {
     assert_eq!(result.mesh.name, mesh_name);
     assert!(founder_state
         .inner
+        .fabric
         .mesh
         .read()
         .await

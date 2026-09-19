@@ -54,8 +54,8 @@
 use std::sync::Arc;
 
 use sovereign_core::setup_config::SetupConfig;
-use sovereign_mesh::corpus_catalog_http::corpus_catalog_router;
-use sovereign_mesh::daemon::EmbeddedDaemon;
+use sovereign_daemon::corpus_catalog_http::corpus_catalog_router;
+use sovereign_daemon::daemon::EmbeddedDaemon;
 
 use crate::common::{desktop_services_with_engine, mesh_admin_services, spawn_router};
 
@@ -333,7 +333,7 @@ async fn catalog_without_a_corpus_engine_is_the_named_503() {
 /// `install` is a `OnceLock::set`, so this is a no-op when
 /// `lc_surface_e2e` got there first — which is the point.
 async fn install_a_manager_if_none() {
-    use sovereign_mesh::watched_folder_runtime;
+    use sovereign_daemon::watched_folder_runtime;
     if watched_folder_runtime::manager().is_some() {
         return;
     }

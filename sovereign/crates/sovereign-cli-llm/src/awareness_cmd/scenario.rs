@@ -28,6 +28,7 @@ use std::sync::Arc;
 use corpus_engine::enrichment::atlas::atoms::AtomEnvelope;
 use corpus_engine::enrichment::atlas::writer::read_atlas_atoms;
 use corpus_engine::enrichment::pipeline::atlas::EntityType;
+use corpus_engine::enrichment::pipeline::ChatPrompt;
 use corpus_engine::InferenceFn;
 use serde::Deserialize;
 use sovereign_core::traits::ConversationStore;
@@ -278,7 +279,7 @@ struct ScenarioScript {
 }
 
 /// An awareness-scenario manifest — unrelated to
-/// `sovereign_mesh::mesh_sim::scenario::Scenario` (a simulated mesh
+/// `sovereign_mesh_test_harness::mesh_sim::scenario::Scenario` (a simulated mesh
 /// topology) or the voice/moral bench scenarios.
 #[derive(Debug, Deserialize)]
 struct Scenario {
@@ -560,7 +561,7 @@ fn count_entities(sandbox: &Path) -> EntityCounts {
         let Ok(file) = read_atlas_atoms(&dir) else {
             continue;
         };
-        for atom in file.atoms {
+        for atom in file.atoms().iter().cloned() {
             if let AtomEnvelope::Entity(e) = atom {
                 match e.entity_type {
                     EntityType::Person => counts.people += 1,
@@ -673,7 +674,7 @@ async fn drive_suggest_replay(
                 continue;
             }
             let prompt = build_detection_prompt(&conversation, idx);
-            let raw = match (inference)(&prompt, None).await {
+            let raw = match (inference)(&ChatPrompt::new("", prompt.as_str()), None).await {
                 Ok(r) => r,
                 Err(_) => continue,
             };

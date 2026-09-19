@@ -310,7 +310,7 @@ fn load_detected(index_root: &Path) -> Result<Vec<PairKey>, String> {
     }
     // Claim atom → section key.
     let mut claim2key: HashMap<String, SectionKey> = HashMap::new();
-    for env in &atoms.atoms {
+    for env in atoms.atoms() {
         if let AtomEnvelope::Claim(c) = env {
             if let Some(ev) = c.evidence.first() {
                 if let Some(k) = chunk2key.get(&ev.chunk_id) {

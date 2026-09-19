@@ -60,7 +60,7 @@ pub struct CrossCorpusEdge {
     /// Opposite-side reference. A traversal walking the bridge
     /// uses `peer.corpus_id + peer.atom_id` to open the other
     /// atlas and continue.
-    pub peer: PeerAtomRef,
+    pub peer: CrossCorpusAtomRef,
     /// Why this edge exists — the exact signal path the detector
     /// took. Surfaced via `sovereign enrich atlas-cross-corpus
     /// --explain <edge-id>`.
@@ -68,7 +68,7 @@ pub struct CrossCorpusEdge {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PeerAtomRef {
+pub struct CrossCorpusAtomRef {
     pub corpus_id: String,
     pub atom_id: AtomId,
     /// Canonical_name on the peer side, copied in so a traversal
@@ -91,7 +91,7 @@ impl CrossCorpusEdge {
         let mut mirror = self.clone();
         std::mem::swap(&mut mirror.edge.source, &mut mirror.edge.target);
         let new_peer_atom_id = mirror.edge.target.clone();
-        mirror.peer = PeerAtomRef {
+        mirror.peer = CrossCorpusAtomRef {
             corpus_id: local_corpus_id,
             atom_id: new_peer_atom_id,
             canonical_name: local_canonical_name,
@@ -490,7 +490,7 @@ fn build_edge(
     };
     CrossCorpusEdge {
         edge,
-        peer: PeerAtomRef {
+        peer: CrossCorpusAtomRef {
             corpus_id: peer_corpus_id.to_string(),
             atom_id: peer.id.clone(),
             canonical_name: peer.canonical_name.clone(),

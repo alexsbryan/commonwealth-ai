@@ -37,15 +37,15 @@
 use serde::{Deserialize, Serialize};
 
 // The atlas taxonomy — `EnrichmentDepth` and the eight kind vocabularies —
-// moved to the `corpus-engine-vocab` leaf on 2026-09-03 so a host can name
+// moved to the `understanding-vocab` leaf on 2026-09-03 so a host can name
 // an atom's kind without linking corpus-engine. Re-exported at the historical
 // path so no importer inside the monorepo changes.
-pub use corpus_engine_vocab::taxonomy::{
+pub use understanding_vocab::taxonomy::{
     normalise_enum_tag, ClaimScope, DiscourseAct, EnrichmentDepth, EntityType, EpistemicStatus,
     EventType, QuestionType, RelationType, StateType,
 };
 // `SectionExtraction` below still names it in a `#[serde(default = "…")]`.
-use corpus_engine_vocab::taxonomy::extracted_default;
+use understanding_vocab::taxonomy::extracted_default;
 
 // ── Sketch types (Phase 1 output — per-section records) ───────
 //

@@ -178,7 +178,7 @@ pub fn build_meta_atlas(indexes_dir: &Path) -> std::io::Result<MetaAtlasFile> {
         }
 
         let mut contributed = 0usize;
-        for env in &atoms_file.atoms {
+        for env in atoms_file.atoms() {
             let entity = match env {
                 AtomEnvelope::Entity(e) => e,
                 _ => continue,
@@ -363,7 +363,7 @@ pub fn rebuild_for_corpus(
             let mut new_display_by_key: HashMap<String, String> = HashMap::new();
             let mut new_aliases_by_key: HashMap<String, BTreeSet<String>> = HashMap::new();
 
-            for env in &atoms_file.atoms {
+            for env in atoms_file.atoms() {
                 let entity = match env {
                     AtomEnvelope::Entity(e) => e,
                     _ => continue,

@@ -98,7 +98,7 @@ transport (#3), falls back to LocalOnly, and no shard ever reaches BeefyMac (thi
 
 8 files, +295/−13. `cargo build -p sovereign-cli-daemon` is clean (debug).
 
-- **Fix #1 — discovery direct-IP.** `sovereign-mesh/src/daemon.rs::discover_rpc_workers` — added
+- **Fix #1 — discovery direct-IP.** `sovereign-daemon/src/daemon.rs::discover_rpc_workers` — added
   `reachable_rpc_endpoint()`: pick a **direct member IP** (private-LAN first, then CGNAT/Tailscale),
   reachability-probe it, fall back to the probe host. **⚠️ Caveat: this is a LAN-only patch.** It
   hardcodes a directly-dialable IP, which is exactly what breaks cross-network. See §5/§6 — for the

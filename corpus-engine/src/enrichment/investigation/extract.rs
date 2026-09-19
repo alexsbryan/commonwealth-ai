@@ -15,7 +15,7 @@
 //!    relationships out of the model's JSON.
 //!
 //! Pure, no I/O — the orchestrator (mod.rs) wires this to the
-//! injected `ChatCompletionFn`.
+//! injected `InferenceFn`.
 
 use std::collections::BTreeMap;
 

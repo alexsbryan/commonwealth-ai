@@ -120,12 +120,12 @@ id = "FE-105"
 family = "FE"
 status = "landed"
 clause = '''A refusal produced by *this* gate MUST be exempted from peer health tracking — a busy response is a healthy peer declining, and booking it as a fault quarantines that peer.'''
-target = '''sovereign/crates/sovereign-mesh/src/peer_inference.rs:1055::book_peer_failure'''
+target = '''sovereign/crates/sovereign-serving-host/src/peer_inference.rs:1049::book_peer_failure'''
 asserts = '''book_peer_failure(peer, err, shed=true) repeated past FAILURE_THRESHOLD leaves is_quarantined(peer) false; the same calls with shed=false quarantine it.'''
 catches = '''dropping the shed early-exit so our own busy/shed refusals are booked as peer faults, quarantining a healthy peer after a few concurrent turns.'''
-destination = '''sovereign/crates/sovereign-mesh/src/peer_inference.rs (mod tests)'''
+destination = '''sovereign/crates/sovereign-serving-host/src/peer_inference.rs (mod tests)'''
 kind = '''rust-unit'''
-landed = '''sovereign-mesh::peer_inference::tests::our_own_shed_refusals_never_quarantine_the_peer_that_shed'''
+landed = '''sovereign-serving-host::peer_inference::tests::our_own_shed_refusals_never_quarantine_the_peer_that_shed'''
 
 [[spec]]
 id = "FE-119"
@@ -255,7 +255,7 @@ id = "UI-22"
 family = "UI"
 status = "landed"
 clause = '''Secure by default: bind to the loopback interface, and refuse at start-up a non-loopback bind with authentication disabled, with an explicit opt-out.'''
-target = '''sovereign/crates/sovereign-mesh/src/daemon.rs:2418::start_daemon'''
+target = '''sovereign/crates/sovereign-daemon/src/daemon.rs:2831::start_daemon'''
 asserts = '''with a non-loopback client_bind and no resolvable token, startup either refuses to bind or installs no token layer and every remote request 401s.'''
 catches = '''an edit flipping the loopback branch shipping an unauthenticated non-loopback listener. The entire posture lives inline in a ~4700-line async fn with no extracted decision function and zero tests — extracting it is part of this spec.'''
 destination = '''sovereign/crates/sovereign-mesh/tests/main/loopback_parity.rs'''
@@ -414,7 +414,7 @@ id = "FE-10"
 family = "FE"
 status = "landed"
 clause = '''Leaving MUST clear the pointer *and* remove the departed membership. Leaving a pointer naming deleted state reads as healthy at boot while making that membership permanently unforgettable.'''
-target = '''sovereign/crates/sovereign-mesh/src/daemon.rs:1459::stop_inner'''
+target = '''sovereign/crates/sovereign-daemon/src/daemon.rs:1805::stop_inner'''
 existing = '''sovereign/crates/sovereign-mesh/tests/main/mesh_switch.rs:179::leaving_clears_the_active_pointer_rather_than_stranding_it'''
 landed = '''sovereign-mesh::main::mesh_switch::leaving_clears_the_active_pointer_rather_than_stranding_it'''
 
@@ -432,9 +432,9 @@ id = "FE-106"
 family = "FE"
 status = "landed"
 clause = '''A peer that refuses with a stated retry delay MUST be excluded from candidacy for that delay, capped, and cleared by any success — **before** any manifest fetch, so a yielding peer costs nothing rather than a cheaper something.'''
-target = '''sovereign/crates/sovereign-mesh/src/yield_backoff.rs:79::record_refusal'''
-existing = '''sovereign/crates/sovereign-mesh/src/yield_backoff.rs:194::backoff_is_capped_however_long_the_peer_asks'''
-landed = '''sovereign-mesh::yield_backoff::tests::backoff_is_capped_however_long_the_peer_asks'''
+target = '''sovereign/crates/sovereign-scheduler/src/yield_backoff.rs:79::record_refusal'''
+existing = '''sovereign/crates/sovereign-scheduler/src/yield_backoff.rs:195::backoff_is_capped_however_long_the_peer_asks'''
+landed = '''sovereign-scheduler::yield_backoff::tests::backoff_is_capped_however_long_the_peer_asks'''
 
 [[spec]]
 id = "FE-11"
@@ -467,18 +467,18 @@ id = "FE-133"
 family = "FE"
 status = "landed"
 clause = '''A host preparing a distributed load MUST be able to ask a participant to seed its portion **before** the load begins, and MUST distribute only to participants that pass an eligibility profile — a settling period plus quarantine on instability, surfaced to the operator.'''
-target = '''sovereign/crates/sovereign-mesh/src/worker_eligibility.rs:625::eligible'''
-existing = '''sovereign/crates/sovereign-mesh/src/worker_eligibility.rs:746::stable_worker_eligible_after_settle'''
-landed = '''sovereign-mesh::worker_eligibility::tests::stable_worker_eligible_after_settle'''
+target = '''sovereign/crates/sovereign-serving-host/src/worker_eligibility.rs:625::eligible'''
+existing = '''sovereign/crates/sovereign-serving-host/src/worker_eligibility.rs:748::stable_worker_eligible_after_settle'''
+landed = '''sovereign-serving-host::worker_eligibility::tests::stable_worker_eligible_after_settle'''
 
 [[spec]]
 id = "FE-135"
 family = "FE"
 status = "landed"
 clause = '''Where a topology stratifies into anchors (holding the split) and consumers, anchors MUST advertise their anchor profile, and the candidate filter MUST exclude non-anchors so a casual peer never joins the split. Anchors MUST get the stricter eligibility profile.'''
-target = '''sovereign/crates/sovereign-mesh/src/worker_eligibility.rs:218::EligibilityConfig::anchor'''
-existing = '''sovereign/crates/sovereign-mesh/src/worker_eligibility.rs:733::anchor_profile_is_stricter_than_default'''
-landed = '''sovereign-mesh::worker_eligibility::tests::anchor_profile_is_stricter_than_default'''
+target = '''sovereign/crates/sovereign-serving-host/src/worker_eligibility.rs:218::EligibilityConfig::anchor'''
+existing = '''sovereign/crates/sovereign-serving-host/src/worker_eligibility.rs:734::anchor_profile_is_stricter_than_default'''
+landed = '''sovereign-serving-host::worker_eligibility::tests::anchor_profile_is_stricter_than_default'''
 
 [[spec]]
 id = "FE-137"
@@ -493,7 +493,7 @@ id = "FE-15"
 family = "FE"
 status = "landed"
 clause = '''Credential rotation MUST be refused while the fleet is mixed, and the refusal MUST distinguish **two populations** with different remedies: a peer that authorises on the legacy predicate needs *upgrading*; a peer simply not yet observed since start-up needs one *round*. Collapsing them tells operators their fleet is un-migrated when it is not.'''
-target = '''sovereign/crates/sovereign-mesh/src/daemon.rs:1763::rotate_invite'''
+target = '''sovereign/crates/sovereign-daemon/src/daemon.rs:2106::rotate_invite'''
 existing = '''sovereign/crates/sovereign-mesh/tests/main/rotate_pre_split_guard.rs:112::the_refusal_tells_an_unconfirmed_peer_apart_from_an_old_build'''
 landed = '''sovereign-mesh::main::rotate_pre_split_guard::the_refusal_tells_an_unconfirmed_peer_apart_from_an_old_build'''
 
@@ -511,7 +511,7 @@ id = "FE-17"
 family = "FE"
 status = "landed"
 clause = '''Because that observation is in memory, the rotation refusal MUST run at least one round before it is willing to refuse. **It must never report a verdict from an instrument it has not run.**'''
-target = '''sovereign/crates/sovereign-mesh/src/daemon.rs:1763::rotate_invite'''
+target = '''sovereign/crates/sovereign-daemon/src/daemon.rs:2106::rotate_invite'''
 existing = '''sovereign/crates/sovereign-mesh/tests/main/rotate_pre_split_guard.rs:86::rotate_refuses_while_an_unconfirmed_peer_is_online'''
 landed = '''sovereign-mesh::main::rotate_pre_split_guard::rotate_refuses_while_an_unconfirmed_peer_is_online'''
 
@@ -615,7 +615,7 @@ id = "FE-43"
 family = "FE"
 status = "exists-untagged"
 clause = '''Control-plane and administrative routes MUST be local-only, defended in **three layers**: router middleware, per-handler check, and a pinned test asserting the guard under the *production listener shape*.'''
-target = '''sovereign/crates/sovereign-mesh/src/loopback_guard.rs:71::loopback_only'''
+target = '''sovereign/crates/sovereign-daemon/src/loopback_guard.rs:159::loopback_only'''
 existing = '''sovereign/crates/sovereign-mesh/tests/main/loopback_parity.rs:134::admin_http_rejects_non_loopback_via_admin_reload'''
 
 [[spec]]
@@ -641,7 +641,7 @@ id = "FE-7"
 family = "FE"
 status = "landed"
 clause = '''A node MUST be able to belong to **many** trust rings and be active in exactly one. Parked memberships MUST retain their full roster and credentials, so returning to one is a **resume** — no handshake, no key redeemed.'''
-target = '''sovereign/crates/sovereign-mesh/src/daemon.rs:1062::join_mesh'''
+target = '''sovereign/crates/sovereign-daemon/src/daemon.rs:1405::join_mesh'''
 existing = '''sovereign/crates/sovereign-mesh/tests/main/join_parks_not_leaves.rs:89::same_mesh_id_survives_a_failed_join_from_a_solo_mesh'''
 landed = '''sovereign-mesh::main::join_parks_not_leaves::same_mesh_id_survives_a_failed_join_from_a_solo_mesh'''
 
@@ -738,8 +738,8 @@ id = "IN-2"
 family = "IN"
 status = "exists-untagged"
 clause = '''Slots MUST be able to alias one another so a single resident copy serves several roles, and the resolution order for an alias MUST have one decider.'''
-target = '''sovereign/crates/sovereign-mesh/src/slot_aliases.rs:88::resolution_alias_keys'''
-existing = '''sovereign/crates/sovereign-mesh/src/slot_aliases.rs:126::every_advertised_alias_is_resolvable'''
+target = '''sovereign/crates/sovereign-scheduler/src/slot_aliases.rs:88::resolution_alias_keys'''
+existing = '''sovereign/crates/sovereign-scheduler/src/slot_aliases.rs:126::every_advertised_alias_is_resolvable'''
 
 [[spec]]
 id = "IN-22"
@@ -794,8 +794,8 @@ id = "IN-5"
 family = "IN"
 status = "exists-untagged"
 clause = '''The system MUST report, per slot: which model is resident, whether it is resident or cold, and whether it is running in a degraded substitute form. **Cold is not an outage** and MUST be reported distinctly.'''
-target = '''sovereign/crates/sovereign-mesh/src/oicp_synthesis.rs:119::build_self_manifest'''
-existing = '''sovereign/crates/sovereign-mesh/src/oicp_synthesis.rs:938::manifest_reports_indeterminate_and_absent_residency_as_cold'''
+target = '''sovereign/crates/sovereign-serving-host/src/oicp_synthesis.rs:121::build_self_manifest'''
+existing = '''sovereign/crates/sovereign-serving-host/src/oicp_synthesis.rs:952::manifest_reports_indeterminate_and_absent_residency_as_cold'''
 
 [[spec]]
 id = "IN-7"

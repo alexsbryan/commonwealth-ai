@@ -590,6 +590,192 @@ negative_control = "none"
 runs_in = ["by-hand"]
 doc = "scripts/nc-thesis.py (module header — is the product claim a TYPE?)"
 
+# ── The domains campaign's census — one row per subcommand a venue runs ──
+#
+# `quality/campaigns/domains.toml` names one `scripts/domains-census.py`
+# subcommand per bar as its `instrument`, and `co-lineage.py measure domains`
+# EXECs each; the campaign's own `[predicate].check` runs `predicate`, and the
+# per-move loop runs `plan`. Every axis is grep-shaped over the registry
+# `quality/DOMAINS.toml` — no SCIP, no daemon — and every row is
+# `runs_in = ["by-hand"]` because the campaign is run by hand. The last row is
+# the control: each axis plants a positive fixture it must catch and a negative
+# it must refuse, and the runner prints caught/refused per axis (ARCH §18.1).
+# Costs measured n=3 on the macOS peer, 2026-09-14.
+
+[[instrument]]
+id = "dm-census-peer-outside"
+kind = "probe"
+claim = "invariant"
+command = "python3 scripts/domains-census.py peer-outside --json"
+# 0.64s, n=3 (0.64 / 0.64 / 0.68 wall), 2026-09-14.
+cost_secs = 0.64
+enforcement = "advisory"
+fidelity = "F0"
+baseline = { kind = "none" }
+negative_control = "domains-census-self-test"
+runs_in = ["by-hand"]
+doc = "quality/campaigns/domains.toml (bar dm-peer-outside-fabric — the count this measures)"
+
+[[instrument]]
+id = "dm-census-shared-edges"
+kind = "probe"
+claim = "invariant"
+command = "python3 scripts/domains-census.py shared-edges --json"
+# 0.12s, n=3 (0.12 / 0.11 / 0.12 wall), 2026-09-14.
+cost_secs = 0.12
+enforcement = "advisory"
+fidelity = "F0"
+baseline = { kind = "none" }
+negative_control = "domains-census-self-test"
+runs_in = ["by-hand"]
+doc = "quality/campaigns/domains.toml (bar dm-shared-edges — the count this measures)"
+
+[[instrument]]
+id = "dm-census-word-owners"
+kind = "probe"
+claim = "invariant"
+command = "python3 scripts/domains-census.py word-owners --json"
+# 1.92s, n=3 (1.92 / 1.87 / 1.92 wall), 2026-09-14 — a full-tree walk.
+cost_secs = 1.92
+enforcement = "advisory"
+fidelity = "F0"
+baseline = { kind = "none" }
+negative_control = "domains-census-self-test"
+runs_in = ["by-hand"]
+doc = "quality/campaigns/domains.toml (bar dm-word-owners — the count this measures)"
+
+[[instrument]]
+id = "dm-census-atom-outside"
+kind = "probe"
+claim = "invariant"
+command = "python3 scripts/domains-census.py atom-outside --json"
+# 0.59s, n=3 (0.59 / 0.59 / 0.58 wall), 2026-09-14.
+cost_secs = 0.59
+enforcement = "advisory"
+fidelity = "F0"
+baseline = { kind = "none" }
+negative_control = "domains-census-self-test"
+runs_in = ["by-hand"]
+doc = "quality/campaigns/domains.toml (bar dm-atom-outside — the count this measures)"
+
+[[instrument]]
+id = "dm-census-liftable"
+kind = "probe"
+claim = "invariant"
+command = "python3 scripts/domains-census.py liftable --json"
+# 0.11s, n=3 (0.11 / 0.11 / 0.11 wall), 2026-09-14 — read tier; a run-tier
+# invocation executes the declared lift scripts and costs their own time.
+cost_secs = 0.11
+enforcement = "advisory"
+fidelity = "F0"
+baseline = { kind = "none" }
+negative_control = "domains-census-self-test"
+runs_in = ["by-hand"]
+doc = "quality/campaigns/domains.toml (bar dm-contexts-liftable — the count this measures)"
+
+[[instrument]]
+id = "dm-census-crate-lines"
+kind = "probe"
+claim = "invariant"
+command = "python3 scripts/domains-census.py crate-lines --crate sovereign-mesh --json"
+# 2.11s, n=3 (2.19 / 2.11 / 2.11 wall), 2026-09-14.
+cost_secs = 2.11
+enforcement = "advisory"
+fidelity = "F0"
+baseline = { kind = "none" }
+negative_control = "domains-census-self-test"
+runs_in = ["by-hand"]
+doc = "quality/campaigns/domains.toml (bar dm-mesh-lines — the count this measures)"
+
+[[instrument]]
+id = "dm-census-misnamed"
+kind = "probe"
+claim = "invariant"
+command = "python3 scripts/domains-census.py misnamed --json"
+# 2.19s, n=3 (2.17 / 2.19 / 2.23 wall), 2026-09-14.
+cost_secs = 2.19
+enforcement = "advisory"
+fidelity = "F0"
+baseline = { kind = "none" }
+negative_control = "domains-census-self-test"
+runs_in = ["by-hand"]
+doc = "quality/campaigns/domains.toml (bar dm-misnamed-crates — the count this measures)"
+
+[[instrument]]
+id = "dm-census-queue"
+kind = "probe"
+claim = "invariant"
+command = "python3 scripts/domains-census.py queue --json"
+# 2.18s, n=3 (2.31 / 2.17 / 2.18 wall), 2026-09-14.
+cost_secs = 2.18
+enforcement = "advisory"
+fidelity = "F0"
+baseline = { kind = "none" }
+negative_control = "domains-census-self-test"
+runs_in = ["by-hand"]
+doc = "quality/campaigns/domains.toml (bar dm-queue — the count this measures)"
+
+[[instrument]]
+id = "dm-census-congestion"
+kind = "probe"
+claim = "invariant"
+command = "python3 scripts/domains-census.py congestion --json"
+# 2.49s, n=3 (2.61 / 2.38 / 2.49 wall), 2026-09-14 — a `git log` walk.
+cost_secs = 2.49
+enforcement = "advisory"
+fidelity = "F0"
+baseline = { kind = "none" }
+negative_control = "domains-census-self-test"
+runs_in = ["by-hand"]
+doc = "quality/campaigns/domains.toml (bar dm-context-congestion — the count this measures)"
+
+[[instrument]]
+id = "dm-census-plan"
+kind = "probe"
+claim = "invariant"
+command = "python3 scripts/domains-census.py plan --crate sovereign-mesh"
+# 1.47s, n=3 (1.51 / 1.46 / 1.47 wall), 2026-09-14. Exits 1 when the plan has
+# a KNOT or a failed assert — the loop's per-move check, run by hand.
+cost_secs = 1.47
+enforcement = "advisory"
+fidelity = "F0"
+baseline = { kind = "none" }
+negative_control = "domains-census-self-test"
+runs_in = ["by-hand"]
+doc = "quality/campaigns/domains.toml (THE STRATEGY — the loop this check drives)"
+
+[[instrument]]
+id = "dm-census-predicate"
+kind = "gate"
+claim = "invariant"
+command = "python3 scripts/domains-census.py predicate"
+# 0.59s, n=3 (0.58 / 0.60 / 0.60 wall), 2026-09-14. Exits 1 (FALSE) while any
+# kept context names no package or any crate outside commonwealth/ defines a
+# Peer* type; the campaign `check` chains boundary-gate after it.
+cost_secs = 0.59
+enforcement = "advisory"
+fidelity = "F0"
+verdict = "judgement-line"
+baseline = { kind = "none" }
+negative_control = "domains-census-self-test"
+runs_in = ["by-hand"]
+doc = "quality/campaigns/domains.toml ([predicate] — the sentence this decides)"
+
+[[instrument]]
+id = "domains-census-self-test"
+kind = "control"
+claim = "invariant"
+command = "python3 scripts/domains-census.py --self-test"
+# 0.27s, n=3 (0.27 / 0.27 / 0.27 wall), 2026-09-14.
+cost_secs = 0.27
+enforcement = "advisory"
+fidelity = "F0"
+verdict = "judgement-line"
+baseline = { kind = "none" }
+negative_control = "none"
+runs_in = ["by-hand"]
+doc = "scripts/domains-census.py (module header — the planted controls)"
+
 [[instrument]]
 id = "mesh-live-probe"
 kind = "probe"

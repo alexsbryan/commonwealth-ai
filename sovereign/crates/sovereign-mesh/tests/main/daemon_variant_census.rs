@@ -21,7 +21,7 @@
 //! ## Rewritten 2026-08-25, because Phase 4b moved where the naming happens
 //!
 //! Hosts no longer name a variant. They hand `LaunchParts` to
-//! `sovereign_mesh::assemble` — the one exhaustive match over `Launch` — and
+//! `sovereign_daemon::assemble` — the one exhaustive match over `Launch` — and
 //! that match names the variant at its arm. The two halves of the claim did
 //! not change; the place each one is checkable did:
 //!
@@ -85,8 +85,10 @@ const LIVE_CONSTRUCTION_SITES: &[(&str, &str, &str)] = &[
 /// Variant names parsed out of the enum itself, so adding one without a host
 /// fails rather than being invisible to a hand-maintained list.
 fn declared_variants() -> Vec<String> {
+    // `daemon_services.rs` moved to `sovereign-daemon` at dm-daemon-mesh-edge
+    // (2026-09-17); this census reads it by repo-relative path.
     let src = std::fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("src/daemon_services.rs"),
+        repo_root().join("sovereign/crates/sovereign-daemon/src/daemon_services.rs"),
     )
     .expect("daemon_services.rs is readable");
     let body_start = src
@@ -121,8 +123,9 @@ fn declared_variants() -> Vec<String> {
 /// input, not produce every output).
 #[test]
 fn every_variant_is_constructed_by_the_assembler() {
+    // The assembler moved to `sovereign-daemon` with the file (2026-09-17).
     let src = std::fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("src/daemon_services.rs"),
+        repo_root().join("sovereign/crates/sovereign-daemon/src/daemon_services.rs"),
     )
     .expect("daemon_services.rs is readable");
     let start = src
@@ -216,7 +219,7 @@ fn each_live_path_supplies_the_parts_for_its_variant() {
         assert!(
             body.contains("assemble("),
             "{rel} commissions a daemon without going through \
-             `sovereign_mesh::assemble` — the one exhaustive match over Launch \
+             `sovereign_daemon::assemble` — the one exhaustive match over Launch \
              (TOPOLOGY §10, Falsifier 3)"
         );
         assert!(
@@ -250,10 +253,11 @@ fn each_live_path_supplies_the_parts_for_its_variant() {
 fn the_desktop_variant_has_no_first_party_host() {
     let root = repo_root();
     // Scanned rather than listed, because the claim is an ABSENCE and a list
-    // of places it is absent from proves nothing (ARCH principle 5). The mesh
-    // crate's own source and tests are excluded: `daemon_services.rs` declares
-    // the arm and its tests exercise it, which is what a reserved variant
-    // looks like.
+    // of places it is absent from proves nothing (ARCH principle 5). Both host
+    // crates are excluded: `daemon_services.rs` (now in `sovereign-daemon`)
+    // declares the arm and its tests exercise it, which is what a reserved
+    // variant looks like, and `sovereign-mesh` is where the census itself
+    // lives.
     let mut hosts: Vec<String> = Vec::new();
     let mut stack = vec![
         root.join("sovereign/crates"),
@@ -280,7 +284,12 @@ fn the_desktop_variant_has_no_first_party_host() {
                 .unwrap_or(&path)
                 .to_string_lossy()
                 .to_string();
-            if rel.starts_with("sovereign/crates/sovereign-mesh/") {
+            // `daemon_services.rs` declares the arm and its tests exercise it —
+            // both crates are the assembler's home since dm-daemon-mesh-edge
+            // (2026-09-17) moved the host cluster out of `sovereign-mesh`.
+            if rel.starts_with("sovereign/crates/sovereign-mesh/")
+                || rel.starts_with("sovereign/crates/sovereign-daemon/")
+            {
                 continue;
             }
             let Ok(body) = std::fs::read_to_string(&path) else {

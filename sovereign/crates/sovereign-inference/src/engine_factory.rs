@@ -3,7 +3,7 @@
 //!
 //! Before this module, engine choice was not a decision the system could
 //! express: five construction sites named [`EmbeddedLlamaCpp`] literally
-//! (`daemon_cmd/build/inference.rs`, `sovereign-server/src/main.rs` ×2,
+//! (`sovereign-daemon/src/build/inference.rs`, `sovereign-server/src/main.rs` ×2,
 //! the desktop's `builders/inference.rs`, `sovereign-compute`'s
 //! `child_main.rs`), and `SetupConfig` had no key that could say
 //! otherwise. The [`InferenceProvider`] seam was already real — the mesh

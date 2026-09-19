@@ -8,7 +8,7 @@
 //! - [`patterns`] — observe sequences/gaps in `tool_call_log` and
 //!   write `source='observed'` notes (e.g. "investigated impact of X
 //!   before modifying Y"). Phase 7.1.
-//! - `commit_harvest` (in `sovereign_mesh::reindexer`) — harvest
+//! - `commit_harvest` (in `corpus_engine_watchers::commit_harvest`) — harvest
 //!   non-noisy git commit messages as `source='committed'` notes.
 //!   Phase 7.1.
 //! - [`nudge`] — surface a single-line "note worth recording?" hint
@@ -17,6 +17,8 @@
 //! - `diff_extract` / `response_mine` — run an extraction prompt or
 //!   regex library over diff-and-transcript to surface
 //!   `source='extracted'` / `source='inferred'` notes. Phase 7.2.
+//!   (`response_mine` moved down to `corpus-engine-notes` in domains
+//!   `dm-decision-extractor-move`; re-exported here.)
 //!
 //! The audit's job is to merge all five sources (`agent`,
 //! `committed`, `extracted`, `inferred`, `observed`) into one
@@ -27,4 +29,9 @@ pub mod diff_extract;
 pub mod diff_extract_backend;
 pub mod nudge;
 pub mod patterns;
-pub mod response_mine;
+// The regex response miner is the note store's question, not the agent tool
+// surface's, so it moved down to `corpus-engine-notes` (DT `workspace`
+// cluster) in domains `dm-decision-extractor-move`. Re-exported here so
+// `sovereign_tools::notes::response_mine` keeps resolving for its remaining
+// caller, `sovereign-cli-dev/src/audit_recover.rs`.
+pub use corpus_engine_notes::response_mine;

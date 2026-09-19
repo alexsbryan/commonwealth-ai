@@ -18,6 +18,7 @@ use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 use parquet::arrow::ArrowWriter;
 
+use corpus_engine::enrichment::pipeline::ChatPrompt;
 use corpus_engine::{CorpusEngine, CorpusSpec, EmbedFn, InferenceFn};
 
 // ─── Fixtures ────────────────────────────────────────────────
@@ -104,7 +105,8 @@ fn mock_embed_fn() -> EmbedFn {
 /// Returns canned JSON responses for skeleton extraction, cluster
 /// labeling, fault line detection, and open question prompts.
 fn mock_inference_fn() -> InferenceFn {
-    Arc::new(|prompt: &str, _schema: Option<&serde_json::Value>| {
+    Arc::new(|prompt: &ChatPrompt, _max_tokens: Option<u32>| {
+        let prompt = prompt.user.as_str();
         let response = if prompt.contains("structure of philosophical debate")
             || prompt.contains("introductory passages")
         {
@@ -298,7 +300,9 @@ async fn parquet_ingest_with_enrichment_creates_field_model() {
     // The v1 artifact must NOT be written by an `AtlasAtoms` domain — this is
     // the retirement half of the port, and it is asserted rather than assumed.
     assert!(
-        index.load_field_skeleton().unwrap().is_none(),
+        corpus_engine::index::field_skeleton::load_field_skeleton(&index.path())
+            .unwrap()
+            .is_none(),
         "an AtlasAtoms domain must not write field_skeleton.json"
     );
 
@@ -307,9 +311,9 @@ async fn parquet_ingest_with_enrichment_creates_field_model() {
     let atlas_dir = index
         .path()
         .join(corpus_engine::enrichment::atlas::ATLAS_DIRNAME);
-    let atoms = corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir)
-        .expect("an enriched AtlasAtoms corpus has an atlas")
-        .atoms;
+    let atoms_file = corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir)
+        .expect("an enriched AtlasAtoms corpus has an atlas");
+    let atoms = atoms_file.atoms();
     assert!(
         atoms
             .iter()
@@ -405,7 +409,8 @@ async fn non_enriched_corpus_has_no_field_model() {
         .expect("non-enriched ingest should succeed");
 
     let index = engine.open_index_for_corpus("test_corpus").await.unwrap();
-    let skeleton = index.load_field_skeleton().unwrap();
+    let skeleton =
+        corpus_engine::index::field_skeleton::load_field_skeleton(&index.path()).unwrap();
     assert!(
         skeleton.is_none(),
         "non-enriched corpus should not have field_skeleton.json"

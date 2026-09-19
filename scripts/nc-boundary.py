@@ -95,7 +95,7 @@ NOT_PRODUCTION = ("/tests/", "/benches/", "/examples/", "research/",
 #                                   tools, `tdd_solve` and `tdd_bdd_cycle`,
 #                                   listed in tools/list (sovereign-server
 #                                   routes_mcp.rs:469), plus the `solve` verb's
-#                                   daemon route (daemon_cmd/solve_http.rs). A
+#                                   daemon route (sovereign-daemon/src/solve_http.rs). A
 #                                   quality control measures SOVEREIGN; this
 #                                   drives red-green-refactor over the USER's
 #                                   repo and emits their code. Caught as a false

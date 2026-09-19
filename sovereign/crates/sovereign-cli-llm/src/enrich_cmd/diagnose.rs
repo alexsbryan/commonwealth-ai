@@ -216,7 +216,7 @@ impl Snapshot {
         } else {
             None
         };
-        let atoms = read_optional(atlas_dir, "atoms.json")?;
+        let atoms = read_atoms_optional(atlas_dir)?;
         let edges = read_optional(atlas_dir, "edges.json")?;
         let gaps = read_optional(atlas_dir, "gaps.json")?;
         let configurations = read_optional(atlas_dir, "configurations.json")?;
@@ -233,7 +233,7 @@ impl Snapshot {
 
     fn entity_name_by_id(&self, id: &AtomId) -> Option<String> {
         let file = self.atoms.as_ref()?;
-        file.atoms.iter().find_map(|a| match a {
+        file.atoms().iter().find_map(|a| match a {
             AtomEnvelope::Entity(e) if e.id == *id => Some(e.canonical_name.clone()),
             _ => None,
         })
@@ -249,6 +249,23 @@ fn read_optional<T: for<'de> Deserialize<'de>>(
         return Ok(None);
     }
     Ok(Some(read_json::<T>(&path)?))
+}
+
+/// The atoms product goes through the vocabulary's read door, so this file
+/// does not parse `atoms.json` itself; absent stays `None` and the door's
+/// parse failure keeps the old `parse <path>` prefix.
+fn read_atoms_optional(atlas_dir: &Path) -> Result<Option<AtomsFile>, String> {
+    let path = atlas_dir.join("atoms.json");
+    if !path.exists() {
+        return Ok(None);
+    }
+    match understanding_vocab::read::read_atlas_atoms(atlas_dir) {
+        Ok(file) => Ok(Some(file)),
+        Err(e) if e.kind() == std::io::ErrorKind::InvalidData => {
+            Err(format!("parse {}: {e}", path.display()))
+        }
+        Err(e) => Err(format!("read {}: {e}", path.display())),
+    }
 }
 
 fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, String> {
@@ -315,7 +332,7 @@ fn print_atoms(snap: &Snapshot, limit: usize) {
     use std::collections::BTreeMap;
     let mut counts: BTreeMap<&str, usize> = BTreeMap::new();
     let mut entity_kinds: BTreeMap<String, usize> = BTreeMap::new();
-    for a in &atoms_file.atoms {
+    for a in atoms_file.atoms() {
         let key = match a {
             AtomEnvelope::Entity(e) => {
                 *entity_kinds
@@ -338,7 +355,7 @@ fn print_atoms(snap: &Snapshot, limit: usize) {
         };
         *counts.entry(key).or_insert(0) += 1;
     }
-    println!("  Total atoms: {}", atoms_file.atoms.len());
+    println!("  Total atoms: {}", atoms_file.atoms().len());
     for (k, v) in &counts {
         println!("    {k:<15} {v}");
     }
@@ -354,7 +371,7 @@ fn print_atoms(snap: &Snapshot, limit: usize) {
     println!();
     println!("  Persons (sample, salience-ordered):");
     let mut persons: Vec<_> = atoms_file
-        .atoms
+        .atoms()
         .iter()
         .filter_map(|a| match a {
             AtomEnvelope::Entity(e) if e.entity_type == EntityType::Person => Some(e),
@@ -380,7 +397,7 @@ fn print_atoms(snap: &Snapshot, limit: usize) {
 
     // Sample concept atoms.
     let concepts: Vec<_> = atoms_file
-        .atoms
+        .atoms()
         .iter()
         .filter_map(|a| match a {
             AtomEnvelope::Entity(e) if e.entity_type == EntityType::Concept => Some(e),
@@ -404,7 +421,7 @@ fn print_atoms(snap: &Snapshot, limit: usize) {
 
     // Sample question atoms with resolution status.
     let questions: Vec<_> = atoms_file
-        .atoms
+        .atoms()
         .iter()
         .filter_map(|a| match a {
             AtomEnvelope::Question(q) => Some(q),
@@ -433,7 +450,7 @@ fn print_atoms(snap: &Snapshot, limit: usize) {
 
     // Sample claims with discourse_act.
     let claims: Vec<_> = atoms_file
-        .atoms
+        .atoms()
         .iter()
         .filter_map(|a| match a {
             AtomEnvelope::Claim(c) => Some(c),
@@ -553,7 +570,7 @@ fn print_configurations(snap: &Snapshot, limit: usize) {
 
     let mut all = Vec::new();
     if let Some(file) = &snap.atoms {
-        for a in &file.atoms {
+        for a in file.atoms() {
             if let AtomEnvelope::Configuration(c) = a {
                 all.push(c.clone());
             }

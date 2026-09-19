@@ -4,7 +4,7 @@
 //! /v1/documents/legacy`, and `POST /v1/documents/{id}/ask` + `GET
 //! /v1/documents/{id}/ask/{job_id}` — defined here so a client parses them
 //! without linking `sovereign-mesh`, and re-exported by
-//! `sovereign_mesh::documents_http`, which serialises them (one
+//! `sovereign_daemon::documents_http`, which serialises them (one
 //! definition, ARCH principle 8). Frames are `serde_json::Value` because
 //! the manager's `IngestProgress` / `OperationProgress` are
 //! `sovereign-tools` types that serialise only; a client re-emits them

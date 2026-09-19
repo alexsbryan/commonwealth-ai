@@ -3,7 +3,7 @@
 //!
 //! Minted 2026-09-04 for cw-lift rung 3b. Before it, `sovereign-cli-daemon`
 //! named `commonwealth_state::MeshStore` and
-//! `sovereign_api::state::ConvergenceRecord` directly, and those two types
+//! `sovereign_daemon::state::ConvergenceRecord` directly, and those two types
 //! were the whole reason the local daemon could not link without the mesh
 //! substrate. The couplings were eleven lines in two files; what they cost was
 //! the entire `commonwealth-*` closure on a binary that has no mesh to speak
@@ -18,10 +18,10 @@
 //! of one makes replication the identity function. Because the degenerate case
 //! is CORRECT rather than SKIPPED, the two paths cannot drift.
 //!
-//! [`SoloPeerStore`] and [`SoloConvergence`] are that N=1 answer written out.
+//! [`SoloReplicatedKv`] and [`SoloConvergence`] are that N=1 answer written out.
 //! Neither is a null object:
 //!
-//! - `SoloPeerStore` really stores. `set` then `get` returns what was set;
+//! - `SoloReplicatedKv` really stores. `set` then `get` returns what was set;
 //!   `scan` enumerates; `delete` removes. Replication to the other zero peers
 //!   is the identity function, which is why there is nothing to send — not
 //!   because sending was skipped.
@@ -37,7 +37,7 @@
 //!
 //! A trait past ~8 methods with no sub-trait shape is the §5.1 smell, and
 //! cw-lift rung 1e already refused a wide `Membership` seam on measured
-//! evidence (roster admission 26.5 ns against a 4.10 ms append). [`PeerStore`]
+//! evidence (roster admission 26.5 ns against a 4.10 ms append). [`ReplicatedKv`]
 //! is the four methods its two consumers actually call — measured across
 //! `sovereign-work-atlas` (get/set/delete/scan) and the daemon's notes publish
 //! sink and ingest poller (set/scan) — out of the fourteen `MeshStore`
@@ -49,18 +49,18 @@ use std::sync::Mutex;
 use bytes::Bytes;
 use kernel_types::NodeId;
 
-/// Why a [`PeerStore`] call could not be served.
+/// Why a [`ReplicatedKv`] call could not be served.
 ///
 /// One variant. The backing store is the only thing that can fail — a
 /// well-formed key is never itself a refusal, which is the property
-/// [`SoloPeerStore`]'s totality tests pin.
+/// [`SoloReplicatedKv`]'s totality tests pin.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PeerStoreError {
+pub enum ReplicatedKvError {
     /// The backing store refused or failed. Carries the store's own message.
     Backend(String),
 }
 
-impl std::fmt::Display for PeerStoreError {
+impl std::fmt::Display for ReplicatedKvError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Backend(m) => write!(f, "peer store backend: {m}"),
@@ -68,15 +68,15 @@ impl std::fmt::Display for PeerStoreError {
     }
 }
 
-impl std::error::Error for PeerStoreError {}
+impl std::error::Error for ReplicatedKvError {}
 
-/// One record in a [`PeerStore`], as the reader sees it.
+/// One record in a [`ReplicatedKv`], as the reader sees it.
 ///
 /// `origin` is which node wrote it — the field the daemon's ingest poller
 /// filters on so it does not re-ingest its own publications. `timestamp` is
 /// unix seconds and carries the last-write-wins ordering.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PeerEntry {
+pub struct ReplicatedKvEntry {
     /// Namespace the record lives in.
     pub app_id: String,
     /// Key within the namespace.
@@ -96,11 +96,11 @@ pub struct PeerEntry {
 /// tasks; every method takes `&self`.
 ///
 /// **Totality is part of the contract.** An implementation may return
-/// [`PeerStoreError::Backend`] when its storage genuinely fails, and may never
+/// [`ReplicatedKvError::Backend`] when its storage genuinely fails, and may never
 /// return one because a call "does not apply" in its topology.
-pub trait PeerStore: Send + Sync {
+pub trait ReplicatedKv: Send + Sync {
     /// Read one record, or `None` when the key is absent.
-    fn get(&self, app_id: &str, key: &str) -> Result<Option<PeerEntry>, PeerStoreError>;
+    fn get(&self, app_id: &str, key: &str) -> Result<Option<ReplicatedKvEntry>, ReplicatedKvError>;
 
     /// Write one record. Returns whether the stored value CHANGED — a
     /// re-publication of identical bytes reports `false` and is still stored.
@@ -110,14 +110,15 @@ pub trait PeerStore: Send + Sync {
         key: &str,
         value: Bytes,
         origin: NodeId,
-    ) -> Result<bool, PeerStoreError>;
+    ) -> Result<bool, ReplicatedKvError>;
 
     /// Remove one record. Returns whether anything was there to remove.
-    fn delete(&self, app_id: &str, key: &str) -> Result<bool, PeerStoreError>;
+    fn delete(&self, app_id: &str, key: &str) -> Result<bool, ReplicatedKvError>;
 
     /// Every record in `app_id` whose key starts with `prefix`. An empty
     /// prefix enumerates the namespace.
-    fn scan(&self, app_id: &str, prefix: &str) -> Result<Vec<PeerEntry>, PeerStoreError>;
+    fn scan(&self, app_id: &str, prefix: &str)
+        -> Result<Vec<ReplicatedKvEntry>, ReplicatedKvError>;
 }
 
 /// The liveness stamps of a two-way convergence path.
@@ -137,9 +138,77 @@ pub trait Convergence: Send + Sync {
     fn snapshot(&self) -> (Option<i64>, Option<i64>);
 }
 
+/// The notes-rail convergence stamps, as one shared record.
+///
+/// The concrete [`Convergence`] the mesh adapter and `/status` both hold, so
+/// the writers and the reader cannot disagree. It lived in
+/// `sovereign-api`'s `state` until domains `REVIEW-build-mesh-api-decouple`
+/// moved it here: `sovereign-mesh`'s `peer_adapter` names it, and Fabric may
+/// not name the daemon host. `None` means that path has never succeeded since
+/// boot — absence is reported, never defaulted (ARCH 18.3).
+#[derive(Debug, Default)]
+pub struct ConvergenceRecord {
+    stamps: Mutex<ConvergenceStamps>,
+}
+
+/// The two stamps behind [`ConvergenceRecord`].
+#[derive(Debug, Default, Clone)]
+struct ConvergenceStamps {
+    /// Unix seconds when the outbound publish sink last accepted a note onto
+    /// the mesh.
+    last_outbound_publish_at: Option<i64>,
+    /// Unix seconds when the inbound ingest poller last applied a peer batch.
+    last_inbound_ingest_at: Option<i64>,
+}
+
+impl ConvergenceRecord {
+    /// A fresh record: both paths never-succeeded since boot.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Stamp the outbound publish path as alive. Called by the notes
+    /// propagation sink's success arm (daemon bootstrap).
+    pub fn record_outbound_publish_success(&self, at_unix: i64) {
+        self.stamps
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .last_outbound_publish_at = Some(at_unix);
+    }
+
+    /// Stamp the inbound ingest path as alive. Called when the daemon's ingest
+    /// poller applies a peer batch.
+    pub fn record_inbound_ingest_success(&self, at_unix: i64) {
+        self.stamps
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .last_inbound_ingest_at = Some(at_unix);
+    }
+
+    /// Read both stamps for `/status`.
+    pub fn snapshot(&self) -> (Option<i64>, Option<i64>) {
+        let s = self.stamps.lock().unwrap_or_else(|e| e.into_inner());
+        (s.last_outbound_publish_at, s.last_inbound_ingest_at)
+    }
+}
+
+impl Convergence for ConvergenceRecord {
+    fn record_outbound_publish_success(&self, at_unix: i64) {
+        ConvergenceRecord::record_outbound_publish_success(self, at_unix);
+    }
+
+    fn record_inbound_ingest_success(&self, at_unix: i64) {
+        ConvergenceRecord::record_inbound_ingest_success(self, at_unix);
+    }
+
+    fn snapshot(&self) -> (Option<i64>, Option<i64>) {
+        ConvergenceRecord::snapshot(self)
+    }
+}
+
 // ── The N=1 answers ──────────────────────────────────────────────────────────
 
-/// [`PeerStore`] for a mesh of one.
+/// [`ReplicatedKv`] for a mesh of one.
 ///
 /// The honest N=1 implementation, not a null object: it stores, reads back,
 /// enumerates and deletes exactly like a store with peers. What is absent is
@@ -150,13 +219,13 @@ pub trait Convergence: Send + Sync {
 /// Constructs infallibly and does no I/O, which is the property that lets a
 /// local daemon come up with nothing to mint and nothing that can refuse.
 #[derive(Debug, Default)]
-pub struct SoloPeerStore {
+pub struct SoloReplicatedKv {
     // `(app_id, key)` ordered so `scan`'s prefix walk is a range and the
     // enumeration order is stable across runs.
-    entries: Mutex<BTreeMap<(String, String), PeerEntry>>,
+    entries: Mutex<BTreeMap<(String, String), ReplicatedKvEntry>>,
 }
 
-impl SoloPeerStore {
+impl SoloReplicatedKv {
     /// An empty store. Infallible, allocation-only, no I/O.
     pub fn new() -> Self {
         Self::default()
@@ -172,7 +241,7 @@ impl SoloPeerStore {
         self.lock().is_empty()
     }
 
-    fn lock(&self) -> std::sync::MutexGuard<'_, BTreeMap<(String, String), PeerEntry>> {
+    fn lock(&self) -> std::sync::MutexGuard<'_, BTreeMap<(String, String), ReplicatedKvEntry>> {
         // A poisoned lock is recovered rather than propagated: a panic in some
         // other task must not turn every later store call into a refusal, which
         // would break the totality this type exists to provide.
@@ -187,8 +256,8 @@ fn now_unix_secs() -> u64 {
     sovereign_time::unix_now_u64()
 }
 
-impl PeerStore for SoloPeerStore {
-    fn get(&self, app_id: &str, key: &str) -> Result<Option<PeerEntry>, PeerStoreError> {
+impl ReplicatedKv for SoloReplicatedKv {
+    fn get(&self, app_id: &str, key: &str) -> Result<Option<ReplicatedKvEntry>, ReplicatedKvError> {
         Ok(self
             .lock()
             .get(&(app_id.to_string(), key.to_string()))
@@ -201,13 +270,13 @@ impl PeerStore for SoloPeerStore {
         key: &str,
         value: Bytes,
         origin: NodeId,
-    ) -> Result<bool, PeerStoreError> {
+    ) -> Result<bool, ReplicatedKvError> {
         let mut entries = self.lock();
         let id = (app_id.to_string(), key.to_string());
         let changed = entries.get(&id).map(|e| e.value != value).unwrap_or(true);
         entries.insert(
             id,
-            PeerEntry {
+            ReplicatedKvEntry {
                 app_id: app_id.to_string(),
                 key: key.to_string(),
                 value,
@@ -218,14 +287,18 @@ impl PeerStore for SoloPeerStore {
         Ok(changed)
     }
 
-    fn delete(&self, app_id: &str, key: &str) -> Result<bool, PeerStoreError> {
+    fn delete(&self, app_id: &str, key: &str) -> Result<bool, ReplicatedKvError> {
         Ok(self
             .lock()
             .remove(&(app_id.to_string(), key.to_string()))
             .is_some())
     }
 
-    fn scan(&self, app_id: &str, prefix: &str) -> Result<Vec<PeerEntry>, PeerStoreError> {
+    fn scan(
+        &self,
+        app_id: &str,
+        prefix: &str,
+    ) -> Result<Vec<ReplicatedKvEntry>, ReplicatedKvError> {
         Ok(self
             .lock()
             .iter()

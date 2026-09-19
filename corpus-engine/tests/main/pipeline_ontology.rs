@@ -16,8 +16,8 @@ use corpus_engine::enrichment::pipeline::pipelines::configurable_atlas::CustomAt
 use corpus_engine::enrichment::pipeline::pipelines::literary_atlas::LiteraryAtlasPipeline;
 use corpus_engine::enrichment::pipeline::{Pipeline, PipelineRegistry};
 use corpus_engine::recipe::Recipe;
-use corpus_engine_vocab::ontology::{QuestionKind, SummarySource};
-use corpus_engine_vocab::taxonomy::EntityType;
+use understanding_vocab::ontology::{QuestionKind, SummarySource};
+use understanding_vocab::taxonomy::EntityType;
 
 /// Build the atlas dir the way the resolve step does and read it back.
 fn build_and_read(dir: &Path, pipeline: &dyn Pipeline, version: u32) -> AtlasOntologyFile {

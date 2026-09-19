@@ -326,16 +326,16 @@ mod tests {
     use std::sync::Arc;
 
     use kernel_types::NodeId;
-    use sovereign_contracts::peer::{PeerStore, SoloPeerStore};
+    use sovereign_contracts::peer::{ReplicatedKv, SoloReplicatedKv};
 
     use crate::tools::broadcast::NullBroadcaster;
 
     use super::*;
 
     fn mk_observer(repo_id: &str) -> AtlasObserver {
-        let mesh = Arc::new(SoloPeerStore::new());
+        let mesh = Arc::new(SoloReplicatedKv::new());
         let store = Arc::new(WorkAtlasStore::new(
-            mesh as Arc<dyn PeerStore>,
+            mesh as Arc<dyn ReplicatedKv>,
             NodeId::from_u128(7),
         ));
         AtlasObserver::new(
@@ -392,9 +392,9 @@ mod tests {
 
     #[tokio::test]
     async fn private_observation_lands_only_in_private_namespace() {
-        let mesh = Arc::new(SoloPeerStore::new());
+        let mesh = Arc::new(SoloReplicatedKv::new());
         let store = Arc::new(WorkAtlasStore::new(
-            Arc::clone(&mesh) as Arc<dyn PeerStore>,
+            Arc::clone(&mesh) as Arc<dyn ReplicatedKv>,
             NodeId::from_u128(7),
         ));
         let mut cfg = WorkAtlasConfig::defaults();

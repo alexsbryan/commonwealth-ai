@@ -1,0 +1,37 @@
+[package]
+name = "understanding-host"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Understanding's host tier — the ports and the knot: stores and the ANN, writers, the field engine, entity extraction, the phase runner. Names corpus-engine, the index leaf, the pure tier and the language."
+
+# The host tier (DE "Step 7, redrawn", "The shape"). It reaches
+# `corpus-engine` — the package's ONE grandfathered `[[exception]]`
+# (quality/ARCH_LAYERS.toml:1388-1393) — plus the index leaf, the pure tier and
+# the language. The dependencies are wired from the files the tier HOLDS
+# (domains `REVIEW-build-understanding-crate-tree`); naming `corpus-engine`
+# here is what turns the grandfathered exception from STALE to LIVE.
+
+[dependencies]
+understanding-vocab = { workspace = true }
+understanding-atlas = { workspace = true }
+corpus-index = { workspace = true }
+kernel-types = { workspace = true }
+corpus-engine = { workspace = true }
+oplog = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+lancedb = { workspace = true }
+arrow = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

@@ -132,7 +132,7 @@ pub fn solo_mesh(self_id: NodeId, name: &str) -> Mesh {
 }
 
 /// Hex-encode a `NodeId` for the `X-Node-Id` header. 32 hex chars,
-/// lowercase — matches `sovereign_api::headers::parse_x_node_id`.
+/// lowercase — matches `sovereign_daemon::headers::parse_x_node_id`.
 pub fn id_to_hex(id: &NodeId) -> String {
     id.as_bytes().iter().map(|b| format!("{b:02x}")).collect()
 }
@@ -159,16 +159,16 @@ pub async fn spawn_router(router: Router) -> SocketAddr {
     addr
 }
 
-/// An `AppState` with one member (self) and a client token installed.
+/// An `AppState` with one member (self) and a client token configured.
 ///
-/// Shared by the tests that drive the REAL `sovereign_api` client router
+/// Shared by the tests that drive the REAL `sovereign_daemon` client router
 /// over a transport — they differ only in the mesh's encryption posture, and a
 /// second copy of this would drift from the first.
 pub fn client_app_state(
     self_id: NodeId,
     token: Option<&str>,
     require_encryption: bool,
-) -> sovereign_api::state::AppState {
+) -> sovereign_daemon::state::AppState {
     let mut members = HashMap::new();
     members.insert(
         self_id,
@@ -185,9 +185,13 @@ pub fn client_app_state(
         members,
         peers: vec![],
     };
-    let state = sovereign_api::state::AppState::new(self_id, mesh);
-    state.install_client_token(token.map(std::sync::Arc::<str>::from));
-    state
+    sovereign_daemon::state::AppState::new_with_node(
+        self_id,
+        mesh,
+        sovereign_daemon::state::NodeSeed {
+            client_token: token.map(std::sync::Arc::<str>::from),
+        },
+    )
 }
 
 // ── Configurable InferenceProvider stub ─────────────────────────
@@ -545,7 +549,7 @@ pub async fn fixture_index(
 /// serves.
 pub fn desktop_services_with_engine(
     engine: Arc<corpus_engine::CorpusEngine>,
-) -> sovereign_mesh::DaemonServices {
+) -> sovereign_daemon::DaemonServices {
     desktop_services(DesktopParts::new(engine))
 }
 
@@ -565,7 +569,7 @@ pub struct DesktopParts {
     pub runtime: Arc<sovereign_core::runtime::Runtime>,
     pub insights: Option<Arc<sovereign_core::insight::InsightService>>,
     pub features: Option<Arc<sovereign_store::recipe_project_store::RecipeProjectStore>>,
-    pub mcp: sovereign_mesh::McpSurface,
+    pub mcp: sovereign_daemon::McpSurface,
 }
 
 impl DesktopParts {
@@ -578,7 +582,7 @@ impl DesktopParts {
             runtime: stub_runtime(Arc::new(TestProvider::new()), None),
             insights: None,
             features: None,
-            mcp: sovereign_mesh::McpSurface::Unavailable {
+            mcp: sovereign_daemon::McpSurface::Unavailable {
                 reason: "test fixture: no tool registry".into(),
             },
         }
@@ -591,7 +595,7 @@ impl DesktopParts {
         tools: Arc<sovereign_core::ToolRegistry>,
         notes: Arc<corpus_engine_notes::NoteStore>,
     ) -> Self {
-        self.mcp = sovereign_mesh::McpSurface::Mounted(sovereign_mesh::McpMount {
+        self.mcp = sovereign_daemon::McpSurface::Mounted(sovereign_daemon::McpMount {
             tools,
             notes,
             session_id: "test-fixture".into(),
@@ -607,27 +611,28 @@ impl DesktopParts {
 /// shape no launch can produce, which is exactly what Falsifier 3
 /// forbids. This is the only site in the fixtures that names
 /// `ServingProfile`.
-pub fn desktop_services(parts: DesktopParts) -> sovereign_mesh::DaemonServices {
-    sovereign_mesh::assemble(
+pub fn desktop_services(parts: DesktopParts) -> sovereign_daemon::DaemonServices {
+    sovereign_daemon::assemble(
         &sovereign_contracts::launch::Launch::Desktop,
-        sovereign_mesh::LaunchParts::Serving {
+        sovereign_daemon::LaunchParts::Serving {
             headless: None,
-            serving: sovereign_mesh::ServingProfile {
-                core: sovereign_mesh::ServingCore {
+            serving: sovereign_daemon::ServingProfile {
+                core: sovereign_daemon::ServingCore {
                     corpus_engine: parts.engine,
                     inference_provider: parts.provider,
+                    in_flight_gauge: None,
                     state_store: parts.store,
                     runtime: parts.runtime,
                     insights: parts.insights,
                     features: parts.features,
                 },
-                capability: sovereign_mesh::ServingCapability {
+                capability: sovereign_daemon::ServingCapability {
                     mcp: parts.mcp,
                     project_http: Router::new(),
                     corpus_watch_http: Router::new(),
                     workflow_http: Router::new(),
                 },
-                advertise_embed: sovereign_mesh::EmbedAdvertisement::Unavailable {
+                advertise_embed: sovereign_daemon::EmbedAdvertisement::Unavailable {
                     reason: "test fixture: no embed probe".into(),
                 },
             },
@@ -648,7 +653,7 @@ pub fn desktop_services(parts: DesktopParts) -> sovereign_mesh::DaemonServices {
 pub fn desktop_services_with_runtime(
     engine: Arc<corpus_engine::CorpusEngine>,
     runtime: Arc<sovereign_core::runtime::Runtime>,
-) -> sovereign_mesh::DaemonServices {
+) -> sovereign_daemon::DaemonServices {
     desktop_services(DesktopParts {
         runtime,
         ..DesktopParts::new(engine)
@@ -689,7 +694,7 @@ pub fn desktop_services_with_note_and_feature_stores(
     engine: Arc<corpus_engine::CorpusEngine>,
     notes: Arc<corpus_engine_notes::NoteStore>,
     features: Option<Arc<sovereign_store::recipe_project_store::RecipeProjectStore>>,
-) -> sovereign_mesh::DaemonServices {
+) -> sovereign_daemon::DaemonServices {
     desktop_services(DesktopParts {
         features,
         ..DesktopParts::new(engine).mounted(Arc::new(sovereign_core::ToolRegistry::new()), notes)
@@ -711,7 +716,7 @@ pub fn desktop_services_with_tool_registry(
     notes: Arc<corpus_engine_notes::NoteStore>,
     features: Option<Arc<sovereign_store::recipe_project_store::RecipeProjectStore>>,
     tools: Arc<sovereign_core::ToolRegistry>,
-) -> sovereign_mesh::DaemonServices {
+) -> sovereign_daemon::DaemonServices {
     desktop_services(DesktopParts {
         features,
         ..DesktopParts::new(engine).mounted(tools, notes)
@@ -790,7 +795,7 @@ pub fn desktop_services_with_conv_reader(
     engine: Arc<corpus_engine::CorpusEngine>,
     store: Arc<dyn sovereign_core::traits::StateStore>,
     conv: Arc<dyn sovereign_core::conv_tiered::ConvTieredReader>,
-) -> sovereign_mesh::DaemonServices {
+) -> sovereign_daemon::DaemonServices {
     let mut lanes = sovereign_core::runtime::lane::LaneSources::none();
     lanes.conv_tiered = Some(conv);
     let runtime = Arc::new(stub_runtime_parts_with_lanes(
@@ -817,7 +822,7 @@ pub fn desktop_services_with_store(
     engine: Arc<corpus_engine::CorpusEngine>,
     store: Arc<dyn sovereign_core::traits::StateStore>,
     provider: Arc<dyn sovereign_core::traits::InferenceProvider>,
-) -> sovereign_mesh::DaemonServices {
+) -> sovereign_daemon::DaemonServices {
     desktop_services_with_insights(engine, store, provider, None)
 }
 
@@ -832,7 +837,7 @@ pub fn desktop_services_with_planner(
     store: Arc<dyn sovereign_core::traits::StateStore>,
     provider: Arc<dyn sovereign_core::traits::InferenceProvider>,
     planner: Box<dyn sovereign_core::traits::Planner>,
-) -> sovereign_mesh::DaemonServices {
+) -> sovereign_daemon::DaemonServices {
     let mut runtime = stub_runtime_parts(Arc::clone(&provider), Some(Arc::clone(&store)));
     runtime.corpus_engine = Some(Arc::clone(&engine));
     runtime.planner = planner;
@@ -854,7 +859,7 @@ pub fn desktop_services_with_insights(
     store: Arc<dyn sovereign_core::traits::StateStore>,
     provider: Arc<dyn sovereign_core::traits::InferenceProvider>,
     insights: Option<Arc<sovereign_core::insight::InsightService>>,
-) -> sovereign_mesh::DaemonServices {
+) -> sovereign_daemon::DaemonServices {
     let runtime = stub_runtime_with_engine(
         Arc::clone(&provider),
         Some(Arc::clone(&store)),
@@ -872,22 +877,22 @@ pub fn desktop_services_with_insights(
 /// Commission a `MeshAdmin` daemon THE WAY PRODUCTION DOES.
 ///
 /// `svrn mesh create` / `join` reach this shape through exactly one door —
-/// `sovereign_mesh::assemble` — and since daemon-convergence Phase 7 that is
+/// `sovereign_daemon::assemble` — and since daemon-convergence Phase 7 that is
 /// the only door there is: `DaemonServices::MeshAdmin` carries a private
-/// [`sovereign_mesh::MeshAdminWitness`], so no crate outside `sovereign-mesh`
+/// [`sovereign_daemon::MeshAdminWitness`], so no crate outside `sovereign-mesh`
 /// can name the variant into being.
 ///
 /// These tests used to write `DaemonServices::MeshAdmin` directly, which meant
 /// 21 sites commissioned a daemon by a route no user can take. Driving the
 /// real door is strictly better evidence: every one of these tests now also
 /// proves the assembler accepts a verb launch and returns the admin shape.
-pub fn mesh_admin_services() -> sovereign_mesh::DaemonServices {
-    sovereign_mesh::assemble(
+pub fn mesh_admin_services() -> sovereign_daemon::DaemonServices {
+    sovereign_daemon::assemble(
         &sovereign_contracts::launch::Launch::Verb {
             name: "mesh".to_string(),
             args: Vec::new(),
         },
-        sovereign_mesh::LaunchParts::Admin,
+        sovereign_daemon::LaunchParts::Admin,
     )
     .expect("a verb launch with admin parts assembles to MeshAdmin")
 }

@@ -388,8 +388,9 @@ async fn cmd_run(args: &[String]) -> Result<i32, String> {
         .map_err(|e| format!("read atoms.json ({}): {e}", atoms_path.display()))?;
 
     let entities: Vec<Entity> = atoms_file
-        .atoms
-        .into_iter()
+        .atoms()
+        .iter()
+        .cloned()
         .filter_map(|env| match env {
             AtomEnvelope::Entity(e) => Some(e),
             _ => None,
@@ -606,8 +607,9 @@ async fn cmd_diagnose(args: &[String]) -> Result<i32, String> {
     let atoms_file = corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir)
         .map_err(|e| format!("read atoms.json ({}): {e}", atoms_path.display()))?;
     let entities: Vec<Entity> = atoms_file
-        .atoms
-        .into_iter()
+        .atoms()
+        .iter()
+        .cloned()
         .filter_map(|env| match env {
             AtomEnvelope::Entity(e) => Some(e),
             _ => None,

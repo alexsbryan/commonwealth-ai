@@ -33,87 +33,9 @@
 //! `apply_to` are accepted unconditionally — the filter is opt-in
 //! per-site.
 
-use serde::{Deserialize, Serialize};
-
 use crate::extractors::ExtractedDoc;
 
-use super::DocumentFilter;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct KnowledgeDensityConfig {
-    /// Minimum number of answers (after the score/length floors) that
-    /// must survive on the question for it to be accepted. The whole
-    /// point of this filter — single-answer threads are the reference
-    /// shape, three+ answer threads are the trade-off shape.
-    #[serde(default = "default_min_substantive_answers")]
-    pub min_substantive_answers: u32,
-
-    /// Score floor for an answer to count toward `min_substantive_answers`.
-    /// Mirrors the extractor's `min_score`; restated here so a recipe
-    /// can ratchet the density check tighter than the extraction cut
-    /// (e.g. extract at score ≥ 3 but require density at score ≥ 5).
-    #[serde(default = "default_answer_score_threshold")]
-    pub answer_score_threshold: i32,
-
-    /// Length floor for an answer to count. Eliminates one-line
-    /// "+1 to the above" / "use sorted()" snippets that inflate
-    /// answer count without adding retrievable knowledge.
-    #[serde(default = "default_min_answer_length")]
-    pub min_answer_length: u64,
-
-    /// Reject questions whose `closed` metadata flag is true. Stack
-    /// Overflow's closed-question moderation flag is a high-precision
-    /// signal that the community judged the thread off-topic /
-    /// duplicate / opinion-based — even if it has multiple answers,
-    /// the answer set tends not to be a coherent trade-off space.
-    #[serde(default = "default_true")]
-    pub exclude_closed: bool,
-
-    /// Optional tag whitelist — accept only questions tagged with at
-    /// least one listed tag. Use to scope the cut to architecture /
-    /// design discussions on Stack Overflow while letting smaller
-    /// already-knowledge-dense sites pass everything.
-    #[serde(default)]
-    pub tag_filter: Option<Vec<String>>,
-
-    /// Optional community whitelist — apply the density check only on
-    /// these communities. Documents from communities not listed are
-    /// accepted regardless. This is the recipe-level escape hatch
-    /// that lets a single recipe combine breadth-pass sources with
-    /// density-cut sources. `None` (default) applies to every
-    /// community.
-    #[serde(default)]
-    pub apply_to: Option<Vec<String>>,
-}
-
-fn default_min_substantive_answers() -> u32 {
-    3
-}
-
-fn default_answer_score_threshold() -> i32 {
-    5
-}
-
-fn default_min_answer_length() -> u64 {
-    500
-}
-
-fn default_true() -> bool {
-    true
-}
-
-impl Default for KnowledgeDensityConfig {
-    fn default() -> Self {
-        Self {
-            min_substantive_answers: default_min_substantive_answers(),
-            answer_score_threshold: default_answer_score_threshold(),
-            min_answer_length: default_min_answer_length(),
-            exclude_closed: default_true(),
-            tag_filter: None,
-            apply_to: None,
-        }
-    }
-}
+use super::{DocumentFilter, KnowledgeDensityConfig};
 
 /// Concrete filter constructed from [`KnowledgeDensityConfig`].
 pub struct KnowledgeDensityFilter {

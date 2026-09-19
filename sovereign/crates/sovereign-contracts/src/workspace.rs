@@ -5,7 +5,7 @@
 //! # The mirror that wasn't
 //!
 //! `sovereign-tools::code::read_notes::resolve_workspace_root` opens with
-//! "mirroring the daemon's chain (`daemon_cmd/workspace.rs`)". It did not
+//! "mirroring the daemon's chain (`sovereign-daemon/src/workspace.rs`)". It did not
 //! mirror it, in two ways that both change which directory you get:
 //!
 //! | | daemon | `read_notes` |

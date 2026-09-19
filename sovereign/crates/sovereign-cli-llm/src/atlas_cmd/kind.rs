@@ -38,7 +38,7 @@ use corpus_engine::enrichment::atlas::{
     open_walk_provider_blocking, read_atlas_ontology, read_or_compute_atlas_summary,
     AtlasInventory, ATLAS_DIRNAME,
 };
-use corpus_engine_vocab::ontology::{NavigationPolicy, QuestionKind};
+use understanding_vocab::ontology::{NavigationPolicy, QuestionKind};
 
 use crate::chat_cmd::bootstrap::build_inference;
 use crate::chat_cmd::config::parse_globals;

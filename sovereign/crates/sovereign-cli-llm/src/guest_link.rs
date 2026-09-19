@@ -46,7 +46,7 @@ use sovereign_cli_shared::dirs::sovereign_root;
 // The TYPE and its file format live in `sovereign-core`, because the DAEMON
 // reads this file too: `svrn chat ask` is a surface, so a guest's turn runs on
 // their own daemon and it is the daemon that must resolve a granted model id
-// to the lender (`sovereign_mesh::guest_lender`). A daemon cannot depend on a
+// to the lender (`sovereign_serving_host::guest_lender`). A daemon cannot depend on a
 // CLI crate, and two copies of the format would be the §10.6 failure.
 //
 // What stays here is the CLI's own half: the well-known root, and the stderr

@@ -36,7 +36,7 @@ use serde::{Deserialize, Serialize};
 
 use super::governance::{ActiveSet, GovernanceOpKind, PairKey, RuleStatus, TensionStatus};
 use super::governance_change::{derive_active_with_policy, read_rule_facts, RuleFacts};
-use crate::enrichment::atlas::atoms::{AtomEnvelope, AtomId, AtomsFile, ChunkRef, Claim};
+use crate::enrichment::atlas::atoms::{AtomEnvelope, AtomId, ChunkRef, Claim};
 use crate::enrichment::atlas::edges::{Edge, EdgeId, EdgeType, EdgesFile};
 use crate::enrichment::atlas::read_atlas_ontology;
 use crate::enrichment::ontology::ChangePolicy;
@@ -637,11 +637,10 @@ fn read_rule_atoms(dir: &Path) -> Result<Vec<RuleAtom>> {
     if !path.exists() {
         return Ok(Vec::new());
     }
-    let bytes = std::fs::read(&path).map_err(Error::Io)?;
-    let file: AtomsFile = serde_json::from_slice(&bytes)
+    let file = crate::enrichment::atlas::read_atlas_atoms(dir)
         .map_err(|e| Error::Extraction(format!("governance_view: atoms.json: {e}")))?;
     Ok(file
-        .atoms
+        .atoms()
         .iter()
         .filter_map(|a| match a {
             AtomEnvelope::Claim(c) => Some(project_claim(c)),
@@ -710,6 +709,7 @@ fn project_tension(e: &Edge) -> RuleTension {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::enrichment::atlas::atoms::AtomsFile;
 
     fn rule(n: usize, text: &str) -> RuleAtom {
         RuleAtom {

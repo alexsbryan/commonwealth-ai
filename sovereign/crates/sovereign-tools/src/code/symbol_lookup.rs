@@ -267,7 +267,7 @@ async fn resolve_via_project_registry(
 /// Project roots from the registry body, the owning corpus first.
 ///
 /// Reads `~/.svrnmesh/projects.json` — the canonical registry written by
-/// `sovereign project register` (`sovereign-mesh/src/projects.rs`): a JSON
+/// `sovereign project register` (`corpus-engine-watchers/src/projects.rs`): a JSON
 /// array of `{corpus_id, root, …}`.
 ///
 /// This used to scan `~/.svrnmesh/projects/*.toml` for `root = "…"` lines —
