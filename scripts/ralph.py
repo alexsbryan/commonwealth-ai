@@ -1664,6 +1664,18 @@ def cmd_supervise(args):
     return guarded(supervisor.run, paths, notify_enabled=args.notify)
 
 
+def cmd_check_argv(args):
+    """ralph-check.sh's lookup: the argv a queue's `[checks]` declares for a
+    name, one argument per line. 1 = not declared (the script falls through to
+    its own verbs); a refused manifest is main()'s exit 2."""
+    paths = paths_for(args)
+    argv = paths.manifest.checks.get(args.name)
+    if argv is None:
+        return 1
+    print("\n".join(argv))
+    return 0
+
+
 def cmd_stop(args):
     paths = paths_for(args)
     stop = paths.p(paths.stop)
@@ -1815,6 +1827,12 @@ def build_parser():
     p = sub.add_parser("plan")
     common(p)
     p.set_defaults(fn=cmd_plan)
+
+    p = sub.add_parser("check-argv")
+    p.add_argument("name")
+    p.add_argument("--workdir", default=".")
+    p.add_argument("--queue", required=True)
+    p.set_defaults(fn=cmd_check_argv)
 
     p = sub.add_parser("promote")
     p.add_argument("name", help="the staged campaign under ralph/next/")

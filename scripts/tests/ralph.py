@@ -584,6 +584,60 @@ class RalphMarkTests(unittest.TestCase):
                              self.ROWS)
 
 
+class RalphCheckTests(unittest.TestCase):
+    """`ralph-check.sh <name>` runs what the worker's OWN queue.toml declares."""
+
+    def fixture(self, tmp):
+        two_queues(tmp)
+        install_script(tmp, "ralph-check.sh")
+        install_script(tmp, "ralph.py")
+        write(tmp, "ralph/next/a/queue.toml",
+              '[checks]\nhello = ["sh", "-c", "echo from-a \\"$@\\"", "sh"]\n'
+              'red = ["sh", "-c", "echo went-red; exit 7"]\n')
+
+    def check(self, tmp, queue, *argv):
+        env = {k: v for k, v in os.environ.items() if k != "RALPH_QUEUE"}
+        if queue is not None:
+            env["RALPH_QUEUE"] = queue
+        return subprocess.run([str(pathlib.Path(tmp) / "scripts/ralph-check.sh"), *argv],
+                              capture_output=True, text=True, env=env)
+
+    def test_each_queue_runs_its_own_declaration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.fixture(tmp)
+            a = self.check(tmp, "a", "hello", "extra arg")
+            b = self.check(tmp, "b", "hello")
+            self.assertEqual((a.returncode, b.returncode), (0, 0), a.stderr + b.stderr)
+            self.assertIn("exit=0\nfrom-a extra arg\n", a.stdout)
+            self.assertIn("exit=0\nfrom-b\n", b.stdout)
+            root = pathlib.Path(tmp)
+            self.assertEqual((root / "target/ralph/a/hello.log").read_text(), "from-a extra arg\n")
+            self.assertEqual((root / "target/ralph/b/hello.log").read_text(), "from-b\n")
+
+    def test_a_declared_check_exits_with_its_own_code(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.fixture(tmp)
+            r = self.check(tmp, "a", "red")
+            self.assertEqual(r.returncode, 7)
+            self.assertIn("exit=7\nwent-red", r.stdout)
+
+    def test_an_undeclared_name_is_usage_with_or_without_a_queue(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.fixture(tmp)
+            for queue in ("b", None, ""):
+                r = self.check(tmp, queue, "red")
+                self.assertEqual(r.returncode, 2, (queue, r.stdout, r.stderr))
+                self.assertIn("usage:", r.stderr)
+
+    def test_a_refused_manifest_fails_the_check_by_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.fixture(tmp)
+            write(tmp, "ralph/next/b/queue.toml", "[checks]\nlint = ['true']\n")
+            r = self.check(tmp, "b", "hello")
+            self.assertEqual(r.returncode, 2)
+            self.assertIn("ralph/next/b/queue.toml", r.stderr)
+
+
 class SupervisorTests(unittest.TestCase):
     def make(self, tmp, *, run_inner, resolver_run, resolve_max=2):
         write(tmp, "ralph/STATE.md", "- [ ] dm-a — depends []\n")
