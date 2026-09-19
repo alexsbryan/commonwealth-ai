@@ -159,6 +159,75 @@ pub struct MetaAtlasHitRecord {
     pub chunks_added: usize,
 }
 
+/// One node the atlas walk passed through, as a serde value.
+///
+/// Echo of `corpus_engine::enrichment::atlas::ground::MapNode`, which derives
+/// no `Serialize` — the same reason `MetaAtlasHitEcho` exists on the bench
+/// side: the measurement schema must not move when a walk internal does. The
+/// two enum-typed fields (`kind`, `via`) come across as their `label()`
+/// strings so a reader of the JSON needs no vocabulary crate.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AtlasWalkNodeEcho {
+    /// The atlas this atom belongs to.
+    pub atlas: String,
+    /// The atom's id — the thing a study joins against. An echo whose nodes
+    /// carry no atom id records that a walk happened and nothing about where
+    /// it went.
+    pub atom_id: String,
+    pub name: String,
+    /// `AtomType::label()` — "entity", "claim", "summary", …
+    pub kind: String,
+    /// The `entity_type` / claim subtype tag, or empty.
+    pub subtype: String,
+    /// 0 for a seed, 1 or 2 for a hop.
+    pub hop: u8,
+    /// `EdgeType::label()` for the edge followed to REACH this node. `None`
+    /// for a seed.
+    pub via: Option<String>,
+    /// The node this one was reached from. `None` for a seed.
+    pub from: Option<String>,
+    /// Accumulated walk weight.
+    pub score: f32,
+}
+
+/// The atlas walk's evidence PATH and its counters, as one serde value.
+///
+/// Until this type the walk's yield existed only as the `atlas-grounding:
+/// fetch ledger` tracing event, and `svrn eval run` emits no `sovereign_core`
+/// tracing at all — so every measurement of atlas reach was made by reading a
+/// number the run could not produce. A value the pipeline carries out is
+/// observable with no subscriber in the loop, which is the same argument
+/// `StepLedger` already makes for the step's accounting.
+///
+/// `nodes` is the path (which atoms, reached how); the counters are the walk's
+/// own ledger plus what the fetch did with the requests. Both are needed:
+/// "the walk reached nothing" and "the walk reached nodes the fetch could not
+/// resolve" produce the same `added` and are different facts.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AtlasWalkEcho {
+    /// `QuestionKind::as_str()` — the navigation row that was executed.
+    pub kind: String,
+    /// The traversed nodes, highest walk weight first, capped at
+    /// `MAP_NODE_CAP`. Empty when the walk reached nothing.
+    pub nodes: Vec<AtlasWalkNodeEcho>,
+    /// Seeds the walk actually started from.
+    pub seeds: usize,
+    /// Edges the walk followed.
+    pub edges_followed: usize,
+    /// Distinct atoms in the neighbourhood, seeds included — the pre-cap
+    /// count, so a truncated `nodes` is detectable.
+    pub nodes_reached: usize,
+    /// Evidence requests the walk emitted.
+    pub requests: usize,
+    /// Summary nodes carried out for late append (rule R3).
+    pub summaries_appended: usize,
+    /// Chunks the fetch actually pushed into the pool.
+    pub added: usize,
+    /// Candidates the resolve step considered. `considered > added` is the
+    /// fetch dropping, not the walk failing.
+    pub considered: usize,
+}
+
 /// Everything `handle_knowledge_query` and the streaming KQ branch need
 /// to issue a synthesis request. Produced by
 /// [`super::Runtime::prepare_knowledge_query_plan`] so the two paths cannot
@@ -197,6 +266,11 @@ pub(crate) struct KnowledgeQueryPlan {
     /// them. Empty on every turn that lost nothing, which is the
     /// no-regression bar. See `runtime::unavailability`.
     pub(crate) unavailable_corpora: Vec<crate::traits::CorpusUnavailable>,
+    /// The atlas walk's evidence path, carried from
+    /// `PipelineState::atlas_walk` the same way `unavailable_corpora` above
+    /// is: the signal exists at the point it is produced and had nowhere to
+    /// go. `None` = the walk did not run. See [`AtlasWalkEcho`].
+    pub(crate) atlas_walk: Option<AtlasWalkEcho>,
     pub(crate) search_ms: u64,
     pub(crate) retrieved_chunks: Vec<serde_json::Value>,
     pub(crate) source_map: HashMap<String, usize>,
@@ -318,6 +392,12 @@ pub struct EvidenceRetrieval {
     ///
     /// Empty on every turn that lost nothing, which is the no-regression bar.
     pub unavailable_corpora: Vec<crate::traits::CorpusUnavailable>,
+    /// The atlas walk's evidence path for this retrieval, carried out for the
+    /// same reason `unavailable_corpora` above is: the MEASUREMENT surface has
+    /// to see what the ANSWER surface saw. `None` = the walk did not run — on
+    /// the DeepQuery branch it is always `None`, because that branch returns a
+    /// `KnowledgeContext`, which does not carry the field.
+    pub atlas_walk: Option<AtlasWalkEcho>,
 }
 
 /// Streaming handle returned by [`super::Runtime::handle_message_stream`].

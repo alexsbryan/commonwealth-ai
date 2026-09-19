@@ -1355,6 +1355,9 @@ impl Runtime {
             route,
             gap_check_enabled,
             unavailable_corpora,
+            // The chat surface does not read the walk echo yet; the
+            // measurement surface (`retrieve_evidence`) is its only consumer.
+            atlas_walk: _,
             search_ms,
             retrieved_chunks,
             source_map,

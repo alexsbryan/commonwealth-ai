@@ -291,11 +291,18 @@ mod ledger {
         )
     }
 
+    /// The step's two return values: the ledger it accounts with, and the
+    /// walk echo it carries out. Both, because a test that asserts on one and
+    /// not the other cannot tell "the walk reached nothing" from "the echo
+    /// lost it".
     async fn ledger_over(
         rt: &Runtime,
         provider: Arc<dyn AtlasContextProvider>,
         corpus: &str,
-    ) -> crate::runtime::retrieval_ledger::StepLedger {
+    ) -> (
+        crate::runtime::retrieval_ledger::StepLedger,
+        Option<crate::runtime::AtlasWalkEcho>,
+    ) {
         let lane = crate::runtime::Lane {
             atlas_context: Some(provider),
             ..crate::runtime::Lane::none()
@@ -307,19 +314,23 @@ mod ledger {
         // late append — but the sink has to exist for the walk to have
         // somewhere to put them.
         let mut summaries = Vec::new();
+        let mut walk = None;
         let scope = [corpus.to_string()];
-        rt.apply_atlas_grounding(
-            "what does alpha say about beta",
-            &vec_for("what does alpha say about beta"),
-            &mut chunks,
-            &mut summaries,
-            "test",
-            None,
-            Some(&scope),
-            None,
-            &lane,
-        )
-        .await
+        let ledger = rt
+            .apply_atlas_grounding(
+                "what does alpha say about beta",
+                &vec_for("what does alpha say about beta"),
+                &mut chunks,
+                &mut summaries,
+                &mut walk,
+                "test",
+                None,
+                Some(&scope),
+                None,
+                &lane,
+            )
+            .await;
+        (ledger, walk)
     }
 
     /// THE STEP'S BODY REACHES A WIKI-CLASS STORE — and says so in a value.
@@ -342,7 +353,8 @@ mod ledger {
         mgr.init_from_cache().await;
         let rt = runtime();
 
-        let served = ledger_over(&rt, mgr.clone() as Arc<dyn AtlasContextProvider>, "wikish").await;
+        let (served, _) =
+            ledger_over(&rt, mgr.clone() as Arc<dyn AtlasContextProvider>, "wikish").await;
         let considered = served.considered.expect("an injector reports `considered`");
         assert!(
             considered > 0,
@@ -362,7 +374,7 @@ mod ledger {
 
         // The failing input, run: the SAME fixture through a provider that can
         // only serve atom-class stores refuses, and refuses to zero.
-        let refused = ledger_over(
+        let (refused, _) = ledger_over(
             &rt,
             Arc::new(AtomClassOnly(mgr)) as Arc<dyn AtlasContextProvider>,
             "wikish",
@@ -375,5 +387,66 @@ mod ledger {
              the step falls to bag-of-atoms over an empty bag. If this is \
              non-zero the test above is no longer discriminating."
         );
+    }
+
+    /// THE ECHO CARRIES THE PATH, NOT JUST THE COUNTS.
+    ///
+    /// `considered > 0` (the test above) says the walk produced candidates. It
+    /// says nothing about WHICH atoms it reached, and a study of ontology reach
+    /// is a join on atom ids — a walk whose echo carries an empty `nodes` is
+    /// indistinguishable from no walk at all on the only surface that can
+    /// measure it (`svrn eval run` emits no `sovereign_core` tracing, so the
+    /// `atlas-grounding: fetch ledger` event is dark there).
+    ///
+    /// The fixture's fetch finds nothing — no corpus index behind it — so
+    /// `added` is 0 here on purpose. The path under test is upstream of the
+    /// fetch, which is exactly why it has to be its own assertion: build the
+    /// echo with `nodes: vec![]` and every count in it still reads correct.
+    #[tokio::test]
+    async fn atlas_walk_echo_carries_atom_ids_and_subtypes() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_wiki_atlas(tmp.path(), "wikish").await;
+        let mgr = manager(tmp.path());
+        mgr.init_from_cache().await;
+        let rt = runtime();
+
+        let (served, walk) =
+            ledger_over(&rt, mgr.clone() as Arc<dyn AtlasContextProvider>, "wikish").await;
+        let considered = served.considered.expect("an injector reports `considered`");
+        assert!(
+            considered > 0,
+            "the walk must have run for the echo to be worth asserting on; \
+             considered {considered}"
+        );
+
+        let walk = walk.expect(
+            "a walk that ran must carry an echo. `None` is reserved for the \
+             walk that did NOT run — feature off, no provider, no embedding, \
+             or no graph layer — and collapsing the two makes 'reached \
+             nothing' unreadable.",
+        );
+        assert!(
+            !walk.nodes.is_empty(),
+            "the echo must carry the evidence PATH, not only its counts: a \
+             walk that considered {considered} candidates reached the atoms \
+             that produced them. counts were seeds={} edges={} reached={} \
+             requests={}",
+            walk.seeds,
+            walk.edges_followed,
+            walk.nodes_reached,
+            walk.requests
+        );
+        for n in &walk.nodes {
+            assert!(
+                !n.atom_id.is_empty(),
+                "every echoed node needs its atom id — it is the join key a \
+                 reach study is made of. node {n:?}"
+            );
+            assert!(
+                !n.kind.is_empty(),
+                "every echoed node needs its kind label; an empty one means \
+                 the AtomType did not survive the echo. node {n:?}"
+            );
+        }
     }
 }

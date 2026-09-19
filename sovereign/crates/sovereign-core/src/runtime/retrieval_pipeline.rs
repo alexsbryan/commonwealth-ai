@@ -386,6 +386,15 @@ pub struct PipelineState<'ctx> {
     /// reached no Summary — which, on a corpus whose atlases carry none, is
     /// the honest and expected value.
     pub atlas_summaries: Vec<corpus_engine::enrichment::atlas::ground::SummaryNode>,
+    /// The atlas walk's evidence path and counters, carried out of
+    /// `apply_atlas_grounding` as a value (see [`AtlasWalkEcho`]).
+    ///
+    /// `None` means the walk did not run — feature off, no provider on the
+    /// lane, no query embedding, or no graph layer for any corpus (the
+    /// bag-of-atoms fallback, which navigates nothing). `Some` with empty
+    /// `nodes` means it ran and reached nothing, which is a different fact and
+    /// must not be collapsed into the first (principle 6).
+    pub atlas_walk: Option<AtlasWalkEcho>,
     pub title_expand_titles: Option<Vec<String>>,
     pub meta_atlas_hits: Vec<MetaAtlasHitRecord>,
     /// In-flight PPR structural-expansion lane (spawned right after
@@ -460,6 +469,7 @@ impl<'ctx> PipelineState<'ctx> {
             searched_corpora: Vec::new(),
             unavailable_corpora: Vec::new(),
             atlas_summaries: Vec::new(),
+            atlas_walk: None,
             title_expand_titles: None,
             meta_atlas_hits: Vec::new(),
             ppr_pending: None,
@@ -1598,6 +1608,7 @@ fn step_atlas_grounding<'a, 'ctx>(
                 &st.embedding,
                 &mut st.chunks,
                 &mut st.atlas_summaries,
+                &mut st.atlas_walk,
                 st.label,
                 st.scope,
                 st.enabled_corpora,

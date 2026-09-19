@@ -82,6 +82,7 @@ impl Runtime {
         embedding: &[f32],
         chunks: &mut Vec<corpus_engine::ScoredChunk>,
         summaries_out: &mut Vec<corpus_engine::enrichment::atlas::ground::SummaryNode>,
+        walk_out: &mut Option<crate::runtime::AtlasWalkEcho>,
         label: &str,
         scope: Option<&str>,
         enabled_corpora: Option<&[String]>,
@@ -379,6 +380,37 @@ impl Runtime {
             dropped_duplicate = resolve.duplicate,
             "atlas-grounding: fetch ledger"
         );
+        // The same ledger as a VALUE, because the event above is unreachable
+        // from the surface that has to measure it: `svrn eval run` emits no
+        // `sovereign_core` tracing even at `RUST_LOG=info`. The event stays —
+        // it is the operator's line during a chat turn — and this carries the
+        // path out for the run that cannot see it.
+        *walk_out = Some(crate::runtime::AtlasWalkEcho {
+            kind: grounding.kind.as_str().to_string(),
+            nodes: grounding
+                .map
+                .nodes
+                .iter()
+                .map(|n| crate::runtime::AtlasWalkNodeEcho {
+                    atlas: n.atlas.clone(),
+                    atom_id: n.atom_id.clone(),
+                    name: n.name.clone(),
+                    kind: n.kind.label().to_string(),
+                    subtype: n.subtype.clone(),
+                    hop: n.hop,
+                    via: n.via.map(|e| e.label().to_string()),
+                    from: n.from.clone(),
+                    score: n.score,
+                })
+                .collect(),
+            seeds: grounding.ledger.seeds,
+            edges_followed: grounding.ledger.edges_followed,
+            nodes_reached: grounding.ledger.nodes_reached,
+            requests: grounding.ledger.requests,
+            summaries_appended: grounding.ledger.summaries_appended,
+            added: graph_added,
+            considered: resolve.considered,
+        });
         let ledger = StepLedger::injected(resolve.considered)
             .drop(DropReason::OutOfScope, resolve.out_of_scope)
             .drop(DropReason::EvidenceUnresolvable, resolve.unresolvable)

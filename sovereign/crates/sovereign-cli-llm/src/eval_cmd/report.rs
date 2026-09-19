@@ -634,6 +634,7 @@ mod tests {
             essay_readiness: None,
             atlas_navigation: Vec::new(),
             meta_atlas_hits: Vec::new(),
+            atlas_walk: None,
         }
     }
 

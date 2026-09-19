@@ -97,8 +97,9 @@ pub(crate) use self::retrieval_helpers::{
     reweight_by_query_relevance,
 };
 pub use self::types::{
-    ContradictionProv, EvidenceRetrieval, HistoryEntryProv, HistoryRecallProv, HistorySummaryProv,
-    MetaAtlasHitRecord, RecalledMemoryProv, StreamHandle, TurnProvenance,
+    AtlasWalkEcho, AtlasWalkNodeEcho, ContradictionProv, EvidenceRetrieval, HistoryEntryProv,
+    HistoryRecallProv, HistorySummaryProv, MetaAtlasHitRecord, RecalledMemoryProv, StreamHandle,
+    TurnProvenance,
 };
 pub(crate) use self::types::{KnowledgeContext, KnowledgeQueryPlan};
 

@@ -322,6 +322,10 @@ impl Runtime {
                 search_ms: t0.elapsed().as_millis() as u64,
                 result_quality: "deep_pipeline",
                 unavailable_corpora: kc.unavailable_corpora,
+                // The deep branch returns a `KnowledgeContext`, which does not
+                // carry the echo — so this is "not carried here", not "the
+                // walk reached nothing". The measured lane is `kq_pipeline`.
+                atlas_walk: None,
             });
         }
         let plan = self
@@ -332,6 +336,7 @@ impl Runtime {
             search_ms: plan.search_ms,
             result_quality: plan.result_quality,
             unavailable_corpora: plan.unavailable_corpora,
+            atlas_walk: plan.atlas_walk,
         })
     }
 
@@ -411,6 +416,7 @@ impl Runtime {
             demand_plan,
             unavailable_corpora,
             atlas_summaries,
+            atlas_walk,
             peer_attribution,
             ..
         } = pipeline_state;
@@ -571,6 +577,7 @@ impl Runtime {
                 // case: the marker names what was missing so "I found
                 // nothing" cannot be read as "there is nothing".
                 unavailable_corpora: unavailable_corpora.clone(),
+                atlas_walk: atlas_walk.clone(),
                 search_ms,
                 retrieved_chunks: Vec::new(),
                 source_map: HashMap::new(),
@@ -844,6 +851,7 @@ impl Runtime {
                 // (cheap: doc_context is empty).
                 gap_check_enabled: true,
                 unavailable_corpora: unavailable_corpora.clone(),
+                atlas_walk: atlas_walk.clone(),
                 search_ms,
                 retrieved_chunks: Vec::new(),
                 source_map: HashMap::new(),
@@ -1604,6 +1612,7 @@ impl Runtime {
             route,
             gap_check_enabled,
             unavailable_corpora,
+            atlas_walk,
             search_ms,
             retrieved_chunks,
             source_map,

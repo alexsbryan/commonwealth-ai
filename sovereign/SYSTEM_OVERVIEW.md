@@ -3594,7 +3594,16 @@ here is what only a `Runtime` can do: choose the atlases in scope (through
 derivation, replacing an inline `format!("{}-{}", corpus_id, title)`), embed
 the question through the lane's provider, and fetch a chunk — the two methods
 of `ground::EvidenceFetcher`. `corpus-mcp`'s `ask` implements the same two and
-gets the same walk, which is the point (§10.6: one walk, two hosts).
+gets the same walk, which is the point (§10.6: one walk, two hosts). It also
+hands the walk's own REPORT out, as a value: a second out-parameter `walk_out`
+writes `AtlasWalkEcho` (the map section's nodes — atlas, atom id, kind,
+subtype, hop, via, from, score — plus the walk and resolve counters,
+`runtime/types.rs`) into `PipelineState::atlas_walk`, carried to
+`KnowledgeQueryPlan` and `EvidenceRetrieval` exactly the way
+`unavailable_corpora` is and out to `EvalResult.atlas_walk`, because the
+`atlas-grounding: fetch ledger` event that used to hold it alone is dark on the
+surface that has to measure it (`svrn eval run` emits no `sovereign_core`
+tracing at any level).
 
 The question's KIND selects the row, by centroid over the map's own exemplars
 (`atlas_traversal::question_kind`, ARCH §2.4 — the router's method, ported

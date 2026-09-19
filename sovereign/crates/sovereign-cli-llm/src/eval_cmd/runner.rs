@@ -145,6 +145,19 @@ pub struct EvalResult {
     /// retrieval-mode runs (synth path only).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub meta_atlas_hits: Vec<MetaAtlasHitEcho>,
+    /// The atlas walk's evidence PATH for this question — which atoms it
+    /// reached, by which edge, and what the fetch did with the requests.
+    ///
+    /// Distinct from `atlas_navigation` above, which is an embedding top-K
+    /// snapshot that never enters the prompt. This is the walk that DID enter
+    /// it, and until now it existed only as a tracing event `svrn eval run`
+    /// cannot emit (`atlas-grounding: fetch ledger`).
+    ///
+    /// `None` = the walk did not run for this row, which includes every lane
+    /// that does not drive the production pipeline. Absent is never "reached
+    /// nothing" — `Some` with empty `nodes` is that.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub atlas_walk: Option<sovereign_core::runtime::AtlasWalkEcho>,
 }
 
 /// Echo of `sovereign_core::runtime::MetaAtlasHitRecord` for the
@@ -816,6 +829,7 @@ async fn run_question_prod(
         essay_readiness: None,
         atlas_navigation: Vec::new(),
         meta_atlas_hits: Vec::new(),
+        atlas_walk: None,
     };
 
     let ev = match session
@@ -925,6 +939,7 @@ async fn run_question_prod(
         essay_readiness: None,
         atlas_navigation: Vec::new(),
         meta_atlas_hits: Vec::new(),
+        atlas_walk: ev.atlas_walk,
     }
 }
 
@@ -963,6 +978,7 @@ async fn run_question(
                 essay_readiness: None,
                 atlas_navigation: Vec::new(),
                 meta_atlas_hits: Vec::new(),
+                atlas_walk: None,
                 // `with_error` below sets `error`, which is what keeps this
                 // row out of the baseline comparison instead of scoring it 0.
                 error: None,
@@ -1510,6 +1526,7 @@ async fn run_question(
         essay_readiness,
         atlas_navigation: atlas_navigation_packed,
         meta_atlas_hits: Vec::new(),
+        atlas_walk: None,
     }
 }
 
@@ -1906,6 +1923,7 @@ async fn run_question_synth(
         essay_readiness: None,
         atlas_navigation: Vec::new(),
         meta_atlas_hits,
+        atlas_walk: None,
     };
 
     // The scores above are real arithmetic over a real answer — and on a
@@ -1987,6 +2005,7 @@ fn empty_synth_result(q: &Question, err: String, stream_wall_ms: u64) -> EvalRes
         essay_readiness: None,
         atlas_navigation: Vec::new(),
         meta_atlas_hits: Vec::new(),
+        atlas_walk: None,
     };
     row.with_error(err)
 }
@@ -2080,6 +2099,7 @@ mod degraded_router_tests {
             essay_readiness: None,
             atlas_navigation: Vec::new(),
             meta_atlas_hits: Vec::new(),
+            atlas_walk: None,
         };
         let degraded = as_metadata(Some(RouterStamp::default()));
         let why = degraded_router(Some(&degraded)).expect("default stamp is all-false");
