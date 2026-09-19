@@ -3298,11 +3298,19 @@ impl EmbeddedDaemon {
         // ceiling (default 1) regardless of whether a corpus engine is present,
         // so a storage-only or inference-only node is still bounded.
         {
-            let max = self.setup_config.read().await.daemon.max_peer_inflight;
+            let (max, reads) = {
+                let cfg = self.setup_config.read().await;
+                (
+                    cfg.daemon.max_peer_inflight,
+                    cfg.daemon.max_peer_knowledge_reads,
+                )
+            };
             app_state.set_contribution_max_peer_inflight(max);
+            app_state.set_contribution_max_peer_knowledge_reads(reads);
             info!(
                 max_peer_inflight = max,
-                "admission: peer-inflight ceiling configured"
+                max_peer_knowledge_reads = reads,
+                "admission: peer-inflight and knowledge-read ceilings configured"
             );
         }
 

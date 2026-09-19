@@ -30,9 +30,10 @@ use commonwealth_core::ids::NodeId;
 pub use sovereign_serving_host::admission::{
     client_fair_concurrency_from_env, client_fairness_enabled_from_env, client_fairness_layer,
     jitter_retry_after, jittered_retry_after_secs, local_queue_shed_response, peer_admission_layer,
-    shed_response, Admission, AdmissionHost, AdmissionLease, AdmissionPosture, AdmissionReason,
-    AdmissionRejection, AdmissionVerdict, AttachedPrincipal, GuardedBody, Principal,
-    DEFAULT_CLIENT_FAIR_CONCURRENCY, RETRY_AFTER_JITTER_SPREAD_SECS,
+    peer_knowledge_read_layer, shed_response, Admission, AdmissionHost, AdmissionLease,
+    AdmissionPosture, AdmissionReason, AdmissionRejection, AdmissionVerdict, AttachedPrincipal,
+    GuardedBody, PeerWork, Principal, DEFAULT_CLIENT_FAIR_CONCURRENCY,
+    RETRY_AFTER_JITTER_SPREAD_SECS,
 };
 
 /// RAII guard returned by the peer admission decision. Holds one slot in the
@@ -45,6 +46,7 @@ pub use sovereign_serving_host::admission::{
 pub struct PrincipalInflightGuard {
     inner: Arc<AppStateInner>,
     key: Principal,
+    work: PeerWork,
 }
 
 impl std::fmt::Debug for PrincipalInflightGuard {
@@ -60,19 +62,21 @@ impl std::fmt::Debug for PrincipalInflightGuard {
 }
 
 impl PrincipalInflightGuard {
-    pub(crate) fn new(inner: Arc<AppStateInner>, key: Principal) -> Self {
-        Self { inner, key }
+    pub(crate) fn new(inner: Arc<AppStateInner>, key: Principal, work: PeerWork) -> Self {
+        Self { inner, key, work }
     }
 }
 
 impl Drop for PrincipalInflightGuard {
     fn drop(&mut self) {
-        // Release this principal's slot back to the scheduler (promoting any
-        // waiter — none on this shed-only gate). Recover from a poisoned lock
-        // rather than cascade the panic.
-        self.inner
-            .serving
-            .peer_sched
+        // Release this principal's slot back to the scheduler that granted it
+        // (promoting any waiter — none on this shed-only gate). Recover from a
+        // poisoned lock rather than cascade the panic.
+        let sched = match self.work {
+            PeerWork::Inference => &self.inner.serving.peer_sched,
+            PeerWork::KnowledgeRead => &self.inner.serving.knowledge_read_sched,
+        };
+        sched
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .release(&self.key);
@@ -146,6 +150,19 @@ impl Drop for ClientShareGuard {
 }
 
 impl AdmissionLease for ClientShareGuard {}
+
+/// A member's request, decided by the one peer decider for `work`.
+fn admit_member(
+    state: &AppState,
+    node: NodeId,
+    now_unix_ms: u64,
+    work: PeerWork,
+) -> AdmissionVerdict {
+    match state.admit_peer_request_at(node, (now_unix_ms / 1000) as i64, work) {
+        Ok(guard) => AdmissionVerdict::Admitted(Box::new(guard)),
+        Err(rejection) => AdmissionVerdict::Rejected(rejection),
+    }
+}
 
 /// The client fair-share decision, over the daemon's `SchedCore<Principal>`.
 ///
@@ -233,16 +250,24 @@ impl Admission for AppState {
             // A verified member is peer traffic: the ceiling, scaled by its
             // reciprocity weight, under the pause and the foreground yield.
             Principal::Member { node_id } => {
-                match self.admit_peer_request_at(*node_id, (now_unix_ms / 1000) as i64) {
-                    Ok(guard) => AdmissionVerdict::Admitted(Box::new(guard)),
-                    Err(rejection) => AdmissionVerdict::Rejected(rejection),
-                }
+                admit_member(self, *node_id, now_unix_ms, PeerWork::Inference)
             }
             // Every other arm is a client: the fair share.
             Principal::LocalOwner { .. }
             | Principal::RemoteClient { .. }
             | Principal::Guest { .. }
             | Principal::Anonymous => admit_client(self, who),
+        }
+    }
+
+    fn admit_knowledge_read(&self, who: &Principal, now_unix_ms: u64) -> AdmissionVerdict {
+        match who {
+            Principal::Member { node_id } => {
+                admit_member(self, *node_id, now_unix_ms, PeerWork::KnowledgeRead)
+            }
+            // The read gate only ever sees members (`peer_gate` builds the
+            // `Member` arm); anything else is a client and takes its share.
+            _ => admit_client(self, who),
         }
     }
 

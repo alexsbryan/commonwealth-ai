@@ -1288,6 +1288,14 @@ pub struct DaemonSection {
     #[serde(default = "default_max_peer_inflight")]
     pub max_peer_inflight: usize,
 
+    /// Maximum concurrent peer corpus reads (`/internal/knowledge/search`)
+    /// this node admits — a budget of its own, never `max_peer_inflight`: a
+    /// read is ~ms of I/O, and one offloaded judge holding the inference slot
+    /// must not blind every member's fan-out to this node's corpora (seat A23).
+    /// Default `4`: bounded, but more than one member can read at once.
+    #[serde(default = "default_max_peer_knowledge_reads")]
+    pub max_peer_knowledge_reads: usize,
+
     /// Enable background freshness watchers (currently:
     /// `wikipedia-newsworthy`'s daily portal-ingest + article-refresh
     /// loop; future entries will share this gate). When true, the
@@ -1420,6 +1428,7 @@ impl Default for DaemonSection {
             embed_idle_secs: default_embed_idle_secs(),
             yield_to_foreground_secs: default_yield_to_foreground_secs(),
             max_peer_inflight: default_max_peer_inflight(),
+            max_peer_knowledge_reads: default_max_peer_knowledge_reads(),
             freshness_watchers_enabled: default_freshness_watchers_enabled(),
             force_tool_calls: default_force_tool_calls(),
             alternation_grammar: default_alternation_grammar(),
@@ -1727,6 +1736,9 @@ fn default_local_only() -> bool {
 /// construction so a CLI daemon is never an unbounded peer fan-out target.
 fn default_max_peer_inflight() -> usize {
     1
+}
+fn default_max_peer_knowledge_reads() -> usize {
+    4
 }
 fn default_freshness_watchers_enabled() -> bool {
     true

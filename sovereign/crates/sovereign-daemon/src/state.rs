@@ -1103,6 +1103,12 @@ impl AppState {
                     // (`try_grant` never queues). Reciprocity weights start empty
                     // (every node neutral) until the daemon's refresh loop runs.
                     peer_sched: Mutex::new(SchedCore::new(DEFAULT_PEER_INFLIGHT_CEILING, 1)),
+                    // Unbounded until the daemon applies the configured read
+                    // ceiling at boot — the same rule as `peer_sched` above.
+                    knowledge_read_sched: Mutex::new(SchedCore::new(
+                        DEFAULT_PEER_INFLIGHT_CEILING,
+                        1,
+                    )),
                     // Client-admission fair scheduler. `usize::MAX` slots on
                     // purpose: no depth ceiling here (see the field docs) — the
                     // per-principal equal share is the only rule, and the
@@ -1506,6 +1512,12 @@ impl AppState {
         self.lock_peer_sched().set_slots(max);
     }
 
+    /// Set the peer corpus-read ceiling (`[daemon] max_peer_knowledge_reads`),
+    /// a budget of its own — never the inference ceiling above (seat A23).
+    pub fn set_contribution_max_peer_knowledge_reads(&self, max: usize) {
+        self.lock_knowledge_read_sched().set_slots(max);
+    }
+
     /// Read the configured peer-inflight ceiling (the global slot budget).
     pub fn contribution_max_peer_inflight(&self) -> usize {
         self.lock_peer_sched().slots()
@@ -1585,6 +1597,15 @@ impl AppState {
         self.inner
             .serving
             .peer_sched
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Lock the peer corpus-read scheduler (same poison rule).
+    fn lock_knowledge_read_sched(&self) -> std::sync::MutexGuard<'_, SchedCore<Principal>> {
+        self.inner
+            .serving
+            .knowledge_read_sched
             .lock()
             .unwrap_or_else(|e| e.into_inner())
     }
@@ -1723,7 +1744,11 @@ impl AppState {
         node: NodeId,
     ) -> Result<crate::admission::PrincipalInflightGuard, crate::admission::AdmissionRejection>
     {
-        self.admit_peer_request_at(node, sovereign_time::unix_now())
+        self.admit_peer_request_at(
+            node,
+            sovereign_time::unix_now(),
+            crate::admission::PeerWork::Inference,
+        )
     }
 
     /// [`Self::admit_peer_request`] against a passed clock — the decider the
@@ -1739,9 +1764,12 @@ impl AppState {
         &self,
         node: NodeId,
         now_unix_secs: i64,
+        work: crate::admission::PeerWork,
     ) -> Result<crate::admission::PrincipalInflightGuard, crate::admission::AdmissionRejection>
     {
-        use crate::admission::{AdmissionReason, AdmissionRejection, PrincipalInflightGuard};
+        use crate::admission::{
+            AdmissionReason, AdmissionRejection, PeerWork, PrincipalInflightGuard,
+        };
 
         if let Some(remaining) = self.seconds_until_unpaused_at(now_unix_secs) {
             return Err(AdmissionRejection::new(
@@ -1749,6 +1777,39 @@ impl AppState {
                 AdmissionReason::Paused,
                 remaining.max(1),
             ));
+        }
+        let key = Principal::Member { node_id: node };
+        // A corpus read neither yields to the local user nor counts against
+        // the inference ceiling: its own budget decides it (seat A23).
+        if work == PeerWork::KnowledgeRead {
+            let mut sched = self.lock_knowledge_read_sched();
+            let granted = matches!(
+                sched.try_grant(key.clone(), 1.0, u32::MAX),
+                TryGrant::Granted
+            );
+            tracing::debug!(
+                target: "admission",
+                principal = %key,
+                ceiling = work.ceiling(),
+                slots = sched.slots(),
+                in_flight = sched.in_flight(),
+                granted,
+                "admission: peer knowledge read"
+            );
+            drop(sched);
+            return if granted {
+                Ok(PrincipalInflightGuard::new(
+                    std::sync::Arc::clone(&self.inner),
+                    key,
+                    work,
+                ))
+            } else {
+                Err(AdmissionRejection::new(
+                    "peer knowledge-read ceiling reached",
+                    AdmissionReason::CeilingExceeded,
+                    crate::admission::jittered_retry_after_secs(1),
+                ))
+            };
         }
         if self.yield_peers_to_foreground() {
             if let Some(remaining) = self.seconds_until_foreground_idle_at(now_unix_secs) {
@@ -1764,7 +1825,6 @@ impl AppState {
         // global ceiling, enforced by the shared `SchedCore`. The key is the
         // one `Principal`; it is cloned for the guard after the (consuming)
         // `try_grant`.
-        let key = Principal::Member { node_id: node };
         let weight = self.peer_reciprocity_weight(&node);
         let mut sched = self.lock_peer_sched();
         let cap = effective_peer_cap(sched.slots(), weight);
@@ -1774,6 +1834,7 @@ impl AppState {
                 Ok(PrincipalInflightGuard::new(
                     std::sync::Arc::clone(&self.inner),
                     key,
+                    work,
                 ))
             }
             // Both outcomes mean "at capacity now" on this shed-only gate.
