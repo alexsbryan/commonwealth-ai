@@ -374,13 +374,16 @@ leg_join() {
   if [ "$BACKEND" = podman ]; then container_up_one d || { fatal "the fourth container did not start"; return; }; fi
   start_daemon d
   { wait_all_up d && wait_homed d; } || { fatal "the fourth daemon never came up homed"; return; }
-  # The invite, as a shows it: `mesh status`'s `join link:` line.
+  # The invite, as a shows it: `mesh status`'s `join link:` line, kept as the
+  # provenance the census re-reads — the link is opened verbatim, the verb is typed.
   t0=$(date +%s)
   while [ $(( $(date +%s) - t0 )) -lt 30 ]; do
-    link=$(sv a mesh status | sed -n 's/^join link: //p'); [ -n "$link" ] && break; sleep 2
+    sv a mesh status > "$D/room-a-status.out" 2>&1
+    link=$(sed -n 's/^join link: //p' "$D/room-a-status.out"); [ -n "$link" ] && break; sleep 2
   done
   [ -n "$link" ] || { fatal "a's mesh status printed no join link inside 30 s"; return; }
-  typed d join "mesh join $link" "the invite a shows — scanned as a QR in the room (no renderer yet: rr-2)"
+  typed d join "mesh join" "the one verb; its argument is the invite below"
+  typed d join "$link" "the invite a shows — scanned as a QR in the room (no renderer yet: rr-2)" "" "$D/room-a-status.out"
   node_exec d "$CLI" mesh join "$link" > "$D/room-join.out" 2>&1
   dname=$(self_name d)
   [ -n "$dname" ] || { fatal "the fourth's mesh status names no self after the join, see room-join.out"; return; }

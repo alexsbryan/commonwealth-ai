@@ -127,7 +127,14 @@ exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 - Chose: Mark the row done on the two-daemon test + PLANT; record the 4B answer bar as COULD-NOT-JUDGE on this host, with each question named, as the row's own check allows ("must read 1.0 or name the question that did not"). No timeout raise, no topology change, no rerun.
 - Because: Raising `ASK_TIMEOUT_S` would not yield a judgment — the gate still sheds at 120 s and releases with no verdict, so every answer reads 0 regardless — and moving the 4B off a is the shape A23 refused. The fix's claim is a two-daemon property the test proves directly; the answer bar stays owed on the default 2B by REVIEW-DEMO-rr-1-run (five PASSED expected), and the 4B judgment is owed to a non-CPU node. The film 1.0→0.0 (listed_s null, c never saw Bo's offer) shares no code with admission and is owed by the next demo row. REVIEW-AFTER: the charter does not say whether a demo that could not judge may close a row whose mechanism a watched-failing test already proves.
 
+**A25 · 2026-09-19 · rr-1-nothing-typed-to-zero · director (supervisor resolution 1)** — commit e618e023d (row) + this commit
+- Needed: The row's six strings are out of the census, but the walk count read 1: the join leg (added after the 99ca7e4cb census) logged `mesh join <link>` as one assembled string, so the invite link a's `mesh status` printed counted as a typed URL. The same run read answer 0.8 and plug-in 0.0 (the fourth's one ask hit the 120 s watch with a 0-byte json), and DEMO-WAIT exited 1 on those two.
+- Chose: Apply the A18 rule to the link: the census records the verb `mesh join` (other) and the link as `opened`, with a's `mesh status` stdout kept as the provenance the report re-reads. Close the row on its own bar; answer and plug-in stay owed by REVIEW-DEMO-rr-1-run. Also corrected that row's "`ra-room-nothing-typed` reading 1" to 0, because the report's value already leaves the Jellyfin login out.
+- Because: The order's step 5 says a fourth node "joins by that link alone" and its scope line says the QR renderer is rr-2, "the link is the seam and the bar accepts it". The link comes from a tool's stdout, as the doc URLs A18 already classes do. The same decider now covers both cases (8). The two failing bars measure the 2B's synthesis and citation release, which this row's verbs do not touch. REVIEW-AFTER: A18 was flagged to the operator, and this is its second use.
+
 ## Flags for the operator
+
+- A25: the invite link a's `mesh status` prints is `opened`, not typed, the same as A18's doc URLs. `mesh join` is the verb; if the operator reads the link as typed until rr-2's QR, the walk count reads 1 again and rr-1 cannot reach 0.
 
 - A24: the 4B answer bar is COULD-NOT-JUDGE on this host (CPU 4B sheds gate calls at 120 s); a 4B judgment needs a GPU-backed node. The film leg read 0.0 in that run (offer never listed on c) — if REVIEW-DEMO repeats it on the 2B, it is a finding, not load.
 - A18: the nothing-typed census classes a URL a tool printed and the person opens verbatim as `opened`, not typed (the driver shows the stdout line it came from; an assembled string still counts).
@@ -5092,5 +5099,25 @@ room-answer-{1,2,4}.json: 0 bytes. The 600 s `timeout` killed the ask. q4's synt
 
 Edit or mark the row in ralph/next/ring-room/STATE.md, then
 `rm ralph/STOP ralph/NEEDS_HUMAN.md`.
+
+</details>
+
+## A25 · 2026-09-19 — rr-1-nothing-typed-to-zero: the join link is opened, not typed; the row closes on its own bar
+
+<details>
+
+**Fork.** (1) The one counted walk string was `mesh join sovereign://join/…` (target/ralph/demo.log:95, `walk count: 1`). Either count it until rr-2's QR renderer exists, or class the link `opened` by A18's rule. (2) Either close the row now, with the census at 0 after (1), or wait on the answer bar (0.8) and the plug-in (0.0).
+
+**Evidence.** `scripts/ring-room-demo.sh` join leg: the link is `sed -n 's/^join link: //p'` over `sv a mesh status`. It is taken verbatim and never assembled, so A18's premise holds for it. Order `.sovereign/features/ring-room-week1/order.md` step 5 ("A fourth node joins by that link alone") and the NOT-in-scope line ("a QR renderer (rr-2 — the link is the seam and the bar accepts it)"). Plug-in: `target/ring-room-demo/room-join-answer-0.json` is 0 bytes, and room-join.json has `answered_s: null, asks: 1, listed_s: 2.14`, so the fourth's library reached c and the 2B did not answer inside `JOIN_WATCH_S=120`. Answer 0.8: q1 released 0 citations with `claims_checked 0` (demo.log:104). Classifier check, run with the report's own `classify` and provenance match against a status file holding the recorded link: `mesh join` → other, the link with provenance → opened, the old `mesh join <link>` with no provenance → URL (still counts, so the rule was seen to fail).
+
+**Change.** The join leg writes `sv a mesh status` to `$D/room-a-status.out` and logs two strings: `mesh join`, and the link with that file as provenance. `classify` and the report are unchanged. The full demo was not re-run here because it takes about 25 minutes. The next DEMO (REVIEW-DEMO-rr-1-run, run twice) is where the 0 will show.
+
+**Falsified if** the next demo's census still counts a join string, or lists the link as `opened` when a's status file has no matching `join link:` line. Also falsified if the operator rules the invite link typed until rr-2, in which case revert this commit and rr-1's nothing-typed target stays 1.
+
+**Worker's package (ralph/NEEDS_HUMAN.md, removed by this commit).**
+
+(a) The unit is STATE.md row rr-1-nothing-typed-to-zero, built in e618e023d. DEMO-WAIT exited 1, and the walk count read 1.
+(b) The runs: clean 0, lint 0, test sovereign-cli-llm 0 (1112/0), test sovereign-mesh 0 (587/0), demo exit 1. Rows: answer 0.8 FAILED, doc 1.0, film 1.0 (listed 8.39 s, narrowed 10.53 s, first byte 0.32 s), plug-in 0.0 FAILED (c_answer_names false), nothing-typed 1 PASSED.
+(c) Decisions: (1) the join link: extend the provenance rule to it, or keep it counted until rr-2. (2) Close on the row's own bar, or wait for the answer bar and the plug-in's 120 s ask, which A24 and rr-1-tune own.
 
 </details>
