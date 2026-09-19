@@ -1,0 +1,101 @@
+{
+ "gold_source": "first-column cells of Spotify Privacy Policy tables (corpus/Spotify/Privacy Policy.md)",
+ "gold_data_type": [
+  "User Data",
+  "Street Address Data",
+  "Usage Data",
+  "Voice Data",
+  "Message Data",
+  "Age Check Data",
+  "Payment and Purchase Data",
+  "Precise Location Data",
+  "Survey and Research Data",
+  "Customer Service Data"
+ ],
+ "gold_recipient": [
+  "Support community",
+  "Other Spotify users",
+  "Artists and record labels",
+  "Service providers",
+  "Payment partners",
+  "Advertising partners",
+  "Marketing Partners",
+  "Ticketing and event partners",
+  "Podcast Hosting Platforms",
+  "Academic researchers",
+  "Purchasers of our business",
+  "Authentication partners",
+  "Technical service partners"
+ ],
+ "recall": {
+  "spike-fineprint-census": {
+   "data_type_name": "10/10",
+   "data_type_alias": "10/10",
+   "recipient_name": "1/13",
+   "recipient_alias": "7/13"
+  },
+  "spike-fineprint-census-pod": {
+   "data_type_name": "10/10",
+   "data_type_alias": "10/10",
+   "recipient_name": "3/13",
+   "recipient_alias": "10/13"
+  }
+ },
+ "quant_compare_same_sections": [
+  [
+   "data_type",
+   56,
+   66,
+   1.18
+  ],
+  [
+   "defined_term",
+   68,
+   76,
+   1.12
+  ],
+  [
+   "recipient",
+   22,
+   36,
+   1.64
+  ],
+  [
+   "purpose",
+   24,
+   8,
+   3.0
+  ],
+  [
+   "service",
+   26,
+   26,
+   1.0
+  ],
+  [
+   "organization",
+   57,
+   39,
+   1.46
+  ],
+  [
+   "agreement",
+   35,
+   38,
+   1.09
+  ],
+  [
+   "obligation",
+   320,
+   0,
+   320.0
+  ],
+  [
+   "person",
+   83,
+   48,
+   1.73
+  ]
+ ],
+ "spotify_data_type_service_attributed": "2/10"
+}
