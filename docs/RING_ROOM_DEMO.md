@@ -176,7 +176,7 @@ same evidence, fewer instructions.
 **3. Let the classify leave the node, or skip it (about 39 s).** The route
 classify is a 1,288-token prompt for a one-letter answer, and it runs before
 retrieval. It is gated local by `OffloadVerdict::FastLatency` in
-`sovereign-mesh/src/oicp_select.rs`, because `Workload::Route` in
+`sovereign-scheduler/src/oicp_select.rs`, because `Workload::Route` in
 `sovereign-contracts/src/slot_policy.rs` is class Fast, and Fast is taken to
 mean "do not pay a network hop". On a CPU node the hop is milliseconds and the
 local call is 39 seconds, so the rule encodes an assumption about hardware
