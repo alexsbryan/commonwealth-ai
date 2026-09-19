@@ -30,7 +30,9 @@ use std::path::Path;
 /// (the wire parse lives in `mesh_commands/state_response.rs` since e85076537).
 fn mesh_commands_source() -> String {
     let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-    let read = |p: &Path| std::fs::read_to_string(p).unwrap_or_else(|e| panic!("read {}: {e}", p.display()));
+    let read = |p: &Path| {
+        std::fs::read_to_string(p).unwrap_or_else(|e| panic!("read {}: {e}", p.display()))
+    };
     let mut out = read(&src.join("mesh_commands.rs"));
     let dir = src.join("mesh_commands");
     for entry in std::fs::read_dir(&dir).unwrap_or_else(|e| panic!("read {}: {e}", dir.display())) {
