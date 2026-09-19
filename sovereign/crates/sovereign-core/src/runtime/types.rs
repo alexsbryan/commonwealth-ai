@@ -190,6 +190,16 @@ pub struct AtlasWalkNodeEcho {
     pub score: f32,
 }
 
+/// The message-metadata key [`AtlasWalkEcho`] rides under.
+///
+/// One name for both ends of the wire (ARCH §8). The write is
+/// `runtime/streaming.rs`; the read is `sovereign-cli-llm`'s
+/// `eval_cmd::atlas_walk_meta`, in another crate — which is exactly where a
+/// duplicated string literal goes stale silently, because a reader looking for
+/// a key nobody writes returns "no walk" and no build, test or gate says a
+/// word. Neither side spells it.
+pub const ATLAS_WALK_META_KEY: &str = "atlas_walk";
+
 /// The atlas walk's evidence PATH and its counters, as one serde value.
 ///
 /// Until this type the walk's yield existed only as the `atlas-grounding:

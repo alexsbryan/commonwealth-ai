@@ -29,6 +29,7 @@
 //! right.
 
 pub mod atlas_ann;
+pub mod atlas_walk_meta;
 pub mod attribution;
 pub mod bank;
 pub mod lost_corpora;
@@ -968,7 +969,9 @@ async fn cmd_run(args: &[String]) -> i32 {
         // nothing — so a run that fell through to raw-index mode looked
         // exactly like one that drove the production pipeline, in the output
         // and in the file. That matters most for an A/B over atlas grounding:
-        // ONLY `--prod-pipeline` reaches `apply_atlas_grounding`, so a
+        // this arm does NOT reach `apply_atlas_grounding` and both the
+        // pipeline arms do (`--synth` through `stream_knowledge_query_turn`
+        // → `prepare_knowledge_query_plan` → `kq_pipeline()` step 8), so a
         // two-arm comparison run in this mode is one arm run twice, and
         // nothing in the artifact says so (ARCH §18.3, §18.4 — validate the
         // instrument before the result).

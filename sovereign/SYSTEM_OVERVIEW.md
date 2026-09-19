@@ -3603,7 +3603,12 @@ subtype, hop, via, from, score — plus the walk and resolve counters,
 `unavailable_corpora` is and out to `EvalResult.atlas_walk`, because the
 `atlas-grounding: fetch ledger` event that used to hold it alone is dark on the
 surface that has to measure it (`svrn eval run` emits no `sovereign_core`
-tracing at any level).
+tracing at any level). The `--synth` lane reaches that same field by the other
+door the plan has: `runtime/streaming.rs` writes the echo into the assistant
+message's metadata under `ATLAS_WALK_META_KEY` beside `meta_atlas_hits`, and
+`eval_cmd::atlas_walk_meta` reads it back off the PERSISTED row — that lane
+returns no plan to read, so a value is not enough and only the metadata hop
+carries it.
 
 The question's KIND selects the row, by centroid over the map's own exemplars
 (`atlas_traversal::question_kind`, ARCH §2.4 — the router's method, ported

@@ -96,6 +96,7 @@ pub(crate) use self::retrieval_helpers::{
     cross_corpus_sort_cmp, drop_no_overlap_chunks, inject_meta_atlas_hits,
     reweight_by_query_relevance,
 };
+pub use self::types::ATLAS_WALK_META_KEY;
 pub use self::types::{
     AtlasWalkEcho, AtlasWalkNodeEcho, ContradictionProv, EvidenceRetrieval, HistoryEntryProv,
     HistoryRecallProv, HistorySummaryProv, MetaAtlasHitRecord, RecalledMemoryProv, StreamHandle,

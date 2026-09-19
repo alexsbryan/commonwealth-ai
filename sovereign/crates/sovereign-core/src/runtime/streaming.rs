@@ -1355,9 +1355,11 @@ impl Runtime {
             route,
             gap_check_enabled,
             unavailable_corpora,
-            // The chat surface does not read the walk echo yet; the
-            // measurement surface (`retrieve_evidence`) is its only consumer.
-            atlas_walk: _,
+            // Rides into this turn's message metadata below, beside
+            // `meta_atlas_hits`. That is the ONLY way a `--synth` eval row can
+            // see the walk: that lane drives this handler and then reads the
+            // PERSISTED metadata back, never a return value.
+            atlas_walk,
             search_ms,
             retrieved_chunks,
             source_map,
@@ -2395,6 +2397,15 @@ impl Runtime {
                 // bench's fourth legibility lens. Empty when the
                 // registry was unset or matched no entities.
                 "meta_atlas_hits": meta_atlas_hits,
+                // The atlas walk's evidence PATH for this turn
+                // (`AtlasWalkEcho`): which atoms it reached, by which
+                // edge, and what the fetch did with the requests. `null`
+                // when the walk did not run; an object with empty
+                // `nodes` when it ran and reached nothing — the two are
+                // different facts and stay distinguishable here. The
+                // `--synth` eval lane reads this key back off the
+                // persisted message; nothing in the chat UI reads it.
+                ATLAS_WALK_META_KEY: atlas_walk,
                 // PR3 — grounded follow-ups rendered as clickable
                 // NextStepButtons under the bubble. Empty array
                 // when retrieval produced nothing to ground an

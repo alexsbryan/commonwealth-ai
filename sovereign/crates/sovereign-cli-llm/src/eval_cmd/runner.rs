@@ -34,6 +34,7 @@ use std::collections::{HashMap, HashSet};
 use crate::chat_cmd::bootstrap::ChatSession;
 use crate::chat_cmd::render::split_reasoning;
 use crate::enrich_cmd::paths;
+use crate::eval_cmd::atlas_walk_meta::atlas_walk_from_metadata;
 use crate::eval_cmd::attribution;
 use crate::eval_cmd::bank::{EvalBank, Question};
 use crate::eval_cmd::score::{
@@ -1788,6 +1789,10 @@ async fn run_question_synth(
         .and_then(|v| serde_json::from_value::<Vec<MetaAtlasHitEcho>>(v.clone()).ok())
         .unwrap_or_default();
 
+    // The atlas walk's evidence path, off the same persisted metadata block
+    // (written at `runtime/streaming.rs`, beside `meta_atlas_hits`).
+    let atlas_walk = atlas_walk_from_metadata(metadata.as_ref(), &q.id);
+
     let titles: Vec<String> = retrieved_chunks_meta
         .iter()
         .filter_map(|c| c.get("title").and_then(|t| t.as_str()))
@@ -1923,7 +1928,7 @@ async fn run_question_synth(
         essay_readiness: None,
         atlas_navigation: Vec::new(),
         meta_atlas_hits,
-        atlas_walk: None,
+        atlas_walk,
     };
 
     // The scores above are real arithmetic over a real answer — and on a
