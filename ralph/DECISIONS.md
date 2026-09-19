@@ -152,6 +152,11 @@ exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 - Chose: ESCALATED, not decided. The row stays `[~]` and is not closed on a red it owns; the foreign reds (hakari.toml:54, cli-contract.toml:3571) are not the campaign's, as in A10.
 - Because: No change inside the charter makes the gate green. Splitting all four campaign files still leaves the band about 366 lines over, because the rail's lib.rs (846) cannot move without a rail diff. Accepting the growth raises a baseline, which PROMPT §7 forbids to the loop and the charter reserves as bar-weakening. Laundering the residue by splitting an unrelated band file is the refill the band ratchet exists to stop. The next row is HUMAN-rr-1-the-room, so stopping here costs the loop no work it could otherwise do.
 
+**A30 · 2026-09-18 · REVIEW-audit-rr-1 · director (supervisor resolution 2)** — this commit
+- Needed: The supervisor re-opened A29's escalation. The fork is unchanged: arch-gate is red on growth that belongs only to this campaign, and no step inside the charter turns it green.
+- Chose: ESCALATION STANDS. No row, code or baseline change. The row stays `[~]` and `ralph/NEEDS_HUMAN.md` stays in place. Re-running the resolution cannot move this; only the operator can.
+- Because: Reproduced on 4b6cd17be, which is 0 commits behind origin/main: all five growing files are this branch's. Splitting every campaign file leaves the band at 207 files / 203069 lines against 202703, +366. The one entrant that cannot move is the rail's lib.rs (846), and it moves only with a rail diff. Closing that gap takes `--update-baseline` (PROMPT §7; charter: operator's) or a rail diff (charter: operator's). The only row after the audit is HUMAN-rr-1-the-room, so the operator is the next step in either case.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -5249,5 +5254,35 @@ rows within slack (then the red is stale), or a split plan reaches green without
 or an unrelated band file.
 
 Worker's package: `ralph/NEEDS_HUMAN.md` at 7c1da559b, kept in place with this verdict added.
+
+</details>
+
+## A30 · 2026-09-18 — REVIEW-audit-rr-1: the escalation stands on re-reading
+
+<details>
+
+Fork: the same as A29's, accept the growth or split the files. Re-read to check whether any
+in-charter step makes the campaign flow.
+
+Evidence (this session): `cargo xtask arch-gate` at 4b6cd17be printed "209 file(s) / 204987 lines
+in the 800-1200 approach band", with epistemic.rs 1444→1574 and admin_http.rs 1308→1387 past slack.
+`git rev-list --count HEAD..origin/main` = 0, and origin/main→HEAD line counts are epistemic.rs
+1444→1574, admin_http.rs 1308→1387, commonwealth-rail/src/lib.rs 798→846, mesh_media.rs 595→931 and
+knowledge_fanout_e2e.rs 644→987. So all of the growth is this branch's. Moving mesh_media.rs and
+knowledge_fanout_e2e.rs under 800 removes 1918 band lines and brings the band to 207 files /
+203069 lines, still +366 over 202703. The rail's 846 lines are the part that cannot move.
+
+The one partial step inside the charter is "fix the code the gate names": split the epistemic and
+admin_http test modules. It clears the two past-slack lines but leaves the band red, and it adds
+about 1800 lines of churn the operator may not want if they choose to accept. That is not the
+smaller reversible step, so it was not taken.
+
+For the operator, A29's options and recommendation unchanged: (1) accept, which means re-pinning
+arch-gate's baselines with a §10 ledger line in SYSTEM_OVERVIEW.md; or (2) mint split rows for
+the four files and hand-raise the band by the rail residue, about 366 lines, with a §10 ledger
+line. Recommendation: (2), as A29 said.
+
+Falsified if: a split inside the charter brings the band to ≤202703 lines without a rail diff or
+touching an unrelated band file, or origin/main moves and absorbs any of the five files' growth.
 
 </details>
