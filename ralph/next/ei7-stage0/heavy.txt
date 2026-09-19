@@ -1,0 +1,4 @@
+# at most one heavy row per wave
+REVIEW-build-e7-path-synth
+REVIEW-build-e7-compare-core
+REVIEW-build-e7-checks

@@ -41,7 +41,18 @@ case "$check" in
     node)    [ -n "${1:-}" ] || { echo "usage: ralph-check.sh node <dir>" >&2; exit 2; }
              run node 8 node --test "$1" ;;
     demo)    run demo 12 scripts/ring-doc-demo.sh verdict all ;;
+    # Campaign-neutral verbs (ei7-stage0, 2026-09-18). `toml` and `demo` above
+    # name ring-doc's files; a queue that is not ring-doc uses these instead.
+    testfn)  [ -n "${2:-}" ] || { echo "usage: ralph-check.sh testfn <crate> <whole-test-fn-name>" >&2; exit 2; }
+             run testfn 8 ./scripts/with-cargo-lock.sh ./scripts/sovereign-test.sh --human --package "$1" --filter "$2" ;;
+    env)     run env 5 bash -c 'cd corpus-engine && ../scripts/with-cargo-lock.sh cargo xtask env-gate' ;;
+    py)      [ -n "${1:-}" ] || { echo "usage: ralph-check.sh py <script.py> (runs its --self-test)" >&2; exit 2; }
+             run py 12 python3 "$1" --self-test ;;
+    campaign) [ -n "${1:-}" ] || { echo "usage: ralph-check.sh campaign <id>" >&2; exit 2; }
+             run campaign 5 python3 -c "import sys,tomllib; tomllib.load(open(f'quality/campaigns/{sys.argv[1]}.toml','rb'))" "$1" ;;
+    desktop) run desktop 12 bash -c 'cd sovereign/crates/sovereign-desktop && npm run check && npm run test' ;;
+    pilot)   run pilot 20 research/ontology-retrieval/pilot/run-pilot.sh ;;
     testall) run testall 12 ./scripts/with-cargo-lock.sh ./scripts/sovereign-test.sh --human ;;
     prepush) run prepush 20 ./scripts/pre-push.sh ;;
-    *) echo "usage: scripts/ralph-check.sh clean|lint|test <crate>|layer|toml|docs|node <dir>|demo|testall|prepush" >&2; exit 2 ;;
+    *) echo "usage: scripts/ralph-check.sh clean|lint|test <crate>|testfn <crate> <fn>|layer|env|toml|campaign <id>|docs|py <script>|node <dir>|desktop|demo|pilot|testall|prepush" >&2; exit 2 ;;
 esac
