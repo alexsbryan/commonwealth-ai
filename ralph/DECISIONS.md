@@ -122,8 +122,14 @@ exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 - Chose: Mark the row done with the 2B 0.8 on record and the 4B as could-not-judge; mint rr-1-corpus-read-not-inference-gated — a knowledge search is admitted under its own small read ceiling, never the inference peer-inflight ceiling, with a two-daemon test watched failing and the 4B demo re-run with the model on every node as before.
 - Because: A corpus read and an offloaded inference are different resources a member owns about itself (12); one ceiling for both means the strongest machine in a room goes blind to everyone the moment it judges for one of them — the D13 sentence fails exactly when the room is busiest. Putting the 4B on a alone would have hidden the finding the instrument just caught; keeping the judge local would hide it with a routing flag.
 
+**A24 · 2026-09-19 · rr-1-corpus-read-not-inference-gated · director (supervisor resolution 1)** — commit 292d3970c (row) + this commit
+- Needed: The admission change landed and its two-daemon test was watched red (the 503 line) then green, with the PLANT red; the one 4B-on-every-node demo read answer 0.0 because a's CPU 4B shed every gate call at the 120 s queue bound (q0 released with claims_checked 0) and q1–q4 hit the 600 s ask timeout with 0-byte json. The judge never offloaded in that run (0 `routing to peer`, 0 `admission: 503`), so the demo did not exercise the fix either way.
+- Chose: Mark the row done on the two-daemon test + PLANT; record the 4B answer bar as COULD-NOT-JUDGE on this host, with each question named, as the row's own check allows ("must read 1.0 or name the question that did not"). No timeout raise, no topology change, no rerun.
+- Because: Raising `ASK_TIMEOUT_S` would not yield a judgment — the gate still sheds at 120 s and releases with no verdict, so every answer reads 0 regardless — and moving the 4B off a is the shape A23 refused. The fix's claim is a two-daemon property the test proves directly; the answer bar stays owed on the default 2B by REVIEW-DEMO-rr-1-run (five PASSED expected), and the 4B judgment is owed to a non-CPU node. The film 1.0→0.0 (listed_s null, c never saw Bo's offer) shares no code with admission and is owed by the next demo row. REVIEW-AFTER: the charter does not say whether a demo that could not judge may close a row whose mechanism a watched-failing test already proves.
+
 ## Flags for the operator
 
+- A24: the 4B answer bar is COULD-NOT-JUDGE on this host (CPU 4B sheds gate calls at 120 s); a 4B judgment needs a GPU-backed node. The film leg read 0.0 in that run (offer never listed on c) — if REVIEW-DEMO repeats it on the 2B, it is a finding, not load.
 - A18: the nothing-typed census classes a URL a tool printed and the person opens verbatim as `opened`, not typed (the driver shows the stdout line it came from; an assembled string still counts).
 - A19: 'citation' in `ra-room-answer-names-the-machine` means the released evidence pointer in either gate mode — a quote citation, or a verified claim's support — and both must name the member.
 - A12/A16: the ring-room predicate's rail clause names `commonwealth-rail` + `commonwealth-rail-core`; the roster-door default (lib.rs:130-205) is its one permitted diff; `commonwealth-rails` (the rails daemon) is outside it.
@@ -4984,3 +4990,107 @@ daemon.rs:1952; mesh_http.rs:504); B and C join with that link and the daemon ke
 founder over iroh. Same code on both backends (decision 2: yes; local re-run is the proof).
 Not taken: `internal_bind = 0.0.0.0` — tests a path the Mac will never take and moves a
 loopback pin. Recorded for the audit: `mesh rotate` prints the link without `dial=`.
+
+## A24 · 2026-09-19 — rr-1-corpus-read-not-inference-gated: the fix is proven by the two-daemon test; the 4B answer bar could not judge on a CPU node
+
+<details><summary>reasoning, evidence, package</summary>
+
+Fork: how to judge the answer bar on the 4B (raise ASK_TIMEOUT_S / 4B on b,d only / accept could-not-judge) and whether the demo is still this row's proof.
+
+Evidence reproduced 2026-09-19 from `target/ring-room-demo/` and `target/ralph/`: `grep -c 'admission: 503'` a=0 b=0; `grep -c 'routing to peer'` a=0 b=0; a/daemon.err holds `gate_call_failed reason=queue_shed ms=120002` at 01:17, 01:20, 01:24, 01:33 and `judge_failed_open reason=queue_shed` at 01:35; room-answer-{1..4}.json are 0 bytes; `target/ralph/plant.log` summary pass 0 fail 1, `green.log` pass 1 fail 0; the test is `sovereign-mesh/tests/main/knowledge_fanout_e2e.rs:889`. room-film.json: listed_s null, narrowed_s null; room-narrow.out shows the offer written and `hot-reloaded: iroh.media_allow`.
+
+Falsified if: REVIEW-DEMO-rr-1-run on the 2B shows `corpora_unavailable` non-empty with an `admission: 503` on the holder (the fix does not hold in the room), or the film leg fails again with no CPU-bound model resident (the 0.0 was not load).
+
+The worker's package:
+
+# NEEDS_HUMAN — rr-1-corpus-read-not-inference-gated
+
+## (a) The unit
+
+Row 62 of `ralph/next/ring-room/STATE.md`, left `[~]`. The admission change is
+done, green and committed as **292d3970c**. Only the 4B DEMO is red.
+
+- One decider. `AppState::admit_peer_request_at(node, now, PeerWork)`
+  (`sovereign-daemon/src/state.rs`). `PeerWork::KnowledgeRead` meets the pause
+  gate, then its own `SchedCore` (`serving.knowledge_read_sched`). It never
+  meets the foreground yield or `peer_sched`.
+- The config key is `[daemon] max_peer_knowledge_reads`, default 4
+  (`sovereign-contracts/src/setup_config.rs`), applied at boot in `daemon.rs`.
+- `/internal/knowledge/search` goes through `peer_knowledge_read_layer`
+  (`Admission::admit_knowledge_read`, `sovereign-serving-host/src/admission.rs`).
+- Every 503 event carries `ceiling=<key>`, and the read decision has a debug
+  event on target `admission`.
+
+## (b) What I ran, and what came back
+
+- The two-daemon test
+  `knowledge_fanout_e2e::corpus_read_is_served_while_the_inference_slot_is_held`
+  was red before the fix: `Got: {"results":[],"corpora_searched":[],"corpora_unavailable":["room"]}`.
+  It is green after the fix.
+- PLANT (read routed as `PeerWork::Inference`): red with the same line, green
+  once reverted.
+- Checks: CLEAN 0 · LINT 0 · TEST(sovereign-mesh) 587/0 ·
+  TEST(sovereign-daemon) 707/0 · TEST(sovereign-serving-host) 224/0 ·
+  TEST(sovereign-contracts) 439/0.
+- `sovereign-api` no longer exists. e9db0b96c moved it into the daemon and
+  serving-host crates, so those two tests stand in for TEST(sovereign-api).
+- The binaries were rebuilt with `scripts/dev-build.sh -p sovereign-cli -p sovereign-cli-daemon -p sovereign-cli-llm -p sovereign-cli-dev`
+  before the demo. Every node's boot line reads
+  `max_peer_inflight=1 max_peer_knowledge_reads=4`.
+
+The DEMO was `RING_ROOM_CHAT=$PWD/sovereign/models/Qwen3.5-4B.Q6_K.gguf RALPH_DEMO_SCRIPT=scripts/ring-room-demo.sh scripts/ralph-check.sh demo-bg`,
+then `demo-wait`. It ran ONE time, took ~55 min and ended **exit=1**:
+
+```
+ra-room-answer-names-the-machine   0.0  FAILED  q0 released 0 claims_checked 0 verdict grounded answer_has true; q1-q4 error "Expecting value" (0-byte json)
+ra-room-doc-name-from-membership   1.0  PASSED  p99 1.723
+ra-room-film-from-the-library-rail 0.0  FAILED  b_listed_and_narrowed false, c_first_byte false
+ra-room-plug-in-live               0.0  FAILED  c_answer_names false (answered_s null)
+ra-room-nothing-typed              10   FAILED  (walk count 10 — rr-1-nothing-typed-to-zero's job)
+```
+
+The collision this row fixes did not recur. It was also not exercised: the
+judge never offloaded in this run.
+
+```
+b/daemon.err   "admission: 503"                        0 lines
+a/daemon.err   "fan-out complete corpora_unavailable"  6 lines, all ={}
+a/daemon.err   "routing to peer"                       0 lines   (no judge offloaded this run)
+q0 answer: "teal, ochre, plum and slate", sources [{origin room-VlACt7, from_peer Bo}]
+```
+
+What failed instead is a's own CPU 4B against the driver's
+`ASK_TIMEOUT_S=600` (`scripts/ring-room-demo.sh:63`):
+
+```
+a 01:33:32 gate model call failed mechanism=chunk_judge reason=queue_shed ms=120002 (host busy: ~120000 ms predicted wait)
+a 01:35:32 gate released without a verdict action=judge_failed_open reason=queue_shed calls_answered=0
+a 01:39:04 kq-stream synth draft complete ... wl-synthesize served_by=local_fallback:Qwen3.5-4B ttft_ms=411273
+room-answer-3.err: turn failed: Inference error: host busy: ~120000 ms predicted wait at queue position 1
+room-answer-{1,2,4}.json: 0 bytes. The 600 s `timeout` killed the ask. q4's synthesis finished at 18:39 local; its json was written empty at 18:29.
+```
+
+## (c) What the operator must decide
+
+1. **How the answer bar gets a 4B judgment.** a's CPU 4B has a TTFT of about
+   7 minutes a question, and its own slot queue sheds the gate calls at the
+   120 s bound. That leaves no room inside a 600 s ask. The options:
+   - (i) Raise `ASK_TIMEOUT_S` (`scripts/ring-room-demo.sh:63`) for a 4B run.
+   - (ii) Run the 4B on b/d only and the 2B on a. That is option (i) of A23's
+     package, and it also forces the offload the fix is about.
+   - (iii) Take this row's evidence as the two-daemon test plus the PLANT, and
+     record the 4B bar as could-not-judge. The 2B 0.8 stays on record.
+2. **Is this row's DEMO still the right proof?** The collision needs the
+   judge to offload. This run kept it local (0 `routing to peer`), so a
+   passing 4B demo would not exercise the fix either. The two-daemon test
+   does exercise it.
+3. `ra-room-film-from-the-library-rail` went 1.0 → 0.0 against the 2B run.
+   That leg shares no code with admission. It ran under the 4B's CPU load,
+   and I did not investigate it.
+
+## (d) Then
+
+Edit or mark the row in ralph/next/ring-room/STATE.md, then
+`rm ralph/STOP ralph/NEEDS_HUMAN.md`.
+
+</details>
