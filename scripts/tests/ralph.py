@@ -638,6 +638,87 @@ class RalphCheckTests(unittest.TestCase):
             self.assertIn("ralph/next/b/queue.toml", r.stderr)
 
 
+class PromptRenderTests(unittest.TestCase):
+    BASE = ("not rendered\n<!-- section: intro -->\n# {{queue}}\n"
+            "<!-- section: checks -->\n| LINT |\n<!-- section: rules -->\n- mark {{state}}\n")
+    BUILTINS = {"queue": "a", "state": "ralph/next/a/STATE.md",
+                "control_dir": "ralph/next/a/ctl", "log_dir": "target/ralph/a"}
+
+    def test_ring_room_renders_byte_for_byte(self):
+        # Nothing was lost in the factoring: base + ring-room's addendum, with the
+        # legacy control files, IS the PROMPT.md its launch line still reads.
+        rendered = ralph.render_prompt(
+            (REPO / "ralph/PROMPT.base.md").read_text(),
+            (REPO / "ralph/next/ring-room/PROMPT.addendum.md").read_text(),
+            {"queue": "ring-room", "state": "ralph/next/ring-room/STATE.md",
+             "control_dir": "ralph", "log_dir": "target/ralph"})
+        self.assertEqual(rendered.encode(),
+                         (REPO / "ralph/next/ring-room/PROMPT.md").read_bytes())
+
+    def test_the_base_alone_renders_with_no_placeholder_left(self):
+        text = ralph.render_prompt((REPO / "ralph/PROMPT.base.md").read_text(),
+                                   "<!-- section: vars -->\nprefix = qa\n", self.BUILTINS)
+        self.assertNotIn("{{", text)
+        self.assertNotIn("<!-- section", text)
+        self.assertIn("`ralph/next/a/ctl/NEEDS_HUMAN.md`", text)
+        self.assertIn("| `REVIEW-mint-qa-` |", text)
+
+    def test_an_addendum_replaces_appends_places_and_adds_sections(self):
+        addendum = ("<!-- section: vars -->\nprefix = qa\n"
+                    "<!-- section: checks append -->\n| PILOT {{prefix}} |\n"
+                    "<!-- section: rules -->\n- never push\n"
+                    "<!-- section: window after=intro -->\nONE gpu window\n"
+                    "<!-- section: tail -->\nthe end\n")
+        self.assertEqual(ralph.render_prompt(self.BASE, addendum, self.BUILTINS),
+                         "# a\nONE gpu window\n| LINT |\n| PILOT qa |\n- never push\nthe end\n")
+
+    def test_what_cannot_be_rendered_is_refused_by_name(self):
+        for addendum, word in (("<!-- section: rules -->\n{{prefx}}\n", "prefx"),
+                               ("<!-- section: vars -->\nstate = elsewhere\n", "state"),
+                               ("<!-- section: ghost append -->\nx\n", "ghost"),
+                               ("<!-- section: w after=ghost -->\nx\n", "ghost"),
+                               ("<!-- section: rules -->\na\n<!-- section: rules -->\nb\n",
+                                "rules")):
+            with self.assertRaisesRegex(ValueError, word):
+                ralph.render_prompt(self.BASE, addendum, self.BUILTINS)
+
+    def campaign_prompt(self, tmp, name):
+        paths = ralph.paths_for(ralph.build_parser().parse_args(
+            ["run", "--workdir", tmp, "--queue", name]))
+        seen = []
+        c = ralph.Campaign(paths, notify_enabled=False, sleep=lambda s: None, max_stall=2,
+                           session_run=lambda args, prompt, log: seen.append(prompt))
+        buf = io.StringIO()
+        with mock.patch.object(ralph, "head_of", return_value="a" * 40), \
+                contextlib.redirect_stdout(buf):
+            c.run()
+        return seen, buf.getvalue()
+
+    def test_a_queue_with_an_addendum_runs_on_the_render_and_logs_its_hash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            two_queues(tmp)
+            write(tmp, "ralph/PROMPT.base.md", self.BASE)
+            write(tmp, "ralph/next/a/PROMPT.addendum.md", "<!-- section: rules -->\n- a only\n")
+            seen, said = self.campaign_prompt(tmp, "a")
+            self.assertTrue(seen[0].endswith("# a\n| LINT |\n- a only\n"), seen[0])
+            import hashlib
+            digest = hashlib.sha256(b"# a\n| LINT |\n- a only\n").hexdigest()[:16]
+            self.assertEqual(said.count(f"sha256={digest}"), 1)     # once, not per iteration
+            self.assertIn("ralph/PROMPT.base.md + ralph/next/a/PROMPT.addendum.md", said)
+            seen_b, said_b = self.campaign_prompt(tmp, "b")
+            self.assertTrue(seen_b[0].endswith("prompt of b\n"))
+            self.assertIn("prompt: ralph/next/b/PROMPT.md sha256=", said_b)
+
+    def test_a_declared_prompt_is_read_as_written_even_beside_an_addendum(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            two_queues(tmp)
+            write(tmp, "ralph/PROMPT.base.md", self.BASE)
+            write(tmp, "ralph/next/a/PROMPT.addendum.md", "<!-- section: rules -->\n- a only\n")
+            write(tmp, "ralph/next/a/queue.toml", 'prompt = "ralph/next/a/PROMPT.md"\n')
+            seen, _ = self.campaign_prompt(tmp, "a")
+            self.assertTrue(seen[0].endswith("prompt of a\n"))
+
+
 class SupervisorTests(unittest.TestCase):
     def make(self, tmp, *, run_inner, resolver_run, resolve_max=2):
         write(tmp, "ralph/STATE.md", "- [ ] dm-a — depends []\n")

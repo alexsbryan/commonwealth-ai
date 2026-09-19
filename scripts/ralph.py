@@ -495,6 +495,7 @@ class Paths:
     control_dir: str = "ralph"            # a queue's own: ralph/next/<name>/ctl
     director_commits: str = "ralph/.director-commits"
     log_dir: str = "target/ralph"
+    prompt_addendum: str = ""             # set when the prompt is rendered, not read
     manifest: QueueManifest | None = None
 
     def p(self, rel):
@@ -507,6 +508,83 @@ class Paths:
                 "stop": f"{control_dir}/STOP", "needs_human": f"{control_dir}/NEEDS_HUMAN.md",
                 "waiting": f"{control_dir}/waiting", "heartbeat": f"{control_dir}/.heartbeat",
                 "director_commits": f"{control_dir}/.director-commits"}
+
+
+PROMPT_BASE = "ralph/PROMPT.base.md"
+SECTION_RE = re.compile(r"^<!-- section: (?P<name>[a-z0-9-]+)"
+                        r"(?: (?P<mode>append|after=(?P<after>[a-z0-9-]+)))? -->\n", re.M)
+VAR_RE = re.compile(r"\{\{([a-z_]+)\}\}")
+
+
+def prompt_sections(text, source):
+    """`<!-- section: name [append|after=<name>] -->` lines split a prompt file;
+    the marker lines, and anything above the first one, are not rendered."""
+    marks = list(SECTION_RE.finditer(text))
+    out = []
+    for n, m in enumerate(marks):
+        body = text[m.end():marks[n + 1].start() if n + 1 < len(marks) else len(text)]
+        if any(name == m["name"] for name, _, _, _ in out):
+            raise ValueError(f"{source}: section `{m['name']}` appears twice")
+        out.append((m["name"], m["mode"] or "", m["after"], body))
+    return out
+
+
+def render_prompt(base, addendum, builtins):
+    """The shared prompt once, a queue's differences beside it (until 2026-09-19
+    every queue carried a sed-edited copy, and ei7-stage0's copy kept a
+    ralph-mark.sh call that named another queue's file). An addendum section
+    replaces the base section of its name, `append` adds to it, `after=<name>`
+    places a new one, and any other new name goes last; `vars` is `key = value`
+    lines for {{key}}. Whatever cannot be rendered is refused by name."""
+    order, bodies = [], {}
+    for name, mode, _, body in prompt_sections(base, "base"):
+        if mode or name == "vars":
+            raise ValueError(f"base: section `{name}` may not be `vars` or carry a mode")
+        order.append(name)
+        bodies[name] = body
+    variables = dict(builtins)
+    for name, mode, after, body in prompt_sections(addendum, "addendum"):
+        if name == "vars":
+            for line in body.splitlines():
+                if "=" in line and not line.lstrip().startswith("#"):
+                    key, value = (part.strip() for part in line.split("=", 1))
+                    if key in builtins:
+                        raise ValueError(f"addendum: var `{key}` is the loop's own, not the queue's")
+                    variables[key] = value
+        elif mode == "append":
+            if name not in bodies:
+                raise ValueError(f"addendum: `{name} append` — the base has no section `{name}`")
+            bodies[name] += body
+        elif after:
+            if after not in bodies or name in bodies:
+                raise ValueError(f"addendum: `{name} after={after}` — `{after}` must exist "
+                                 f"and `{name}` must be new")
+            order.insert(order.index(after) + 1, name)
+            bodies[name] = body
+        else:
+            if name not in bodies:
+                order.append(name)
+            bodies[name] = body
+
+    def fill(m):
+        if m[1] not in variables:
+            raise ValueError(f"prompt: {{{{{m[1]}}}}} is not a var "
+                             f"(known: {', '.join(sorted(variables))})")
+        return variables[m[1]]
+
+    return VAR_RE.sub(fill, "".join(bodies[name] for name in order))
+
+
+def prompt_text(paths):
+    """(text, source) for the worker prompt: rendered when the queue has an
+    addendum and declares no `prompt` of its own, else the file as written."""
+    if paths.prompt_addendum:
+        text = render_prompt(paths.p(PROMPT_BASE).read_text(),
+                             paths.p(paths.prompt_addendum).read_text(),
+                             {"queue": paths.queue, "state": paths.state,
+                              "control_dir": paths.control_dir, "log_dir": paths.log_dir})
+        return text, f"{PROMPT_BASE} + {paths.prompt_addendum}"
+    return paths.p(paths.prompt).read_text(), paths.prompt
 
 
 # A driver heartbeat younger than this means a loop is live. One number for the
@@ -744,7 +822,14 @@ class Campaign:
             pass
 
     def _prompt_text(self):
-        return self.paths.p(self.paths.prompt).read_text()
+        """Re-read every iteration, as before; the hash is logged when it changes,
+        so the log says which prompt each unit ran on."""
+        text, source = prompt_text(self.paths)
+        digest = hashlib.sha256(text.encode()).hexdigest()[:16]
+        if digest != getattr(self, "_prompt_digest", None):
+            self._prompt_digest = digest
+            say(f"prompt: {source} sha256={digest}")
+        return text
 
     def _log_path(self, iteration):
         return str(self.paths.p(self.paths.log_dir) / f"iter-{iteration}.out")
@@ -1304,7 +1389,7 @@ def cmd_plan(args):
     queue = Queue(paths.p(paths.state))
     models = resolve_models(args, paths)
     unit = queue.current()
-    print(f"prompt: {paths.prompt}  queue: {paths.state}")
+    print(f"prompt: {prompt_text(paths)[1]}  queue: {paths.state}")
     print(f"commits since review: n/a  head: {head_of(paths.workdir)[:9]}")
     print(f"done: {queue.done_count()}/{len(queue.rows)}")
     if unit is None:
@@ -1579,7 +1664,11 @@ def paths_for(args):
         args.session_timeout = m.session_timeout
     elif given is None:
         args.session_timeout = DEFAULT_SESSION_TIMEOUT
+    addendum = f"{STAGED_DIR}/{name}/PROMPT.addendum.md"
+    if m.prompt_declared or not (workdir / addendum).is_file():
+        addendum = ""
     return Paths(workdir, prompt=m.prompt, state=m.state, charter=m.charter,
+                 prompt_addendum=addendum,
                  conflicts=m.conflicts, heavy=m.heavy, queue=name, manifest=m,
                  log_dir=f"target/ralph/{name}", **Paths.control_files(m.control_dir))
 
@@ -1662,6 +1751,12 @@ def cmd_supervise(args):
         print(f"wrote {plist}")
         return 0
     return guarded(supervisor.run, paths, notify_enabled=args.notify)
+
+
+def cmd_prompt(args):
+    """What a worker of this queue is given, exactly."""
+    sys.stdout.write(prompt_text(paths_for(args))[0])
+    return 0
 
 
 def cmd_check_argv(args):
@@ -1827,6 +1922,11 @@ def build_parser():
     p = sub.add_parser("plan")
     common(p)
     p.set_defaults(fn=cmd_plan)
+
+    p = sub.add_parser("prompt")
+    queue_flag(p)
+    p.add_argument("--prompt", default=None, help="default: ralph/PROMPT.md")
+    p.set_defaults(fn=cmd_prompt)
 
     p = sub.add_parser("check-argv")
     p.add_argument("name")
