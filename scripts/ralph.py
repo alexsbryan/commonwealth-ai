@@ -114,7 +114,7 @@ def wait_for_marker(paths, marker_timeout):
         return None
     m = re.search(r"[A-Za-z0-9._/-]+\.done", waiting.read_text())
     if not m:
-        say("ralph/waiting names no *.done marker — ignoring it")
+        say(f"{paths.waiting} names no *.done marker — ignoring it")
         waiting.unlink()
         return None
     marker = paths.p(m.group(0))
@@ -141,7 +141,7 @@ def resolver_prompt(paths, attempt, resolve_max, reason, charter=None):
             f"Read the package (`{paths.needs_human}`), verify its facts, and DECIDE — do not\n"
             "defer a fork the charter covers. Reproduce every claim you rely on.\n\n"
             f"1. Read `{paths.needs_human}`, `{paths.state}`, `git status`, and the charter.\n"
-            "   Campaign logs are under `~/.svrnmesh/ralph/` and `target/ralph/`.\n"
+            f"   Campaign logs are under `~/.svrnmesh/ralph/` and `{paths.log_dir}/`.\n"
             "2. Apply the smallest change that makes the campaign flow: correct the row or\n"
             "   the code, with its source order corrected together when a premise was false.\n"
             "3. Record the decision in `ralph/DECISIONS.md` (date, unit, fork, choice,\n"
@@ -157,7 +157,7 @@ def resolver_prompt(paths, attempt, resolve_max, reason, charter=None):
     return head + (
         "You are the resolution session. Diagnose and fix so the campaign flows again:\n"
         f"1. Read `{paths.needs_human}`, `{paths.state}`, and `git status`. Campaign logs are\n"
-        "   under `~/.svrnmesh/ralph/` and `target/ralph/`.\n"
+        f"   under `~/.svrnmesh/ralph/` and `{paths.log_dir}/`.\n"
         "2. Fix the blocker. A false premise may be corrected only from verified code or\n"
         "   consumer evidence, with the row and its source order corrected together.\n"
         "3. Do NOT weaken a PASS BAR and do not mark a unit [x] that has not earned it.\n"
@@ -435,10 +435,21 @@ class Paths:
     conflicts: str = "ralph/conflicts.txt"
     heavy: str = "ralph/heavy.txt"
     queue: str = ""                       # the --queue name; "" on a legacy launch line
+    control_dir: str = "ralph"            # a queue's own: ralph/next/<name>/ctl
+    director_commits: str = "ralph/.director-commits"
+    log_dir: str = "target/ralph"
     manifest: QueueManifest | None = None
 
     def p(self, rel):
         return self.workdir / rel
+
+    @staticmethod
+    def control_files(control_dir):
+        """The per-loop files, as Paths fields. One loop per control_dir."""
+        return {"control_dir": control_dir, "done": f"{control_dir}/DONE",
+                "stop": f"{control_dir}/STOP", "needs_human": f"{control_dir}/NEEDS_HUMAN.md",
+                "waiting": f"{control_dir}/waiting", "heartbeat": f"{control_dir}/.heartbeat",
+                "director_commits": f"{control_dir}/.director-commits"}
 
 
 # A driver heartbeat younger than this means a loop is live. One number for the
@@ -508,6 +519,7 @@ class Session:
 
     def heartbeat(self, context):
         try:
+            self.paths.p(self.paths.control_dir).mkdir(parents=True, exist_ok=True)
             self.paths.p(self.paths.heartbeat).write_text(f"{int(time.time())} {context}\n")
         except OSError:
             pass
@@ -630,6 +642,11 @@ class Campaign:
             note = (f"Your unit: {unit.id} — its row in {self.paths.state} is the [~] row, "
                     "or the first ready [ ] row. Open only that row; do not scan the "
                     "queue for another.\n\n")
+            if self.paths.queue:
+                # Another loop may own ralph/STOP and ralph/NEEDS_HUMAN.md in this checkout.
+                note += (f"This queue's control files are {self.paths.needs_human}, "
+                         f"{self.paths.done} and {self.paths.waiting} — never the files of "
+                         "those names directly under ralph/, which belong to another loop.\n\n")
             self.session_run(model_args, note + self._prompt_text(), self._log_path(iteration))
             after = head_of(self.paths.workdir)
             if after != before:
@@ -643,6 +660,7 @@ class Campaign:
 
     def _beat(self, context):
         try:
+            self.paths.p(self.paths.control_dir).mkdir(parents=True, exist_ok=True)
             self.paths.p(self.paths.heartbeat).write_text(f"{int(time.time())} {context}\n")
         except OSError:
             pass
@@ -651,7 +669,7 @@ class Campaign:
         return self.paths.p(self.paths.prompt).read_text()
 
     def _log_path(self, iteration):
-        return str(self.paths.workdir / "target" / "ralph" / f"iter-{iteration}.out")
+        return str(self.paths.p(self.paths.log_dir) / f"iter-{iteration}.out")
 
 
 class Supervisor:
@@ -678,8 +696,9 @@ class Supervisor:
     def _record_director_range(self, before, after, attempt, reason):
         """Name the director's commits so the morning review can revert one:
         `git revert <sha>` works because a decision is its own commit."""
-        log = self.paths.p("ralph/.director-commits")
+        log = self.paths.p(self.paths.director_commits)
         try:
+            log.parent.mkdir(parents=True, exist_ok=True)
             with log.open("a") as fh:
                 fh.write(f"{int(time.time())} attempt={attempt} {before}..{after} — {reason}\n")
         except OSError:
@@ -1197,6 +1216,11 @@ RUNTIME_MARKERS = ("ralph/DONE", "ralph/STOP", "ralph/NEEDS_HUMAN.md",
                    "ralph/log.txt", "ralph/.director-commits")
 
 
+def runtime_markers(paths):
+    """What must not dirty the tree: a queue's whole control dir, else the legacy set."""
+    return (f"{paths.control_dir}/",) if paths.queue else RUNTIME_MARKERS
+
+
 def cmd_plan(args):
     paths = paths_for(args)
     queue = Queue(paths.p(paths.state))
@@ -1372,7 +1396,8 @@ def cmd_report(args):
             # report is how the operator learns it before `promote` refuses.
             rows = f"DOES NOT PARSE — {e}"
         print(f"next up: {d.name} ({rows}, staged in {STAGED_DIR})")
-    markers =[m for m in ("DONE", "STOP", "NEEDS_HUMAN.md") if paths.p(f"ralph/{m}").exists()]
+    markers = [pathlib.PurePath(m).name for m in (paths.done, paths.stop, paths.needs_human)
+               if paths.p(m).exists()]
     print(f"markers: {', '.join(markers) if markers else 'none'}")
     decisions = paths.p("ralph/DECISIONS.md")
     if decisions.exists():
@@ -1382,7 +1407,7 @@ def cmd_report(args):
         print("\n".join(lines[-args.lines:]))
     else:
         print("\nralph/DECISIONS.md: not written yet")
-    ranges = paths.p("ralph/.director-commits")
+    ranges = paths.p(paths.director_commits)
     if ranges.exists():
         entries = [l for l in ranges.read_text().splitlines() if ".." in l]
         print(f"\n=== director commit ranges ({len(entries)}) — revert one with "
@@ -1450,7 +1475,8 @@ def paths_for(args):
     if getattr(args, "label", "") is None:
         args.label = m.label
     return Paths(workdir, prompt=m.prompt, state=m.state, charter=m.charter,
-                 conflicts=m.conflicts, heavy=m.heavy, queue=name, manifest=m)
+                 conflicts=m.conflicts, heavy=m.heavy, queue=name, manifest=m,
+                 log_dir=f"target/ralph/{name}", **Paths.control_files(m.control_dir))
 
 
 def queue_flags(paths):
@@ -1475,7 +1501,7 @@ def cmd_run(args):
         review_model=args.review_model or models.get("REVIEW_MODEL", ""),
         variant=args.variant or models.get("VARIANT", ""))
     if args.install_launchd:
-        ensure_excludes(paths.workdir, RUNTIME_MARKERS)
+        ensure_excludes(paths.workdir, runtime_markers(paths))
         plist = install_launchd(
             f"dev.ralph.{paths.workdir.name}-{args.label}",
             [sys.executable, str(pathlib.Path(__file__).resolve()), "run",
@@ -1506,7 +1532,7 @@ def cmd_supervise(args):
     charter = charter_path.read_text() if charter_path.exists() else None
     if charter:
         say(f"supervisor: director charter loaded from {charter_path}")
-    ensure_excludes(paths.workdir, RUNTIME_MARKERS)
+    ensure_excludes(paths.workdir, runtime_markers(paths))
 
     def run_inner():
         subprocess.run(campaign, cwd=str(paths.workdir))
@@ -1517,13 +1543,13 @@ def cmd_supervise(args):
         resolve_variant = args.resolve_variant or args.variant or models.get("VARIANT", "")
         model_args = select_model_args("review", resolve_model, "", resolve_variant)
         prompt = resolver_prompt(paths, attempt, args.resolve_max, reason, charter)
-        session.run(model_args, prompt, str(paths.workdir / "target" / "ralph"
-                                           / f"supervise-{attempt}.out"))
+        session.run(model_args, prompt,
+                    str(paths.p(paths.log_dir) / f"supervise-{attempt}.out"))
 
     supervisor = Supervisor(paths, run_inner=run_inner, resolver_run=resolver_run,
                             notify_enabled=args.notify, resolve_max=args.resolve_max)
     if args.install_launchd:
-        ensure_excludes(paths.workdir, RUNTIME_MARKERS)
+        ensure_excludes(paths.workdir, runtime_markers(paths))
         plist = install_launchd(
             f"dev.ralph.{paths.workdir.name}-{args.label}",
             [sys.executable, str(pathlib.Path(__file__).resolve()), "supervise",

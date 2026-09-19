@@ -362,6 +362,55 @@ class CampaignTests(unittest.TestCase):
             self.assertFalse((pathlib.Path(tmp) / "ralph/waiting").exists())
 
 
+class TwoQueueControlTests(unittest.TestCase):
+    """Two loops in one checkout share no control file."""
+
+    def campaign(self, tmp, name, seen):
+        paths = ralph.paths_for(ralph.build_parser().parse_args(
+            ["run", "--workdir", tmp, "--queue", name]))
+        return ralph.Campaign(paths, notify_enabled=False, sleep=lambda s: None, max_stall=1,
+                              session_run=lambda args, prompt, log: seen.append((name, prompt, log)))
+
+    def test_stop_in_a_stops_a_and_not_b_and_a_stale_done_ends_neither(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            two_queues(tmp)
+            write(tmp, "ralph/DONE", "")            # the finished campaign's leftover
+            write(tmp, "ralph/next/a/ctl/STOP", "")
+            seen = []
+            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
+                ra = self.campaign(tmp, "a", seen).run()
+                rb = self.campaign(tmp, "b", seen).run()
+            self.assertEqual(ra.outcome, ralph.Outcome.OPERATOR_STOP)
+            self.assertEqual(rb.outcome, ralph.Outcome.HALT)       # b ran its session and stalled
+            self.assertEqual([name for name, _, _ in seen], ["b"])
+            _, prompt, log = seen[0]
+            self.assertIn("ralph/next/b/ctl/NEEDS_HUMAN.md", prompt)
+            self.assertIn("target/ralph/b/", log)
+            root = pathlib.Path(tmp)
+            self.assertIn("without a commit", (root / "ralph/next/b/ctl/NEEDS_HUMAN.md").read_text())
+            self.assertTrue((root / "ralph/next/b/ctl/.heartbeat").exists())
+            self.assertFalse((root / "ralph/NEEDS_HUMAN.md").exists())
+            self.assertFalse((root / "ralph/STOP").exists())
+
+    def test_watch_stop_and_report_read_the_queues_markers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            two_queues(tmp)
+            write(tmp, "ralph/next/a/ctl/NEEDS_HUMAN.md", "# a is blocked\n")
+            pa, pb = (ralph.paths_for(ralph.build_parser().parse_args(
+                ["watch", "--workdir", tmp, "--queue", q])) for q in ("a", "b"))
+            wa = ralph.Watch(pa, label="a", running=lambda: True, disk_free_mb=lambda: 99999)
+            wb = ralph.Watch(pb, label="b", running=lambda: True, disk_free_mb=lambda: 99999)
+            self.assertTrue(wa.condition()[0].startswith("needs-human:"))
+            self.assertIsNone(wb.condition())
+            with mock.patch.object(ralph, "job_running", return_value=False):
+                rc, _, _ = quiet_main(["stop", "--workdir", tmp, "--queue", "b", "--timeout", "1"])
+            self.assertEqual(rc, 0)
+            self.assertTrue((pathlib.Path(tmp) / "ralph/next/b/ctl/STOP").exists())
+            self.assertFalse((pathlib.Path(tmp) / "ralph/STOP").exists())
+            _, out, _ = quiet_main(["report", "--workdir", tmp, "--queue", "a"])
+            self.assertIn("markers: NEEDS_HUMAN.md", out)
+
+
 class SupervisorTests(unittest.TestCase):
     def make(self, tmp, *, run_inner, resolver_run, resolve_max=2):
         write(tmp, "ralph/STATE.md", "- [ ] dm-a — depends []\n")
@@ -710,6 +759,21 @@ class PathsForTests(unittest.TestCase):
                 self.assertEqual(p.charter, "ralph/next/b/CHARTER.md")
                 if verb != "models":
                     self.assertEqual(args.label, "b")
+
+    def test_a_queues_control_files_live_under_its_control_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            two_queues(tmp)
+            write(tmp, "ralph/next/b/queue.toml", 'control_dir = "var/b"\n')
+            pa, pb = (ralph.paths_for(ralph.build_parser().parse_args(
+                ["run", "--workdir", tmp, "--queue", q])) for q in ("a", "b"))
+            ctl = "ralph/next/a/ctl"
+            self.assertEqual(
+                (pa.control_dir, pa.done, pa.stop, pa.needs_human, pa.waiting, pa.heartbeat,
+                 pa.director_commits, pa.log_dir),
+                (ctl, f"{ctl}/DONE", f"{ctl}/STOP", f"{ctl}/NEEDS_HUMAN.md", f"{ctl}/waiting",
+                 f"{ctl}/.heartbeat", f"{ctl}/.director-commits", "target/ralph/a"))
+            self.assertEqual((pb.stop, pb.log_dir), ("var/b/STOP", "target/ralph/b"))
+            self.assertEqual(ralph.runtime_markers(pa), (f"{ctl}/",))
 
     def test_plan_prints_the_named_queues_head(self):
         with tempfile.TemporaryDirectory() as tmp:
