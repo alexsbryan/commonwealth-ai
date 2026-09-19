@@ -126,7 +126,7 @@ pub async fn run_setup(args: &[String]) -> i32 {
     // This is the whole reason the verb grew a flag rather than the daemon
     // growing a route: the sidecar exits 1 with no config off a TTY
     // (`daemon_cmd/mod.rs`) and refuses a config with no `[models]`
-    // (`daemon_cmd/build/inference.rs`), so on a first run there is no HTTP to
+    // (`sovereign-daemon/src/build/inference.rs`), so on a first run there is no HTTP to
     // ask. A spawn links nothing.
     if args.iter().any(|a| a == "--plan") {
         let opts = match parse_args(args) {

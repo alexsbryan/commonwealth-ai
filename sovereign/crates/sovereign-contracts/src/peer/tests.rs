@@ -15,7 +15,7 @@ fn node(n: u128) -> NodeId {
     NodeId::from_u128(n)
 }
 
-/// Inputs a `PeerStore` might be tempted to refuse. Deliberately awkward:
+/// Inputs a `ReplicatedKv` might be tempted to refuse. Deliberately awkward:
 /// empty strings on both axes, a key that is itself a prefix of another, a
 /// long key, non-ASCII, an empty value, and bytes that are not valid UTF-8.
 fn awkward_inputs() -> Vec<(String, String, Bytes)> {
@@ -44,7 +44,7 @@ fn awkward_inputs() -> Vec<(String, String, Bytes)> {
 /// method has an arm that means "not applicable locally".
 #[test]
 fn solo_peer_store_is_total() {
-    let store = SoloPeerStore::new();
+    let store = SoloReplicatedKv::new();
     for (app_id, key, value) in awkward_inputs() {
         assert!(
             store.get(&app_id, &key).is_ok(),
@@ -85,7 +85,7 @@ fn solo_peer_store_is_total() {
 /// that accepts every write and remembers none — total, and useless.
 #[test]
 fn solo_peer_store_reads_back_what_it_wrote() {
-    let store = SoloPeerStore::new();
+    let store = SoloReplicatedKv::new();
     store
         .set("notes", "k", Bytes::from_static(b"payload"), node(7))
         .unwrap();
@@ -109,7 +109,7 @@ fn solo_peer_store_reads_back_what_it_wrote() {
 /// bytes rather than new ones.
 #[test]
 fn solo_peer_store_set_reports_value_change_only() {
-    let store = SoloPeerStore::new();
+    let store = SoloReplicatedKv::new();
     assert!(store
         .set("notes", "k", Bytes::from_static(b"a"), node(1))
         .unwrap());
@@ -132,7 +132,7 @@ fn solo_peer_store_set_reports_value_change_only() {
 
 #[test]
 fn solo_peer_store_scan_is_prefix_scoped_and_namespaced() {
-    let store = SoloPeerStore::new();
+    let store = SoloReplicatedKv::new();
     for (app, key) in [
         ("notes", "claim:1"),
         ("notes", "claim:2"),
@@ -159,7 +159,7 @@ fn solo_peer_store_scan_is_prefix_scoped_and_namespaced() {
 
 #[test]
 fn solo_peer_store_delete_reports_whether_anything_went() {
-    let store = SoloPeerStore::new();
+    let store = SoloReplicatedKv::new();
     assert!(!store.delete("notes", "k").unwrap());
     store
         .set("notes", "k", Bytes::from_static(b"v"), node(1))
@@ -198,7 +198,7 @@ fn solo_convergence_keeps_the_latest_stamp_per_direction() {
 /// property that makes a local daemon's boot have nothing to mint.
 #[test]
 fn solo_adapters_construct_infallibly() {
-    let store: Box<dyn PeerStore> = Box::new(SoloPeerStore::new());
+    let store: Box<dyn ReplicatedKv> = Box::new(SoloReplicatedKv::new());
     let conv: Box<dyn Convergence> = Box::new(SoloConvergence::new());
     assert!(store.scan("anything", "").unwrap().is_empty());
     assert_eq!(conv.snapshot(), (None, None));

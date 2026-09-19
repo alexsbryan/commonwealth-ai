@@ -102,7 +102,7 @@ impl Scope {
     pub fn paths(&self) -> &'static [&'static str] {
         match self {
             Scope::Models(_) => &["/v1/models", "/v1/chat/completions"],
-            Scope::Rails(_) => &["/v1/rail/append", "/v1/rail/log"],
+            Scope::Rails(_) => &["/v1/rail/append", "/v1/rail/log", "/v1/rail/live"],
         }
     }
 

@@ -1,0 +1,58 @@
+[package]
+name = "corpus-index"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "The retrieval read-port leaf — the index directory's shape, its search, and the rows it persists. The surface a thin host and the engine both reach DOWN to."
+
+# Home of `CorpusIndex` (the LanceDB/Tantivy table wrapper), `IndexInfo` /
+# `IndexMeta` (the `_corpus_meta.json` shape), the persisted setting types the
+# recipe embeds (`DisplayMeta`, `MutableMergePolicy`, `FilterConfig` /
+# `ComposeMode`, `StreamAxes`), `ScoredChunk` / `ChunkProvenance` / `Evidence`,
+# `Corpus`, and the engine's `Error`. Carved out of `corpus-engine` by domains
+# `REVIEW-build-index-read-port` (DE "The read-port leaf, measured again"; DT
+# retrieval cluster dest) so `corpus-mcp`'s `serve` can open an index by corpus
+# id without linking the 160k lines that produce one — the burn-down step (1)
+# of the `corpus-mcp -> corpus-engine` exception in `quality/ARCH_LAYERS.toml`.
+#
+# corpus-engine re-exports every item at its historical path (`index::*`,
+# `types::*`, `error::*`, `corpus::*`, `stream_axes::*`, `recipe::{DisplayMeta,
+# MutableMergePolicy}`, `filters::*`, `chunkers::CommittedChunk`), so nothing
+# inside the monorepo had to change an import.
+
+[dependencies]
+# The neutral kernel — `CorpusId`/`Custody`/`Grain`/`ContentHash`/`Origin`.
+kernel-types = { workspace = true }
+# The append-only journal. `Error` carries a `From<oplog::OplogError>` bridge
+# moved here with the error type; oplog is itself a leaf.
+oplog = { workspace = true }
+# `unix_now_u64` — the one wall-clock read the index directory's meta writer
+# makes. A tier-0 leaf.
+corpus-engine-yield = { workspace = true }
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+tokio = { workspace = true }
+futures = { workspace = true }
+
+tracing = { workspace = true }
+reqwest = { workspace = true }
+
+lancedb = { workspace = true }
+arrow = { workspace = true }
+arrow-array = { workspace = true }
+arrow-schema = { workspace = true }
+
+chrono = { workspace = true }
+blake3 = "1"
+sha2 = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

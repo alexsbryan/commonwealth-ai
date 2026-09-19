@@ -65,7 +65,7 @@ fn the_dep_tree_carries_no_inference_stack() {
         "corpus-mcp",
         &[
             "corpus-engine",
-            "corpus-engine-vocab",
+            "understanding-vocab",
             "lancedb",
             "tantivy",
             // `corpus ingest <recipe.toml>` (ei-5b-build-verb): the host now
@@ -96,7 +96,7 @@ fn the_enrichment_build_orchestrator_carries_no_inference_stack() {
         "sovereign-enrichment-build",
         &[
             "corpus-engine",
-            "corpus-engine-vocab",
+            "understanding-vocab",
             "sovereign-enrichment-catalog",
             "sovereign-contracts",
             "oicp-client",

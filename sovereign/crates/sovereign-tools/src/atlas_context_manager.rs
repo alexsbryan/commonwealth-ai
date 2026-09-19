@@ -883,12 +883,12 @@ mod tests {
     /// eviction test relies on. No ANN table is written, so the corpus has no
     /// seed bag (its graph stays lazy) — matching the "deferred graph" tests.
     fn write_atlas_fixture(indexes: &Path, corpus: &str, atoms_json: &str) {
-        use corpus_engine::enrichment::atlas::{store, AtomsFile};
+        use corpus_engine::enrichment::atlas::{read_atlas_atoms, store};
         let atlas = indexes.join(corpus).join(ATLAS_DIRNAME);
         std::fs::create_dir_all(&atlas).unwrap();
         std::fs::write(atlas.join("atoms.json"), atoms_json).unwrap();
-        if let Ok(file) = serde_json::from_str::<AtomsFile>(atoms_json) {
-            store::write_store_blocking(&atlas, corpus, &file.atoms, &[]).unwrap();
+        if let Ok(file) = read_atlas_atoms(&atlas) {
+            store::write_store_blocking(&atlas, corpus, file.atoms(), &[]).unwrap();
         }
     }
 

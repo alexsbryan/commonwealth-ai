@@ -719,7 +719,7 @@ pub(super) fn resolve_endpoint_name(snap: &AtlasSnapshot, id: &AtomId) -> String
         return name.to_string();
     }
     if let Some(file) = snap.atoms.as_ref() {
-        for atom in &file.atoms {
+        for atom in file.atoms() {
             match atom {
                 AtomEnvelope::Claim(c) if c.id == *id => {
                     if let Some(attr) = &c.attributed_to {

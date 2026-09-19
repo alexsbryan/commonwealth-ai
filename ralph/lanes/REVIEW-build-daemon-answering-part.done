@@ -1,0 +1,21 @@
+unit: REVIEW-build-daemon-answering-part
+commits: 858e3cec3 (the split)
+what: `AnsweringPart` dissolved into three `AppStateInner` fields, each supplied
+  by its owner (DC §4.2). `middleware_registry` is host composition (DC
+  §4.2:351): the daemon constructs it as before and the route reads it
+  directly. `session_store` is taken from the new ATOS entry point
+  `sovereign_atos::middleware::session_store(mesh, origin)`, beside
+  `registrations()`, so the daemon never constructs an ATOS type.
+  `repo_root` is taken from `sovereign_core::answering::repo_root()`, the
+  Answering context's home. `state/answering.rs` (28 lines) deleted; the three
+  reads in `#[cfg(feature = "atos")] run_atos_pipeline`
+  (`routes_inference.rs:1530,1555,1577`) repoint to `state.inner.<field>`. DT
+  row for the deleted module removed; `state.rs` and `routes_inference.rs`
+  line counts and notes updated; DC §4.2's Answering row records the dissolve.
+  No new part, no new `[[exception]]`.
+premises verified (2026-09-18): `state/answering.rs` is 28 lines;
+  `sovereign/crates/sovereign-atos/Cargo.toml:22` is `sovereign-core`;
+  `MiddlewareRegistry` is at
+  `sovereign/crates/sovereign-daemon/src/middleware/mod.rs:182`. All hold.
+checks: CLEAN exit=0 (debug target 39G, under 50G); LINT exit=0 (18 crates,
+  --all-targets, errors: 0); LAYER exit=0 ("fan-in within caps"); TOML exit=0.

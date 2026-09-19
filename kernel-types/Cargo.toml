@@ -48,6 +48,7 @@ blake3 = "1"
 serde_json = { workspace = true, optional = true }
 
 [features]
+default = ["wire-fixture"]   # build-latency bl-member-features: sovereign-cli-dev turns it on in every workspace build; default-on keeps kernel-types one unit across scopes
 # The instrument-registry schema (`kernel_types::quality`), read by
 # `xtask instrument-gate`, `svrn quality map` and `svrn posture`. Off by
 # default for the same reason `wire-fixture` is: a third party lifting this

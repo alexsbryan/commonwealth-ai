@@ -93,7 +93,7 @@ pub fn render_holistic_user_body(atoms: &AtomsFile) -> String {
     let mut concepts: Vec<&crate::enrichment::atlas::atoms::Entity> = Vec::new();
     let mut persons: Vec<&crate::enrichment::atlas::atoms::Entity> = Vec::new();
     let mut claims: Vec<&crate::enrichment::atlas::atoms::Claim> = Vec::new();
-    for env in &atoms.atoms {
+    for env in atoms.atoms() {
         match env {
             AtomEnvelope::Entity(e) => match e.entity_type {
                 EntityType::Concept => concepts.push(e),

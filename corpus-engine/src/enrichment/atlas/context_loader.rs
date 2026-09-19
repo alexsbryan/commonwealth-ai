@@ -373,7 +373,7 @@ pub async fn load_atlas_context(
     let mut drop_depth = 0usize;
     let mut drop_cap = 0usize;
     let mut drop_unrenderable: BTreeMap<AtomType, usize> = BTreeMap::new();
-    for atom in &atoms.atoms {
+    for atom in atoms.atoms() {
         let kind = atom.atom_type();
         *seen_by_kind.entry(kind).or_default() += 1;
         // ONE admission predicate (ARCH §10.6): the seed population the map
@@ -457,7 +457,7 @@ pub async fn load_atlas_context(
         // thousand atoms.
         use std::collections::HashMap;
         let atoms_by_id: HashMap<&str, &AtomEnvelope> =
-            atoms.atoms.iter().map(|a| (a.id().as_str(), a)).collect();
+            atoms.atoms().iter().map(|a| (a.id().as_str(), a)).collect();
         match read_atlas_edges(atlas_dir) {
             Ok(edges_file) => {
                 for edge in &edges_file.edges {

@@ -27,6 +27,7 @@
 
 use std::sync::Arc;
 
+use corpus_engine::enrichment::pipeline::ChatPrompt;
 use corpus_engine::InferenceFn;
 
 use super::args::parse_args;
@@ -80,8 +81,8 @@ pub(super) async fn resolve_inference(
 /// e2e harness's `stub_inference` plus an entity-extraction shape
 /// for the personal/conversational domains.
 fn mock_inference() -> InferenceFn {
-    Arc::new(|prompt: &str, _schema: Option<&serde_json::Value>| {
-        let p = prompt.to_string();
+    Arc::new(|prompt: &ChatPrompt, _max_tokens: Option<u32>| {
+        let p = prompt.user.clone();
         Box::pin(async move {
             // Entity extraction (personal or conversational). The
             // marker phrase is the prompt preamble's claim about
@@ -364,8 +365,8 @@ fn truncate_for_display(s: &str, max: usize) -> String {
 /// visually inspect what the production pipeline would send to the
 /// model without spending an inference call.
 fn dry_run_inference() -> InferenceFn {
-    Arc::new(|prompt: &str, _schema: Option<&serde_json::Value>| {
-        let p = prompt.to_string();
+    Arc::new(|prompt: &ChatPrompt, _max_tokens: Option<u32>| {
+        let p = prompt.user.clone();
         eprintln!("─── awareness --dry-run ───────────────────────────");
         eprintln!("{p}");
         eprintln!("──────────────────────────────────────────────────");
@@ -447,20 +448,20 @@ async fn real_inference(flags: &Parsed) -> Result<InferenceFn, String> {
 
     let verbose = flags.has("verbose");
     let client = Arc::new(client);
-    let f: InferenceFn = Arc::new(move |prompt: &str, _schema: Option<&serde_json::Value>| {
+    let f: InferenceFn = Arc::new(move |prompt: &ChatPrompt, max_tokens: Option<u32>| {
         let client = client.clone();
-        let p = prompt.to_string();
+        let prompt = prompt.clone();
         Box::pin(async move {
             if verbose {
                 eprintln!("─── awareness daemon prompt ───────────────────────");
-                eprintln!("{}", truncate_for_display(&p, 800));
+                eprintln!("{}", truncate_for_display(&prompt.user, 800));
                 eprintln!("───────────────────────────────────────────────────");
             }
-            let chat_prompt = corpus_engine::enrichment::pipeline::ChatPrompt::new("", &p);
-            let resp = client
-                .complete(&chat_prompt)
-                .await
-                .map_err(|e| corpus_engine::error::Error::Extraction(e.to_string()))?;
+            let resp = match max_tokens {
+                Some(tokens) => client.complete_with_tokens(&prompt, tokens).await,
+                None => client.complete(&prompt).await,
+            }
+            .map_err(|e| corpus_engine::error::Error::Extraction(e.to_string()))?;
             if verbose {
                 eprintln!("─── awareness daemon response ─────────────────────");
                 eprintln!("{}", truncate_for_display(&resp, 4000));
@@ -500,7 +501,7 @@ job is named-entity extraction.
 Memories:
 [Memory 1]
 Had a great call with Sarah Chen at Acme Corp about the Q3 launch."#;
-        let out = (inf)(prompt, None).await.unwrap();
+        let out = (inf)(&ChatPrompt::new("", prompt), None).await.unwrap();
         let v: serde_json::Value = serde_json::from_str(&out).unwrap();
         let persons = v["persons"].as_array().unwrap();
         let orgs = v["organizations"].as_array().unwrap();
@@ -517,7 +518,9 @@ Had a great call with Sarah Chen at Acme Corp about the Q3 launch."#;
     #[tokio::test]
     async fn mock_returns_empty_object_for_unknown_prompts() {
         let inf = mock_inference();
-        let out = (inf)("a totally unrelated prompt", None).await.unwrap();
+        let out = (inf)(&ChatPrompt::new("", "a totally unrelated prompt"), None)
+            .await
+            .unwrap();
         assert_eq!(out, "{}");
     }
 }

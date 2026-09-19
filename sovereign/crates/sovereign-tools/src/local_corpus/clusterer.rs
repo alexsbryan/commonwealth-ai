@@ -22,6 +22,7 @@ use corpus_engine::enrichment::clustering::{
     cluster_embeddings, ClusterResult as EngineClusterResult, EnrichmentProgress,
 };
 use corpus_engine::enrichment::domain::ClusteringConfig;
+use corpus_engine::enrichment::pipeline::ChatPrompt;
 use corpus_engine::{CorpusEngine, InferenceFn};
 use serde::{Deserialize, Serialize};
 use sovereign_core::error::{Error, Result};
@@ -134,7 +135,7 @@ impl Clusterer {
                 .map_err(|e| Error::Execution(format!("get_chunks: {e}")))?;
             let prompt = build_label_prompt(&chunks);
 
-            let raw = match (self.inference)(&prompt, None).await {
+            let raw = match (self.inference)(&ChatPrompt::new("", prompt.as_str()), None).await {
                 Ok(r) => r,
                 Err(e) => {
                     tracing::warn!(

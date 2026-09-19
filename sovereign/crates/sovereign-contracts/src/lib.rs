@@ -36,15 +36,45 @@ pub mod engine_config;
 // paths to it.
 pub mod egress;
 pub mod embed_quirks;
+/// One truthiness rule for the workspace's operator switches — see the module
+/// docs for why it is a shared leaf rather than a per-crate helper.
+pub mod env;
 pub mod error;
+/// Fill-in-the-middle prompt and stop text — the marker table, the PSM prompt
+/// builder, the mode decision and the pure stream stop tracker. Moved down
+/// from `sovereign-inference` (domains `REVIEW-build-serving-drop-inference`)
+/// so the serving host reaches it without linking the inference stack; it is
+/// arithmetic over `types::FimStyle`, which already lives here.
+pub mod fim;
 pub mod frame;
 pub mod gguf_validator;
+pub mod git;
 pub mod health;
+/// This node's identity, published as a watch over `kernel_types::NodeId` —
+/// a reader a consumer holds rather than a value it copies, because
+/// `join_mesh` swaps the id inside a running daemon
+/// (`quality/DAEMON_CORE.md` §4.2). Here because its consumers span crates
+/// that may not name each other (`sovereign-api` cannot name
+/// `sovereign-mesh`).
+pub mod identity;
+/// The node's in-flight request gauge — a signal object created before the
+/// provider that increments it, so the counter is never a slot filled later.
+/// Here because its two speakers may not name each other: `sovereign-mesh`
+/// carries it and `sovereign-api` holds it
+/// (`quality/DAEMON_CORE.md` §4.2 "Where an install slot breaks a cycle").
+pub mod in_flight;
 pub mod intent_policy;
 pub mod launch;
 pub mod lessons;
+pub mod local_inference;
 pub mod mcp_config;
 pub mod memory_config;
+/// Answering's port — the middleware trait, its request/session/error/view
+/// vocabulary, and the session artifact delta it carries. Lifted out of
+/// `sovereign-api` (domains `REVIEW-build-middleware-seam`) so the Workspace
+/// decision extractor and the ATOS middlewares can name it without the host;
+/// the composition (`Pipeline`, the registry) stays host code.
+pub mod middleware;
 pub mod mobile_host;
 pub mod model_family;
 pub mod observer;
@@ -54,10 +84,21 @@ pub mod observer;
 // `sovereign-cli-daemon` declares them, `sovereign-work-atlas` consumes one,
 // and `sovereign-mesh` supplies the mesh-backed adapter for each (cw-lift 3b).
 pub mod peer;
+/// Who is asking — the identity a request resolves to before admission, and
+/// the key of the daemon's one `principal -> Scope` table. Published language
+/// rather than the daemon's, because Serving's package and Answering both key
+/// on it and neither may name the daemon (`quality/DAEMON_CORE.md` §3.3).
+pub mod principal;
 pub mod rebrand;
 pub mod recipe;
 pub mod registry;
 pub mod run_lock;
+/// What this node claims about itself — the port Fabric publishes from. A
+/// consumer in `sovereign-mesh` (Fabric) and an implementation in
+/// `sovereign-api` (the daemon) may not name each other, so the port lives
+/// here beside `identity` (`quality/DAEMON_CORE.md` §4.2 "Gossip asks the node
+/// what to claim").
+pub mod self_claims;
 pub mod setup_config;
 /// `[iroh]` / `[iroh.transport]`, beside `setup_config` because that file is
 /// past its ceiling and this block grows with every origin kind. Re-exported
@@ -70,6 +111,13 @@ pub mod tool_manifest;
 pub mod tool_result_cache;
 pub mod traits;
 pub mod types;
+/// The ephemeral worker pod's owner↔pod wire protocol — bootstrap blob,
+/// worker token, seed-derived cert and the token verifier. A shared leaf
+/// rather than `sovereign-pods` (Compute's crate) because the protocol has
+/// two speakers in two contexts: the pod that decodes it and the serving host
+/// that mints it (`SERVING_BOUNDARY.md` "Grandfathered"; a third package
+/// exception is the kill clause).
+pub mod worker_pod;
 /// Which checkout this host's code tools operate on — one reading of the
 /// two configured sources (`TOPOLOGY.md` §10 phase 10).
 pub mod workspace;

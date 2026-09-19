@@ -5,7 +5,7 @@
 //! The unit tests inside `decision_log` / `decision_trace` pin the
 //! record *shapes*. What they cannot show is the thing the whole
 //! phase exists for: that a real request through the real
-//! `MeshInferenceProvider` produces a decision and an outcome that
+//! `InferenceRouter` produces a decision and an outcome that
 //! **join**, carrying inputs that match what the scorer actually saw.
 //! So these tests drive the production code paths —
 //! `complete_stream_with_id`, `complete`, the manifest fetch, the
@@ -48,29 +48,33 @@ use sovereign_core::oicp::{
 };
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, Speed};
-use sovereign_mesh::daemon::PeerInferenceEndpoint;
+use sovereign_daemon::daemon::InferenceVenue;
 use sovereign_mesh::decision_log::{
     CandidateKind, CaptureDecisionSink, DecisionEvent, DecisionPath, DecisionSink, ExclusionReason,
-    LoadSource, RoutingDecision, RoutingOutcome, ServedBy, TracingDecisionSink, Verdict,
+    LoadSource, RoutingDecision, RoutingOutcome, ServedBy, Verdict,
 };
 use sovereign_mesh::decision_trace::SchedulerTrace;
-use sovereign_mesh::peer_inference::{MeshInferenceProvider, PeerEndpointSource};
+use sovereign_mesh::peer_inference::{InferenceRouter, VenueHost, VenueSource};
+use sovereign_serving_host::recorder::TracingDecisionSink;
 
 use crate::common;
 use crate::common::TestProvider;
 
 // ── Harness ─────────────────────────────────────────────────────
 
-struct StubPeerSource {
-    peers: Vec<PeerInferenceEndpoint>,
+struct StubVenueSource {
+    peers: Vec<InferenceVenue>,
 }
 
 #[async_trait]
-impl PeerEndpointSource for StubPeerSource {
-    async fn peer_inference_endpoints(&self) -> Vec<PeerInferenceEndpoint> {
+impl VenueSource for StubVenueSource {
+    async fn candidates(&self) -> Vec<InferenceVenue> {
         self.peers.clone()
     }
 }
+
+#[async_trait]
+impl VenueHost for StubVenueSource {}
 
 const PEER_TEXT: &str = "Answer from the peer slot.";
 
@@ -192,12 +196,12 @@ async fn spawn_peer(shedding: bool) -> SocketAddr {
 
 /// A peer endpoint whose gossip signals are all populated, so P2
 /// provenance has something real to record.
-fn peer_endpoint(name: &str, addr: SocketAddr, gossip_age_secs: u64) -> PeerInferenceEndpoint {
+fn peer_endpoint(name: &str, addr: SocketAddr, gossip_age_secs: u64) -> InferenceVenue {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_secs();
-    PeerInferenceEndpoint {
+    InferenceVenue {
         node_id: NodeId::from_u128(0x42 << 120),
         name: name.into(),
         base_urls: vec![format!("http://{addr}/v1")],
@@ -212,14 +216,14 @@ fn peer_endpoint(name: &str, addr: SocketAddr, gossip_age_secs: u64) -> PeerInfe
         current_in_flight: Some(3),
         inference_availability: Some(0.85),
         gossip_last_seen_unix: now.saturating_sub(gossip_age_secs),
-        transport: None,
+        pinned_transport: false,
     }
 }
 
 /// An endpoint pointing nowhere — its manifest fetch fails, which is
 /// the `ManifestUnavailable` exclusion.
-fn dead_peer_endpoint(name: &str) -> PeerInferenceEndpoint {
-    PeerInferenceEndpoint {
+fn dead_peer_endpoint(name: &str) -> InferenceVenue {
+    InferenceVenue {
         node_id: NodeId::from_u128(0x99 << 120),
         name: name.into(),
         // Reserved-for-documentation address: guaranteed unroutable,
@@ -231,7 +235,7 @@ fn dead_peer_endpoint(name: &str) -> PeerInferenceEndpoint {
         current_in_flight: None,
         inference_availability: None,
         gossip_last_seen_unix: 0,
-        transport: None,
+        pinned_transport: false,
     }
 }
 
@@ -257,12 +261,16 @@ fn mesh_request() -> CompletionRequest {
         )
 }
 
-fn build(peers: Vec<PeerInferenceEndpoint>) -> (MeshInferenceProvider, Arc<CaptureDecisionSink>) {
+fn build(peers: Vec<InferenceVenue>) -> (InferenceRouter, Arc<CaptureDecisionSink>) {
     let capture = Arc::new(CaptureDecisionSink::new());
     let sink: Arc<dyn DecisionSink> = capture.clone();
-    let provider = MeshInferenceProvider::with_peer_source(
+    let provider = InferenceRouter::with_peer_source(
         weak_local(),
-        Arc::new(StubPeerSource { peers }) as Arc<dyn PeerEndpointSource>,
+        Arc::new(StubVenueSource {
+            peers: peers.clone(),
+        }) as Arc<dyn VenueSource>,
+        Arc::new(StubVenueSource { peers }) as Arc<dyn VenueHost>,
+        Arc::new(sovereign_daemon::slot_manifest::CoreSlotManifest),
     )
     .with_decision_sink(sink);
     (provider, capture)
@@ -623,11 +631,15 @@ async fn jsonl_capture_loads_back_as_a_replayable_trace() {
     let path = dir.join("decisions.jsonl");
 
     let sink: Arc<dyn DecisionSink> = Arc::new(TracingDecisionSink::to_path(&path).unwrap());
-    let provider = MeshInferenceProvider::with_peer_source(
+    let provider = InferenceRouter::with_peer_source(
         weak_local(),
-        Arc::new(StubPeerSource {
+        Arc::new(StubVenueSource {
             peers: vec![peer_endpoint("hub", addr, 14)],
-        }) as Arc<dyn PeerEndpointSource>,
+        }) as Arc<dyn VenueSource>,
+        Arc::new(StubVenueSource {
+            peers: vec![peer_endpoint("hub", addr, 14)],
+        }) as Arc<dyn VenueHost>,
+        Arc::new(sovereign_daemon::slot_manifest::CoreSlotManifest),
     )
     .with_decision_sink(sink);
 
@@ -700,11 +712,15 @@ async fn the_sink_does_not_change_the_routing_decision() {
     let addr = spawn_peer(false).await;
 
     let (with_capture, _) = build(vec![peer_endpoint("hub", addr, 11)]);
-    let silent = MeshInferenceProvider::with_peer_source(
+    let silent = InferenceRouter::with_peer_source(
         weak_local(),
-        Arc::new(StubPeerSource {
+        Arc::new(StubVenueSource {
             peers: vec![peer_endpoint("hub", addr, 11)],
-        }) as Arc<dyn PeerEndpointSource>,
+        }) as Arc<dyn VenueSource>,
+        Arc::new(StubVenueSource {
+            peers: vec![peer_endpoint("hub", addr, 11)],
+        }) as Arc<dyn VenueHost>,
+        Arc::new(sovereign_daemon::slot_manifest::CoreSlotManifest),
     )
     .with_decision_sink(Arc::new(sovereign_mesh::decision_log::NullDecisionSink));
 
@@ -975,7 +991,7 @@ async fn hard_named_target_still_fails_loudly_rather_than_falling_through() {
 ///
 /// The fix reads `in_flight_publisher` — the RAII-maintained total
 /// this node already gossips — at the gather point. This test drives
-/// the real `MeshInferenceProvider` twice against the same mock peer,
+/// the real `InferenceRouter` twice against the same mock peer,
 /// changing nothing but that counter, and asserts the recorded
 /// `ScoreBreakdown` moved. It fails on the pre-fix code with
 /// `load_penalty` pinned at 1.0 in both runs, which is the whole
@@ -995,11 +1011,15 @@ async fn the_local_candidate_is_scored_on_this_nodes_real_in_flight_count() {
         let capture = Arc::new(CaptureDecisionSink::new());
         let sink: Arc<dyn DecisionSink> = capture.clone();
         let publisher = Arc::new(AtomicU32::new(0));
-        let provider = MeshInferenceProvider::with_peer_source_and_publisher(
+        let provider = InferenceRouter::with_peer_source_and_publisher(
             weak_local(),
-            Arc::new(StubPeerSource {
+            Arc::new(StubVenueSource {
                 peers: vec![peer_endpoint("hub", addr, 12)],
-            }) as Arc<dyn PeerEndpointSource>,
+            }) as Arc<dyn VenueSource>,
+            Arc::new(StubVenueSource {
+                peers: vec![peer_endpoint("hub", addr, 12)],
+            }) as Arc<dyn VenueHost>,
+            Arc::new(sovereign_daemon::slot_manifest::CoreSlotManifest),
             Arc::clone(&publisher),
         )
         .with_decision_sink(sink);

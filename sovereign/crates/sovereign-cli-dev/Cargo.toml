@@ -86,6 +86,9 @@ sovereign-tools = { workspace = true, features = [
 ], optional = true }
 sovereign-atos = { workspace = true, optional = true }
 sovereign-mesh = { workspace = true, features = ["treesitter"], optional = true }
+# The mesh host cluster (domains dm-daemon-mesh-edge): `project_cmd::serve`
+# mounts `mcp_router`, so it rides the same `workbench` gate as the mesh dep.
+sovereign-daemon = { workspace = true, optional = true }
 # `project_cmd::cmd_serve` registers work-atlas claim handlers when
 # the daemon comes up; pulled in directly here rather than via
 # sovereign-tools so the dep is visible in this crate's tree.
@@ -93,6 +96,11 @@ sovereign-work-atlas = { workspace = true, optional = true }
 commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state", optional = true }
 commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core", optional = true }
 corpus-engine = { workspace = true, features = ["treesitter"], optional = true }
+# The code-intel package's fact base (`facts`/`facts_check`/`facts_store`),
+# moved out of corpus-engine at domains REVIEW-build-code-facts. `code_cmd`
+# names `code_facts::*` directly; the `treesitter`/`stores` features arrive
+# through corpus-engine's feature of the same name.
+code-facts = { workspace = true, optional = true }
 corpus-engine-notes = { workspace = true, optional = true }
 # `code_fieldglass` renders the layer-flow panel from the SAME parser/evaluator
 # the layer gate uses (one decider), and the SRP co-change communities from the
@@ -134,6 +142,7 @@ hostname = { workspace = true }
 # `atos_cmd::run` reads SQLite directly for one query (open-feature
 # replay extraction). Same dep as sovereign-cli's `awareness` path.
 rusqlite = { version = "0.35", features = ["bundled"] }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 # daemon_cmd uses libc::kill / setsid for unix process lifecycle.
 [target.'cfg(unix)'.dependencies]
@@ -149,10 +158,12 @@ workbench = [
     "dep:sovereign-tools",
     "dep:sovereign-atos",
     "dep:sovereign-mesh",
+    "dep:sovereign-daemon",
     "dep:sovereign-work-atlas",
     "dep:commonwealth-state",
     "dep:commonwealth-core",
     "dep:corpus-engine",
+    "dep:code-facts",
     "dep:corpus-engine-notes",
     "dep:arch-layers",
     "dep:corpus-engine-archaeology",

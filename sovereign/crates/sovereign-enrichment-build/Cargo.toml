@@ -40,7 +40,7 @@ description = "The atlas enrichment build orchestrator and its phase drivers, be
 # `EnrichProgress` event the orchestrator emits. Knowledge layer — down.
 corpus-engine = { workspace = true, features = ["treesitter"] }
 # The atlas vocabulary leaf — `OntologyPolicies` as recorded in atlas/ontology.json.
-corpus-engine-vocab = { workspace = true }
+understanding-vocab = { workspace = true }
 # The enrichment store's layout + `config.json` schema. Re-exported from
 # `lib.rs` as `config` / `paths` so the moved modules' `super::config` and
 # `super::paths` paths resolve unchanged — the same re-export
@@ -72,6 +72,7 @@ tracing = { workspace = true }
 # `test_env::scoped_home` only, behind `test-support`. NOT a runtime cost:
 # every non-test use of tempfile in the moved code sits after a `#[cfg(test)]`.
 tempfile = { workspace = true, optional = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
 tempfile = { workspace = true }

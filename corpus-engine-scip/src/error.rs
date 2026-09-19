@@ -10,7 +10,7 @@
 //! Callers in `corpus-engine` itself convert via the
 //! `From<corpus_engine_scip::Error>` impl in `corpus_engine::error`.
 //! Callers in the sovereign workspace generally `map_err` to their
-//! own error type — see e.g. `sovereign-mesh/src/reindexer.rs` where
+//! own error type — see e.g. `corpus-engine-watchers/src/reindexer.rs` where
 //! scip errors get stringified into the reindexer's local error
 //! variant, and `sovereign-tools/src/code/*.rs` where they get
 //! wrapped in `sovereign_core::Error::Tool`.

@@ -115,3 +115,15 @@ slow-timeout = { period = "300s", terminate-after = 4 }
 [[profile.ci.overrides]]
 filter = "binary(evidence_reds) + binary(judgement_reds) + binary(answer_reds)"
 slow-timeout = { period = "300s", terminate-after = 4 }
+
+# THE DST SOAK — `dst_scenarios::seeded_chaos_soak`. A genuine soak (3 seeds ×
+# 5 nodes × 16 chaos rounds, then agreed reconvergence) on a `multi_thread`
+# runtime. Measured 2026-09-17: 110.3s solo (green), but the `dst.rs` harness
+# moved into the shared `main` binary, so in a full `sovereign-test.sh` run it
+# competes with ~13k tests at 6 jobs and crossed the default 180s wall
+# (`TIMEOUT [180.012s]`, REVIEW-audit-daemon-1). It is slow, not hung — the
+# solo run is green — and the seeds/rounds ARE the coverage, so this is
+# headroom rather than a rewrite.
+[[profile.default.overrides]]
+filter = "test(/dst_scenarios::/)"
+slow-timeout = { period = "120s", terminate-after = 3 }

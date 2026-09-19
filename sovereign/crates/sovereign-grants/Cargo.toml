@@ -10,6 +10,7 @@ commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" 
 corpus-engine = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+dirs = "5"
 anyhow = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
@@ -17,6 +18,7 @@ bytes = { workspace = true }
 reqwest = { workspace = true }
 hex = "0.4"
 thiserror = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
 tempfile = { workspace = true }

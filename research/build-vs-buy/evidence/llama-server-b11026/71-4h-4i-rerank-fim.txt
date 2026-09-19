@@ -1,0 +1,14 @@
+### /v1/rerank
+{"model":"x","object":"list","usage":{"prompt_tokens":265,"total_tokens":265},"results":[{"index":0,"relevance_score":0.9939901828765869},{"index":1,"relevance_score":0.00018757818907033652},{"index":2,"relevance_score":1.3976607988297474e-05}]} [http=200]
+### /rerank alias
+{"model":"~/dev/commonwealth-ai/sovereign/models/qwen3-reranker-0.6b-q8_0.gguf","object":"list","usage":{"prompt_tokens":167,"total_tokens":167},"results":[{"index":0,"relevance_score":0.9790173172950745},{"index":1,"relevance_score":0.0010237906826660037}]} [http=200]
+### /v1/embeddings on rerank server
+{"model":"~/dev/commonwealth-ai/sovereign/models/qwen3-reranker-0.6b-q8_0.gguf","object":"list","usage":{"prompt_tokens":1,"total_tokens":1},"data":[{"embedding":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0
+### FIM /infill (sweep-next-edit-1.5b)
+{"content":"return a + b\n\nprint(add(2, 3))\n","stop_type":"eos","tokens_predicted":14,"error":null}
+### FIM tokens in vocab
+{"tokens":[{"id":43832,"piece":"<|fim_prefix|>"}]}
+{"tokens":[{"id":43834,"piece":"<|fim_suffix|>"}]}
+{"tokens":[{"id":43833,"piece":"<|fim_middle|>"}]}
+### /infill with input_extra
+{"content":"x*x\n","stop_type":"eos"}

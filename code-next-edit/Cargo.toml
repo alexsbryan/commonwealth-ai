@@ -1,0 +1,38 @@
+[package]
+name = "code-next-edit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The code-intel package's next-edit crate: the pure rule/model/symbol/syntax lanes + the journal policy, split out of sovereign-api's workbench cluster (docs/CODE_TOOLING_BOUNDARY.md §2; the package's tenth crate)."
+
+[dependencies]
+# The SCIP call graph the symbol lane navigates (next_edit_symbols.rs).
+# A DIRECT dep by the carve-out's own rule: corpus-engine ships no re-export
+# shim for it (corpus-engine/src/lib.rs), precisely so two crates cannot end
+# up on different versions of one logical type (ARCH §8.3).
+corpus-engine-scip = { workspace = true }
+# `JournalLine` / `NextEditEpisode` / the journal layout, one schema shared
+# with `svrn journal`. These are the `sovereign_core::types` re-exports
+# (CODE_TOOLING_BOUNDARY.md Phase 1: the package names the leaf, not the
+# facade).
+sovereign-contracts = { workspace = true }
+# The parser engine for the syntax + symbol lanes. The GRAMMARS come through
+# `grammar::GrammarLookup` from the host's registry — this is only the
+# engine that runs them, so `.tsx` vs `.ts` stays decided in one place.
+tree-sitter = "0.26"
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+# Test-only grammar stubs for the lanes' own parse tests. The real registry
+# is `corpus-engine`'s and stays there; a package crate may not name it, so
+# the tests register the four grammars their fixtures use.
+tree-sitter-go = "0.25"
+tree-sitter-python = "0.25"
+tree-sitter-rust = "0.24"
+tree-sitter-typescript = "0.23"
+
+[lints]
+workspace = true

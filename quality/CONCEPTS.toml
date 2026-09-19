@@ -519,7 +519,7 @@ a golden equivalence test."""
 
 [[concept]]
 name        = "EvidenceSet"
-canonical   = "corpus_engine::index::EvidenceSet"
+canonical   = "corpus_index::index::EvidenceSet"
 disposition = "converge"
 totality    = """
 TWO seals, both carried: the CHUNK SET composition read, and the CORPUS
@@ -886,7 +886,7 @@ today      = "2026-08-24: the noun DOES NOT EXIST and this row said it held. `so
 
 [[concept]]
 name       = "Atom"
-canonical  = "corpus_engine_vocab::atoms::AtomEnvelope"
+canonical  = "understanding_vocab::atoms::AtomEnvelope"
 disposition = "converge"
 totality   = "The closed set of atlas atom kinds (Entity, Event, State, Relation, Claim, Question, Configuration, ArgumentReconstruction, Position), tagged, with deliberately no #[serde(other)] — an unknown atom refuses, never skips."
 gloss      = '''the enrichment ontology's unit (`AtomEnvelope`).'''
@@ -958,7 +958,7 @@ measure    = "definitions carrying `Donor` outside the commonwealth package's co
 
 [[concept]]
 name       = "Principal"
-canonical  = "sovereign_api::principal::Principal"
+canonical  = "sovereign_daemon::client_principal::Principal"
 disposition = "converge"
 totality   = "Who is asking — the identity a request resolves to before admission, and the key of DAEMON_CORE.md §1's one table `principal -> Scope`. Admission's inflight guard and tally are keyed on it; a peer's row and a local caller's row have the same shape."
 gloss      = '''who is asking, resolved to a Scope.'''

@@ -1,0 +1,9 @@
+REVIEW-build-understanding-closure-converge
+commit 4ae9885c7
+CLEAN exit=0 (debug target 6G, under the 50G gate)
+LINT exit=0 (scoped 22 crates, 0 errors, --all-targets)
+TEST(corpus-engine) exit=0 pass=2299 fail=0
+TEST(corpus-engine-vocab) exit=0 pass=54 fail=0
+extra touched-crate proof: TEST(sovereign-tools) exit=0 pass=852; TEST(sovereign-enrichment-build) exit=0 pass=113; TEST(sovereign-cli-llm) exit=0 pass=1105; TEST(sovereign-mesh) exit=0 pass=613
+decision: one port `corpus_engine::InferenceFn = Arc<dyn Fn(&ChatPrompt, Option<u32>) -> Future<Result<String>> + Send + Sync>` in corpus-engine/src/types.rs; ChatPrompt carries system/user, the schema, phase id and sampling controls; Option<u32> is the per-call max_tokens override (the old ChatCompletionWithTokensFn arm). ChatCompletionFn/ChatCompletionWithTokensFn deleted (pipeline/types.rs re-exports crate::types::InferenceFn); DaemonInferenceClient::into_closures_with_tokens folded into into_closures. Recorded in ralph/DECISIONS.md-adjacent note d3548416 and corpus-engine/DECOMPOSITION.md ports table; SYSTEM_OVERVIEW.md injection contract updated.
+premise: measured 2026-09-17 `git grep -n 'InferenceFn' -- '*.rs' | wc -l` = 103, `ChatCompletionFn` = 59, aliases at corpus-engine/src/types.rs:54 and enrichment/pipeline/types.rs:334/:347; InferenceProvider::complete is the wrapped trait, not a closure.

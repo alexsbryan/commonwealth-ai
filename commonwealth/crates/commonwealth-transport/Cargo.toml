@@ -21,9 +21,20 @@ tokio = { workspace = true, optional = true }
 # `fanout` only: the per-peer rows are what a route serialises.
 serde = { workspace = true, optional = true }
 rustls = { version = "0.23", default-features = false, features = ["ring"], optional = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [features]
-iroh = ["dep:iroh", "dep:tokio", "dep:rustls"]
+# `iroh/unstable-custom-transports` and `iroh/test-utils` ride here rather than
+# only behind `iroh-relay-only` / `iroh-test-utils` (which stay as THIS crate's
+# cfg switches) so iroh resolves with ONE feature set in every build scope.
+# With two, cargo-hakari lists iroh in workspace-hack, which links it into
+# every member — including corpus-mcp, whose closure test
+# (corpus-mcp/tests/no_inference_stack.rs) forbids it; excluding it from the
+# hack instead (`final-excludes`) drops its feature contributions to
+# ed25519-dalek/noq-udp/signature and re-opens the scoped-build drift the
+# hack exists to close (scope-drift.py 92 -> 180, `cargo hakari verify` red).
+# Cost: the two iroh features compile in production; the hack already did that.
+iroh = ["dep:iroh", "dep:tokio", "dep:rustls", "iroh/unstable-custom-transports", "iroh/test-utils"]
 # The generic peer fan-out (`fanout` module). Its own feature so a build that
 # only wants the `PeerTransport` seam links neither tokio nor serde.
 fanout = ["dep:tokio", "dep:serde"]

@@ -28,7 +28,7 @@
 //!    `{"jsonrpc":"2.0","method":"notifications/tools/list_changed"}`
 //!    over each subscribed SSE client.
 //!
-//! [^notif]: `sovereign_mesh::mcp_router::McpNotifier`.
+//! [^notif]: `sovereign_daemon::mcp_router::McpNotifier`.
 //!
 //! ## What we watch
 //!

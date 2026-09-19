@@ -95,8 +95,10 @@ impl TenantRuntime {
 /// Injected into the `Runtime` so corpus retrieval is scoped per principal
 /// (another tenant's `Private` corpora never enter a turn's evidence) without
 /// the Runtime knowing tenancy exists. A conversation id with no prefix
-/// resolves to `None` (no scoping) — but server-issued ids are always
-/// prefixed, so on the hub the principal is always present.
+/// resolves to `None`, and `build_context` then REFUSES that turn
+/// (`PrincipalScope::Unresolved` — no corpus visible, ARCH principle 6) rather
+/// than defaulting it to every corpus; server-issued ids are always prefixed,
+/// so on the hub the principal is always present.
 pub struct TenantPrincipalResolver;
 
 impl sovereign_core::traits::PrincipalResolver for TenantPrincipalResolver {

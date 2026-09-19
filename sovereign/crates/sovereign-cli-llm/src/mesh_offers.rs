@@ -569,7 +569,7 @@ async fn reach_one(client: &reqwest::Client, port: u16, peer: &str, json_out: bo
         println!("{body}");
         return 0;
     }
-    let reach: sovereign_mesh::media_reach::MediaReach = match serde_json::from_str(&body) {
+    let reach: sovereign_daemon::media_reach::MediaReach = match serde_json::from_str(&body) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("mesh offers: response shape mismatch ({e}): {body}");

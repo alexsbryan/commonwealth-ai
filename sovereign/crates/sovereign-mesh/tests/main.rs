@@ -51,6 +51,9 @@ mod d9a_documents_e2e;
 mod daemon_variant_census;
 #[path = "main/daemon_wiring.rs"]
 mod daemon_wiring;
+#[path = "main/dst.rs"]
+#[cfg(feature = "dst")]
+mod dst;
 #[path = "main/dst_scenarios.rs"]
 mod dst_scenarios;
 #[path = "main/embeddings_e2e.rs"]
@@ -103,6 +106,13 @@ mod load_awareness_e2e;
 mod local_only_boot;
 #[path = "main/local_only_corpus_locality.rs"]
 mod local_only_corpus_locality;
+// The loop tests moved here from `src/ring_sync/{tests,snapshot_tests,
+// projection_tests}.rs` and `src/rail_kv_pump/tests.rs` at domains
+// `dm-daemon-api-edge` (b): they assemble the host node, which now lives in
+// `sovereign-daemon`, and a unit test inside this crate that named the daemon
+// would put two builds of `sovereign-mesh` in the graph (a dev-dependency
+// cycle) so the `FabricPart` types would not unify. An integration test
+// resolves both to one build.
 #[path = "main/local_pod_smoke.rs"]
 mod local_pod_smoke;
 #[path = "main/loopback_parity.rs"]
@@ -133,6 +143,8 @@ mod peer_tally_status_e2e;
 mod plaintext_join_over_iroh_e2e;
 #[path = "main/port_config.rs"]
 mod port_config;
+#[path = "main/rail_kv_pump_loop_tests.rs"]
+mod rail_kv_pump_loop_tests;
 #[path = "main/reading_http_e2e.rs"]
 mod reading_http_e2e;
 #[path = "main/recipe_surface_e2e.rs"]
@@ -143,6 +155,16 @@ mod replication_sender_census;
 mod research_surface_e2e;
 #[path = "main/responses_adapter_e2e.rs"]
 mod responses_adapter_e2e;
+#[path = "main/ring_append_nudges_sync.rs"]
+mod ring_append_nudges_sync;
+#[path = "main/ring_live_non_durable.rs"]
+mod ring_live_non_durable;
+#[path = "main/ring_sync_loop_tests.rs"]
+mod ring_sync_loop_tests;
+#[path = "main/ring_sync_projection_tests.rs"]
+mod ring_sync_projection_tests;
+#[path = "main/ring_sync_snapshot_tests.rs"]
+mod ring_sync_snapshot_tests;
 #[path = "main/rotate_pre_split_guard.rs"]
 mod rotate_pre_split_guard;
 #[path = "main/scheduler_decision_records.rs"]

@@ -21,7 +21,8 @@
 
 use std::path::Path;
 
-use corpus_engine::enrichment::atlas::{AtomEnvelope, AtomsFile};
+use understanding_vocab::atoms::AtomEnvelope;
+use understanding_vocab::read::read_atlas_atoms;
 
 use super::tokens::estimate_tokens;
 
@@ -57,16 +58,15 @@ const SECTION_BULLET_CAP: usize = 5;
 /// fallback is preserved by the manager's branch rather than here, so
 /// this function only handles the populated path.
 pub(crate) fn render_atlas_digest(atlas_dir: &Path, budget_tokens: usize) -> String {
-    let atoms_path = atlas_dir.join("atoms.json");
-    let Ok(raw) = std::fs::read(&atoms_path) else {
-        tracing::debug!(
-            atlas_dir = %atlas_dir.display(),
-            "atlas_digest: atoms.json absent — caller should fall back"
-        );
-        return String::new();
-    };
-    let file: AtomsFile = match serde_json::from_slice(&raw) {
+    let file = match read_atlas_atoms(atlas_dir) {
         Ok(f) => f,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            tracing::debug!(
+                atlas_dir = %atlas_dir.display(),
+                "atlas_digest: atoms.json absent — caller should fall back"
+            );
+            return String::new();
+        }
         Err(e) => {
             tracing::warn!(
                 atlas_dir = %atlas_dir.display(),
@@ -80,7 +80,7 @@ pub(crate) fn render_atlas_digest(atlas_dir: &Path, budget_tokens: usize) -> Str
     let mut entities: Vec<(&str, f32)> = Vec::new();
     let mut claims: Vec<(&str, f32)> = Vec::new();
     let mut questions: Vec<(&str, f32)> = Vec::new();
-    for env in &file.atoms {
+    for env in file.atoms() {
         match env {
             AtomEnvelope::Entity(e) => entities.push((&e.canonical_name, e.salience)),
             AtomEnvelope::Claim(c) => {
@@ -126,7 +126,7 @@ pub(crate) fn render_atlas_digest(atlas_dir: &Path, budget_tokens: usize) -> Str
         atlas_dir = %atlas_dir.display(),
         budget_tokens,
         output_tokens = estimate_tokens(&out),
-        input_atoms = file.atoms.len(),
+        input_atoms = file.atoms().len(),
         input_entities = entities.len(),
         input_claims = claims.len(),
         input_questions = questions.len(),

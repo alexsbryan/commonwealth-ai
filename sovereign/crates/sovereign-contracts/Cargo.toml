@@ -20,10 +20,14 @@ kernel-types = { workspace = true }
 # so `peer.rs` stops carrying a private fifth copy of `unix_now_u64`.
 sovereign-time = { workspace = true }
 oicp-types = { workspace = true }
-# `peer::PeerEntry.value`. A leaf third-party crate with no in-repo edges, so
+# `peer::ReplicatedKvEntry.value`. A leaf third-party crate with no in-repo edges, so
 # it costs the contract seam nothing — and it keeps the port's payload the
 # SAME type the mesh store already speaks, so an adapter is a move, not a copy.
 bytes = { workspace = true }
+# `identity::IdentityReader` — the node id as a watch, not a value. A leaf
+# third-party crate (no in-repo edges), so the contract seam's closure is
+# unchanged; `sovereign-api` and `sovereign-mesh` already carry it.
+arc-swap = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 async-trait = { workspace = true }
@@ -45,12 +49,30 @@ regex = { workspace = true }
 # remote call rides on. Pure HTTP: it carries no part of the inference stack.
 reqwest = { workspace = true }
 
+# `worker_pod.rs` — the ephemeral worker pod's owner↔pod wire protocol, moved
+# down from `sovereign-pods` (Compute) by domains REVIEW-build-serving-worker-port
+# so the serving host can name it without a third package `[[exception]]`
+# (`sovereign-pods` is neither a package member nor a shared leaf). Same
+# versions `sovereign-pods` carries, so `lock-gate` sees no skew: `ring` (via
+# `rcgen`) is already in this crate's closure through `reqwest`'s rustls-tls.
+ed25519-dalek = { workspace = true }
+rcgen = "0.13"
+base64 = "0.22"
+rand = "0.9"
+hex = "0.4"
+
 # `run_lock`: flock(2) for the single-writer claim on a data root. A leaf
 # third-party crate, so it adds no workspace layer edge — and unix-gated,
 # because the lock has no enforcement to offer anywhere else
 # (`RunLock::is_enforced`).
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+[features]
+# The canonical middleware test fixtures (`middleware::fixtures`). Off by
+# default so the lifted contract leaf ships no test support; the crates that
+# own middleware tests enable it through a dev-dependency.
+test-fixtures = []
 
 [dev-dependencies]
 tempfile = { workspace = true }

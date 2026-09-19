@@ -44,7 +44,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-use corpus_engine_vocab::ontology::{OntologyPolicies, WalkPolicy, SUMMARY_SEED_BUDGET};
+use understanding_vocab::ontology::{OntologyPolicies, WalkPolicy, SUMMARY_SEED_BUDGET};
 
 use super::atoms::AtomType;
 use super::context::{
@@ -736,7 +736,7 @@ fn summary_text(graph: &dyn AtlasProvider, atom_id: &str) -> String {
 ///
 /// One line, but it is the enforcement point for the ei-7a hold-out, so it
 /// has a name and a single definition. The DECISION itself lives on
-/// [`AtomType::grain`] in `corpus-engine-vocab` (one decider, ARCH §10.6);
+/// [`AtomType::grain`] in `understanding-vocab` (one decider, ARCH §10.6);
 /// this only asks the store for the kind. An atom the store cannot produce
 /// is NOT treated as a summary — the permissive answer is the leaf one, and
 /// a missing atom is already counted as a dropped seed elsewhere.

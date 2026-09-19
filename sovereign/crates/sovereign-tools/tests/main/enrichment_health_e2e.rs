@@ -47,6 +47,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+use corpus_engine::enrichment::pipeline::ChatPrompt;
 use corpus_engine::{CorpusEngine, CorpusSpec, EmbedFn, Error};
 use sovereign_core::health::{HealthCheckable, HealthIssue};
 use sovereign_tools::enrichment_checker::EnrichmentChecker;
@@ -142,7 +143,7 @@ fn mock_embed_fn() -> EmbedFn {
 /// enrichment failures this check exists to surface (an unregistered domain,
 /// a dead model slot, a mid-phase kill).
 fn always_failing_inference_fn() -> corpus_engine::types::InferenceFn {
-    Arc::new(|_prompt: &str, _schema: Option<&serde_json::Value>| {
+    Arc::new(|_prompt: &ChatPrompt, _max_tokens: Option<u32>| {
         Box::pin(async {
             Err(Error::InvalidInput(
                 "simulated enrichment-time inference outage".to_string(),

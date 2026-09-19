@@ -8,7 +8,7 @@
 //! is where the route that emits it lives. That is the right place for a
 //! ROUTE. It is the wrong place for a TYPE, because a client that only wants
 //! to parse the answer had to link the whole serving host to name it: the
-//! desktop's `use sovereign_mesh::lc_http::OcrAvailability` is one `bool` on
+//! desktop's `use sovereign_daemon::lc_http::OcrAvailability` is one `bool` on
 //! the wire and a `sovereign-desktop -> sovereign-mesh` layer edge in
 //! `quality/ARCH_LAYERS.toml`.
 //!
@@ -181,7 +181,7 @@ pub struct LocalSearchHit {
 /// a shape it does not own.
 ///
 /// The `Note -> NoteEntry` projection stays beside the route, in
-/// `sovereign_mesh::notes_http::note_entry`: the store type is three
+/// `sovereign_daemon::notes_http::note_entry`: the store type is three
 /// layers up from here and the kernel cannot name it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NoteEntry {
@@ -372,7 +372,7 @@ pub struct McpServerView {
 /// Whether the daemon has a tool mount to count against, and — when it
 /// does not — why.
 ///
-/// Mirrors `sovereign_mesh::daemon_services::McpSurface`, which exists for
+/// Mirrors `sovereign_daemon::daemon_services::McpSurface`, which exists for
 /// exactly this reason: "this host serves no tools" and "`notes.db` would
 /// not open" are different operational facts with different fixes.
 #[derive(Debug, Clone, Serialize, Deserialize)]

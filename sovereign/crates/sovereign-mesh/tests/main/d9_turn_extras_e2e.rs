@@ -48,8 +48,8 @@ use std::sync::Arc;
 use sovereign_contracts::skills::{parse_skill_toml, SkillRegistry};
 use sovereign_core::runtime::TurnProvenance;
 use sovereign_core::setup_config::SetupConfig;
-use sovereign_mesh::daemon::EmbeddedDaemon;
-use sovereign_mesh::turn_extras_http::turn_extras_router;
+use sovereign_daemon::daemon::EmbeddedDaemon;
+use sovereign_daemon::turn_extras_http::turn_extras_router;
 
 use crate::common::{
     desktop_services_with_runtime, engine_at, mesh_admin_services, spawn_router,

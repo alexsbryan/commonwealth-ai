@@ -149,7 +149,7 @@ async fn async_main() {
     match cmd {
         "mesh" => init_tracing(
             "sovereign_cli=info,sovereign_cli_llm=info,sovereign_mesh=info,\
-             commonwealth_discovery=info,sovereign_api=info",
+             commonwealth_discovery=info,sovereign_daemon=info",
         ),
         // `publish` only reads and rewrites config; it dials nothing.
         "publish" | "unpublish" => init_tracing("sovereign_cli_llm=info"),

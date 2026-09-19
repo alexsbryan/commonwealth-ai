@@ -16,7 +16,7 @@ error[E0624]: associated function `acquired` is private
 7 |       let _ = Evidence::acquired("the text", Custody::Personal, 0.9);
   |                         ^^^^^^^^ private associated function
   |
- ::: src/index/evidence.rs
+ ::: $WORKSPACE/corpus-index/src/index/evidence.rs
   |
   | /     pub(crate) fn acquired(
   | |         content: impl Into<String>,
@@ -33,7 +33,7 @@ error[E0061]: this function takes 4 arguments but 3 arguments were supplied
   |             ^^^^^^^^^^^^^^^^^^             ----------------- argument #2 of type `Origin` is missing
   |
 note: associated function defined here
- --> src/index/evidence.rs
+ --> $WORKSPACE/corpus-index/src/index/evidence.rs
   |
   |     pub(crate) fn acquired(
   |                   ^^^^^^^^

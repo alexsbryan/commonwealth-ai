@@ -12,8 +12,8 @@ use std::sync::Arc;
 
 use corpus_engine::{CorpusEngine, EmbedFn};
 use sovereign_core::setup_config::SetupConfig;
-use sovereign_mesh::daemon::EmbeddedDaemon;
-use sovereign_mesh::enrich_http::enrich_router;
+use sovereign_daemon::daemon::EmbeddedDaemon;
+use sovereign_daemon::enrich_http::enrich_router;
 
 use crate::common;
 use crate::common::spawn_router;

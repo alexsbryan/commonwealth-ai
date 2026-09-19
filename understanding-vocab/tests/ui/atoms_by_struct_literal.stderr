@@ -1,0 +1,8 @@
+error[E0451]: field `atoms` of struct `AtomsFile` is private
+  --> tests/ui/atoms_by_struct_literal.rs:11:9
+   |
+ 9 |     let _file = AtomsFile {
+   |                 --------- in this type
+10 |         schema_version: "2.5".to_string(),
+11 |         atoms: Vec::new(),
+   |         ^^^^^ private field

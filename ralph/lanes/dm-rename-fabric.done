@@ -1,0 +1,24 @@
+unit: dm-rename-fabric
+commits: 4d5695e1e (the in-place renames)
+what: Applies the DT [[noun]] dispositions (quality/DOMAINS.toml) to the fabric
+  identifiers that stayed in sovereign-mesh — identifiers only, no behaviour
+  change. PeerPathsFn -> ReachPathsFn, PeerPathVerdict -> ReachPathVerdict,
+  PeerPathHealth -> ReachPathHealth, PeerPathObservation -> ReachPathObservation
+  in sovereign-mesh/src/iroh_watchdog.rs, with the readers repointed in
+  iroh_access.rs:236,273 and sovereign-daemon/src/daemon.rs:4409,4423 (the
+  injected closure, now in the daemon after dm-daemon-mesh-edge). MeshPeerStore
+  -> MeshReplicatedKv in sovereign-mesh/src/peer_adapter.rs (def, doc links,
+  cfg(test)), with every consumer repointed: daemon_services.rs:289,831,859;
+  cli-daemon bootstrap.rs:2481,2526-2527; cli-dev code_cmd.rs:1841,
+  project_cmd/serve.rs:495-496, tools_cmd/registry.rs:225-226; cli-llm
+  claim_cmd.rs:19,810; work-atlas gc.rs:11 and tests/cross_node.rs:38 (docs);
+  commonwealth-state store.rs:1434 (doc). mesh_http.rs's host renames
+  (PeerMeasurementDto/Query/Response -> Member*) are not here — they rode
+  dm-daemon-mesh-edge with the mesh host cluster.
+checks: CLEAN exit=0 (debug target 0G, under 50G — cache kept); LINT exit=0
+  (commonwealth-state, sovereign-cli-daemon, sovereign-cli-dev, sovereign-cli-llm,
+  sovereign-daemon, sovereign-mesh, sovereign-work-atlas, sovereign-api,
+  sovereign-atos, sovereign-cli, sovereign-grants, sovereign-mesh-test-harness,
+  sovereign-tools; 0 errors, cargo exit 0).
+evidence: git diff is 60 insertions / 60 deletions, every hunk an identifier
+  swap; `grep -rn` for the five old names over *.rs is empty after the change.

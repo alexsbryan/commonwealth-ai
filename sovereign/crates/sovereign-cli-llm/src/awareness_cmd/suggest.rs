@@ -18,6 +18,7 @@
 
 use std::sync::Arc;
 
+use corpus_engine::enrichment::pipeline::ChatPrompt;
 use sovereign_core::traits::ConversationStore;
 use sovereign_core::types::{Conversation, Message, Role};
 use sovereign_store::sqlite::SqliteStateStore;
@@ -97,7 +98,7 @@ pub(super) async fn cmd_suggest(args: &[String]) -> i32 {
             eprintln!("{prompt}");
             eprintln!("──────────────────────────────────────────────────────");
         }
-        let raw = match (inference)(&prompt, None).await {
+        let raw = match (inference)(&ChatPrompt::new("", prompt.as_str()), None).await {
             Ok(r) => r,
             Err(e) => {
                 eprintln!("awareness suggest: inference failed on turn {turn_no}: {e}");

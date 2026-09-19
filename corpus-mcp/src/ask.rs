@@ -31,7 +31,8 @@
 use corpus_engine::enrichment::atlas::ground::{Degradation, Grounding, MapNode};
 use corpus_engine::enrichment::atlas::{EvidenceFetcher, ResolvedChunk};
 use corpus_engine::CorpusId;
-use corpus_engine::{CorpusIndex, ScoredChunk};
+use corpus_index::index::CorpusIndex;
+use corpus_index::types::ScoredChunk;
 use serde_json::{json, Value};
 
 use crate::tools::ToolOutcome;
@@ -370,8 +371,8 @@ mod tests {
     use corpus_engine::enrichment::atlas::ground::{
         MapSection, PolicySource, WalkLedger, WalkSelection,
     };
-    use corpus_engine_vocab::atoms::AtomType;
-    use corpus_engine_vocab::ontology::{NavigationPolicy, QuestionKind};
+    use understanding_vocab::atoms::AtomType;
+    use understanding_vocab::ontology::{NavigationPolicy, QuestionKind};
 
     fn chunk(id: u64, title: &str, body: &str) -> ScoredChunk {
         ScoredChunk {
@@ -384,7 +385,7 @@ mod tests {
             chunk_id: Some(id),
             source_doc_id: None,
             vector_distance: None,
-            provenance: corpus_engine::index::ChunkProvenance::acquired_from_estate("bk"),
+            provenance: corpus_index::index::ChunkProvenance::acquired_from_estate("bk"),
         }
     }
 

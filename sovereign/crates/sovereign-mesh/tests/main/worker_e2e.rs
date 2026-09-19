@@ -23,14 +23,14 @@ use std::time::Duration;
 
 use ed25519_dalek::SigningKey;
 use sha2::{Digest, Sha256};
-use sovereign_mesh::worker_controller::{
-    JobSpec, ProviderInstance, ProviderResult, PublicAddress, UploadFile, UploadSource,
-    WorkerController, WorkerProvider,
-};
-use sovereign_mesh::worker_daemon::{run_worker_mode, EchoRunner};
 use sovereign_mesh::worker_pod::{
     encode_bootstrap, mint_bootstrap, self_signed_cert, BootstrapBlob, BootstrapInputs,
 };
+use sovereign_pods::worker_controller::{
+    JobSpec, ProviderInstance, ProviderResult, PublicAddress, UploadFile, UploadSource,
+    WorkerController, WorkerProvider,
+};
+use sovereign_pods::worker_daemon::{run_worker_mode, EchoRunner};
 
 /// Mock provider — returns a pre-set address. The test pre-binds the
 /// pod's HTTPS listener on a random port and hands the controller
@@ -83,14 +83,14 @@ async fn spawn_worker_daemon(blob: BootstrapBlob) -> SocketAddr {
         .expect("tls config");
 
     let state = Arc::new(
-        sovereign_mesh::worker_http::WorkerState::from_blob(blob.clone(), Arc::new(EchoRunner))
+        sovereign_pods::worker_http::WorkerState::from_blob(blob.clone(), Arc::new(EchoRunner))
             .expect("state"),
     );
     // Production `run_worker_mode` calls this after state construction;
     // the test helper has to do the same or URL-backed entries in the
     // manifest never get fetched.
     state.spawn_url_fetches();
-    let router = sovereign_mesh::worker_http::worker_router(state);
+    let router = sovereign_pods::worker_http::worker_router(state);
 
     // `axum_server::bind_rustls(addr, tls).handle(...)` exposes the
     // bound port via Handle, but we can also use a std listener for
@@ -147,12 +147,12 @@ async fn full_lifecycle_against_real_tls_pod() {
         label: "e2e".into(),
         uploads,
         units: vec![
-            sovereign_mesh::worker_http::WorkUnit {
+            sovereign_pods::worker_http::WorkUnit {
                 unit_id: 1,
                 kind: "unit-a".into(),
                 payload: serde_json::json!({"x": 1}),
             },
-            sovereign_mesh::worker_http::WorkUnit {
+            sovereign_pods::worker_http::WorkUnit {
                 unit_id: 2,
                 kind: "unit-b".into(),
                 payload: serde_json::json!({"y": 2}),
@@ -191,7 +191,7 @@ async fn full_lifecycle_against_real_tls_pod() {
             port: bound.port(),
         },
     });
-    let mut config = sovereign_mesh::worker_controller::ControllerConfig::default();
+    let mut config = sovereign_pods::worker_controller::ControllerConfig::default();
     config.address_poll_interval = Duration::from_millis(20);
     config.health_poll_interval = Duration::from_millis(50);
     config.health_poll_timeout = Duration::from_secs(10);
@@ -206,7 +206,7 @@ async fn full_lifecycle_against_real_tls_pod() {
     // handshake, upload streams + SHA validates, dispatch transitions
     // the pod into running, completed polling advances the cursor,
     // destroy sends DELETE.
-    let client = sovereign_mesh::worker_controller::build_pinned_client_for(&blob).expect("pinned");
+    let client = sovereign_pods::worker_controller::build_pinned_client_for(&blob).expect("pinned");
     let handle = sovereign_mesh::worker_pod::WorkerHandle::new(
         bound.ip().to_string(),
         bound.port(),
@@ -279,13 +279,13 @@ async fn wrong_owner_key_cannot_drive_a_pinned_pod() {
     // the default health-poll deadline. We're verifying the request
     // is REJECTED — the controller will retry on 401, so we want it
     // to give up quickly.
-    let config = sovereign_mesh::worker_controller::ControllerConfig {
+    let config = sovereign_pods::worker_controller::ControllerConfig {
         health_poll_interval: Duration::from_millis(50),
         health_poll_timeout: Duration::from_secs(2),
         ..Default::default()
     };
     let controller = WorkerController::new(provider, owner_b.clone(), config);
-    let client = sovereign_mesh::worker_controller::build_pinned_client_for(&blob).expect("pinned");
+    let client = sovereign_pods::worker_controller::build_pinned_client_for(&blob).expect("pinned");
     // Mint an owner-B-signed token for the same pod thumbprint —
     // mimics what a hostile second owner would try.
     let claims = sovereign_mesh::worker_pod::TokenClaims {
@@ -381,7 +381,7 @@ async fn url_backed_upload_fetched_by_pod_in_background() {
             port: bound.port(),
         },
     });
-    let mut config = sovereign_mesh::worker_controller::ControllerConfig::default();
+    let mut config = sovereign_pods::worker_controller::ControllerConfig::default();
     config.health_poll_interval = Duration::from_millis(50);
     config.health_poll_timeout = Duration::from_secs(10);
     let controller = WorkerController::new(provider, owner.clone(), config);
@@ -395,7 +395,7 @@ async fn url_backed_upload_fetched_by_pod_in_background() {
         job_id: "url-job".into(),
         label: "url".into(),
         uploads,
-        units: vec![sovereign_mesh::worker_http::WorkUnit {
+        units: vec![sovereign_pods::worker_http::WorkUnit {
             unit_id: 1,
             kind: "k".into(),
             payload: serde_json::json!({}),
@@ -403,7 +403,7 @@ async fn url_backed_upload_fetched_by_pod_in_background() {
         runner_config: serde_json::json!({}),
     };
 
-    let client = sovereign_mesh::worker_controller::build_pinned_client_for(&blob).expect("pinned");
+    let client = sovereign_pods::worker_controller::build_pinned_client_for(&blob).expect("pinned");
     let handle = sovereign_mesh::worker_pod::WorkerHandle::new(
         bound.ip().to_string(),
         bound.port(),
@@ -468,7 +468,7 @@ async fn url_backed_upload_rejects_manual_upload() {
         .unwrap();
 
     let bound = spawn_worker_daemon(blob.clone()).await;
-    let client = sovereign_mesh::worker_controller::build_pinned_client_for(&blob).expect("pinned");
+    let client = sovereign_pods::worker_controller::build_pinned_client_for(&blob).expect("pinned");
     let url = format!(
         "https://{}:{}/internal/worker/upload?name=primary.gguf&finalize=true",
         bound.ip(),
@@ -519,7 +519,7 @@ async fn smoke_run_worker_mode_bails_on_bad_blob_seed() {
     let blocked: SocketAddr = listener.local_addr().unwrap();
     // Don't drop the listener — keep the port held.
 
-    let runner: Arc<dyn sovereign_mesh::worker_http::WorkerRunner> = Arc::new(EchoRunner);
+    let runner: Arc<dyn sovereign_pods::worker_http::WorkerRunner> = Arc::new(EchoRunner);
     let result = tokio::time::timeout(
         Duration::from_secs(2),
         run_worker_mode(blob, runner, Some(blocked), None),
@@ -545,7 +545,7 @@ async fn smoke_run_worker_mode_bails_on_bad_blob_seed() {
 #[ignore = "requires reachable pod /health endpoints; flaky in dev sandboxes"]
 #[tokio::test]
 async fn multi_pod_pool_poll_drains_partitioned_units() {
-    use sovereign_mesh::multi_pod_coordinator::{
+    use sovereign_pods::multi_pod_coordinator::{
         partition_units, CoordinatorConfig, PoolHandle, PoolPod,
     };
     use tokio::sync::Mutex as AsyncMutex;
@@ -559,8 +559,8 @@ async fn multi_pod_pool_poll_drains_partitioned_units() {
     // unit_ids start at 1 — the `/completed` cursor uses `> since`
     // watermark semantics with 0 = "before anything", so a unit_id of
     // 0 would never be reported.
-    let units: Vec<sovereign_mesh::worker_http::WorkUnit> = (1..=total_units)
-        .map(|i| sovereign_mesh::worker_http::WorkUnit {
+    let units: Vec<sovereign_pods::worker_http::WorkUnit> = (1..=total_units)
+        .map(|i| sovereign_pods::worker_http::WorkUnit {
             unit_id: i as u64,
             kind: format!("u{i}"),
             payload: serde_json::json!({"i": i}),
@@ -583,7 +583,7 @@ async fn multi_pod_pool_poll_drains_partitioned_units() {
         .unwrap();
         let bound = spawn_worker_daemon(blob.clone()).await;
         let client =
-            sovereign_mesh::worker_controller::build_pinned_client_for(&blob).expect("pinned");
+            sovereign_pods::worker_controller::build_pinned_client_for(&blob).expect("pinned");
         let handle = sovereign_mesh::worker_pod::WorkerHandle::new(
             bound.ip().to_string(),
             bound.port(),
@@ -592,7 +592,7 @@ async fn multi_pod_pool_poll_drains_partitioned_units() {
             blob.job_id.clone(),
             owner.clone(),
         );
-        let instance = sovereign_mesh::worker_controller::ProviderInstance {
+        let instance = sovereign_pods::worker_controller::ProviderInstance {
             instance_id: format!("inst-{i}"),
             gpu_name: "Mock-L40S".into(),
             cost_per_hour: 0.25,
@@ -608,7 +608,7 @@ async fn multi_pod_pool_poll_drains_partitioned_units() {
     }
 
     // Use a tiny controller config for fast polling in tests.
-    let mut cfg = sovereign_mesh::worker_controller::ControllerConfig::default();
+    let mut cfg = sovereign_pods::worker_controller::ControllerConfig::default();
     cfg.health_poll_interval = Duration::from_millis(20);
     cfg.health_poll_timeout = Duration::from_secs(5);
     let provider = Arc::new(PreboundProvider {

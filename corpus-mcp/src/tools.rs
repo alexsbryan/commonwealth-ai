@@ -13,7 +13,7 @@
 //! - `corpus_search` — tier 1: cited chunks from `CorpusIndex::search` (the
 //!   same LanceDB + Tantivy hybrid every sovereign surface uses).
 //! - `atoms_lookup` — tier 1.5: the atoms an enrichment PRODUCED, read from
-//!   `atlas/atoms.json` through `corpus_engine_vocab::atoms::AtomsFile`.
+//!   `atlas/atoms.json` through `understanding_vocab::atoms::AtomsFile`.
 //!   That the artifact crosses the seam is the point; the atom-grounded
 //!   ranking does not, and this module does not pretend to.
 //! - `corpus_ontology` — what the corpus DECLARED, from `atlas/ontology.json`
@@ -36,9 +36,12 @@ use corpus_engine::enrichment::atlas::ground;
 use corpus_engine::enrichment::atlas::summary::read_current_summary;
 use corpus_engine::enrichment::atlas::writer::{read_atlas_ontology, AtlasOntologyFile};
 use corpus_engine::enrichment::atlas::{open_walk_provider, AtlasInventory, AtlasProvider};
-use corpus_engine::{CorpusEngine, CorpusIndex, EmbedFn, ScoredChunk};
-use corpus_engine_vocab::atoms::{AtomEnvelope, AtomsFile};
+use corpus_engine::CorpusEngine;
+use corpus_index::index::CorpusIndex;
+use corpus_index::types::{EmbedFn, ScoredChunk};
 use serde_json::{json, Value};
+use understanding_vocab::atoms::AtomEnvelope;
+use understanding_vocab::read::read_atlas_atoms;
 
 use crate::host::HostProfile;
 
@@ -594,17 +597,22 @@ impl Server {
             return refuse("atoms_lookup needs `corpus`");
         };
         let path = self.atlas_path(corpus, "atoms.json");
-        let file = match read_atoms(&path) {
+        let missing = format!(
+            "no atlas at {} — this corpus's enrichment was not built or pulled on this machine",
+            path.display()
+        );
+        let file = match read_atlas_atoms(&self.atlas_dir(corpus)) {
             Ok(f) => f,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return refuse(&missing),
             Err(e) => return refuse(&e.to_string()),
         };
         let needle = args["query"].as_str().map(str::to_lowercase);
         let kind = args["kind"].as_str().map(str::to_lowercase);
         let limit = args["limit"].as_u64().map(|l| l as usize).unwrap_or(20);
 
-        let total = file.atoms.len();
+        let total = file.atoms().len();
         let matched: Vec<&AtomEnvelope> = file
-            .atoms
+            .atoms()
             .iter()
             .filter(|a| kind.as_deref().is_none_or(|k| a.atom_type().label() == k))
             .filter(|a| {
@@ -870,17 +878,6 @@ fn tag<T: serde::Serialize>(t: T) -> String {
         .to_string()
 }
 
-fn read_atoms(path: &Path) -> Result<AtomsFile> {
-    if !path.exists() {
-        bail!(
-            "no atlas at {} — this corpus's enrichment was not built or pulled on this machine",
-            path.display()
-        );
-    }
-    let file = std::fs::File::open(path)?;
-    Ok(serde_json::from_reader(std::io::BufReader::new(file))?)
-}
-
 /// The prose an atom carries, by kind. Entity/Event/Configuration describe;
 /// Claim/Question/Position state; the rest have only their name.
 fn atom_text(a: &AtomEnvelope) -> &str {
@@ -916,8 +913,8 @@ fn truncate(s: &str, max: usize) -> String {
 mod tests {
     use super::*;
     use corpus_engine::enrichment::atlas::writer::write_atlas_ontology;
-    use corpus_engine_vocab::ontology::decl::{OntologyTypeDecl, TypeKind};
-    use corpus_engine_vocab::ontology::OntologyPolicies;
+    use understanding_vocab::ontology::decl::{OntologyTypeDecl, TypeKind};
+    use understanding_vocab::ontology::OntologyPolicies;
 
     fn declared(names: &[(&str, TypeKind)]) -> OntologyPolicies {
         let mut p = OntologyPolicies::default();

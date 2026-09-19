@@ -1,0 +1,38 @@
+unit: REVIEW-build-daemon-parts
+commits: 6942d96e1 (the move), d52b7ab39 (rustfmt)
+what: Serving's part moved to its owner, sovereign-serving-host
+  (`src/state.rs`): 17 of DC §4.2's 20 fields — model/pipeline/slot aliases,
+  servable files, the local-inference handle, the peer/client admission
+  schedulers with their caps, switch, tallies, rejected-header record and
+  reciprocity weights, the contribution pause and yield-peers switch, the
+  availability composite and the in-flight gauge — plus the two readers
+  (`SlotAliasesReader`, `ServableModelFilesReader`) and the two tally types
+  (`PrincipalTally`, `RejectedNodeIdHeader`). The daemon's `state/serving.rs`
+  is a shim: re-exports the host part, keeps `ServingSeed` (it carries the
+  `AppState`-typed warmer). Consumers repointed (13 daemon route/loop files,
+  `daemon.rs`, `state.rs`, the mesh test harness, two `sovereign-mesh/tests/
+  main/` files) to `state.inner.store.*` for the three held-back fields.
+  `serving-policy` joins the host deps (a member of the same package). DT rows
+  added for `sovereign-serving-host/src/state.rs` and
+  `sovereign-daemon/src/state/store.rs`.
+corrections (PROMPT §6, ralph/DECISIONS.md 2026-09-18):
+  (1) three of Serving's twenty fields cannot cross into the serving package —
+  `inference_store` (`commonwealth_state::store_adapter::InferenceStateStore`)
+  and `peer_preferences` (`commonwealth_state::PeerPreferenceStore`) are
+  commonwealth-state-backed (not a shared leaf; a dep is a second
+  `[[exception]]`, §7 operator-only, and the campaign's K4 kill clause at
+  quality/campaigns/domains.toml:288 splits rather than widens), and
+  `rpc_shard_warmer`'s trait method takes `AppState` — so they stay in the
+  daemon as `state/store.rs::StorePart`.
+  (2) the answering clause is false and deferred to the minted
+  `REVIEW-build-daemon-answering-part`: `middleware_registry` is host
+  composition (DC §4.2:351) and `session_store` is
+  `sovereign_atos::session::SessionStore`, which `sovereign-core` cannot name
+  (`sovereign-atos` -> `sovereign-core`).
+  (3) the row's "never a flat field" clause is DC §4.2's end state ("Handlers
+  take a part, never the node", DAEMON_CORE.md:412-416), not this row's scope.
+  `state/workbench.rs` stays scaffolding; `state/node.rs`/`state/ingest.rs`
+  were already in their owner (sovereign-daemon).
+checks: CLEAN exit=0 (debug target 12G, under 50G); LINT exit=0 (WORKSPACE,
+  --all-targets, errors: 0); LAYER exit=0 ("fan-in within caps"); CENSUS
+  --self-test exit=0 (11/11 positives caught, 11/11 negatives refused).

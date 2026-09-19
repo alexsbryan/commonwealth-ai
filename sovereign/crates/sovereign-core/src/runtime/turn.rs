@@ -280,17 +280,9 @@ impl Runtime {
 
         // 1. Build context from store (use message text for memory retrieval).
         //    The user message is already persisted so it shows up here.
-        let principal = self
-            .corpus_principal
-            .as_ref()
-            .and_then(|r| r.principal_for(conversation_id));
-        let mut context = build_context(
-            self.store.as_ref(),
-            conversation_id,
-            message,
-            principal.as_deref(),
-        )
-        .await?;
+        let scope = self.principal_scope(conversation_id);
+        let mut context =
+            build_context(self.store.as_ref(), conversation_id, message, scope).await?;
         tracing::debug!(
             messages = context.conversation.messages.len(),
             memories = context.memories.len(),

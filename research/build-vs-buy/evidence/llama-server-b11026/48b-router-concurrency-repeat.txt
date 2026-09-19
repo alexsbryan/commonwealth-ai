@@ -1,0 +1,18 @@
+### trial 1: unload all, then 2 concurrent requests for different unloaded models
+proxy error: Could not establish connection <- t1a model=qwen35-2b http=500 t=0.798379s
+ok <- t1b model=sweep-1.5b http=200 t=1.228180s
+### trial 1: one loaded, concurrent request for the OTHER (non-resident) model x2
+ok <- t1d model=sweep-1.5b http=200 t=0.026722s
+ok <- t1c model=sweep-1.5b http=200 t=0.050015s
+### trial 2: unload all, then 2 concurrent requests for different unloaded models
+{"error":{"code":500,"message":"model limit reached, try again later","type":"server_error"}} <- t2b model=sweep-1.5b http=500 t=0.001126s
+ok <- t2a model=qwen35-2b http=200 t=0.868541s
+### trial 2: one loaded, concurrent request for the OTHER (non-resident) model x2
+ok <- t2c model=qwen35-2b http=200 t=0.046366s
+ok <- t2d model=qwen35-2b http=200 t=0.090031s
+### trial 3: unload all, then 2 concurrent requests for different unloaded models
+{"error":{"code":500,"message":"model limit reached, try again later","type":"server_error"}} <- t3a model=qwen35-2b http=500 t=0.001975s
+ok <- t3b model=sweep-1.5b http=200 t=0.346188s
+### trial 3: one loaded, concurrent request for the OTHER (non-resident) model x2
+ok <- t3c model=sweep-1.5b http=200 t=0.047503s
+ok <- t3d model=sweep-1.5b http=200 t=0.070588s

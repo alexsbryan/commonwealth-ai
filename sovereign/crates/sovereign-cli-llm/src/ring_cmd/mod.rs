@@ -173,7 +173,7 @@ fn http_client() -> Result<reqwest::Client, String> {
         .map_err(|e| format!("http client: {e}"))
 }
 
-/// The rail's two routes and its two operator-side clients — **re-exported,
+/// The rail's three routes and its two operator-side clients — **re-exported,
 /// not defined here** (cw-lift 5e).
 ///
 /// They were this module's while `ring` and `job` were the only callers. `svrn
@@ -185,7 +185,7 @@ fn http_client() -> Result<reqwest::Client, String> {
 /// here needs the functions, so one `use` line serves both and a route renamed
 /// on the daemon still breaks the build at every caller.
 pub(crate) use sovereign_cli_shared::rail::{
-    error_text, rail_append, rail_log, RAIL_APPEND_PATH, RAIL_LOG_PATH,
+    error_text, rail_append, rail_log, RAIL_APPEND_PATH, RAIL_LIVE_PATH, RAIL_LOG_PATH,
 };
 
 /// Mint a grant that reaches exactly one namespace's rail and nothing else.

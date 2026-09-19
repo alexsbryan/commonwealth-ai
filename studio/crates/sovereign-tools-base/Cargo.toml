@@ -48,6 +48,7 @@ tracing = { workspace = true }
 sha2 = { workspace = true }
 # ~/.svrnmesh resolution for the MCP secret store.
 dirs = "5"
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
 tempfile = { workspace = true }

@@ -10,8 +10,8 @@
 //! Split out of `evidence_loop.rs` (2026-07-13) for legibility and the
 //! ARCH §3.1 file-size ceiling — a pure move, no behaviour change.
 
-use corpus_engine_vocab::atoms::{AtomEnvelope, AtomsFile};
 use std::collections::HashSet;
+use understanding_vocab::atoms::{AtomEnvelope, AtomsFile};
 
 use super::dbg;
 
@@ -42,11 +42,11 @@ fn cached_atoms(corpus_id: &str) -> Option<std::sync::Arc<AtomsFile>> {
     static CACHE: OnceLock<Cache> = OnceLock::new();
     let cache = CACHE.get_or_init(|| RwLock::new(std::collections::HashMap::new()));
 
-    let path = sovereign_contracts::rebrand::data_dir()
+    let atlas_dir = sovereign_contracts::rebrand::data_dir()
         .join("indexes")
         .join(corpus_id)
-        .join("atlas")
-        .join("atoms.json");
+        .join(understanding_vocab::read::ATLAS_DIRNAME);
+    let path = atlas_dir.join("atoms.json");
     let mtime = std::fs::metadata(&path).ok()?.modified().ok()?;
 
     // Fast path: present and fresh (mtime unchanged since we parsed it).
@@ -58,8 +58,7 @@ fn cached_atoms(corpus_id: &str) -> Option<std::sync::Arc<AtomsFile>> {
         }
     }
     // Slow path: (re)parse and cache under the current mtime.
-    let text = std::fs::read_to_string(&path).ok()?;
-    let value = Arc::new(serde_json::from_str::<AtomsFile>(&text).ok()?);
+    let value = Arc::new(understanding_vocab::read::read_atlas_atoms(&atlas_dir).ok()?);
     if let Ok(mut map) = cache.write() {
         map.insert(corpus_id.to_string(), (mtime, Arc::clone(&value)));
     }
@@ -79,7 +78,7 @@ pub(crate) fn atlas_entity_names(corpus_id: &str) -> Vec<String> {
     // version cloned the whole atoms array on every call). `canonical_name`
     // is an Entity (and Position) field; the untyped walk read it off any
     // atom's `data`, which for every other kind was absent.
-    file.atoms
+    file.atoms()
         .iter()
         .filter_map(|a| match a {
             AtomEnvelope::Entity(e) => Some(e.canonical_name.clone()),
@@ -397,7 +396,7 @@ fn atlas_atom_records(corpus_id: &str) -> Vec<(String, Vec<String>)> {
     // has one — see `cached_atoms`.) Previews come from the envelope's own
     // evidence accessor; an Entity has no evidence list, so its previews are
     // empty exactly as before.
-    file.atoms
+    file.atoms()
         .iter()
         .filter_map(|a| {
             let desc = match a {

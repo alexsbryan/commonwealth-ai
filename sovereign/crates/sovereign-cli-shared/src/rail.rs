@@ -35,7 +35,7 @@ use std::collections::BTreeMap;
 
 use commonwealth_rail::{Admission, AdmittedOp, RailAct, RailGap};
 
-/// The rail's two routes, spelled once for every caller in the workspace.
+/// The rail's three routes, spelled once for every caller in the workspace.
 ///
 /// The FUNCTIONS below are the clients. `svrn ring dev` cannot use them — it
 /// proxies a browser's opaque bytes to a different listener under a grant
@@ -45,6 +45,9 @@ use commonwealth_rail::{Admission, AdmittedOp, RailAct, RailGap};
 pub const RAIL_LOG_PATH: &str = "/v1/rail/log";
 /// See [`RAIL_LOG_PATH`].
 pub const RAIL_APPEND_PATH: &str = "/v1/rail/append";
+/// See [`RAIL_LOG_PATH`]. One path, both directions: POST sends one ephemeral
+/// payload, GET drains what peers sent.
+pub const RAIL_LIVE_PATH: &str = "/v1/rail/live";
 
 fn client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()

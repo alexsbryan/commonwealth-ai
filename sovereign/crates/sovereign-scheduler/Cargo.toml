@@ -1,0 +1,30 @@
+[package]
+name = "sovereign-scheduler"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+# The published language the ranker is arithmetic over. Rule 1
+# (ARCH_LAYERS.toml): the scheduler may name `oicp-types` and nothing else in
+# this repo. `TierFloor` reads the envelope's latency class off it.
+oicp-types = { workspace = true }
+# `venue.rs`: `InferenceVenue::node_id` is a `kernel_types::NodeId` (the
+# identity the roster and the local reader both speak), and the `VenueSource`
+# port is async.
+kernel-types = { workspace = true }
+async-trait = { workspace = true }
+# The scheduler half of sovereign-mesh moved in here (domains row
+# REVIEW-build-sched-move): the decision records and replay fixtures are
+# serde-serialised and the ranker logs through `tracing`. The recording sink —
+# file, env, clock, ids — is `sovereign-serving-host`'s
+# (REVIEW-build-sched-split-sink), so this crate reads no clock and mints no
+# id: `uuid` and `sovereign-time` left with the sink. Verified 2026-09-15 by
+# `grep` over the seven modules — none of them names `sovereign-contracts`,
+# `futures`, `tokio` or `async-trait`.
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+
+[lints]
+workspace = true

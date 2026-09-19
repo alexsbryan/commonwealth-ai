@@ -224,19 +224,27 @@ mod tests {
         let atlas = root.join("atlas");
         std::fs::create_dir_all(&atlas).unwrap();
         let atoms = serde_json::json!({
-            "schema_version": 1,
+            "schema_version": "2.0",
             "atoms": [
                 {"atom_type": "Claim", "data": {
                     "id": "claim-verloc",
                     "content": "Mr Verloc keeps a shabby shop in Soho as a front for his secret work.",
+                    "discourse_act": "assert",
+                    "epistemic_status": "confident",
+                    "scope": "universal",
                     "evidence": [{"chunk_id": "c1", "passage_preview": "the shop"}],
-                    "quotable_excerpt": "Verloc kept a shop selling shady wares in a Soho back street"
+                    "quotable_excerpt": "Verloc kept a shop selling shady wares in a Soho back street",
+                    "enrichment_depth": "extracted"
                 }},
                 {"atom_type": "Claim", "data": {
                     "id": "claim-vladimir",
                     "content": "The embassy official pressures Verloc to provoke an outrage against science.",
+                    "discourse_act": "assert",
+                    "epistemic_status": "confident",
+                    "scope": "universal",
                     "evidence": [{"chunk_id": "c2", "passage_preview": "Greenwich"}],
-                    "quotable_excerpt": "Vladimir demanded an attack upon the Greenwich Observatory itself"
+                    "quotable_excerpt": "Vladimir demanded an attack upon the Greenwich Observatory itself",
+                    "enrichment_depth": "extracted"
                 }}
             ]
         });

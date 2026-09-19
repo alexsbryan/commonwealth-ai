@@ -12,7 +12,7 @@
 //! Asking the daemon works only once there IS one, and on a first run there
 //! is not: the sidecar exits 1 with no config off a TTY
 //! (`daemon_cmd/mod.rs`), refuses a config with no `[models]`
-//! (`daemon_cmd/build/inference.rs`), and the app reaches it only after the
+//! (`sovereign-daemon/src/build/inference.rs`), and the app reaches it only after the
 //! wizard has written config (`serving_host::ensure_reachable`). So first run
 //! SPAWNS the sidecar's own `setup` verb — `--plan --json` to render the
 //! screens, `--yes --json` to run them — and a spawn links nothing.

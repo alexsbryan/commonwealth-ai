@@ -7,7 +7,7 @@
 //! and drove it inside the app — a second in-process copy of a
 //! long-running model loop beside the CLI verb's, with the daemon serving
 //! no research route. The loop turns on the daemon now
-//! (`sovereign-mesh/src/research_http.rs`), which also owns the run-dir
+//! (`sovereign-daemon/src/research_http.rs`), which also owns the run-dir
 //! readers this module carried (`live.rs`, `report.rs`, `runs.rs` — moved
 //! down whole). What is left here:
 //!

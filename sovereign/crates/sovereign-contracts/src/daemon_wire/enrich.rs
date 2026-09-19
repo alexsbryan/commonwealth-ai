@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Wire shapes of the enrichment-store reads — `GET /internal/corpus/enriched`
 //! and `GET /internal/corpus/{corpus}/starter-questions`
-//! (`sovereign_mesh::enrich_http`). Moved below the daemon 2026-09-11
+//! (`sovereign_daemon::enrich_http`). Moved below the daemon 2026-09-11
 //! (thin-desktop order): the desktop read the enrichment store's directory
 //! tree and folded atoms itself to produce these, which meant a thin client
 //! linked `sovereign-enrichment-catalog` and the knowledge engine to render

@@ -9,6 +9,7 @@ mod ingest;
 mod ingest_factories;
 mod ingest_helpers;
 pub(crate) mod ingest_prebuilt;
+pub mod pass;
 pub(crate) mod yield_gate;
 
 pub mod reindex;
@@ -320,6 +321,15 @@ pub struct CorpusEngine {
     /// against the map; the per-path inner `tokio::sync::Mutex` is what
     /// the ingest holds across its many awaits.
     partition_locks: Arc<std::sync::Mutex<HashMap<PathBuf, Arc<tokio::sync::Mutex<()>>>>>,
+    /// The enrichment-pass registry: the one decider for `[enrichment] type`
+    /// (§10.6). Injected at construction by whoever assembles the engine
+    /// (DE "Direction: Understanding reads Ingest and Retrieval, never the
+    /// reverse": "the engine receives the registry at construction from
+    /// whoever assembles it"). The `builtin()` default in
+    /// [`CorpusEngine::new`] is TEMPORARY — it is the inline assembly this
+    /// field exists to remove; the move row (`dm-pass-impls-move`) flips it
+    /// to `new()` once every assembler injects.
+    enrichment_passes: crate::engine::pass::EnrichmentPassRegistry,
 }
 
 /// Returns the raw ZIP entry indices (in TOC order) that represent real
@@ -413,6 +423,9 @@ impl CorpusEngine {
             yield_hook: std::sync::RwLock::new(None),
             foreground_signal: std::sync::RwLock::new(None),
             partition_locks: Arc::new(std::sync::Mutex::new(HashMap::new())),
+            // TEMPORARY: the built-in assembly, until every assembler injects
+            // through `with_enrichment_passes` (`dm-pass-impls-move`).
+            enrichment_passes: crate::enrichment::pass::EnrichmentPassRegistry::builtin(),
         }
     }
 
@@ -459,6 +472,24 @@ impl CorpusEngine {
     pub fn set_yield_hook(&self, hook: Arc<dyn crate::YieldHook>) {
         let mut guard = self.yield_hook.write().expect("yield_hook RwLock poisoned");
         *guard = Some(hook);
+    }
+
+    /// Install the enrichment-pass registry this engine resolves
+    /// `[enrichment] type` against. Returns `self` for builder chaining
+    /// alongside `with_inference_fn` etc. The assembler that owns the
+    /// built-in passes calls this; until every assembler does,
+    /// [`CorpusEngine::new`] installs `builtin()`.
+    pub fn with_enrichment_passes(
+        mut self,
+        registry: crate::engine::pass::EnrichmentPassRegistry,
+    ) -> Self {
+        self.enrichment_passes = registry;
+        self
+    }
+
+    /// The registry this engine resolves `[enrichment] type` against.
+    pub fn enrichment_passes(&self) -> &crate::engine::pass::EnrichmentPassRegistry {
+        &self.enrichment_passes
     }
 
     /// Snapshot of the currently-installed yield hook (cheap Arc
@@ -738,7 +769,12 @@ impl CorpusEngine {
                 Ok(Some(s)) => s,
                 _ => continue, // no prior enrichment attempt → nothing to resume
             };
-            if !conversation_enrichment_is_resumable(category, enrichment_type, &state) {
+            if !conversation_enrichment_is_resumable(
+                category,
+                enrichment_type,
+                &state,
+                self.enrichment_passes(),
+            ) {
                 if state.declared_dead() {
                     tracing::info!(
                         corpus = %corpus_id,
@@ -1287,7 +1323,7 @@ impl CorpusEngine {
     /// in-memory `MeshStore` losing the handoff blob across a
     /// daemon restart while the dispatcher's recovery path can no
     /// longer find a peer that holds it. See
-    /// `sovereign_api::auto_recover` for the recovery primitive
+    /// `sovereign_grants::auto_recover` for the recovery primitive
     /// that consumes this.
     ///
     /// Excludes:
@@ -2852,7 +2888,7 @@ impl CorpusEngine {
     /// freshness disclosure can surface it to the user.
     ///
     /// Conservative: only artifact-backed types are checked (via
-    /// [`crate::enrichment::pass::EnrichmentPass::declared_artifacts`]); `None`
+    /// [`crate::engine::pass::EnrichmentPass::declared_artifacts`]); `None`
     /// when enrichment is disabled, the type has no verifiable artifact, the
     /// recipe can't be loaded, or the artifact is present.
     pub async fn enrichment_drift(&self, corpus_id: &str) -> Option<String> {
@@ -2861,7 +2897,8 @@ impl CorpusEngine {
         if !enrichment.enabled {
             return None;
         }
-        let rels = crate::enrichment::pass::EnrichmentPassRegistry::builtin()
+        let rels = self
+            .enrichment_passes()
             .get(&enrichment.enrichment_type)?
             .declared_artifacts();
         if rels.is_empty() {
@@ -3072,7 +3109,7 @@ pub(crate) fn normalize_content(s: &str) -> String {
 /// Selection rule for [`CorpusEngine::resume_interrupted_conversation_enrichment`].
 /// Pure so the boot-resume corpus filter is unit-testable without a wired
 /// engine: re-kick only NON-folder-shaped corpora whose pass says
-/// [`resumable_at_boot`](crate::enrichment::pass::EnrichmentPass::resumable_at_boot)
+/// [`resumable_at_boot`](crate::engine::pass::EnrichmentPass::resumable_at_boot)
 /// (today: `tiered`) and whose enrichment state is a resumable interruption. Folder/vault corpora are
 /// handled by `LocalCorpusManager::resume_interrupted_enrichment`; a clean
 /// `Complete` needs nothing; a deliberate `Failed` is never auto-retried
@@ -3081,9 +3118,10 @@ fn conversation_enrichment_is_resumable(
     category: &str,
     enrichment_type: Option<&str>,
     state: &crate::enrichment::state::EnrichmentState,
+    passes: &crate::engine::pass::EnrichmentPassRegistry,
 ) -> bool {
     enrichment_type
-        .and_then(|t| crate::enrichment::pass::EnrichmentPassRegistry::builtin().get(t))
+        .and_then(|t| passes.get(t))
         .is_some_and(|p| p.resumable_at_boot())
         && !matches!(category, "vault" | "watched_folder")
         && state.phase.is_resumable_interruption()
@@ -3115,7 +3153,9 @@ mod tests {
             s.phase = phase;
             s
         };
-        let resumable = |cat, ty, phase| conversation_enrichment_is_resumable(cat, ty, &st(phase));
+        let passes = crate::enrichment::pass::EnrichmentPassRegistry::builtin();
+        let resumable =
+            |cat, ty, phase| conversation_enrichment_is_resumable(cat, ty, &st(phase), &passes);
 
         // Re-kick: conversation-shaped tiered corpora left mid-run.
         assert!(resumable("conversation", Some("tiered"), Starting));
@@ -3153,7 +3193,8 @@ mod tests {
         assert!(!conversation_enrichment_is_resumable(
             "conversation",
             Some("tiered"),
-            &errored
+            &errored,
+            &passes,
         ));
     }
 

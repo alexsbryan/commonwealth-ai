@@ -89,7 +89,7 @@ pub async fn run(args: &[String]) -> i32 {
                 continue;
             }
         };
-        let atoms_count = atoms_file.atoms.len();
+        let atoms_count = atoms_file.atoms().len();
 
         let (sidecar_status, doc_count) = match doc_to_atoms::read(&atlas_dir) {
             Ok(Some(f)) => ("present", f.len()),
@@ -99,7 +99,7 @@ pub async fn run(args: &[String]) -> i32 {
 
         let stability = read_corpus_stability(&corpus_path).unwrap_or_else(|| "—".into());
 
-        let (inv_pct, arg_pct, trc_pct) = articulation_histogram(&atoms_file.atoms);
+        let (inv_pct, arg_pct, trc_pct) = articulation_histogram(&atoms_file.atoms());
 
         println!(
             "{:<32} {:>8} {:>6} {:>10} {:>8.1}% {:>8.1}% {:>8.1}% {:>10}",

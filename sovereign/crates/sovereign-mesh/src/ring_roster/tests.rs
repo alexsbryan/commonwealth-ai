@@ -8,15 +8,15 @@ use commonwealth_rail::{Person, RingSigner, SigningKey};
 
 use super::MeshRoster;
 
-pub(crate) fn key(seed: u8) -> SigningKey {
+pub fn key(seed: u8) -> SigningKey {
     SigningKey::from_bytes(&[seed; 32])
 }
 
-pub(crate) fn pubkey_of(k: &SigningKey) -> NodePubkey {
+pub fn pubkey_of(k: &SigningKey) -> NodePubkey {
     commonwealth_transport::identity::node_pubkey(k)
 }
 
-pub(crate) fn member(node_id: NodeId, name: &str, pubkey: Option<NodePubkey>) -> MemberRecord {
+pub fn member(node_id: NodeId, name: &str, pubkey: Option<NodePubkey>) -> MemberRecord {
     MemberRecord {
         node_id,
         name: name.to_string(),
@@ -56,7 +56,7 @@ pub(crate) fn member(node_id: NodeId, name: &str, pubkey: Option<NodePubkey>) ->
     }
 }
 
-pub(crate) fn mesh_of(members: Vec<MemberRecord>) -> Mesh {
+pub fn mesh_of(members: Vec<MemberRecord>) -> Mesh {
     Mesh {
         id: MeshId::generate(),
         name: "test".into(),

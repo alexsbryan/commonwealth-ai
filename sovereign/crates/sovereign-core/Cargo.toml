@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-oicp-types = { path = "../../../oicp-types" }
+oicp-types = { workspace = true }
 # The daemon↔package contract (error, traits, registry, tool_result_cache,
 # setup_config, types) was carved out here; sovereign-core re-exports every
 # item at its historical path so importers are unaffected.
@@ -14,6 +14,10 @@ sovereign-contracts = { workspace = true }
 # rather than re-declaring the same four variants and the same wire form
 # (noun-convergence rung nc-10-judgement). Layer 0: this edge points DOWN.
 kernel-types = { workspace = true }
+# The Tier-0 wall-clock leaf. `src/time.rs` was a byte-identical twin of
+# `sovereign_time`; it is now a re-export so there is ONE implementation
+# (ARCH principle 8, domains row dm-time-reexport).
+sovereign-time = { workspace = true }
 # `treesitter` feature dropped 2026-05-22: sovereign-core's
 # corpus-engine usages (FeatureStore, NoteStore, EmbedFn, etc) are
 # not treesitter-gated. The only "ScipGraph" / "symbol_lookup"
@@ -21,7 +25,7 @@ kernel-types = { workspace = true }
 # no source-level dependency on the gated APIs.
 corpus-engine = { workspace = true }
 # The atlas vocabulary leaf — `AtomsFile` for the evidence loop's gazetteer.
-corpus-engine-vocab = { workspace = true }
+understanding-vocab = { workspace = true }
 # `LaneSources::meta_atlas` is a CELL, not a value: the desktop fires
 # `backend-ready` and warms the ~900MB index in the background, then fills it
 # in an already-shared `Arc<Runtime>`. One storage, lock-free snapshot per turn.
@@ -78,6 +82,7 @@ oicp-client = { workspace = true }
 pdf-extract = "0.7"
 # Staging file for the PDF leg — the extractor takes a path, not bytes.
 tempfile = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
 tokio = { workspace = true }
@@ -87,6 +92,10 @@ tokio = { workspace = true }
 tracing-subscriber = { workspace = true }
 sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true }
+# The canonical middleware test fixtures, off by default on the leaf; the
+# `answering::tool_injector` test module names them through
+# `crate::middleware::fixtures`.
+sovereign-contracts = { workspace = true, features = ["test-fixtures"] }
 
 [lints]
 workspace = true

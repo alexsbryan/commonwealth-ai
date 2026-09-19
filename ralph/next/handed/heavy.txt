@@ -1,0 +1,8 @@
+# At most ONE of these per wave. LANE rows only — scripts/ralph.py:275-276 skips
+# every `REVIEW-` id in pick_wave, so listing one here constrains nothing (three
+# of the four entries here were REVIEW- rows until round 2). Each of these
+# cold-builds its own worktree target: .ralph/wt/<unit> has no target/ and
+# nothing sets CARGO_TARGET_DIR.
+hd-2-seal-core
+hd-2-seal-tests
+hd-3-atlas-guard

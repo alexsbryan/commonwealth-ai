@@ -154,7 +154,7 @@ pub struct AppState {
     // FULL `CorpusEngine` over `~/.svrnmesh/{recipes,indexes}` — the
     // daemon's own root, opened a second time by a client, with every
     // `.with_*` in its builder chain paired one-for-one against
-    // `sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs:276-296`. Its last
+    // `sovereign-daemon/src/bootstrap.rs:276-296`. Its last
     // reader was the recipe harness's rung-6 verify, which is
     // `POST /internal/corpus/recipes/harness` now; the corpus pane reads
     // `GET /internal/corpus/catalog` and has since 2a9a9e91e.
@@ -480,7 +480,7 @@ pub async fn bootstrap_with_progress(
     //
     // What used to stand here was the split that in-process hosting needed: a
     // `raw_inference` for peers POSTing `/v1/chat/completions` at our own
-    // `:9741`, and a `MeshInferenceProvider` wrapper routing THIS user's
+    // `:9741`, and a `InferenceRouter` wrapper routing THIS user's
     // Slow-slot work to a beefier peer. Both belonged to the daemon this
     // process was; it is no longer one, and peer routing is served by the
     // daemon at the other end (svt-3).
@@ -521,7 +521,7 @@ pub async fn bootstrap_with_progress(
     // it. The recipe went at svt-3b; the engine goes here (svt-6), and it is
     // the same finding both times — the daemon builds the identical thing
     // over the identical data root. `state.rs:622-645` and
-    // `sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs:276-296` paired every
+    // `sovereign-daemon/src/bootstrap.rs:276-296` paired every
     // `.with_*`: the same recipes dir, the same indexes dir, the same
     // embedding model name, the same tiered provider, the same GLiNER
     // extractor, the same `sec_edgar` acquirer.
@@ -563,7 +563,7 @@ pub async fn bootstrap_with_progress(
     // The lazy canonical-fingerprint stamp stood here and is GONE (svt-6).
     // Its own comment said it "mirrors the daemon-mode bootstrap", and it
     // did, exactly: `bootstrap::spawn_lazy_stamp_fingerprints`
-    // (`sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs:1658`, called from
+    // (`sovereign-daemon/src/bootstrap.rs:1658`, called from
     // `daemon_cmd/mod.rs:872`) runs the same `lazy_stamp_legacy_fingerprints`
     // over the same `~/.svrnmesh/indexes` root, supervised. Two processes
     // racing one idempotent pass is not a second answer, it is a second
@@ -598,7 +598,7 @@ pub async fn bootstrap_with_progress(
     // `mark_vector_index_built` when LanceDB reports a complete index the
     // meta had not recorded — and its ONE reader in the workspace is
     // `corpus_catalog_http::catalog`, which prefers exactly that meta field
-    // (`sovereign-mesh/src/corpus_catalog_http.rs:420-427`). Sweep and reader
+    // (`sovereign-daemon/src/corpus_catalog_http.rs:420-427`). Sweep and reader
     // now run in one process over one engine.
     //
     // It was MOVED, not deleted, and the difference is user-visible: with no

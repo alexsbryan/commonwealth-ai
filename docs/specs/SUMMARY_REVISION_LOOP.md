@@ -74,7 +74,7 @@ flowchart TD
   U["User in Library / ConvDetail.svelte<br/>sees a wrong summary block"] -->|"⚑ wrong? + optional 'what's wrong' hint"| API
   API["api.ts flagSummaryCorrection(corpusId, convUuid, originalSummary, hint)"] --> TAURI
   TAURI["Tauri cmd enrich_flag_correction<br/>src-tauri/src/local_corpus_commands.rs"] -->|"POST /internal/corpus/{id}/enrich/correct"| ROUTE
-  ROUTE["daemon route correct_note_handler<br/>sovereign-mesh/src/corpus_watch_http.rs"] --> LEDGER
+  ROUTE["daemon route correct_note_handler<br/>sovereign-daemon/src/corpus_watch_http.rs"] --> LEDGER
   LEDGER[("conv_summary_corrections<br/>ledger: status=pending")] --> MGR
   MGR["LocalCorpusManager::reenrich_note_with_correction(corpus_id, conv_uuid)"] --> RESET
   RESET["RaptorCheckpointHandle::reset()<br/>defeat content-hash short-circuit"] --> RE
@@ -193,7 +193,7 @@ append-only audit table; v1 keeps live state only, matching the work-atlas
    - **Daemon route** `POST /internal/corpus/{id}/enrich/correct` with body
      `{ conv_uuid, correction_hint, original_summary, flagged_node_id }` →
      `correct_note_handler`, next to `reset_enrichment_state`
-     (`sovereign-mesh/src/corpus_watch_http.rs:1306`). Plus
+     (`sovereign-daemon/src/corpus_watch_http.rs:1306`). Plus
      `GET /internal/corpus/{id}/enrich/corrections` (list, for the review view).
    - **Tauri command** `enrich_flag_correction` in
      `src-tauri/src/local_corpus_commands.rs` (POSTs the route, like

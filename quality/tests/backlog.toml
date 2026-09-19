@@ -500,7 +500,7 @@ found = "2026-08-27"
 class = "inert-guard"
 tier = 1
 surface = "rust-functional"
-target = "sovereign-mesh/src/daemon.rs"
+target = "sovereign-daemon/src/daemon.rs"
 failure = """The guard that was supposed to stop rotate from partitioning the
 mesh SHIPPED INERT — the second half of the same bug as ME-01. It was present,
 it was unit-tested, and in the running system it could not fire."""
@@ -554,7 +554,7 @@ found = "2026-08-26"
 class = "dark-capability"
 tier = 1
 surface = "rust-functional"
-target = "sovereign-mesh/src/auto_ingest.rs"
+target = "sovereign-daemon/src/auto_ingest.rs"
 failure = """PEER-ASSISTED INGEST HANDOFF WAS DARK FOR FIVE WEEKS AND THE
 CONTROL PLANE ABOVE IT KEPT WORKING. Commit `ec7ca66c` ('feat: fim',
 2026-07-21) deleted three lines; the handoff stopped happening and every
@@ -590,7 +590,7 @@ found = "2026-08-27"
 class = "config-lie"
 tier = 1
 surface = "cli-journey"
-target = "sovereign-mesh/src/daemon.rs::start_daemon"
+target = "sovereign-daemon/src/daemon.rs::start_daemon"
 failure = """`[daemon] client_bind` IS NOT WHAT THE DAEMON BOUND. An encrypted
 mesh forces the client listener back to loopback, silently as far as the config
 is concerned. The operator reads their own config and concludes the listener is
@@ -608,7 +608,7 @@ found = "2026-08-23"
 class = "silent-substitute"
 tier = 1
 surface = "rust-unit"
-target = "sovereign-mesh/src/admin_http.rs::ConfigDiff::diff"
+target = "sovereign-daemon/src/admin_http.rs::ConfigDiff::diff"
 failure = """DAEMON HOT-RELOAD DROPS EXTRA SLOTS. `ConfigDiff::diff` compares
 primary and fast and does not see `models.extra`, so a reload silently unloads
 extra slots. The note is explicit that the fix is NOT to add `models.extra` to
@@ -1315,7 +1315,7 @@ found = "2026-08-26"
 class = "dark-capability"
 tier = 1
 surface = "rust-unit"
-target = "sovereign-mesh/src/auto_ingest.rs"
+target = "sovereign-daemon/src/auto_ingest.rs"
 failure = """The ME-05 handoff was dark for five weeks because three deleted
 lines had no test naming them. The generalisable half: a capability whose only
 construction site is its own test module is not wired, and nothing reports

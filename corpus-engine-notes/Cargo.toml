@@ -24,6 +24,16 @@ description = "NoteStore + project_docs index + notes ↔ alignment-corpus sync.
 [dependencies]
 # Shared corpus-engine-subtree leaf: canonical wall-clock helpers (time module).
 corpus-engine-yield = { workspace = true }
+# The middleware seam (`Middleware`, `PipelineContext`, `MiddlewareSession`,
+# `notes_db_path`) — `decision_extractor` implements the trait. `sovereign-
+# contracts` is the knowledge layer's one sanctioned sovereign edge
+# (`[[forbid]] corpus-engine* -> sovereign-*`, `except = ["sovereign-contracts"]`,
+# quality/ARCH_LAYERS.toml:358-362), landed by domains `dm-decision-extractor-move`.
+sovereign-contracts = { workspace = true }
+# The wire vocabulary `decision_extractor` reads (`ChatCompletionRequest`,
+# `ChatMessage`), a shared leaf like sovereign-contracts.
+oicp-types = { workspace = true }
+async-trait = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -33,6 +43,7 @@ chrono = { workspace = true }
 uuid = { workspace = true }
 sha2 = { workspace = true }
 rusqlite = { version = "0.35", features = ["bundled"] }
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 # NB: NO dep on `corpus-engine`. notes_sync (which is the only
 # bridge between this crate and corpus-engine's ExtractedDoc) lives
@@ -43,6 +54,9 @@ rusqlite = { version = "0.35", features = ["bundled"] }
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
 tempfile = "3"
+# The canonical middleware test fixtures (`middleware::fixtures`), off by
+# default on the leaf; `decision_extractor`'s test module names them directly.
+sovereign-contracts = { workspace = true, features = ["test-fixtures"] }
 # Same version + features as the dependency above, so this reuses the
 # compiled artifact rather than building a second copy. Needed by
 # `tests/red_baseline_cross_model_notes.rs`, which asserts on what

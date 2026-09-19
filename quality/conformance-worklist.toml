@@ -45,7 +45,7 @@
 # So the mesh CLAIM is unproven in both directions, and the honest statement is
 # that nothing about mesh coverage is known until sabotage.py adjudicates with
 # the fixed instrument. What IS established: the DST invariant pack
-# (sovereign-mesh/src/dst.rs) has six invariants each already carrying a
+# (sovereign-mesh/tests/main/dst.rs) has six invariants each already carrying a
 # falsifier test. Of the ~12 FE clauses previously mapped to them, five were
 # word-collisions on "split" (FE-60 is replay scorer-vs-policy agreement;
 # FE-72, FE-135, FE-86, FE-23 likewise unrelated). The defensible mappings are

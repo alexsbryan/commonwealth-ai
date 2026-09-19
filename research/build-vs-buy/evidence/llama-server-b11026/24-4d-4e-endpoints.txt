@@ -1,0 +1,43 @@
+### clearly malformed GBNF
+{"error":{"code":400,"message":"Failed to initialize samplers: failed to parse grammar","type":"invalid_request_error"}} [http=400]
+### invalid json_schema type
+{"error":{"code":400,"message":"Unable to generate parser for this template. Automatic parser generation failed: JSON schema error at #: unrecognized type nonsense","type":"invalid_request_error"}} [http=400]
+### 4d /v1/responses more tokens
+{"status":"completed","output_types":["reasoning","message"],"message_text":["hello"],"usage":{"input_tokens":16,"output_tokens":105,"total_tokens":121,"input_tokens_details":{"cached_tokens":12}}}
+### 4e /tokenize
+{"tokens":[{"id":9419,"piece":"Hello"},{"id":1814,"piece":" world"},{"id":11,"piece":","},{"id":90448,"piece":" llama"},{"id":0,"piece":"!"}]}
+### 4e /detokenize
+{"content":"Hello world, kvinna!"}
+### 4e /props (keys + selected)
+{"keys":["bos_token","build_info","chat_template","chat_template_caps","cors_proxy_enabled","default_generation_settings","endpoint_metrics","endpoint_props","endpoint_slots","eos_token","is_sleeping","media_marker","modalities","model_alias","model_ftype","model_path","total_slots","ui","ui_settings"],"total_slots":2,"model_path":"~/.svrnmesh/models/Qwen3.5-2B.Q6_K.gguf","build_info":"b11026-b49650adb","modalities":{"vision":false,"video":false,"audio":false},"n_ctx":4096,"is_sleeping":false,"webui":null}
+### 4e /slots
+[{"id":0,"n_ctx":4096,"speculative":false,"is_processing":false,"keys":["id","id_task","is_processing","n_ctx","n_prompt_tokens","n_prompt_tokens_cache","n_prompt_tokens_processed","next_token","params","speculative"]},{"id":1,"n_ctx":4096,"speculative":false,"is_processing":false,"keys":["id","id_task","is_processing","n_ctx","n_prompt_tokens","n_prompt_tokens_cache","n_prompt_tokens_processed","next_token","params","speculative"]}]
+### 4e /metrics
+llamacpp:prompt_tokens_total 50
+llamacpp:prompt_tokens_cached_total 12
+llamacpp:prompt_seconds_total 0.179261
+llamacpp:tokens_predicted_total 150
+llamacpp:tokens_predicted_seconds_total 1.13555
+llamacpp:n_decode_total 154
+llamacpp:n_tokens_max 120
+llamacpp:spec_decode_num_draft_tokens_total 0
+llamacpp:spec_decode_num_accepted_tokens_total 0
+llamacpp:spec_decode_num_drafts_total 0
+llamacpp:prompt_tokens_seconds 278.923
+llamacpp:predicted_tokens_seconds 127.692
+llamacpp:requests_processing 0
+llamacpp:requests_deferred 0
+llamacpp:n_busy_slots_per_decode 1
+### 4e /v1/models
+{"models":[{"name":"~/.svrnmesh/models/Qwen3.5-2B.Q6_K.gguf","model":"~/.svrnmesh/models/Qwen3.5-2B.Q6_K.gguf","modified_at":"","size":"","digest":"","type":"model","description":"","tags":[""],"capabilities":["completion"],"parameters":"","details":{"parent_model":"","format":"gguf","family":"","families":[""],"parameter_size":"","quantization_level":""}}],"object":"list","data":[{"id":"~/.svrnmesh/models/Qwen3.5-2B.Q6_K.gguf","aliases":["~/.svrnmesh/models/Qwen3.5-2B.Q6_K.gguf"],"tags":[],"object":"model","created":1789662640,"owned_by":"llamacpp","meta":{"vocab_type":true,"n_vocab":248320,"n_ctx":4096,"n_ctx_train":262144,"n_embd":2048,"n_params":1881825088,"size":1545429248,"ftype":"Q6_K"}}]}
+### slot save
+{"id_slot":0,"filename":"slot0.bin","n_saved":42,"n_written":20719388,"timings":{"save_ms":11.416}} [http=200]
+### slot restore
+{"id_slot":0,"filename":"slot0.bin","n_restored":42,"n_read":20719388,"timings":{"restore_ms":2.403}} [http=200]
+### slot erase
+{"id_slot":0,"n_erased":42} [http=200]
+total 40472
+drwxr-xr-x@  3 user  wheel        96 Sep 17 09:30 .
+drwxr-xr-x@ 29 user  wheel       928 Sep 17 09:30 ..
+-rw-r--r--@  1 user  wheel  20719388 Sep 17 09:30 slot0.bin
+{"content":"Hello world, llama!"}

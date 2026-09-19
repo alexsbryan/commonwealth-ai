@@ -725,7 +725,7 @@ pub async fn build_and_write_store(
     let edges = super::read_atlas_edges(atlas_dir)
         .map(|f| f.edges)
         .unwrap_or_default();
-    write_store(atlas_dir, corpus_id, &atoms.atoms, &edges).await
+    write_store(atlas_dir, corpus_id, &atoms.atoms(), &edges).await
 }
 
 /// Sync bridge for the disk-reading entry — runs the async build on a dedicated

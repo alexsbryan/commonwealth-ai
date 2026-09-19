@@ -1,0 +1,14 @@
+unit: dm-daemon-mesh-jobs
+commits: 77000cdbd (the move), 296c1be35 (rustfmt the repointed files)
+what: sovereign-mesh's `jobs` family (12 files / 5,926 lines — auto_ingest.rs +
+  auto_ingest/heartbeat_verdict{,/tests}.rs, auto_resume.rs, ingest_executor.rs
+  + ingest_executor/tests.rs, watched_folder_setup.rs, watched_folder_runtime.rs,
+  job_registry.rs, supervised_task.rs, work_donor.rs + work_donor/tests.rs)
+  moved to sovereign-daemon per §3a. No shims: `[[forbid]] sovereign-mesh ->
+  sovereign-daemon` (quality/ARCH_LAYERS.toml:749-752, no except) closes the shim
+  direction, so every consumer repointed in the same commit. daemon_services.rs
+  rode dm-daemon-mesh-edge (it is in the SCC). Registry/baseline path re-keys
+  (DT x12, oversized.txt, corpus_layout.txt) and SYSTEM_OVERVIEW §2 updated.
+checks: CLEAN exit=0 (19G, under 50G); LINT exit=0 (44 crates, 0 errors);
+  LAYER exit=0; DOCS exit=0 (1115 cited paths resolve);
+  TEST(sovereign-daemon) exit=0 (156 pass); TEST(sovereign-mesh) exit=0 (650 pass).

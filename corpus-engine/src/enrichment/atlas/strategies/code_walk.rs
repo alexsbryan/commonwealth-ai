@@ -1784,7 +1784,7 @@ pub fn read_code_walk_visibility(atlas_dir: &Path) -> (bool, bool) {
     }
     let has_functions = crate::enrichment::atlas::read_atlas_atoms(atlas_dir)
         .map(|af| {
-            af.atoms.iter().any(|a| {
+            af.atoms().iter().any(|a| {
                 matches!(a, AtomEnvelope::Entity(e)
                     if matches!(&e.entity_type, EntityType::Other(k) if k == "function" || k == "method"))
             })

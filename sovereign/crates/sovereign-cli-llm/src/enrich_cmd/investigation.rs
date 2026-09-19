@@ -289,7 +289,7 @@ async fn cmd_build(args: &[String]) -> i32 {
             return 1;
         }
     };
-    let (_, chat, _) = client.into_closures_with_tokens();
+    let (_, chat) = client.into_closures();
 
     // ── Convert StoredChunk → ChunkInput. We hold the strings on
     //     the stack so the borrowed `&str`s in `ChunkInput` stay

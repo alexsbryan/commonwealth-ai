@@ -1,0 +1,19 @@
+REVIEW-build-articulation-vocab
+commit 2d5ffe3d8
+CLEAN exit=0 (debug target 33G, under the 50G gate)
+LINT exit=0 (scope corpus-engine-vocab, corpus-engine + 20 dependents; 0 errors)
+LAYER exit=0 (72 members, 396 internal edges; every edge down or sideways)
+TEST(corpus-engine-vocab) exit=0 pass=75 fail=0 (65 -> 75; the 10 articulation tests moved in)
+TEST(corpus-engine) exit=0 pass=2279 fail=0 (2288 -> 2279; articulation tests moved out, one stability as_str test split out)
+extra touched-crate proof: TEST(sovereign-cli-llm) exit=0 pass=1105
+what: Articulation and ArticulationVector (with their impls: ALL/as_str/dominant/weight/is_ambiguous/
+  dominant_above plus new/balanced/Default) moved to corpus-engine-vocab/src/articulation.rs;
+  corpus-engine re-exports both at the historical crate::stream_axes path, so every consumer
+  (meta_atlas/{builder,classifier,index,bridge/*}.rs, sovereign-cli-llm atlas_cmd/stats.rs:14 and
+  meta_atlas_cmd.rs:23, sovereign-core retrieval/boosts.rs:81) keeps resolving. The per-corpus
+  stability half (Stability, StreamAxes, StreamAxesSource) and the derivation functions stayed
+  behind for REVIEW-build-stream-axes-split.
+premise: measured 2026-09-18 — the two types' only non-std import is serde (stream_axes.rs:29);
+  Articulation at :40, ArticulationVector at :120; consumers name them via crate::stream_axes::* /
+  corpus_engine::stream_axes::*. DOMAINS.toml re-keyed: stream_axes.rs 518 -> 310, new row
+  corpus-engine-vocab/src/articulation.rs (243).

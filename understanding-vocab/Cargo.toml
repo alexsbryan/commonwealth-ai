@@ -1,0 +1,45 @@
+[package]
+name = "understanding-vocab"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "The atlas vocabulary — atoms, edges, the kind taxonomy, canonical-name folding, the content-derived stable key and the read door. A leaf: serde + serde_json + kernel-types + blake3 and nothing else."
+
+# Home of `AtomsFile` / `AtomEnvelope` / the eleven atom structs, `Edge` /
+# `EdgesFile`, `EnrichmentDepth` + the eight `string_enum_with_other!` kind
+# enums, and `lookup_key`. Carved out of `corpus-engine` on 2026-09-03 (Step 2
+# of the enrichment-as-plugin plan) so that a thin host can READ what an
+# enrichment produced — `atlas/atoms.json` — without linking the 162k lines
+# that produce it. corpus-engine re-exports every item at its historical path
+# (`enrichment::atlas::{atoms,edges}`, `enrichment::pipeline::atlas::*`,
+# `atlas_canonical`), so nothing inside the monorepo had to change an import.
+#
+# The four carved sources did no file IO, took no feature gate and reached no
+# store; `read` (`read_atlas_atoms`/`read_atlas_edges`, moved here by domains
+# `dm-vocab-door-move`) is the one IO, and it is a `std::fs` read of the product
+# the vocabulary already describes. `kernel-types` is here for ONE call —
+# `ContentHash::of_str` in `AtomId::from_essence` — and is itself an empty
+# leaf, so the closure stays provably tiny. Declared as a `[[package_leaf]]` in
+# `quality/ARCH_LAYERS.toml`; boundary-gate keeps this comment honest.
+
+[dependencies]
+kernel-types = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+# `StableAtomKey` is hex blake3 over the atom's essence; the keys are
+# persisted (curation overlays, pin lists), so the hash is part of the format.
+blake3 = "1"
+
+[dev-dependencies]
+# The compile-fail harness for `atoms_reds` — the structural half of the
+# `AtomsFile` invariant is a claim about what a caller OUTSIDE this crate
+# cannot construct, and trybuild is the only thing that can assert it. The
+# leaf's dev surface stays liftable: trybuild is a dev-dep, so it is not part
+# of the shipped closure boundary-gate checks (`boundary_gate.rs:577`).
+# Same version as `corpus-engine`'s `evidence_reds` suite (ARCH §8.2 — one
+# version per third-party crate across the workspace).
+trybuild = "1"
+
+[lints]
+workspace = true

@@ -1,0 +1,34 @@
+{
+ "response_format.json_schema": {
+  "http": 200,
+  "content": "{\n  \"city\": \"Lisbon\",\n  \"population\": 511894,\n  \"is_capital\": true,\n  \"tags\": [\"historic\", \"coastal\", \"coastal\"\n  ]\n }",
+  "schema_valid": true,
+  "validation_error": null,
+  "error": null,
+  "finish_reason": "stop"
+ },
+ "top_level_json_schema": {
+  "http": 200,
+  "content": "{\n  \"city\": \"Lisbon\",\n  \"population\": 547743,\n  \"is_capital\": true,\n  \"tags\": [\"historic\", \"coastal\", \"coastal\"]\n}",
+  "schema_valid": true,
+  "validation_error": null,
+  "error": null,
+  "finish_reason": "stop"
+ },
+ "response_format.json_object+schema": {
+  "http": 200,
+  "content": "{\n  \"city\": \"Lisbon\",\n  \"population\": 547747,\n  \"is_capital\": true,\n  \"tags\": [\"historic\", \"coastal\", \"coastal\"]\n}",
+  "schema_valid": true,
+  "validation_error": null,
+  "error": null,
+  "finish_reason": "stop"
+ },
+ "no_constraint_control": {
+  "http": 200,
+  "content": "# Lisbon JSON Object\n\n```json\n{\n  \"city\": {\n    \"name\": \"Lisbon\",\n    \"country\": \"Portugal\",\n    \"region\": \"North Atlantic\",\n    \"coordinates\": {\n      \"latitude\": 38.7223,\n      \"longitude\": -9.1393\n    },\n    \"population\": {\n      \"total\": \"561326\",\n      \"year\": 2023,\n      \"growth_rate\": \"1.1%\"\n    },\n    \"area\": {\n      \"total_km2\": \"107.6\",\n      \"urban_km2\": \"64.3\"\n    }\n  },\n  \"geography\":",
+  "schema_valid": false,
+  "validation_error": "Expecting value: line 1 column 1 (char 0)",
+  "error": null,
+  "finish_reason": "length"
+ }
+}

@@ -29,7 +29,7 @@ use sovereign_core::setup_config::SetupConfig;
 //
 // `RegisterRequest`'s config is the OTHER direction and is where the live bug
 // was: see `build_watch_config`.
-use sovereign_mesh::corpus_watch_http::{
+use sovereign_daemon::corpus_watch_http::{
     AckResponse, ListResponse, RegisterResponse, StateResponse, StatusResponse,
 };
 use sovereign_tools::local_corpus::config::{SyncMode, WatchedFolderConfig};
@@ -880,7 +880,7 @@ mod tests {
     /// flags together.
     #[test]
     fn every_register_flag_survives_the_daemon_extractor() {
-        use sovereign_mesh::corpus_watch_http::RegisterRequest;
+        use sovereign_daemon::corpus_watch_http::RegisterRequest;
 
         let flags = RegisterFlags {
             sweep_secs: Some(300),
@@ -925,7 +925,7 @@ mod tests {
     /// broken one: it emits a `deletion_guard` object with a single member.
     #[test]
     fn a_lone_threshold_flag_still_registers() {
-        use sovereign_mesh::corpus_watch_http::RegisterRequest;
+        use sovereign_daemon::corpus_watch_http::RegisterRequest;
 
         for flags in [
             RegisterFlags {

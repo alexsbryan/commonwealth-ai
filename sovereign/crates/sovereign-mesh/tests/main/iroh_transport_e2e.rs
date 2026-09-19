@@ -26,8 +26,8 @@ use commonwealth_transport::iroh::{
     Endpoint, EndpointBuilder, IrohAcceptor, IrohTransport, SecretKey, ALPN,
 };
 use commonwealth_transport::{PeerContact, PeerTransport, TrafficClass};
-use sovereign_api::server::internal_router;
-use sovereign_api::state::AppState;
+use sovereign_daemon::server::internal_router;
+use sovereign_daemon::state::AppState;
 
 async fn bind_iroh_endpoint(seed: u8) -> Endpoint {
     // Builder::empty(): no relays, no address-lookup services —
@@ -170,7 +170,7 @@ async fn gossip_round_trips_over_iroh_dialed_by_pubkey() {
 
     // And the founder's live AppState actually merged it — this was
     // a real anti-entropy round, not an echo.
-    let live = founder_state.inner.mesh.read().await;
+    let live = founder_state.inner.fabric.mesh.read().await;
     let merged = live
         .members
         .values()

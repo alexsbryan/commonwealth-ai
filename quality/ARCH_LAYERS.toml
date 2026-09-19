@@ -70,7 +70,7 @@ backstage = [
 #     `sovereign-server` and `sovereign-cli-daemon`. It backs two SHIPPED MCP
 #     tools — `tdd_solve` and `tdd_bdd_cycle`, listed in `tools/list`
 #     (`routes_mcp.rs::tdd_tool_descriptors`) — and the `solve` verb's daemon
-#     route (daemon_cmd/solve_http.rs). The product does not ship without those.
+#     route (sovereign-daemon/src/solve_http.rs). The product does not ship without those.
 #     The distinction that decides it: a quality control measures SOVEREIGN,
 #     while this drives red-green-refactor over the USER's repo and emits their
 #     code. It is a feature about tests, not a test of the product.
@@ -101,6 +101,15 @@ name = "contract"
 crates = [
     "oicp-types",
     "kernel-types",
+    # cargo-hakari's workspace-hack (build-latency move bl-hakari, 2026-09-17):
+    # ZERO source, third-party deps only, every member depends on it so a
+    # `-p <crate>` build resolves the same third-party feature set as
+    # `--workspace`. It is layer 0 because nothing in the repo is below it and
+    # it may name no workspace crate — `cargo hakari verify` (an instrument in
+    # quality/instruments.toml) regenerates it and would surface one. On lift,
+    # the line is dropped or patched to an empty stub (hakari's documented
+    # publish path), which is why it is also a [[package_leaf]] below.
+    "workspace-hack",
     "sovereign-contracts",
     "oicp-client",
     # The CLIENT half of the turn protocol, here for the same reason
@@ -126,6 +135,12 @@ crates = [
     # back. See the two [[forbid]] blocks below — the layer entry alone would
     # be a green gate enforcing nothing (§5.1).
     "serving-policy",
+    # The serving package's ranker (SERVING_BOUNDARY.md "The two tiers"). Here
+    # for the same reason serving-policy is: rule 1 lets it name `oicp-types`
+    # and nothing else in this repo, so any layer above this one would put a
+    # cross-family edge back. A stub until the scheduler half of sovereign-mesh
+    # moves in.
+    "sovereign-scheduler",
     # The append-only journal. Tier-0 for a sharper reason than the others:
     # `OpId` is content-addressed AND GOSSIPED, so a second derivation is a
     # wire break with nothing red anywhere (§10.6, §7.5). Every crate that
@@ -144,7 +159,39 @@ crates = [
 # here (noun-convergence rung 2).
 [[layer]]
 name = "knowledge"
-crates = ["corpus-engine", "corpus-engine-*"]
+crates = ["corpus-engine", "corpus-engine-*",
+    # The code-intel package's next-edit crate (domains
+    # REVIEW-build-next-edit-crate). It sits in the knowledge layer beside its
+    # package siblings — the `corpus-engine-*` carve-outs — because it is a
+    # package crate of the same family and reaches corpus-engine-scip. The
+    # package's own boundary (its crates + the shared leaves) is what keeps it
+    # liftable; the layer entry is what keeps the edge direction honest.
+    "code-next-edit",
+    # The code-intel package's deterministic fact base (docs/CODE_TOOLING_BOUNDARY.md
+    # §2 Phase 2; domains REVIEW-build-code-facts). `facts`/`facts_check`/`facts_store`
+    # moved out of corpus-engine, which re-exports them at their historical paths.
+    "code-facts",
+    # The retrieval read-port leaf (domains REVIEW-build-index-read-port).
+    # CorpusIndex, IndexInfo, the persisted settings and the search/evidence
+    # surface — carved out of corpus-engine so a thin host can read an index
+    # without linking the engine. A `knowledge` crate beside the
+    # `corpus-engine-*` carve-outs it leaves.
+    "corpus-index",
+    # The atlas vocabulary, renamed from `corpus-engine-vocab` by domains
+    # `dm-understanding-vocab-rename` (DE "The shape"). It no longer matches
+    # the `corpus-engine-*` glob above and must be named: Understanding's
+    # published language, a `knowledge` leaf beside the `corpus-engine-*`
+    # carve-outs it left.
+    "understanding-vocab",
+    # Understanding's two carved tiers (DE "Step 7, redrawn", "The shape";
+    # domains REVIEW-build-understanding-tier-crates). `understanding-atlas` is
+    # the pure arithmetic over the published language, `understanding-host` the
+    # ports and the knot. Both sit beside the `corpus-engine-*` carve-outs they
+    # will receive files from; the `[[package]] understanding` block below is
+    # what keeps their edges honest. Stubs until the classification lands.
+    "understanding-atlas",
+    "understanding-host",
+]
 
 # Commonwealth mesh internals BELOW the runtime: shared mesh types + state +
 # transport + discovery + scheduling + app platform. These must stay
@@ -156,7 +203,6 @@ crates = [
     "commonwealth-state",
     "commonwealth-transport",
     "commonwealth-discovery",
-    "sovereign-serving",
     "sovereign-grants",
     "sovereign-meshapp-registry",
     # The ring rail, split out of `commonwealth-knowledge` on 2026-09-04
@@ -210,6 +256,15 @@ crates = [
     # Supervised compute-child process boundary (P1). Depends on
     # sovereign-inference (same layer) + sovereign-contracts (lower).
     "sovereign-compute",
+    # Compute's remote isolation: leasing a rented machine and running work on
+    # it (DOMAINS.md §11.2). Holds the rented-pod modules lifted out of
+    # sovereign-mesh.
+    "sovereign-pods",
+    # The serving package's ports and knot (SERVING_BOUNDARY.md "The two
+    # tiers"): peer_inference, inference_adapter, oicp_synthesis, guest_lender,
+    # pinned_worker_source, entry_endpoint, admission. A stub until the host
+    # half moves in.
+    "sovereign-serving-host",
     # GLiNER NER inference (ort/gline-rs carve-out). Depends on sovereign-core
     # + sovereign-store (same layer) + corpus-engine (lower); consumed from
     # capabilities (sovereign-tools) and hosts.
@@ -278,7 +333,15 @@ crates = [
 [[layer]]
 name = "mesh-api"
 crates = [
-    "sovereign-api",
+    # The node's host crate (DAEMON_CORE.md §4.1): assembly, the surface
+    # shells, the edge and the adapters. A stub until the host modules move in;
+    # the two [[forbid]] rows below land with it.
+    "sovereign-daemon",
+    # The daemon-to-daemon wire types both ends of an internal exchange must
+    # spell the same way (domains dm-daemon-api-edge (a)): the receiving route
+    # lives in `sovereign-daemon` and the sending loop in `sovereign-mesh`, so
+    # the shared body sits in a leaf neither makes the other's dependency.
+    "sovereign-peer-wire",
     "sovereign-mesh-test-harness",
     "sovereign-mesh",
 ]
@@ -314,20 +377,21 @@ crates = [
 # two readings binds new code: the seam is permitted, a second sovereign
 # dependency is not.
 #
-# What crosses today, census 2026-08-20. Four TYPES stopped crossing when the
+# What crosses today, census 2026-08-20, minus the descriptor const (removed
+# 2026-09-16: corpus-engine now embeds it from its own `OUT_DIR`, so the
+# re-export through the leaf is gone). Four TYPES stopped crossing when the
 # section detectors moved to `corpus-engine-sections`
 # (`nc-boundary --edge corpus-engine:sovereign`: 4 → 0). The crate dependency
-# SURVIVES, on three modules that carry no types at all — which is why the type
+# SURVIVES, on two modules that carry no types at all — which is why the type
 # census never showed them (`nc-boundary.py` selects `qualified_name LIKE '%#'`,
 # so free functions and consts are invisible to it):
 #   rebrand::svrnmesh_root                          4 sites (+2 in examples)
 #   recipe::url_template::render_template           1 site
-#   recipe::schema::RECIPE_SCHEMA_DESCRIPTOR_JSON   1 site (re-exported)
 # These stay deliberately. `svrnmesh_root` is the workspace path SSOT — 220 call
 # sites over 15 crates, and clippy `disallowed_methods = "deny"` makes
 # hand-rolling the path a build error, so it must remain ONE accessor (ARCH
-# §10.6); relocating it is its own rung. The other two are agreements the engine
-# and the recipe package must hold bit-for-bit, with no home below.
+# §10.6); relocating it is its own rung. `render_template` is an agreement the
+# engine and the recipe package must hold bit-for-bit, with no home below.
 [[forbid]]
 from = "corpus-engine*"
 to = "sovereign-*"
@@ -376,8 +440,10 @@ reason = "the OICP client meets the runtime at the contracts seam only; the infe
 # commonwealth-core, and `fair_sched` was the ONLY reason sovereign-inference
 # and sovereign-server depended on the mesh foundation at all. A dep in EITHER
 # direction here restores exactly the edges the move deleted, so both are
-# forbidden with no `except`. Its `[dependencies]` is serde + toml and nothing
-# in-repo; that is the contract, stated in its lib.rs and pinned here.
+# forbidden with no `except`. Its `[dependencies]` names only `oicp-types`,
+# the family-neutral floor, and nothing else in-repo (restated 2026-09-16 when
+# `PipelineContextConfig` moved down to `oicp-types`); that is the contract,
+# stated in its lib.rs and pinned here.
 [[forbid]]
 from = "serving-policy"
 to = "sovereign-*"
@@ -387,6 +453,45 @@ reason = "a serving-policy that names the runtime is not tier-0, and the two cro
 from = "serving-policy"
 to = "commonwealth-*"
 reason = "same rule pointing the other way — the module came OUT of commonwealth-core precisely so its runtime-tier consumers would stop reaching into the mesh foundation for it"
+
+# The serving package's rules (SERVING_BOUNDARY.md "The rules", declared with
+# the [[package]] row below by rung domains-9). They are written as separate
+# rows, one per target, because each target carries a different reason and the
+# reason is the whole value of a forbid row — a single `sovereign-*` catch-all
+# would say "no" without saying why, and rule 1 does not mean "no sovereign
+# crate": the scheduler reaches `sovereign-contracts` (a shared leaf) for
+# `InferenceProvider` and `Speed`. `forbidden_by` returns the FIRST match, so
+# these sit together and name their crates explicitly rather than leaning on a
+# broader row above.
+#
+# Rule 1 — the scheduler may name `oicp-types` and nothing else in this repo: a
+# ranker that names the mesh foundation cannot rank a candidate that is not a
+# mesh member.
+[[forbid]]
+from = "sovereign-scheduler"
+to = "commonwealth-*"
+reason = "the ranker is arithmetic over the published language and must stay liftable without either family's foundation — naming commonwealth-* is the mesh leaking back into a decision that has to rank a candidate which is not a mesh member"
+
+# Rule 2 — not `sovereign-mesh`: the edge Phase C exists to delete. It is why a
+# CLI wanting a roster inherits llama-cpp.
+[[forbid]]
+from = "sovereign-scheduler"
+to = "sovereign-mesh"
+reason = "sovereign-mesh is the edge Phase C exists to delete; a ranker that names it is why a CLI wanting a roster inherits llama-cpp (DAEMON_CORE.md §4)"
+
+# Rule 3 — not `sovereign-inference`: ranking is not executing; only the host
+# connects.
+[[forbid]]
+from = "sovereign-scheduler"
+to = "sovereign-inference"
+reason = "ranking is not executing — only the host connects, so the ranker must never name the inference stack"
+
+# Rule 4 — the host may name inference; it may NOT name `sovereign-mesh`: it
+# receives candidates through a port, never an `EmbeddedDaemon`.
+[[forbid]]
+from = "sovereign-serving-host"
+to = "sovereign-mesh"
+reason = "the host receives candidates through a port, never an EmbeddedDaemon — a sovereign-mesh dep here is the kill clause, because it would rebuild the knot the package exists to cut"
 
 # oplog was minted 2026-09-04 by moving `corpus-engine/src/oplog.rs` out. The
 # rail in commonwealth-knowledge named five of its types and took a dep on
@@ -591,11 +696,6 @@ to = "sovereign-*"
 reason = "mesh foundation must stay consumable without the agent runtime"
 
 [[forbid]]
-from = "sovereign-serving"
-to = "sovereign-*"
-reason = "must stay consumable without the agent runtime — it names NO sovereign-* crate today (measured at the domains-1 move, 2026-09-11) and this rule keeps it that way. The reason read \"mesh foundation must stay…\" until that move, when the crate left commonwealth/crates/ for sovereign/crates/; the PROPERTY is unchanged, only the family it sits in changed"
-
-[[forbid]]
 from = "sovereign-grants"
 to = "sovereign-*"
 reason = "must stay consumable without the agent runtime — it names NO sovereign-* crate today (measured at the domains-1 move, 2026-09-11) and this rule keeps it that way. The reason read \"mesh foundation must stay…\" until that move, when the crate left commonwealth/crates/ for sovereign/crates/; the PROPERTY is unchanged, only the family it sits in changed"
@@ -605,56 +705,36 @@ from = "sovereign-meshapp-registry"
 to = "sovereign-*"
 reason = "must stay consumable without the agent runtime — it names NO sovereign-* crate today (measured at the domains-1 move, 2026-09-11) and this rule keeps it that way. The reason read \"mesh foundation must stay…\" until that move, when the crate left commonwealth/crates/ for sovereign/crates/; the PROPERTY is unchanged, only the family it sits in changed"
 
-# WHAT actually crosses, so R6 has a size rather than a feeling. Census
-# 2026-08-20, `scripts/nc-boundary.py --edge commonwealth:sovereign`: 11 types /
-# 38 refs, all from `commonwealth-api` —
-#   sovereign-contracts (5, permitted by the `except` below — the declared seam)
-#     next_edit_journal.rs NextEditEpisode, JournalLine, NextEditOutcome,
-#                          NextEditOutcomeLine
-#     journal.rs           JournalStream
-#   sovereign-tools (6, grandfathered below)
-#     atlas_postinstall.rs Tier2LaunchOutcome, StructuralAtlasOutcome, TriageOutcome
-#     atlas_peer_advice.rs PeerAtlasView, PeerAtlasPullCandidate
-#     atlas_status.rs      AtlasStatusRow
-#   sovereign-atos (grandfathered below; named from the ATOS-feature middleware,
-#   which is off in default builds so the type census does not count it)
-#     session.rs           ArtifactDelta, MilestonePassEvent, SessionStore
-#     approval.rs          FeatureApproval, ApprovalSource
-# The 5 contract types are the seam working as designed. The other 6 are the
-# in-process runtime embed, and they are what R6 has to delete.
-#
-# Burn-down: 22/122 -> 16/98 (rung 2b moved the inference vocabulary to
-# oicp-types) -> 11/38 (rung 2c family A moved the tool vocabulary — Effect,
-# Scope, ToolDescriptor, Idempotency, Latency, ToolExample — to oicp-types
-# too). The `except` below stays for now, and the reason is worth stating
-# because the two halves of this rule measure different things: the `except`
-# is CRATE-level and is already inert — no commonwealth crate carries a direct
-# `sovereign-contracts` dep, so it grants nothing today. What is still live is
-# the TYPE-level reach: the next-edit journal family (rung 2c/B) names
-# sovereign-contracts types through `sovereign_core`'s re-exports, which the
-# `commonwealth-api -> sovereign-core` exception below already covers. Dropping
-# the `except` is therefore a free ratchet against a dep nobody has taken yet —
-# it belongs with the family that makes the type census zero, not with this one.
-# The mesh API's reach into the agent runtime is real, load-bearing debt —
-# the OICP-only seam is the goal state (remediation R6). Forbidden so every
-# such edge must be individually grandfathered below and burns down visibly.
-[[forbid]]
-from = "sovereign-api"
-to = "sovereign-*"
-except = ["sovereign-contracts", "sovereign-serving", "sovereign-grants", "sovereign-meshapp-registry"]
-# `except` gained sovereign-{serving,grants,meshapp-registry} at the domains-1
-# move (2026-09-11): they were `commonwealth-{inference,knowledge,app}` and left
-# `commonwealth/crates/` in the same commit as this crate. They were ALWAYS in
-# its closure and were never part of R6 — the census counts 11 types / 38 refs
-# into sovereign-{contracts,tools,atos} only. Excepting them preserves R6's
-# measurement exactly; without it the rule fires on three edges it never meant.
 
-reason = "cross-family reach — the mesh API should meet the runtime at the OICP/contracts seam (R6)"
+# The daemon crate's two rows, landing with the crate (DAEMON_CORE.md §4.1;
+# domains dm-daemon-crate). Layer ordering already forbids a lower tier
+# reaching tier 5; the rows are named because of two things no gate sees: a
+# struct in `sovereign-daemon` that carries every part and is handed to every
+# handler passes all of them while restoring `AppState` under a new name, and
+# a decider can land in the crate green. The harness row sits ABOVE its broad
+# `sovereign-mesh-test-harness -> sovereign-*` sibling so its specific reason
+# is the first match.
+[[forbid]]
+from = "sovereign-mesh"
+to = "sovereign-daemon"
+reason = "Fabric observes membership through readers, never the reverse (DAEMON_CORE.md §4.1) — a mesh dependency on the host crate rebuilds the orchestration Fabric's ownership removes"
+
+[[forbid]]
+from = "sovereign-mesh-test-harness"
+to = "sovereign-daemon"
+reason = "the harness simulates a node against the OICP/contracts seam, not the assembled host (DAEMON_CORE.md §4.1)"
 
 [[forbid]]
 from = "sovereign-mesh-test-harness"
 to = "sovereign-*"
-except = ["sovereign-contracts", "sovereign-serving", "sovereign-grants", "sovereign-meshapp-registry"]
+except = ["sovereign-contracts", "sovereign-grants", "sovereign-meshapp-registry", "sovereign-scheduler"]
+# `sovereign-scheduler` gained at HUMAN-forbid-harness-except (2026-09-17,
+# 9b0b65080): the Tier-1 simulator replays the routing records, so it names them
+# directly. `sovereign-serving-host` is deliberately ABSENT (dm-harness-except,
+# 2026-09-17): the simulator's one host reach
+# (`sovereign_serving_host::recorder::new_decision_id`, mesh_sim/mod.rs:1541) is
+# CUT by dm-mesh-sim-move rather than excepted — the simulator mints its own
+# deterministic id, and widening an `except` is operator-only (ralph/CHARTER.md).
 # TRANSLATED at the domains-2 move (2026-09-11), not deleted. The crate was
 # `commonwealth-test-harness` in `commonwealth/crates/`; it is now
 # `sovereign-mesh-test-harness` beside its only consumer. Deleting the row
@@ -663,7 +743,8 @@ except = ["sovereign-contracts", "sovereign-serving", "sovereign-grants", "sover
 # below. The PROPERTY is unchanged: a harness that simulates a mesh node
 # should meet the runtime at the OICP/contracts seam. Same treatment the three
 # `sovereign-{serving,grants,meshapp-registry}` rows above got for the same
-# reason.
+# reason. `sovereign-serving` left this list when the peg was deleted
+# (REVIEW-build-serving-empty-peg, 2026-09-15).
 reason = "cross-family reach — harness should simulate against the OICP/contracts seam (R6)"
 
 # ── Extractable packages ─────────────────────────────────────────────────────
@@ -715,13 +796,21 @@ name = "oicp-types"
 # in this crate, which is the ARCH §10.6 defect the budget exists to prevent,
 # so the edge buys a deletion rather than paying for one.
 #
-# Same justification as `corpus-engine-vocab` below (`:581-588`): kernel-types
+# Same justification as `understanding-vocab` below (`:581-588`): kernel-types
 # is itself an empty leaf, so the closure is two crates and stays that way.
 # Still enforced from above by `[[forbid]] oicp-types -> sovereign-*` — a
 # protocol crate that names the RUNTIME cannot be lifted, versioned, or
 # implemented by a third party, and that is the edge this budget is really
 # guarding.
 allow = ["kernel-types"]
+
+[[package_leaf]]
+name = "workspace-hack"
+# Generated by cargo-hakari; no source, no internal deps, and boundary-gate
+# would otherwise count every member's edge to it as a closure escape. A lifted
+# package drops the line (hakari's publish path) — see the `contract` layer
+# comment above for the rest.
+allow = []
 
 [[package_leaf]]
 name = "kernel-types"
@@ -741,13 +830,31 @@ name = "corpus-engine-sections"
 allow = []
 
 [[package_leaf]]
-name = "corpus-engine-vocab"
+name = "understanding-vocab"
 # The atlas vocabulary — atoms, edges, kind taxonomy, canonical fold. Admitted
 # 2026-09-03 (enrichment-as-plugin Step 2) so a thin host can name an atom
 # without linking corpus-engine. `kernel-types` is its ONE internal dep, for
 # `ContentHash::of_str` in `AtomId::from_essence`, and kernel-types is itself
-# an empty leaf — so the closure is two crates and stays that way.
+# an empty leaf — so the closure is two crates and stays that way. Renamed from
+# `corpus-engine-vocab` by domains `dm-understanding-vocab-rename` (DE "The
+# shape": the published language is `understanding-vocab`); the `corpus-engine-`
+# prefix was carve-out history and the crate is Understanding's, not the
+# engine's.
 allow = ["kernel-types"]
+
+[[package_leaf]]
+name = "corpus-index"
+# The retrieval read-port leaf. Admitted 2026-09-18 (domains
+# REVIEW-build-index-read-port, DE "The read-port leaf, measured again") so
+# `corpus-mcp`'s `serve` — and any other thin host — can open an index by
+# corpus id, search it and read its rows without linking `corpus-engine`: the
+# burn-down step (1) of the `corpus-mcp -> corpus-engine` exception below.
+# Its internal closure is three leaves — `kernel-types` (identity),
+# `oplog` (the error bridge) and `corpus-engine-yield` (`unix_now_u64`) — and
+# the retrieval stack it wraps (LanceDB/Tantivy/arrow/reqwest) is the surface
+# itself, not a widening a package can avoid. It carries no `build.rs` and no
+# `include_str!`, so all three filesystem rules pass.
+allow = ["kernel-types", "oplog", "corpus-engine-yield"]
 
 [[package_leaf]]
 name = "sovereign-time"
@@ -805,7 +912,7 @@ name = "oplog"
 # All 27 transitive deps (serde, serde_json, thiserror, tracing, blake3 via
 # kernel-types, itoa, memchr, once_cell, …) are already inside an admitted
 # leaf, so the real widening is the crate and nothing else. On size it is
-# mid-pack: kernel-types 16, oicp-types 20, corpus-engine-vocab 21, oplog 28,
+# mid-pack: kernel-types 16, oicp-types 20, understanding-vocab 21, oplog 28,
 # sovereign-contracts 147. All three filesystem rules pass — no `build.rs`,
 # no `include_str!`/`include_bytes!` escaping the crate root, and no runtime
 # reach-out past it.
@@ -860,6 +967,18 @@ crates = [
     "corpus-engine-notes",
     "corpus-engine-watchers",
     "corpus-engine-archaeology",
+    # The package's TENTH crate and the first §2's table does not name — the
+    # next-edit half of sovereign-api's workbench cluster (domains
+    # REVIEW-build-next-edit-crate; `quality/DOMAINS.md` §4 calls next-edit
+    # "Workbench's clearest lost child"). A stub until dm-next-edit-move lands
+    # the five pure modules; `routes_edit_predictions.rs` is a route shell and
+    # goes to sovereign-daemon instead (DAEMON_CORE.md §4.1).
+    "code-next-edit",
+    # The package's §2 `code-facts` — the deterministic tree-sitter fact base
+    # (`facts` + `facts_check` + `facts_store`), moved out of `corpus-engine` by
+    # domains REVIEW-build-code-facts (Phase 2). `corpus-engine` re-exports the
+    # three modules at their historical paths.
+    "code-facts",
 ]
 
 [[package]]
@@ -973,6 +1092,74 @@ crates = [
     "commonwealth-rails",
 ]
 
+[[package]]
+name = "serving"
+doc = "sovereign/SERVING_BOUNDARY.md"
+# The serving package — declared 2026-09-14 by rung domains-9, BEFORE the work
+# that moves code into it, for the reason the `commonwealth` block above gives:
+# no gate here can tell "the files moved" from "the boundary holds". Unlike
+# commonwealth, this one was RED the day it was declared, and that was the point
+# (ARCH §18.1). The scheduler half (seven modules, 6,559 lines) and the knot now
+# live in `sovereign-scheduler` and `sovereign-serving-host`; the peg
+# `sovereign-serving` emptied to zero at REVIEW-build-serving-empty-peg
+# (2026-09-15) — its two live modules moved to `commonwealth-state` and its
+# re-exports went to `oicp-types`/`commonwealth-core`, so the crate was deleted.
+#
+# THE TWO TIERS (SERVING_BOUNDARY.md "The two tiers"). `sovereign-scheduler` is
+# arithmetic over the published language — the ranking decision reads no clock
+# and does no I/O; `sovereign-serving-host` is the ports and the knot — it opens
+# connections and receives every candidate through a port. `serving-policy` is
+# the tier-0 leaf the admission decider already lives in (`fair_sched` left
+# commonwealth-core 2026-09-03) and it is the precedent this package copies; it
+# is a MEMBER here rather than a shared leaf, because a crate cannot be both.
+# The peg `sovereign-serving` emptied to zero at REVIEW-build-serving-empty-peg.
+#
+# The shared leaves the package reaches are the GLOBAL [[package_leaf]] set —
+# `oicp-types`, `kernel-types`, `sovereign-contracts`. "And nothing else in this
+# repo" is what the five [[forbid]] rows above make structural, per target.
+# `sovereign-compute` is Serving's local engine and is deliberately OUTSIDE this
+# closure (DOMAINS.md §11): one supervised child per slot behind the daemon's
+# provider facade, which a lift carries no need for.
+crates = [
+    "sovereign-scheduler",
+    "sovereign-serving-host",
+    "serving-policy",
+]
+
+[[package]]
+name = "understanding"
+doc = "corpus-engine/DECOMPOSITION.md"
+# The Understanding context's package (DE "Step 7, redrawn"; quality/DOMAINS.toml
+# [[context]] understanding). Declared 2026-09-18 by domains
+# REVIEW-build-understanding-tier-crates, BEFORE the work that fills it, for the
+# reason the `commonwealth` block above gives: no gate here can tell "the files
+# moved" from "the boundary holds". RED the day it is declared (ARCH §18.1): the
+# two tiers are empty stubs, so the one grandfathered edge below is STALE until
+# the host half names `corpus-engine`.
+#
+# THE TWO TIERS (DE "The shape"). `understanding-atlas` is arithmetic over the
+# published language — analysis, resolution by name, classification, the ground
+# walk, domains, ontology, reconciliation, the pipeline types and schemas, the
+# meta-atlas and traversal logic — and may name the language
+# (`understanding-vocab`, a shared leaf below), `kernel-types` and the row types
+# the `corpus-index` leaf publishes; it carries `no async fn`.
+# `understanding-host` is the ports and the knot — stores and the ANN, writers,
+# the field engine, entity extraction, the phase runner — and reaches
+# `corpus-engine`, the `corpus-index` leaf, the pure tier and the language.
+#
+# WHY A PACKAGE, NOT `corpus-mcp` GROWING. DE "This is the `corpus-mcp` package
+# growing, not a second package" reads the tiers as members of `corpus-mcp`; the
+# registry and the campaign's own note say otherwise — quality/DOMAINS.toml
+# "understanding (package, SERVING_BOUNDARY shape)", the cluster note "a
+# two-tier PACKAGE, not a crate", and quality/campaigns/domains.toml's
+# floor_basis ("corpus-mcp, which is a HOST that reads Understanding's output
+# rather than Understanding's crate"). Resolved for the registry, the campaign's
+# data; the DECISIONS entry is in ralph/DECISIONS.md 2026-09-18.
+crates = [
+    "understanding-atlas",
+    "understanding-host",
+]
+
 # ── THE THIN-SURFACE RULE — can this client BECOME what it talks to? ─────────
 #
 # sv-surface's `sv-no-daemon-management` bar, operator 2026-09-11:
@@ -1039,9 +1226,9 @@ crates = [
 #
 # What is on the list and why:
 #   the `contract` layer whole (oicp-types, kernel-types, sovereign-contracts,
-#   oicp-client, sovereign-turn-client, sovereign-time) — wire types and the
-#   clients that speak them; a surface that could not name these could not
-#   be a client at all.
+#   oicp-client, sovereign-turn-client, sovereign-time, and workspace-hack,
+#   which has no source at all) — wire types and the clients that speak them;
+#   a surface that could not name these could not be a client at all.
 #   `sovereign-tools-base` — `web::search` lives there, and web search stays
 #   IN the app on egress custody (DEFAULTS_LEDGER "`search_web` stays in the
 #   app"). The declared exception, expressed as the one runtime-layer crate a
@@ -1053,6 +1240,7 @@ may_reach = [
     "oicp-client",
     "sovereign-turn-client",
     "sovereign-time",
+    "workspace-hack",
     "sovereign-tools-base",
 ]
 doc = "quality/campaigns/sv-surface.toml §sv-no-daemon-management"
@@ -1082,7 +1270,7 @@ file = "sovereign/crates/sovereign-desktop/src-tauri/src/setup_plan.rs"
 rule = "starts"
 max = 3
 kind = "sanctioned"
-reason = "FIRST RUN, operator call 2026-09-12. The wizard spawns the sidecar's own `setup` verb — `--plan --json` to render the screens, `--yes --json` to run them — because on a first run there is no HTTP to ask: the sidecar exits 1 with no config off a TTY (`daemon_cmd/mod.rs`) and refuses a config with no `[models]` (`daemon_cmd/build/inference.rs`), measured 2026-09-12. What this starts is NOT a backend. `setup` binds no port, serves nothing, and exits; the thing this row permits is a one-shot that ends, which is the opposite of the handle-holding the bar refuses. The alternative priced against it was a daemon that boots unconfigured (a new NodeClass and a restart handshake); this links nothing and adds no ability — the app could already exec this binary (`daemon_binary::stable_daemon_binary`, the same one `ServingHost` brings up). Read it as the shape the rule permits: a user action, a process that terminates, no policy and no timer."
+reason = "FIRST RUN, operator call 2026-09-12. The wizard spawns the sidecar's own `setup` verb — `--plan --json` to render the screens, `--yes --json` to run them — because on a first run there is no HTTP to ask: the sidecar exits 1 with no config off a TTY (`daemon_cmd/mod.rs`) and refuses a config with no `[models]` (`sovereign-daemon/src/build/inference.rs`), measured 2026-09-12. What this starts is NOT a backend. `setup` binds no port, serves nothing, and exits; the thing this row permits is a one-shot that ends, which is the opposite of the handle-holding the bar refuses. The alternative priced against it was a daemon that boots unconfigured (a new NodeClass and a restart handshake); this links nothing and adds no ability — the app could already exec this binary (`daemon_binary::stable_daemon_binary`, the same one `ServingHost` brings up). Read it as the shape the rule permits: a user action, a process that terminates, no policy and no timer."
 
 [[thin_surfaces.lifecycle_allow]]
 file = "sovereign/crates/sovereign-desktop/src-tauri/src/setup_plan.rs"
@@ -1101,11 +1289,12 @@ reason = "`kickstart_daemon` — `id -u`, then `launchctl kickstart -k gui/<uid>
 
 # ── Grandfathered violations (the burn-down list) ────────────────────────────
 
-[[exception]]
-from = "sovereign-mesh-test-harness"
-to = "sovereign-api"
-reason = "R6 debt the domains-1 move EXPOSED rather than created. The harness has always depended on the API it simulates against; while both were `commonwealth-*` the edge was intra-family and no rule looked at it. `commonwealth-api` became `sovereign-api` on 2026-09-11 and the same edge is now cross-family, which is what R6 has always said it is. Nothing about the code changed — only whether a gate could see it."
-tracking = "domains-2 MOVED the harness (commonwealth/crates/commonwealth-test-harness -> sovereign/crates/sovereign-mesh-test-harness, 2026-09-11) and this row was RENAMED with it, not deleted. The removal condition written here before the move — `from` stops matching — was the wrong one: it would have retired a live grandfathering by renaming its subject, which is the debt disappearing from the burn-down without anyone paying it. The real condition is R6: this row goes when the harness stands up a simulated node against oicp-types alone and no longer names sovereign-api. `grep -rn sovereign_api sovereign/crates/sovereign-mesh-test-harness/src/` is the check."
+# `sovereign-mesh-test-harness -> sovereign-api` retired at
+# REVIEW-build-harness-oicp-seam (2026-09-17). The harness's simulated node is
+# now generic over the node state (the OICP/contracts seam) and its `src/`
+# names no host, so the edge is gone and the row above would be STALE. The
+# integration tests that assemble the real node bind `AppState` through a
+# test-only (dev) edge, which layer-gate never enforces.
 
 [[exception]]
 package = "corpus-mcp"
@@ -1125,8 +1314,45 @@ tracking = "enrichment-as-plugin follow-up (index-read leaf)"
 package = "corpus-mcp"
 from = "corpus-mcp"
 to = "corpus-engine"
-reason = "the host reads indexes through corpus-engine (`CorpusIndex::search`, `open_index_for_corpus`), and corpus-engine cannot join a liftable package yet: it carries a `build.rs` (recipe vendoring), `include_str!`s tree-sitter queries from `queries/` outside its crate root, and an optional edge to `corpus-engine-scip`. Burn-down, in order: (1) the read-only index surface the host needs — open + hybrid search over LanceDB/Tantivy, `index/search.rs` has zero enrichment references across 1,245 lines — carved into a leaf the host and the engine both reach DOWN to; (2) the tree-sitter queries moved inside the crate or behind the code-intel seam; (3) the recipe vendoring build.rs replaced by the checked-in artifact. When (1) lands this row moves to the new leaf and the host's closure is clean."
-tracking = "enrichment-as-plugin follow-up (index-read leaf)"
+reason = "the host does the engine's own work through corpus-engine — the `ingest` verb, the pull-if-absent prebuilt restore in `serve`, recipe install, and the atlas reads — and corpus-engine cannot join a liftable package yet: it carries a `build.rs` (recipe vendoring), `include_str!`s tree-sitter queries from `queries/` outside its crate root, and an optional edge to `corpus-engine-scip`. Burn-down: (1) the read-only index surface the host needs — open + hybrid search over LanceDB/Tantivy — LANDED 2026-09-18 as the `corpus-index` leaf (domains REVIEW-build-index-read-port), and the host's read-only sites (`serve`, `ask`, `host`, the `corpus_search` tool) now reach it directly, so the read surface is no longer why this row exists; (2) the tree-sitter queries moved inside the crate or behind the code-intel seam; (3) the recipe vendoring build.rs replaced by the checked-in artifact. The row stays for the engine work that genuinely ingests and for the atlas reads Understanding still owns; it retires when (2) and (3) land and those reads move."
+tracking = "corpus-engine lift: (2) tree-sitter queries inside the crate, (3) recipe vendoring build.rs"
+
+# ── Serving package exceptions (the burn-down list) ──────────────────────────
+# Declared 2026-09-14 with the [[package]] row above, per SERVING_BOUNDARY.md
+# "Grandfathered": at most two, and a third means the boundary is drawn in the
+# wrong place (the campaign's K4) — move the line, do not widen the ledger. Each
+# carries the `tracking` condition that retires it, and a stale one (the edge is
+# gone) fails the gate until it is deleted.
+#
+# ONE LEFT. The `sovereign-serving-host -> sovereign-inference` row was retired
+# 2026-09-15 by domains REVIEW-build-serving-drop-inference: the remote provider
+# is reached through `oicp-client` now (its `RemoteApiProvider`/`EndpointResolver`
+# are `pub use oicp_client::*`), the tool-call parser moved down to `oicp-types`,
+# the FIM prompt/stop text to `sovereign-contracts`, and the host's
+# `sovereign-inference` dep is gone — so the edge is gone and the row went with
+# it (removals are the celebration).
+
+[[exception]]
+package = "serving"
+from = "sovereign-serving-host"
+to = "commonwealth-core"
+reason = "quarantine state (`PeerHealthTracker`), identity (`ids::NodeId`) and the model wire types `model_fetch` reads (`commonwealth_core::model::*`) are reached from the host; each belongs on the host's own side of the seam rather than the mesh foundation."
+tracking = "clears when quarantine state is the host's own, identity is `kernel_types::NodeId`, and `model_fetch`'s model wire types have a leaf of their own (the third reason was unnamed until the move materialized, §10.1z 2026-09-15)"
+
+# ── Understanding package exceptions (the burn-down list) ────────────────────
+# Declared 2026-09-18 with the [[package]] row above, per DE "Direction:
+# Understanding reads Ingest and Retrieval, never the reverse": the pure tier
+# may NOT name `corpus-engine`, the host MAY. The host's edge is the one
+# grandfathered row. STALE-by-construction today — `understanding-host` is an
+# empty stub, so the gate reports the row STALE rather than silent until the
+# host half names the engine (ARCH §18.1).
+
+[[exception]]
+package = "understanding"
+from = "understanding-host"
+to = "corpus-engine"
+reason = "the host does the engine's own work through `corpus-engine` — the field engine, the atlas writers, entity extraction and the phase runner are the engine's pipeline — and `corpus-engine` cannot join a liftable package yet (its `build.rs`, its `include_str!`d tree-sitter queries and its optional `corpus-engine-scip` edge). The pure tier may NOT name it; the host MAY (DE \"Direction: Understanding reads Ingest and Retrieval, never the reverse\")."
+tracking = "clears when the enrichment pipeline is reachable through a port or the `corpus-index` leaf, the same burn-down the `corpus-mcp -> corpus-engine` exception tracks"
 
 # Populated by the first layer-gate census, 2026-07-11. Removing an entry —
 # with its edge — is the win condition; see the remediation roadmap (R6).
@@ -1142,24 +1368,6 @@ from = "sovereign-cli-llm"
 to = "sovereign-eval"
 reason = "bench_cmd (51 files, ~31k lines) shares this crate with chat/corpus/mesh, so the shipped binary links the instrument. Priced 2026-08-20 and declined: extracting it needs pub churn through enrich_cmd/eval_cmd/chat_cmd. CONTAINED meanwhile by the module rule bench_cmd_is_the_only_module_naming_the_eval_harness (src/lib.rs) — one module names it, and a test fails if that changes. The product verb that used to cross (recipe_cmd, via the harness alias on the eval crate) was repointed at sovereign-authoring-harness directly and no longer does. UPDATE 2026-08-21 (nc-26): the crate is no longer bin-only — it gained a [lib] target so awareness_cmd could move to the crate whose enrich_cmd it was importing. Half of the declined price is therefore already paid; what remains is the pub-visibility churn, not the lib target."
 tracking = "nc-3-backstage"
-
-[[exception]]
-from = "sovereign-api"
-to = "sovereign-core"
-reason = "the mesh API embeds the agent runtime for in-process serving (frontdoor); goal state is the OICP seam"
-tracking = "R6"
-
-[[exception]]
-from = "sovereign-api"
-to = "sovereign-tools"
-reason = "tool registry assembly for the embedded runtime; goal state is the OICP seam"
-tracking = "R6"
-
-[[exception]]
-from = "sovereign-api"
-to = "sovereign-atos"
-reason = "feature-gated (atos) ATOS surface on the mesh API; opt-in experiment, off in default builds"
-tracking = "R6"
 
 # ── Thin-surface reaches, grandfathered (sv-no-daemon-management) ────────────
 # The violation list as it stood on 2026-09-11, one row per crate the desktop

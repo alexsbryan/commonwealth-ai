@@ -1,0 +1,25 @@
+unit: REVIEW-audit-wave-2
+commits: c765d09ec (the audit)
+what: audited wave 2's close — the sovereign-api retire (78e38ce76) and the
+  campaign amendment beside it — against ARCH_PRINCIPLES "The twelve". Row
+  claims verified: sovereign-api is gone (dir deleted, no root member / workspace
+  dep, 0 `sovereign_api::` refs in .rs); its three [[exception]] rows are zero
+  (no `from = "sovereign-api"` row; the two forbids and the mesh-api layer entry
+  went with it; layer-gate green, no STALE); `plan --crate sovereign-api` reads
+  no cluster (CENSUS 11/11); `crate-lines --crate sovereign-api` still exits 4
+  on the pre-existing coverage hole (corpus-index 19, understanding-atlas 13,
+  sovereign-peer-wire 1) — reported, not defaulted. The retire's two live
+  instrument repoints work: daemon-route-census.py -> 302 registrations / 284
+  unique paths; tracing filters read sovereign_daemon=info.
+  Fix: ARCH 3 — three mesh shims with zero importers (lsp_tier :60,
+  oicp_select :64, scheduler_core :86), created by REVIEW-build-sched-move and
+  dm-mesh-workbench-move-scip, deleted after their consumers moved to
+  sovereign-serving-host/sovereign-scheduler.
+  Recorded, not changed: the coverage holes; CONCEPTS.toml:961 Principal
+  canonical does not resolve (tolerated because home = planned); the frozen
+  CONCEPTS measure and [[noun]] crate strings; the design docs (DAEMON_CORE,
+  DOMAINS.md, DECOMPOSITION.md) that describe the pre-move state; size-gate the
+  advisory warn_gate.
+checks: TESTALL exit=0 (13397 pass, 0 fail); PREPUSH exit=0 (2 of 18 want
+  attention: concept-gate NEVER-RAN — sovereign-cli-dev not built — and the
+  advisory size-gate).

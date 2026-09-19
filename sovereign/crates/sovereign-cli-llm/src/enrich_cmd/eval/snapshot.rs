@@ -37,7 +37,10 @@ impl AtlasSnapshot {
 
         let atoms_path = atlas_dir.join("atoms.json");
         let atoms = if atoms_path.exists() {
-            Some(read_json(&atoms_path)?)
+            Some(
+                corpus_engine::enrichment::atlas::read_atlas_atoms(atlas_dir)
+                    .map_err(|e| format!("parse {}: {e}", atoms_path.display()))?,
+            )
         } else {
             None
         };
@@ -88,7 +91,7 @@ impl AtlasSnapshot {
         let Some(file) = &self.atoms else {
             return Vec::new();
         };
-        file.atoms
+        file.atoms()
             .iter()
             .filter_map(|a| match a {
                 AtomEnvelope::Entity(e) if e.entity_type == kind => Some(e),
@@ -107,7 +110,7 @@ impl AtlasSnapshot {
         let Some(file) = &self.atoms else {
             return Vec::new();
         };
-        file.atoms
+        file.atoms()
             .iter()
             .filter_map(|a| match a {
                 AtomEnvelope::Entity(e) => Some(e),
@@ -120,7 +123,7 @@ impl AtlasSnapshot {
         let Some(file) = &self.atoms else {
             return Vec::new();
         };
-        file.atoms
+        file.atoms()
             .iter()
             .filter_map(|a| match a {
                 AtomEnvelope::Question(q) => Some(q),
@@ -133,7 +136,7 @@ impl AtlasSnapshot {
         let Some(file) = &self.atoms else {
             return Vec::new();
         };
-        file.atoms
+        file.atoms()
             .iter()
             .filter_map(|a| match a {
                 AtomEnvelope::Event(e) => Some(e),
@@ -146,7 +149,7 @@ impl AtlasSnapshot {
         let Some(file) = &self.atoms else {
             return Vec::new();
         };
-        file.atoms
+        file.atoms()
             .iter()
             .filter_map(|a| match a {
                 AtomEnvelope::State(s) => Some(s),
@@ -159,7 +162,7 @@ impl AtlasSnapshot {
         let Some(file) = &self.atoms else {
             return Vec::new();
         };
-        file.atoms
+        file.atoms()
             .iter()
             .filter_map(|a| match a {
                 AtomEnvelope::Relation(r) => Some(r),
@@ -172,7 +175,7 @@ impl AtlasSnapshot {
         let Some(file) = &self.atoms else {
             return Vec::new();
         };
-        file.atoms
+        file.atoms()
             .iter()
             .filter_map(|a| match a {
                 AtomEnvelope::Claim(c) => Some(c),
@@ -185,7 +188,7 @@ impl AtlasSnapshot {
         let Some(file) = &self.atoms else {
             return Vec::new();
         };
-        file.atoms
+        file.atoms()
             .iter()
             .filter_map(|a| match a {
                 AtomEnvelope::Configuration(c) => Some(c),
@@ -196,7 +199,7 @@ impl AtlasSnapshot {
 
     pub(super) fn entity_name_by_id(&self, id: &AtomId) -> Option<&str> {
         let file = self.atoms.as_ref()?;
-        file.atoms.iter().find_map(|a| match a {
+        file.atoms().iter().find_map(|a| match a {
             AtomEnvelope::Entity(e) if e.id == *id => Some(e.canonical_name.as_str()),
             _ => None,
         })
@@ -212,7 +215,7 @@ impl AtlasSnapshot {
         let Some(file) = self.atoms.as_ref() else {
             return Vec::new();
         };
-        file.atoms
+        file.atoms()
             .iter()
             .find_map(|a| match a {
                 AtomEnvelope::Entity(e) if e.id == *id => {

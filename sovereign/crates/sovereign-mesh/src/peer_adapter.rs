@@ -7,7 +7,7 @@
 //! the one backed by the actual mesh.
 //!
 //! **The arrow this reverses.** Until cw-lift 3b, `sovereign-cli-daemon` named
-//! `commonwealth_state::MeshStore` and `sovereign_api::state::ConvergenceRecord`
+//! `commonwealth_state::MeshStore` and `sovereign_contracts::peer::ConvergenceRecord`
 //! in its own bootstrap, so the local daemon could not link without the mesh
 //! substrate. Now the daemon names the port, and this crate — which exists to
 //! be the Commonwealth integration layer — supplies the mesh implementation of
@@ -17,7 +17,7 @@
 //! Both adapters own the underlying handle rather than borrowing it, because
 //! two consumers must reach the SAME instance: the daemon's own note pipeline
 //! (through the port) and the gossip/`/status` surfaces inside this crate
-//! (through [`MeshPeerStore::inner`] / [`MeshConvergence::inner`], which are
+//! (through [`MeshReplicatedKv::inner`] / [`MeshConvergence::inner`], which are
 //! crate-private on purpose). A second store would gossip nothing and a second
 //! recorder would make `/status` report a liveness that no writer stamps.
 
@@ -26,34 +26,35 @@ use std::sync::Arc;
 use bytes::Bytes;
 use commonwealth_state::MeshStore;
 use kernel_types::NodeId;
-use sovereign_api::state::ConvergenceRecord;
-use sovereign_contracts::peer::{Convergence, PeerEntry, PeerStore, PeerStoreError};
+use sovereign_contracts::peer::{
+    Convergence, ConvergenceRecord, ReplicatedKv, ReplicatedKvEntry, ReplicatedKvError,
+};
 
-/// [`PeerStore`] backed by the ring-projected [`MeshStore`].
+/// [`ReplicatedKv`] backed by the ring-projected [`MeshStore`].
 ///
 /// A thin projection: four of the store's methods, which is what the port's
 /// consumers call. The rest — `append`, `merge_entry`, `apply_projection`, the
 /// outbox pair, the four `gc_*` — are the mesh's own business and stay
-/// reachable through [`MeshPeerStore::inner`] inside this crate.
+/// reachable through [`MeshReplicatedKv::inner`] inside this crate.
 #[derive(Clone)]
-pub struct MeshPeerStore {
+pub struct MeshReplicatedKv {
     inner: Arc<MeshStore>,
 }
 
-impl std::fmt::Debug for MeshPeerStore {
+impl std::fmt::Debug for MeshReplicatedKv {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // `MeshStore` has no Debug; name the shape rather than the contents.
-        f.write_str("MeshPeerStore { .. }")
+        f.write_str("MeshReplicatedKv { .. }")
     }
 }
 
-impl MeshPeerStore {
+impl MeshReplicatedKv {
     /// An in-memory mesh store.
     ///
     /// This is what the daemon's work atlas and notes rail run on: the
     /// atlas-relevant records have TTLs measured in hours and long-term
     /// persistence is the mesh itself, so restart cost is acceptable.
-    pub fn in_memory() -> Result<Self, PeerStoreError> {
+    pub fn in_memory() -> Result<Self, ReplicatedKvError> {
         MeshStore::in_memory()
             .map(|s| Self { inner: Arc::new(s) })
             .map_err(to_port_error)
@@ -61,30 +62,32 @@ impl MeshPeerStore {
 
     /// Open (or create) the store at `path`.
     ///
-    /// The persisted counterpart of [`MeshPeerStore::in_memory`], for the CLI
+    /// The persisted counterpart of [`MeshReplicatedKv::in_memory`], for the CLI
     /// surfaces that read a workstation's `mesh.db` rather than the daemon's
     /// live in-memory one.
-    pub fn open(path: &std::path::Path) -> Result<Self, PeerStoreError> {
+    pub fn open(path: &std::path::Path) -> Result<Self, ReplicatedKvError> {
         MeshStore::open(path)
             .map(|s| Self { inner: Arc::new(s) })
             .map_err(to_port_error)
     }
 
     /// The underlying store, for the mesh-side machinery that needs the whole
-    /// surface (gossip enumeration, GC, merge). Crate-private: a consumer that
-    /// could reach through the port to the concrete store would make the port
-    /// decorative.
-    pub(crate) fn inner(&self) -> Arc<MeshStore> {
+    /// surface (gossip enumeration, GC, merge). Public only because the
+    /// composition root moved to `sovereign-daemon` (`dm-daemon-mesh-edge`):
+    /// `EmbeddedDaemon` builds `AppState` from the concrete store, and the
+    /// assembly is the one caller. A decision made through the port never
+    /// reaches here — that is what keeps the port from going decorative.
+    pub fn inner(&self) -> Arc<MeshStore> {
         Arc::clone(&self.inner)
     }
 }
 
-fn to_port_error(e: commonwealth_state::error::Error) -> PeerStoreError {
-    PeerStoreError::Backend(e.to_string())
+fn to_port_error(e: commonwealth_state::error::Error) -> ReplicatedKvError {
+    ReplicatedKvError::Backend(e.to_string())
 }
 
-fn to_port_entry(e: commonwealth_state::StoreEntry) -> PeerEntry {
-    PeerEntry {
+fn to_port_entry(e: commonwealth_state::StoreEntry) -> ReplicatedKvEntry {
+    ReplicatedKvEntry {
         app_id: e.app_id,
         key: e.key,
         value: e.value,
@@ -93,8 +96,8 @@ fn to_port_entry(e: commonwealth_state::StoreEntry) -> PeerEntry {
     }
 }
 
-impl PeerStore for MeshPeerStore {
-    fn get(&self, app_id: &str, key: &str) -> Result<Option<PeerEntry>, PeerStoreError> {
+impl ReplicatedKv for MeshReplicatedKv {
+    fn get(&self, app_id: &str, key: &str) -> Result<Option<ReplicatedKvEntry>, ReplicatedKvError> {
         self.inner
             .get(app_id, key)
             .map(|o| o.map(to_port_entry))
@@ -107,17 +110,21 @@ impl PeerStore for MeshPeerStore {
         key: &str,
         value: Bytes,
         origin: NodeId,
-    ) -> Result<bool, PeerStoreError> {
+    ) -> Result<bool, ReplicatedKvError> {
         self.inner
             .set(app_id, key, value, origin)
             .map_err(to_port_error)
     }
 
-    fn delete(&self, app_id: &str, key: &str) -> Result<bool, PeerStoreError> {
+    fn delete(&self, app_id: &str, key: &str) -> Result<bool, ReplicatedKvError> {
         self.inner.delete(app_id, key).map_err(to_port_error)
     }
 
-    fn scan(&self, app_id: &str, prefix: &str) -> Result<Vec<PeerEntry>, PeerStoreError> {
+    fn scan(
+        &self,
+        app_id: &str,
+        prefix: &str,
+    ) -> Result<Vec<ReplicatedKvEntry>, ReplicatedKvError> {
         self.inner
             .scan(app_id, prefix)
             .map(|v| v.into_iter().map(to_port_entry).collect())
@@ -127,8 +134,8 @@ impl PeerStore for MeshPeerStore {
 
 /// [`Convergence`] backed by the [`ConvergenceRecord`] that `/status` reads.
 ///
-/// The record is installed onto `AppState` at daemon start
-/// (`install_convergence_recorder`), so the writers reached through this port
+/// The record is carried onto `AppState` at construction
+/// (`FabricSeed::convergence`), so the writers reached through this port
 /// and the `/status` reader are the same instance by construction.
 #[derive(Debug, Clone)]
 pub struct MeshConvergence {
@@ -149,9 +156,10 @@ impl MeshConvergence {
         }
     }
 
-    /// The underlying record, for installation onto `AppState`. Crate-private
-    /// for the same reason as [`MeshPeerStore::inner`].
-    pub(crate) fn inner(&self) -> Arc<ConvergenceRecord> {
+    /// The underlying record, for installation onto `AppState`. Public for the
+    /// same reason as [`MeshReplicatedKv::inner`]: the composition root in
+    /// `sovereign-daemon` is the one caller.
+    pub fn inner(&self) -> Arc<ConvergenceRecord> {
         Arc::clone(&self.inner)
     }
 }
@@ -179,7 +187,7 @@ mod tests {
     /// name, and a consumer written against one would misread the other.
     #[test]
     fn mesh_peer_store_agrees_with_the_solo_answers() {
-        let store = MeshPeerStore::in_memory().expect("in-memory store");
+        let store = MeshReplicatedKv::in_memory().expect("in-memory store");
         let origin = NodeId::from_u128(3);
 
         assert_eq!(store.get("notes", "k").unwrap(), None);
@@ -224,8 +232,8 @@ mod tests {
         assert_eq!(c.snapshot(), (Some(1_700_000_000), Some(1_700_000_042)));
     }
 
-    /// The installed record and the port write to the same place — the
-    /// property `install_convergence_recorder`'s "ONE instance" comment
+    /// The constructed record and the port write to the same place — the
+    /// property `FabricSeed::convergence`'s "ONE instance" comment
     /// claims and nothing asserted.
     #[test]
     fn mesh_convergence_port_and_installed_record_are_one_instance() {

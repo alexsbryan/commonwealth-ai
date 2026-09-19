@@ -66,7 +66,7 @@
 //!
 //!   desktop asks the daemon to install (`request_daemon_install`)
 //!     -> the daemon's OWN engine carries the acquirer
-//!        (`daemon_cmd/bootstrap.rs`, unconditional)
+//!        (`sovereign-daemon/src/bootstrap.rs`, unconditional)
 //!       -> the daemon composes `baseline_bundles`
 //!         -> `CoreTurnTools` registers `sec_facts`
 //!           -> no `ToolFamily`, so no switch can withhold it
@@ -108,9 +108,9 @@ const RECIPE_RS: &str = include_str!("../../../sovereign-runtime-recipe/src/lib.
 /// The process that ANSWERS a question about a corpus the desktop installed.
 const DAEMON_RS: &str = include_str!("../../../sovereign-cli-daemon/src/daemon_cmd/mod.rs");
 /// Where the engine that INGESTS is built — and therefore the only place an
-/// acquirer registration can do anything (svt-6).
-const BOOTSTRAP_RS: &str =
-    include_str!("../../../sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs");
+/// acquirer registration can do anything (svt-6). Moved to the host crate at
+/// domains `dm-daemon-cli-composition` (2026-09-17).
+const BOOTSTRAP_RS: &str = include_str!("../../../sovereign-daemon/src/bootstrap.rs");
 /// The desktop's install request. It holds no engine; it asks the one that has
 /// the acquirer.
 const INSTALL_RS: &str = include_str!("../src/commands/corpus_install.rs");

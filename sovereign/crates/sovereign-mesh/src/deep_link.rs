@@ -8,13 +8,13 @@
 //! the daemon keep naming `sovereign_mesh::deep_link::…`.
 //!
 //! What stays is [`join_confirmation_from_link`]: it builds a
-//! [`JoinConfirmation`](crate::types::JoinConfirmation), which is this
-//! crate's own wire type, and moving it would have taken that type down with
-//! it for one conversion.
+//! `JoinConfirmation`, which lives in `sovereign_contracts::daemon_wire` (the
+//! client-parseable wire type), and moving the builder would have taken that
+//! type down with it for one conversion.
 
 pub use commonwealth_discovery::deep_link::*;
 
-use crate::types::JoinConfirmation;
+use sovereign_contracts::daemon_wire::JoinConfirmation;
 
 /// Build a join confirmation from a parsed deep link.
 pub fn join_confirmation_from_link(link: &DeepLink) -> Option<JoinConfirmation> {

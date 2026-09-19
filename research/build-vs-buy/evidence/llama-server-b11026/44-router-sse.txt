@@ -1,0 +1,12 @@
+data: {"model":"sweep-1.5b","event":"status_change","data":{"status":"unloaded","exit_code":0}}
+
+data: {"model":"qwen35-2b","event":"model_status","data":{"status":"loading"}}
+
+data: {"model":"qwen35-2b","event":"status_change","data":{"status":"loading","progress":{"stages":["text_model"],"current":"text_model","value":0.0}}}
+
+data: {"model":"qwen35-2b","event":"status_change","data":{"status":"loading","progress":{"stages":["text_model"],"current":"text_model","value":0.0}}}
+
+data: {"model":"qwen35-2b","event":"status_change","data":{"status":"loading","progress":{"stages":["text_model"],"current":"text_model","value":1.0}}}
+
+data: {"model":"qwen35-2b","event":"status_change","data":{"status":"loaded","info":{"id":"qwen35-2b","aliases":["qwen35-2b"],"tags":[],"object":"model","created":1789662860,"owned_by":"llamacpp","meta":{"vocab_type":true,"n_vocab":248320,"n_ctx":4096,"n_ctx_train":262144,"n_embd":2048,"n_params":1881825088,"size":1545429248,"ftype":"Q6_K"}}}}
+

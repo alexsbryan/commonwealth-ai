@@ -1,21 +1,22 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use std::net::SocketAddr;
 
+use axum::Router;
 use commonwealth_core::capabilities::*;
-use commonwealth_core::ids::{ModelId, NodeId};
+use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::*;
-use sovereign_serving::inference_plan::InferencePlan;
-use sovereign_serving::model::ModelInfo;
-
-use sovereign_api::server::{client_router, internal_router};
-use sovereign_api::state::AppState;
 
 /// A simulated node for integration testing.
-/// Runs an in-process API server and holds mesh/model state.
-pub struct SimulatedNode {
+///
+/// Holds the caller's node state as a type parameter, because this crate meets
+/// the runtime at the OICP/contracts seam: it names no host, and the caller
+/// binds the concrete node (its `AppState`, its routers) when it builds the
+/// node. `start_servers` takes the two routers rather than mounting them
+/// itself, for the same reason — the host that builds them is the caller's.
+pub struct SimulatedNode<S> {
     pub node_id: NodeId,
     pub name: String,
-    pub state: AppState,
+    pub state: S,
     pub hardware: HardwareProfile,
     pub client_addr: Option<SocketAddr>,
     pub internal_addr: Option<SocketAddr>,
@@ -67,17 +68,25 @@ impl SimulatedNodeBuilder {
         self
     }
 
-    pub fn build(self, mesh: &Mesh) -> SimulatedNode {
-        let hardware = HardwareProfile {
-            gpus: self.gpus,
+    fn hardware(&self) -> HardwareProfile {
+        HardwareProfile {
+            gpus: self.gpus.clone(),
             system_ram_gb: self.ram_gb,
             cpu_cores: self.cpu_cores,
             total_storage_gb: self.storage_gb,
             free_storage_gb: self.free_storage_gb,
             network_bandwidth_mbps: Some(1000),
-        };
+        }
+    }
 
-        let state = AppState::new(self.node_id, mesh.clone());
+    /// Build the node, creating its state with `make_state`.
+    pub fn build<S>(
+        self,
+        mesh: &Mesh,
+        make_state: impl FnOnce(NodeId, Mesh) -> S,
+    ) -> SimulatedNode<S> {
+        let hardware = self.hardware();
+        let state = make_state(self.node_id, mesh.clone());
 
         SimulatedNode {
             node_id: self.node_id,
@@ -91,18 +100,15 @@ impl SimulatedNodeBuilder {
     }
 
     /// Build and register this node as a member in the given mesh.
-    pub fn build_and_register(self, mesh: &mut Mesh) -> SimulatedNode {
+    pub fn build_and_register<S>(
+        self,
+        mesh: &mut Mesh,
+        make_state: impl FnOnce(NodeId, Mesh) -> S,
+    ) -> SimulatedNode<S> {
         let node_id = self.node_id;
         let name = self.name.clone();
 
-        let hardware = HardwareProfile {
-            gpus: self.gpus,
-            system_ram_gb: self.ram_gb,
-            cpu_cores: self.cpu_cores,
-            total_storage_gb: self.storage_gb,
-            free_storage_gb: self.free_storage_gb,
-            network_bandwidth_mbps: Some(1000),
-        };
+        let hardware = self.hardware();
 
         let total_vram: f32 = hardware.gpus.iter().map(|g| g.vram_gb as f32).sum();
 
@@ -148,7 +154,7 @@ impl SimulatedNodeBuilder {
         };
         mesh.members.insert(node_id, member);
 
-        let state = AppState::new(node_id, mesh.clone());
+        let state = make_state(node_id, mesh.clone());
 
         SimulatedNode {
             node_id,
@@ -162,10 +168,20 @@ impl SimulatedNodeBuilder {
     }
 }
 
-impl SimulatedNode {
-    /// Start the node's API servers on random ports.
-    /// Returns the client and internal addresses.
-    pub async fn start_servers(&mut self) -> (SocketAddr, SocketAddr) {
+impl<S> SimulatedNode<S> {
+    /// Start the node's API servers on random ports. Returns the client and
+    /// internal addresses.
+    ///
+    /// The caller supplies the two routers — this crate does not name the host
+    /// that builds them. The client router carries the `client_auth`
+    /// ConnectInfo layer, so it is served with the connect-info factory or
+    /// every request 500s (matches the production listener in
+    /// `server::serve`).
+    pub async fn start_servers(
+        &mut self,
+        client_app: Router,
+        internal_app: Router,
+    ) -> (SocketAddr, SocketAddr) {
         let client_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let internal_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
 
@@ -175,12 +191,7 @@ impl SimulatedNode {
         self.client_addr = Some(client_addr);
         self.internal_addr = Some(internal_addr);
 
-        // Client surface carries the `client_auth` ConnectInfo layer —
-        // serve with the connect_info factory or every request 500s
-        // (matches the production listener in `server::serve`).
-        let client_app =
-            client_router(self.state.clone()).into_make_service_with_connect_info::<SocketAddr>();
-        let internal_app = internal_router(self.state.clone());
+        let client_app = client_app.into_make_service_with_connect_info::<SocketAddr>();
 
         let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
         self.shutdown_tx = Some(shutdown_tx);
@@ -194,21 +205,6 @@ impl SimulatedNode {
         });
 
         (client_addr, internal_addr)
-    }
-
-    /// Register a model on this node.
-    pub fn register_model(&self, model: ModelInfo) {
-        self.state.register_model(model);
-    }
-
-    /// Set the inference plan for this node.
-    pub fn set_inference_plan(&self, plan: InferencePlan) {
-        self.state.inner.inference_store.set_plan(&plan);
-    }
-
-    /// Set the llama-server address for a model.
-    pub fn set_llama_server_address(&self, model_id: ModelId, address: String) {
-        self.state.set_llama_server_address(model_id, address);
     }
 
     /// Shutdown the node's servers.
@@ -247,7 +243,7 @@ impl SimulatedNode {
     }
 }
 
-impl Drop for SimulatedNode {
+impl<S> Drop for SimulatedNode<S> {
     fn drop(&mut self) {
         self.shutdown();
     }

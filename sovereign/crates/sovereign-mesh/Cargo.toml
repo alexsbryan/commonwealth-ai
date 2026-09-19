@@ -15,6 +15,15 @@ sovereign-contracts = { workspace = true }
 # `commonwealth_core::ids`'s re-export of it (ARCH §8.3) — the peer adapters
 # below sit on the port's own vocabulary.
 kernel-types = { workspace = true }
+# The wire vocabulary (`openai_types`, `responses_types`), named directly
+# rather than through `sovereign-api`'s re-export (domains row
+# dm-wire-repoint-mesh).
+oicp-types = { workspace = true }
+# The client family (domains REVIEW-build-mesh-client-pair): the knowledge and
+# landscape-digest HTTP clients moved to `sovereign-turn-client`; this crate
+# keeps `sovereign_mesh::knowledge_client` as a shim (the digest client's shim
+# was dead and went at REVIEW-audit-daemon-1).
+sovereign-turn-client = { workspace = true }
 # `features = ["iroh"]`: the daemon's dial-by-key binding (W1 of
 # TRANSPORT_MIGRATION.md) is compiled into the default build —
 # runtime-gated by `[iroh] enabled`, not cfg-gated — so the shipped
@@ -51,7 +60,6 @@ commonwealth-discovery = { path = "../../../commonwealth/crates/commonwealth-dis
 # and the package-only rails daemon compose ONE implementation (ARCH §10.6).
 # A direct path dep on the owner like its neighbours above (ARCH §8.3).
 commonwealth-media = { path = "../../../commonwealth/crates/commonwealth-media" }
-sovereign-api = { path = "../../../sovereign/crates/sovereign-api" }
 # Needed because `AppState::new_with_platform_and_engine` requires
 # an explicit `MeshStore` / `AppRegistry` — we construct in-memory
 # variants of each when `EmbeddedDaemon` builds its state.
@@ -83,14 +91,18 @@ commonwealth-rail = { workspace = true }
 commonwealth-work = { workspace = true, features = ["process"] }
 sovereign-meshapp-registry = { path = "../../../sovereign/crates/sovereign-meshapp-registry" }
 # DST harness (FaultTransport / FaultProxy / SimulatedMesh) for the
-# deterministic-simulation tests in `dst.rs` + `tests/dst_scenarios.rs`.
+# deterministic-simulation tests in `dst.rs` + `tests/dst_scenarios.rs`, and
+# now the home of the Tier-1 scheduler simulator (`mesh_sim`, moved out of
+# this crate by domains dm-mesh-sim-move) that `tests/main/mesh_sim_scoreboard.rs`
+# and `scheduler_replay_agreement.rs` drive.
 # Optional: only the `dst` feature (the CI fault-injection gate) pulls it in,
 # so default builds don't drag the test harness into the dependency graph.
 sovereign-mesh-test-harness = { path = "../sovereign-mesh-test-harness", optional = true }
-# KnowledgeSearchRequest / KnowledgeSearchResponse live in oicp-types,
-# re-exported via sovereign-serving::oicp — we POST/parse those
-# bodies from the mesh knowledge client.
-sovereign-serving = { path = "../../../sovereign/crates/sovereign-serving" }
+# The serving package's host half (SERVING_BOUNDARY.md "The two tiers"). Named
+# for the local slot pick, which is host code that left `oicp_select` (domains
+# row REVIEW-build-sched-split-pick-slot): `SovereignInferenceAdapter` calls it
+# through this crate until `inference_adapter` itself moves host-side.
+sovereign-serving-host = { path = "../sovereign-serving-host" }
 # `treesitter` feature dropped from the unconditional dep 2026-05-22:
 # only `reindexer` + `project_http` (the SCIP-graph modules) need it,
 # and those are now feature-gated by this crate's `treesitter` feature
@@ -98,9 +110,21 @@ sovereign-serving = { path = "../../../sovereign/crates/sovereign-serving" }
 # gossip, etc.) don't pull the 5 tree-sitter grammar crates.
 corpus-engine = { workspace = true }
 corpus-engine-notes = { workspace = true }
+# The workbench pair (`projects`, `reindexer`) moved here from this crate at
+# domains REVIEW-build-mesh-workbench-deferred; lib.rs shims both so the
+# daemon and cli consumers keep resolving through `sovereign_mesh::`.
+corpus-engine-watchers = { workspace = true }
 # SCIP call graph + exporter dispatch. Carved out of corpus-engine
 # 2026-05-23 — reindexer.rs uses ScipGraph + scip_export directly.
 corpus-engine-scip = { workspace = true }
+# The code-intel package's fact base (`facts`/`facts_store`), moved out of
+# corpus-engine at domains REVIEW-build-code-facts; `reindexer.rs` names
+# `code_facts::*` directly. The `stores` feature arrives through corpus-engine.
+code-facts = { workspace = true }
+# The atlas vocabulary leaf. Named directly rather than through corpus-engine's
+# re-export so `reading_formatters` resolves at its new home (domains row
+# dm-mesh-move-reading-formatters, DC §4.3).
+understanding-vocab = { workspace = true }
 # The authoring harness's POLICY layer — the Pass/Fail ladder over
 # `corpus_engine::harness` stage outputs, plus the shared DRIVE
 # (`run_over_frozen_sample`) that `POST /internal/corpus/recipes/harness` and
@@ -111,6 +135,26 @@ sovereign-authoring-harness = { workspace = true }
 
 # Sovereign core (for InferenceProvider + MeshKnowledgeSource traits)
 sovereign-core = { workspace = true }
+# The Tier-0 wall-clock leaf, named directly rather than reached through the
+# `sovereign_core::time` re-export (domains row dm-time-repoint-mesh).
+sovereign-time = { workspace = true }
+# The rented-pod modules lifted out of this crate (domains dm-pods-move-*).
+# Every importer is repointed; the dependency remains for this crate's own
+# pod integration tests (`tests/main/worker_e2e.rs`,
+# `tests/main/local_pod_smoke.rs`), which drive `sovereign_pods::worker_*`
+# directly. The `worker_pod` wire protocol itself now lives in the shared
+# `sovereign-contracts` leaf (REVIEW-build-serving-worker-port), re-exported
+# by `sovereign-pods` and shimmed in lib.rs.
+sovereign-pods = { path = "../sovereign-pods" }
+# The scheduler records and ranker lifted out of this crate (domains
+# dm-sched-move-tier, REVIEW-build-sched-move); lib.rs shims `decision_log`,
+# `decision_replay`, `decision_trace` and `predicted_time` for their
+# consumers. `tier`'s shim was deleted by REVIEW-audit-mesh-rest once its
+# last internal reader left with the simulator.
+sovereign-scheduler = { path = "../sovereign-scheduler" }
+# The daemon-to-daemon wire bodies the ring-sync loop sends and the route
+# receives; a leaf both may name (domains dm-daemon-api-edge (a)).
+sovereign-peer-wire = { workspace = true }
 # RemoteApiProvider — synthesised at request time when routing to
 # a peer for federated inference.
 sovereign-inference = { workspace = true }
@@ -206,16 +250,12 @@ dirs = "6"
 # Streaming SHA-256 in `model_fetch` so the file is hashed
 # while the bytes pass through — no second pass over disk.
 sha2 = { workspace = true }
-# Ed25519 keypair derivation in `worker_pod.rs`. `pkcs8` lets us feed
-# the derived key directly to rcgen for self-signed cert generation;
-# `rand_core` exposes the RNG trait we need on the verify side.
+# Ed25519 identity keys: `ring_roster` and the join handshake in `src/`, plus
+# the pinned-pod integration tests (`tests/main/{join_handshake,local_pod_smoke,
+# worker_e2e}.rs`). The owner↔pod protocol that once carried its own copy here
+# is `sovereign-contracts::worker_pod` now (REVIEW-build-serving-worker-port);
+# `rcgen`/`base64`, which only that protocol used, went with it.
 ed25519-dalek = { workspace = true }
-# Self-signed TLS cert generation from a deterministic Ed25519 seed
-# (pod side) — version matches commonwealth-discovery to keep one
-# rcgen in the build graph.
-rcgen = "0.13"
-# Bootstrap blob is base64'd into Vast's `onstart` env var.
-base64 = "0.22"
 # HTTPS termination for the worker daemon — pod serves its
 # seed-derived self-signed cert on :9742. `axum-server` is the
 # cleanest path that pairs axum routers with rustls without
@@ -248,30 +288,26 @@ tempfile = "3"
 # Wrapping Vec<u8> for MeshStore::set in MeshNewsworthyHost. One call
 # site; explicit dep keeps the host's API surface honest.
 bytes = "1"
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [features]
 default = []
-# Deterministic-simulation mesh tests: compiles `dst.rs` (the `DstMesh` gossip
-# driver + invariant pack) and `tests/dst_scenarios.rs`. Pulls the test
-# harness. CI runs a fixed-seed set behind this flag; off by default so the
-# production build never links the harness.
+# Deterministic-simulation mesh tests: compiles `tests/main/dst.rs` (the
+# `DstMesh` gossip driver + invariant pack) and `tests/main/dst_scenarios.rs`.
+# Pulls the test harness, which is now also the home of the Tier-1 scheduler
+# simulator (`SCHEDULER_QUALITY.md` §5, moved from this crate by domains
+# dm-mesh-sim-move), so this flag also compiles `tests/main/mesh_sim_scoreboard.rs`
+# and `scheduler_replay_agreement.rs`. CI runs a fixed-seed set behind this
+# flag; off by default so the production build never links the harness. Run:
+#   cargo test -p sovereign-mesh --features dst,treesitter --test main mesh_sim_scoreboard -- --nocapture
 dst = ["dep:sovereign-mesh-test-harness"]
-# Tier-1 scheduler simulator (`SCHEDULER_QUALITY.md` §5): compiles
-# `mesh_sim.rs` + `tests/mesh_sim_scoreboard.rs`. Pure compute — no
-# extra dependencies, no network, no wall clock — but off by default
-# so a production build never links a measurement harness. Run:
-#   cargo test -p sovereign-mesh --features mesh-sim,treesitter --test main mesh_sim_scoreboard -- --nocapture
-mesh-sim = []
-# Forward the ATOS served-middleware pipeline through to sovereign-api.
-# OFF by default; an atos daemon build turns it on via the feature chain.
-atos = ["sovereign-api/atos"]
 # Enables `reindexer` + `project_http` — the SCIP-graph-hosting
 # modules. Off by default so binaries that only use the mesh
 # primitives (deep_link, EmbeddedDaemon, persist, model_fetch) don't
 # drag in `corpus-engine`'s `treesitter` feature with its 5 grammar
 # crates. The CLI dispatcher (sovereign-cli) skips this; the daemon
 # host (sovereign-cli-atos) and desktop both enable it.
-treesitter = ["corpus-engine/treesitter"]
+treesitter = ["corpus-engine/treesitter", "corpus-engine-watchers/treesitter"]
 # EXPERIMENTAL: compiles commonwealth-transport's iroh dial-by-key
 # transport and the spike e2e (tests/iroh_transport_e2e.rs). Off by
 # default — never part of the workspace gates. Run via:
@@ -284,11 +320,20 @@ iroh-experimental = ["commonwealth-transport/iroh"]
 iroh-relay-only = ["commonwealth-transport/iroh-relay-only"]
 
 [dev-dependencies]
+# The mesh host cluster moved to `sovereign-daemon` (domains
+# dm-daemon-mesh-edge). The integration tests still live in this crate and
+# name the moved surfaces, so this is a TEST-ONLY edge — layer-gate never
+# enforces dev edges (DepKind::Dev), and the production direction stays
+# `sovereign-daemon -> sovereign-mesh`. `treesitter` because
+# `loopback_parity` mounts `project_router`, which reads
+# `sovereign_mesh::reindexer`.
+sovereign-daemon = { path = "../sovereign-daemon", features = ["treesitter"] }
+# `auto_recover` moved to `sovereign-grants` at domains `dm-auto-recover-move`;
+# the fold-ingest integration tests read it there. The ring's live-lane
+# namespace tests (`tests/main/ring_live_non_durable.rs`) also issue real rail
+# grants through `Scope::Rails` (merged 2026-09-18).
+sovereign-grants = { workspace = true }
 tempfile = "3"
-# `JobKind` / `JobRequirements` for the sealed `JobUnit`s the work-plane seal
-# test submits. TEST-ONLY: the pump's production path names no oicp type — it
-# moves `WorkAct`s, whose bodies it never opens.
-oicp-types = { workspace = true }
 # `ServiceExt::oneshot` lets the worker_http integration tests dispatch
 # a synthetic axum Request through the router without spinning up a
 # TcpListener. Same pattern as commonwealth's HTTP unit tests.

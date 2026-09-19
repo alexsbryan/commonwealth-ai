@@ -16,12 +16,13 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use futures::Stream;
-use sovereign_api::openai_types::ChatCompletionRequest;
-use sovereign_api::state::LocalInferenceService;
+use oicp_types::openai_types::ChatCompletionRequest;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{
     CompletionRequest, CompletionResponse, Depth, FinishReason, ProviderCapabilities, Speed,
 };
+use sovereign_daemon::slot_manifest::CoreSlotManifest;
+use sovereign_daemon::state::LocalInferenceService;
 use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
 
 /// Reports exactly the finish reason it was built with, so the test
@@ -69,7 +70,8 @@ impl InferenceProvider for Fixed {
 }
 
 async fn served_reason(provider_said: Option<FinishReason>) -> String {
-    let adapter = SovereignInferenceAdapter::new(Arc::new(Fixed(provider_said)));
+    let adapter =
+        SovereignInferenceAdapter::new(Arc::new(Fixed(provider_said)), Arc::new(CoreSlotManifest));
     let request: ChatCompletionRequest = serde_json::from_value(serde_json::json!({
         "model": "primary",
         "messages": [{"role": "user", "content": "count to a hundred"}],

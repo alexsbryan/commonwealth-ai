@@ -187,7 +187,11 @@ type = "sentence"
 async fn write_structured_writes_clean_recipe_from_structured_input() {
     let home = tempfile::tempdir().unwrap();
     let root = make_root(home.path());
-    let tool = RecipeWriteStructuredTool::with_recipes_dir(tester(), root.clone());
+    let tool = RecipeWriteStructuredTool::with_recipes_dir(
+        tester(),
+        root.clone(),
+        corpus_engine::recipe_schema::RECIPE_SCHEMA_DESCRIPTOR_JSON,
+    );
     let out = tool
         .execute(
             &json!({
@@ -228,7 +232,11 @@ async fn write_structured_writes_clean_recipe_from_structured_input() {
 async fn write_structured_nested_arrays_become_double_bracket_blocks() {
     let home = tempfile::tempdir().unwrap();
     let root = make_root(home.path());
-    let tool = RecipeWriteStructuredTool::with_recipes_dir(tester(), root.clone());
+    let tool = RecipeWriteStructuredTool::with_recipes_dir(
+        tester(),
+        root.clone(),
+        corpus_engine::recipe_schema::RECIPE_SCHEMA_DESCRIPTOR_JSON,
+    );
     tool.execute(
         &json!({
             "path": "investigation-shape",
@@ -272,7 +280,11 @@ async fn write_structured_accepts_flat_args_recipe_shape() {
     // under `recipe`. Tool should still produce a valid recipe TOML.
     let home = tempfile::tempdir().unwrap();
     let root = make_root(home.path());
-    let tool = RecipeWriteStructuredTool::with_recipes_dir(tester(), root.clone());
+    let tool = RecipeWriteStructuredTool::with_recipes_dir(
+        tester(),
+        root.clone(),
+        corpus_engine::recipe_schema::RECIPE_SCHEMA_DESCRIPTOR_JSON,
+    );
     let out = tool
         .execute(
             &json!({
@@ -305,7 +317,11 @@ async fn write_structured_null_optional_key_is_dropped_not_fatal() {
     // so the agent never needs the raw-recipe_write fallback.
     let home = tempfile::tempdir().unwrap();
     let root = make_root(home.path());
-    let tool = RecipeWriteStructuredTool::with_recipes_dir(tester(), root.clone());
+    let tool = RecipeWriteStructuredTool::with_recipes_dir(
+        tester(),
+        root.clone(),
+        corpus_engine::recipe_schema::RECIPE_SCHEMA_DESCRIPTOR_JSON,
+    );
     let out = tool
         .execute(
             &json!({
@@ -342,7 +358,11 @@ async fn write_structured_recovers_malformed_comparison_key_artifact() {
     // (previously a hard conversion failure).
     let home = tempfile::tempdir().unwrap();
     let root = make_root(home.path());
-    let tool = RecipeWriteStructuredTool::with_recipes_dir(tester(), root.clone());
+    let tool = RecipeWriteStructuredTool::with_recipes_dir(
+        tester(),
+        root.clone(),
+        corpus_engine::recipe_schema::RECIPE_SCHEMA_DESCRIPTOR_JSON,
+    );
     let mut threshold = serde_json::Map::new();
     threshold.insert("type".into(), json!("threshold"));
     threshold.insert("name".into(), json!("hotspots"));

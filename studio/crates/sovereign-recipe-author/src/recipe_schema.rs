@@ -15,10 +15,8 @@
 //! ## The variant catalog is GENERATED — it cannot drift
 //!
 //! The discriminator strings and required fields for `acquire` / `extract` /
-//! `chunk` / `filter` / `enrichment.patterns` come from
-//! [`sovereign_contracts::recipe::schema::RECIPE_SCHEMA_DESCRIPTOR_JSON`], a typed
-//! const over the checked-in artifact
-//! `sovereign-recipes/schema/recipe_schema_descriptor.json`, which
+//! `chunk` / `filter` / `enrichment.patterns` come from the generated
+//! descriptor `sovereign-recipes/schema/recipe_schema_descriptor.json`, which
 //! `corpus-engine/tests/recipe_schema.rs` regenerates (drift-gated) from
 //! `corpus-engine/src/recipe.rs`'s actual `AcquirerConfig` / `ExtractorConfig`
 //! / `ChunkerConfig` / `FilterConfig` / `PatternDecl` / `Comparison` types. Add
@@ -27,11 +25,11 @@
 //! extractors). corpus-engine owns the catalog (it owns the types); this file
 //! owns the schema shape + hand-authored overlays.
 //!
-//! The descriptor const lives in `sovereign_contracts::recipe::schema` (the
-//! contract crate both corpus-engine and this authoring stack depend on), so
-//! this file references a typed const, not a path, and needs no `corpus-engine`
-//! dependency — which is what lets the recipe-author bundle move to its own
-//! crate (plan B:P6).
+//! The descriptor is INJECTED, not embedded: this crate may not name
+//! `corpus-engine` (it is part of the extractable package), and the shared
+//! leaf may not embed the artifact because that `include_str!` escapes its
+//! crate root. `sovereign-tools` holds both sides and passes the descriptor in
+//! — see [`recipe_json_schema`].
 //!
 //! What stays hand-authored here is the *shape* (the grammar-friendly
 //! tagged-union JSON Schema) plus **rich overlays** for variants worth extra
@@ -40,32 +38,22 @@
 //! the on-disk `RecipeValidate` catches per-variant errors after writing.
 
 use serde_json::{json, Map, Value};
-use std::sync::LazyLock;
-
-/// Recipe variant catalog generated from `recipe.rs` by the corpus-engine
-/// `recipe_schema` test, embedded as a typed const in `sovereign-contracts`. No
-/// build script, no cross-crate source-tree reach-in, and no repo-relative path
-/// in this crate — the descriptor travels with the contract dependency.
-static DESCRIPTOR: LazyLock<Value> = LazyLock::new(|| {
-    serde_json::from_str(sovereign_contracts::recipe::schema::RECIPE_SCHEMA_DESCRIPTOR_JSON)
-        .expect("checked-in recipe_schema_descriptor.json must parse")
-});
 
 /// One list under `descriptor.ontology` — field names of a version-1 struct
 /// (`type`, `attribute`, `voices`, …) or the wire values of a closed enum
 /// (`kind`, `force`, `deontic`, `clock`, `claim_scope`). Generated from the
 /// ontology AST by the same corpus-engine test that emits the rest of the
 /// descriptor, so the grammar below cannot drift behind the real types.
-fn desc_ontology(key: &str) -> Vec<Value> {
-    DESCRIPTOR["ontology"][key]
+fn desc_ontology(descriptor: &Value, key: &str) -> Vec<Value> {
+    descriptor["ontology"][key]
         .as_array()
         .unwrap_or_else(|| panic!("descriptor.ontology.{key} must be an array"))
         .clone()
 }
 
 /// `[{key, required}]` for a tagged enum (acquire / extract).
-fn desc_variants(section: &str) -> Vec<(String, Vec<String>)> {
-    DESCRIPTOR[section]
+fn desc_variants(descriptor: &Value, section: &str) -> Vec<(String, Vec<String>)> {
+    descriptor[section]
         .as_array()
         .unwrap_or_else(|| panic!("descriptor.{section} must be an array"))
         .iter()
@@ -85,8 +73,8 @@ fn desc_variants(section: &str) -> Vec<(String, Vec<String>)> {
 }
 
 /// Wire-key list for a tagged enum (chunk / filter / pattern / comparison).
-fn desc_keys(section: &str) -> Vec<Value> {
-    DESCRIPTOR[section]
+fn desc_keys(descriptor: &Value, section: &str) -> Vec<Value> {
+    descriptor[section]
         .as_array()
         .unwrap_or_else(|| panic!("descriptor.{section} must be an array"))
         .iter()
@@ -115,7 +103,13 @@ fn variant_arm(key: &str, required: &[String], overlay: Value) -> Value {
 }
 
 /// Top-level JSON Schema for a recipe.
-pub fn recipe_json_schema() -> Value {
+///
+/// `descriptor_json` is the injected recipe variant-catalog descriptor (the
+/// bytes of `sovereign-recipes/schema/recipe_schema_descriptor.json`, supplied
+/// by the monolith from `corpus_engine::recipe_schema::RECIPE_SCHEMA_DESCRIPTOR_JSON`).
+pub fn recipe_json_schema(descriptor_json: &str) -> Value {
+    let descriptor: Value = serde_json::from_str(descriptor_json)
+        .expect("the injected recipe_schema_descriptor.json must parse");
     json!({
         "type": "object",
         "title": "Recipe",
@@ -131,13 +125,13 @@ pub fn recipe_json_schema() -> Value {
         "properties": {
             "corpus":      corpus_schema(),
             "parameters":  parameters_schema(),
-            "acquire":     acquire_schema(),
-            "extract":     extract_schema(),
-            "chunk":       chunk_schema(),
-            "filter":      filter_schema(),
+            "acquire":     acquire_schema(&descriptor),
+            "extract":     extract_schema(&descriptor),
+            "chunk":       chunk_schema(&descriptor),
+            "filter":      filter_schema(&descriptor),
             "filter_mode": filter_mode_schema(),
             "index":       index_schema(),
-            "enrichment":  enrichment_schema(),
+            "enrichment":  enrichment_schema(&descriptor),
         }
     })
 }
@@ -186,8 +180,8 @@ fn parameters_schema() -> Value {
     })
 }
 
-fn acquire_schema() -> Value {
-    let arms: Vec<Value> = desc_variants("acquire")
+fn acquire_schema(descriptor: &Value) -> Value {
+    let arms: Vec<Value> = desc_variants(descriptor, "acquire")
         .iter()
         .map(|(key, required)| variant_arm(key, required, acquire_overlay(key)))
         .collect();
@@ -283,8 +277,8 @@ fn acquire_overlay(key: &str) -> Value {
     }
 }
 
-fn extract_schema() -> Value {
-    let arms: Vec<Value> = desc_variants("extract")
+fn extract_schema(descriptor: &Value) -> Value {
+    let arms: Vec<Value> = desc_variants(descriptor, "extract")
         .iter()
         .map(|(key, required)| variant_arm(key, required, extract_overlay(key)))
         .collect();
@@ -344,20 +338,20 @@ fn extract_overlay(key: &str) -> Value {
     }
 }
 
-fn chunk_schema() -> Value {
+fn chunk_schema(descriptor: &Value) -> Value {
     json!({
         "type": "object",
         "required": ["type"],
         "additionalProperties": true,
         "properties": {
-            "type":          { "enum": desc_keys("chunk") },
+            "type":          { "enum": desc_keys(descriptor, "chunk") },
             "max_chars":     { "type": "integer", "minimum": 1 },
             "overlap_chars": { "type": "integer", "minimum": 0 }
         }
     })
 }
 
-fn filter_schema() -> Value {
+fn filter_schema(descriptor: &Value) -> Value {
     json!({
         "type": "array",
         "items": {
@@ -365,7 +359,7 @@ fn filter_schema() -> Value {
             "required": ["type"],
             "additionalProperties": true,
             "properties": {
-                "type": { "enum": desc_keys("filter") }
+                "type": { "enum": desc_keys(descriptor, "filter") }
             }
         }
     })
@@ -393,7 +387,7 @@ fn index_schema() -> Value {
     })
 }
 
-fn enrichment_schema() -> Value {
+fn enrichment_schema(descriptor: &Value) -> Value {
     json!({
         "type": "object",
         "required": ["enabled", "type"],
@@ -413,11 +407,11 @@ fn enrichment_schema() -> Value {
             // emit it (not just permits it): `guidance` is prose describing what
             // entities/relations/claims/events matter, in the domain's language;
             // a generic atlas pipeline extracts to it → atoms.json that feeds chat.
-            "ontology": ontology_schema(),
+            "ontology": ontology_schema(descriptor),
             "prompt_version": { "type": "string" },
             "entity_types": { "type": "array", "items": entity_type_schema() },
             "relationship_types": { "type": "array", "items": relationship_type_schema() },
-            "patterns": { "type": "array", "items": pattern_schema() }
+            "patterns": { "type": "array", "items": pattern_schema(descriptor) }
         }
     })
 }
@@ -430,16 +424,16 @@ fn enrichment_schema() -> Value {
 /// `guidance` is no longer `required` here (it hard-blocked declared types).
 /// Every property list and enum is gated to the recipe AST through the
 /// descriptor (`tool_schema_matches_recipe_ast`).
-fn ontology_schema() -> Value {
+fn ontology_schema(descriptor: &Value) -> Value {
     json!({
         "type": "object",
         "additionalProperties": true,
         "properties": {
-            "version": { "type": "integer", "enum": desc_ontology("versions") },
+            "version": { "type": "integer", "enum": desc_ontology(descriptor, "versions") },
             "guidance": { "type": "string" },
             "vocabulary": vocabulary_schema(),
             "must_not": { "type": "array", "items": { "type": "string" } },
-            "types": { "type": "array", "items": ontology_type_schema() },
+            "types": { "type": "array", "items": ontology_type_schema(descriptor) },
             "voices": {
                 "type": "object",
                 "additionalProperties": true,
@@ -453,7 +447,7 @@ fn ontology_schema() -> Value {
                 "type": "object",
                 "additionalProperties": true,
                 "properties": {
-                    "clock":      { "enum": desc_ontology("clock") },
+                    "clock":      { "enum": desc_ontology(descriptor, "clock") },
                     "supersedes": { "type": "object", "additionalProperties": { "type": "string" } }
                 }
             },
@@ -475,7 +469,7 @@ fn ontology_schema() -> Value {
                     "arguments":      { "type": "boolean" }
                 }
             },
-            "patterns": { "type": "array", "items": pattern_schema() },
+            "patterns": { "type": "array", "items": pattern_schema(descriptor) },
             // `[enrichment.ontology.navigation]` — one walk row per question
             // kind (ei-2-map). Every row defaults to the spec table, so the
             // tool offers the keys and requires none; nothing reads it yet.
@@ -534,7 +528,7 @@ fn vocabulary_schema() -> Value {
 
 /// One `[[enrichment.ontology.types]]` entry. `name` and `kind` are required;
 /// the rest are per-kind facets (see the descriptor's `type` field list).
-fn ontology_type_schema() -> Value {
+fn ontology_type_schema(descriptor: &Value) -> Value {
     let str_array = json!({ "type": "array", "items": { "type": "string" } });
     json!({
         "type": "object",
@@ -542,9 +536,9 @@ fn ontology_type_schema() -> Value {
         "additionalProperties": true,
         "properties": {
             "name":              { "type": "string" },
-            "kind":              { "enum": desc_ontology("kind") },
+            "kind":              { "enum": desc_ontology(descriptor, "kind") },
             "description":       { "type": "string" },
-            "attributes":        { "type": "array", "items": ontology_attr_schema() },
+            "attributes":        { "type": "array", "items": ontology_attr_schema(descriptor) },
             "specializes":       { "type": "string" },
             "role_of":           { "type": "string" },
             "from":              { "type": "string" },
@@ -565,25 +559,25 @@ fn ontology_type_schema() -> Value {
             "label":             { "type": "string" },
             "identity":          str_array.clone(),
             "identity_fallback": str_array.clone(),
-            "force":             { "enum": desc_ontology("force") },
-            "deontic":           { "type": "array", "items": { "enum": desc_ontology("deontic") } },
+            "force":             { "enum": desc_ontology(descriptor, "force") },
+            "deontic":           { "type": "array", "items": { "enum": desc_ontology(descriptor, "deontic") } },
             "subject":           { "type": "string" },
             "grades":            str_array.clone(),
             "anchors":           str_array,
-            "scope":             { "enum": desc_ontology("claim_scope") }
+            "scope":             { "enum": desc_ontology(descriptor, "claim_scope") }
         }
     })
 }
 
 /// One typed attribute: `name` + `type` (the family) + that family's keys.
-fn ontology_attr_schema() -> Value {
+fn ontology_attr_schema(descriptor: &Value) -> Value {
     json!({
         "type": "object",
         "required": ["name", "type"],
         "additionalProperties": true,
         "properties": {
             "name":        { "type": "string" },
-            "type":        { "enum": desc_ontology("attribute_family") },
+            "type":        { "enum": desc_ontology(descriptor, "attribute_family") },
             "description": { "type": "string" },
             "values":      { "type": "array", "items": { "type": "string" } },
             "unit":        { "type": "string" },
@@ -620,273 +614,18 @@ fn relationship_type_schema() -> Value {
     })
 }
 
-fn pattern_schema() -> Value {
+fn pattern_schema(descriptor: &Value) -> Value {
     json!({
         "type": "object",
         "required": ["type"],
         "additionalProperties": true,
         "properties": {
-            "type":        { "enum": desc_keys("pattern") },
+            "type":        { "enum": desc_keys(descriptor, "pattern") },
             "name":        { "type": "string" },
             "description": { "type": "string" },
             // Comparison variants are generated too, so the grammar rejects
             // `gt`/`lt` abbreviations the model is otherwise tempted to emit.
-            "comparison":  { "enum": desc_keys("comparison") }
+            "comparison":  { "enum": desc_keys(descriptor, "comparison") }
         }
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn variant_consts(section_oneof: &Value) -> Vec<String> {
-        section_oneof
-            .as_array()
-            .expect("oneOf array")
-            .iter()
-            .filter_map(|arm| {
-                arm["properties"]["type"]["const"]
-                    .as_str()
-                    .map(String::from)
-            })
-            .collect()
-    }
-
-    #[test]
-    fn schema_is_valid_json_object() {
-        let s = recipe_json_schema();
-        assert_eq!(s["type"], "object");
-        let required: Vec<&str> = s["required"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .filter_map(|v| v.as_str())
-            .collect();
-        for k in ["corpus", "acquire", "extract", "chunk"] {
-            assert!(required.contains(&k), "root must require {k}");
-        }
-    }
-
-    #[test]
-    fn extract_covers_all_generated_variants() {
-        // The whole point of the generated descriptor: every ExtractorConfig
-        // variant in recipe.rs must surface as an arm. Pre-generation this was
-        // 4 of 22 (email/jsonl/csv/markdown were unauthorable).
-        let s = recipe_json_schema();
-        let arms = variant_consts(&s["properties"]["extract"]["oneOf"]);
-        for v in [
-            "jsonl",
-            "csv",
-            "email",
-            "markdown",
-            "code",
-            "parquet",
-            "html",
-            "html_sections",
-        ] {
-            assert!(
-                arms.iter().any(|x| x == v),
-                "missing extractor arm `{v}`; got {arms:?}"
-            );
-        }
-        assert!(
-            arms.len() >= 20,
-            "expected the full extractor catalog, got {}",
-            arms.len()
-        );
-    }
-
-    #[test]
-    fn acquire_covers_all_generated_variants() {
-        let s = recipe_json_schema();
-        let arms = variant_consts(&s["properties"]["acquire"]["oneOf"]);
-        for v in [
-            "bulk_download",
-            "http_api",
-            "huggingface_dataset",
-            "local_file",
-            "web_crawl",
-        ] {
-            assert!(
-                arms.iter().any(|x| x == v),
-                "missing acquire arm `{v}`; got {arms:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn http_api_arm_requires_requests_not_base_url() {
-        // base_url is `#[serde(default)]` in recipe.rs, so it is NOT required
-        // (the old hand-schema wrongly required it); `requests` IS required.
-        let s = recipe_json_schema();
-        let arms = s["properties"]["acquire"]["oneOf"].as_array().unwrap();
-        let http_api = arms
-            .iter()
-            .find(|a| a["properties"]["type"]["const"] == "http_api")
-            .expect("http_api arm");
-        let required: Vec<&str> = http_api["required"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .filter_map(|v| v.as_str())
-            .collect();
-        assert!(
-            required.contains(&"requests"),
-            "http_api must require requests"
-        );
-        assert!(
-            !required.contains(&"base_url"),
-            "base_url is defaulted, must not be required"
-        );
-    }
-
-    /// Property names of a JSON-schema object node, sorted.
-    fn props(node: &Value) -> Vec<String> {
-        let mut v: Vec<String> = node["properties"]
-            .as_object()
-            .unwrap_or_else(|| panic!("node has no properties: {node}"))
-            .keys()
-            .cloned()
-            .collect();
-        v.sort();
-        v
-    }
-
-    /// The descriptor list `ontology.<key>` as sorted strings.
-    fn desc_strings(key: &str) -> Vec<String> {
-        let mut v: Vec<String> = desc_ontology(key)
-            .iter()
-            .map(|x| x.as_str().expect("string").to_string())
-            .collect();
-        v.sort();
-        v
-    }
-
-    /// The ontology grammar is a hand copy of the recipe AST, gated here in
-    /// BOTH directions through the descriptor corpus-engine generates from
-    /// that AST: every field the AST has, the tool offers (an agent can emit
-    /// it); every field the tool offers, the AST has (nothing phantom). A
-    /// June note records the grammar silently blocking `ontology` when it
-    /// lagged; this is what makes that impossible to repeat.
-    #[test]
-    fn tool_schema_matches_recipe_ast() {
-        let tool = ontology_schema();
-
-        // Block-level keys: `version` plus every version-1 key.
-        let mut ast_block = desc_strings("block");
-        ast_block.extend(desc_strings("v1"));
-        ast_block.sort();
-        assert_eq!(props(&tool), ast_block, "[enrichment.ontology] keys");
-
-        // Nested version-1 structs.
-        for (prop, key) in [
-            ("vocabulary", "vocabulary"),
-            ("voices", "voices"),
-            ("change", "change"),
-            ("tension", "tension"),
-            ("derive", "derive"),
-        ] {
-            assert_eq!(
-                props(&tool["properties"][prop]),
-                desc_strings(key),
-                "[enrichment.ontology.{prop}] keys"
-            );
-        }
-
-        // Type declarations and their nested `source`.
-        let type_node = &tool["properties"]["types"]["items"];
-        assert_eq!(props(type_node), desc_strings("type"), "[[types]] keys");
-        assert_eq!(
-            props(&type_node["properties"]["source"]),
-            desc_strings("source"),
-            "types.source keys"
-        );
-
-        // Attributes: the shared fields plus every family's own keys plus `type`.
-        let mut ast_attr = desc_strings("attribute");
-        ast_attr.push("type".to_string());
-        for fam in desc_ontology("attribute_families") {
-            for f in fam["fields"].as_array().expect("fields") {
-                ast_attr.push(f.as_str().expect("string").to_string());
-            }
-        }
-        ast_attr.sort();
-        ast_attr.dedup();
-        assert_eq!(
-            props(&type_node["properties"]["attributes"]["items"]),
-            ast_attr,
-            "attribute keys"
-        );
-
-        // Closed enums are read straight from the descriptor.
-        let enum_of = |node: &Value| -> Vec<String> {
-            let mut v: Vec<String> = node["enum"]
-                .as_array()
-                .expect("enum")
-                .iter()
-                .map(|x| x.as_str().expect("string").to_string())
-                .collect();
-            v.sort();
-            v
-        };
-        assert_eq!(
-            enum_of(&type_node["properties"]["kind"]),
-            desc_strings("kind")
-        );
-        assert_eq!(
-            enum_of(&type_node["properties"]["force"]),
-            desc_strings("force")
-        );
-        assert_eq!(
-            enum_of(&type_node["properties"]["deontic"]["items"]),
-            desc_strings("deontic")
-        );
-        assert_eq!(
-            enum_of(&type_node["properties"]["scope"]),
-            desc_strings("claim_scope")
-        );
-        assert_eq!(
-            enum_of(&tool["properties"]["change"]["properties"]["clock"]),
-            desc_strings("clock")
-        );
-        assert_eq!(
-            enum_of(&type_node["properties"]["attributes"]["items"]["properties"]["type"]),
-            desc_strings("attribute_family")
-        );
-
-        // The grammar block no longer hard-requires prose (a types-only block
-        // is a valid recipe), and the version enum is the registry's.
-        assert!(
-            tool.get("required").is_none(),
-            "ontology must not require `guidance`"
-        );
-        let versions = tool["properties"]["version"]["enum"]
-            .as_array()
-            .expect("versions");
-        assert!(versions.iter().any(|v| v == 1), "version 1 must be offered");
-    }
-
-    #[test]
-    fn chunk_and_filter_and_pattern_enums_are_generated() {
-        let s = recipe_json_schema();
-        let chunk: Vec<&str> = s["properties"]["chunk"]["properties"]["type"]["enum"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .filter_map(|v| v.as_str())
-            .collect();
-        assert!(
-            chunk.contains(&"threaded_turns"),
-            "chunk enum should include threaded_turns; got {chunk:?}"
-        );
-        let pats: Vec<&str> = s["properties"]["enrichment"]["properties"]["patterns"]["items"]
-            ["properties"]["type"]["enum"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .filter_map(|v| v.as_str())
-            .collect();
-        assert!(pats.contains(&"role_overlap"));
-    }
 }

@@ -1,0 +1,25 @@
+unit: dm-decision-extractor-move
+commits: 8f19c1bc4 (the move)
+what: sovereign-api/src/middleware/decision_extractor.rs (443) and
+  sovereign-tools/src/notes/response_mine.rs (454) moved to corpus-engine-notes
+  (DT `workspace` cluster, dest corpus-engine-notes). decision_extractor.rs
+  repointed: `corpus_engine_notes::` -> `crate::`, `sovereign_tools::notes::
+  response_mine` -> `crate::response_mine`, `super::{Middleware, …}` ->
+  `sovereign_contracts::middleware::{…}`, `crate::openai_types::` ->
+  `oicp_types::openai_types::`, `sovereign_core::middleware::notes_db_path` ->
+  `sovereign_contracts::middleware::notes_db_path` (defined at
+  sovereign-contracts/src/middleware.rs:242, so repointed not moved). Shims keep
+  old paths live: `pub use corpus_engine_notes::decision_extractor;` in
+  sovereign-api/src/middleware/mod.rs, `pub use corpus_engine_notes::response_mine;`
+  in sovereign-tools/src/notes/mod.rs (audit_recover.rs:71 still compiles).
+  corpus-engine-notes gains sovereign-contracts + oicp-types + async-trait and a
+  `test-fixtures` dev-dep; the middleware-directory guard's walk floor drops
+  `scanned >= 3` -> `>= 2`; DT [[module]] rows re-keyed to corpus-engine-notes/src/.
+  Premise correction (PROMPT §6, ralph/DECISIONS.md): the row predated
+  REVIEW-build-middleware-seam (7ea3d6aae), so its line numbers were stale, and
+  naming sovereign-contracts from corpus-engine-notes grows that leaf's fan-in
+  31 -> 32 — quality/baselines/fan_in.tsv hand-raised ONE line with a
+  SYSTEM_OVERVIEW.md §10.1ac ledger (--update-baseline not run).
+checks: CLEAN exit=0; LINT exit=0 (15 crates, errors: 0); LAYER exit=0
+  ("fan-in within caps"); TEST(corpus-engine-notes) exit=0 (134 pass, 0 fail);
+  TEST(sovereign-api) exit=0 (556 pass, 0 fail).

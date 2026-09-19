@@ -1,0 +1,65 @@
+[package]
+name = "code-facts"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The code-intel package's deterministic tree-sitter fact base: fact extraction, the SQLite per-file store, and the claim checks over them (docs/CODE_TOOLING_BOUNDARY.md §2, Phase 2)."
+
+# The deterministic fact base — the three modules the package boundary doc's §2
+# table names as `code-facts` (`docs/CODE_TOOLING_BOUNDARY.md:67`), moved out of
+# `corpus-engine` at domains `REVIEW-build-code-facts` (Phase 2, `:404`). The
+# package's crates are the root siblings beside this one (`code-next-edit`,
+# `corpus-engine-scip`, …) until the doc's Phase 5 rename.
+#
+# Rule 4 (`docs/CODE_TOOLING_BOUNDARY.md` §3) puts this crate on the WRITE side
+# of the fact base: it links the tree-sitter grammars, exactly as the doc's
+# table says. `scip-graph` and `code-tools` must not.
+
+[dependencies]
+# The retrieval read-port leaf — `types::EmbedFn` (facts_check.rs) and
+# `error::{Error, Result}` (facts_store.rs) are defined here, at the historical
+# `corpus_engine::{types,error}` paths. A shared [[package_leaf]]
+# (quality/ARCH_LAYERS.toml), so the reach stays inside the package closure.
+corpus-index = { workspace = true }
+# The cooperative-yield leaf — `time::unix_now()` stamps the fact-store build
+# (`facts_store.rs`). A code-intel package member.
+corpus-engine-yield = { workspace = true }
+# The SCIP call graph `facts_check` dispatches CONFIG/CALLS over. A code-intel
+# package member; `corpus-engine` deliberately ships no re-export shim for it
+# (ARCH §8.3), so the crate names it directly.
+corpus-engine-scip = { workspace = true, optional = true }
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# `treesitter`: the extraction loops and their grammars. Tree-sitter and the
+# grammar crates are heavy, so default builds skip them — the same gate
+# `corpus-engine` carried before the move.
+tree-sitter = { version = "0.26", optional = true }
+tree-sitter-language = { version = "0.1", optional = true }
+tree-sitter-rust = { version = "0.24", optional = true }
+tree-sitter-python = { version = "0.25", optional = true }
+streaming-iterator = { version = "0.1", optional = true }
+
+# `stores`: the SQLite-backed `FactStore` (rusqlite is bundled — no system dep).
+rusqlite = { version = "0.35", features = ["bundled"], optional = true }
+tokio = { workspace = true, optional = true }
+
+[features]
+# The grammar-backed fact extraction (`facts`) and the deterministic claim
+# checks over the SCIP graph (`facts_check`). `corpus-engine`'s feature of the
+# same name forwards here, so the shim keeps the historical build contract.
+treesitter = [
+    "dep:corpus-engine-scip",
+    "dep:tree-sitter",
+    "dep:tree-sitter-language",
+    "dep:tree-sitter-rust",
+    "dep:tree-sitter-python",
+    "dep:streaming-iterator",
+]
+# The SQLite `FactStore` (`facts_store`). `corpus-engine`'s `stores` feature
+# forwards here.
+stores = ["dep:rusqlite", "dep:tokio"]
+
+[lints]
+workspace = true

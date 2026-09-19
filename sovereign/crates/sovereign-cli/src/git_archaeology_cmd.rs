@@ -116,7 +116,7 @@ pub async fn run(args: &[String]) -> i32 {
     let atlas_built_at = atlas_built_timestamp(&atlas_dir).unwrap_or(0);
     println!(
         "  · loaded {} atoms (atlas built {})",
-        atoms_file.atoms.len(),
+        atoms_file.atoms().len(),
         format_iso_date(atlas_built_at)
     );
 
@@ -124,7 +124,7 @@ pub async fn run(args: &[String]) -> i32 {
     let mut provenance: Vec<AtomProvenance> = Vec::new();
     let mut atoms_without_path: usize = 0;
     let mut atoms_without_history: usize = 0;
-    for atom in &atoms_file.atoms {
+    for atom in atoms_file.atoms() {
         let Some(chunk_id) = anchor_chunk_id(atom) else {
             atoms_without_path += 1;
             continue;
@@ -164,7 +164,7 @@ pub async fn run(args: &[String]) -> i32 {
         corpus_id: parsed.atlas_corpus_id.clone(),
         repo_root: repo_root.clone(),
         atlas_built_at,
-        atom_count: atoms_file.atoms.len(),
+        atom_count: atoms_file.atoms().len(),
         atoms_with_history: provenance.len(),
         follows_renames: false,
         provenance,

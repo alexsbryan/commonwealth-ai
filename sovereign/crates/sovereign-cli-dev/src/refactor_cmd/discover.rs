@@ -291,7 +291,10 @@ fn feature_contract(meta: &WorkspaceMeta, crate_filter: Option<&str>) -> String 
     if (crate_filter.is_none() || crate_filter == Some("sovereign-mesh"))
         && meta.get("sovereign-mesh").is_some()
     {
-        features.push("sovereign-mesh/mesh-sim".into());
+        // The Tier-1 simulator moved to `sovereign-mesh-test-harness` and is
+        // pulled by `dst` now (domains dm-mesh-sim-move); the feature that
+        // used to compile it here is gone.
+        features.push("sovereign-mesh/dst".into());
     }
     features.join(",")
 }

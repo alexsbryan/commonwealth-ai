@@ -681,7 +681,7 @@ fn synthesize_loop_break_message(call: &ToolCall, count: usize, kind: &'static s
 /// Salvage `<tool_call>...</tool_call>` blocks the model emitted as
 /// plain text but the daemon's tool-call parser didn't pick up.
 ///
-/// Why this is needed: the daemon (`sovereign-mesh::inference_adapter`)
+/// Why this is needed: the daemon (`sovereign-serving-host::inference_adapter`)
 /// is supposed to extract every `<tool_call>...</tool_call>` JSON
 /// block from a model's raw output and surface it as a structured
 /// `tool_calls[]` field on the response, then strip the block from
@@ -1353,16 +1353,19 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
     let mut registry = ToolRegistry::new();
     registry.register(Box::new(RecipeReadTool::new()));
     registry.register(Box::new(RecipeWriteTool::new()));
-    registry.register(Box::new(RecipeWriteStructuredTool::new(Arc::new(
-        CorpusEngineRecipeTester::new(),
-    ))));
+    registry.register(Box::new(RecipeWriteStructuredTool::new(
+        Arc::new(CorpusEngineRecipeTester::new()),
+        corpus_engine::recipe_schema::RECIPE_SCHEMA_DESCRIPTOR_JSON,
+    )));
     registry.register(Box::new(RecipeValidateTool::new(Arc::new(
         CorpusEngineRecipeTester::new(),
     ))));
     registry.register(Box::new(RecipeTestTool::new(Arc::new(
         CorpusEngineRecipeTester::new(),
     ))));
-    registry.register(Box::new(RegistryBrowseTool));
+    registry.register(Box::new(RegistryBrowseTool::new(
+        corpus_engine::registry::BUNDLED_REGISTRY_TOML,
+    )));
     registry.register(Box::new(DecisionLogTool::with_notes(Arc::clone(&notes))));
     registry.register(Box::new(CheckpointTool::with_stores(
         Arc::clone(&notes),

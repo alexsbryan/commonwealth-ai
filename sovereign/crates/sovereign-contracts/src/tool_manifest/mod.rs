@@ -62,8 +62,7 @@ use crate::types::{
 /// Code-intelligence manifests — every tool under `sovereign-tools/src/code/`.
 ///
 /// Anchored at `CARGO_MANIFEST_DIR` so the one repo-relative reference to the
-/// artifact lives here, once — the same convention as
-/// [`crate::recipe::registry::RECIPE_REGISTRY_TOML`].
+/// artifact lives here, once — inside this crate's own root.
 pub const CODE_MANIFESTS_TOML: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/tool-manifests/code.toml"

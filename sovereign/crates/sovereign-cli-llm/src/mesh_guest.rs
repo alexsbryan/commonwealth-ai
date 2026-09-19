@@ -210,7 +210,7 @@ async fn node_dial_string(port: u16) -> Option<String> {
 /// Reading `[daemon] client_bind` is NOT sufficient and this is not
 /// hypothetical; it was measured on 2026-08-27. On an ENCRYPTED mesh
 /// `start_daemon` forces the client listener back to loopback whatever the
-/// config says (`sovereign-mesh/src/daemon.rs`, "encrypted mesh: forcing
+/// config says (`sovereign-daemon/src/daemon.rs`, "encrypted mesh: forcing
 /// client API to loopback-only"). A host with `client_bind = "0.0.0.0"` in
 /// config and an encrypted mesh on disk would therefore have passed a
 /// config-only check and bound `127.0.0.1` anyway.

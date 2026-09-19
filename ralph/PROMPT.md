@@ -14,9 +14,11 @@ in the files the row points at. When a row and the tree disagree, you stop
 2. Otherwise your unit is the FIRST `[ ]` row, top to bottom, whose
    `depends [...]` ids are all `[x]`. Rows below it are not your business.
 3. If this prompt opens with a `POOL LANE` note, the note names your unit and
-   you do not edit `ralph/STATE.md` at all.
+   you edit `ralph/STATE.md` only to correct your own row's premises (§6).
 4. If the loop told you the tree holds uncommitted work, it belongs to the
    `[~]` unit: read `git status` and `git diff`, keep what is right, continue.
+5. If the loop's note names your unit (`Your unit: <id>`), that is your unit —
+   open only that row in `ralph/STATE.md`; do not scan the queue.
 
 ## 2. Reading a row
 
@@ -50,18 +52,33 @@ What the id prefix tells you:
 3. Do the VERB. `MOVE` uses §3a and nothing else. Change nothing the row does
    not ask for — no renames inside a move, no logic edits, no nearby cleanup
    (ARCH principle 2).
-4. Run the row's checks. On a failure: read the log, fix, re-run. Two honest
+4. **Build hygiene.** Before the first check, run CLEAN once (§5) — it is the
+   disk gate and does not build; LINT is the unit's first build (2026-09-16
+   speed order). The gate cleans the debug profile only when it has grown past
+   its threshold (50G), so a warm unit keeps its cache and its checks stay
+   incremental; a cold unit pays the rebuild. Never build with bare `cargo` —
+   a `-p` build resolves features differently and rebuilds the dependents
+   twice, and the accumulated target (100G, 503 crates with duplicate rlibs,
+   2026-09-15) is what filled the disk and took the loop down.
+5. Run the row's checks. On a failure: read the log, fix, re-run. Two honest
    attempts at the same failure and still red: §6.
-5. Commit: `git add` the paths you changed, by name — never `git add -A`, never
+6. Commit: `git add` the paths you changed, by name — never `git add -A`, never
    `target/` or `ralph/log*`. Message `<unit-id>: <one line>`; body = the
-   `exit=` lines and anything the row says to paste.
-6. Mark the row `[x] <short-hash>` and commit `ralph/STATE.md` alone as
-   `ralph: <unit-id> done`. In a POOL LANE, write `ralph/done/<unit-id>` and
-   commit that instead.
+   `exit=` lines and anything the row says to paste. In a POOL LANE, use
+   absolute paths under your worktree in shell commands — a compound
+   `cd A && cat ../B` is path-checked against the session's cwd, not `A`, and
+   auto-rejects a path that does not exist (2026-09-17).
+7. Mark the row `- [x] <unit-id> <short-hash> — depends [...] — ...`, keeping
+   the unit id immediately after the checkbox; the dependency parser reads that
+   position. Commit `ralph/STATE.md` alone as
+   `ralph: <unit-id> done`. In a POOL LANE, write `ralph/lanes/<unit-id>.done`
+   and commit that instead.
 
 Commit as soon as a coherent piece compiles. You can be killed at any moment;
 a killed session with commits resumes, one holding an hour of uncommitted work
-is lost.
+is lost. A `[~]` row whose delta is already in the tree is a resume: the prior
+session did the analysis — verify with the row's checks, commit the delta by
+name, record what you have, mark it; do not re-derive.
 
 ### 3a. MOVE `<file>` -> `<crate>` — the only move recipe
 
@@ -83,7 +100,14 @@ A move keeps behaviour identical and keeps every old path compiling.
 5. **Source.** Replace `pub mod <name>;` (or `mod <name>;`) in its `src/lib.rs`
    with `pub use <dest_crate_ident>::<name>; // shim: moved by domains <unit-id>`
    and add the destination crate to the source `Cargo.toml` if it is absent.
-6. **Visibility.** If the compiler reports an item private because it now
+6. **Baseline.** If `git grep -n '<old path>' quality/baselines/` names the
+   file, re-key that row to `<dest>/src/<name>.rs` in the same commit: the path
+   changes, the line count does not. This is a move, not `--update-baseline`
+   (§7) and not new debt — §10.1d "path re-key, no debt", as `atoms.rs`'s row
+   did at `9722bf821`. `arch-gate` keys `oversized.txt` by path, so without
+   this a moved oversized file reads as a false "NEW oversized file" and
+   PREPUSH blocks at the next audit.
+7. **Visibility.** If the compiler reports an item private because it now
    crosses a crate line, change that item's `pub(crate)` to `pub` and list it in
    the commit body. Any other error you cannot fix with an import path: §6 after
    two tries.
@@ -102,11 +126,17 @@ members`; add it to the `[[layer]]` the row names in
 grep`, `wc -l`, `sovereign tools call callers --symbol=<S>`). Append rows
 directly under the mint row, in §2's grammar. A row is atomic when it has one
 VERB, touches at most about ten files, lands in one commit, states a premise a
-worker can verify with grep, and names §5 checks. Order rows so every row's
-dependencies sit above it. Anything that needs judgment — a cycle, a
+worker can verify with grep, and names §5 checks. A mechanical MOVE row checks
+`LINT` (plus `LAYER` when a layer edge changes) and names no `TEST(...)` —
+tests ride the wave audit, whose range covers the batch (2026-09-16 speed
+order); `TEST` is for rows that change behaviour. Prefer rows at the ten-file
+end of the grammar: a bigger row amortizes the session, the build and the
+commit. Order rows so every row's dependencies sit above it. Anything that needs judgment — a cycle, a
 back-edge, a port, a type name — becomes its own `REVIEW-build-` row; only
-mechanical work becomes a `dm-` row. Put a `REVIEW-audit-` row after every five
-or so build rows, and a `HUMAN-` row before anything that adds an
+mechanical work becomes a `dm-` row. Put a `REVIEW-audit-` row after every ten
+or so build rows, and one at a wave's close: a mid-wave audit names TESTALL,
+the wave-close audit names TESTALL and PREPUSH. A `HUMAN-` row goes before
+anything that adds an
 `[[exception]]`, widens an `except`, or changes behaviour. Commit
 `ralph/STATE.md` as `REVIEW-mint-<x>: <n> rows minted`, then mark the mint row
 `[x]`. If the pointed design is contradicted by the tree, §6.
@@ -120,8 +150,14 @@ repointed. A red gate you cannot make green: §6.
 
 ## 5. Checks — from the repo root; `mkdir -p target/ralph` first
 
+On Linux (`uname` prints `Linux`) every check must run inside the
+`sovereign-vulkan` toolbox — native builds fail outside it. The loop is launched
+from inside the toolbox, so run the commands as written; if `/run/.containerenv`
+does not exist on a Linux host, you are outside it: stop (§6) before building.
+
 | name | command | passes when |
 |---|---|---|
+| CLEAN | `./scripts/with-cargo-lock.sh ./scripts/dev-build.sh --clean --gate-only > target/ralph/build.log 2>&1; echo exit=$?; tail -5 target/ralph/build.log` | exit=0 (once per unit; disk gate only, it does not build) |
 | LINT | `./scripts/with-cargo-lock.sh ./scripts/sovereign-lint.sh --human > target/ralph/lint.log 2>&1; echo exit=$?; tail -5 target/ralph/lint.log` | exit=0 |
 | TEST(c) | `./scripts/with-cargo-lock.sh ./scripts/sovereign-test.sh --human --package c > target/ralph/test.log 2>&1; echo exit=$?; tail -8 target/ralph/test.log` | exit=0; exit=4 (zero tests) only for a crate created in this unit, said in the commit |
 | LAYER | `(cd corpus-engine && ../scripts/with-cargo-lock.sh cargo xtask layer-gate) > target/ralph/layer.log 2>&1; echo exit=$?; tail -5 target/ralph/layer.log` | exit=0 |
@@ -137,6 +173,20 @@ repointed. A red gate you cannot make green: §6.
 Never print a whole log into the session; grep it.
 
 ## 6. Stopping
+
+**A row whose premises fail is yours to correct (2026-09-17, operator
+direction).** When the row's own facts prove false — a dependency it does not
+name, a cycle, a count, a scope that cannot compile — do not stop. Correct the
+row in `ralph/STATE.md` (its `depends`, its scope, its text, its `check`) and,
+when the correction needs it, the rows it collides with: re-order them, fold
+one into another, re-scope a neighbour — recording in `ralph/DECISIONS.md` what
+moved and why. Record the correction in the row itself (`CORRECTED <date>
+(ralph/DECISIONS.md): <what was false, what you verified>`), add the
+DECISIONS entry (fork, choice, evidence, falsifier), commit it, and proceed on
+the corrected row. In a POOL LANE this is the one edit you make to the main
+tree's `ralph/STATE.md` (§1.3). Four things still stop you: weakening a pass
+bar, adding or widening an `[[exception]]`/`except`, touching a `HUMAN-` row,
+pushing — and any correction whose evidence you cannot reproduce.
 
 - **`ralph/NEEDS_HUMAN.md`** — a decision package, not a question:
   (a) the unit id and its row; (b) the exact commands you ran and their ACTUAL
@@ -155,9 +205,12 @@ Never print a whole log into the session; grep it.
   or widen an `except` list unless the row names that exact row.
 - Never build `--release`. Never run bare `cargo build`/`test`/`check`/`clippy`
   — only the §5 commands, which take the cargo lock.
-- Never edit `sovereign/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/`,
-  `scripts/ralph-*.sh` or `quality/baselines/`. Never stop or restart the
-  daemon.
+- Never edit `sovereign/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/` or
+  `scripts/ralph-*.sh`. Never stop or restart the daemon. Never
+  `--update-baseline` a ratchet (first bullet). `quality/baselines/` is
+  machine-written and off-limits except for §3a step 6: a move re-keys its own
+  file's row to the new path, the line count unchanged — a re-key absorbs no
+  growth.
 - When a move changes a path that `quality/DAEMON_CORE.md`,
   `sovereign/SERVING_BOUNDARY.md` or `corpus-engine/DECOMPOSITION.md` names,
   fix that line in the same commit.

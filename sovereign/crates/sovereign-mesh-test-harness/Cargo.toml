@@ -8,21 +8,35 @@ publish = false
 
 [dependencies]
 commonwealth-core = { workspace = true }
-commonwealth-discovery = { workspace = true }
-sovereign-serving = { workspace = true }
-sovereign-api = { workspace = true }
-sovereign-meshapp-registry = { workspace = true }
-commonwealth-state = { workspace = true }
+oicp-types = { workspace = true }
+# The Tier-1 simulator (moved from sovereign-mesh by domains dm-mesh-sim-move)
+# replays the scheduler's routing records — `decision_log`, `oicp_select`,
+# `predicted_time`, `scheduler_core`, `tier` — so it names the ranker directly.
+# The harness's `[[forbid]] sovereign-mesh-test-harness -> sovereign-*`
+# (quality/ARCH_LAYERS.toml) carries `sovereign-scheduler` in its `except`
+# (HUMAN-forbid-harness-except, 2026-09-17).
+sovereign-scheduler = { workspace = true }
 commonwealth-transport = { workspace = true }
 tokio = { workspace = true }
-bytes = { workspace = true }
 tracing = { workspace = true }
-serde = { workspace = true }
 serde_json = { workspace = true }
 axum = { workspace = true }
-tower = "0.5"
-http-body-util = "0.1"
 async-trait = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
+
+# The harness's `src/` meets the runtime at the OICP/contracts seam: its
+# simulated node is generic over the node state, so the library names no host.
+# The integration tests assemble the real host node and bind it, which is why
+# `sovereign-daemon` is a test-only edge here — layer-gate never enforces dev
+# edges (DepKind::Dev), and the production direction is unchanged.
+[dev-dependencies]
+commonwealth-discovery = { workspace = true }
+commonwealth-state = { workspace = true }
+# The integration tests assemble the real host node — the host cluster moved
+# from `sovereign-api` to `sovereign-daemon` at domains `dm-daemon-api-edge`,
+# so this TEST-ONLY edge follows it. Layer-gate never enforces dev edges
+# (DepKind::Dev), and the production direction is unchanged.
+sovereign-daemon = { workspace = true }
 
 [[test]]
 name = "integration"

@@ -1,83 +1,107 @@
-# ralph-loop — a commit-driven campaign loop
+# ralph — a commit-driven campaign loop
 
-`scripts/ralph-loop.sh` runs a coding-agent campaign until the repo says it is
-done. It is svrnmesh-cln's shape — the one that rebuilt a 1M-line repo in four
-days — with no daemon around it.
+`scripts/ralph.py` runs a coding-agent campaign until the repo says it is done,
+and it cannot resolve to quietly stuck: every terminal state is DONE, an
+operator stop, or an escalation. One Python state machine — a typed queue
+parser, a session layer, and three explicit FSMs — replacing the shell drivers
+(`ralph-{loop,supervise,pool,watch}.sh`) that had grown into string matching.
 
 ## Run it
 
 ```sh
-nohup scripts/ralph-loop.sh --workdir . --label ring1 \
-  --prompt ralph/PROMPT.md >> ralph/log.txt 2>&1 &
+nohup python3 scripts/ralph.py supervise --workdir . --label ring1 \
+  -- python3 scripts/ralph.py run --workdir . --label ring1 \
+  --prompt ralph/PROMPT.md --state ralph/STATE.md --notify \
+  >> ralph/log.txt 2>&1 &
 tail -f ralph/log.txt
 ```
 
-One process, one append-only log. The agent's output streams into it live, so
-progress is visible as it happens — not summarised after. Stop it with
-`touch ralph/STOP` (or `kill`).
+One process, one append-only log; the agent's output streams into it live. Stop
+with `touch ralph/STOP` — an EMPTY file is the operator's; a halt writes its
+reason into it. For a detached Mac job, add `--install-launchd` to `supervise`
+and `watch` and run the printed `launchctl bootstrap`.
 
 ## The model
 
-- **The queue is `ralph/STATE.md`** — the plan is memory, so a fresh session
-  knows where it is. The unit is one order (or one `REVIEW-n`), not a
-  micro-task; the order's lanes are its acceptance criteria, not an execution
-  script.
-- **Progress is a commit.** The loop advances when HEAD advances; `--max-stall`
-  iterations with no commit halts it and notifies.
-- **Commit as you go.** The prompt requires incremental commits, so a session
-  killed at any moment costs at most the in-flight step.
-- **Reviews are queue units** (`REVIEW-n`): audit the named orders against
-  `ARCH_PRINCIPLES.md`, then fix and consolidate, behaviour-preserving.
-  Optionally `--review-prompt FILE --review-every N` also runs a read-only
-  review every N commits.
+- **The queue is `ralph/STATE.md`** — typed and validated at load (duplicate
+  ids and unknown dependencies are errors, not silent misses). The unit is the
+  first `[~]` row, else the first dependency-ready `[ ]` row.
+- **Progress is a commit** in the serial driver (the stall bound halts and
+  escalates) and **a unit completed** in the supervisor (a resolution that
+  changes nothing escalates immediately; a resolver committing junk cannot
+  reset the bound).
+- **Commit as you go.** A session killed at any moment costs at most the
+  in-flight step; the next session is told the tree is dirty.
 
-## The safety, in the loop
+## The escalation gates
 
-- a session past `--session-timeout` is killed; its uncommitted work stays in
-  the tree and the next iteration resumes it (the loop tells the next session
-  the tree is dirty);
-- `--max-stall` consecutive no-commit iterations halt the loop and notify;
-- permission auto-rejections are counted and reported;
-- markers: `ralph/DONE` (complete), `ralph/STOP` (halt), `ralph/NEEDS_HUMAN.md`
-  (a decision package — the loop notifies and stops).
+- a session past `--session-timeout` is killed (its process group), and its
+  uncommitted work stays in the tree;
+- `--max-stall` consecutive no-commit iterations halt with a package;
+- a ready `HUMAN-` row stops before any session (operator-only);
+- `ralph/waiting` is bounded (`--marker-timeout`, default 7200s) — a detached
+  run that never writes its marker halts with a package;
+- every poll tick writes `ralph/.heartbeat`; `watch` notifies when it goes
+  stale, when a package sits unresolved, when the job is down without
+  DONE/operator-STOP, or when disk drops below 5 GB;
+- an I/O error (a full disk) halts with a package instead of a traceback.
 
-## Options
+Markers: `ralph/DONE` (complete), `ralph/STOP` (empty = operator, non-empty =
+halt), `ralph/NEEDS_HUMAN.md` (the decision package).
 
-```
---workdir DIR --prompt ralph/PROMPT.md [--label NAME]
-[--review-prompt FILE] [--review-every N] [--max-stall N] [--max-iter N]
-[--session-timeout S] [--done-file ralph/DONE] [--stop-file ralph/STOP]
-[--needs-human-file ralph/NEEDS_HUMAN.md] [--last-review ralph/.last_review]
-[--notify] [--plan]
-```
+## Build hygiene
+
+A campaign that builds accumulates: measured 2026-09-15, this workspace's
+`target/` reached 100G — 47G incremental, 35G deps, and 503 crates holding more
+than one rlib from differing feature sets — and the disk ceiling took the loop
+down twice. So a unit opens with `scripts/dev-build.sh --clean`, which cleans
+the debug profile only when it has grown past 50G (`RALPH_CLEAN_MB`): an
+unconditional clean costs a full rebuild every unit — measured 7.2m of a 30m
+unit, on top of checks that are cold anyway. Every build goes through that
+entry or the check scripts, never bare `cargo`: a `-p` build resolves features
+differently and rebuilds the dependents twice.
+
+## The director and the charter
+
+The supervisor's resolution session is a headless agent that fixes what a
+blocker needs. By default it defers design forks to the operator; when
+`ralph/CHARTER.md` exists (or `--charter FILE` names one) it becomes the
+**director** — the operator's standing delegate — and decides the forks the
+charter covers: row order and re-scoping, which documented option to take,
+placements the docs already imply. The charter's bright lines still stop it:
+no weakening a pass bar, no third `[[exception]]`, no widening an `except`, no
+`HUMAN-` rows, no pushes.
+
+Every director decision is one commit, recorded in `ralph/DECISIONS.md` with
+its evidence and the commit hash(es), and tagged `REVIEW-AFTER:` when the
+charter did not clearly cover it. The supervisor records each resolution's
+commit range in `ralph/.director-commits`, and
+`python3 scripts/ralph.py report` prints the decisions, the ranges with their
+commits, the packages and the queue head — so a decision the operator
+disagrees with is named and one `git revert` away. The director runs on
+`RESOLVE_MODEL` (`models.env`), separately from the worker and review models.
 
 ## Parallel lanes
 
-`ralph-loop.sh` is serial — one unit at a time. When a ring's frontier has
-independent units (ring 1 opened with five; ring 2 has `transform-rung` beside
-the registry chain), `ralph-pool.sh` runs them concurrently:
+`pool` runs a ring's ready units concurrently, each in its own git worktree on
+its own branch; waves of up to `--lanes`; merges are serial; a conflict aborts
+and halts, never auto-resolved. REVIEW units run serially in the main tree.
 
 ```sh
-nohup scripts/ralph-pool.sh --workdir . --prompt ralph/PROMPT.md --lanes 2 \
-  --review-model <model> >> ralph/log.txt 2>&1 &
+nohup python3 scripts/ralph.py supervise --workdir . --label ring2 \
+  -- python3 scripts/ralph.py pool --workdir . --label ring2 \
+  --prompt ralph/PROMPT.md --state ralph/STATE.md --lanes 2 --notify \
+  >> ralph/log.txt 2>&1 &
 ```
 
-It is wave-based: each wave takes up to `--lanes` ready units, runs each in its
-own **git worktree** on its own branch, waits, then merges the finished ones
-**serially** into the main tree. Safety:
+A lane session writes `ralph/lanes/<unit>.done` (committed) when the unit
+passes its own tests; the pool merges a lane whose marker is present. Lanes do
+not edit `STATE.md`; the pool marks a unit `[x]` after merging.
 
-- lanes never share a working tree, so no two sessions edit the same files;
-- a merge conflict **aborts and halts** (`ralph/NEEDS_HUMAN.md` + `ralph/STOP`) —
-  never auto-resolved;
-- `REVIEW` units run serially in the main tree (a review must see its units);
-- lanes do not edit `STATE.md`; the pool marks a unit `[x]` after merging, so the
-  merge never fights over the queue file;
-- a lane session runs in its own process group and is killed (group) past
-  `--session-timeout`.
+## Models and tests
 
-A lane session writes `ralph/done/<unit>` (committed) when the unit passes its
-own tests; the pool merges a lane whose marker is present.
-
-A repo supplies three files and points the loop at them: `ralph/PROMPT.md` (the
-iteration work order), `ralph/STATE.md` (the queue), and — if it uses review
-units — the principles it holds (`ARCH_PRINCIPLES.md`).
+`ralph/models.env` (per-host, gitignored) holds `MODEL`, `REVIEW_MODEL` and
+`VARIANT`; any unit id containing `REVIEW` routes to the review model.
+`python3 scripts/ralph.py models --model M --review-model R [--variant high]
+--label L` writes it and restarts the loaded job. The FSMs are tested
+in-process, no model calls: `python3 scripts/tests/ralph.py`.

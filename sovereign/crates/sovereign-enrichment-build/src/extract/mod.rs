@@ -185,19 +185,19 @@ pub async fn run_extract(args: &[String]) -> i32 {
     // with the closures, so each chat call bumps it and the flusher
     // task below sees the running totals.
     let usage_ledger = client.usage_ledger();
-    let (embed, chat, chat_with_tokens) = client.into_closures_with_tokens();
+    let (embed, chat) = client.into_closures();
 
     let cache = cfg.phase_cache();
     let runs = RunOutputWriter::new(paths::runs_dir(&cfg.corpus_id));
     let runner = PhaseRunner::new(
         pipeline,
         embed,
-        chat,
+        chat.clone(),
         cache,
         runs,
         paths::exemplars_dir(&cfg.corpus_id),
     )
-    .with_chat_with_tokens(chat_with_tokens)
+    .with_chat_with_tokens(chat)
     .with_checkpoint_path(&checkpoint_path)
     .with_dry_run(parsed.dry_run);
 
@@ -639,7 +639,7 @@ pub async fn run_with_closures_for_test(
     corpus_id: &str,
     selection: ChapterSelection,
     embed: corpus_engine::types::EmbedFn,
-    chat: corpus_engine::enrichment::pipeline::ChatCompletionFn,
+    chat: corpus_engine::InferenceFn,
 ) -> Result<(usize, bool), String> {
     let cfg = EnrichConfig::require(corpus_id).map_err(|e| e.to_string())?;
     let pipeline = super::pipeline_resolve::resolve_pipeline(&cfg)

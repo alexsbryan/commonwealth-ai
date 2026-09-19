@@ -68,7 +68,7 @@ fn floor_anchors() -> Vec<String> {
 }
 
 /// Resolve the workspace root for the registry, mirroring the daemon's
-/// chain (daemon_cmd/workspace.rs): explicit root (the builder) →
+/// chain (sovereign-daemon/src/workspace.rs): explicit root (the builder) →
 /// SOVEREIGN_WORKSPACE_DIR → `~/.svrnmesh/workspace` → ascent from the
 /// cwd for the repo signature. `None` only when every source fails,
 /// in which case the floor still holds.
@@ -137,7 +137,7 @@ impl ReadNotesTool {
     }
 
     /// Where `quality/operational-anchors.toml` lives. Mirrors the
-    /// BriefingTool/SessionStateTool builder in daemon_cmd/tool_registry.rs.
+    /// BriefingTool/SessionStateTool builder in sovereign-daemon/src/tool_registry.rs.
     /// Without it the loader falls back to SOVEREIGN_WORKSPACE_DIR, the
     /// `~/.svrnmesh/workspace` file, then an ascent from the cwd, then
     /// the compiled-in floor.

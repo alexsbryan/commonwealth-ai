@@ -21,54 +21,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::DocumentFilter;
+use super::{BoilerplateConfig, DocumentFilter};
 use crate::extractors::ExtractedDoc;
-
-/// Per-recipe configuration for the boilerplate filter. Each
-/// detection axis can be disabled independently — useful for corpora
-/// where the "reply quote" lines aren't quoted prefixes (Outlook's
-/// "On Date X wrote:" pattern), or where signature-block heuristics
-/// produce false positives (e.g. code in monospace mail).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BoilerplateConfig {
-    /// Strip `-- ` -prefixed signature blocks (RFC 3676 §4.3.2) and
-    /// strong heuristic siblings ("Sent from my iPhone", "Best
-    /// regards,\n<name>").
-    #[serde(default = "default_true_bool")]
-    pub strip_signatures: bool,
-    /// Strip RFC 3676 §4.5 quoted-reply blocks — lines starting with
-    /// `>` (one or more).
-    #[serde(default = "default_true_bool")]
-    pub strip_quoted_replies: bool,
-    /// Strip common corporate-disclaimer trailers ("This email and
-    /// any files transmitted with it…").
-    #[serde(default = "default_true_bool")]
-    pub strip_disclaimers: bool,
-    /// Reject docs whose body becomes shorter than this many chars
-    /// after stripping. Default 20 — anything shorter is empty for
-    /// retrieval purposes.
-    #[serde(default = "default_min_body_chars_after_strip")]
-    pub min_body_chars_after_strip: usize,
-}
-
-impl Default for BoilerplateConfig {
-    fn default() -> Self {
-        Self {
-            strip_signatures: true,
-            strip_quoted_replies: true,
-            strip_disclaimers: true,
-            min_body_chars_after_strip: 20,
-        }
-    }
-}
-
-fn default_true_bool() -> bool {
-    true
-}
-
-fn default_min_body_chars_after_strip() -> usize {
-    20
-}
 
 /// Filter implementation. Stateless across calls — `accept` is pure
 /// over `(doc, config)`.

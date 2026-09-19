@@ -49,6 +49,7 @@ tracing = { workspace = true }
 # how that is enforced rather than remembered. A third party lifting this crate
 # for the fold alone never links tokio.
 tokio = { workspace = true, optional = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [features]
 default = []

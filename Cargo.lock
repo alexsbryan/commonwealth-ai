@@ -229,6 +229,7 @@ version = "0.7.0"
 dependencies = [
  "serde",
  "toml 0.8.2",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -1849,6 +1850,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "code-facts"
+version = "0.7.0"
+dependencies = [
+ "corpus-engine-scip",
+ "corpus-engine-yield",
+ "corpus-index",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "streaming-iterator",
+ "tokio",
+ "tree-sitter",
+ "tree-sitter-language",
+ "tree-sitter-python",
+ "tree-sitter-rust",
+]
+
+[[package]]
+name = "code-next-edit"
+version = "0.7.0"
+dependencies = [
+ "corpus-engine-scip",
+ "serde",
+ "serde_json",
+ "sovereign-contracts",
+ "tokio",
+ "tracing",
+ "tree-sitter",
+ "tree-sitter-go",
+ "tree-sitter-python",
+ "tree-sitter-rust",
+ "tree-sitter-typescript",
+]
+
+[[package]]
 name = "codepage"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1904,6 +1940,7 @@ dependencies = [
  "thiserror 2.0.18",
  "toml 0.8.2",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -1921,6 +1958,7 @@ dependencies = [
  "sysinfo 0.35.2",
  "tokio",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -1938,6 +1976,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -1949,6 +1988,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -1962,6 +2002,7 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -1985,6 +2026,7 @@ dependencies = [
  "toml 0.8.2",
  "tracing",
  "tracing-subscriber",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -1995,12 +2037,14 @@ dependencies = [
  "bytes",
  "commonwealth-core",
  "commonwealth-rail-core",
+ "oicp-types",
  "rusqlite",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2020,6 +2064,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2036,6 +2081,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2248,11 +2294,12 @@ dependencies = [
  "bzip2 0.5.2",
  "calamine",
  "chrono",
+ "code-facts",
  "corpus-engine-notes",
  "corpus-engine-scip",
  "corpus-engine-sections",
- "corpus-engine-vocab",
  "corpus-engine-yield",
+ "corpus-index",
  "csv",
  "flate2",
  "futures",
@@ -2302,10 +2349,12 @@ dependencies = [
  "tree-sitter-rust",
  "tree-sitter-typescript",
  "trybuild",
- "unicode-normalization",
+ "understanding-atlas",
+ "understanding-vocab",
  "uuid",
  "walkdir",
  "wiremock",
+ "workspace-hack",
  "zip 8.6.0",
  "zstd",
 ]
@@ -2322,6 +2371,7 @@ dependencies = [
  "toml 0.8.2",
  "tracing",
  "walkdir",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2339,26 +2389,31 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+ "workspace-hack",
 ]
 
 [[package]]
 name = "corpus-engine-notes"
 version = "0.7.0"
 dependencies = [
+ "async-trait",
  "chrono",
  "clap",
  "corpus-engine-yield",
+ "oicp-types",
  "reqwest 0.12.28",
  "rusqlite",
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "sovereign-contracts",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "toml 0.8.2",
  "tracing",
  "uuid",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2379,6 +2434,7 @@ dependencies = [
  "tokio",
  "tracing",
  "which",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2390,35 +2446,60 @@ dependencies = [
 ]
 
 [[package]]
-name = "corpus-engine-vocab"
-version = "0.7.0"
-dependencies = [
- "blake3",
- "kernel-types",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "corpus-engine-watchers"
 version = "0.7.0"
 dependencies = [
+ "arc-swap",
  "async-trait",
+ "chrono",
+ "code-facts",
  "corpus-engine-notes",
+ "corpus-engine-scip",
  "corpus-engine-yield",
  "futures",
+ "ignore",
  "notify",
  "rusqlite",
+ "serde",
  "serde_json",
+ "sovereign-contracts",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
 name = "corpus-engine-yield"
 version = "0.7.0"
+dependencies = [
+ "workspace-hack",
+]
+
+[[package]]
+name = "corpus-index"
+version = "0.7.0"
+dependencies = [
+ "arrow",
+ "arrow-array",
+ "arrow-schema",
+ "blake3",
+ "chrono",
+ "corpus-engine-yield",
+ "futures",
+ "kernel-types",
+ "lancedb",
+ "oplog",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
 
 [[package]]
 name = "corpus-mcp"
@@ -2428,7 +2509,7 @@ dependencies = [
  "chrono",
  "clap",
  "corpus-engine",
- "corpus-engine-vocab",
+ "corpus-index",
  "oicp-types",
  "reqwest 0.12.28",
  "serde",
@@ -2439,6 +2520,8 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "understanding-vocab",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -8518,7 +8601,7 @@ version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "680998035259dcfcafe653688bf2aa6d3e2dc05e98be6ab46afb089dc84f1df8"
 dependencies = [
- "proc-macro-crate 1.3.1",
+ "proc-macro-crate 2.0.0",
  "proc-macro2",
  "quote",
  "syn 2.0.118",
@@ -8887,12 +8970,14 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "workspace-hack",
 ]
 
 [[package]]
 name = "oicp-types"
 version = "0.1.0"
 dependencies = [
+ "futures",
  "kernel-types",
  "serde",
  "serde_json",
@@ -11584,8 +11669,10 @@ dependencies = [
 name = "serving-policy"
 version = "0.7.0"
 dependencies = [
+ "oicp-types",
  "serde",
  "toml 0.8.2",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12002,6 +12089,7 @@ dependencies = [
  "toml 0.8.2",
  "tracing",
  "tracing-subscriber",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12017,58 +12105,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
-]
-
-[[package]]
-name = "sovereign-api"
-version = "0.7.0"
-dependencies = [
- "arc-swap",
- "async-trait",
- "axum",
- "bytes",
- "chrono",
- "commonwealth-core",
- "commonwealth-discovery",
- "commonwealth-rail",
- "commonwealth-state",
- "commonwealth-transport",
- "corpus-engine",
- "corpus-engine-atos",
- "corpus-engine-notes",
- "corpus-engine-scip",
- "dirs 5.0.1",
- "ed25519-dalek 2.2.0",
- "futures",
- "hex",
- "http-body 1.0.1",
- "http-body-util",
- "kernel-types",
- "libc",
- "oicp-types",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "serving-policy",
- "sha2 0.10.9",
- "sovereign-atos",
- "sovereign-core",
- "sovereign-grants",
- "sovereign-meshapp-registry",
- "sovereign-serving",
- "sovereign-tools",
- "tar",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tokio-stream",
- "tokio-util",
- "toml 0.8.2",
- "tower",
- "tower-http",
- "tracing",
- "tree-sitter",
- "zstd",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12082,16 +12119,19 @@ dependencies = [
  "corpus-engine",
  "corpus-engine-atos",
  "corpus-engine-notes",
+ "oicp-types",
  "pulldown-cmark",
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "sovereign-contracts",
  "sovereign-core",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
  "uuid",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12102,6 +12142,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12147,6 +12188,7 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "which",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12174,12 +12216,16 @@ dependencies = [
  "sovereign-compute",
  "sovereign-contracts",
  "sovereign-core",
+ "sovereign-daemon",
  "sovereign-enrichment-build",
  "sovereign-gliner",
  "sovereign-inference",
  "sovereign-mesh",
+ "sovereign-pods",
  "sovereign-runtime-recipe",
+ "sovereign-scheduler",
  "sovereign-service",
+ "sovereign-serving-host",
  "sovereign-store",
  "sovereign-tdd",
  "sovereign-tools",
@@ -12195,6 +12241,7 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "which",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12206,6 +12253,7 @@ dependencies = [
  "async-trait",
  "axum",
  "chrono",
+ "code-facts",
  "commonwealth-core",
  "commonwealth-state",
  "corpus-engine",
@@ -12229,6 +12277,7 @@ dependencies = [
  "sovereign-atos",
  "sovereign-cli-shared",
  "sovereign-core",
+ "sovereign-daemon",
  "sovereign-mesh",
  "sovereign-store",
  "sovereign-tools",
@@ -12241,6 +12290,7 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "which",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12262,7 +12312,6 @@ dependencies = [
  "corpus-engine",
  "corpus-engine-atos",
  "corpus-engine-notes",
- "corpus-engine-vocab",
  "dirs 5.0.1",
  "ed25519-dalek 2.2.0",
  "futures",
@@ -12282,6 +12331,7 @@ dependencies = [
  "sovereign-cli-shared",
  "sovereign-contracts",
  "sovereign-core",
+ "sovereign-daemon",
  "sovereign-enrichment-build",
  "sovereign-enrichment-catalog",
  "sovereign-eval",
@@ -12290,6 +12340,7 @@ dependencies = [
  "sovereign-mesh",
  "sovereign-meshapp",
  "sovereign-pipeline",
+ "sovereign-pods",
  "sovereign-runtime-recipe",
  "sovereign-store",
  "sovereign-tools",
@@ -12305,8 +12356,10 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-subscriber",
+ "understanding-vocab",
  "uuid",
  "which",
+ "workspace-hack",
  "zstd",
 ]
 
@@ -12334,6 +12387,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "which",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12354,20 +12408,27 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "workspace-hack",
 ]
 
 [[package]]
 name = "sovereign-contracts"
 version = "0.7.0"
 dependencies = [
+ "arc-swap",
  "async-trait",
+ "base64 0.22.1",
  "bytes",
  "chrono",
  "dirs 5.0.1",
+ "ed25519-dalek 2.2.0",
  "futures",
+ "hex",
  "kernel-types",
  "libc",
  "oicp-types",
+ "rand 0.9.4",
+ "rcgen 0.13.2",
  "regex",
  "reqwest 0.12.28",
  "serde",
@@ -12391,7 +12452,6 @@ dependencies = [
  "corpus-engine",
  "corpus-engine-notes",
  "corpus-engine-scip",
- "corpus-engine-vocab",
  "dashmap",
  "dirs 5.0.1",
  "futures",
@@ -12405,6 +12465,7 @@ dependencies = [
  "sha2 0.10.9",
  "sovereign-contracts",
  "sovereign-store",
+ "sovereign-time",
  "sovereign-tools",
  "sovereign-tools-base",
  "tempfile",
@@ -12415,7 +12476,87 @@ dependencies = [
  "toml 0.8.2",
  "tracing",
  "tracing-subscriber",
+ "understanding-vocab",
  "uuid",
+ "workspace-hack",
+]
+
+[[package]]
+name = "sovereign-daemon"
+version = "0.7.0"
+dependencies = [
+ "arc-swap",
+ "async-trait",
+ "axum",
+ "bytes",
+ "chrono",
+ "code-next-edit",
+ "commonwealth-core",
+ "commonwealth-discovery",
+ "commonwealth-media",
+ "commonwealth-rail",
+ "commonwealth-state",
+ "commonwealth-transport",
+ "commonwealth-work",
+ "corpus-engine",
+ "corpus-engine-atos",
+ "corpus-engine-notes",
+ "corpus-engine-scip",
+ "corpus-engine-watchers",
+ "dirs 5.0.1",
+ "ed25519-dalek 2.2.0",
+ "futures",
+ "hex",
+ "hostname",
+ "http-body 1.0.1",
+ "http-body-util",
+ "if-addrs",
+ "kernel-types",
+ "libc",
+ "oicp-types",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "serving-policy",
+ "sha2 0.10.9",
+ "sovereign-atos",
+ "sovereign-authoring-harness",
+ "sovereign-compute",
+ "sovereign-contracts",
+ "sovereign-core",
+ "sovereign-enrichment-build",
+ "sovereign-enrichment-catalog",
+ "sovereign-gliner",
+ "sovereign-grants",
+ "sovereign-inference",
+ "sovereign-mesh",
+ "sovereign-meshapp",
+ "sovereign-meshapp-registry",
+ "sovereign-peer-wire",
+ "sovereign-pods",
+ "sovereign-scheduler",
+ "sovereign-serving-host",
+ "sovereign-store",
+ "sovereign-tdd",
+ "sovereign-time",
+ "sovereign-tools",
+ "sovereign-work-atlas",
+ "sovereign-workflow",
+ "sovereign-workflow-host",
+ "tar",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "toml 0.8.2",
+ "tower",
+ "tower-http",
+ "tracing",
+ "tree-sitter",
+ "uuid",
+ "workspace-hack",
+ "zstd",
 ]
 
 [[package]]
@@ -12456,6 +12597,7 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "walkdir",
+ "workspace-hack",
  "zip 8.6.0",
 ]
 
@@ -12465,7 +12607,6 @@ version = "0.7.0"
 dependencies = [
  "chrono",
  "corpus-engine",
- "corpus-engine-vocab",
  "oicp-client",
  "oicp-types",
  "reqwest 0.12.28",
@@ -12478,6 +12619,8 @@ dependencies = [
  "tokio",
  "toml 0.8.2",
  "tracing",
+ "understanding-vocab",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12490,6 +12633,7 @@ dependencies = [
  "sovereign-contracts",
  "tempfile",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12516,7 +12660,9 @@ dependencies = [
  "toml 0.8.2",
  "tracing",
  "tracing-subscriber",
+ "understanding-vocab",
  "uuid",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12540,6 +12686,7 @@ dependencies = [
  "tokenizers",
  "tokio",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12551,6 +12698,7 @@ dependencies = [
  "commonwealth-core",
  "commonwealth-state",
  "corpus-engine",
+ "dirs 5.0.1",
  "hex",
  "reqwest 0.12.28",
  "serde",
@@ -12559,6 +12707,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12575,6 +12724,7 @@ dependencies = [
  "llguidance",
  "minijinja",
  "oicp-client",
+ "oicp-types",
  "rayon",
  "reqwest 0.12.28",
  "serde",
@@ -12590,6 +12740,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "tracing-subscriber",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12600,9 +12751,9 @@ dependencies = [
  "async-trait",
  "axum",
  "axum-server",
- "base64 0.22.1",
  "bytes",
  "chrono",
+ "code-facts",
  "commonwealth-core",
  "commonwealth-discovery",
  "commonwealth-media",
@@ -12613,6 +12764,7 @@ dependencies = [
  "corpus-engine",
  "corpus-engine-notes",
  "corpus-engine-scip",
+ "corpus-engine-watchers",
  "dirs 6.0.0",
  "ed25519-dalek 2.2.0",
  "futures",
@@ -12624,25 +12776,30 @@ dependencies = [
  "notify",
  "oicp-types",
  "rand 0.9.4",
- "rcgen 0.13.2",
  "reqwest 0.12.28",
  "rustls",
  "serde",
  "serde_json",
  "sha2 0.10.9",
- "sovereign-api",
  "sovereign-authoring-harness",
  "sovereign-contracts",
  "sovereign-core",
+ "sovereign-daemon",
  "sovereign-enrichment-catalog",
  "sovereign-gliner",
+ "sovereign-grants",
  "sovereign-inference",
  "sovereign-mesh-test-harness",
  "sovereign-meshapp",
  "sovereign-meshapp-registry",
- "sovereign-serving",
+ "sovereign-peer-wire",
+ "sovereign-pods",
+ "sovereign-scheduler",
+ "sovereign-serving-host",
  "sovereign-store",
+ "sovereign-time",
  "sovereign-tools",
+ "sovereign-turn-client",
  "sovereign-work-atlas",
  "tempfile",
  "thiserror 2.0.18",
@@ -12655,8 +12812,10 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-subscriber",
+ "understanding-vocab",
  "urlencoding",
  "uuid",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12665,20 +12824,17 @@ version = "0.7.0"
 dependencies = [
  "async-trait",
  "axum",
- "bytes",
  "commonwealth-core",
  "commonwealth-discovery",
  "commonwealth-state",
  "commonwealth-transport",
- "http-body-util",
- "serde",
+ "oicp-types",
  "serde_json",
- "sovereign-api",
- "sovereign-meshapp-registry",
- "sovereign-serving",
+ "sovereign-daemon",
+ "sovereign-scheduler",
  "tokio",
- "tower",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12694,6 +12850,7 @@ dependencies = [
  "sovereign-time",
  "tempfile",
  "tokio",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12707,6 +12864,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12729,6 +12887,15 @@ dependencies = [
  "tokio-tungstenite",
  "tracing",
  "uuid",
+ "workspace-hack",
+]
+
+[[package]]
+name = "sovereign-peer-wire"
+version = "0.7.0"
+dependencies = [
+ "commonwealth-rail",
+ "serde",
 ]
 
 [[package]]
@@ -12750,6 +12917,35 @@ dependencies = [
  "toml 0.8.2",
  "tracing",
  "uuid",
+ "workspace-hack",
+]
+
+[[package]]
+name = "sovereign-pods"
+version = "0.7.0"
+dependencies = [
+ "axum",
+ "axum-server",
+ "base64 0.22.1",
+ "bytes",
+ "ed25519-dalek 2.2.0",
+ "futures",
+ "hex",
+ "rand 0.9.4",
+ "reqwest 0.12.28",
+ "rustls",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sovereign-contracts",
+ "sovereign-time",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-stream",
+ "tower",
+ "tracing",
+ "urlencoding",
 ]
 
 [[package]]
@@ -12768,6 +12964,7 @@ dependencies = [
  "tokio",
  "toml 0.8.2",
  "uuid",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12782,6 +12979,19 @@ dependencies = [
  "sovereign-inference",
  "sovereign-tools",
  "tokio",
+ "tracing",
+ "workspace-hack",
+]
+
+[[package]]
+name = "sovereign-scheduler"
+version = "0.7.0"
+dependencies = [
+ "async-trait",
+ "kernel-types",
+ "oicp-types",
+ "serde",
+ "serde_json",
  "tracing",
 ]
 
@@ -12823,6 +13033,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12832,26 +13043,39 @@ dependencies = [
  "dirs 5.0.1",
  "libc",
  "sovereign-contracts",
+ "workspace-hack",
 ]
 
 [[package]]
-name = "sovereign-serving"
+name = "sovereign-serving-host"
 version = "0.7.0"
 dependencies = [
- "anyhow",
+ "arc-swap",
+ "async-trait",
  "axum",
- "bytes",
- "chrono",
  "commonwealth-core",
- "commonwealth-state",
- "corpus-engine",
+ "ed25519-dalek 2.2.0",
+ "futures",
+ "http-body 1.0.1",
+ "kernel-types",
+ "oicp-client",
+ "oicp-types",
+ "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "serving-policy",
+ "sha2 0.10.9",
+ "sovereign-contracts",
+ "sovereign-scheduler",
+ "sovereign-time",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
- "tokio-stream",
- "tokio-util",
+ "toml 0.8.2",
+ "tower",
  "tracing",
+ "urlencoding",
+ "uuid",
 ]
 
 [[package]]
@@ -12873,6 +13097,7 @@ dependencies = [
  "tokio-postgres",
  "tracing",
  "uuid",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12887,6 +13112,7 @@ dependencies = [
  "sovereign-workflow",
  "sovereign-workflow-host",
  "tokio",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12905,6 +13131,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -12924,6 +13151,7 @@ dependencies = [
  "blake3",
  "bzip2 0.5.2",
  "chrono",
+ "code-facts",
  "commonwealth-core",
  "corpus-engine",
  "corpus-engine-archaeology",
@@ -12978,8 +13206,10 @@ dependencies = [
  "toml 0.8.2",
  "tracing",
  "tracing-subscriber",
+ "understanding-vocab",
  "uuid",
  "walkdir",
+ "workspace-hack",
  "zip 8.6.0",
 ]
 
@@ -13001,13 +13231,17 @@ dependencies = [
  "tokio",
  "toml 0.8.2",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
 name = "sovereign-turn-client"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "axum",
  "futures",
+ "oicp-types",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
@@ -13015,6 +13249,7 @@ dependencies = [
  "tokio",
  "tokio-tungstenite",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -13039,6 +13274,7 @@ dependencies = [
  "toml 0.8.2",
  "tracing",
  "uuid",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -13056,6 +13292,7 @@ dependencies = [
  "tokio",
  "toml 0.8.2",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -13075,6 +13312,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -14856,6 +15094,55 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2896d95c02a80c6d6a5d6e953d479f5ddf2dfdb6a244441010e373ac0fb88971"
 
 [[package]]
+name = "understanding-atlas"
+version = "0.7.0"
+dependencies = [
+ "chrono",
+ "corpus-index",
+ "kernel-types",
+ "oplog",
+ "regex",
+ "serde",
+ "serde_json",
+ "tracing",
+ "understanding-vocab",
+ "unicode-normalization",
+]
+
+[[package]]
+name = "understanding-host"
+version = "0.7.0"
+dependencies = [
+ "arrow",
+ "async-trait",
+ "chrono",
+ "corpus-engine",
+ "corpus-index",
+ "futures",
+ "kernel-types",
+ "lancedb",
+ "oplog",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "understanding-atlas",
+ "understanding-vocab",
+]
+
+[[package]]
+name = "understanding-vocab"
+version = "0.7.0"
+dependencies = [
+ "blake3",
+ "kernel-types",
+ "serde",
+ "serde_json",
+ "trybuild",
+]
+
+[[package]]
 name = "unic-char-property"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -16382,6 +16669,152 @@ dependencies = [
 ]
 
 [[package]]
+name = "workspace-hack"
+version = "0.1.0"
+dependencies = [
+ "ahash",
+ "aho-corasick",
+ "arrayvec",
+ "axum",
+ "bitflags 2.11.1",
+ "block2",
+ "brotli",
+ "bytes",
+ "cc",
+ "chrono",
+ "cipher",
+ "crossbeam-epoch",
+ "data-encoding",
+ "deadpool",
+ "deadpool-runtime",
+ "der 0.7.10",
+ "deranged",
+ "derive_more 2.1.1",
+ "derive_more-impl",
+ "digest 0.10.7",
+ "digest 0.11.3",
+ "dispatch2",
+ "displaydoc",
+ "ed25519 2.2.3",
+ "ed25519-dalek 2.2.0",
+ "either",
+ "errno",
+ "fastrand",
+ "fixedbitset 0.5.7",
+ "flate2",
+ "foldhash 0.2.0",
+ "form_urlencoded",
+ "futures-channel",
+ "futures-core",
+ "futures-executor",
+ "futures-io",
+ "futures-sink",
+ "futures-task",
+ "futures-util",
+ "getrandom 0.2.17",
+ "getrandom 0.3.4",
+ "getrandom 0.4.2",
+ "h2",
+ "half",
+ "hashbrown 0.14.5",
+ "hashbrown 0.15.5",
+ "hashbrown 0.17.1",
+ "hyper",
+ "hyper-rustls",
+ "hyper-util",
+ "i_overlay",
+ "idna",
+ "inout",
+ "ipnet",
+ "lazy_static",
+ "libc",
+ "log",
+ "lopdf",
+ "lzma-rust2",
+ "matrixmultiply",
+ "memchr",
+ "miniz_oxide",
+ "mio",
+ "moka",
+ "num-bigint",
+ "num-complex",
+ "num-integer",
+ "num-iter",
+ "num-traits",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-core-foundation",
+ "objc2-foundation",
+ "objc2-security",
+ "objc2-system-configuration",
+ "once_cell",
+ "percent-encoding",
+ "petgraph 0.8.3",
+ "phf 0.13.1",
+ "phf_shared 0.10.0",
+ "phf_shared 0.13.1",
+ "pkcs8 0.10.2",
+ "portable-atomic",
+ "proc-macro2",
+ "prost",
+ "prost-types",
+ "quote",
+ "rand 0.8.6",
+ "rand_core 0.6.4",
+ "regex",
+ "regex-automata",
+ "regex-syntax",
+ "reqwest 0.12.28",
+ "ring",
+ "rustls",
+ "rustls-pemfile",
+ "rustls-pki-types",
+ "rustls-webpki",
+ "schemars 0.8.22",
+ "semver",
+ "serde",
+ "serde_core",
+ "serde_json",
+ "sevenz-rust2",
+ "sha2 0.10.9",
+ "sha2 0.11.0",
+ "signature 2.2.0",
+ "simd-adler32",
+ "simdutf8",
+ "slab",
+ "smallvec",
+ "spin 0.9.8",
+ "spki 0.7.3",
+ "stable_deref_trait",
+ "subtle",
+ "syn 1.0.109",
+ "syn 2.0.118",
+ "tauri",
+ "tauri-build",
+ "tauri-utils",
+ "time",
+ "time-macros",
+ "tokio",
+ "tokio-rustls",
+ "tokio-stream",
+ "tokio-util",
+ "toml 0.8.2",
+ "toml_datetime 0.6.11",
+ "toml_edit 0.20.2",
+ "tower",
+ "tower-http",
+ "tracing",
+ "tracing-core",
+ "tracing-subscriber",
+ "typenum",
+ "url",
+ "uuid",
+ "winnow 0.7.15",
+ "zerocopy",
+ "zeroize",
+]
+
+[[package]]
 name = "writeable"
 version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -16540,6 +16973,7 @@ dependencies = [
  "serde_json",
  "syn 2.0.118",
  "toml 0.8.2",
+ "workspace-hack",
 ]
 
 [[package]]

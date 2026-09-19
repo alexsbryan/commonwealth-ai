@@ -29,18 +29,19 @@
 //! hardware, where no such field exists.
 //!
 //! ```text
-//! cargo test -p sovereign-mesh --features mesh-sim,treesitter \
+//! cargo test -p sovereign-mesh --features dst,treesitter \
 //!     --test main scheduler_replay_agreement -- --nocapture
 //! ```
-#![cfg(feature = "mesh-sim")]
+#![cfg(feature = "dst")]
 
 use std::path::PathBuf;
 
-use sovereign_mesh::decision_log::{DecisionEvent, DecisionSink, TracingDecisionSink};
+use sovereign_mesh::decision_log::{DecisionEvent, DecisionSink};
 use sovereign_mesh::decision_replay::{replay_decisions, replay_trace, ReplayReport, SkipReason};
 use sovereign_mesh::decision_trace::SchedulerTrace;
-use sovereign_mesh::mesh_sim::scenario::{self, Scenario};
-use sovereign_mesh::mesh_sim::{run, Arm, RunReport};
+use sovereign_mesh_test_harness::mesh_sim::scenario::{self, Scenario};
+use sovereign_mesh_test_harness::mesh_sim::{run, Arm, RunReport};
+use sovereign_serving_host::recorder::TracingDecisionSink;
 
 const SEED: u64 = 20_260_726;
 

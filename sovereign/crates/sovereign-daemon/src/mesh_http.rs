@@ -1,0 +1,1838 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! HTTP surface for mesh mutation. Lets an out-of-process client
+//! (most notably the desktop app, when it detects that a CLI-started
+//! daemon already owns `:9741`) drive `create / join / rotate / leave`
+//! without reimplementing the state machine.
+//!
+//! Before this module, mesh mutations were Rust-only via
+//! `EmbeddedDaemon::{create_mesh, join_mesh, stop}` — which meant a
+//! second process couldn't change mesh state without attempting to
+//! start its own daemon (silent port collision, no mesh parity).
+//!
+//! Routes mount under `/v1/mesh/*` on the same `:9741` listener as
+//! `/v1/chat/completions` and `/mcp`. Localhost-only: any non-loopback
+//! caller gets `403 Forbidden`, same guard as `mcp_router`. The
+//! endpoints are deliberately symmetric with the `sovereign mesh …`
+//! CLI subcommands.
+
+use std::sync::Arc;
+
+use axum::extract::Extension;
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
+use axum::routing::{get, post};
+use axum::{Json, Router};
+use serde::{Deserialize, Serialize};
+
+use crate::daemon::EmbeddedDaemon;
+use crate::loopback_guard::{LocalOnly, LoopbackRouter};
+use crate::types::JoinConfirmation;
+
+/// Build the mesh HTTP router. Merged into the daemon's client router
+/// next to `mcp_router`. Call once at `start_daemon` time and hand the
+/// same `Arc<EmbeddedDaemon>` that `start_daemon` owns internally.
+pub fn mesh_router(daemon: Arc<EmbeddedDaemon>) -> Router {
+    Router::new()
+        .route("/v1/mesh/status", get(mesh_status))
+        .route("/v1/mesh/create", post(mesh_create))
+        .route("/v1/mesh/join", post(mesh_join))
+        .route("/v1/mesh/join/preview", post(mesh_join_preview))
+        .route("/v1/mesh/rotate", post(mesh_rotate))
+        .route("/v1/mesh/switch", post(mesh_switch))
+        .route("/v1/mesh/forget", post(mesh_forget))
+        .route("/v1/mesh/leave", post(mesh_leave))
+        .route(
+            "/v1/mesh/forget-member",
+            post(crate::roster_repair::mesh_forget_member),
+        )
+        .route("/v1/mesh/relay-candidates", get(mesh_relay_candidates))
+        // Federated media, viewer half: the loopback URL that reaches a
+        // member's `[iroh] media_origin`. The holder half is the acceptor's
+        // MEDIA_ALPN slot in `iroh_access`.
+        .route("/v1/mesh/media", get(crate::media_reach::mesh_media))
+        .route("/v1/mesh/app", get(crate::media_reach::mesh_app))
+        .route("/v1/mesh/offers", get(crate::media_reach::mesh_offers))
+        // The catalogue half: one request to every offering member, one
+        // attributed row each (`commonwealth_transport::fanout` underneath).
+        // One handler, two paths: `kind` defaults to media, so the older
+        // spelling is the generic body with a field absent rather than a
+        // second implementation that could drift from it.
+        .route("/v1/mesh/fanout", post(crate::origin_fanout::mesh_fanout))
+        .route(
+            "/v1/mesh/media/fanout",
+            post(crate::origin_fanout::mesh_fanout),
+        )
+        // The publishing half: what THIS node offers the house, and the
+        // claims that keep the ephemeral tier from outliving its process.
+        .route(
+            "/v1/mesh/publish",
+            get(crate::publish_http::publishing).post(crate::publish_http::publish_app),
+        )
+        .route(
+            "/v1/mesh/publish/{claim_id}",
+            axum::routing::delete(crate::publish_http::unpublish_app),
+        )
+        .route(
+            "/v1/mesh/publish/{claim_id}/renew",
+            post(crate::publish_http::renew_app),
+        )
+        .route(
+            "/v1/mesh/measurements",
+            post(publish_measurement).get(peer_measurements),
+        )
+        // Router-level loopback guard — defense in depth on top of
+        // the per-handler `enforce_localhost` checks. Adding a new
+        // route to this module inherits the guard for free; the
+        // per-handler check stays as a secondary barrier.
+        .localhost_only_with(daemon)
+}
+
+/// Request body for `POST /v1/mesh/create`. Both fields default so a
+/// bare `POST` with empty body is valid — mirrors `sovereign mesh create`
+/// with no args.
+#[derive(Debug, Deserialize, Default)]
+pub struct CreateRequest {
+    /// Human-readable mesh name. Defaults to `"<host>'s Mesh"`.
+    #[serde(default)]
+    pub name: Option<String>,
+    /// Node display name. Defaults to the machine's hostname.
+    #[serde(default)]
+    pub node_name: Option<String>,
+    /// Create an ENCRYPTED mesh (founder-set policy: all peers enforce
+    /// iroh dial-by-key + encrypted join). Defaults to plaintext.
+    #[serde(default)]
+    pub encrypt: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CreateResponse {
+    pub mesh_name: String,
+    pub join_key: String,
+    pub join_link: String,
+    /// Bearer token a remote peer/client must present, shown beside the
+    /// join key on the invite screen. `None` if the daemon stayed
+    /// loopback-only. See `client_auth`.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub client_token: Option<String>,
+}
+
+/// Request body for `POST /v1/mesh/join`. Accepts any of the three
+/// forms the CLI accepts: bare `cwth-…` key, `https://sovereign.dev/join/…`
+/// URL, or `sovereign://join/…` deep link.
+#[derive(Debug, Deserialize)]
+pub struct JoinRequest {
+    pub key_or_url: String,
+    #[serde(default)]
+    pub node_name: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct JoinResponse {
+    pub mesh_name: String,
+    pub node_id: String,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub client_token: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RotateResponse {
+    pub mesh_name: String,
+    pub join_key: String,
+}
+
+/// Shape returned by `GET /v1/mesh/status`. Flat and JSON-friendly so
+/// desktop UIs can render it without a client-side wrapper type.
+/// Field names are aligned with the existing `MeshState` the desktop
+/// already knows how to render — an HTTP client can round-trip through
+/// this DTO without losing information.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct StatusResponse {
+    pub running: bool,
+    /// What kind of participant THIS node is — `holder`, `terminal`, or
+    /// `unconfigured` ([`NodeClass::id`]).
+    ///
+    /// Local only: derived from this daemon's own `SetupConfig`, never
+    /// gossiped, so `members[]` carries no such field. It is reported because
+    /// the manifest cannot answer it. Since candidacy began keying on
+    /// residency, a terminal and a holder whose slots failed to load both
+    /// advertise zero models, and an operator staring at an empty lineup has no
+    /// way to tell "holds nothing by design" from "should hold something and
+    /// does not" (§18.2).
+    ///
+    /// `#[serde(default)]` so a desktop or CLI built before this field can
+    /// still deserialise a newer daemon's response.
+    #[serde(default)]
+    pub node_class: String,
+    /// The entry node a `terminal` forwards every turn and embedding to.
+    /// `None` on a holder.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub entry_node: Option<String>,
+    /// Every mesh this node is a member of — the active one and the parked
+    /// ones. Empty on a daemon with persistence disabled.
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub meshes: Vec<KnownMeshDto>,
+    pub mesh_name: Option<String>,
+    pub members_online: usize,
+    pub members_total: usize,
+    pub members: Vec<MemberDto>,
+    /// Current shareable invite. `None` when the daemon is solo,
+    /// or when the persisted mesh predates the join_key.secret cache
+    /// (a rotate recovers the link). The frontend hides the share
+    /// card when these are absent.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub join_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub join_link: Option<String>,
+    /// Client-API bearer token for remote callers. `Some` once the
+    /// daemon is exposed (shared mesh); `None` for a loopback-only
+    /// solo daemon. Surfaced beside the invite so the share UI can
+    /// render it after a restart without re-creating the mesh.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub client_token: Option<String>,
+    /// RPC inference workers + their eligibility state (host side; empty on a
+    /// node not running RPC discovery). Lets an operator see WHY a worker isn't
+    /// being distributed to — e.g. `quarantined` with a cooldown after flapping.
+    /// See `crate::worker_eligibility`.
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub rpc_workers: Vec<crate::worker_eligibility::WorkerStatusView>,
+    /// True when THIS node is the current shared-model host (it assembles +
+    /// distributes the RPC layer-split). Published by the daemon's discovery
+    /// loop via [`set_shared_model_host`]; lets a mesh soak assert the
+    /// no-split-brain invariant — at most one host across the fleet.
+    #[serde(default)]
+    pub shared_model_host: bool,
+    /// Cluster-health summary when this node is in a shared-model fleet
+    /// (`SOVEREIGN_SHARED_MODEL_ID` set); `None` otherwise. Powers the desktop
+    /// "Shared model" chip (`k/N anchors · available|forming`).
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub shared_model: Option<SharedModelStatusDto>,
+    /// Peer-admission load: current in-flight peer requests + the configured
+    /// ceiling. Lets a multi-process soak assert AdmissionSafety over HTTP
+    /// (inflight ≤ ceiling, → 0 at quiescence) — previously DST-only. Serde
+    /// default keeps older status consumers wire-compatible.
+    #[serde(default)]
+    pub peer_inflight_current: usize,
+    #[serde(default)]
+    pub peer_inflight_ceiling: usize,
+    /// Current outbound peer knowledge fan-out width (the `fanout_inflight`
+    /// gauge). Lets the soak assert `BoundedFanOut` over HTTP. Serde default
+    /// keeps older status consumers wire-compatible.
+    #[serde(default)]
+    pub fanout_inflight_current: usize,
+    /// Corpora currently being ingested on this node — the soak's ingest /
+    /// inference-contention signal (0 when idle).
+    #[serde(default)]
+    pub active_corpus_ingests: usize,
+    /// Per-peer iroh connection path (H2 observability): `direct` /
+    /// `relayed` / `mixed` / `idle` for each known peer. Empty when
+    /// iroh isn't running (mesh on the IP path) — so it also answers
+    /// "is this mesh actually on iroh, and via relay or direct?".
+    /// Serde default keeps older consumers wire-compatible.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub iroh_transport: Vec<crate::daemon::MemberReach>,
+    /// This NODE's OWN iroh reachability (Track W): relay-homed?,
+    /// discoverable?, plus the self-heal watchdog's recovery history. `None`
+    /// when iroh isn't running. Answers "am I actually dialable right now?".
+    ///
+    /// Renamed from `founder_reachability`: it reads THIS node's iroh endpoint
+    /// and watchdog status, never the founder's. Alias kept for one release
+    /// because attach mode lets the desktop and daemon run different versions.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "founder_reachability"
+    )]
+    pub self_reachability: Option<crate::daemon::SelfReachability>,
+    /// Live per-device memory as the LOADER sees it, in its plan order (eligible
+    /// RPC workers first, this host's GPU last). Empty when this node would not
+    /// distribute (no eligible RPC worker), and on any daemon predating the field.
+    ///
+    /// Published because only this process can answer the question. The gossiped
+    /// `members[].vram_gb` is a device TOTAL — what the silicon could hold if
+    /// nothing else were resident. The loader gates on live FREE, which is a
+    /// different number whenever anything is loaded, and no peer can observe it
+    /// from outside. `svrn mesh plan --from-mesh` previously had only the total,
+    /// so it apportioned a cut (14/34) that the loader did not run (12/36) — and
+    /// a plan that predicts the wrong cut cannot find the measurement recorded
+    /// under the right one. This field is what closes that gap.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub device_memory: Vec<DeviceMemoryView>,
+    /// Unix seconds at which `device_memory` was observed by the load path.
+    ///
+    /// Present whenever `device_memory` is. The reading is an observation taken
+    /// when the loader last planned a cut, NOT a live sample — publishing its age
+    /// is what keeps a consumer from presenting a stale figure as current.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device_memory_observed_unix: Option<u64>,
+    /// The operator's `SOVEREIGN_RPC_BLOCK_SPLIT` pin, when set — e.g. `"12,36"`.
+    ///
+    /// Published for the same reason as `device_memory`: only this process can see
+    /// it, and without it a preview lies. When a pin is active the loader does not
+    /// apportion by VRAM at all, so any capacity-derived plan — on EITHER basis —
+    /// describes a cut that will not load. A consumer parses this with the same
+    /// `parse_block_split` the loader uses, so both agree on validity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rpc_block_split_pin: Option<String>,
+}
+
+/// One placed device's live memory, as published on `/v1/mesh/status`.
+///
+/// Both figures travel together on purpose: the difference between them is
+/// "memory held by something else right now", which is the whole distinction
+/// between "this device is too small for the job" and "this device is busy" —
+/// diagnoses with opposite repairs. Collapsing them into one capacity is what
+/// made a 2026-07-29 load refusal unreadable from the logs.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct DeviceMemoryView {
+    /// The RPC worker endpoint behind this device; absent for this host's own
+    /// GPU. Lets a consumer join a row to the `rpc_workers` entry (and through
+    /// it to the mesh member) that owns it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub endpoint: Option<String>,
+    /// Available at the instant of the read — the basis the load gates on.
+    pub free_mb: u64,
+    /// Physical device memory — the durable hardware fact.
+    pub total_mb: u64,
+    /// What the OWNING node keeps for itself and will not lend, already
+    /// reflected in the capacity its own loader plans against.
+    ///
+    /// Travels with the other two for the same reason they travel together: a
+    /// consumer that derives capacity from `free_mb` alone computes a bigger
+    /// device than the loader will actually use, and then previews a cut the
+    /// loader would not make. `0` on a remote row — a peer's reserve is the
+    /// peer's to declare, and this node does not speak for it.
+    #[serde(default)]
+    pub reserve_mb: u64,
+}
+
+impl From<sovereign_inference::embedded::DeviceMemory> for DeviceMemoryView {
+    fn from(m: sovereign_inference::embedded::DeviceMemory) -> Self {
+        const MIB: u64 = 1024 * 1024;
+        Self {
+            free_mb: m.free_bytes / MIB,
+            total_mb: m.total_bytes / MIB,
+            reserve_mb: m.reserve_bytes / MIB,
+            endpoint: m.endpoint,
+        }
+    }
+}
+
+/// Cluster-health snapshot of a shared-model fleet, surfaced on
+/// `GET /v1/mesh/status` for the desktop chip + degraded banner.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SharedModelStatusDto {
+    /// The shared model this fleet runs (e.g. `glm-5.2`).
+    pub model_id: String,
+    /// Eligible anchors currently gossiped (online + `can_anchor`).
+    pub eligible_anchors: usize,
+    /// Quorum target — the host won't distribute below this many anchors.
+    pub quorum_anchors: u32,
+    /// `true` once the anchor quorum is met — a proxy for "the shared model is
+    /// serveable" (the exact engine load state isn't HTTP-observable). Below
+    /// quorum the cluster is "forming" and consumers fall back to local.
+    pub available: bool,
+}
+
+/// Build the shared-model cluster-health summary, or `None` when this node
+/// isn't in a shared-model fleet. Reads the eligible-anchor count from the
+/// daemon and the fleet's model id / quorum from the RPC env the role
+/// translation set (`apply_shared_model_role_to_env`).
+async fn shared_model_status(daemon: &EmbeddedDaemon) -> Option<SharedModelStatusDto> {
+    let fleet = sovereign_contracts::launch::SharedModelFleet::from_env();
+    let model_id = fleet.model_id()?.to_string();
+    let eligible_anchors = daemon.eligible_anchors().await.len();
+    let quorum_anchors = fleet.quorum_anchors();
+    Some(SharedModelStatusDto {
+        model_id,
+        eligible_anchors,
+        quorum_anchors,
+        available: eligible_anchors >= quorum_anchors as usize,
+    })
+}
+
+/// Runtime "am I the shared-model host" flag. Published by the daemon's
+/// RPC-discovery loop (`daemon_cmd::bootstrap`) each tick the elected host role
+/// changes, and surfaced on `GET /v1/mesh/status` so the mesh soak can assert
+/// at-most-one-host. A process-global atomic — there is exactly one daemon per
+/// process and one host role per daemon.
+static SHARED_MODEL_HOST: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Publish whether this node is currently the shared-model host.
+pub fn set_shared_model_host(is_host: bool) {
+    SHARED_MODEL_HOST.store(is_host, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Read the published shared-model host flag (for `/v1/mesh/status`).
+pub fn is_shared_model_host() -> bool {
+    SHARED_MODEL_HOST.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// One member row, the known-mesh row, and the client's read of the
+/// whole answer — wire shapes, so defined in
+/// `sovereign_contracts::daemon_wire` (svt-3) and re-exported here.
+/// `MeshStatusSummary` is the subset a client that does not link this
+/// crate parses off `StatusResponse`; `tests/main/wire_view_drift.rs`
+/// pins the two to each other.
+pub use sovereign_contracts::daemon_wire::{
+    JoinPreviewRequest, KnownMeshDto, MemberDto, MeshStatusSummary,
+};
+
+fn default_node_name(override_name: Option<String>) -> String {
+    override_name.unwrap_or_else(|| {
+        hostname::get()
+            .ok()
+            .and_then(|h| h.into_string().ok())
+            .unwrap_or_else(|| "sovereign-node".to_string())
+    })
+}
+
+// ─── Handlers ────────────────────────────────────────────────────
+
+/// `GET /v1/mesh/status` — read-only snapshot for UI polling.
+async fn mesh_status(
+    _: LocalOnly,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+) -> impl IntoResponse {
+    let running = daemon.is_running().await;
+    // Read live off the daemon's config — see `EmbeddedDaemon::node_class`.
+    let node_class = daemon.node_class().await.id().to_string();
+    let entry_node = daemon.entry_node().await;
+    // RPC worker eligibility (host side) — the same tracker the discovery loop
+    // gates on, so the operator sees the live state without DEBUG logs.
+    let rpc_workers = crate::worker_eligibility::global()
+        .map(|e| e.status_views(std::time::Instant::now()))
+        .unwrap_or_default();
+    // Shared-model cluster health (None unless this node is in a shared-model
+    // fleet). Powers the desktop chip + degraded banner in both UI reach modes.
+    let shared_model = shared_model_status(&daemon).await;
+    // The loader's own per-device memory view, as CACHED on the load path.
+    //
+    // Never sampled here: reading an RPC device's memory round-trips to the
+    // worker, and a worker busy serving a resident model can stall that call for
+    // a minute or more — which hung this endpoint (and with it `svrn mesh bench`)
+    // on 2026-07-30. A status endpoint must not block on a remote resource. See
+    // `sovereign_inference::embedded::last_device_memory`.
+    let (device_memory, device_memory_observed_unix) =
+        match sovereign_inference::embedded::last_device_memory() {
+            Some(s) => (
+                s.devices.into_iter().map(DeviceMemoryView::from).collect(),
+                Some(s.observed_unix),
+            ),
+            None => (Vec::new(), None),
+        };
+    let rpc_block_split_pin = sovereign_inference::embedded::pinned_block_split_raw();
+    let (
+        peer_inflight_current,
+        peer_inflight_ceiling,
+        fanout_inflight_current,
+        active_corpus_ingests,
+    ) = daemon.glassbox_signals().await;
+    let Some(s) = daemon.mesh_state().await else {
+        // Running but no mesh — e.g. the daemon started solo and the
+        // user hasn't run `mesh create` yet. Empty but valid payload
+        // keeps the UI's empty-state rendering happy.
+        return (
+            StatusCode::OK,
+            Json(
+                serde_json::to_value(StatusResponse {
+                    running,
+                    node_class,
+                    entry_node,
+                    meshes: known_mesh_dtos(&daemon),
+                    mesh_name: None,
+                    members_online: 0,
+                    members_total: 0,
+                    members: vec![],
+                    join_key: None,
+                    join_link: None,
+                    client_token: daemon.running_client_token().await,
+                    rpc_workers,
+                    shared_model_host: is_shared_model_host(),
+                    shared_model: shared_model.clone(),
+                    peer_inflight_current,
+                    peer_inflight_ceiling,
+                    fanout_inflight_current,
+                    active_corpus_ingests,
+                    iroh_transport: vec![],  // no mesh → no peers
+                    self_reachability: None, // no mesh → no founder endpoint
+                    // Reported even without a mesh: a solo daemon can still have
+                    // RPC workers pinned by env, and the memory it would gate on
+                    // is worth seeing either way.
+                    device_memory,
+                    device_memory_observed_unix,
+                    rpc_block_split_pin,
+                })
+                .unwrap(),
+            ),
+        )
+            .into_response();
+    };
+
+    // H2: per-peer iroh path (empty when iroh isn't running).
+    let iroh_transport = daemon.iroh_transport_snapshot().await;
+    // Track W: this founder's own reachability (relay-home + discovery health).
+    let self_reachability = daemon.self_reachability().await;
+
+    // Map MemberStatus to its serde-renamed variant. `MeshMember`
+    // already owns its `node_id` as a String (set by `mesh_state`), so
+    // we don't need to Debug-format a NodeId byte array.
+    let members: Vec<MemberDto> = s
+        .members
+        .iter()
+        .map(|m| MemberDto {
+            node_id: m.node_id.clone(),
+            name: m.name.clone(),
+            is_self: m.is_self,
+            status: match m.status {
+                crate::types::MemberStatus::Online => "online",
+                crate::types::MemberStatus::Busy => "busy",
+                crate::types::MemberStatus::Away => "away",
+                crate::types::MemberStatus::Offline => "offline",
+            }
+            .to_string(),
+            vram_gb: m.vram_gb,
+            can_anchor: m.can_anchor,
+            addresses: m.addresses.clone(),
+            origins: m.origins.clone(),
+            node_pubkey: m.node_pubkey.clone(),
+            active: m.active,
+            hw_fingerprint: m.hw_fingerprint,
+            backend: m.backend.clone(),
+        })
+        .collect();
+
+    let (join_key, join_link) = match daemon.current_invite().await {
+        Some((k, l)) => (Some(k), Some(l)),
+        None => (None, None),
+    };
+
+    (
+        StatusCode::OK,
+        Json(
+            serde_json::to_value(StatusResponse {
+                running,
+                node_class,
+                entry_node,
+                meshes: known_mesh_dtos(&daemon),
+                mesh_name: Some(s.status.name),
+                members_online: s.status.members_online,
+                members_total: s.status.members_total,
+                members,
+                join_key,
+                join_link,
+                client_token: daemon.running_client_token().await,
+                rpc_workers,
+                shared_model_host: is_shared_model_host(),
+                shared_model,
+                peer_inflight_current,
+                peer_inflight_ceiling,
+                fanout_inflight_current,
+                active_corpus_ingests,
+                iroh_transport,
+                self_reachability,
+                device_memory,
+                device_memory_observed_unix,
+                rpc_block_split_pin,
+            })
+            .unwrap(),
+        ),
+    )
+        .into_response()
+}
+
+/// `POST /v1/mesh/create` — promote the solo daemon to a joinable mesh
+/// and return the shareable invite.
+// ---------------------------------------------------------------------------
+// Measurements
+// ---------------------------------------------------------------------------
+//
+// Why these two routes exist at all: `svrn mesh bench` measures, and it runs in
+// the CLI process. Gossip publishes from the daemon's `MeshStore`, which is
+// `in_memory()` (`bootstrap.rs`) and therefore unreachable from any other
+// process — there is no file to open and no lock to share. So a measurement
+// taken by the CLI cannot travel without the daemon handing it a door. This is
+// that door, in both directions:
+//
+//   POST — "here is a run I just took, put it on the wire"
+//   GET  — "what have peers measured?"
+//
+// Symmetric with the rest of this module: localhost-only, and shaped like the
+// CLI subcommand that drives it. Both are deliberately thin. The policy lives in
+// `sovereign_core::mesh_measurements` (what may travel, under what key, in what
+// envelope) so that the CLI and the daemon cannot disagree about it.
+
+/// Result of `POST /v1/mesh/measurements`.
+#[derive(Debug, Serialize)]
+pub struct PublishMeasurementResponse {
+    /// Whether the record entered the gossip buffer.
+    pub published: bool,
+    /// The KV key it published under. Derived from the record, so a republish of
+    /// the same run reuses it rather than adding a copy.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    /// Why not, when `published` is false. Present so the CLI can say something
+    /// specific instead of "publish failed".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub refused: Option<String>,
+}
+
+/// One peer's measurement, as `GET /v1/mesh/measurements` returns it.
+#[derive(Debug, Serialize)]
+pub struct MemberMeasurementDto {
+    /// Hex node id of the publisher, resolved from the journal line's `actor`
+    /// through the ring roster — not from anything inside the payload, which
+    /// the publisher controls. The `actor` is the public key that SIGNED the
+    /// line, which is the one field a writer cannot forge for someone else
+    /// (ARCH §18.1).
+    pub origin_node: String,
+    /// Friendly mesh name, as the roster resolved the signing key. Absent only
+    /// when this build could not name the node behind an admitted key.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub origin_name: Option<String>,
+    /// What they measured.
+    pub record: sovereign_core::mesh_measurements::MeasurementRecord,
+}
+
+/// Query for `GET /v1/mesh/measurements`.
+#[derive(Debug, Deserialize, Default)]
+pub struct MemberMeasurementsQuery {
+    /// Include this node's own published records. **Diagnostic only.**
+    ///
+    /// The default excludes them, and the CLI must never set this: our own runs
+    /// are authoritative on disk, and a consumer that fed a self-origin record
+    /// into `near_misses` would show the operator their own measurement labelled
+    /// with their own node name, as though a stranger had confirmed it.
+    ///
+    /// It exists because without it there is no way to see what this node has
+    /// actually put on the wire — which makes the one property the design leans
+    /// on, that a republish overwrites its own entry rather than accumulating
+    /// copies, unverifiable on a live machine.
+    ///
+    /// Accepts `1`, `true`, `yes`, `on`, or the bare flag. A diagnostic an
+    /// operator reaches for with `curl` must not answer `400` because they typed
+    /// the wrong spelling of true.
+    #[serde(default, deserialize_with = "lenient_bool")]
+    pub include_self: bool,
+}
+
+/// Deserialize a query flag the way a person types one.
+fn lenient_bool<'de, D>(d: D) -> Result<bool, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw = Option::<String>::deserialize(d)?;
+    Ok(match raw.as_deref().map(str::trim) {
+        // `?include_self` with no value reads as "yes"; that is what a bare flag
+        // means everywhere else in this CLI's vocabulary.
+        None | Some("") => true,
+        Some(v) => matches!(
+            v.to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes" | "y" | "on"
+        ),
+    })
+}
+
+/// Response body for `GET /v1/mesh/measurements`.
+#[derive(Debug, Serialize)]
+pub struct MemberMeasurementsResponse {
+    /// Peer records, newest first. Excludes this node's own — the CLI already
+    /// holds those on disk, and they are the authoritative copy — unless
+    /// [`MemberMeasurementsQuery::include_self`] was set.
+    pub records: Vec<MemberMeasurementDto>,
+    /// Journal lines that were admitted but could not be read as measurements,
+    /// usually a peer on an incompatible schema, PLUS everything admission
+    /// could not account for at all — an unplaceable signer, a hole in a peer's
+    /// sequence, a torn line. Reported rather than swallowed: a reader seeing
+    /// `records: []` deserves to know whether the ring is quiet or whether this
+    /// answer covers a subset (ARCH §18.3).
+    pub unreadable: usize,
+}
+
+/// Publish a locally-taken measurement onto this node's ring journal.
+///
+/// The journal is the durable copy and `ring_sync`'s ordinary anti-entropy
+/// round carries it to every peer — there is nothing to broadcast here and
+/// nothing to re-upload at boot, which is what the gossip KV store needed
+/// because it was an in-memory buffer that lost this node's history on every
+/// restart. See [`sovereign_mesh::measurements_rail`].
+async fn publish_measurement(
+    _: LocalOnly,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Json(record): Json<sovereign_core::mesh_measurements::MeasurementRecord>,
+) -> impl IntoResponse {
+    let refuse = |why: String| {
+        (
+            StatusCode::OK,
+            Json(PublishMeasurementResponse {
+                published: false,
+                key: None,
+                refused: Some(why),
+            }),
+        )
+            .into_response()
+    };
+
+    // Not an error: a solo daemon has nowhere to publish to, and `mesh bench`
+    // on a solo node is a completely normal thing to do. Saying so beats a 503
+    // the CLI would have to interpret.
+    let Some(app_state) = daemon.app_state().await else {
+        return refuse("the daemon has no mesh state yet".into());
+    };
+    let Some(rail) = app_state.ring_rail() else {
+        return refuse("this daemon keeps no ring journal".into());
+    };
+    let journal = match rail.journal(sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID) {
+        Ok(j) => j,
+        Err(e) => return refuse(format!("the ring journal could not be opened: {e}")),
+    };
+
+    // Derived here from membership this node already holds, and never accepted
+    // over the wire — there is no roster route, and its absence is the safety
+    // property (ARCH §7.1). See `sovereign_mesh::ring_roster`.
+    let roster = sovereign_mesh::ring_roster::MeshRoster::from_membership(
+        &*app_state.inner.fabric.mesh.read().await,
+        app_state.self_node_id(),
+        app_state.self_node_pubkey(),
+    );
+    // Asked here, in the mesh's own words, because the rail's door would
+    // answer the same condition with `svrn ring roster add … --self` — the
+    // right instruction for a ring whose roster is written by hand, and one
+    // that does not apply to a namespace whose roster IS the membership.
+    if !roster.claims(&rail.signer().actor()) {
+        return refuse(
+            "this node is not in a mesh yet, so a run it published would be \
+             unreadable to every peer — `svrn mesh create` or join one first. \
+             The run is already on disk and travels once membership exists."
+                .into(),
+        );
+    }
+    match sovereign_mesh::measurements_rail::publish(
+        &journal,
+        rail.signer(),
+        roster.roster(),
+        &record,
+    ) {
+        Ok(op) => {
+            tracing::info!(
+                target = "mesh_measurements",
+                id = %op.id,
+                seq = op.kind.seq,
+                decode_tok_s = record.decode_tok_s,
+                model = %record.model_name,
+                placement = %record.placement_human,
+                "mesh-measurements: appended a run to the ring journal"
+            );
+            (
+                StatusCode::OK,
+                Json(PublishMeasurementResponse {
+                    published: true,
+                    key: Some(op.id.to_string()),
+                    refused: None,
+                }),
+            )
+                .into_response()
+        }
+        // The rail's own refusals are already sentences naming the fix — a
+        // node that cannot place its own key is told which command adds it —
+        // so they are passed through rather than restated (ARCH §10.6).
+        Err(why) => {
+            tracing::warn!(
+                target = "mesh_measurements",
+                why,
+                "mesh-measurements: not published"
+            );
+            refuse(why)
+        }
+    }
+}
+
+/// Every measurement the ring has put on this namespace's journal.
+async fn peer_measurements(
+    _: LocalOnly,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    axum::extract::Query(q): axum::extract::Query<MemberMeasurementsQuery>,
+) -> impl IntoResponse {
+    let empty = || {
+        (
+            StatusCode::OK,
+            Json(MemberMeasurementsResponse {
+                records: Vec::new(),
+                unreadable: 0,
+            }),
+        )
+            .into_response()
+    };
+    let Some(app_state) = daemon.app_state().await else {
+        return empty();
+    };
+    let Some(rail) = app_state.ring_rail() else {
+        return empty();
+    };
+    let journal = match rail.journal(sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID) {
+        Ok(j) => j,
+        Err(e) => {
+            tracing::warn!(error = %e, "mesh-measurements: ring journal unavailable");
+            return empty();
+        }
+    };
+    let roster = sovereign_mesh::ring_roster::MeshRoster::from_membership(
+        &*app_state.inner.fabric.mesh.read().await,
+        app_state.self_node_id(),
+        app_state.self_node_pubkey(),
+    );
+    let admission = match journal.admit(roster.roster(), &commonwealth_rail::Ed25519Verifier) {
+        Ok(a) => a,
+        Err(e) => {
+            // NOT `empty()`. A journal we could not open and a ring with
+            // nothing on it are different facts, and answering the second when
+            // the first is true is a claim of completeness this node cannot
+            // make (ARCH §18.3). One thing was unreadable: the journal.
+            tracing::warn!(error = %e, "mesh-measurements: journal unreadable");
+            return (
+                StatusCode::OK,
+                Json(MemberMeasurementsResponse {
+                    records: Vec::new(),
+                    unreadable: 1,
+                }),
+            )
+                .into_response();
+        }
+    };
+
+    // `None` drops the own-author filter entirely; see `include_self`.
+    let mine = rail.signer().actor();
+    let exclude = (!q.include_self).then_some(mine.as_str());
+    let seen = sovereign_mesh::measurements_rail::read(&admission, exclude);
+    (StatusCode::OK, Json(peer_view(seen, &roster))).into_response()
+}
+
+/// Turn what the rail admitted into the peer view. Pure, so every decision in
+/// it is testable without a live daemon: how a publisher is named, what a
+/// reader is told about the lines that did not survive, and what order they
+/// come back in.
+fn peer_view(
+    seen: sovereign_mesh::measurements_rail::RailMeasurements,
+    roster: &sovereign_mesh::ring_roster::MeshRoster,
+) -> MemberMeasurementsResponse {
+    // One count, not two. A line this build cannot decode and a line the rail
+    // could not account for are both "your answer covers less than the ring
+    // holds", and splitting them across two fields would let a caller read one
+    // and believe the other was zero (ARCH §18.3).
+    let unreadable = seen.unreadable + seen.gaps;
+    let records = seen
+        .found
+        .into_iter()
+        .map(|m| MemberMeasurementDto {
+            origin_node: roster
+                .node_id_of(&m.actor)
+                .map(|id| hex::encode(id.as_bytes()))
+                // Unreachable while admission and the roster share one
+                // derivation — an admitted op's key is by definition claimed —
+                // but the signing key is the honest fallback rather than a
+                // blank, because it still identifies the writer.
+                .unwrap_or_else(|| m.actor.clone()),
+            origin_name: Some(m.person.as_str().to_string()),
+            record: m.record,
+        })
+        .collect();
+    MemberMeasurementsResponse {
+        records,
+        unreadable,
+    }
+}
+
+async fn mesh_create(
+    _: LocalOnly,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    body: Option<Json<CreateRequest>>,
+) -> impl IntoResponse {
+    let req = body.map(|Json(b)| b).unwrap_or_default();
+    let node_name = default_node_name(req.node_name);
+    let mesh_name = req.name.unwrap_or_else(|| format!("{node_name}'s Mesh"));
+    let encrypt = req.encrypt;
+
+    // Explicit create = opt into serving remote peers. Mark exposed so
+    // the daemon binds non-loopback (+ requires a bearer token). For an
+    // already-running daemon this takes effect on the next restart
+    // (client_bind is restart-required); the desktop reloads on the
+    // config change.
+    daemon.expose_client_api();
+
+    match daemon
+        .create_mesh_with(&mesh_name, &node_name, encrypt)
+        .await
+    {
+        Ok(result) => (
+            StatusCode::OK,
+            Json(
+                serde_json::to_value(CreateResponse {
+                    mesh_name: result.mesh_name,
+                    join_key: result.join_key,
+                    join_link: result.join_link,
+                    client_token: result.client_token,
+                })
+                .unwrap(),
+            ),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+/// `POST /v1/mesh/join/preview` — what `POST /v1/mesh/join` WOULD join,
+/// as a [`JoinConfirmation`] for a confirmation dialog, without joining.
+///
+/// The HOST parses the invite (`parse_join_argument`: bare key, https URL
+/// or `sovereign://` link — exactly the forms `mesh_join` accepts) so the
+/// desktop links no parser of its own. Until svt-3 it ran
+/// `parse_deep_link` + `join_confirmation_from_link` in-process, which
+/// accepted ONE of the three forms the join route takes: a preview that
+/// refused an invite the join would have accepted (ARCH principle 8). A
+/// guest link is not a join and previews as 400 — the conversion refuses
+/// it by construction.
+async fn mesh_join_preview(_: LocalOnly, Json(req): Json<JoinPreviewRequest>) -> impl IntoResponse {
+    let Some(link) = sovereign_mesh::deep_link::parse_join_argument(&req.link) else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "link must be a bare cwth-… key, an https://sovereign.dev/join/… URL, or a sovereign://join/… deep link"
+            })),
+        )
+            .into_response();
+    };
+    match sovereign_mesh::deep_link::join_confirmation_from_link(&link) {
+        Some(confirmation) => (
+            StatusCode::OK,
+            Json(serde_json::to_value(confirmation).unwrap()),
+        )
+            .into_response(),
+        None => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": "not a join invite" })),
+        )
+            .into_response(),
+    }
+}
+
+/// `POST /v1/mesh/join` — join an existing mesh by key or URL.
+async fn mesh_join(
+    _: LocalOnly,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Json(req): Json<JoinRequest>,
+) -> impl IntoResponse {
+    // Accept bare key, https URL, or sovereign:// deep link — matches
+    // what the CLI's `sovereign mesh join` takes.
+    let link = match sovereign_mesh::deep_link::parse_join_argument(&req.key_or_url) {
+        Some(l) => l,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error": "key_or_url must be a bare cwth-… key, an https://sovereign.dev/join/… URL, or a sovereign://join/… deep link"
+                })),
+            )
+                .into_response();
+        }
+    };
+    let node_name = default_node_name(req.node_name);
+
+    // Joining a mesh = serving/relating to remote peers → expose.
+    daemon.expose_client_api();
+
+    match daemon.join_mesh(&link, &node_name).await {
+        Ok(result) => (
+            StatusCode::OK,
+            Json(
+                serde_json::to_value(JoinResponse {
+                    mesh_name: result.mesh_name,
+                    node_id: result.node_id,
+                    client_token: result.client_token,
+                })
+                .unwrap(),
+            ),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+/// Render the known-mesh list for `/v1/mesh/status`.
+fn known_mesh_dtos(daemon: &Arc<EmbeddedDaemon>) -> Vec<KnownMeshDto> {
+    let active = sovereign_mesh::persist::active_mesh_id(daemon.data_dir());
+    daemon
+        .known_meshes()
+        .into_iter()
+        .map(|m| KnownMeshDto {
+            is_active: active.as_ref() == Some(&m.mesh_id),
+            mesh_id: m.mesh_id.to_hex(),
+            members_total: m.members.len(),
+            last_seen_unix: m.members.iter().map(|r| r.last_seen).max().unwrap_or(0),
+            name: m.name,
+        })
+        .collect()
+}
+
+/// Body for [`mesh_switch`] and [`mesh_forget`].
+///
+/// ONE type for the two, because the two take ONE thing and resolve it
+/// through the same `persist::resolve_known` — a second struct with the
+/// same field would be a second place for the reference syntax to drift
+/// (ARCH principle 8), which is the exact bug `forget_mesh` shipped when
+/// it refused the id prefix `switch_mesh` accepted.
+#[derive(Debug, Deserialize)]
+pub struct SwitchRequest {
+    /// Mesh name, full hex id, or an unambiguous id prefix (≥8 chars).
+    pub mesh: String,
+}
+
+/// `POST /v1/mesh/forget` — drop a PARKED mesh from this node.
+///
+/// Delegates wholly to [`EmbeddedDaemon::forget_mesh`], which refuses the
+/// active one. Written at sv-surface svt-3 because until then the desktop
+/// could forget a mesh ONLY through an in-process daemon: attach mode
+/// answered "not yet exposed over HTTP — run `svrn mesh forget` instead",
+/// and once the app stopped commissioning a daemon of its own that arm
+/// became unreachable, so the button worked in neither mode.
+async fn mesh_forget(
+    _: LocalOnly,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Json(req): Json<SwitchRequest>,
+) -> impl IntoResponse {
+    match daemon.forget_mesh(&req.mesh) {
+        Ok(name) => (StatusCode::OK, Json(serde_json::json!({ "forgot": name }))).into_response(),
+        // The daemon distinguishes "no such mesh" from "that one is
+        // active"; both arrive as its own words rather than a status the
+        // caller has to interpret (ARCH principle 6).
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+/// `POST /v1/mesh/switch` — set the active mesh down and bring another up.
+///
+/// **ACK-then-detach, like `mesh_leave`.** This handler is served BY the
+/// listener that the switch drops, so doing the work inline cancels its own
+/// response mid-flight — the historical "connection reset / :9741 down
+/// forever" bug. Answer `202` first, switch 300ms later.
+async fn mesh_switch(
+    _: LocalOnly,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Json(req): Json<SwitchRequest>,
+) -> impl IntoResponse {
+    // Resolve BEFORE detaching so a bad name is a 404 the caller can read,
+    // rather than a 202 followed by silence.
+    let known = daemon.known_meshes();
+    if sovereign_mesh::persist::resolve_known(&known, &req.mesh).is_none() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "error": format!("not a member of any mesh matching '{}'", req.mesh)
+            })),
+        )
+            .into_response();
+    }
+
+    let target = req.mesh.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        match daemon.switch_mesh(&target).await {
+            Ok(name) => tracing::info!(mesh = %name, "mesh: switch complete"),
+            Err(e) => tracing::error!(error = %e, target, "mesh: switch failed"),
+        }
+    });
+    (
+        StatusCode::ACCEPTED,
+        Json(serde_json::json!({ "switching_to": req.mesh })),
+    )
+        .into_response()
+}
+
+/// Query for [`mesh_rotate`].
+#[derive(Debug, Default, Deserialize)]
+pub struct RotateQuery {
+    /// Rotate even though a peer on a pre-split build is online and will be
+    /// partitioned by it. Off by default — see `MeshError::RotateWouldPartition`.
+    #[serde(default)]
+    pub force: bool,
+}
+
+/// `POST /v1/mesh/rotate` — mint a new invite key for the active mesh.
+///
+/// Delegates wholly to [`EmbeddedDaemon::rotate_invite`], which is the single
+/// implementation of what rotation means (ARCH §10.6). This handler used to
+/// carry a third of that logic itself — disk write here, plaintext cache there,
+/// TTL re-arm in a third place, and the live `Mesh` updated nowhere — which is
+/// how a rotation could report success and then be reverted by the next gossip
+/// round. There is nothing left here but transport.
+async fn mesh_rotate(
+    _: LocalOnly,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    axum::extract::Query(q): axum::extract::Query<RotateQuery>,
+) -> impl IntoResponse {
+    match daemon.rotate_invite(q.force).await {
+        Ok(rotated) => {
+            // Rotation exists to SHARE the new key, so a soloist rotating in
+            // order to invite someone gets the client API exposed too (bind +
+            // token apply on next start, same as create).
+            daemon.expose_client_api();
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(RotateResponse {
+                        mesh_name: rotated.mesh_name,
+                        join_key: rotated.join_key,
+                    })
+                    .unwrap(),
+                ),
+            )
+                .into_response()
+        }
+        Err(crate::daemon::MeshError::NotRunning) => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "no mesh to rotate" })),
+        )
+            .into_response(),
+        Err(e @ crate::daemon::MeshError::RotateWouldPartition { .. }) => (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+/// `GET /v1/mesh/relay-candidates` — enumerate the host's
+/// reachable IPs so the founder can copy one into a `?relay=…`
+/// query param when sharing the invite. Doesn't require a running
+/// mesh — the candidates are interface-derived and a user might
+/// want to look at them before deciding to create a mesh.
+async fn mesh_relay_candidates(_: LocalOnly) -> impl IntoResponse {
+    // Internal port is fixed at 9742 today (matches what the daemon
+    // binds in start_daemon and what the gossip handshake targets).
+    // Plumbing this through config is a follow-up; for now the
+    // single source of truth lives next to the binder.
+    let candidates = sovereign_mesh::mesh_discovery::relay_candidates(9742);
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({ "candidates": candidates })),
+    )
+        .into_response()
+}
+
+/// `POST /v1/mesh/leave` — leave the current mesh and re-create a fresh
+/// solo mesh **in this same process**. Mirrors the desktop "Leave mesh"
+/// button.
+///
+/// The node returns to being its own solo mesh with the client API
+/// staying available on the same process — no restart, no model reload,
+/// no dependency on a service manager to relaunch us (the old design
+/// exited with code 103 and hoped launchd/systemd would bring us back,
+/// which stranded `:9741` when nothing supervised the daemon).
+async fn mesh_leave(
+    _: LocalOnly,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+) -> impl IntoResponse {
+    // Must be running to leave — preserve the 409 contract for callers.
+    if !daemon.is_running().await {
+        return (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({ "error": "mesh is not running" })),
+        )
+            .into_response();
+    }
+    // Do NOT tear down synchronously: this handler is being served BY the
+    // `:9741` listener that `leave()` drops, so leaving inline would cancel
+    // our own response mid-flight (the historical "connection reset / :9741
+    // down forever on leave" bug). Instead ACK now on the still-live
+    // listener, then re-solo in a detached task after a short grace so the
+    // `204` flushes first. `leave_to_solo` rebinds `:9741` in THIS process
+    // within ~1s — the desktop's reconnect poll catches it.
+    tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        if let Err(e) = daemon.leave_to_solo().await {
+            tracing::error!(
+                error = %e,
+                "mesh leave: in-process re-solo failed; :9741 may stay down \
+                 until a daemon restart"
+            );
+        }
+    });
+    StatusCode::NO_CONTENT.into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::EmbeddedDaemon;
+    use sovereign_core::setup_config::{
+        DaemonSection, DiscoverySection, IrohSection, ModelsSection, SetupConfig,
+    };
+    use std::collections::BTreeMap;
+    use std::net::SocketAddr;
+    use std::path::PathBuf;
+    use tempfile::TempDir;
+
+    /// Hermetic daemon config for tests: ephemeral ports (`0`) so parallel
+    /// `create`/`leave` tests never fight over the real `:9741`/`:9742` — a
+    /// bind conflict is now a hard error (`MeshError::Network`) rather than
+    /// silently swallowed — and mDNS + iroh off so no unit test touches a
+    /// multicast socket or binds an iroh endpoint. Everything else defaulted.
+    fn hermetic_cfg() -> SetupConfig {
+        SetupConfig {
+            engine: Default::default(),
+            compute: Default::default(),
+            search: Default::default(),
+            models: Some(ModelsSection {
+                primary: PathBuf::from("/models/primary.gguf"),
+                fast: None,
+                embed: PathBuf::from("/models/embed.gguf"),
+                code: None,
+                context_size: None,
+                fast_context_size: None,
+                max_extras_memory_gb: None,
+                extra: BTreeMap::new(),
+                primary_pool: None,
+                edit: None,
+            }),
+            node: Default::default(),
+            daemon: DaemonSection {
+                client_port: 0,
+                internal_port: 0,
+                ..Default::default()
+            },
+            data: Default::default(),
+            watched_folders: Default::default(),
+            memory: Default::default(),
+            iroh: IrohSection {
+                enabled: Some(false),
+                ..Default::default()
+            },
+            shared_model: Default::default(),
+            discovery: DiscoverySection {
+                mdns: false,
+                ..Default::default()
+            },
+            mcp_servers: Vec::new(),
+        }
+    }
+
+    /// Stand up the mesh HTTP router over a no-mesh daemon bound to
+    /// an ephemeral localhost port. Returns `(daemon_arc, base_url,
+    /// _tmp)` — hold the tempdir so it isn't cleaned up mid-test.
+    async fn spawn_test_router() -> (Arc<EmbeddedDaemon>, String, TempDir) {
+        let tmp = tempfile::tempdir().unwrap();
+        let daemon = EmbeddedDaemon::new(
+            tmp.path().to_path_buf(),
+            hermetic_cfg(),
+            crate::daemon_services::DaemonServices::mesh_admin(),
+        );
+        let app = mesh_router(Arc::clone(&daemon));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(
+                listener,
+                app.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .await
+            .ok();
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        (daemon, format!("http://{addr}"), tmp)
+    }
+
+    #[tokio::test]
+    async fn status_returns_empty_when_no_mesh() {
+        let (_daemon, base, _tmp) = spawn_test_router().await;
+        let client = reqwest::Client::new();
+        let resp = client
+            .get(format!("{base}/v1/mesh/status"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 200);
+        let body: serde_json::Value = resp.json().await.unwrap();
+        assert_eq!(body["running"], false);
+        assert_eq!(body["member_count"].as_u64().unwrap_or(0), 0);
+    }
+
+    #[tokio::test]
+    async fn create_and_status_round_trip() {
+        let (_daemon, base, _tmp) = spawn_test_router().await;
+        let client = reqwest::Client::new();
+
+        let resp = client
+            .post(format!("{base}/v1/mesh/create"))
+            .json(&serde_json::json!({ "name": "test mesh", "node_name": "alice" }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 200);
+        let body: serde_json::Value = resp.json().await.unwrap();
+        assert_eq!(body["mesh_name"], "test mesh");
+        assert!(body["join_key"].as_str().unwrap().starts_with("cwth-"));
+        assert!(body["join_link"].as_str().unwrap().contains("sovereign://"));
+
+        // Status should now report running + one member.
+        let resp = client
+            .get(format!("{base}/v1/mesh/status"))
+            .send()
+            .await
+            .unwrap();
+        let body: serde_json::Value = resp.json().await.unwrap();
+        assert_eq!(body["running"], true);
+        assert_eq!(body["mesh_name"], "test mesh");
+        assert_eq!(body["members_total"], 1);
+    }
+
+    /// The user-facing `POST /v1/mesh/leave` must return the node to a live
+    /// SOLO mesh in the SAME process — `/v1/mesh/status` keeps answering, no
+    /// restart. Regression guard for the bug where leaving a mesh killed
+    /// `:9741` with no way back (the daemon tore down its listeners and
+    /// relied on a service manager that wasn't there to relaunch it).
+    #[tokio::test]
+    async fn http_leave_returns_to_solo_mesh() {
+        let (_daemon, base, _tmp) = spawn_test_router().await;
+        let client = reqwest::Client::new();
+
+        // Create a mesh so leave() has something to leave.
+        let resp = client
+            .post(format!("{base}/v1/mesh/create"))
+            .json(&serde_json::json!({ "name": "test mesh", "node_name": "alice" }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 200);
+
+        let resp = client
+            .post(format!("{base}/v1/mesh/leave"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 204);
+
+        // The re-solo runs in a detached task after a short grace, so poll
+        // status until the fresh solo mesh is back up (same process, same
+        // test listener). We wait specifically for a mesh that is NOT the
+        // old "test mesh" — the pre-teardown window still reports the old
+        // one as running. A missing re-solo would never satisfy this and
+        // fail the assertion after the loop.
+        let mut running_solo = false;
+        for _ in 0..40 {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            let body: serde_json::Value = client
+                .get(format!("{base}/v1/mesh/status"))
+                .send()
+                .await
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            if body["running"] == true
+                && body["members_total"] == 1
+                && body["mesh_name"].as_str() != Some("test mesh")
+            {
+                running_solo = true;
+                break;
+            }
+        }
+        assert!(
+            running_solo,
+            "POST /v1/mesh/leave should re-create a live solo mesh in-process"
+        );
+    }
+
+    /// A DIRECT `leave()` — the path `join_mesh`'s auto-leave and the
+    /// deprecated `stop()` take when switching meshes — must NOT re-create a
+    /// solo mesh. It leaves the daemon Stopped so the caller can join the
+    /// next mesh; only the user-facing `leave_to_solo` bounces back to solo.
+    #[tokio::test]
+    async fn direct_leave_leaves_daemon_stopped() {
+        let (daemon, base, _tmp) = spawn_test_router().await;
+        let client = reqwest::Client::new();
+
+        let resp = client
+            .post(format!("{base}/v1/mesh/create"))
+            .json(&serde_json::json!({ "name": "test mesh", "node_name": "alice" }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 200);
+        assert!(daemon.is_running().await);
+
+        // Leave via the library method, exactly as join_mesh's auto-leave does.
+        daemon.leave().await.unwrap();
+
+        assert!(
+            !daemon.is_running().await,
+            "direct leave() must leave the daemon Stopped (no auto re-solo — that \
+             would restart the daemon mid mesh-switch)"
+        );
+    }
+
+    /// Leaving and re-soloing repeatedly must rebind the SAME address cleanly
+    /// every time. `stop_inner` awaits the old serve task before `create_mesh`
+    /// rebinds, so the in-process rebind never races the just-dropped socket
+    /// into `EADDRINUSE`. Uses a fixed (non-ephemeral) port so each iteration
+    /// genuinely re-binds the same `host:port` — the exact race being guarded.
+    #[tokio::test]
+    async fn leave_to_solo_rebinds_same_port_repeatedly() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut cfg = hermetic_cfg();
+        cfg.daemon.client_port = 39411;
+        cfg.daemon.internal_port = 39412;
+        let daemon = EmbeddedDaemon::new(
+            tmp.path().to_path_buf(),
+            cfg,
+            crate::daemon_services::DaemonServices::mesh_admin(),
+        );
+
+        daemon.create_mesh("test mesh", "alice").await.unwrap();
+        for i in 0..5 {
+            daemon
+                .leave_to_solo()
+                .await
+                .unwrap_or_else(|e| panic!("re-solo #{i} failed (bind race?): {e}"));
+            assert!(
+                daemon.is_running().await,
+                "daemon should be running after re-solo #{i}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn create_fails_when_mesh_already_exists() {
+        let (_daemon, base, _tmp) = spawn_test_router().await;
+        let client = reqwest::Client::new();
+        let _ = client
+            .post(format!("{base}/v1/mesh/create"))
+            .json(&serde_json::json!({ "name": "first" }))
+            .send()
+            .await
+            .unwrap();
+        let resp = client
+            .post(format!("{base}/v1/mesh/create"))
+            .json(&serde_json::json!({ "name": "second" }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 409, "second create must conflict");
+    }
+
+    #[tokio::test]
+    async fn rotate_after_create_changes_invite_key_hash() {
+        let (_daemon, base, _tmp) = spawn_test_router().await;
+        let client = reqwest::Client::new();
+
+        let create: serde_json::Value = client
+            .post(format!("{base}/v1/mesh/create"))
+            .json(&serde_json::json!({ "name": "m" }))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let original_key = create["join_key"].as_str().unwrap().to_string();
+
+        let rotate: serde_json::Value = client
+            .post(format!("{base}/v1/mesh/rotate"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let rotated_key = rotate["join_key"].as_str().unwrap();
+        assert!(rotated_key.starts_with("cwth-"));
+        assert_ne!(original_key, rotated_key);
+    }
+
+    #[tokio::test]
+    async fn rotate_without_mesh_returns_404() {
+        let (_daemon, base, _tmp) = spawn_test_router().await;
+        let client = reqwest::Client::new();
+        let resp = client
+            .post(format!("{base}/v1/mesh/rotate"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 404);
+    }
+
+    #[tokio::test]
+    async fn status_includes_invite_after_create() {
+        let (_daemon, base, _tmp) = spawn_test_router().await;
+        let client = reqwest::Client::new();
+        let create: serde_json::Value = client
+            .post(format!("{base}/v1/mesh/create"))
+            .json(&serde_json::json!({ "name": "Lab Squad" }))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let created_key = create["join_key"].as_str().unwrap().to_string();
+
+        let status: serde_json::Value = client
+            .get(format!("{base}/v1/mesh/status"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(
+            status["join_key"].as_str().unwrap(),
+            created_key,
+            "status must echo back the same plaintext key"
+        );
+        let link = status["join_link"].as_str().unwrap();
+        assert!(link.starts_with("sovereign://join/"));
+        assert!(link.contains(&created_key));
+    }
+
+    #[tokio::test]
+    async fn status_omits_invite_when_solo() {
+        let (_daemon, base, _tmp) = spawn_test_router().await;
+        let client = reqwest::Client::new();
+        let status: serde_json::Value = client
+            .get(format!("{base}/v1/mesh/status"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert!(status.get("join_key").is_none_or(|v| v.is_null()));
+        assert!(status.get("join_link").is_none_or(|v| v.is_null()));
+    }
+
+    #[tokio::test]
+    async fn rotate_refreshes_status_invite_in_place() {
+        let (_daemon, base, _tmp) = spawn_test_router().await;
+        let client = reqwest::Client::new();
+        let create: serde_json::Value = client
+            .post(format!("{base}/v1/mesh/create"))
+            .json(&serde_json::json!({ "name": "m" }))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let pre_key = create["join_key"].as_str().unwrap().to_string();
+
+        let rotate: serde_json::Value = client
+            .post(format!("{base}/v1/mesh/rotate"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let new_key = rotate["join_key"].as_str().unwrap().to_string();
+        assert_ne!(pre_key, new_key);
+
+        let status: serde_json::Value = client
+            .get(format!("{base}/v1/mesh/status"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(status["join_key"].as_str().unwrap(), new_key);
+        assert!(status["join_link"].as_str().unwrap().contains(&new_key));
+    }
+
+    /// Read the hash the RUNNING daemon actually gates on, not the plaintext
+    /// it handed back.
+    async fn live_invite_key_hash(daemon: &Arc<EmbeddedDaemon>) -> [u8; 32] {
+        let app = daemon
+            .app_state()
+            .await
+            .expect("daemon is running after create");
+        let mesh = app.inner.fabric.mesh.read().await;
+        mesh.invite_key_hash
+    }
+
+    /// Create a mesh over the router and return its plaintext join key.
+    async fn create_mesh_over_http(client: &reqwest::Client, base: &str) -> String {
+        let create: serde_json::Value = client
+            .post(format!("{base}/v1/mesh/create"))
+            .json(&serde_json::json!({ "name": "m" }))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        create["join_key"].as_str().unwrap().to_string()
+    }
+
+    /// ARCH §18.1 — assert on something the subject cannot author.
+    ///
+    /// The three rotate tests above all read `join_key`: the plaintext the
+    /// handler itself just returned. That is a verbatim echo of the value
+    /// under test, so they pass cleanly on the exact failure they exist to
+    /// catch. The state that actually gates admission is
+    /// `AppState.inner.fabric.mesh.invite_key_hash`, and nothing reads it.
+    ///
+    /// The defect this was written against: rotation wrote the new hash to
+    /// disk and refreshed the cached plaintext, but never wrote the live
+    /// `Mesh`, so the running daemon kept admitting the OLD key on
+    /// `/internal/join` and kept gossiping the OLD hash. `rotate_join_key` is
+    /// now the one implementation and mutates the live mesh first; this
+    /// assertion is what stays red if that is ever undone.
+    #[tokio::test]
+    async fn rotate_changes_the_live_in_memory_hash_not_only_the_disk_one() {
+        let (daemon, base, _tmp) = spawn_test_router().await;
+        let client = reqwest::Client::new();
+
+        let original_key = create_mesh_over_http(&client, &base).await;
+        let hash_before = live_invite_key_hash(&daemon).await;
+        assert_eq!(
+            hash_before,
+            commonwealth_discovery::membership::hash_join_key(&original_key),
+            "precondition: the live mesh gates on the key create just minted"
+        );
+
+        let rotate: serde_json::Value = client
+            .post(format!("{base}/v1/mesh/rotate"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let new_key = rotate["join_key"].as_str().unwrap().to_string();
+        assert_ne!(original_key, new_key, "precondition: rotation minted a key");
+
+        let hash_after = live_invite_key_hash(&daemon).await;
+        assert_eq!(
+            hash_after,
+            commonwealth_discovery::membership::hash_join_key(&new_key),
+            "the running daemon still gates on the OLD hash — rotation touched \
+             disk and the cached plaintext but not the live Mesh, so \
+             /internal/join keeps admitting the old key and gossip keeps \
+             advertising the old hash"
+        );
+    }
+
+    /// The clobber, named by its mechanism rather than raced against a timer.
+    ///
+    /// The gossip loop re-persists the live in-memory mesh over `mesh.json`
+    /// every round (`gossip.rs`'s `persist::save` call). So if rotation leaves
+    /// disk and memory disagreeing, the next round silently resolves the
+    /// disagreement toward memory and the rotation is reverted — while
+    /// `join_key.secret` keeps the NEW plaintext. The operator is then holding
+    /// an invite that hashes to nothing the mesh accepts.
+    ///
+    /// Asserting agreement is strictly stronger than sleeping for a round:
+    /// if the two never disagree, no round can revert anything.
+    #[tokio::test]
+    async fn rotate_leaves_disk_and_memory_agreeing_so_a_gossip_round_cannot_revert_it() {
+        let (daemon, base, tmp) = spawn_test_router().await;
+        let client = reqwest::Client::new();
+
+        create_mesh_over_http(&client, &base).await;
+        let _: serde_json::Value = client
+            .post(format!("{base}/v1/mesh/rotate"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+
+        let in_memory = live_invite_key_hash(&daemon).await;
+        let on_disk = sovereign_mesh::persist::load(tmp.path())
+            .expect("mesh.json readable")
+            .expect("a mesh is persisted after create")
+            .invite_key_hash;
+
+        assert_eq!(
+            in_memory, on_disk,
+            "rotation left the live mesh and mesh.json disagreeing; the next \
+             gossip round re-persists memory over disk and silently reverts \
+             the rotation"
+        );
+    }
+
+    #[tokio::test]
+    async fn relay_candidates_endpoint_returns_classified_array() {
+        // Doesn't require a mesh — just lists local interfaces.
+        let (_daemon, base, _tmp) = spawn_test_router().await;
+        let client = reqwest::Client::new();
+        let resp = client
+            .get(format!("{base}/v1/mesh/relay-candidates"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 200);
+        let body: serde_json::Value = resp.json().await.unwrap();
+        let arr = body["candidates"].as_array().expect("candidates is array");
+        // Test runners on macOS / Linux always have at least one
+        // non-loopback interface (even CI VMs). Each entry must be
+        // shape-correct so the desktop's typed deserializer doesn't
+        // silently drop fields.
+        for c in arr {
+            assert!(c["ip"].is_string());
+            assert!(c["kind"].is_string());
+            assert!(c["url_fragment"].is_string());
+            assert!(c["recommended"].is_boolean());
+        }
+        // At most one should be marked recommended.
+        let recommended_count = arr
+            .iter()
+            .filter(|c| c["recommended"].as_bool().unwrap_or(false))
+            .count();
+        assert!(
+            recommended_count <= 1,
+            "got {recommended_count} recommended"
+        );
+    }
+
+    #[tokio::test]
+    async fn join_rejects_unparseable_input() {
+        let (_daemon, base, _tmp) = spawn_test_router().await;
+        let client = reqwest::Client::new();
+        let resp = client
+            .post(format!("{base}/v1/mesh/join"))
+            .json(&serde_json::json!({ "key_or_url": "not a valid key" }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 400);
+    }
+
+    // -- Measurements -------------------------------------------------------
+    //
+    // The namespace lives on the ring rail (`sovereign_mesh::measurements_rail`), so
+    // the journal-level properties — self-exclusion, ordering, what an
+    // undecodable line costs — are pinned there, against a real journal. What
+    // is left here is the MAPPING: how an admitted op becomes the DTO the CLI
+    // reads.
+
+    use commonwealth_rail::{Person, RingSigner};
+    use sovereign_mesh::measurements_rail::{RailMeasurement, RailMeasurements};
+    use sovereign_mesh::ring_roster::tests::{key, member, mesh_of, pubkey_of};
+    use sovereign_mesh::ring_roster::MeshRoster;
+
+    use sovereign_mesh::measurements_rail::tests::a_measurement;
+
+    fn node(b: u8) -> commonwealth_core::ids::NodeId {
+        commonwealth_core::ids::NodeId::from_u128(u128::from(b))
+    }
+
+    /// A publisher is named from the ROSTER, never from the payload it wrote.
+    /// The `actor` on a journal line is the key that signed it — the one field
+    /// a writer cannot forge for someone else (ARCH §18.1) — so both halves of
+    /// the attribution, the node id and the display name, are derived from it.
+    #[test]
+    fn a_publisher_is_named_from_the_key_that_signed_the_line() {
+        let k = key(71);
+        let id = node(2);
+        let roster = MeshRoster::derive(
+            &mesh_of(vec![member(id, "BeefyMac", Some(pubkey_of(&k)))]),
+            node(1),
+            None,
+        );
+        let view = peer_view(
+            RailMeasurements {
+                found: vec![RailMeasurement {
+                    actor: RingSigner::actor(&k),
+                    person: Person::from("BeefyMac"),
+                    record: a_measurement(11.08, 200),
+                }],
+                unreadable: 0,
+                gaps: 0,
+            },
+            &roster,
+        );
+        assert_eq!(view.records.len(), 1);
+        assert_eq!(view.records[0].origin_node, hex::encode(id.as_bytes()));
+        assert_eq!(view.records[0].origin_name.as_deref(), Some("BeefyMac"));
+    }
+
+    /// **An incomplete answer says so, in one number.** A line this build
+    /// cannot decode and a line the rail could not account for at all are both
+    /// "your answer covers less than the ring holds"; reporting them in two
+    /// fields would let a caller read one and believe the other was zero
+    /// (ARCH §18.3). Before the move this counted only the first.
+    #[test]
+    fn a_gap_the_rail_reported_reaches_the_reader_as_an_unreadable_line() {
+        let view = peer_view(
+            RailMeasurements {
+                found: Vec::new(),
+                unreadable: 1,
+                gaps: 2,
+            },
+            &MeshRoster::default(),
+        );
+        assert!(view.records.is_empty());
+        assert_eq!(
+            view.unreadable, 3,
+            "\"nobody has measured this\" and \"three lines did not survive \
+             admission\" send an operator to different places"
+        );
+    }
+
+    #[tokio::test]
+    async fn publishing_without_a_mesh_is_declined_with_a_reason_not_an_error() {
+        // The harness's daemon is not running, which is exactly the state of a
+        // machine that has never run `mesh create`. `mesh bench` on such a
+        // machine is completely normal, so this path must be a 200 with a reason
+        // the CLI can print — not a 5xx it would have to interpret.
+        let (_daemon, base, _tmp) = spawn_test_router().await;
+        let resp = reqwest::Client::new()
+            .post(format!("{base}/v1/mesh/measurements"))
+            .json(&a_measurement(11.08, 200))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 200);
+        let body: serde_json::Value = resp.json().await.unwrap();
+        assert_eq!(body["published"], false);
+        assert!(
+            body["refused"].as_str().is_some_and(|s| !s.is_empty()),
+            "a refusal without a reason is a failure the operator cannot act on: {body}"
+        );
+    }
+
+    #[tokio::test]
+    async fn reading_peers_without_a_mesh_is_empty_not_an_error() {
+        let (_daemon, base, _tmp) = spawn_test_router().await;
+        let resp = reqwest::Client::new()
+            .get(format!("{base}/v1/mesh/measurements"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            resp.status(),
+            200,
+            "`mesh plan` is a useful command on a solo machine; the peer half \
+             going missing must make the answer smaller, not fail it"
+        );
+        let body: serde_json::Value = resp.json().await.unwrap();
+        assert_eq!(body["records"].as_array().map(Vec::len), Some(0));
+        assert_eq!(body["unreadable"], 0);
+    }
+}

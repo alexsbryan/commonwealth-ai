@@ -1,0 +1,19 @@
+probe	crate	shape	run	wall_s	exit	note
+flip	-	check-full	noop	7.4	0	
+flip	-	lint-scoped-noedit	0	22.6	0	
+flip	-	check-full-after-scoped	0	7.5	0	
+flip	-	lint-scoped-noedit	1	6.8	0	
+sovereign/crates/sovereign-cli-llm/src/lib.rs	sovereign-cli-llm	check-full	2	8.5	0	
+sovereign/crates/sovereign-cli-llm/src/lib.rs	sovereign-cli-llm	build-ws	2	12.7	0	
+sovereign/crates/sovereign-desktop/src-tauri/src/state.rs	sovereign-desktop	check-full	2	7.7	0	
+sovereign/crates/sovereign-desktop/src-tauri/src/state.rs	sovereign-desktop	build-ws	2	11.4	0	
+sovereign/crates/sovereign-tools/src/local_corpus/manager.rs	sovereign-tools	check-full	2	13.8	0	
+sovereign/crates/sovereign-tools/src/local_corpus/manager.rs	sovereign-tools	build-ws	2	20.7	0	
+sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/mod.rs	sovereign-cli-daemon	check-full	2	7.4	0	
+sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/mod.rs	sovereign-cli-daemon	build-ws	2	11.2	0	
+sovereign/crates/sovereign-turn-client/src/lib.rs	sovereign-turn-client	check-full	2	10.1	0	
+sovereign/crates/sovereign-turn-client/src/lib.rs	sovereign-turn-client	build-ws	2	13.1	0	
+sovereign/crates/sovereign-mesh/src/daemon.rs	sovereign-mesh	check-full	2	9.8	0	
+sovereign/crates/sovereign-mesh/src/daemon.rs	sovereign-mesh	build-ws	2	16.2	0	
+sovereign/crates/sovereign-contracts/src/setup_config.rs	sovereign-contracts	check-full	2	26.4	0	
+sovereign/crates/sovereign-contracts/src/setup_config.rs	sovereign-contracts	build-ws	2	35.0	0	

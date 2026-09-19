@@ -256,7 +256,7 @@ pub(super) fn cached_atoms(atlas_dir: &Path) -> std::io::Result<Arc<Vec<AtomEnve
     // last-writer-wins is fine because all writers produce the same
     // Arc target for the same mtime/size.
     let file: AtomsFile = read_atlas_atoms(atlas_dir)?;
-    let atoms = Arc::new(file.atoms);
+    let atoms = Arc::new(file.atoms().to_vec());
     let mut write = cache().write().expect("atoms cache rwlock poisoned");
     write.insert(
         atlas_dir.to_path_buf(),

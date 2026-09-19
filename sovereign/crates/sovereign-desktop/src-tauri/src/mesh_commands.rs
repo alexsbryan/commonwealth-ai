@@ -364,7 +364,7 @@ pub async fn mesh_leave(state: State<'_, Arc<AppState>>) -> Result<(), String> {
 // successful join with silent peer invisibility.
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DiscoveredPeerDto {
+pub struct DiscoveredMemberDto {
     pub node_id: String,
     pub mesh_id_hex: String,
     /// The peer's *mesh* name (e.g. "Masonic Mesh"). Surfaced in the
@@ -379,7 +379,7 @@ pub struct DiscoveredPeerDto {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MeshDiagnostics {
-    pub discovered_peers: Vec<DiscoveredPeerDto>,
+    pub discovered_peers: Vec<DiscoveredMemberDto>,
     pub daemon_running: bool,
 }
 
@@ -568,7 +568,7 @@ pub struct CorpusHostingDto {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PeerPreferenceDto {
+pub struct VenuePreferenceDto {
     pub node_id: String,
     pub multiplier: f64,
     pub reason: Option<String>,
@@ -586,7 +586,7 @@ pub struct PeerPreferenceDto {
 /// in-process — two implementations of one answer, free to drift
 /// apart in window, shape and order (ARCH principle 8). The
 /// in-process daemon binds the SAME `/internal` router beside its
-/// client listener (`sovereign_mesh::daemon::start_daemon`), so Local
+/// client listener (`sovereign_daemon::daemon::start_daemon`), so Local
 /// mode reaches that one handler over loopback.
 ///
 /// Local mode still answers an EMPTY list, not an error, when no mesh
@@ -697,7 +697,7 @@ pub async fn mesh_clear_peer_preference(
 #[tauri::command]
 pub async fn mesh_list_peer_preferences(
     state: State<'_, Arc<AppState>>,
-) -> Result<Vec<PeerPreferenceDto>, String> {
+) -> Result<Vec<VenuePreferenceDto>, String> {
     let attached = attached(&state);
     if !attached {
         tracing::debug!(
@@ -714,7 +714,7 @@ pub async fn mesh_list_peer_preferences(
         "mesh_list_peer_preferences: asking the daemon for the preference list"
     );
     sovereign_turn_client::TurnClient::new(state.internal_base_url())
-        .peer_preferences::<PeerPreferenceDto>()
+        .peer_preferences::<VenuePreferenceDto>()
         .await
         .map_err(|e| format!("mesh_list_peer_preferences: {e}"))
 }
@@ -724,7 +724,7 @@ mod contribution_view_tests {
     use super::*;
     use std::sync::Mutex;
 
-    /// Exactly what `sovereign_api::routes_internal::mesh_admin::
+    /// Exactly what `sovereign_daemon::routes_internal::mesh_admin::
     /// contribution_view` serialises: `Vec<NodeContributionsView>`,
     /// plain field names, no serde renames, already sorted by node id
     /// (the handler's own `out.sort_by` is the last thing it does).
@@ -968,8 +968,8 @@ mod contribution_view_tests {
 
     /// The peer-preference half of the same contract (svt-3).
     ///
-    /// Exactly what `sovereign_api::routes_internal::peer_preference::
-    /// peer_preference_list` serialises: `Vec<PeerPreferenceView>`, plain
+    /// Exactly what `sovereign_daemon::routes_internal::peer_preference::
+    /// peer_preference_list` serialises: `Vec<VenuePreferenceDto>`, plain
     /// field names, no serde renames. Before svt-3 the Local arm built these
     /// DTOs in-process from `commonwealth_state::PeerPreferenceStore::list`
     /// and the Attach arm returned an empty list; both arms now parse this
@@ -996,7 +996,7 @@ mod contribution_view_tests {
           }
         ]"#;
 
-        let got: Vec<PeerPreferenceDto> =
+        let got: Vec<VenuePreferenceDto> =
             serde_json::from_str(DAEMON_PREFS_JSON).expect("the daemon's own shape parses");
         assert_eq!(got.len(), 2);
 

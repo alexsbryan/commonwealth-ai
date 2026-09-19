@@ -1,0 +1,10 @@
+REVIEW-build-understanding-pass-port
+commit 037f8285c
+CLEAN exit=0 (debug target 38G, under the 50G gate)
+LINT exit=0 (scoped 23 crates, 0 errors, --all-targets)
+TEST(corpus-engine) exit=0 pass=2197 fail=0
+TOML exit=0
+census crate-lines --crate corpus-engine names 0 corpus-engine files (exit 4 is the pre-existing corpus-index coverage hole, not this crate)
+what: moved the enrichment-pass PORT (EnrichmentPass, EnrichmentContext, EnrichmentPassRegistry, the four id consts) from corpus-engine/src/enrichment/pass.rs to corpus-engine/src/engine/pass.rs; the four *Pass impls + refuse_deferred + builtin() stay in enrichment/pass.rs and re-export the port at the historical paths; EnrichmentPassRegistry::new() added; the engine's own sites (engine/ingest.rs:1749,:1799,:1833, engine/mod.rs:2865,:3087) name crate::engine::pass. DT re-counts: engine/ 10006/11 -> 10166/12, enrichment/pass.rs 646 -> 547; SYSTEM_OVERVIEW.md and DOMAINS.toml path repoints.
+correction: the row's second half (impls+builtin() -> understanding-host, registry handed in at construction) is a multi-crate cascade, not one unit. `git grep -n 'EnrichmentPassRegistry::builtin()'` is 7 sites not 5 (recipe.rs:1903 unnamed); understanding-host/Cargo.toml has an empty [dependencies]; builtin() leaving corpus-engine forces check_enrichment_type (Recipe::from_toml, ~100 sites), produces_enriched_atoms and CorpusEngine::new (165 sites) to take the registry. Recorded in ralph/DECISIONS.md; minted REVIEW-build-understanding-pass-host beneath the row.
+premise: measured 2026-09-18 on ralph/domains-campaign.

@@ -1,0 +1,40 @@
+unit: dm-mesh-workbench-move-watchers
+commits: a23d8b663 (the move); row correction + ralph/DECISIONS.md entry in the
+  commit that adds this file
+what: MOVE sovereign/crates/sovereign-mesh/src/commit_harvest.rs (481) ->
+  corpus-engine-watchers (§3a), home per the DT workbench cluster note. It adds
+  no dependency (corpus-engine-notes, tracing and tempfile are already carried),
+  so the fan-in ratchet is untouched; sovereign-mesh keeps
+  `pub use corpus_engine_watchers::commit_harvest;` as the shim and reindexer
+  reads `crate::commit_harvest::harvest_between` through it.
+
+  DEFERRED — the row also named projects.rs (674) and reindexer.rs (2,155);
+  both are blocked by gates only the operator can lift (ralph/DECISIONS.md
+  2026-09-17, "two of the three files need an operator-only gate decision"):
+    - reindexer.rs reaches `corpus_engine::facts` / `facts_store` in PRODUCTION
+      (reindexer.rs:650,:708, inside `run_overlay_merge` — the row called it a
+      test reach), so `corpus-engine-watchers -> corpus-engine` is
+      package-illegal for code-intel (reproduced: boundary-gate exit=1) AND
+      grows corpus-engine fan-in 20 -> 21.
+    - projects.rs calls `sovereign_contracts::rebrand::projects_json()`
+      (projects.rs:364), growing sovereign-contracts fan-in 31 -> 32.
+  PROMPT §7 forbids re-baselining a ratchet and §6's hard stops name an
+  `[[exception]]`, so the two need an operator decision. No re-export reaches
+  either fact (corpus-engine-yield is dependency-free by contract;
+  corpus-engine-notes names neither dep).
+
+  Registry: the DT [[module]] row re-keyed to
+  corpus-engine-watchers/src/commit_harvest.rs, context unchanged (workbench),
+  lines 481 unchanged. `quality/baselines/clock_reads.txt` needs no re-key — the
+  harvester has no `SystemTime::now()` (only projects.rs did, and it stayed).
+  The cluster note's two findings stand and are unchanged by this commit: the
+  registry's dest is corpus-engine-watchers while the context's crates are
+  corpus-engine-scip/-sections, and its "corpus-engine-watchers ->
+  sovereign-serving-host" PROBLEM is the stale fim_adapter edge.
+
+  Also stale in the row and corrected in ralph/STATE.md: the treesitter gate is
+  at lib.rs:81-82 not :113-114, and reindexer.rs is 2,155 lines not 2,150.
+checks: CLEAN exit=0 (disk gate); LINT exit=0 (11 crates, 0 errors, --all-targets);
+  LAYER exit=0 (fan-in within caps); BOUNDARY exit=0 (code-intel closure still
+  clean with commit_harvest.rs in it); TOML exit=0; CENSUS --self-test exit=0
+  (11/11), misnamed exit=0 (corpus-engine-watchers 87.3%, not flagged).

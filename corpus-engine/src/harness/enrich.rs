@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use crate::enrichment::atlas::atoms::{AtomEnvelope, AtomsFile};
+use crate::enrichment::atlas::atoms::AtomEnvelope;
 use crate::enrichment::pipeline::chapter_manifest::ChapterManifest;
 use crate::error::{Error, Result};
 use crate::index::CorpusIndex;
@@ -81,14 +81,13 @@ pub async fn verify_atoms(
     index: &CorpusIndex,
     chapters_path: &Path,
 ) -> Result<EnrichOutput> {
-    let raw = std::fs::read(atlas_dir.join("atoms.json"))?;
-    let file: AtomsFile = serde_json::from_slice(&raw)
+    let file = crate::enrichment::atlas::read_atlas_atoms(atlas_dir)
         .map_err(|e| Error::Serialization(format!("parse atoms.json: {e}")))?;
     let manifest = ChapterManifest::load(chapters_path)?;
 
     // Resolve every distinct chunk_id once (async I/O), then run the pure check.
     let mut resolved: HashMap<String, String> = HashMap::new();
-    for atom in &file.atoms {
+    for atom in file.atoms() {
         for r in atom.evidence() {
             if resolved.contains_key(&r.chunk_id) {
                 continue;
@@ -98,7 +97,7 @@ pub async fn verify_atoms(
             }
         }
     }
-    Ok(check_evidence(&file.atoms, &resolved))
+    Ok(check_evidence(&file.atoms(), &resolved))
 }
 
 /// Convenience over [`verify_atoms`]: given a corpus index directory, locate
