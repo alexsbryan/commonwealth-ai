@@ -877,6 +877,93 @@ class Ei7Stage0MigrationTests(unittest.TestCase):
         self.assertNotIn("`ralph/NEEDS_HUMAN.md`", live)
 
 
+class FastSession(ralph.Session):
+    def __init__(self, *args, **kwargs):
+        kwargs["poll"] = 0.2
+        super().__init__(*args, **kwargs)
+
+
+class TwoQueueDemoTests(unittest.TestCase):
+    """The order's Demo, end to end, with a stub worker (no model session): two
+    `run --queue` loops in one checkout, then the unedited ring-room launch line."""
+
+    WORKER = (
+        'set -eu\n'
+        'if [ "$RALPH_QUEUE" = a ]; then\n'          # a never finishes: it waits to be stopped
+        '    while [ ! -f "$RALPH_CONTROL_DIR/STOP" ]; do sleep 0.1; done; exit 0\n'
+        'fi\n'
+        'unit=$(sed -n "s/^- \\[[ ~]\\] \\([^ ]*\\) .*/\\1/p" "$RALPH_STATE" | head -1)\n'
+        'scripts/ralph-check.sh hello > "check-${RALPH_QUEUE:-legacy}.out" 2>&1 || true\n'
+        'echo work > "$unit.txt"; git add "$unit.txt"; git commit -q -m "$unit: work"\n'
+        'scripts/ralph-mark.sh "$unit" "$(git rev-parse --short HEAD)"\n'   # two arguments
+        'mkdir -p "$RALPH_CONTROL_DIR"; : > "$RALPH_CONTROL_DIR/DONE"\n')
+
+    def test_two_queues_run_beside_each_other_and_the_legacy_line_still_starts(self):
+        import threading
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = str(pathlib.Path(tmp).resolve())
+            git_repo(tmp)
+            two_queues(tmp)
+            for name in ("a", "b"):
+                manifest = pathlib.Path(tmp) / f"ralph/next/{name}/queue.toml"
+                manifest.write_text('worker_bin = "./stub-worker.sh"\n' + manifest.read_text())
+            for script in ("ralph-check.sh", "ralph-mark.sh", "ralph.py"):
+                install_script(tmp, script)
+            stub = stub_worker(tmp, self.WORKER)
+            ring_room = launch_lines("ralph/next/ring-room/STATE.md")[1]
+            write(tmp, "ralph/next/ring-room/STATE.md", "- [ ] rr-1 — depends [] — do it\n")
+            write(tmp, "ralph/next/ring-room/PROMPT.md", "legacy prompt\n")
+            write(tmp, ".gitignore", "target/\ncheck-*.out\nralph/next/*/ctl/\n"
+                                     "ralph/DONE\nralph/.heartbeat\n")
+            commit_all(tmp)
+            root = pathlib.Path(tmp)
+            rcs = {}
+
+            def loop(name):
+                args = ralph.build_parser().parse_args(
+                    ["run", "--workdir", tmp, "--queue", name, "--max-stall", "2"])
+                rcs[name] = ralph.cmd_run(args)
+
+            out = io.StringIO()
+            with mock.patch.object(ralph, "Session", FastSession), contextlib.redirect_stdout(out):
+                threads = {name: threading.Thread(target=loop, args=(name,)) for name in "ab"}
+                for t in threads.values():
+                    t.start()
+                threads["b"].join(timeout=60)
+                self.assertFalse(threads["b"].is_alive(), out.getvalue())
+                self.assertEqual(rcs.get("b"), 0, out.getvalue())
+                self.assertTrue(threads["a"].is_alive())        # b's DONE did not end a
+                (root / "ralph/next/a/ctl/STOP").write_text("")
+                threads["a"].join(timeout=60)
+                self.assertFalse(threads["a"].is_alive(), out.getvalue())
+            self.assertEqual(rcs, {"a": 0, "b": 0})
+            self.assertIn("campaign: operator-stop", out.getvalue())
+            self.assertIn("campaign: done", out.getvalue())
+            self.assertIn("from-b", (root / "check-b.out").read_text())
+            self.assertRegex((root / "ralph/next/b/STATE.md").read_text(), r"- \[x\] qb-1 [0-9a-f]{7}")
+            self.assertIn("- [ ] qa-1", (root / "ralph/next/a/STATE.md").read_text())
+            self.assertFalse((root / "ralph/next/b/ctl/STOP").exists())
+            self.assertFalse((root / "ralph/STOP").exists())
+            self.assertFalse((root / "ralph/DONE").exists())
+
+            # Then the ring-room launch line, exactly as its STATE.md has it (`--workdir .`).
+            cwd = os.getcwd()
+            os.chdir(tmp)
+            try:
+                with mock.patch.object(ralph, "Session", FastSession), \
+                        mock.patch.dict(os.environ, {"RALPH_OPENCODE_BIN": str(stub)}), \
+                        contextlib.redirect_stdout(out):
+                    rc = ralph.cmd_run(ralph.build_parser().parse_args(ring_room))
+            finally:
+                os.chdir(cwd)
+            self.assertEqual(rc, 0, out.getvalue())
+            self.assertRegex((root / "ralph/next/ring-room/STATE.md").read_text(),
+                             r"- \[x\] rr-1 [0-9a-f]{7}")
+            self.assertTrue((root / "ralph/DONE").exists())          # legacy control files
+            self.assertTrue((root / "ralph/.heartbeat").exists())
+            self.assertIn("usage:", (root / "check-legacy.out").read_text())   # no queue, no `hello`
+
+
 class SupervisorTests(unittest.TestCase):
     def make(self, tmp, *, run_inner, resolver_run, resolve_max=2):
         write(tmp, "ralph/STATE.md", "- [ ] dm-a — depends []\n")
