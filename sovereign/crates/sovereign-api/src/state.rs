@@ -999,6 +999,8 @@ pub struct AppStateInner {
     /// the entire turn regardless of the window; the window only governs
     /// the quiet after the last turn ends.
     pub foreground_inflight: std::sync::atomic::AtomicUsize,
+    /// Peer corpus reads' own budget — never the inference ceiling (seat A23).
+    pub knowledge_reads: crate::knowledge_read::KnowledgeReadBudget,
 
     /// Mesh quiesce flag. When `true`, the auto-collaborate loop
     /// (`sovereign-mesh::auto_ingest`) skips peer-pull discovery and
@@ -1832,6 +1834,7 @@ impl AppState {
                 // default 60) before AppState is shared.
                 yield_window_secs: std::sync::atomic::AtomicU64::new(0),
                 foreground_inflight: std::sync::atomic::AtomicUsize::new(0),
+                knowledge_reads: Default::default(),
                 // false = full peer collaboration. Daemon startup
                 // overrides this from `SOVEREIGN_DISABLE_AUTO_COLLAB`
                 // when set, preserving the env-var escape hatch.
@@ -2479,14 +2482,33 @@ impl AppState {
     pub fn admit_peer_request(
         &self,
         node: NodeId,
+        work: crate::admission::PeerWork,
     ) -> Result<crate::admission::PeerInflightGuard, crate::admission::AdmissionRejection> {
-        use crate::admission::{AdmissionReason, AdmissionRejection, PeerInflightGuard};
+        use crate::admission::{AdmissionReason, AdmissionRejection, PeerInflightGuard, PeerWork};
 
         if let Some(remaining) = self.seconds_until_unpaused() {
             return Err(AdmissionRejection::new(
                 "contribution paused",
                 AdmissionReason::Paused,
                 remaining.max(1),
+            ));
+        }
+        // A corpus read never yields to the local GPU nor counts against the
+        // inference ceiling: its own budget decides it (seat A23).
+        if work == PeerWork::KnowledgeRead {
+            let admitted = self.inner.knowledge_reads.try_take();
+            tracing::debug!(
+                ceiling = work.ceiling(),
+                admitted,
+                "admission: peer knowledge read"
+            );
+            if admitted {
+                return Ok(PeerInflightGuard::new(Arc::clone(&self.inner), node, work));
+            }
+            return Err(AdmissionRejection::new(
+                "peer knowledge-read ceiling reached",
+                AdmissionReason::CeilingExceeded,
+                crate::admission::jittered_retry_after_secs(1),
             ));
         }
         if self.yield_peers_to_foreground() {
@@ -2511,6 +2533,7 @@ impl AppState {
                 Ok(PeerInflightGuard::new(
                     std::sync::Arc::clone(&self.inner),
                     node,
+                    work,
                 ))
             }
             // Both outcomes mean "at capacity now" on this shed-only gate.

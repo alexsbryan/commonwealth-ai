@@ -853,3 +853,133 @@ async fn a_daemon_served_chat_turn_names_the_peer_whose_corpus_answered() {
         "every per-claim corpus holding over an all-Bo pool must name Bo. Got: {members:?}"
     );
 }
+
+fn online_member(
+    id: NodeId,
+    name: &str,
+    hosted: &[&str],
+    addr: std::net::SocketAddr,
+) -> MemberRecord {
+    MemberRecord {
+        removed_at: None,
+        node_pubkey: None,
+        relay_url: None,
+        iroh_direct_addrs: Vec::new(),
+        dial_info_version: 0,
+        dial_info_sig: None,
+        node_id: id,
+        name: name.into(),
+        invited_by: id,
+        joined_at: 0,
+        last_seen: 0,
+        status: NodeStatus::Online,
+        capabilities: caps_with_hosted(hosted),
+        addresses: vec![addr],
+    }
+}
+
+/// The ring-room 4B collision (seat A23): a's gate judge offloaded to Bo took
+/// Bo's single peer-inference slot and marked Bo's foreground busy, and Bo then
+/// refused a's corpus read with `503 CeilingExceeded` / `YieldedToLocal` — the
+/// fan-out recorded the corpus unavailable and a answered with no pool. A
+/// corpus read is not an inference: it is admitted under its own ceiling.
+#[tokio::test]
+async fn corpus_read_is_served_while_the_inference_slot_is_held() {
+    let id_a = NodeId::from_u128(0xAAAA_AAAA_AAAA_AAAA);
+    let id_b = NodeId::from_u128(0xBBBB_BBBB_BBBB_BBBB);
+
+    // === Bo: hosts the corpus, one peer-inference slot, busy with a's judge ===
+    let tmp_b = tempfile::tempdir().unwrap();
+    let indexes_b = tmp_b.path().join("indexes");
+    std::fs::create_dir_all(&indexes_b).unwrap();
+    install_corpus(&indexes_b, "room", "Room", "Bo keeps the room notes.").await;
+    let recipes_b = tmp_b.path().join("recipes");
+    std::fs::create_dir_all(&recipes_b).unwrap();
+    let engine_b = Arc::new(
+        CorpusEngine::new(recipes_b, indexes_b, mock_embed_fn())
+            .with_embedding_model("qwen3-embedding-0.6b"),
+    );
+    let mesh_b = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
+        id: MeshId::from_u128(1),
+        name: "ring-room".into(),
+        invite_key_hash: [0u8; 32],
+        invite_version: 0,
+        require_encryption: false,
+        members: HashMap::from([(
+            id_b,
+            online_member(id_b, "Bo", &["room"], "127.0.0.1:9742".parse().unwrap()),
+        )]),
+        peers: vec![],
+    };
+    let state_b = AppState::new_with_platform_and_engine(
+        id_b,
+        mesh_b,
+        Arc::new(MeshStore::in_memory().unwrap()),
+        Arc::new(AppRegistry::new()),
+        Some(engine_b),
+    );
+    // Exactly the collision run's state: the default `max_peer_inflight = 1`,
+    // that one slot held by a's offloaded judge, and the judge's turn marking
+    // Bo's foreground active inside the yield window.
+    state_b.set_contribution_max_peer_inflight(1);
+    state_b.set_yield_window_secs(60);
+    let _judge = state_b
+        .admit_peer_request(id_a, sovereign_api::admission::PeerWork::Inference)
+        .expect("a's offloaded judge takes Bo's one inference slot");
+    state_b.bump_foreground_active();
+    let addr_b = spawn_router(internal_router(state_b.clone())).await;
+
+    // === a: no corpus locally, fans out to Bo ===
+    let mesh_a = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
+        id: MeshId::from_u128(1),
+        name: "ring-room".into(),
+        invite_key_hash: [0u8; 32],
+        invite_version: 0,
+        require_encryption: false,
+        members: HashMap::from([
+            (
+                id_a,
+                online_member(id_a, "a", &[], "127.0.0.1:0".parse().unwrap()),
+            ),
+            (id_b, online_member(id_b, "Bo", &["room"], addr_b)),
+        ]),
+        peers: vec![],
+    };
+    let state_a = AppState::new_with_platform_and_engine(
+        id_a,
+        mesh_a,
+        Arc::new(MeshStore::in_memory().unwrap()),
+        Arc::new(AppRegistry::new()),
+        None,
+    );
+    let addr_a = spawn_router(client_router(state_a)).await;
+
+    let body: serde_json::Value = reqwest::Client::new()
+        .post(format!("http://{addr_a}/v1/knowledge/search"))
+        .json(&serde_json::json!({
+            "query_embedding": vec![0.0_f32; EMBED_DIM],
+            "query_text": "room notes",
+            "corpora": ["room"],
+            "limit": 10,
+        }))
+        .send()
+        .await
+        .expect("/v1/knowledge/search reachable on a")
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        body["corpora_searched"],
+        serde_json::json!(["room"]),
+        "Bo's corpus read must be answered while Bo's inference slot is held — \
+         a 503 here blinds a to Bo's corpora. Got: {body}"
+    );
+    assert!(
+        !body["results"].as_array().unwrap().is_empty(),
+        "Bo's chunk must come back. Got: {body}"
+    );
+}

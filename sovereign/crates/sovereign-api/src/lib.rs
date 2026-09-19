@@ -26,6 +26,7 @@ pub mod client_surface;
 pub use commonwealth_transport::fanout;
 pub mod frontdoor;
 pub mod headers;
+pub mod knowledge_read;
 pub mod middleware;
 pub mod next_edit;
 pub mod next_edit_journal;

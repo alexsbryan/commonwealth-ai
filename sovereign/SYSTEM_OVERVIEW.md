@@ -7370,7 +7370,10 @@ work pins the GPU while the user is chatting. Components:
   `/v1/knowledge/search`. Local requests admit unconditionally;
   peer requests are rejected with 503 + `Retry-After` when paused,
   yielding to a recent local foreground request, or refused by the
-  fair scheduler. The flat ceiling became a **`serving_policy::fair_sched::SchedCore<NodeId>`**
+  fair scheduler. A peer corpus read (`/internal/knowledge/search`,
+  `PeerWork::KnowledgeRead`) meets only the pause gate and its own
+  `[daemon] max_peer_knowledge_reads` budget (default 4), never the
+  yield or the inference ceiling (seat A23). The flat ceiling became a **`serving_policy::fair_sched::SchedCore<NodeId>`**
   (`AppStateInner.peer_sched`): a runtime-mutable global ceiling
   (`set_slots`, `0` = reject all) **plus a per-node concurrency cap**
   so one peer can't hog the pool, **reciprocity-scaled** — a

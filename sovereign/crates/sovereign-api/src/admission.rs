@@ -91,6 +91,25 @@ impl AdmissionReason {
     }
 }
 
+/// What a peer request spends — two resources, two budgets (seat A23): a corpus
+/// read (~ms of I/O) is not an inference, so one offloaded judge holding the
+/// inference slot must not blind every member's fan-out to this node's corpora.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PeerWork {
+    Inference,
+    KnowledgeRead,
+}
+
+impl PeerWork {
+    /// The `[daemon]` key of the ceiling deciding this work, named on every 503.
+    pub const fn ceiling(self) -> &'static str {
+        match self {
+            Self::Inference => "max_peer_inflight",
+            Self::KnowledgeRead => "max_peer_knowledge_reads",
+        }
+    }
+}
+
 /// How many seconds of spread a shed's `Retry-After` hint carries on
 /// top of its base value.
 ///
@@ -228,6 +247,7 @@ pub fn shed_response(rejection: AdmissionRejection) -> Response {
 pub struct PeerInflightGuard {
     inner: Arc<AppStateInner>,
     node: NodeId,
+    work: PeerWork,
 }
 
 impl std::fmt::Debug for PeerInflightGuard {
@@ -238,13 +258,16 @@ impl std::fmt::Debug for PeerInflightGuard {
 }
 
 impl PeerInflightGuard {
-    pub(crate) fn new(inner: Arc<AppStateInner>, node: NodeId) -> Self {
-        Self { inner, node }
+    pub(crate) fn new(inner: Arc<AppStateInner>, node: NodeId, work: PeerWork) -> Self {
+        Self { inner, node, work }
     }
 }
 
 impl Drop for PeerInflightGuard {
     fn drop(&mut self) {
+        if self.work == PeerWork::KnowledgeRead {
+            return self.inner.knowledge_reads.release();
+        }
         // Release this node's slot back to the scheduler (promoting any
         // waiter — none on this shed-only gate). Recover from a poisoned lock
         // rather than cascade the panic.
@@ -554,6 +577,26 @@ pub async fn peer_admission_layer(
     req: Request<Body>,
     next: Next,
 ) -> Response {
+    peer_gate(state, headers, req, next, PeerWork::Inference).await
+}
+
+/// The same gate for `/internal/knowledge/search`, under its own ceiling.
+pub async fn peer_knowledge_read_admission_layer(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    req: Request<Body>,
+    next: Next,
+) -> Response {
+    peer_gate(state, headers, req, next, PeerWork::KnowledgeRead).await
+}
+
+async fn peer_gate(
+    state: AppState,
+    headers: HeaderMap,
+    req: Request<Body>,
+    next: Next,
+    work: PeerWork,
+) -> Response {
     let is_peer = headers.get("x-node-id").is_some();
     if !is_peer {
         return next.run(req).await;
@@ -576,7 +619,7 @@ pub async fn peer_admission_layer(
             NodeId::from_u128(0)
         }
     };
-    match state.admit_peer_request(node) {
+    match state.admit_peer_request(node, work) {
         Ok(_guard) => {
             // _guard binds the scheduler slot to this future's
             // lifetime; the saturating decrement fires when the
@@ -600,6 +643,7 @@ pub async fn peer_admission_layer(
             // and must not read as serving on /status.
             tracing::info!(
                 reason = ?rejection.reason,
+                ceiling = work.ceiling(),
                 retry_after_secs = rejection.retry_after_secs,
                 "admission: 503 — peer request gated"
             );
@@ -643,7 +687,7 @@ mod tests {
     #[test]
     fn admits_when_unrestricted() {
         let s = fresh_state();
-        let g = s.admit_peer_request(nid(1));
+        let g = s.admit_peer_request(nid(1), PeerWork::Inference);
         assert!(g.is_ok());
         assert_eq!(s.peer_inflight_count(), 1);
         drop(g);
@@ -655,7 +699,7 @@ mod tests {
     fn rejects_when_paused() {
         let s = fresh_state();
         s.set_contribution_paused_until(unix_now() + 60);
-        let g = s.admit_peer_request(nid(1));
+        let g = s.admit_peer_request(nid(1), PeerWork::Inference);
         let err = g.expect_err("expected pause rejection");
         assert!(matches!(err.reason, AdmissionReason::Paused));
         assert!(err.retry_after_secs >= 1);
@@ -668,7 +712,7 @@ mod tests {
         let s = fresh_state();
         // Pause that expired 1s ago.
         s.set_contribution_paused_until(unix_now() - 1);
-        assert!(s.admit_peer_request(nid(1)).is_ok());
+        assert!(s.admit_peer_request(nid(1), PeerWork::Inference).is_ok());
     }
 
     #[test]
@@ -677,10 +721,10 @@ mod tests {
         s.set_contribution_max_peer_inflight(2);
         // Two DISTINCT nodes fill the 2 global slots (each capped at 1 when
         // rationing). A third node is shed — the global ceiling is reached.
-        let _g1 = s.admit_peer_request(nid(1)).unwrap();
-        let _g2 = s.admit_peer_request(nid(2)).unwrap();
+        let _g1 = s.admit_peer_request(nid(1), PeerWork::Inference).unwrap();
+        let _g2 = s.admit_peer_request(nid(2), PeerWork::Inference).unwrap();
         let err = s
-            .admit_peer_request(nid(3))
+            .admit_peer_request(nid(3), PeerWork::Inference)
             .expect_err("expected ceiling rejection");
         assert!(matches!(err.reason, AdmissionReason::CeilingExceeded));
         assert_eq!(s.peer_inflight_count(), 2);
@@ -691,13 +735,13 @@ mod tests {
         let s = fresh_state();
         s.set_contribution_max_peer_inflight(4); // rationing, 4 slots
                                                  // A neutral node's cap is 1 even with 3 slots free — anti-hog.
-        let _g1 = s.admit_peer_request(nid(1)).unwrap();
+        let _g1 = s.admit_peer_request(nid(1), PeerWork::Inference).unwrap();
         let err = s
-            .admit_peer_request(nid(1))
+            .admit_peer_request(nid(1), PeerWork::Inference)
             .expect_err("same node is capped despite free slots");
         assert!(matches!(err.reason, AdmissionReason::CeilingExceeded));
         // A different node still gets in.
-        assert!(s.admit_peer_request(nid(2)).is_ok());
+        assert!(s.admit_peer_request(nid(2), PeerWork::Inference).is_ok());
     }
 
     /// RED-FIRST (order mesh-scale-t0, item 2). Before the fix,
@@ -711,7 +755,7 @@ mod tests {
         s.set_contribution_max_peer_inflight(0);
         let hints: Vec<u64> = (0..32)
             .map(|i| {
-                s.admit_peer_request(nid(i))
+                s.admit_peer_request(nid(i), PeerWork::Inference)
                     .expect_err("ceiling 0 sheds everything")
                     .retry_after_secs
             })
@@ -749,7 +793,7 @@ mod tests {
         let s = fresh_state();
         s.set_contribution_max_peer_inflight(0);
         let err = s
-            .admit_peer_request(nid(1))
+            .admit_peer_request(nid(1), PeerWork::Inference)
             .expect_err("expected ceiling rejection at 0");
         assert!(matches!(err.reason, AdmissionReason::CeilingExceeded));
     }
@@ -760,7 +804,7 @@ mod tests {
         s.set_yield_window_secs(60);
         s.bump_foreground_active();
         let err = s
-            .admit_peer_request(nid(1))
+            .admit_peer_request(nid(1), PeerWork::Inference)
             .expect_err("expected foreground-yield rejection");
         assert!(matches!(err.reason, AdmissionReason::YieldedToLocal));
         assert!(err.retry_after_secs >= 1);
@@ -772,7 +816,7 @@ mod tests {
         s.set_yield_window_secs(60);
         s.bump_foreground_active();
         s.set_yield_peers_to_foreground(false);
-        assert!(s.admit_peer_request(nid(1)).is_ok());
+        assert!(s.admit_peer_request(nid(1), PeerWork::Inference).is_ok());
     }
 
     // ── The advertised number matches the enforced decision ──────
@@ -791,7 +835,9 @@ mod tests {
         s.bump_foreground_active();
         // Same state that makes `admit_peer_request` refuse...
         assert!(matches!(
-            s.admit_peer_request(nid(1)).unwrap_err().reason,
+            s.admit_peer_request(nid(1), PeerWork::Inference)
+                .unwrap_err()
+                .reason,
             AdmissionReason::YieldedToLocal
         ));
         // ...must be the state we advertise.
@@ -804,7 +850,7 @@ mod tests {
         let s = fresh_state();
         s.set_yield_window_secs(60);
         // No foreground request has ever landed: not yielding.
-        assert!(s.admit_peer_request(nid(1)).is_ok());
+        assert!(s.admit_peer_request(nid(1), PeerWork::Inference).is_ok());
         assert_eq!(s.recompute_local_availability().await, 1.0);
     }
 
@@ -854,7 +900,9 @@ mod tests {
         let s = fresh_state();
         s.set_contribution_max_peer_inflight(0); // would reject too
         s.set_contribution_paused_until(unix_now() + 60);
-        let err = s.admit_peer_request(nid(1)).expect_err("expected pause");
+        let err = s
+            .admit_peer_request(nid(1), PeerWork::Inference)
+            .expect_err("expected pause");
         assert!(matches!(err.reason, AdmissionReason::Paused));
     }
 
@@ -1103,7 +1151,7 @@ mod tests {
         s.set_contribution_max_peer_inflight(1);
         let router = both_gates_router(s.clone());
         let _peer_slot = s
-            .admit_peer_request(nid(0xCAFE))
+            .admit_peer_request(nid(0xCAFE), PeerWork::Inference)
             .expect("the one peer slot");
 
         // The control: with that slot held, a peer request IS shed. Without

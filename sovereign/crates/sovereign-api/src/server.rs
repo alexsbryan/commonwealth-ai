@@ -298,13 +298,14 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
 
 /// Build the internal mesh API router (port 9742).
 pub fn internal_router(state: AppState) -> Router {
-    // Same admission gate as the client router — applied to peer-
-    // fan-out routes so a busy operator's machine 503s knowledge
-    // searches from peers rather than starving local chat. See
-    // `crate::admission`.
-    let admission = || {
-        axum::middleware::from_fn_with_state(state.clone(), crate::admission::peer_admission_layer)
-    };
+    // The peer gate for fan-out corpus reads: pause still refuses, but a read
+    // is admitted under its own `max_peer_knowledge_reads` budget, never the
+    // inference ceiling or the foreground yield (seat A23). See
+    // `crate::admission::PeerWork`.
+    let knowledge_read_admission = axum::middleware::from_fn_with_state(
+        state.clone(),
+        crate::admission::peer_knowledge_read_admission_layer,
+    );
 
     Router::new()
         .route("/internal/gossip", post(routes_internal::gossip))
@@ -341,7 +342,7 @@ pub fn internal_router(state: AppState) -> Router {
         .route("/internal/index/serve", get(routes_internal::index_serve))
         .route(
             "/internal/knowledge/search",
-            post(routes_internal::knowledge_search).layer(admission()),
+            post(routes_internal::knowledge_search).layer(knowledge_read_admission),
         )
         .route("/internal/atlas/status", get(routes_internal::atlas_status))
         .route(
