@@ -1080,13 +1080,42 @@ Reply with JSON only:
         CONTENT_VERBS.iter().any(|v| lower.contains(v))
     }
 
+    /// The intent classify's OICP envelope, posture threaded.
+    ///
+    /// SLOT_POLICY §2.4: thread the session/operator posture, never hardcode
+    /// one. Until 2026-09-19 all three classify calls used `Workload::request`,
+    /// which hardcodes `LocalOnly` — so `offload_verdict` returned
+    /// `LocalOnlyPrivacy` on its FIRST check and the classify could not leave
+    /// the node whatever the mesh looked like. Measured on a CPU-only podman
+    /// node (`target/ring-room-demo/a/daemon.err` 2026-09-19T20:18:44Z):
+    ///
+    /// ```text
+    /// routing decision (gated) — stayed local before scoring
+    ///   oicp_request_id=wl-route-05c1c73f gate=not_offload_eligible
+    ///   latency=Fast sharding=LocalOnly
+    /// routing outcome … wl-route-05c1c73f
+    ///   served_by=local_fallback:Qwen3.5-2B.Q6_K total_ms=Some(38159.45)
+    /// ```
+    ///
+    /// 38.2 s for a 1,265-token prompt that returns one letter, while the same
+    /// turn's knowledge fan-out to a peer completed in 37 ms.
+    ///
+    /// No new exposure: the posture is read from the SAME source the synthesis
+    /// turn reads (`SkillRegistry::session_sharding`), so a classify crosses
+    /// only where that session's synthesis prompt — a superset of this one,
+    /// carrying the same user message — already crosses. A session with
+    /// `inner-work` active stays `LocalOnly` here exactly as it does there.
+    fn classify_oicp_posture(&self) -> sovereign_contracts::oicp::ShardingPrivacy {
+        self.skills.session_sharding()
+    }
+
     /// Call the fast model with a classification prompt.
     async fn classify_call(&self, prompt: String) -> Result<String> {
         // SLOT_POLICY §3 Route: single-letter classify consumed by
         // control flow. Bundle supplies latency=Fast + think=0; the
         // honest 5-token budget is the FastShort gate.
         let mut request = Workload::Route
-            .request(prompt)
+            .request_shared(prompt, self.classify_oicp_posture())
             .with_system("You are a message classifier. Respond with exactly one letter.")
             .with_output_budget(5);
         request.temperature = Some(0.0);
@@ -1136,7 +1165,7 @@ Reply with JSON only:
         });
         // SLOT_POLICY §3 Route: schema-constrained intent classify.
         let mut request = Workload::Route
-            .request(prompt)
+            .request_shared(prompt, self.classify_oicp_posture())
             .with_system("You are a message classifier. Respond with valid JSON only.")
             .with_output_budget(max_tokens as u32);
         request.temperature = Some(0.0);
@@ -1162,7 +1191,7 @@ Reply with JSON only:
         });
         // SLOT_POLICY §3 Route: schema-constrained tool selection.
         let mut request = Workload::Route
-            .request(prompt)
+            .request_shared(prompt, self.classify_oicp_posture())
             .with_system("You are a tool router. Respond with valid JSON only.")
             .with_output_budget(64);
         request.temperature = Some(0.0);
@@ -3410,3 +3439,10 @@ mod tests {
         );
     }
 }
+
+// The posture-threading tests live in a sibling file: they carry a capturing
+// provider and a real `LlmRouter`, and keeping them here put this file past
+// its arch-gate slack (ARCH §3.1). `#[path]`, so the names are unchanged.
+#[cfg(test)]
+#[path = "router/posture_tests.rs"]
+mod posture_tests;

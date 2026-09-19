@@ -109,7 +109,7 @@ impl Runtime {
     /// posture from — the evidence-loop forced-choice judge — routes with
     /// the same privacy the synthesis turn would.
     pub(crate) fn session_sharding(&self) -> crate::oicp::ShardingPrivacy {
-        self.skills.inference_requirements().sharding()
+        self.skills.session_sharding()
     }
     /// Build a system message that includes memory context.
     pub(crate) fn build_system_message(&self, base: &str, context: &ConversationContext) -> String {

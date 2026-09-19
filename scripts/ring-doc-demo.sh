@@ -36,6 +36,8 @@
 #
 # BACKENDS (`--backend <b>` first, or env RING_DOC_BACKEND; default local).
 #   local   the three daemons as processes on this host, as above.
+#           RING_DOC_GPU_NODES="b" gives the named nodes the host's render
+#           node (`--device /dev/dri`); empty (the default) is all-CPU.
 #   podman  three containers ring-doc-a|b|c on a `ring-doc` network, the repo
 #           bind-mounted at its own path so target/debug/* runs unchanged. Each
 #           daemon and its `ring dev` run INSIDE their container and stay on
@@ -89,6 +91,10 @@ declare -A IP=([a]=10.89.49.11 [b]=10.89.49.12 [c]=10.89.49.13)
 # when the tag has moved on (it is not pulled here), the toolbox's own image
 # is used and the substitution is printed.
 IMAGE="${RING_DOC_IMAGE:-docker.io/kyuz0/amd-strix-halo-toolboxes:vulkan-radv}"
+# Space-separated node letters that get the host's GPU (`--device /dev/dri`).
+# Empty = every node CPU, the rehearsed topology. The image already carries the
+# RADV Vulkan driver; only the device is withheld.
+RING_DOC_GPU_NODES="${RING_DOC_GPU_NODES:-}"
 
 # A command on node n, with n's data dir. Plain on local; in n's container on podman.
 node_exec() {
@@ -175,9 +181,22 @@ containers_up() {
     # HOME to the workdir, and every binary's startup migrator renames $HOME/.sovereign
     # to .svrnmesh (rebrand.rs) — on 2026-09-18 it renamed the REPO's tracked project dir
     # (restored by hand). Note 746c91f2 carries the product-side guard.
+    # RING_DOC_GPU_NODES: the room's laptop. A knob of the INSTRUMENT, not a
+    # product change — nothing in the daemon reads it; it only decides which
+    # containers see the host's render node, exactly as the `sovereign-vulkan`
+    # toolbox does (`--volume /dev:/dev`). Every node is CPU by default, which
+    # is the rehearsed topology and what every recorded run so far measured.
+    #
+    # Measured before use, with a control (2026-09-19, this host):
+    #   with `--device /dev/dri`:  vulkaninfo GPU0 vendorID 0x1002 deviceID 0x1586
+    #   without (same image):      vulkaninfo GPU0 vendorID 0x10005 deviceID 0x0000
+    # The second is lavapipe, Mesa's software rasteriser — which is why a node
+    # with no device reports `ggml_vulkan: No devices found` and runs on CPU.
+    local dev=()
+    case " $RING_DOC_GPU_NODES " in *" $n "*) dev=(--device /dev/dri) ;; esac
     "${PODMAN[@]}" run -d --name "ring-doc-$n" --hostname "ring-doc-$n" --network "$NET" --ip "${IP[$n]}" \
       --init --userns=keep-id --security-opt label=disable -v "$REPO:$REPO" -w "$REPO" \
-      -e HOME="$D/$n" \
+      -e HOME="$D/$n" "${dev[@]+"${dev[@]}"}" \
       -p "${DPORT[$n]}:${DPORT[$n]}" --pull=never "$IMAGE" sleep infinity >/dev/null \
       || { echo "podman: could not start ring-doc-$n" >&2; return 1; }
     start_forwarder "$n"

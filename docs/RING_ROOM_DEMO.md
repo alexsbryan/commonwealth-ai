@@ -126,9 +126,13 @@ of the wait. The decode of the answer is 21 seconds.
 
 Stated as one sentence: the pipeline fixes the prompt volume of an ask (about
 7,400 tokens for a five-passage answer) without ever reading the serving node's
-prefill rate, and the one call that could have left the node is gated home by
-its latency class. On a GPU node the same volume is a few seconds and nobody
+prefill rate, and the one call that could have left the node never reached a
+scheduler at all. On a GPU node the same volume is a few seconds and nobody
 notices. On a CPU node, which a phone in the room will be, it is four minutes.
+
+(That sentence ended "is gated home by its latency class" until 2026-09-19.
+The latency class is the second of two gates and the classify never reached
+it — see fix 3 below, where a's own log names the one that fired.)
 
 The A28 decision kept the 60-second window and owed this leg to rr-2's GPU
 walk. That was right for the campaign; it is not a fix. The fixes, ranked by
@@ -150,13 +154,28 @@ capability: no measurement for this slot — the arch declaration decided
 prefix_cache: prefill scope cache_hit_tokens=0 raw_lcp=0 new_prefill_tokens=5359
 ```
 
-Nobody has measured whether the prefix cache is safe on this architecture, so
-the declaration decides against it and every synthesis starts from token zero.
-Two moves follow, in order. Run the slot measurement so the verdict is measured
-rather than could-not-judge (principle 5: a gate that has never been watched is
-not a gate). If the hybrid attention genuinely cannot reuse a prefix, the
-stable layer is the thing to shrink, and the audit test already prints where
-the tokens are.
+**That paragraph read "nobody has measured whether the prefix cache is safe on
+this architecture" until 2026-09-19, and it was wrong — which retires this
+fix rather than ranking it.** The architecture HAS been measured, on this
+host, and it fails: `sovereign/DEFAULTS_LEDGER.md` records `qwen35` 2B at
+floor 19.9, signal 459-644, **ratio 23x** against the probe's `Safe` limit of
+4x, and the same sweep found the measurement agreeing with the declared gate
+on 12 of 12 local models. The 2B genuinely cannot survive a partial-KV
+rollback, so `prefix_cache_safe=false` is the right answer and running the
+measurement would only confirm it.
+
+What the log line reports is narrower than it reads. `reason="could-not-judge"`
+is the verdict LABEL, not a cause (`embedded/model_slot.rs:2714` logs
+`gate.measured`, which is `PartialKvVerdict::label()`), and the cause string
+the verdict actually carries is never logged — three different causes are
+indistinguishable in the log. The cause here is that a daemon's PRIMARY slot
+is constructed `distributable = true` and `model_slot.rs:2180` skips the probe
+for it, despite the comment there saying the skip is for distributed children.
+Two real items survive, neither of them a prefix cache: log the inner cause
+(principle 1), and stop skipping the probe on the primary slot. The 120
+seconds this fix was ranked for are not available on this model, and the
+stable layer is the only thing left to shrink — which is a quality trade, not
+a latency fix.
 
 **2. Size the prompt to the node's rate, not only its window (the rest of the
 synthesis prefill).** The bundle budget above is context-aware: it trims
@@ -173,20 +192,67 @@ seconds is about 1,000 tokens, which is the five passages, the question, and a
 short system prompt. That is the answer a person on a phone should get: the
 same evidence, fewer instructions.
 
-**3. Let the classify leave the node, or skip it (about 39 s).** The route
-classify is a 1,288-token prompt for a one-letter answer, and it runs before
-retrieval. It is gated local by `OffloadVerdict::FastLatency` in
-`sovereign-scheduler/src/oicp_select.rs`, because `Workload::Route` in
-`sovereign-contracts/src/slot_policy.rs` is class Fast, and Fast is taken to
-mean "do not pay a network hop". On a CPU node the hop is milliseconds and the
-local call is 39 seconds, so the rule encodes an assumption about hardware
-that this node falsifies. Two fixes, either sufficient. The gate compares
-predicted time rather than class: the scorer already has a predicted-time
-objective and the `rtt_ms` and throughput inputs to feed it. Or the order
-changes: the fan-out took 37 milliseconds and returned five hits from a hosted
-corpus, which is a routing decision on its own; run it first and let the
-heuristic floor decide when the pool is non-empty, calling the classifier only
-when retrieval came back empty.
+**3. Let the classify leave the node (about 38 s). Two gates, not one — and
+this paragraph named the wrong one.** The route classify is a 1,288-token
+prompt for a one-letter answer, and it runs before retrieval.
+
+Until 2026-09-19 this read "gated local by `OffloadVerdict::FastLatency` …
+because `Workload::Route` is class Fast". A fresh run says otherwise. a's own
+decision line carries the answer in a field this document had not read:
+
+```
+routing decision (gated) — stayed local before scoring
+  oicp_request_id=wl-route-05c1c73f gate=not_offload_eligible
+  latency=Fast sharding=LocalOnly
+routing outcome … served_by=local_fallback:Qwen3.5-2B.Q6_K total_ms=Some(38159.45)
+```
+
+`sharding=LocalOnly`. `offload_verdict` checks privacy FIRST, so it returned
+`LocalOnlyPrivacy` and the latency gate was never consulted at all — the two
+verdicts share the reported gate name `not_offload_eligible`, which is what let
+the misreading stand. The privacy posture is hardcoded: `Workload::request`
+(`sovereign-contracts/src/slot_policy.rs`) passes `ShardingPrivacy::LocalOnly`,
+and all three of `LlmRouter`'s classify calls used it, while the same turn's
+`Judge` and `Synthesize` envelopes thread the session's posture through
+`Workload::requirements(posture)`. SLOT_POLICY §2.4 requires the threading; the
+router was the one hot-path workload not doing it.
+
+So the fix is both gates, in series, and neither alone moves the classify:
+
+- **Privacy.** The classify threads `SkillRegistry::session_sharding()` — the
+  same accessor, the same source, the same posture the turn's synthesis
+  already carries, so nothing new crosses the wire and a `local_only` session
+  still keeps it home.
+- **Latency.** `LatencyClass::Fast`'s rule ("a hop is a net loss") is a
+  prediction about hardware, and this node falsifies it by three orders of
+  magnitude — 38.2 s local against a 37 ms hop. The gate now asks its own
+  premise: a node whose measured `tg_tok_s_ewma` sits below
+  `THROUGHPUT_REFERENCE_TG_TOK_S` (the existing "good for interactive use"
+  inflection, 20 tok/s) stands the rule down, reported as
+  `gate=fast_latency_yielded` rather than hidden inside `eligible`. An
+  unmeasured node keeps the standing rule — absence is reported, not
+  defaulted — and standing down only lets the scorer LOOK at peers; local
+  still ranks and still wins when no peer is better.
+
+**And it was not enough for the bar, which is the part worth writing down.**
+With both gates open the classify reaches the scorer — its decision line loses
+the `(gated)` prefix and reads `scored=3` — and then the scorer ranks local
+anyway, 38.2 s of it, inside a 60-second window. The same run shows the scorer
+sending three of five syntheses to the GPU peer and two to the CPU local, with
+nothing in the `info` line to say why either way: the decision line names the
+winner and the candidate count and no scores, so "why did this one stay home"
+cannot be answered from the artifact. Opening a gate does not make a scorer
+see. That is §4.5's finding arriving at the bar — `throughput_factor` is a
+constant for every peer, so the only thing separating a CPU node from a GPU
+node is the local candidate's own sub-reference clamp, and that margin is thin
+enough to flip between adjacent asks.
+
+Note what this fix is NOT. The scorer has no prefill rate to divide by, and
+the obvious way to get one — reviving `run_baseline_benchmark` — is a measured
+quality regression (canon `dc3c9856`, `SCHEDULER_QUALITY.md` §4.5 / F10: −56%
+mean latency, bought with capability, declined upgrades doubled). The decode
+EWMA is the speed signal this fleet actually collects, and it is a rate, so it
+does not conflate job sizes the way a measured TTFT would.
 
 **4. Judge the pool once, not the claims one at a time (about 28 s, after the
 first token).** Four judge calls follow every answer. They run after the
@@ -201,9 +267,16 @@ laptop with a GPU in it. Passing the host's Vulkan device into one container
 makes the podman rehearsal the same shape as the room, and is the only way to
 watch fixes 2 and 3 move this bar before the rr-2 walk on real machines.
 
-Fixes 1 and 2 are the same change seen from two sides, measure the node and
-size to the measurement, and together they take a CPU node's ask from about
-250 seconds to something near 60 before the classify is touched. Fix 3 is a
-policy that should have been data. Fix 5 is the instrument, and it comes
-first, because without it the other four cannot be watched failing and then
-passing on the bar that minted them.
+That ranking is superseded by what fixing it actually took. Fix 1 is retired:
+the prefix cache is measured unsafe on this architecture and buys nothing here.
+Fix 3 turned out to be two gates rather than one, and is the only one that has
+shipped. Fix 2 remains real and unbuilt — sizing the prompt to the node's rate
+is a design change and a quality trade, not a latency fix to be taken quietly.
+Fix 5 came first in practice, because without one fast machine in the room no
+scheduling change could be watched failing and then passing on the bar that
+minted it: `RING_DOC_GPU_NODES` on the podman backend passes the host's render
+node into one named container, measured against a control
+(`vulkaninfo` vendorID `0x1002` with the device, Mesa's lavapipe `0x10005`
+without). Even with both gates open, a room whose every machine is CPU cannot
+pass this bar — the scorer can only choose the best machine present, and three
+identical slow ones have no best.

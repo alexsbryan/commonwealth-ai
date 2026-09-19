@@ -24,6 +24,7 @@
 use oicp_types::{
     score_with_adjustments, BenchmarkResult, CapabilityHint, InferenceRequirements, LatencyClass,
     NodeLocality, NodeObservations, ScoreBreakdown, ShardingPrivacy,
+    THROUGHPUT_OBSERVATION_THRESHOLD, THROUGHPUT_REFERENCE_TG_TOK_S,
 };
 
 // The scoring primitives are the oicp-types SSOT (2026-06-10
@@ -53,11 +54,13 @@ pub(crate) fn candidates_equal(a: &ModelCandidate, b: &ModelCandidate) -> bool {
 ///      `Fast`).
 ///
 /// Latency-`Fast` work (routing, titling, compression, the memory
-/// housekeepers) never offloads: the peer round-trip dominates the
+/// housekeepers) normally stays home: the peer round-trip dominates the
 /// inference, so a hop is a net loss even when a peer would score
-/// higher on capability. `LocalOnly` work never offloads by
-/// definition — that is the privacy contract. Both gates are
-/// necessary; neither alone is sufficient.
+/// higher on capability. That clause is an empirical claim about the
+/// deciding node's hardware, and a node that has measured itself can
+/// falsify it — see [`offload_verdict_with_local`]. `LocalOnly` work
+/// never offloads by definition; that is the privacy contract and no
+/// measurement reopens it.
 ///
 /// Callers: `shared_primary_id` ("does the configured shared model
 /// apply?"), which only ever asks about a request that HAS an envelope.
@@ -67,7 +70,7 @@ pub(crate) fn candidates_equal(a: &ModelCandidate, b: &ModelCandidate) -> bool {
 /// refusal. Both bottom out in [`offload_verdict`], so they cannot drift
 /// out of agreement about what "offloadable" means.
 pub fn offload_eligible(req: &InferenceRequirements) -> bool {
-    offload_verdict(req) == OffloadVerdict::Eligible
+    offload_verdict(req).is_eligible()
 }
 
 /// Why a request may not be handed to a peer — or that it may.
@@ -87,15 +90,32 @@ pub enum OffloadVerdict {
     LocalOnlyPrivacy,
     /// SLOT_POLICY §5: a hop costs more than `Fast` work is worth.
     FastLatency,
+    /// SLOT_POLICY §5's `Fast` gate, **stood down on this node's own
+    /// measurement**. Eligible — see [`OffloadVerdict::is_eligible`].
+    ///
+    /// A separate variant rather than a plain `Eligible` for the same
+    /// reason the three refusals are separate (principle 6): "nothing
+    /// was in the way" and "the standing rule was set aside because
+    /// this machine measured itself too slow to obey it" are different
+    /// facts, and an operator reading why a routing call left a phone
+    /// needs the second one by name.
+    FastLatencyYielded,
     /// The request has already been forwarded as far as it may go.
     ForwardBudgetExhausted,
 }
 
 impl OffloadVerdict {
     /// Stable gate name for the decision log and `tracing`.
+    ///
+    /// Every name here is load-bearing downstream: the decision log, its
+    /// replay, and their fixtures key on the string. `fast_latency_yielded`
+    /// is the only one added since the budget gate, and it is added rather
+    /// than folded into `eligible` because principle 1 wants the line to
+    /// say *which floor decided*.
     pub fn gate(self) -> &'static str {
         match self {
             OffloadVerdict::Eligible => "eligible",
+            OffloadVerdict::FastLatencyYielded => "fast_latency_yielded",
             // Unchanged from before the budget gate existed: the decision
             // log, its replay, and their fixtures all key on this string.
             OffloadVerdict::LocalOnlyPrivacy | OffloadVerdict::FastLatency => {
@@ -104,6 +124,54 @@ impl OffloadVerdict {
             OffloadVerdict::ForwardBudgetExhausted => "forward_budget_exhausted",
         }
     }
+
+    /// May this request cross to a peer?
+    ///
+    /// The one place the eligible set is spelled, so a new eligible verdict
+    /// cannot be added without every caller seeing it (principle 8). Callers
+    /// compared against `OffloadVerdict::Eligible` directly until
+    /// `FastLatencyYielded` existed; a bare `==` would silently have read the
+    /// yield as a refusal.
+    pub fn is_eligible(self) -> bool {
+        matches!(
+            self,
+            OffloadVerdict::Eligible | OffloadVerdict::FastLatencyYielded
+        )
+    }
+}
+
+/// Is this node measurably too slow to serve `Fast`-class work itself?
+///
+/// `None` when the node has not measured itself yet, and that is reported
+/// rather than defaulted (principle 6): an unmeasured node keeps SLOT_POLICY
+/// §5's standing rule, it does not get a guessed rate.
+///
+/// **Every input here already exists and is already maintained.** The rate is
+/// `NodeObservations::tg_tok_s_ewma`, which the serving host folds in on every
+/// local streaming completion (`throughput_tracking::ThroughputTarget::Local`,
+/// wired at `peer_inference/provider_impl.rs:390` and `:530`) and which
+/// `throughput_factor` already treats as its source of truth. The sample gate
+/// is [`THROUGHPUT_OBSERVATION_THRESHOLD`], the same count that function uses
+/// to decide the EWMA is trustworthy. The floor is
+/// [`THROUGHPUT_REFERENCE_TG_TOK_S`], whose own doc defines it as the "good
+/// for interactive use" inflection point, "below it conversation feels
+/// sluggish to a human" — which is the question `LatencyClass::Fast` asks and
+/// is why no new constant is minted here (principles 8, 11).
+///
+/// A **rate**, deliberately, and not the measured time-to-first-token: TTFT
+/// mixes job sizes, so a GPU node prefilling one long synthesis would read as
+/// slow, while tokens-per-second is a property of the machine and its model.
+///
+/// What this is NOT: a prefill measurement. No node on this mesh advertises a
+/// `BenchmarkResult` and reviving the probe that used to produce one is a
+/// measured quality regression — canon `dc3c9856`, `SCHEDULER_QUALITY.md`
+/// §4.5 / F10, −56% latency bought with capability. The decode rate is the
+/// speed signal this fleet actually collects.
+fn local_is_sub_interactive(obs: &NodeObservations) -> Option<bool> {
+    if obs.samples < THROUGHPUT_OBSERVATION_THRESHOLD || obs.tg_tok_s_ewma <= 0.0 {
+        return None;
+    }
+    Some(obs.tg_tok_s_ewma < f64::from(THROUGHPUT_REFERENCE_TG_TOK_S))
 }
 
 /// The same gate, for a request whose envelope may be **absent**.
@@ -135,9 +203,29 @@ impl OffloadVerdict {
 /// than at either call site so they cannot diverge again;
 /// `both_routing_surfaces_agree_an_absent_envelope_permits_a_peer` pins it.
 pub fn offload_verdict_opt(req: Option<&InferenceRequirements>) -> OffloadVerdict {
+    offload_verdict_opt_with_local(req, None)
+}
+
+/// [`offload_verdict_opt`], told what the deciding node measured about itself.
+/// The production ranked path calls this one; every other caller keeps the
+/// two-argument form and so keeps today's behaviour exactly.
+///
+/// An ABSENT envelope is `Eligible` before the latency gate is ever reached,
+/// so a slow node changes nothing for plain OpenAI clients — they could
+/// already cross. The yield reaches only requests that explicitly asked for
+/// `Fast`, which in this repo means the three `Workload` bundles that declare
+/// that class in `sovereign-contracts::slot_policy` — `Route`, `Housekeep` and
+/// `EnrichBulk`. (`Judge` and `Synthesize` are `Normal` and were never gated
+/// here.) Of those three, only `Route` threads a posture today, so only
+/// `Route` can reach this gate at all; the other two are still `LocalOnly` by
+/// `Workload::request` and are refused one check earlier.
+pub fn offload_verdict_opt_with_local(
+    req: Option<&InferenceRequirements>,
+    local: Option<&NodeObservations>,
+) -> OffloadVerdict {
     match req {
         None => OffloadVerdict::Eligible,
-        Some(req) => offload_verdict(req),
+        Some(req) => offload_verdict_with_local(req, local),
     }
 }
 
@@ -148,11 +236,58 @@ pub fn offload_verdict_opt(req: Option<&InferenceRequirements>) -> OffloadVerdic
 /// independent and any one of them closes the request. Privacy is checked
 /// first because it is the contract a reader is most likely to be auditing.
 pub fn offload_verdict(req: &InferenceRequirements) -> OffloadVerdict {
+    offload_verdict_with_local(req, None)
+}
+
+/// The single decider, told what the deciding node has measured about
+/// **itself**. [`offload_verdict`] is this with nothing measured.
+///
+/// Order matters only for which reason is reported first; the gates are
+/// independent and any one of them closes the request. Privacy is checked
+/// first because it is the contract a reader is most likely to be auditing,
+/// and because no measurement may reopen it — `local` is read only by the
+/// latency gate, never by the privacy one.
+///
+/// ## Why the `Fast` gate has a measured escape and the others do not
+///
+/// SLOT_POLICY §5 keeps `Fast` work home on the ground that "the peer
+/// round-trip dominates the inference, so a hop is a net loss". That is not a
+/// policy, it is a **prediction about hardware**, and it is false on a machine
+/// slow enough. Measured on `ring-doc-a`, a CPU-only podman node running
+/// Qwen3.5-2B.Q6_K (`target/ring-room-demo/a/daemon.err`, bring-up 04:23Z
+/// 2026-09-19): one `Workload::Route` classify — 1,288 prompt tokens for a
+/// one-letter answer — took **38.4 s** gated `not_offload_eligible`, while the
+/// knowledge fan-out to a peer on the same host completed in **37 ms**. The
+/// rule cost three orders of magnitude more than the hop it was avoiding.
+///
+/// So the gate now asks its own premise instead of assuming it. A node that
+/// has measured itself below the interactive reference has falsified "a hop is
+/// a net loss" for its own work, and the gate stands down — reported as
+/// [`OffloadVerdict::FastLatencyYielded`], never as a bare `Eligible`.
+///
+/// **Standing down is not offloading.** The verdict only decides whether the
+/// scorer is allowed to *look* at peers; `scheduler_core::rank` still ranks
+/// local against every peer and `pick_better` still keeps the work home when
+/// no peer wins. A slow node with no peer, or with only slower peers, behaves
+/// exactly as before — which is what bounds this change's blast radius.
+///
+/// The privacy and forward-budget gates take no measured escape and must not
+/// grow one: neither is a claim about speed.
+pub fn offload_verdict_with_local(
+    req: &InferenceRequirements,
+    local: Option<&NodeObservations>,
+) -> OffloadVerdict {
     if req.sharding() != ShardingPrivacy::MeshAllowed {
         return OffloadVerdict::LocalOnlyPrivacy;
     }
     if req.effective_latency_class() == LatencyClass::Fast {
-        return OffloadVerdict::FastLatency;
+        // `None` (never measured) and `Some(false)` (measured fast enough)
+        // both keep the standing rule. Only a node that measured itself slow
+        // stands it down.
+        return match local.and_then(local_is_sub_interactive) {
+            Some(true) => OffloadVerdict::FastLatencyYielded,
+            _ => OffloadVerdict::FastLatency,
+        };
     }
     if !req.may_forward() {
         return OffloadVerdict::ForwardBudgetExhausted;
@@ -230,435 +365,5 @@ pub fn adjust_for_observations(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use oicp_types::ProviderManifest;
-
-    fn cand(score: f32, size_gb: Option<f32>, id: &str) -> ModelCandidate {
-        ModelCandidate {
-            score,
-            size_gb,
-            model_id: id.into(),
-            claim_affinity: score,
-        }
-    }
-
-    /// GOLDEN VECTOR — pins the operational-adjustment product
-    /// bit-for-bit across the SSOT move to oicp-types (Phase B of
-    /// the 2026-06-10 rationalization). Every factor ≠ 1.0:
-    ///   observation_mult = eff(0.95, obs)/0.95
-    ///                    = (0.95·(1 − (10/50)·0.1))/0.95 = 0.98
-    ///   load   = 1/(1 + 0.05·10)   = 2/3
-    ///   loc    = Near              = 1.05
-    ///   cold   = 0.7 + 0.3·(10/20) = 0.85
-    ///   thru   = 10/20 (observed)  = 0.5
-    ///   final  = 0.5 · 0.98 · (2/3) · 1.05 · 0.85 · 0.5
-    /// If this fails after a refactor, the refactor changed routing
-    /// behavior — that is a disclosure, not a test update.
-    #[test]
-    fn golden_adjustment_product_all_factors_active() {
-        let obs = NodeObservations {
-            in_flight: 10,
-            samples: 10,
-            recent_failure_rate: 0.1,
-            tg_tok_s_ewma: 10.0,
-            ..Default::default()
-        };
-        let raw = ModelCandidate {
-            score: 0.5,
-            size_gb: Some(8.0),
-            model_id: "golden".into(),
-            claim_affinity: 0.95,
-        };
-        let (adjusted, breakdown) =
-            adjust_for_observations(raw, &obs, NodeLocality::Near, None, None);
-        let expected = 0.5_f32 * 0.98 * (2.0 / 3.0) * 1.05 * 0.85 * 0.5;
-        assert!(
-            (adjusted.score - expected).abs() < 1e-6,
-            "golden product drifted: got {}, want {expected}",
-            adjusted.score
-        );
-        // Equivalence: the wrapper's candidate score IS the SSOT
-        // breakdown's final score, forever.
-        assert_eq!(adjusted.score.to_bits(), breakdown.final_score.to_bits());
-        assert!(
-            (breakdown.availability - 1.0).abs() < 1e-6,
-            "None ⇒ neutral"
-        );
-        // Tie-break inputs must survive adjustment untouched.
-        assert_eq!(adjusted.model_id, "golden");
-        assert_eq!(adjusted.size_gb, Some(8.0));
-    }
-
-    /// The decided behavior change (2026-06-10): the Joiner honors
-    /// gossiped `inference_availability`. Two otherwise-identical
-    /// peers — the one advertising 0.2 loses to the idle one 5:1.
-    #[test]
-    fn gossiped_availability_demotes_busy_peer() {
-        let obs = NodeObservations {
-            samples: 100, // fully ramped — isolate the availability term
-            ..Default::default()
-        };
-        let raw = |id: &str| ModelCandidate {
-            score: 0.8,
-            size_gb: Some(8.0),
-            model_id: id.into(),
-            claim_affinity: 0.9,
-        };
-        let (busy, _) =
-            adjust_for_observations(raw("busy"), &obs, NodeLocality::Far, None, Some(0.2));
-        let (idle, _) =
-            adjust_for_observations(raw("idle"), &obs, NodeLocality::Far, None, Some(1.0));
-        assert!(idle.score > busy.score * 4.9);
-        assert_eq!(pick_better(busy, idle).model_id, "idle");
-    }
-
-    #[test]
-    fn pick_better_higher_score_wins() {
-        let a = cand(0.5, Some(5.5), "small");
-        let b = cand(1.0, Some(16.5), "big");
-        assert_eq!(pick_better(a, b).model_id, "big");
-    }
-
-    // ── v0.3 §7 — RTT-based locality classification ───────────
-
-    #[test]
-    fn classify_rtt_sub_5ms_is_local() {
-        assert_eq!(classify_rtt_ms(0), NodeLocality::Local);
-        assert_eq!(classify_rtt_ms(1), NodeLocality::Local);
-        assert_eq!(classify_rtt_ms(4), NodeLocality::Local);
-    }
-
-    #[test]
-    fn classify_rtt_lan_range_is_near() {
-        // 5ms is the Local threshold (exclusive), so it tips into
-        // Near — the "local" bucket is reserved for same-host loop.
-        assert_eq!(classify_rtt_ms(5), NodeLocality::Near);
-        assert_eq!(classify_rtt_ms(12), NodeLocality::Near);
-        assert_eq!(classify_rtt_ms(24), NodeLocality::Near);
-    }
-
-    #[test]
-    fn classify_rtt_wan_range_is_far() {
-        assert_eq!(classify_rtt_ms(25), NodeLocality::Far);
-        assert_eq!(classify_rtt_ms(50), NodeLocality::Far);
-        assert_eq!(classify_rtt_ms(250), NodeLocality::Far);
-        assert_eq!(classify_rtt_ms(u32::MAX), NodeLocality::Far);
-    }
-
-    #[test]
-    fn classify_rtt_thresholds_are_exclusive_upper() {
-        // Exact-boundary behaviour: the `< LOCAL`, `< NEAR` rule
-        // means LOCAL_RTT_MS_THRESHOLD itself falls into Near, and
-        // NEAR_RTT_MS_THRESHOLD itself falls into Far. Document
-        // this so future tweaks to the constants can't silently
-        // shift which bucket the boundary lands in.
-        assert_eq!(classify_rtt_ms(LOCAL_RTT_MS_THRESHOLD), NodeLocality::Near);
-        assert_eq!(classify_rtt_ms(NEAR_RTT_MS_THRESHOLD), NodeLocality::Far);
-    }
-
-    #[test]
-    fn pick_better_score_tied_smaller_size_wins() {
-        let nine = cand(1.0, Some(5.5), "qwen-9b");
-        let twenty_seven = cand(1.0, Some(16.5), "qwen-27b");
-        assert_eq!(
-            pick_better(twenty_seven.clone(), nine.clone()).model_id,
-            "qwen-9b"
-        );
-        assert_eq!(pick_better(nine, twenty_seven).model_id, "qwen-9b");
-    }
-
-    #[test]
-    fn pick_better_known_size_beats_unknown_on_tie() {
-        let annotated = cand(1.0, Some(5.5), "annotated");
-        let unannotated = cand(1.0, None, "byom");
-        assert_eq!(
-            pick_better(unannotated.clone(), annotated.clone()).model_id,
-            "annotated"
-        );
-        assert_eq!(pick_better(annotated, unannotated).model_id, "annotated");
-    }
-
-    #[test]
-    fn pick_better_full_tie_keeps_incumbent() {
-        let a = cand(1.0, Some(5.5), "incumbent");
-        let b = cand(1.0, Some(5.5), "challenger");
-        assert_eq!(pick_better(a, b).model_id, "incumbent");
-    }
-
-    #[test]
-    fn pick_better_epsilon_ignores_floating_point_noise() {
-        let nine = cand(1.0, Some(5.5), "qwen-9b");
-        let twenty_seven = cand(1.0 - 1e-6, Some(16.5), "qwen-27b");
-        assert_eq!(pick_better(twenty_seven, nine).model_id, "qwen-9b");
-    }
-
-    // -----------------------------------------------------------
-    // v0.3 — score_manifest_for_request claim path
-    // -----------------------------------------------------------
-
-    fn manifest_with_claim(
-        id: &str,
-        size_gb: Option<f32>,
-        claim: oicp_types::CapabilityClaim,
-    ) -> ProviderManifest {
-        ProviderManifest::new(vec![oicp_types::ProviderModel {
-            id: id.into(),
-            base_model: None,
-            quantization: None,
-            context_tokens: claim.max_context,
-            status: oicp_types::ModelStatus {
-                available: true,
-                loaded: true,
-                estimated_tokens_per_sec: None,
-                estimated_ttft_ms: None,
-                estimated_load_time_sec: None,
-            },
-            size_gb,
-            claims: vec![claim],
-            fingerprint: None,
-        }])
-    }
-
-    #[test]
-    fn score_manifest_for_request_prefers_claim_path_when_claims_present() {
-        use oicp_types::CapabilityClaim;
-        let qwen_coder = manifest_with_claim(
-            "qwen-coder-32b",
-            Some(16.1),
-            CapabilityClaim::new(
-                CapabilityHint::code(),
-                LatencyClass::Normal,
-                32_000,
-                4_000,
-                0.95,
-            ),
-        );
-        let req = InferenceRequirements::new()
-            .with_hint(CapabilityHint::code())
-            .with_latency_class(LatencyClass::Normal)
-            .with_context_tokens(16_000)
-            .with_max_output_tokens(2_000);
-        let cand =
-            score_manifest_for_request(&qwen_coder, &req).expect("v0.3 claim scores non-None");
-        assert_eq!(cand.model_id, "qwen-coder-32b");
-        // Exact hint + latency match → score equals affinity.
-        assert!((cand.score - 0.95).abs() < 1e-4);
-    }
-
-    #[test]
-    fn score_manifest_for_request_returns_none_when_no_claims_match() {
-        // Claim with zero-output gate against a request needing any
-        // output → hard gate fails, no candidate.
-        let m = manifest_with_claim(
-            "undersized",
-            Some(1.0),
-            oicp_types::CapabilityClaim::new(
-                CapabilityHint::general(),
-                LatencyClass::Normal,
-                100,
-                50,
-                0.5,
-            ),
-        );
-        let req = InferenceRequirements::new()
-            .with_hint(CapabilityHint::general())
-            .with_latency_class(LatencyClass::Normal)
-            .with_context_tokens(8_000)
-            .with_max_output_tokens(1_000);
-        assert!(score_manifest_for_request(&m, &req).is_none());
-    }
-
-    // -----------------------------------------------------------
-    // SLOT_POLICY §5 — offload_eligible truth table
-    // -----------------------------------------------------------
-
-    /// The offload gate is the AND of two conditions: privacy
-    /// `MeshAllowed` and latency class != `Fast`. This table pins
-    /// every combination plus the two envelope defaults the
-    /// derivation accessors apply (`privacy` unset → `LocalOnly`;
-    /// `latency` unset → `Normal`).
-    #[test]
-    fn offload_eligible_truth_table() {
-        let mesh = ShardingPrivacy::MeshAllowed;
-        let local = ShardingPrivacy::LocalOnly;
-
-        // (privacy, latency, expected)
-        let cases: &[(ShardingPrivacy, LatencyClass, bool)] = &[
-            (mesh, LatencyClass::Fast, false),      // latency gate closes it
-            (mesh, LatencyClass::Normal, true),     // both gates open
-            (mesh, LatencyClass::Extended, true),   // both gates open
-            (local, LatencyClass::Fast, false),     // both gates closed
-            (local, LatencyClass::Normal, false),   // privacy gate closes it
-            (local, LatencyClass::Extended, false), // privacy gate closes it
-        ];
-        for (privacy, latency, expected) in cases {
-            let req = InferenceRequirements::new()
-                .with_hint(CapabilityHint::general())
-                .with_latency_class(*latency)
-                .with_sharding(*privacy);
-            assert_eq!(
-                offload_eligible(&req),
-                *expected,
-                "privacy={privacy:?} latency={latency:?} should be {expected}"
-            );
-        }
-
-        // Default-privacy envelope (no `with_sharding`) resolves to
-        // LocalOnly → never offloadable even at Normal latency.
-        let default_privacy = InferenceRequirements::new()
-            .with_hint(CapabilityHint::general())
-            .with_latency_class(LatencyClass::Normal);
-        assert!(
-            !offload_eligible(&default_privacy),
-            "envelope without explicit privacy defaults to LocalOnly → not offloadable"
-        );
-
-        // Default-latency envelope (no `with_latency_class`) resolves
-        // to Normal → offloadable when MeshAllowed (the hint-only /
-        // sizing-only case the §5 headline delta covers).
-        let default_latency = InferenceRequirements::new()
-            .with_hint(CapabilityHint::general())
-            .with_sharding(ShardingPrivacy::MeshAllowed);
-        assert!(
-            offload_eligible(&default_latency),
-            "MeshAllowed hint-only envelope defaults to Normal latency → offloadable"
-        );
-
-        // Budget-unstated envelope resolves to one hop → still offloadable.
-        // This is the compatibility case that matters most: every envelope
-        // built before the budget existed, and every locally-originated one
-        // today, omits the field. Reading absence as zero would disable mesh
-        // routing outright.
-        assert!(
-            default_latency.forward_budget.is_none(),
-            "fixture must actually omit the field"
-        );
-        assert!(
-            offload_eligible(&default_latency),
-            "an unstated budget must not block offload"
-        );
-    }
-
-    /// The budget is a third, independent gate — and it must stay
-    /// distinguishable from the other two, because "stayed home by policy"
-    /// and "someone already forwarded this" are different operator problems.
-    #[test]
-    fn forward_budget_is_an_independent_gate_with_its_own_name() {
-        let open = || {
-            InferenceRequirements::new()
-                .with_hint(CapabilityHint::general())
-                .with_latency_class(LatencyClass::Normal)
-                .with_sharding(ShardingPrivacy::MeshAllowed)
-        };
-
-        // Both other gates open, budget spent → blocked, and named as such.
-        let spent = open().with_forward_budget(0);
-        assert_eq!(
-            offload_verdict(&spent),
-            OffloadVerdict::ForwardBudgetExhausted
-        );
-        assert!(!offload_eligible(&spent));
-        assert_eq!(offload_verdict(&spent).gate(), "forward_budget_exhausted");
-
-        // A remaining budget with both gates open is eligible.
-        assert_eq!(
-            offload_verdict(&open().with_forward_budget(1)),
-            OffloadVerdict::Eligible
-        );
-
-        // The pre-existing gates keep their reported name, so the decision
-        // log, its replay, and their fixtures are unaffected.
-        let private = open()
-            .with_sharding(ShardingPrivacy::LocalOnly)
-            .with_forward_budget(1);
-        assert_eq!(offload_verdict(&private), OffloadVerdict::LocalOnlyPrivacy);
-        assert_eq!(offload_verdict(&private).gate(), "not_offload_eligible");
-
-        let fast = open()
-            .with_latency_class(LatencyClass::Fast)
-            .with_forward_budget(1);
-        assert_eq!(offload_verdict(&fast), OffloadVerdict::FastLatency);
-        assert_eq!(offload_verdict(&fast).gate(), "not_offload_eligible");
-    }
-
-    /// The §9.1.1 regression, at the smallest scale that can hold it.
-    ///
-    /// A plain OpenAI client sends no `oicp` key. Before 2026-08-13 the
-    /// ranked path read that absence as a refusal and never scored a peer;
-    /// the named path read the same absence as "unstated" and routed
-    /// perfectly well. This pins the answer that both now give.
-    #[test]
-    fn an_absent_envelope_is_not_a_refusal() {
-        assert_eq!(offload_verdict_opt(None), OffloadVerdict::Eligible);
-        assert_eq!(offload_verdict_opt(None).gate(), "eligible");
-    }
-
-    /// A PRESENT envelope is still judged in full — absence is the only
-    /// thing that changed. Without this, "absence is eligible" could be
-    /// mis-implemented as "the envelope is eligible", silently unhooking
-    /// the privacy contract for every `local_only` caller.
-    #[test]
-    fn a_present_envelope_is_judged_exactly_as_before() {
-        let private = InferenceRequirements::new().with_sharding(ShardingPrivacy::LocalOnly);
-        assert_eq!(
-            offload_verdict_opt(Some(&private)),
-            OffloadVerdict::LocalOnlyPrivacy
-        );
-
-        // The subtle one: an envelope that is PRESENT but says nothing
-        // about privacy is `LocalOnly` by §3.1 and stays home. Absence of
-        // the envelope and absence of the field are different facts and
-        // this is where that distinction has to hold.
-        let silent = InferenceRequirements::new();
-        assert_eq!(
-            offload_verdict_opt(Some(&silent)),
-            OffloadVerdict::LocalOnlyPrivacy,
-            "an empty envelope states LocalOnly by §3.1; only a MISSING \
-             envelope states nothing"
-        );
-
-        let fast = InferenceRequirements::new()
-            .with_sharding(ShardingPrivacy::MeshAllowed)
-            .with_latency_class(LatencyClass::Fast);
-        assert_eq!(
-            offload_verdict_opt(Some(&fast)),
-            OffloadVerdict::FastLatency
-        );
-
-        let spent = InferenceRequirements::new()
-            .with_sharding(ShardingPrivacy::MeshAllowed)
-            .with_forward_budget(0);
-        assert_eq!(
-            offload_verdict_opt(Some(&spent)),
-            OffloadVerdict::ForwardBudgetExhausted
-        );
-    }
-
-    /// §10.6, made structural. The named path (`resolve_named_dispatch`)
-    /// and the ranked path (`select_peers_ranked`) each decide whether an
-    /// envelope-less request may cross to a peer. They disagreed for a
-    /// week and the disagreement cost the §9.1.1 measurement. This asserts
-    /// the named path's two predicates — reproduced here verbatim in
-    /// shape, `Option::is_none_or` — against the ranked path's decider, so
-    /// a future edit to either one fails here rather than silently
-    /// re-forking the policy.
-    #[test]
-    fn both_routing_surfaces_agree_an_absent_envelope_permits_a_peer() {
-        let absent: Option<&InferenceRequirements> = None;
-
-        // The named path, as written at `resolve_named_dispatch`.
-        let named_may_forward = absent.is_none_or(|o: &InferenceRequirements| o.may_forward());
-        let named_privacy_permits = absent
-            .is_none_or(|o: &InferenceRequirements| o.sharding() == ShardingPrivacy::MeshAllowed);
-        assert!(named_may_forward && named_privacy_permits);
-
-        // The ranked path.
-        assert_eq!(
-            offload_verdict_opt(absent),
-            OffloadVerdict::Eligible,
-            "the ranked path must reach the same verdict the named path \
-             reaches for an envelope-less request, or §9.1.1 recurs"
-        );
-    }
-}
+#[path = "oicp_select/tests.rs"]
+mod tests;

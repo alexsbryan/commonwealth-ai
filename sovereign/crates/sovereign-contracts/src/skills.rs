@@ -836,6 +836,23 @@ impl SkillRegistry {
     ///   maximum across skills. The scheduler uses these as hard
     ///   feasibility gates, so the most demanding skill sets the
     ///   floor.
+    /// The session's sharding posture, and the ONE accessor for it.
+    ///
+    /// `MeshAllowed` unless an active skill declares `LocalOnly` (e.g.
+    /// `inner-work`), which is [`Self::inference_requirements`]'s merge rule
+    /// read through its one relevant field.
+    ///
+    /// It exists as a named accessor because three call sites need this one
+    /// fact without needing the rest of the envelope — the runtime's synthesis
+    /// builder, the evidence-loop judge, and the router's intent classify —
+    /// and SLOT_POLICY §2.4 requires each of them to *thread* the posture
+    /// rather than hardcode one. Three hand-written
+    /// `.inference_requirements().sharding()` chains would be three places for
+    /// the rule to drift (principle 8); this is one.
+    pub fn session_sharding(&self) -> ShardingPrivacy {
+        self.inference_requirements().sharding()
+    }
+
     pub fn inference_requirements(&self) -> InferenceRequirements {
         let mut hint: Option<CapabilityHint> = None;
         let mut latency_class: Option<LatencyClass> = None;

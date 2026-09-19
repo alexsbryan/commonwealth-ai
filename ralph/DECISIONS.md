@@ -167,6 +167,12 @@ exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 - Chose: ONE row, `REVIEW-build-rr-1-band-split`, above the audit: split the five campaign-grown files (epistemic.rs and admin_http.rs test modules out; mesh_media.rs, knowledge_fanout_e2e.rs and mesh_commands.rs under 800). The audit depends on it and re-runs. No baseline is touched, and the rail is not edited.
 - Because: `mesh_commands.rs` is in arch-gate scope (`quality/source-tree.toml` excludes only .git/.sovereign/vendor/node_modules) and sits in the band at 1180, +164 from rr-1-library-rail. Taking it out along with the other two entrants gives 206 files / 201889 lines, 814 under the baseline, and that absorbs the rail's 846 without touching the rail. A shrinking oversized file never fails the gate (`arch_gate.rs:258-271`), so the loop can reach green by itself. REVIEW-AFTER: the operator may prefer A29's accept-the-residue over a third split.
 
+
+**A33 · 2026-09-19 · rr-1-classify-leaves-a-slow-node · worker (director order)** — commit <SHA> + this commit
+- Needed: `ra-room-plug-in-live` fails on `c_answer_names` alone, and A28 kept the 60 s window rather than widen it. `docs/RING_ROOM_DEMO.md` part two and the order both named the root as `OffloadVerdict::FastLatency` gating the 38 s route classify because `Workload::Route` is class Fast. A fresh reproduction says otherwise: a's own decision line reads `sharding=LocalOnly`, so `offload_verdict` refused on PRIVACY — its first check — and the latency gate was never consulted. `Workload::request` hardcodes `ShardingPrivacy::LocalOnly` and all three `LlmRouter` classify sites used it, while the same turn's `Judge` and `Synthesize` envelopes thread the session posture, which SLOT_POLICY §2.4 requires of all of them.
+- Chose: Fix BOTH gates, in the order they fire, at one decider each. (1) Privacy: the classify threads `SkillRegistry::session_sharding()` — one new accessor that `Runtime::session_sharding` now also delegates to, so the rule has one implementation. (2) Latency: `offload_verdict_with_local` stands the Fast gate down when the node's own measured `tg_tok_s_ewma` is below the existing `THROUGHPUT_REFERENCE_TG_TOK_S`, reported as its own gate name `fast_latency_yielded`; an unmeasured node keeps the standing rule. REFUSED the order's suggested shape — a startup benchmark probe on every node — citing canon `dc3c9856` and `SCHEDULER_QUALITY.md` §4.5 / F10. Instrument: `RING_DOC_GPU_NODES` gives one named podman node the host's render device.
+- Because: The order's own method binds the diagnosis to a run, and the run falsified the premise both it and the doc inherited — the two verdicts share the reported gate name `not_offload_eligible`, which is what let the misreading stand, and fixing only the named gate would have moved nothing (pinned by its own test). Reviving `run_baseline_benchmark` is the measured regression canon forbids (−56 % mean latency bought with capability, declined upgrades 31 → 67), so the speed signal used is the one this fleet already collects; it is a rate, so unlike a measured TTFT it does not conflate job sizes, and it mints no constant, config key or probe. Standing the gate down only lets the scorer LOOK — local still ranks and still wins where no peer is better — which is what bounds a change to a privacy-adjacent path.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -5339,5 +5345,158 @@ REVIEW-AFTER: A29 option 2 would have hand-raised the band by the rail residue. 
 Falsified if: after the row, arch-gate still reads the band above 202703 or 207 files (a new file landed ≥800, or the gate's count disagrees with `wc -l`), or the split changes behaviour (TESTALL red on a campaign test).
 
 Worker's package: `ralph/NEEDS_HUMAN.md` at 3d47bd337 (A29–A31 verdicts over the REVIEW-audit-rr-1 package), removed by this commit. Its foreign items (hakari `corpus-engine-vocab`, cli-contract.toml:3571) stay recorded in A29 and REVIEW_FINDINGS.
+
+</details>
+
+## A33 · 2026-09-19 — rr-1: the classify was gated by privacy, not latency; two gates, one instrument
+
+<details><summary>the fork, the run that moved it, the evidence, what would falsify it</summary>
+
+**Fork.** The order named one root — `OffloadVerdict::FastLatency` keeping `Workload::Route` home — and
+prescribed one shape: score the local candidate with a measured throughput term from a startup
+benchmark probe, and let the Fast gate yield on predicted time. Three questions fell out once the
+method's step 1 was actually run: which gate fires; whether the prescribed probe may be built; and
+whether any code change can reach the bar on an all-CPU room.
+
+**Evidence, reproduced before anything was named** (method step 1, principle 2). Fresh podman
+bring-up, three CPU nodes, `RING_DOC_BACKEND=podman`, one `chat ask` on a, `target/ring-room-demo/a/daemon.err`:
+
+```
+2026-09-19T20:18:44.501Z routing decision (gated) — stayed local before scoring
+  oicp_request_id=wl-route-05c1c73f gate=not_offload_eligible
+  latency=Fast sharding=LocalOnly
+2026-09-19T20:19:22.661Z routing outcome … wl-route-05c1c73f
+  served_by=local_fallback:Qwen3.5-2B.Q6_K total_ms=Some(38159.45)
+2026-09-19T20:18:44.513Z prefix_cache: … new_prefill_tokens=1265
+```
+
+1,265 prompt tokens / 38.16 s = **33.2 prompt tok/s**, which reproduces the doc's rate to the decimal.
+`ggml_vulkan: No devices found` on a fresh log, and NO `BenchmarkResult` / `pp_tok_s` line anywhere —
+the latter by construction: `run_baseline_benchmark` was deleted 2026-07-28 and `benchmark: None` is
+hardcoded at `peer_inference.rs` with the reason written out.
+
+**Q1 — which gate.** `sharding=LocalOnly`. `offload_verdict`
+(`sovereign-scheduler/src/oicp_select.rs`) checks privacy FIRST and returned `LocalOnlyPrivacy`; the
+latency gate was never consulted. Both verdicts report the gate name `not_offload_eligible`
+(`OffloadVerdict::gate`), which is precisely what let the doc's reading stand. The hardcode is
+`Workload::request` → `request_shared(prompt, ShardingPrivacy::LocalOnly)`
+(`sovereign-contracts/src/slot_policy.rs`), used by all three `LlmRouter` classify sites
+(`router.rs:1088,1138,1164`), while the same turn's `Workload::Judge` and `Workload::Synthesize`
+envelopes take a posture argument (`grounding/judge.rs`, `runtime/system_message.rs:74`).
+SLOT_POLICY §2.4, quoted in `request_shared`'s own doc, requires the threading "never hardcoding it".
+That doc also claimed its posture-aware callers were the grounding judges — its only caller passed
+`LocalOnly`, so the sentence was false as written.
+
+**Q2 — may the prescribed probe be built? No.** Canon invariant `dc3c9856` and
+`SCHEDULER_QUALITY.md` §4.5 / F10: `run_baseline_benchmark` probes the `Speed::Fast` slot and
+`throughput_factor` extrapolates linearly on the size ratio, a law that is false because decode is
+bandwidth-bound; measured at β=0.7, −56 % mean latency with declined upgrades 31.2 → 67.0, bought
+with capability. The inventory also found the predicted-time objective already exists
+(`sovereign-scheduler/src/predicted_time.rs`, `PredictInputs`) and already consumes `pp_tok_s` for
+the LOCAL candidate (`scheduler_core.rs:423`) — but production hardcodes `RankObjective::Product`,
+and §6 requires behavioural routing work to be measured as a Tier-1 arm before it ships. So the
+order's shape was refused and a cheaper true one taken, as the order permitted.
+
+**The change, two deciders.**
+1. *Privacy.* `SkillRegistry::session_sharding()` — one accessor, which `Runtime::session_sharding`
+   now delegates to, so three sites cannot drift. `LlmRouter::classify_oicp_posture` reads it and the
+   three classify calls pass it. No new exposure: it is the same source the turn's synthesis already
+   reads, so a classify crosses only where that session's larger synthesis prompt already crosses,
+   and a skill declaring `privacy = local_only` keeps it home.
+2. *Latency.* `offload_verdict_with_local(req, Option<&NodeObservations>)` — the existing single
+   decider, told what the node measured about itself. Below `THROUGHPUT_REFERENCE_TG_TOK_S`
+   (20 tok/s, whose own doc defines it as the interactive inflection) the Fast gate stands down as
+   `OffloadVerdict::FastLatencyYielded`, gate name `fast_latency_yielded`. Inputs all pre-existing:
+   `tg_tok_s_ewma` (maintained for Local at `peer_inference/provider_impl.rs:390,530`) and
+   `THROUGHPUT_OBSERVATION_THRESHOLD`. A **rate**, not a measured TTFT, so it does not conflate job
+   sizes. Unmeasured ⇒ standing rule (principle 6). `offload_verdict`/`offload_verdict_opt` keep
+   their signatures, so the mesh simulator and every other caller are provably unchanged.
+
+**Watched failing, both.** Reverting the threading: `every_intent_classify_threads_the_session_posture`
+→ `left: LocalOnly, right: MeshAllowed`. Reverting the stand-down:
+`a_node_measured_below_the_interactive_reference_stands_down_the_fast_gate` and
+`a_measured_slow_node_may_score_peers_for_its_intent_classify` → `left: FastLatency, right:
+FastLatencyYielded`. `a_posture_threaded_classify_still_stays_home_until_the_node_measures_itself`
+is the test that says gate 2 is load-bearing — fixing privacy alone moves nothing.
+
+**Q3 — the instrument, and it came first.** `RING_DOC_GPU_NODES` on the podman backend
+(`scripts/ring-doc-demo.sh`) adds `--device /dev/dri` for named nodes only; default empty, i.e. the
+rehearsed all-CPU topology. Measured with a control before use (principle 7): with the device,
+`vulkaninfo` GPU0 vendorID `0x1002` deviceID `0x1586`; without, `0x10005` / `0x0000`, Mesa's lavapipe
+software rasteriser — which is why a device-less node logs `ggml_vulkan: No devices found`. In the
+judged run `/dev/dri` is present in `ring-doc-b` and absent in `ring-doc-a`, and b's daemon reports
+`GPU: Vulkan0`.
+
+**What the judged run showed, mechanism first.** The classify's decision line lost its `(gated)`
+prefix and reads `path=RankedOicp verdict=stay_local scored=2 excluded=1 latency=Fast` — both gates
+open, the scorer reached. And the same prompt on two machines:
+
+| `wl-synthesize` | prompt tokens | ttft | total | served by |
+|---|---|---|---|---|
+| q0 (a's EWMA still unset) | 5,359 | 160,758 ms | 172,447 ms | `local_fallback` on a, CPU |
+| q1 | 5,366 | **2,128 ms** | 12,087 ms | **`peer:Bo`**, GPU |
+
+A 76× prefill difference, taken because the scorer could finally see a reason to move.
+
+**And the bar still FAILED — which is the pre-registered falsifier, not a surprise.**
+`RING_DOC_GPU_NODES="b"`, one `verdict all`:
+
+| bar | verdict | value |
+|---|---|---|
+| `ra-room-answer-names-the-machine` | FAILED | 0.6 — 3/5 named Bo; q1 `mixed`, q3 `unverified` |
+| `ra-room-doc-name-from-membership` | PASSED | 1.0 — p99 1.598 s over 100 acts, 9/9 attributed |
+| `ra-room-film-from-the-library-rail` | PASSED | 1.0 — listed 10.5 s, narrowed 10.7 s, first byte 0.058 s, HTTP 206 |
+| `ra-room-plug-in-live` | FAILED | 0.0 — `a_doc` true, `b_library` true, **`c_answer_names` false**, `d_n` true |
+| `ra-room-nothing-typed` | PASSED | 0 — walk count 0, census names 0 of 22 |
+
+The plug-in ask, from a's log: `wl-route-06303aff` at 20:51:10 reads
+`path=RankedOicp verdict=stay_local scored=3 excluded=1 latency=Fast` — NOT
+`(gated)`, so both gates opened and the scorer was reached — and then ranked
+local anyway, `total_ms=Some(38163.11)`, with the synthesis at 20:51:48 also
+ranking local. 38 s of a 60 s window spent on a one-letter classify that was
+allowed to leave and was not sent. **Opening a gate does not make a scorer
+see.** Three of five answer-leg syntheses went to Bo and two stayed local, and
+the `info` decision line carries the winner and the candidate count but no
+scores, so which way a given ask will go cannot be read from the artifact at
+all — an ARCH 1 gap this change did not close.
+
+**The answer bar also moved, and it is NOT claimed as noise.** It read 0.6 here
+against 1.0 in the recorded run this campaign judged on (A27 records 0.6 and
+0.8 in the two runs before that, so 0.6 is the floor of a 0.6–1.0 spread). The
+two misses are release verdicts — `mixed` (one claim checked and failed) and
+`unverified` (released with `claims_checked 0`) — not fan-out or attribution
+failures: every question that released anything named Bo, and `fanout_members`
+is `["Bo"]` throughout. But this run also moved three of five syntheses onto a
+different BACKEND (Vulkan on b rather than CPU on a), which changes the sampled
+tokens, so n=1 cannot separate that from the 2B's known variance (principle 7).
+**Before the GPU keeper is used to judge anything, the answer bar needs a
+baseline on that topology.** Owed, and named here rather than buried.
+
+**What is NOT claimed.** The classify, though now scored rather than gated, still ranked local
+(44.4 s) — the peer's claim loses on latency-class match, which is the scorer's ranking policy and
+is not tuned here (§6, and "do not tune a gate to flip one number"). Nothing in this change gives
+the scorer a peer speed signal; §4.5's finding that `throughput_factor` is a constant for peers
+stands, and the local candidate's sub-reference clamp is what moved the synthesis.
+
+**Also corrected in the same commit** (principle 3): `docs/RING_ROOM_DEMO.md` fix 1 is retired.
+`reason="could-not-judge"` is the verdict LABEL, not a cause (`model_slot.rs:2714` logs
+`gate.measured`); `qwen35` 2B HAS been measured — `sovereign/DEFAULTS_LEDGER.md`, floor 19.9, signal
+459–644, **ratio 23x** against the probe's 4x `Safe` limit, in a sweep that agreed with the declared
+gate on 12/12 local models — so `prefix_cache_safe=false` is correct and the ~120 s that fix was
+ranked for does not exist on this model. Two real defects remain there, neither fixed here: the
+inner `CouldNotJudge` cause string is never logged, and a daemon's PRIMARY slot is constructed
+`distributable = true` so `model_slot.rs:2180` skips the probe for it despite the comment saying the
+skip is for distributed children.
+
+**Falsified if** a node measured at or above the interactive reference is seen yielding its Fast
+work; if a `local_only` session's classify appears on the wire; if the simulator's
+`private_and_fast_requests_never_cross_the_wire` ever goes red (it must not — the two-argument
+`offload_verdict` it calls is unchanged); or if the classify's decision line reads `(gated)` again
+on a measured-slow node.
+
+**Owed.** The stand-down ships to production without a Tier-1 arm, which `SCHEDULER_QUALITY.md` §6
+would ordinarily require of routing behaviour. The mitigation is that it changes no ranking and only
+widens the candidate set on a node that measured itself slow; the arm (`mesh_sim` can feed a local
+observation from `Hardware.tg_tok_s`) is the honest next step and is not done here.
 
 </details>

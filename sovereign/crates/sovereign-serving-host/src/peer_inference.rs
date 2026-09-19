@@ -1539,8 +1539,23 @@ impl InferenceRouter {
         // it here rather than branching downstream keeps ONE scoring shape
         // — an absent envelope is a request with default requirements, not
         // a second kind of request.
-        let verdict = sovereign_scheduler::oicp_select::offload_verdict_opt(request.oicp.as_ref());
-        if verdict != sovereign_scheduler::oicp_select::OffloadVerdict::Eligible {
+        //
+        // `local_obs` is bound HERE, above the gate, rather than at the
+        // scoring block below: the gate now reads this node's own measured
+        // rate (see `offload_verdict_with_local`), and reading it twice would
+        // let the gate and the scorer disagree about the same belief
+        // (principle 8). Everything the F9 comment says about `in_flight`
+        // still applies — that rationale travels with the binding.
+        let local_obs = {
+            let mut obs = self.local_observations.read().await.clone();
+            obs.in_flight = self.in_flight_publisher.load(Ordering::Relaxed);
+            obs
+        };
+        let verdict = sovereign_scheduler::oicp_select::offload_verdict_opt_with_local(
+            request.oicp.as_ref(),
+            Some(&local_obs),
+        );
+        if !verdict.is_eligible() {
             // The budget case is reported apart from the other two on
             // purpose: it does not mean "this work stays home by policy",
             // it means SOME OTHER NODE already forwarded this request and
@@ -1576,6 +1591,24 @@ impl InferenceRouter {
                  `locus` says whether serving it locally still leaves this machine"
             );
             return self.gated(rec, verdict.gate());
+        }
+        if verdict == sovereign_scheduler::oicp_select::OffloadVerdict::FastLatencyYielded {
+            // Principle 1: the decision line names WHICH floor decided, and
+            // the measurement that cleared it. `tg_tok_s_ewma` below the
+            // interactive reference is the whole reason this Fast-class
+            // request is about to be scored against peers at all.
+            tracing::debug!(
+                oicp_request_id = %oicp_request_id,
+                gate = verdict.gate(),
+                measured_tg_tok_s = local_obs.tg_tok_s_ewma,
+                samples = local_obs.samples,
+                reference_tg_tok_s = oicp_types::THROUGHPUT_REFERENCE_TG_TOK_S,
+                latency = ?request.oicp.as_ref().map(|o| o.effective_latency_class()),
+                "mesh-inference: SLOT_POLICY §5's Fast gate stood down — this node \
+                 measured itself below the interactive reference, so \"a hop is a net \
+                 loss\" is false here. Peers are now SCORED, not chosen: local still \
+                 ranks and still wins when no peer is better."
+            );
         }
         let effective_oicp;
         let req_oicp = match request.oicp.as_ref() {
@@ -1634,11 +1667,6 @@ impl InferenceRouter {
         // Completing that wiring is a regression, not a fix; see the
         // `what_the_scorer_loses_by_never_seeing_its_own_load` arm table
         // and F7, which is the same trap.
-        let local_obs = {
-            let mut obs = self.local_observations.read().await.clone();
-            obs.in_flight = self.in_flight_publisher.load(Ordering::Relaxed);
-            obs
-        };
         let self_manifest = self.self_manifest.load();
         let now_unix = Self::now_unix_secs();
 
@@ -3423,6 +3451,98 @@ mod tests {
     use sovereign_contracts::error::Error;
     use sovereign_contracts::types::Depth;
     use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+
+    // -----------------------------------------------------------
+    // The ring-room `c_answer_names` root, pinned end to end
+    // -----------------------------------------------------------
+    //
+    // Two gates stand between a CPU node's intent classify and a peer, and
+    // they fire in this order. The tests below walk the real envelope the
+    // router builds through the real decider, so a revert of EITHER gate's
+    // fix goes red here and names which one.
+    //
+    // Evidence (`target/ring-room-demo/a/daemon.err`, 2026-09-19T20:18:44Z,
+    // three CPU-only podman nodes, Qwen3.5-2B.Q6_K):
+    //
+    //   routing decision (gated) — stayed local before scoring
+    //     oicp_request_id=wl-route-05c1c73f gate=not_offload_eligible
+    //     latency=Fast sharding=LocalOnly
+    //   routing outcome … total_ms=Some(38159.45)
+    //
+    // 1,265 prompt tokens, 38.2 s, one letter of output — against a 37 ms
+    // fan-out to a peer on the same host.
+
+    use sovereign_contracts::slot_policy::Workload;
+    use sovereign_scheduler::oicp_select::{offload_verdict_with_local, OffloadVerdict};
+
+    fn slow_cpu_node() -> oicp_types::NodeObservations {
+        oicp_types::NodeObservations {
+            samples: oicp_types::THROUGHPUT_OBSERVATION_THRESHOLD * 2,
+            tg_tok_s_ewma: 14.0, // measured on ring-doc-a
+            ..Default::default()
+        }
+    }
+
+    /// GATE 1 — privacy. The classify used `Workload::request`, which
+    /// hardcodes `LocalOnly`, so `offload_verdict` refused it on its FIRST
+    /// check and the latency gate below was never consulted at all. The fix
+    /// is SLOT_POLICY §2.4: thread the session posture
+    /// (`LlmRouter::classify_oicp_posture` → `SkillRegistry::session_sharding`).
+    ///
+    /// This is the assertion the log line `sharding=LocalOnly` demanded, and
+    /// it is why the demo doc's "gated by `OffloadVerdict::FastLatency`" was
+    /// wrong about which gate fired.
+    #[test]
+    fn the_intent_classify_hardcoding_local_only_never_reaches_the_latency_gate() {
+        let hardcoded = Workload::Route.requirements(ShardingPrivacy::LocalOnly);
+        assert_eq!(
+            offload_verdict_with_local(&hardcoded, Some(&slow_cpu_node())),
+            OffloadVerdict::LocalOnlyPrivacy,
+            "a hardcoded LocalOnly classify is refused on privacy, so no \
+             amount of measured slowness can move it — this is the gate that \
+             actually fired on ring-doc-a"
+        );
+    }
+
+    /// GATE 2 — latency, reached only once gate 1 opens. With the posture
+    /// threaded from a default (`MeshAllowed`) session, the classify now
+    /// reaches SLOT_POLICY §5 — which on an UNMEASURED node still keeps it
+    /// home. Fixing privacy alone is not enough, and this names why.
+    #[test]
+    fn a_posture_threaded_classify_still_stays_home_until_the_node_measures_itself() {
+        let threaded = Workload::Route.requirements(ShardingPrivacy::MeshAllowed);
+        assert_eq!(
+            offload_verdict_with_local(&threaded, None),
+            OffloadVerdict::FastLatency,
+            "gate 2 is load-bearing: privacy alone does not free the classify"
+        );
+    }
+
+    /// BOTH gates open — the bar's own case. A node that threaded its session
+    /// posture AND measured itself below the interactive reference may finally
+    /// have its 38-second one-letter classify scored against peers.
+    #[test]
+    fn a_measured_slow_node_may_score_peers_for_its_intent_classify() {
+        let threaded = Workload::Route.requirements(ShardingPrivacy::MeshAllowed);
+        let verdict = offload_verdict_with_local(&threaded, Some(&slow_cpu_node()));
+        assert_eq!(verdict, OffloadVerdict::FastLatencyYielded);
+        assert!(verdict.is_eligible());
+        assert_eq!(verdict.gate(), "fast_latency_yielded");
+    }
+
+    /// The session that says no still means no. `inner-work` (and any skill
+    /// declaring `privacy = local_only`) resolves the session posture to
+    /// `LocalOnly`, and threading it keeps the classify home on the same slow
+    /// node — which is the whole reason the fix threads a posture instead of
+    /// swapping one hardcoded constant for another.
+    #[test]
+    fn a_local_only_session_keeps_its_classify_home_on_any_hardware() {
+        let threaded = Workload::Route.requirements(ShardingPrivacy::LocalOnly);
+        assert_eq!(
+            offload_verdict_with_local(&threaded, Some(&slow_cpu_node())),
+            OffloadVerdict::LocalOnlyPrivacy
+        );
+    }
 
     /// A warm slot, for stubs that own weights.
     ///
