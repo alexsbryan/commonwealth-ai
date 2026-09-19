@@ -147,6 +147,11 @@ exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 - Chose: Option 1. The bar keeps its 60 s window and floor. The row's expectation becomes "every bar emits a verdict", with plug-in allowed to read FAILED on `c_answer_names` alone when a's log shows that ask still synthesizing at the watch's end. That leg is owed to rr-2's Halo-and-Mac walk. No code change.
 - Because: The order's Done-when asks that the five bars "each have a verdict emitted", not that all five pass, and the order fixes both the topology (three podman nodes on the Halo) and the model budget (local daemon, fast slot). "Five PASSED" was the row's own premise, and the tree contradicts it. The other three options widen a bar (charter: operator's), change the topology (a design change), or tune a knob that B §Tuning excludes. REVIEW-AFTER: the campaign predicate ("PASSED on every bar") stays unmet at rr-1's close, and that should be said, not buried.
 
+**A29 · 2026-09-18 · REVIEW-audit-rr-1 · director (supervisor resolution 1)** — this commit
+- Needed: The audit's PREPUSH is red on arch-gate, and all of it is this campaign's growth: epistemic.rs +130 and admin_http.rs +79 past slack, and the approach band +2 files / +2284 lines, one entrant of which is the operator-permitted rail roster hunk.
+- Chose: ESCALATED, not decided. The row stays `[~]` and is not closed on a red it owns; the foreign reds (hakari.toml:54, cli-contract.toml:3571) are not the campaign's, as in A10.
+- Because: No change inside the charter makes the gate green. Splitting all four campaign files still leaves the band about 366 lines over, because the rail's lib.rs (846) cannot move without a rail diff. Accepting the growth raises a baseline, which PROMPT §7 forbids to the loop and the charter reserves as bar-weakening. Laundering the residue by splitting an unrelated band file is the refill the band ratchet exists to stop. The next row is HUMAN-rr-1-the-room, so stopping here costs the loop no work it could otherwise do.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -5193,5 +5198,56 @@ Edit or mark the row in ralph/next/ring-room/STATE.md, then
 **Falsified if** a's log on the next run shows the plug-in ask's synthesis finishing inside 60 s while the leg still reads false (then it is an instrument fault, not latency), or plug-in fails on any leg other than `c_answer_names`.
 
 **Worker's package (ralph/NEEDS_HUMAN.md, removed by this commit).** The same four options, with option 1 recommended. It also noted the answer bar's 0.8 on q3 as a fan-out failure within `PEER_TIMEOUT` 3 s, with the cause to be named by A27's log line.
+
+</details>
+
+## A29 · 2026-09-18 — REVIEW-audit-rr-1: arch-gate's growth is the campaign's own and only the operator can accept it
+
+<details><summary>reasoning, evidence, package</summary>
+
+Fork: the worker's package asks (1) accept the campaign's growth or mint split rows, (2) whether
+the audit closes with PREPUSH red, (3) two foreign reds. (2) and (3) are decidable and decided:
+the row does not close on a red its own commits caused (A10 closed only because every red there
+was foreign), and the foreign reds are recorded, not fixed. (1) is not decidable here.
+
+Evidence, reproduced by the director on 7c1da559b (tree clean):
+- `target/debug/xtask arch-gate` (from `corpus-engine/`) exit 1: `209 file(s) / 204987 lines in
+  the 800-1200 approach band`; `epistemic.rs 1444 → 1574 (+130, slack 50)`; `admin_http.rs 1308 →
+  1387 (+79, slack 50)`; `files 207 -> 209`; `lines 202703 -> 204987 (+2284)`. The package read
+  +2276; the 8-line difference is in the gate's count, not the tree.
+- `git log e9db0b96c..HEAD` on the grown files names only rr-1 commits, the domains merge
+  cf1638ca6 carrying rr-1-media-origin-live, and a133ef05b rustfmt.
+- Band entrants: mesh_media.rs 595 → 931, knowledge_fanout_e2e.rs 644 → 987,
+  commonwealth-rail/src/lib.rs 798 → 846 (e94b26826, the hunk the operator permitted, A12).
+- Arithmetic: splitting mesh_media.rs and knowledge_fanout_e2e.rs back under 800 removes 1918
+  lines and two files, leaving 207 files / ~203069 lines, still ~366 over 202703. Extracting the
+  two test modules (epistemic.rs:740, 833 lines; admin_http.rs:388, ~1000 lines) clears the
+  per-file reds only if each lands as two files under 800, or it adds to the band.
+- `quality/baselines/approach_band.txt` is machine-written; PROMPT §7 forbids `--update-baseline`
+  and hand edits outside a §3a.6 re-key. Re-pinning at origin/main (AGENTS.md "Definition of
+  done") does not help: the 64 campaign commits are unpushed, so origin/main's baseline is the
+  current one.
+
+Options for the operator, with cost:
+1. Accept the growth by hand-raising `approach_band.txt` and the two per-file rows by exactly the
+   attributed amounts, ledgered in SYSTEM_OVERVIEW.md §10. One commit, no code change; the band
+   carries +2284 lines of real accretion.
+2. Split first, accept the residue: mint rows that extract the two test modules (two files each,
+   under 800) and split mesh_media.rs and knowledge_fanout_e2e.rs, then hand-raise the band by the
+   ~366 residue (the rail's entrant). Four mechanical rows, about half a day of loop time, and the
+   band ends where it would have been without the rail hunk.
+3. Close the audit red and carry the arch-gate growth as a finding until rr-2. Nothing is spent
+   now and PREPUSH stays red for every campaign on main, as A10's REVIEW-AFTER already records.
+
+Recommendation: 2. The per-file reds are test modules that grew beside behaviour the rows
+required, and extracting them is cheap and behaviour-preserving (principle 2). The band residue
+is the one hunk the operator already chose to permit, so accepting exactly that keeps the raise
+tied to a decision someone made.
+
+*Falsified if* an arch-gate run on this tree reads the band at or under 202703 and both per-file
+rows within slack (then the red is stale), or a split plan reaches green without touching the rail
+or an unrelated band file.
+
+Worker's package: `ralph/NEEDS_HUMAN.md` at 7c1da559b, kept in place with this verdict added.
 
 </details>
