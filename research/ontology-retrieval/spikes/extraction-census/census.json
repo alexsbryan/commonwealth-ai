@@ -1,0 +1,1602 @@
+{
+ "atoms_total": 1239,
+ "by_atom_type": {
+  "Entity": 427,
+  "Event": 15,
+  "State": 154,
+  "Relation": 149,
+  "Claim": 320,
+  "Question": 174
+ },
+ "data_keys_by_atom_type": {
+  "Entity": {
+   "id": 427,
+   "canonical_name": 427,
+   "aliases": 33,
+   "entity_type": 427,
+   "first_appearance": 427,
+   "description": 427,
+   "salience": 427,
+   "enrichment_depth": 427,
+   "provenance": 427,
+   "attributes": 178
+  },
+  "Event": {
+   "id": 15,
+   "description": 15,
+   "event_type": 15,
+   "participants": 15,
+   "evidence": 15,
+   "section_position": 15,
+   "enrichment_depth": 15
+  },
+  "State": {
+   "id": 154,
+   "entity_id": 154,
+   "label": 154,
+   "state_type": 154,
+   "evidence": 154,
+   "section_range": 154,
+   "enrichment_depth": 154
+  },
+  "Relation": {
+   "id": 149,
+   "label": 149,
+   "participants": 149,
+   "relation_type": 149,
+   "evidence": 147,
+   "section_range": 149,
+   "enrichment_depth": 149
+  },
+  "Claim": {
+   "id": 320,
+   "content": 320,
+   "discourse_act": 320,
+   "epistemic_status": 320,
+   "scope": 320,
+   "evidence": 320,
+   "attributed_to": 129,
+   "anchor": 320,
+   "claim_kind": 320,
+   "enrichment_depth": 320,
+   "subject": 272,
+   "attributes": 17
+  },
+  "Question": {
+   "id": 174,
+   "content": 174,
+   "question_type": 174,
+   "raised_at": 174,
+   "resolution_status": 174,
+   "enrichment_depth": 174
+  }
+ },
+ "entity_type_counts": {
+  "person": 83,
+  "defined_term": 68,
+  "organization": 57,
+  "data_type": 56,
+  "agreement": 35,
+  "service": 26,
+  "purpose": 24,
+  "work": 23,
+  "recipient": 22,
+  "concept": 22,
+  "place": 9,
+  "institution": 2
+ },
+ "entity_undeclared_types": {
+  "work": 23,
+  "person": 83,
+  "concept": 22,
+  "place": 9,
+  "institution": 2
+ },
+ "claim_kind_counts": {
+  "obligation": 320
+ },
+ "entity_types": {
+  "organization": {
+   "count": 57,
+   "attr_filled": {},
+   "with_any_attr": 0,
+   "unmerged_duplicate_names": {
+    "you": 3,
+    "reddit": 2,
+    "we": 2,
+    "user": 3
+   },
+   "heading_like": [
+    "Moderators",
+    "us"
+   ],
+   "empty_description": 0,
+   "by_first_doc": {
+    "Spotify — Privacy Policy": 5,
+    "Reddit — Terms of Service": 12,
+    "LinkedIn — Terms of Service": 3,
+    "Reddit — Privacy Policy": 15,
+    "LinkedIn — Privacy Policy": 9,
+    "Spotify — Terms of Service": 9,
+    "LinkedIn — Trackers Policy": 2,
+    "Spotify — Trackers Policy": 1,
+    "Reddit — Trackers Policy": 1
+   },
+   "examples": [
+    {
+     "name": "Digital Advertising Alliance",
+     "attributes": null,
+     "aliases": [
+      "European Interactive Digital Advertising Alliance"
+     ],
+     "description": "An organization whose participating companies allow users to opt-out of data usage for interest-based advertising via the AdChoices mechanism.",
+     "first_doc": "Spotify — Trackers Policy",
+     "first_chunk": "sec_00255"
+    },
+    {
+     "name": "Data Protection Officer",
+     "attributes": null,
+     "aliases": null,
+     "description": "A role acting as the communication channel between Reddit, data subjects in Brazil, and the ANPD.",
+     "first_doc": "Spotify — Privacy Policy",
+     "first_chunk": "sec_00033"
+    },
+    {
+     "name": "distributors",
+     "attributes": null,
+     "aliases": null,
+     "description": "Entities such as app store providers who are intended beneficiaries with enforcement rights.",
+     "first_doc": "Spotify — Terms of Service",
+     "first_chunk": "sec_00402"
+    },
+    {
+     "name": "Reddit UK Limited",
+     "attributes": null,
+     "aliases": null,
+     "description": "Acts as Reddit’s UK GDPR Article 27 Representative.",
+     "first_doc": "Reddit — Privacy Policy",
+     "first_chunk": "sec_00140"
+    },
+    {
+     "name": "Reddit, Inc.",
+     "attributes": null,
+     "aliases": null,
+     "description": "The service provider that certifies compliance with the Data Privacy Frameworks and processes personal data from the EU, UK, and Switzerland.",
+     "first_doc": "Reddit — Terms of Service",
+     "first_chunk": "sec_00042"
+    },
+    {
+     "name": "Content owners",
+     "attributes": null,
+     "aliases": null,
+     "description": "Intended beneficiaries of the Terms who may enforce them directly against users.",
+     "first_doc": "Spotify — Terms of Service",
+     "first_chunk": "sec_00402"
+    },
+    {
+     "name": "user",
+     "attributes": null,
+     "aliases": null,
+     "description": "The individual using the Services or interacting with Reddit.",
+     "first_doc": "Reddit — Privacy Policy",
+     "first_chunk": "sec_00257"
+    },
+    {
+     "name": "Facebook",
+     "attributes": null,
+     "aliases": null,
+     "description": "A third-party provider of social sharing features linked in the policy.",
+     "first_doc": "Reddit — Privacy Policy",
+     "first_chunk": "sec_00326"
+    }
+   ]
+  },
+  "party": {
+   "count": 0,
+   "attr_filled": {},
+   "with_any_attr": 0,
+   "unmerged_duplicate_names": {},
+   "heading_like": [],
+   "empty_description": 0,
+   "by_first_doc": {},
+   "examples": []
+  },
+  "service": {
+   "count": 26,
+   "attr_filled": {},
+   "with_any_attr": 0,
+   "unmerged_duplicate_names": {},
+   "heading_like": [
+    "paid Services",
+    "Managed Accounts",
+    "Spotify Kids"
+   ],
+   "empty_description": 0,
+   "by_first_doc": {
+    "Spotify — Privacy Policy": 4,
+    "Reddit — Terms of Service": 2,
+    "Spotify — Trackers Policy": 4,
+    "LinkedIn — Terms of Service": 2,
+    "LinkedIn — Privacy Policy": 1,
+    "LinkedIn — Trackers Policy": 4,
+    "Spotify — Terms of Service": 1,
+    "Reddit — Privacy Policy": 4,
+    "Reddit — Trackers Policy": 4
+   },
+   "examples": [
+    {
+     "name": "Google Chrome",
+     "attributes": null,
+     "aliases": null,
+     "description": "A popular web browser for which external help materials on cookie management are provided.",
+     "first_doc": "Reddit — Trackers Policy",
+     "first_chunk": "sec_00445"
+    },
+    {
+     "name": "Spotify Kids",
+     "attributes": null,
+     "aliases": null,
+     "description": "A dedicated service for young users, governed by its own separate privacy notice.",
+     "first_doc": "Spotify — Privacy Policy",
+     "first_chunk": "sec_00126"
+    },
+    {
+     "name": "Android",
+     "attributes": null,
+     "aliases": null,
+     "description": "A mobile device operating system that provides advertising ID controls.",
+     "first_doc": "LinkedIn — Trackers Policy",
+     "first_chunk": "sec_00291"
+    },
+    {
+     "name": "LinkedIn ad services",
+     "attributes": null,
+     "aliases": null,
+     "description": "Off-site services provided by LinkedIn where third-party cookies may be used.",
+     "first_doc": "LinkedIn — Trackers Policy",
+     "first_chunk": "sec_00436"
+    },
+    {
+     "name": "Privacy Center",
+     "attributes": null,
+     "aliases": null,
+     "description": "The online location where users can find contact details and access the policy.",
+     "first_doc": "Spotify — Trackers Policy",
+     "first_chunk": "sec_00091"
+    },
+    {
+     "name": "Reddit",
+     "attributes": null,
+     "aliases": [
+      "redditdatarequests@reddit.com"
+     ],
+     "description": "The online platform whose public nature and content accessibility are described in this section.",
+     "first_doc": "Reddit — Terms of Service",
+     "first_chunk": "sec_00006"
+    },
+    {
+     "name": "Spotify",
+     "attributes": null,
+     "aliases": null,
+     "description": "The online music service whose privacy policy is being described.",
+     "first_doc": "Spotify — Trackers Policy",
+     "first_chunk": "sec_00047"
+    },
+    {
+     "name": "iOS",
+     "attributes": null,
+     "aliases": null,
+     "description": "An Apple mobile operating system for which LinkedIn does not use advertising IDs for targeted ads.",
+     "first_doc": "LinkedIn — Trackers Policy",
+     "first_chunk": "sec_00291"
+    }
+   ]
+  },
+  "agreement": {
+   "count": 35,
+   "attr_filled": {
+    "service": 25
+   },
+   "with_any_attr": 25,
+   "unmerged_duplicate_names": {},
+   "heading_like": [
+    "Privacy Policy",
+    "User Agreement",
+    "Arbitration Agreement",
+    "LinkedIn European Regional Privacy Notice",
+    "Developer Terms",
+    "Spotify Cookie Policy"
+   ],
+   "empty_description": 0,
+   "by_first_doc": {
+    "Spotify — Privacy Policy": 4,
+    "LinkedIn — Terms of Service": 3,
+    "Spotify — Trackers Policy": 2,
+    "Reddit — Terms of Service": 1,
+    "Reddit — Privacy Policy": 11,
+    "Spotify — Terms of Service": 4,
+    "LinkedIn — Privacy Policy": 10
+   },
+   "examples": [
+    {
+     "name": "Professional Community Policies",
+     "attributes": {
+      "service": "entity-0411"
+     },
+     "aliases": null,
+     "description": "Policies defining acceptable behavior on LinkedIn, violations of which may be reported by users.",
+     "first_doc": "LinkedIn — Terms of Service",
+     "first_chunk": "sec_00072"
+    },
+    {
+     "name": "California Notice at Collection",
+     "attributes": {
+      "service": "entity-0257"
+     },
+     "aliases": null,
+     "description": "A notice required by the California Consumer Privacy Act that applies alongside this Policy for California residents.",
+     "first_doc": "Spotify — Privacy Policy",
+     "first_chunk": "sec_00001"
+    },
+    {
+     "name": "ePrivacy Regulations",
+     "attributes": {
+      "service": "entity-0411"
+     },
+     "aliases": null,
+     "description": "Regulatory laws requiring LinkedIn to process personal data upon request or order.",
+     "first_doc": "LinkedIn — Privacy Policy",
+     "first_chunk": "sec_00169"
+    },
+    {
+     "name": "Spotify Cookie Policy",
+     "attributes": {
+      "service": "entity-0257"
+     },
+     "aliases": [
+      "Spotify Privacy Policy"
+     ],
+     "description": "The policy document effective as of 29 May 2023 that describes how Spotify uses cookies.",
+     "first_doc": "Spotify — Trackers Policy",
+     "first_chunk": "sec_00370"
+    },
+    {
+     "name": "Federal Arbitration Act",
+     "attributes": null,
+     "aliases": null,
+     "description": "The federal statute governing the interpretation and enforcement of the arbitration agreement.",
+     "first_doc": "Spotify — Terms of Service",
+     "first_chunk": "sec_00149"
+    },
+    {
+     "name": "Privacy Policy",
+     "attributes": {
+      "service": "entity-0257"
+     },
+     "aliases": [
+      "this Privacy Policy"
+     ],
+     "description": "The document describing how Spotify processes personal data, applicable to U.S. residents and the Spotify Service.",
+     "first_doc": "Spotify — Privacy Policy",
+     "first_chunk": "sec_00001"
+    },
+    {
+     "name": "Card Terms",
+     "attributes": null,
+     "aliases": null,
+     "description": "Terms applicable when purchasing a Paid Subscription using Codes or gift cards.",
+     "first_doc": "Spotify — Terms of Service",
+     "first_chunk": "sec_00299"
+    },
+    {
+     "name": "EU-U.S. Data Privacy Framework",
+     "attributes": {
+      "service": "entity-0443"
+     },
+     "aliases": [
+      "UK Extension to the EU-U.S. Data Privacy Framework"
+     ],
+     "description": "A framework set forth by the U.S. Department of Commerce to which Reddit has certified adherence for processing EU and UK data.",
+     "first_doc": "Reddit — Privacy Policy",
+     "first_chunk": "sec_00202"
+    }
+   ]
+  },
+  "defined_term": {
+   "count": 68,
+   "attr_filled": {
+    "definition": 67,
+    "agreement": 62
+   },
+   "with_any_attr": 67,
+   "unmerged_duplicate_names": {
+    "cookies": 2
+   },
+   "heading_like": [
+    "strictly necessary cookies",
+    "optional cookies",
+    "Additional Terms",
+    "Services",
+    "Feedback",
+    "Mass arbitration",
+    "Compliance with Legal Obligations",
+    "Special Category Data",
+    "Policy"
+   ],
+   "empty_description": 0,
+   "by_first_doc": {
+    "Reddit — Terms of Service": 9,
+    "Spotify — Privacy Policy": 5,
+    "Spotify — Trackers Policy": 7,
+    "LinkedIn — Terms of Service": 5,
+    "LinkedIn — Privacy Policy": 10,
+    "Spotify — Terms of Service": 14,
+    "LinkedIn — Trackers Policy": 5,
+    "Reddit — Privacy Policy": 8,
+    "Reddit — Trackers Policy": 5
+   },
+   "examples": [
+    {
+     "name": "browser settings",
+     "attributes": {
+      "definition": "settings ... that allow you to manage the use of cookies",
+      "agreement": "Your mobile device settings"
+     },
+     "aliases": null,
+     "description": "Settings on a mobile device that allow users to manage the use of cookies.",
+     "first_doc": "Reddit — Trackers Policy",
+     "first_chunk": "sec_00446"
+    },
+    {
+     "name": "HTTPS",
+     "attributes": {
+      "definition": "protocol used... while information is being transmitted",
+      "agreement": "How We Protect Your Information"
+     },
+     "aliases": null,
+     "description": "A protocol used to protect information while it is being transmitted.",
+     "first_doc": "Reddit — Privacy Policy",
+     "first_chunk": "sec_00231"
+    },
+    {
+     "name": "Right to Know / Access",
+     "attributes": {
+      "definition": "A type of privacy request where the user seeks access to their personal data held by the service.",
+      "agreement": "entity-0010"
+     },
+     "aliases": null,
+     "description": "A category of privacy request allowing users to access their data, with specific volume and compliance statistics recorded for 2025.",
+     "first_doc": "Spotify — Privacy Policy",
+     "first_chunk": "sec_00026"
+    },
+    {
+     "name": "personal data access",
+     "attributes": {
+      "definition": "request a copy of their personal data",
+      "agreement": "entity-0018"
+     },
+     "aliases": null,
+     "description": "The right for any user to request a copy of their personal data held by Reddit.",
+     "first_doc": "Reddit — Privacy Policy",
+     "first_chunk": "sec_00257"
+    },
+    {
+     "name": "repeat infringers",
+     "attributes": {
+      "definition": "users of our Services who are repeat infringers",
+      "agreement": "entity-0018"
+     },
+     "aliases": null,
+     "description": "Users who repeatedly violate intellectual property rights, subject to termination.",
+     "first_doc": "Reddit — Terms of Service",
+     "first_chunk": "sec_00128"
+    },
+    {
+     "name": "Informal Settlement Conference",
+     "attributes": {
+      "definition": "a telephone or video settlement conference... in an effort to facilitate resolution",
+      "agreement": "Spotify Terms of Service"
+     },
+     "aliases": null,
+     "description": "A telephone or video conference requested by either party to facilitate resolution.",
+     "first_doc": "Spotify — Terms of Service",
+     "first_chunk": "sec_00311"
+    },
+    {
+     "name": "optional cookies",
+     "attributes": {
+      "definition": "One of two main categories of cookie used by Spotify",
+      "agreement": "entity-0002"
+     },
+     "aliases": null,
+     "description": "A main category of cookie that Spotify uses, distinguished from strictly necessary ones.",
+     "first_doc": "Spotify — Trackers Policy",
+     "first_chunk": "sec_00046"
+    },
+    {
+     "name": "DMCA",
+     "attributes": {
+      "definition": "Digital Millennium Copyright Act (implied by context of copyright/trademark takedowns)",
+      "agreement": "entity-0018"
+     },
+     "aliases": null,
+     "description": "Digital Millennium Copyright Act, referenced as the legal framework for takedown procedures.",
+     "first_doc": "Reddit — Terms of Service",
+     "first_chunk": "sec_00128"
+    }
+   ]
+  },
+  "data_type": {
+   "count": 56,
+   "attr_filled": {
+    "service": 46,
+    "source": 54
+   },
+   "with_any_attr": 54,
+   "unmerged_duplicate_names": {
+    "cookies": 2
+   },
+   "heading_like": [
+    "Strictly Necessary Cookies",
+    "user content",
+    "Mobile Identifiers"
+   ],
+   "empty_description": 0,
+   "by_first_doc": {
+    "Spotify — Trackers Policy": 5,
+    "LinkedIn — Terms of Service": 2,
+    "Spotify — Privacy Policy": 13,
+    "Reddit — Terms of Service": 3,
+    "Reddit — Privacy Policy": 18,
+    "LinkedIn — Privacy Policy": 14,
+    "LinkedIn — Trackers Policy": 1
+   },
+   "examples": [
+    {
+     "name": "Non-Public Content You Submit",
+     "attributes": {
+      "source": "provided_by_user"
+     },
+     "aliases": null,
+     "description": "Private content submitted by users, such as direct messages.",
+     "first_doc": "Reddit — Privacy Policy",
+     "first_chunk": "sec_00140"
+    },
+    {
+     "name": "Usage Data",
+     "attributes": {
+      "service": "entity-0257",
+      "source": "collected_automatically"
+     },
+     "aliases": null,
+     "description": "Information collected during service access including actions (search queries, streaming history), technical data (URLs, cookies, IP addresses, device IDs), general location, inferences about age/interests, content posted by users, and engagement with ads or AI features.",
+     "first_doc": "Spotify — Privacy Policy",
+     "first_chunk": "sec_00062"
+    },
+    {
+     "name": "trade union membership data",
+     "attributes": {
+      "service": "entity-0411",
+      "source": "provided_by_user"
+     },
+     "aliases": null,
+     "description": "Data revealing trade union membership, classified as Special Category Data.",
+     "first_doc": "LinkedIn — Privacy Policy",
+     "first_chunk": "sec_00369"
+    },
+    {
+     "name": "Inferred Information",
+     "attributes": {
+      "service": "entity-0443",
+      "source": "from_third_parties"
+     },
+     "aliases": null,
+     "description": "Attributes such as age range, gender, and preferred language inferred from other data.",
+     "first_doc": "Reddit — Privacy Policy",
+     "first_chunk": "sec_00425"
+    },
+    {
+     "name": "Street Address Data",
+     "attributes": {
+      "service": "entity-0257",
+      "source": "provided_by_user"
+     },
+     "aliases": null,
+     "description": "Physical location information used for eligibility checks, legal notices, support, billing, tax administration, and delivery of physical goods.",
+     "first_doc": "Spotify — Privacy Policy",
+     "first_chunk": "sec_00062"
+    },
+    {
+     "name": "Strictly Necessary Cookies",
+     "attributes": {
+      "service": "entity-0257",
+      "source": "collected_automatically"
+     },
+     "aliases": null,
+     "description": "Cookies essential for enabling use of Services features like logging in and payments.",
+     "first_doc": "Spotify — Trackers Policy",
+     "first_chunk": "sec_00004"
+    },
+    {
+     "name": "Non-Public Content",
+     "attributes": {
+      "service": "entity-0443",
+      "source": "provided_by_user"
+     },
+     "aliases": null,
+     "description": "Private submissions such as saved drafts, private messages, modmail, and reports.",
+     "first_doc": "Reddit — Privacy Policy",
+     "first_chunk": "sec_00425"
+    },
+    {
+     "name": "Customer Service Data",
+     "attributes": {
+      "service": "entity-0257",
+      "source": "provided_by_user"
+     },
+     "aliases": null,
+     "description": "Information from contacts with customer service, including chat conversations and email correspondence.",
+     "first_doc": "Spotify — Privacy Policy",
+     "first_chunk": "sec_00062"
+    }
+   ]
+  },
+  "recipient": {
+   "count": 22,
+   "attr_filled": {
+    "service": 16
+   },
+   "with_any_attr": 16,
+   "unmerged_duplicate_names": {},
+   "heading_like": [
+    "Affiliates"
+   ],
+   "empty_description": 0,
+   "by_first_doc": {
+    "Spotify — Trackers Policy": 4,
+    "Spotify — Privacy Policy": 5,
+    "LinkedIn — Terms of Service": 1,
+    "Reddit — Privacy Policy": 7,
+    "LinkedIn — Privacy Policy": 5
+   },
+   "examples": [
+    {
+     "name": "Courts and Authorities",
+     "attributes": {
+      "service": "entity-0411"
+     },
+     "aliases": [
+      "courts"
+     ],
+     "description": "Legal bodies to whom data is disclosed to comply with legal obligations or protect safety.",
+     "first_doc": "Spotify — Privacy Policy",
+     "first_chunk": "sec_00089"
+    },
+    {
+     "name": "advertisers",
+     "attributes": null,
+     "aliases": null,
+     "description": "Organizations with whom Spotify may share data collected by targeting cookies.",
+     "first_doc": "Spotify — Trackers Policy",
+     "first_chunk": "sec_00047"
+    },
+    {
+     "name": "analytics service providers",
+     "attributes": {
+      "service": "entity-0411"
+     },
+     "aliases": [
+      "Service providers",
+      "third-party service providers"
+     ],
+     "description": "A broad category of external entities including cloud, telecom, maintenance, support, ID verification, development, market research, anti-fraud/abuse, marketing/analytics, payment processors, auditors, advisors, managed services, and consultancy firms.",
+     "first_doc": "Spotify — Trackers Policy",
+     "first_chunk": "sec_00047"
+    },
+    {
+     "name": "online search result tools",
+     "attributes": {
+      "service": "entity-0411"
+     },
+     "aliases": null,
+     "description": "Third-party services like search engines that may receive user data.",
+     "first_doc": "LinkedIn — Privacy Policy",
+     "first_chunk": "sec_00191"
+    },
+    {
+     "name": "law enforcement agencies",
+     "attributes": {
+      "service": "entity-0411"
+     },
+     "aliases": [
+      "regulators and law enforcement agencies"
+     ],
+     "description": "External bodies to whom LinkedIn discloses information to adhere to valid legal requests.",
+     "first_doc": "LinkedIn — Privacy Policy",
+     "first_chunk": "sec_00169"
+    },
+    {
+     "name": "LLM providers",
+     "attributes": {
+      "service": "entity-0443"
+     },
+     "aliases": null,
+     "description": "Service providers who compile and summarize public content for search results.",
+     "first_doc": "Reddit — Privacy Policy",
+     "first_chunk": "sec_00232"
+    },
+    {
+     "name": "partners",
+     "attributes": {
+      "service": "entity-0257"
+     },
+     "aliases": [
+      "Authentication partners",
+      "Technical service partners",
+      "Payment partners and Merchants",
+      "Advertising and marketing partners",
+      "Advertising partners",
+      "Marketing Partners",
+      "Payment partners",
+      "subcontractors and partners",
+      "Third-party partners",
+      "business partners"
+     ],
+     "description": "Partners providing data such as mapping IP addresses to non-precise location and helping protect user accounts.",
+     "first_doc": "Spotify — Trackers Policy",
+     "first_chunk": "sec_00005"
+    },
+    {
+     "name": "cloud providers",
+     "attributes": {
+      "service": "entity-0443"
+     },
+     "aliases": null,
+     "description": "Service providers who host data and services for the platform.",
+     "first_doc": "Reddit — Privacy Policy",
+     "first_chunk": "sec_00232"
+    }
+   ]
+  },
+  "purpose": {
+   "count": 24,
+   "attr_filled": {
+    "service": 16
+   },
+   "with_any_attr": 16,
+   "unmerged_duplicate_names": {},
+   "heading_like": [],
+   "empty_description": 0,
+   "by_first_doc": {
+    "Reddit — Terms of Service": 1,
+    "Spotify — Privacy Policy": 2,
+    "LinkedIn — Privacy Policy": 4,
+    "Reddit — Privacy Policy": 9,
+    "Spotify — Trackers Policy": 1,
+    "LinkedIn — Trackers Policy": 7
+   },
+   "examples": [
+    {
+     "name": "usage analysis",
+     "attributes": {
+      "service": "entity-0443"
+     },
+     "aliases": null,
+     "description": "A purpose to monitor and analyze trends, usage, and activities in connection with the services.",
+     "first_doc": "Reddit — Privacy Policy",
+     "first_chunk": "sec_00233"
+    },
+    {
+     "name": "Plugins on and off LinkedIn purpose",
+     "attributes": null,
+     "aliases": null,
+     "description": "Enabling plugins like 'Apply with LinkedIn' or 'Share' buttons on third-party sites to recognize users and provide analytics.",
+     "first_doc": "LinkedIn — Trackers Policy",
+     "first_chunk": "sec_00431"
+    },
+    {
+     "name": "Customized content purpose",
+     "attributes": null,
+     "aliases": null,
+     "description": "Customizing experience by remembering previous searches to offer related information.",
+     "first_doc": "LinkedIn — Trackers Policy",
+     "first_chunk": "sec_00431"
+    },
+    {
+     "name": "Analytics and research purpose",
+     "attributes": null,
+     "aliases": null,
+     "description": "Learning about service performance, improving products, and generating usage analytics for members logged out.",
+     "first_doc": "LinkedIn — Trackers Policy",
+     "first_chunk": "sec_00431"
+    },
+    {
+     "name": "Security purpose",
+     "attributes": null,
+     "aliases": null,
+     "description": "Using technologies to make interactions faster, more secure, and detect malicious activity.",
+     "first_doc": "LinkedIn — Trackers Policy",
+     "first_chunk": "sec_00431"
+    },
+    {
+     "name": "interest-based ads",
+     "attributes": {
+      "service": "entity-0257"
+     },
+     "aliases": null,
+     "description": "A purpose for using cookies and managing settings, distinct from general service provision.",
+     "first_doc": "Spotify — Trackers Policy",
+     "first_chunk": "sec_00370"
+    },
+    {
+     "name": "advertising effectiveness measurement",
+     "attributes": {
+      "service": "entity-0443"
+     },
+     "aliases": null,
+     "description": "A purpose involving the optimization and measurement of ad performance on and off the service.",
+     "first_doc": "Reddit — Privacy Policy",
+     "first_chunk": "sec_00233"
+    },
+    {
+     "name": "personalised Ads",
+     "attributes": {
+      "service": "entity-0411"
+     },
+     "aliases": null,
+     "description": "The use of user data to display targeted advertisements on and off LinkedIn.",
+     "first_doc": "LinkedIn — Privacy Policy",
+     "first_chunk": "sec_00171"
+    }
+   ]
+  }
+ },
+ "obligation": {
+  "count": 320,
+  "deontic": {
+   "None": 312,
+   "forbid": 7,
+   "require": 1
+  },
+  "subject_filled": 272,
+  "subject_top": {
+   "user [organization]": 67,
+   "LinkedIn [organization]": 45,
+   "Spotify USA Inc. [organization]": 39,
+   "Reddit [organization]": 29,
+   "we [organization]": 24,
+   "the user [organization]": 12,
+   "you [organization]": 9,
+   "third parties [organization]": 8,
+   "Moderators [organization]": 7,
+   "Reddit, Inc. [organization]": 7,
+   "Member [organization]": 6,
+   "Members [organization]": 5,
+   "legal entity [organization]": 2,
+   "Reddit Netherlands B.V. [organization]": 2,
+   "Apple Inc. [organization]": 2
+  },
+  "attr_filled": {
+   "valid": 9,
+   "deadline": 4,
+   "deontic": 8
+  },
+  "attributed_to_filled": 129,
+  "discourse_act": {
+   "enact": 320
+  },
+  "examples": [
+   {
+    "content": "Precise Location Data is used only with user permission via in-app pop-up or device settings for features like concert recommendations.",
+    "deontic": null,
+    "subject": "Spotify USA Inc.",
+    "attributes": null,
+    "doc": "Spotify — Privacy Policy"
+   },
+   {
+    "content": "Mobile device settings may include browser settings that allow users to manage the use of cookies.",
+    "deontic": null,
+    "subject": "user",
+    "attributes": null,
+    "doc": "Reddit — Trackers Policy"
+   },
+   {
+    "content": "By submitting feedback, users agree that LinkedIn can use and share it for any purpose without compensation.",
+    "deontic": null,
+    "subject": "user",
+    "attributes": null,
+    "doc": "LinkedIn — Terms of Service"
+   },
+   {
+    "content": "Processing is necessary to fulfill contractual obligations when providing, maintaining, and improving the Services.",
+    "deontic": null,
+    "subject": null,
+    "attributes": null,
+    "doc": "Reddit — Privacy Policy"
+   },
+   {
+    "content": "A moderator must use non-public information only in connection with their performance as a moderator.",
+    "deontic": null,
+    "subject": "Moderators",
+    "attributes": null,
+    "doc": "Reddit — Terms of Service"
+   },
+   {
+    "content": "Reddit may assign its rights and obligations at its sole discretion with 30 days' notice.",
+    "deontic": null,
+    "subject": null,
+    "attributes": null,
+    "doc": "Reddit — Terms of Service"
+   },
+   {
+    "content": "Users agree not to access Paid Subscriptions or Trials without paying the applicable price or frustrate Spotify's attempts to collect payment.",
+    "deontic": "forbid",
+    "subject": "user",
+    "attributes": {
+     "deontic": "forbid"
+    },
+    "doc": "Spotify — Terms of Service"
+   },
+   {
+    "content": "We collect and process information about individuals in the EEA, Switzerland, and UK only where we have a legal basis for doing so.",
+    "deontic": null,
+    "subject": null,
+    "attributes": null,
+    "doc": "Reddit — Privacy Policy"
+   }
+  ]
+ },
+ "non_obligation_claims": {
+  "count": 0,
+  "examples": []
+ },
+ "edges_total": 1416,
+ "edges_by_type": {
+  "Involves": 879,
+  "Grounds": 474,
+  "Transition": 63
+ },
+ "ontology.json": {
+  "ontology_version": 1,
+  "pipeline_id": "custom_atlas",
+  "types": [
+   [
+    "organization",
+    "entity"
+   ],
+   [
+    "party",
+    "entity"
+   ],
+   [
+    "service",
+    "entity"
+   ],
+   [
+    "agreement",
+    "entity"
+   ],
+   [
+    "defined_term",
+    "entity"
+   ],
+   [
+    "data_type",
+    "entity"
+   ],
+   [
+    "recipient",
+    "entity"
+   ],
+   [
+    "purpose",
+    "entity"
+   ],
+   [
+    "obligation",
+    "claim"
+   ]
+  ],
+  "policy_keys": [
+   "shape",
+   "assertion",
+   "identity",
+   "change",
+   "derivation",
+   "prose",
+   "navigation"
+  ]
+ },
+ "schema_validation.json": {
+  "schema_version": "2.1",
+  "corpus_id": "spike-fineprint-census",
+  "section_count": 105,
+  "extraction": {
+   "total_atoms": 1239,
+   "by_type": [
+    {
+     "atom_type": "Entity",
+     "count": 427
+    },
+    {
+     "atom_type": "Event",
+     "count": 15
+    },
+    {
+     "atom_type": "State",
+     "count": 154
+    },
+    {
+     "atom_type": "Relation",
+     "count": 149
+    },
+    {
+     "atom_type": "Claim",
+     "count": 320
+    },
+    {
+     "atom_type": "Question",
+     "count": 174
+    },
+    {
+     "atom_type": "Configuration",
+     "count": 0
+    }
+   ],
+   "zero_coverage_types": [
+    "Configuration"
+   ]
+  },
+  "depth": {
+   "extracted": 1239,
+   "structural": 0,
+   "structural_classified": 0
+  },
+  "confidence": {
+   "buckets": [
+    0,
+    344,
+    49,
+    16,
+    6,
+    2,
+    3,
+    0,
+    5,
+    2
+   ],
+   "total_with_confidence": 427,
+   "low_confidence_fraction": 0.97189695
+  },
+  "utilisation": {
+   "fractions": [
+    {
+     "atom_type": "Entity",
+     "fraction": 0.34463277
+    },
+    {
+     "atom_type": "Event",
+     "fraction": 0.012106538
+    },
+    {
+     "atom_type": "State",
+     "fraction": 0.12429378
+    },
+    {
+     "atom_type": "Relation",
+     "fraction": 0.12025827
+    },
+    {
+     "atom_type": "Claim",
+     "fraction": 0.2582728
+    },
+    {
+     "atom_type": "Question",
+     "fraction": 0.14043583
+    },
+    {
+     "atom_type": "Configuration",
+     "fraction": 0.0
+    }
+   ],
+   "under_utilised_types": [
+    "Event",
+    "Configuration"
+   ]
+  },
+  "orphans": {
+   "orphan_atoms": 415,
+   "total_atoms": 1239,
+   "orphan_fraction": 0.33494753,
+   "by_type": [
+    {
+     "atom_type": "Entity",
+     "orphan_count": 241,
+     "total_count": 427,
+     "orphan_fraction": 0.5644028
+    },
+    {
+     "atom_type": "Event",
+     "orphan_count": 0,
+     "total_count": 15,
+     "orphan_fraction": 0.0
+    },
+    {
+     "atom_type": "State",
+     "orphan_count": 0,
+     "total_count": 154,
+     "orphan_fraction": 0.0
+    },
+    {
+     "atom_type": "Relation",
+     "orphan_count": 0,
+     "total_count": 149,
+     "orphan_fraction": 0.0
+    },
+    {
+     "atom_type": "Claim",
+     "orphan_count": 0,
+     "total_count": 320,
+     "orphan_fraction": 0.0
+    },
+    {
+     "atom_type": "Question",
+     "orphan_count": 174,
+     "total_count": 174,
+     "orphan_fraction": 1.0
+    }
+   ]
+  },
+  "discourse": {
+   "buckets": [
+    {
+     "act": "enact",
+     "count": 320
+    }
+   ],
+   "total_claims": 320,
+   "top_act": "enact",
+   "top_fraction": 1.0
+  },
+  "cross_corpus": {
+   "available": false,
+   "grounding_count": 0,
+   "local_atoms_with_outbound": 0,
+   "local_entity_atom_count": 427
+  },
+  "gaps": {
+   "transition_without_trigger": 62,
+   "ungrounded_claim": 0,
+   "open_question": 174,
+   "total_transitions": 63,
+   "total_claims": 320,
+   "total_questions": 174
+  },
+  "ontology": {
+   "ontology_version": 1,
+   "by_type": [
+    {
+     "kind": "entity",
+     "name": "organization",
+     "count": 57,
+     "count_with_subtypes": 57
+    },
+    {
+     "kind": "entity",
+     "name": "party",
+     "count": 43,
+     "count_with_subtypes": 43
+    },
+    {
+     "kind": "entity",
+     "name": "service",
+     "count": 26,
+     "count_with_subtypes": 26
+    },
+    {
+     "kind": "entity",
+     "name": "agreement",
+     "count": 35,
+     "count_with_subtypes": 35
+    },
+    {
+     "kind": "entity",
+     "name": "defined_term",
+     "count": 68,
+     "count_with_subtypes": 68
+    },
+    {
+     "kind": "entity",
+     "name": "data_type",
+     "count": 56,
+     "count_with_subtypes": 56
+    },
+    {
+     "kind": "entity",
+     "name": "recipient",
+     "count": 22,
+     "count_with_subtypes": 22
+    },
+    {
+     "kind": "entity",
+     "name": "purpose",
+     "count": 24,
+     "count_with_subtypes": 24
+    },
+    {
+     "kind": "claim",
+     "name": "obligation",
+     "count": 320,
+     "count_with_subtypes": 320
+    }
+   ],
+   "identity": [
+    {
+     "type_name": "organization",
+     "criterion": "default:canonical_name"
+    },
+    {
+     "type_name": "party",
+     "criterion": "default:canonical_name"
+    },
+    {
+     "type_name": "service",
+     "criterion": "default:canonical_name"
+    },
+    {
+     "type_name": "agreement",
+     "criterion": "default:canonical_name"
+    },
+    {
+     "type_name": "defined_term",
+     "criterion": "default:canonical_name"
+    },
+    {
+     "type_name": "data_type",
+     "criterion": "default:canonical_name"
+    },
+    {
+     "type_name": "recipient",
+     "criterion": "default:canonical_name"
+    },
+    {
+     "type_name": "purpose",
+     "criterion": "default:canonical_name"
+    },
+    {
+     "type_name": "obligation",
+     "criterion": "default:canonical_name"
+    }
+   ],
+   "merges": null,
+   "same_as_claims": 0,
+   "claims_missing_subject": 48,
+   "attribute_fill": [
+    {
+     "type_name": "agreement",
+     "attribute": "service",
+     "atoms": 35,
+     "with_slot": 35,
+     "filled": 25
+    },
+    {
+     "type_name": "defined_term",
+     "attribute": "definition",
+     "atoms": 68,
+     "with_slot": 68,
+     "filled": 67
+    },
+    {
+     "type_name": "defined_term",
+     "attribute": "agreement",
+     "atoms": 68,
+     "with_slot": 68,
+     "filled": 62
+    },
+    {
+     "type_name": "data_type",
+     "attribute": "service",
+     "atoms": 56,
+     "with_slot": 56,
+     "filled": 46
+    },
+    {
+     "type_name": "data_type",
+     "attribute": "source",
+     "atoms": 56,
+     "with_slot": 56,
+     "filled": 54
+    },
+    {
+     "type_name": "recipient",
+     "attribute": "service",
+     "atoms": 22,
+     "with_slot": 22,
+     "filled": 16
+    },
+    {
+     "type_name": "purpose",
+     "attribute": "service",
+     "atoms": 24,
+     "with_slot": 24,
+     "filled": 16
+    },
+    {
+     "type_name": "obligation",
+     "attribute": "valid",
+     "atoms": 320,
+     "with_slot": 320,
+     "filled": 9
+    },
+    {
+     "type_name": "obligation",
+     "attribute": "deadline",
+     "atoms": 320,
+     "with_slot": 320,
+     "filled": 4
+    }
+   ]
+  }
+ },
+ "resolution_failures.json": {
+  "count": 105,
+  "kinds": {
+   "unresolved_claim_subject": 47,
+   "unresolved_relation_participant": 39,
+   "unresolved_attribute_ref": 18,
+   "unresolved_claim_attribution": 1
+  },
+  "sample": [
+   {
+    "phase": "questions",
+    "subject": "sketch:relation_introduced:sec_00005#1",
+    "kind": "unresolved_relation_participant",
+    "reason": "relation participant `Spotify and our partners` did not resolve (relation label: `uniquely recognise`)"
+   },
+   {
+    "phase": "questions",
+    "subject": "sketch:relation_introduced:sec_00005#2",
+    "kind": "unresolved_relation_participant",
+    "reason": "relation participant `experience continuity` did not resolve (relation label: `support the continuity of`)"
+   },
+   {
+    "phase": "questions",
+    "subject": "sketch:relation_introduced:sec_00030#1",
+    "kind": "unresolved_relation_participant",
+    "reason": "relation participant `defense of any matter` did not resolve (relation label: `reserves right to control defense`)"
+   },
+   {
+    "phase": "questions",
+    "subject": "sketch:relation_introduced:sec_00047#2",
+    "kind": "unresolved_relation_participant",
+    "reason": "relation participant `email newsletters` did not resolve (relation label: `collect information from`)"
+   },
+   {
+    "phase": "questions",
+    "subject": "sketch:relation_introduced:sec_00072#1",
+    "kind": "unresolved_relation_participant",
+    "reason": "relation participant `label provides a venue for service procurement and offering` did not resolve (relation label: `provides event registration assistance`)"
+   },
+   {
+    "phase": "questions",
+    "subject": "sketch:relation_introduced:sec_00072#1",
+    "kind": "unresolved_relation_participant",
+    "reason": "relation participant `anchor in Services Marketplace` did not resolve (relation label: `provides event registration assistance`)"
+   }
+  ]
+ },
+ "_summary.json": {
+  "schema_version": 6,
+  "atom_count": 0,
+  "tier2_count": 0,
+  "fingerprint": "sha256:1774d6b96c12e2154d04713b1b01f3fcf82a74d7e24fb66b6ea5acf380e49712",
+  "atoms_mtime_ms": 1789847837520,
+  "atoms_size_bytes": 44,
+  "atom_counts": {},
+  "subtype_counts": {},
+  "ann_mtime_ms": 0,
+  "csr_mtime_ms": 0
+ },
+ "pre_resolve_sketches": {
+  "sections_ok": 107,
+  "sections_failed": 1,
+  "failed": [
+   [
+    "sec_00438",
+    "{'chapter_id': 'sec_00438', 'reason': 'chat error: Serialization error: daemon chat error 503 Service Unavailable: {\"error\":{\"message\":\"host busy: ~40686 ms pre"
+   ]
+  ],
+  "facet_totals": {
+   "entities_introduced": 551,
+   "entities_developed": 107,
+   "relations_introduced": 213,
+   "claims": 317,
+   "questions_raised": 172,
+   "relations_developed": 2,
+   "events": 15
+  },
+  "entity_type_sketches": {
+   "data_type": 99,
+   "defined_term": 84,
+   "organization": 70,
+   "service": 57,
+   "agreement": 54,
+   "recipient": 51,
+   "party": 43,
+   "work": 29,
+   "purpose": 25,
+   "concept": 23,
+   "place": 14,
+   "institution": 2
+  },
+  "claim_kind_sketches": {
+   "obligation": 317
+  },
+  "obligation_deontic_sketches": {
+   "None": 309,
+   "forbid": 7,
+   "require": 1
+  },
+  "obligation_subject_filled": 317,
+  "sections_at_entity_cap_15": [
+   [
+    "sec_00062",
+    "3. Personal data we collect about you",
+    1610
+   ]
+  ],
+  "service_attr_filled": {
+   "recipient": 38,
+   "data_type": 64,
+   "purpose": 17
+  },
+  "service_attr_missing": {
+   "data_type": 35,
+   "recipient": 13,
+   "purpose": 8
+  }
+ },
+ "spot_checks": {
+  "extra": {
+   "data_type": {
+    "by_service": {
+     "Spotify": 16,
+     "None": 10,
+     "LinkedIn": 13,
+     "Reddit": 17
+    },
+    "service_vs_doc_mismatch": 0
+   },
+   "recipient": {
+    "by_service": {
+     "Spotify": 3,
+     "LinkedIn": 7,
+     "None": 6,
+     "Reddit": 6
+    },
+    "service_vs_doc_mismatch": 2
+   },
+   "purpose": {
+    "by_service": {
+     "Reddit": 10,
+     "Spotify": 3,
+     "LinkedIn": 3,
+     "None": 8
+    },
+    "service_vs_doc_mismatch": 0
+   }
+  },
+  "spotify_data_type_recall": {
+   "User Data": [
+    "User Data"
+   ],
+   "Street Address Data": [
+    "Street Address Data"
+   ],
+   "Usage Data": [
+    "Usage Data"
+   ],
+   "Voice Data": [
+    "Voice Data"
+   ],
+   "Message Data": [
+    "Message Data"
+   ],
+   "Age Check Data": [
+    "Age Check Data"
+   ],
+   "Payment and Purchase Data": [
+    "Payment and Purchase Data"
+   ],
+   "Precise Location Data": [
+    "Precise Location Data"
+   ],
+   "Survey and Research Data": [
+    "Survey and Research Data"
+   ],
+   "Customer Service Data": [
+    "Customer Service Data"
+   ]
+  },
+  "spotify_recipient_recall": {
+   "Third party applications": [],
+   "Support community": [],
+   "Other Spotify users": [
+    "Other Spotify group companies"
+   ],
+   "Artists and record labels": [],
+   "Service providers": [
+    "analytics service providers",
+    "advertising service providers"
+   ],
+   "Payment partners": [
+    "partners"
+   ],
+   "Advertising partners": [
+    "partners"
+   ],
+   "Marketing Partners": [
+    "partners"
+   ],
+   "Ticketing and event partners": [],
+   "Podcast Hosting Platforms": [],
+   "Academic researchers": [
+    "Academic researchers"
+   ],
+   "Spotify group companies": [
+    "Other Spotify group companies",
+    "Spotify group companies"
+   ],
+   "Purchasers of our business": []
+  },
+  "spotify_recipient_recall_canonical_only": {
+   "Third party applications": [],
+   "Support community": [],
+   "Other Spotify users": [
+    "Other Spotify group companies"
+   ],
+   "Artists and record labels": [],
+   "Service providers": [
+    "analytics service providers",
+    "advertising service providers"
+   ],
+   "Payment partners": [],
+   "Advertising partners": [],
+   "Marketing Partners": [],
+   "Ticketing and event partners": [],
+   "Podcast Hosting Platforms": [],
+   "Academic researchers": [
+    "Academic researchers"
+   ],
+   "Spotify group companies": [
+    "Other Spotify group companies",
+    "Spotify group companies"
+   ],
+   "Purchasers of our business": []
+  }
+ },
+ "run": {
+  "corpus_files": 22,
+  "corpus_words": 101458,
+  "chunks": 699,
+  "chapters_total": 449,
+  "chapters_extracted": 108,
+  "chapters_extracted_words": 42643,
+  "model": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL (daemon slot primary, per daemon.err)",
+  "template_diff_lines": 94,
+  "validate": "passed",
+  "timings_s": {
+   "corpus_install": 34,
+   "enrich_init": "<5",
+   "extract_first_attempt_28ch_9_failed_503": 1188,
+   "extract_resume_89ch": 2039,
+   "retry_failed_1ch": 37,
+   "cluster+name+resolve": "~420 (within build2, killed during tensions-classify at 994 candidate pairs)",
+   "gaps+report+backfill": "<60"
+  },
+  "not_done": [
+   "tensions-classify (994 LLM pairs, killed for budget) so no Tension edges",
+   "341 of 449 chapters not extracted (non-privacy docs, short ToS sections)"
+  ]
+ }
+}
