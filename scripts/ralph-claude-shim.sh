@@ -20,7 +20,7 @@
 # "permission auto-rejections" warning. Extend the settings file, not this.
 #
 # Also on purpose:
-#   - --variant is opencode-only and is dropped.
+#   - --variant is opencode-only and is dropped, with one line on stderr (the iter log) saying so.
 #   - NOT --bare: --bare skips the credential read and reports "Not logged in".
 #   - The nested-session vars are unset so the worker is a root session, not
 #     a child of whichever Claude Code seat launched the loop.
@@ -32,11 +32,12 @@ settings="${RALPH_CLAUDE_SETTINGS:-$here/ralph/claude-settings.json}"
 verb="${1:-}"; shift || true
 [ "$verb" = "run" ] || { echo "ralph-claude-shim: only 'run' is supported, got '$verb'" >&2; exit 2; }
 
-model=""
+model=""; dropped=""
 while [ $# -gt 1 ]; do
     case "$1" in
         --model)   model="$2"; shift 2 ;;
-        --variant) shift 2 ;;
+        --variant) [ -n "$dropped" ] || echo "ralph-claude-shim: dropping --variant $2 (opencode-only; claude -p has no such flag) — this session runs at the model's default effort" >&2
+                   dropped=1; shift 2 ;;
         *) echo "ralph-claude-shim: unknown flag $1" >&2; exit 2 ;;
     esac
 done

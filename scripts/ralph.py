@@ -44,19 +44,215 @@ def say(msg: str) -> None:
     print(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} {msg}", flush=True)
 
 
+class HostError(Exception):
+    """The platform cannot do what was asked; the message names what is missing."""
+
+
+class Host:
+    """The two things a loop asks of the machine it runs on — a desktop
+    notification and a detached job — behind one interface, so the FSM names
+    neither osascript nor launchd. This base is the platform with no backend:
+    it reports every request instead of dropping it (the old notify swallowed
+    every failure, so a Linux host simply never heard from its loops)."""
+    notifier = ""
+    job_tools = ()
+
+    def __init__(self, *, run=subprocess.run, which=shutil.which, home=None):
+        self._run = run
+        self._which = which
+        self.home = pathlib.Path(home) if home else pathlib.Path.home()
+        self._reported = set()
+
+    def _absent(self, tools, kind):
+        if not tools:
+            return f"no {kind} backend for {sys.platform}"
+        gone = [t for t in tools if not self._which(t)]
+        return f"{', '.join(gone)} not found" if gone else ""
+
+    def notify(self, title, body):
+        absent = self._absent((self.notifier,) if self.notifier else (), "notification")
+        if absent:
+            say(f"notify ({absent}) — {title}: {body}")
+            return False
+        try:
+            self._run(self._notify_argv(title, body), capture_output=True, timeout=10)
+        except (OSError, subprocess.SubprocessError) as e:
+            say(f"notify ({self.notifier} failed: {e}) — {title}: {body}")
+            return False
+        return True
+
+    def require_jobs(self):
+        absent = self._absent(self.job_tools, "job")
+        if absent:
+            raise HostError(f"{absent} — this host cannot run a detached ralph job")
+
+    def job_running(self, name):
+        try:
+            self.require_jobs()
+        except HostError as e:
+            if name not in self._reported:
+                self._reported.add(name)
+                say(f"{e}: cannot tell whether {name} is running — treating it as not running")
+            return False
+        return self._job_running(name)
+
+    def install_job(self, name, argv, workdir, log_path, interval=None):
+        self.require_jobs()
+        return self._install_job(name, [str(a) for a in argv], str(workdir), str(log_path),
+                                 interval)
+
+    def start_job(self, name):
+        self.require_jobs()
+        return self._start_job(name)
+
+    def stop_job(self, name):
+        self.require_jobs()
+        return self._stop_job(name)
+
+    def restart_job(self, name):
+        """True when a loaded job was restarted, False when none is loaded."""
+        self.require_jobs()
+        return self._restart_job(name)
+
+
+class MacHost(Host):
+    notifier = "/usr/bin/osascript"
+    job_tools = ("launchctl",)
+
+    def _notify_argv(self, title, body):
+        return [self.notifier, "-e", f'display notification "{body}" with title "ralph: {title}"']
+
+    def _domain(self, name=""):
+        return f"gui/{os.getuid()}" + (f"/{name}" if name else "")
+
+    def job_file(self, name):
+        return self.home / "Library" / "LaunchAgents" / f"{name}.plist"
+
+    def _job_running(self, name):
+        r = self._run(["launchctl", "print", self._domain(name)], capture_output=True, text=True)
+        return "state = running" in r.stdout
+
+    def _install_job(self, name, argv, workdir, log_path, interval):
+        plist = self.job_file(name)
+        args = "\n".join(f"    <string>{a}</string>" for a in argv)
+        schedule = (f"  <key>StartInterval</key><integer>{interval}</integer>\n"
+                    if interval else "  <key>RunAtLoad</key><true/>\n")
+        plist.parent.mkdir(parents=True, exist_ok=True)
+        plist.write_text(f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>{name}</string>
+  <key>ProgramArguments</key><array>
+{args}
+  </array>
+  <key>WorkingDirectory</key><string>{workdir}</string>
+{schedule}  <key>EnvironmentVariables</key><dict>
+    <key>HOME</key><string>{self.home}</string>
+    <key>PATH</key><string>{os.environ.get("PATH", "")}</string>
+  </dict>
+  <key>StandardOutPath</key><string>{log_path}</string>
+  <key>StandardErrorPath</key><string>{log_path}</string>
+</dict></plist>
+""")
+        return plist
+
+    def _start_job(self, name):
+        self._stop_job(name)
+        r = self._run(["launchctl", "bootstrap", self._domain(), str(self.job_file(name))],
+                      capture_output=True, text=True)
+        if r.returncode != 0:
+            raise HostError(f"bootstrap failed: {(r.stderr or r.stdout).strip()}")
+
+    def _stop_job(self, name):
+        self._run(["launchctl", "bootout", self._domain(name)], capture_output=True, text=True)
+
+    def _restart_job(self, name):
+        r = self._run(["launchctl", "print", self._domain(name)], capture_output=True, text=True)
+        if r.returncode != 0:
+            return False
+        self._run(["launchctl", "kickstart", "-k", self._domain(name)], capture_output=True)
+        return True
+
+
+class LinuxHost(Host):
+    """notify-send and a transient `systemd-run --user` unit. `install_job`
+    records the command (as the plist does on macOS); `start_job` runs it."""
+    notifier = "notify-send"
+    job_tools = ("systemd-run", "systemctl")
+
+    def _notify_argv(self, title, body):
+        return [self.notifier, f"ralph: {title}", body]
+
+    def job_file(self, name):
+        return self.home / ".config" / "ralph" / "jobs" / f"{name}.json"
+
+    def _units(self, name):
+        return [f"{name}.service", f"{name}.timer"]
+
+    def _job_running(self, name):
+        return any(self._run(["systemctl", "--user", "is-active", "--quiet", unit],
+                             capture_output=True, text=True).returncode == 0
+                   for unit in self._units(name))
+
+    def _install_job(self, name, argv, workdir, log_path, interval):
+        import json
+        spec = self.job_file(name)
+        spec.parent.mkdir(parents=True, exist_ok=True)
+        spec.write_text(json.dumps({"argv": argv, "workdir": workdir, "log": log_path,
+                                    "interval": interval}, indent=2) + "\n")
+        return spec
+
+    def _start_job(self, name):
+        import json
+        job = json.loads(self.job_file(name).read_text())
+        self._stop_job(name)
+        timer = ([f"--on-active=1", f"--on-unit-active={job['interval']}"]
+                 if job["interval"] else [])
+        r = self._run(["systemd-run", "--user", "--unit", name, "--collect",
+                       f"--working-directory={job['workdir']}",
+                       f"--setenv=PATH={os.environ.get('PATH', '')}",
+                       "-p", f"StandardOutput=append:{job['log']}",
+                       "-p", f"StandardError=append:{job['log']}", *timer, *job["argv"]],
+                      capture_output=True, text=True)
+        if r.returncode != 0:
+            raise HostError(f"systemd-run failed: {(r.stderr or r.stdout).strip()}")
+
+    def _stop_job(self, name):
+        self._run(["systemctl", "--user", "stop", *self._units(name)],
+                  capture_output=True, text=True)
+
+    def _restart_job(self, name):
+        if not self._job_running(name):
+            return False
+        self._start_job(name)
+        return True
+
+
+def host_for(platform=None, **kwargs):
+    platform = platform or sys.platform
+    if platform == "darwin":
+        return MacHost(**kwargs)
+    if platform.startswith("linux"):
+        return LinuxHost(**kwargs)
+    return Host(**kwargs)
+
+
+_HOST = None
+
+
+def host():
+    global _HOST
+    if _HOST is None:
+        _HOST = host_for()
+    return _HOST
+
+
 def notify(title: str, body: str, enabled: bool = True) -> None:
     """Titles carry the tier so a popup says who must act (2026-09-17):
     "OPERATOR — …" a human act is required; "auto — …" the loop is handling it
     (a director dispatch, a retry); "DONE" / "stopped" are terminal."""
-    if not enabled:
-        return
-    try:
-        subprocess.run(
-            ["/usr/bin/osascript", "-e",
-             f'display notification "{body}" with title "ralph: {title}"'],
-            capture_output=True, timeout=10)
-    except Exception:
-        pass
+    if enabled:
+        host().notify(title, body)
 
 
 def file_hash(path) -> str:
@@ -190,6 +386,7 @@ class Row:
     hash: str | None
     lineno: int
     line: str
+    review: bool = False
 
 
 class Queue:
@@ -219,7 +416,8 @@ class Queue:
                 raise ValueError(f"{self.path}:{n}: row has no id")
             commit = next((t for t in tokens if HASH_RE.fullmatch(t)), None)
             deps = tuple(d.strip() for d in m.group("deps").split(",") if d.strip())
-            rows.append(Row(row_id, Status(m.group("mark")), deps, commit, n, line))
+            rows.append(Row(row_id, Status(m.group("mark")), deps, commit, n, line,
+                            review=bool(REVIEW_TAG_RE.search(m.group("rest")))))
         return rows
 
     def by_id(self):
@@ -310,8 +508,20 @@ def load_models(path):
     return out
 
 
-def select_model_args(row_id, model, review_model, variant):
-    chosen = review_model if (review_model and "review" in row_id.lower()) else model
+REVIEW_TAG_RE = re.compile(r"(?:^|—)\s*review\s*=\s*true\s*(?=—|$)")
+
+
+def is_review(row):
+    """A review row is the `REVIEW-` prefix or a `— review = true —` field on
+    the row. It was the substring "review" anywhere in the id, which would send
+    a row named for a review FEATURE to the stronger model."""
+    if isinstance(row, str):
+        return row.startswith("REVIEW-")
+    return row.id.startswith("REVIEW-") or row.review
+
+
+def select_model_args(row, model, review_model, variant):
+    chosen = review_model if (review_model and is_review(row)) else model
     args = []
     if chosen:
         args += ["--model", chosen]
@@ -598,9 +808,7 @@ def job_name(paths, label):
 
 
 def job_running(paths, label):
-    r = subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/{job_name(paths, label)}"],
-                       capture_output=True, text=True)
-    return "state = running" in r.stdout
+    return host().job_running(job_name(paths, label))
 
 
 def sessions_under(workdir):
@@ -793,7 +1001,7 @@ class Campaign:
                 return self.halt(f"no ready unit in {self.paths.state}; check dependencies")
             if unit.id.startswith("HUMAN-"):
                 return self.halt(f"operator approval required: {unit.id}")
-            model_args = select_model_args(unit.id, self.model, self.review_model, self.variant)
+            model_args = select_model_args(unit, self.model, self.review_model, self.variant)
             say(f"unit {unit.id} — {' '.join(model_args) or 'configured default'}")
             before = head_of(self.paths.workdir)
             note = (f"Your unit: {unit.id} — its row in {self.paths.state} is the [~] row, "
@@ -1335,28 +1543,13 @@ class Watch:
         return cond
 
 
-def install_launchd(plist_label, program_args, workdir, log_path, interval=None):
-    plist = pathlib.Path.home() / "Library" / "LaunchAgents" / f"{plist_label}.plist"
-    args = "\n".join(f"    <string>{a}</string>" for a in program_args)
-    schedule = (f"  <key>StartInterval</key><integer>{interval}</integer>\n"
-                if interval else "  <key>RunAtLoad</key><true/>\n")
-    plist.write_text(f"""<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>Label</key><string>{plist_label}</string>
-  <key>ProgramArguments</key><array>
-{args}
-  </array>
-  <key>WorkingDirectory</key><string>{workdir}</string>
-{schedule}  <key>EnvironmentVariables</key><dict>
-    <key>HOME</key><string>{pathlib.Path.home()}</string>
-    <key>PATH</key><string>{os.environ.get("PATH", "")}</string>
-  </dict>
-  <key>StandardOutPath</key><string>{log_path}</string>
-  <key>StandardErrorPath</key><string>{log_path}</string>
-</dict></plist>
-""")
-    return plist
+def install_job(name, program_args, workdir, log_path, interval=None):
+    """Exit-2 text instead of a traceback when the host has no job backend."""
+    try:
+        return host().install_job(name, program_args, workdir, log_path, interval)
+    except HostError as e:
+        print(f"install: {e}", file=sys.stderr)
+        return None
 
 
 def ensure_excludes(workdir, rel_paths):
@@ -1400,7 +1593,7 @@ def cmd_plan(args):
     if unit is None:
         print("no ready unit")
         return 0
-    routed = select_model_args(unit.id, models["MODEL"], models["REVIEW_MODEL"],
+    routed = select_model_args(unit, models["MODEL"], models["REVIEW_MODEL"],
                                models["VARIANT"])
     print(f"unit {unit.id} — {' '.join(routed) or 'configured default'}")
     return 0
@@ -1512,15 +1705,16 @@ def cmd_models(args):
             f"RESOLVE_MODEL={current.get('RESOLVE_MODEL', '')}\n"
             f"VARIANT={current.get('VARIANT', '')}\n")
         if not args.no_restart and args.label:
-            job = f"dev.ralph.{paths.workdir.name}-{args.label}"
-            r = subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/{job}"],
-                               capture_output=True, text=True)
-            if r.returncode == 0:
-                subprocess.run(["launchctl", "kickstart", "-k", f"gui/{os.getuid()}/{job}"],
-                               capture_output=True)
-                print(f"restarted {job} (any in-flight session was killed)")
+            job = job_name(paths, args.label)
+            try:
+                restarted = host().restart_job(job)
+            except HostError as e:
+                print(f"models: {e}; {job} was not restarted", file=sys.stderr)
             else:
-                print(f"{job} is not loaded — the change applies on the next start")
+                if restarted:
+                    print(f"restarted {job} (any in-flight session was killed)")
+                else:
+                    print(f"{job} is not loaded — the change applies on the next start")
     print(f"models: {paths.models}")
     print(f"  MODEL={current.get('MODEL') or '<unset>'}")
     print(f"  REVIEW_MODEL={current.get('REVIEW_MODEL') or '<unset>'}")
@@ -1554,11 +1748,11 @@ def cmd_pool(args):
                  "--lanes", str(args.lanes)]
         if args.notify:
             inner.append("--notify")
-        plist = install_launchd(f"dev.ralph.{paths.workdir.name}-{args.label}", inner,
+        plist = install_job(f"dev.ralph.{paths.workdir.name}-{args.label}", inner,
                                 paths.workdir,
                                 str(state_dir_for(paths, args.label) / "launchd.log"))
-        print(f"wrote {plist}")
-        return 0
+        print(f"wrote {plist}" if plist else "nothing installed")
+        return 0 if plist else 2
     return guarded(pool.run, paths, notify_enabled=args.notify)
 
 
@@ -1615,14 +1809,14 @@ def cmd_watch(args):
     state_dir = state_dir_for(paths, args.label)
     watch = Watch(paths, label=args.label, dry=os.environ.get("RALPH_WATCH_DRY") == "1")
     if args.install_launchd:
-        plist = install_launchd(
+        plist = install_job(
             f"dev.ralphwatch.{paths.workdir.name}-{args.label}",
             [sys.executable, str(pathlib.Path(__file__).resolve()),
              "watch", "--workdir", str(paths.workdir), "--label", args.label,
              *(["--queue", paths.queue] if paths.queue else [])],
             paths.workdir, state_dir / "watch.log", interval=120)
-        print(f"wrote {plist}")
-        return 0
+        print(f"wrote {plist}" if plist else "nothing installed")
+        return 0 if plist else 2
     watch.run(state_dir / "watch.state")
     return 0
 
@@ -1699,14 +1893,14 @@ def cmd_run(args):
         model=models["MODEL"], review_model=models["REVIEW_MODEL"], variant=models["VARIANT"])
     if args.install_launchd:
         ensure_excludes(paths.workdir, runtime_markers(paths))
-        plist = install_launchd(
+        plist = install_job(
             f"dev.ralph.{paths.workdir.name}-{args.label}",
             [sys.executable, str(pathlib.Path(__file__).resolve()), "run",
              "--workdir", str(paths.workdir), "--label", args.label,
              *queue_flags(paths)],
             paths.workdir, str(state_dir_for(paths, args.label) / "launchd.log"))
-        print(f"wrote {plist}")
-        return 0
+        print(f"wrote {plist}" if plist else "nothing installed")
+        return 0 if plist else 2
     result = guarded(campaign.run, paths, notify_enabled=args.notify)
     if isinstance(result, int):
         return result
@@ -1737,7 +1931,7 @@ def cmd_supervise(args):
     def resolver_run(attempt, reason):
         resolve_model = models["RESOLVE_MODEL"] or models["REVIEW_MODEL"]
         resolve_variant = args.resolve_variant or models["VARIANT"]
-        model_args = select_model_args("review", resolve_model, "", resolve_variant)
+        model_args = select_model_args("resolver", resolve_model, "", resolve_variant)
         prompt = resolver_prompt(paths, attempt, args.resolve_max, reason, charter)
         session.run(model_args, prompt,
                     str(paths.p(paths.log_dir) / f"supervise-{attempt}.out"))
@@ -1746,15 +1940,15 @@ def cmd_supervise(args):
                             notify_enabled=args.notify, resolve_max=args.resolve_max)
     if args.install_launchd:
         ensure_excludes(paths.workdir, runtime_markers(paths))
-        plist = install_launchd(
+        plist = install_job(
             f"dev.ralph.{paths.workdir.name}-{args.label}",
             [sys.executable, str(pathlib.Path(__file__).resolve()), "supervise",
              "--workdir", str(paths.workdir), "--label", args.label,
              "--session-timeout", str(args.session_timeout),
              *(["--queue", paths.queue] if paths.queue else [])] + campaign,
             paths.workdir, str(state_dir_for(paths, args.label) / "launchd.log"))
-        print(f"wrote {plist}")
-        return 0
+        print(f"wrote {plist}" if plist else "nothing installed")
+        return 0 if plist else 2
     return guarded(supervisor.run, paths, notify_enabled=args.notify)
 
 
@@ -1792,9 +1986,10 @@ def cmd_stop(args):
         say("stop: still running — re-run with --hard to boot the job out "
             "(its SIGTERM handler takes the sessions with it)")
         return 1
-    subprocess.run(["launchctl", "bootout",
-                    f"gui/{os.getuid()}/{job_name(paths, args.label)}"],
-                   capture_output=True, text=True)
+    try:
+        host().stop_job(job_name(paths, args.label))
+    except HostError as e:
+        say(f"stop: {e}")
     strays = sessions_under(paths.workdir)
     for pid in strays:
         try:
@@ -1807,32 +2002,30 @@ def cmd_stop(args):
 
 def cmd_start(args):
     paths = paths_for(args)
-    plist = (pathlib.Path.home() / "Library" / "LaunchAgents"
-             / f"{job_name(paths, args.label)}.plist")
-    if not plist.exists():
-        print(f"start: no plist at {plist} — install it first:\n"
-              f"  python3 scripts/ralph.py supervise --workdir {paths.workdir} "
-              f"--label {args.label} --install-launchd -- <campaign command>",
-              file=sys.stderr)
-        return 2
-    stop = paths.p(paths.stop)
-    if stop.exists():
-        if stop.stat().st_size:
-            print(f"start: {paths.stop} holds a halt reason — resolve it "
-                  f"(read {paths.needs_human}) and remove the file first",
+    job = job_name(paths, args.label)
+    try:
+        host().require_jobs()
+        job_file = host().job_file(job)
+        if not job_file.exists():
+            print(f"start: no job installed at {job_file} — install it first:\n"
+                  f"  python3 scripts/ralph.py supervise --workdir {paths.workdir} "
+                  f"--label {args.label} --install-launchd -- <campaign command>",
                   file=sys.stderr)
             return 2
-        stop.unlink()
-        say("start: cleared the operator STOP")
-    job = job_name(paths, args.label)
-    subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}/{job}"],
-                   capture_output=True, text=True)
-    r = subprocess.run(["launchctl", "bootstrap", f"gui/{os.getuid()}", str(plist)],
-                       capture_output=True, text=True)
-    if r.returncode != 0:
-        print(f"start: bootstrap failed: {(r.stderr or r.stdout).strip()}", file=sys.stderr)
-        return r.returncode
-    say(f"start: {job} bootstrapped")
+        stop = paths.p(paths.stop)
+        if stop.exists():
+            if stop.stat().st_size:
+                print(f"start: {paths.stop} holds a halt reason — resolve it "
+                      f"(read {paths.needs_human}) and remove the file first",
+                      file=sys.stderr)
+                return 2
+            stop.unlink()
+            say("start: cleared the operator STOP")
+        host().start_job(job)
+    except HostError as e:
+        print(f"start: {e}", file=sys.stderr)
+        return 2
+    say(f"start: {job} started")
     return 0
 
 
@@ -1868,7 +2061,8 @@ def build_parser():
     p.add_argument("--state", default=None, help="default: ralph/STATE.md")
     p.add_argument("--max-stall", type=int, default=3)
     p.add_argument("--max-iter", type=int, default=200)
-    p.add_argument("--install-launchd", action="store_true")
+    p.add_argument("--install-launchd", "--install-job", dest="install_launchd",
+                   action="store_true", help="launchd on macOS, systemd-run --user on Linux")
     p.set_defaults(fn=cmd_run)
 
     p = sub.add_parser("supervise")
@@ -1879,7 +2073,8 @@ def build_parser():
     p.add_argument("--resolve-variant", default="")
     p.add_argument("--resolve-max", type=int, default=4)
     p.add_argument("--charter", default="", help="default: ralph/CHARTER.md when present")
-    p.add_argument("--install-launchd", action="store_true")
+    p.add_argument("--install-launchd", "--install-job", dest="install_launchd",
+                   action="store_true", help="launchd on macOS, systemd-run --user on Linux")
     p.add_argument("campaign", nargs=argparse.REMAINDER)
     p.set_defaults(fn=cmd_supervise)
 
@@ -1890,12 +2085,14 @@ def build_parser():
     p.add_argument("--lanes", type=int, default=2)
     p.add_argument("--conflicts", default="ralph/conflicts.txt")
     p.add_argument("--base-branch", default="")
-    p.add_argument("--install-launchd", action="store_true")
+    p.add_argument("--install-launchd", "--install-job", dest="install_launchd",
+                   action="store_true", help="launchd on macOS, systemd-run --user on Linux")
     p.set_defaults(fn=cmd_pool)
 
     p = sub.add_parser("watch")
     queue_flag(p)
-    p.add_argument("--install-launchd", action="store_true")
+    p.add_argument("--install-launchd", "--install-job", dest="install_launchd",
+                   action="store_true", help="launchd on macOS, systemd-run --user on Linux")
     p.set_defaults(fn=cmd_watch)
 
     p = sub.add_parser("stop")

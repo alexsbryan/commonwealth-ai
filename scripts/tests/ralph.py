@@ -719,6 +719,118 @@ class PromptRenderTests(unittest.TestCase):
             self.assertTrue(seen[0].endswith("prompt of a\n"))
 
 
+class HostTests(unittest.TestCase):
+    """Backend SELECTION and the absent-backend path, with the platform and the
+    `which` lookup injected. The Linux backends are not exercised on a Linux host here."""
+
+    def host(self, platform, present, home):
+        calls = []
+
+        def run(argv, **kw):
+            calls.append(list(argv))
+            return subprocess.CompletedProcess(argv, 0, "", "")
+
+        host = ralph.host_for(platform=platform, run=run, home=pathlib.Path(home),
+                              which=lambda tool: tool if tool in present else None)
+        return host, calls
+
+    def said(self, fn):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            result = fn()
+        return result, buf.getvalue()
+
+    def test_the_platform_picks_the_backend(self):
+        with tempfile.TemporaryDirectory() as home:
+            for platform, cls in (("darwin", ralph.MacHost), ("linux", ralph.LinuxHost),
+                                  ("win32", ralph.Host)):
+                self.assertIs(type(self.host(platform, (), home)[0]), cls)
+
+    def test_each_backend_notifies_with_its_own_tool(self):
+        with tempfile.TemporaryDirectory() as home:
+            mac, mac_calls = self.host("darwin", ("/usr/bin/osascript",), home)
+            linux, linux_calls = self.host("linux", ("notify-send",), home)
+            self.assertTrue(mac.notify("OPERATOR — halt", "reason"))
+            self.assertTrue(linux.notify("OPERATOR — halt", "reason"))
+            self.assertEqual(mac_calls[0][:2], ["/usr/bin/osascript", "-e"])
+            self.assertEqual(linux_calls, [["notify-send", "ralph: OPERATOR — halt", "reason"]])
+
+    def test_an_absent_notifier_is_reported_with_the_message_it_could_not_show(self):
+        with tempfile.TemporaryDirectory() as home:
+            for platform, tool in (("linux", "notify-send"), ("darwin", "/usr/bin/osascript"),
+                                   ("win32", "no notification backend")):
+                host, calls = self.host(platform, (), home)
+                delivered, said = self.said(lambda: host.notify("OPERATOR — loop down", "b is down"))
+                self.assertFalse(delivered)
+                self.assertEqual(calls, [])
+                self.assertIn(tool, said)
+                self.assertIn("OPERATOR — loop down: b is down", said)
+
+    def test_linux_installs_and_starts_a_systemd_run_job(self):
+        with tempfile.TemporaryDirectory() as home:
+            host, calls = self.host("linux", ("systemd-run", "systemctl"), home)
+            spec = host.install_job("dev.ralph.x-a", ["python3", "ralph.py", "run", "--queue", "a"],
+                                    "/w", "/w/log.txt")
+            self.assertTrue(spec.is_file())
+            host.start_job("dev.ralph.x-a")
+            start = calls[-1]
+            self.assertEqual(start[:4], ["systemd-run", "--user", "--unit", "dev.ralph.x-a"])
+            self.assertIn("--working-directory=/w", start)
+            self.assertEqual(start[-5:], ["python3", "ralph.py", "run", "--queue", "a"])
+            host.install_job("dev.ralphwatch.x-a", ["python3", "ralph.py", "watch"], "/w",
+                             "/w/watch.log", interval=120)
+            host.start_job("dev.ralphwatch.x-a")
+            self.assertIn("--on-unit-active=120", calls[-1])
+
+    def test_an_absent_job_backend_refuses_to_start_and_says_it_cannot_see(self):
+        with tempfile.TemporaryDirectory() as home:
+            for platform, tool in (("linux", "systemd-run"), ("darwin", "launchctl"),
+                                   ("win32", "no job backend")):
+                host, calls = self.host(platform, (), home)
+                with self.assertRaisesRegex(ralph.HostError, tool):
+                    host.start_job("dev.ralph.x-a")
+                running, said = self.said(lambda: host.job_running("dev.ralph.x-a"))
+                self.assertFalse(running)
+                self.assertIn("cannot tell whether dev.ralph.x-a is running", said)
+                self.assertEqual(calls, [])
+
+    def test_start_reports_an_absent_backend_as_exit_two(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            host, _ = self.host("linux", (), tmp)
+            with mock.patch.object(ralph, "host", return_value=host):
+                rc, _, err = quiet_main(["start", "--workdir", tmp])
+            self.assertEqual(rc, 2)
+            self.assertIn("start:", err)
+
+
+class ShimTests(unittest.TestCase):
+    def test_a_dropped_variant_is_said_once(self):
+        # The empty prompt makes the shim exit 2 BEFORE it reaches `claude`: no session.
+        r = subprocess.run([str(SCRIPTS / "ralph-claude-shim.sh"), "run", "--model", "m",
+                            "--variant", "high", "--variant", "max", ""],
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("empty prompt", r.stderr)
+        self.assertEqual(r.stderr.count("--variant"), 1, r.stderr)
+        self.assertIn("high", r.stderr)
+
+
+class ReviewRoutingTests(unittest.TestCase):
+    def test_review_is_the_prefix_or_the_row_tag_never_a_substring(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "ralph/STATE.md",
+                  "- [ ] REVIEW-audit-1 — depends [] — audit\n"
+                  "- [ ] qa-peer-review-form — depends [] — build the review form\n"
+                  "- [ ] qa-hard — depends [] — review = true — needs judgment\n"
+                  "- [ ] qa-prose — depends [] — say review = true in the docs\n")
+            rows = ralph.Queue(pathlib.Path(tmp) / "ralph/STATE.md").by_id()
+            routed = {i: ralph.select_model_args(r, "w", "r", "")[1] for i, r in rows.items()}
+            self.assertEqual(routed, {"REVIEW-audit-1": "r", "qa-peer-review-form": "w",
+                                      "qa-hard": "r", "qa-prose": "w"})
+            self.assertEqual(ralph.select_model_args("qa-peer-review-form", "w", "r", ""),
+                             ["--model", "w"])
+
+
 class SupervisorTests(unittest.TestCase):
     def make(self, tmp, *, run_inner, resolver_run, resolve_max=2):
         write(tmp, "ralph/STATE.md", "- [ ] dm-a — depends []\n")
