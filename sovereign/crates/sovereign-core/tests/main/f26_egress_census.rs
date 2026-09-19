@@ -277,7 +277,13 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // NOT its change): 031a32294's `reload_moves_the_media_origin_without_a_restart`
     // POSTs /v1/admin/reload (:1281) to the router it spawned on loopback,
     // inside `mod tests` — same class, no new egress.
-    ("sovereign/crates/sovereign-daemon/src/admin_http.rs", Class::Mesh, 14),
+    //
+    // 14 -> split (2026-09-18, REVIEW-build-rr-1-band-split e85076537): the
+    // test module moved verbatim to child files, so the fourteen sites moved
+    // with it — the eight reload tests to `tests/reload.rs`, the other six to
+    // `tests.rs`. Same sites, same class; `admin_http.rs` itself has none.
+    ("sovereign/crates/sovereign-daemon/src/admin_http/tests.rs", Class::Mesh, 6),
+    ("sovereign/crates/sovereign-daemon/src/admin_http/tests/reload.rs", Class::Mesh, 8),
     // NEW ROW 2026-09-12 (sv-surface svt-7). `assets_http.rs` is the daemon's
     // weights surface — hardware / catalog / slot / NER reads plus the one
     // asset-download job. All five constructions are inside its

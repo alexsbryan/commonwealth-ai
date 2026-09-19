@@ -26,9 +26,20 @@
 
 use std::path::Path;
 
+/// The whole `mesh_commands` module: the parent file plus its child files
+/// (the wire parse lives in `mesh_commands/state_response.rs` since e85076537).
 fn mesh_commands_source() -> String {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/mesh_commands.rs");
-    std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
+    let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let read = |p: &Path| std::fs::read_to_string(p).unwrap_or_else(|e| panic!("read {}: {e}", p.display()));
+    let mut out = read(&src.join("mesh_commands.rs"));
+    let dir = src.join("mesh_commands");
+    for entry in std::fs::read_dir(&dir).unwrap_or_else(|e| panic!("read {}: {e}", dir.display())) {
+        let p = entry.expect("dir entry").path();
+        if p.extension().is_some_and(|x| x == "rs") {
+            out.push_str(&read(&p));
+        }
+    }
+    out
 }
 
 #[test]
