@@ -17,26 +17,45 @@ Pointer keys: **O** = `.sovereign/features/ei7-stage0-harness/order.md` ·
 Status: `[x]` done · `[~]` in progress · `[ ]` pending. Work the first `[ ]`
 row whose dependencies are all `[x]`. `HUMAN-` rows are marked by the operator
 only. Run it serially, in place — this queue is NOT promoted over
-`ralph/STATE.md`:
+`ralph/STATE.md`.
+
+**This loop runs on opus workers, by FLAG, and leaves every other loop alone.**
+`ralph/models.env` is one file per checkout and every loop here reads it, so it
+is not touched: `run` and `supervise` take `--model` / `--review-model` /
+`--resolve-model`, and a flag wins over the file (`ralph.py:1098-1100`,
+`:1339-1341`, `:1380`). The worker is `claude -p` through
+`scripts/ralph-claude-shim.sh`, which passes `--model` on and drops `--variant`.
 
 ```
+rm -f ralph/DONE            # see "Before launching" — only if no loop is live here
 RALPH_OPENCODE_BIN=$PWD/scripts/ralph-claude-shim.sh \
-nohup python3 scripts/ralph.py supervise --workdir . --label ei7-stage0 \
+nohup python3 scripts/ralph.py supervise --workdir . --label ei7-stage0 --session-timeout 7200 \
+  --resolve-model claude-opus-5 \
   --prompt ralph/next/ei7-stage0/PROMPT.md --state ralph/next/ei7-stage0/STATE.md \
   --charter ralph/next/ei7-stage0/CHARTER.md \
   -- python3 scripts/ralph.py run --workdir . --label ei7-stage0 \
+  --model claude-opus-5 --review-model claude-opus-5 \
   --prompt ralph/next/ei7-stage0/PROMPT.md --state ralph/next/ei7-stage0/STATE.md \
-  --max-stall 3 >> ralph/log-ei7-stage0.txt 2>&1 &
+  --session-timeout 7200 --max-stall 3 >> ralph/log-ei7-stage0.txt 2>&1 &
 ```
 
-Control files (`ralph/STOP`, `ralph/NEEDS_HUMAN.md`, `ralph/DONE`, `ralph/.heartbeat`)
-are shared with any other loop on this host — run one loop per checkout.
+**Before launching.** The control files (`ralph/STOP`, `ralph/NEEDS_HUMAN.md`,
+`ralph/DONE`, `ralph/.heartbeat`) are per CHECKOUT, not per loop, so one loop
+per checkout. `run` returns DONE on its first iteration if `ralph/DONE` exists
+(`ralph.py:502`), and a finished campaign leaves one behind (the domains loop
+did, 2026-09-18 16:48, untracked). Remove it only after
+`pgrep -fl "ralph.py (run|supervise|pool)"` shows no loop whose `--workdir` is
+this checkout and `ralph/.heartbeat` is older than five minutes. Loops in OTHER
+checkouts (ersilia's pool runs from this repo's `scripts/ralph.py` against its
+own workdir) are unaffected either way.
+
 **The queue is ordered around ONE rented-GPU window.** Lanes R, X and P need no
-GPU and run first, in any interleaving (`--lanes 2` lets a python row run beside
-a cargo row; `conflicts.txt` keeps cargo rows apart). `e7-pod-preflight`
-rehearses the whole GPU batch locally. Only then does the operator rent
-(`HUMAN-e7-pod-up`), and one script runs the batch and destroys the pod on any
-exit. Nothing that can fail without a GPU is allowed to fail while one bills.
+GPU and run first; `run` is serial, which is what the cargo rows need anyway
+(the `pool` driver's lanes are separate worktrees and each pays a cold build).
+`e7-pod-preflight` rehearses the whole GPU batch locally. Only then does the
+operator rent (`HUMAN-e7-pod-up`), and one script runs the batch and destroys
+the pod on any exit. Nothing that can fail without a GPU is allowed to fail
+while one bills.
 
 Every python file this queue creates carries `--self-test` with at least one
 planted failing input, and prints the four verdicts by name (passed / failed /
