@@ -132,7 +132,14 @@ exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 - Chose: Apply the A18 rule to the link: the census records the verb `mesh join` (other) and the link as `opened`, with a's `mesh status` stdout kept as the provenance the report re-reads. Close the row on its own bar; answer and plug-in stay owed by REVIEW-DEMO-rr-1-run. Also corrected that row's "`ra-room-nothing-typed` reading 1" to 0, because the report's value already leaves the Jellyfin login out.
 - Because: The order's step 5 says a fourth node "joins by that link alone" and its scope line says the QR renderer is rr-2, "the link is the seam and the bar accepts it". The link comes from a tool's stdout, as the doc URLs A18 already classes do. The same decider now covers both cases (8). The two failing bars measure the 2B's synthesis and citation release, which this row's verbs do not touch. REVIEW-AFTER: A18 was flagged to the operator, and this is its second use.
 
+**A26 · 2026-09-19 · rr-1-tune · director (supervisor resolution 1)** — no code; this commit
+- Needed: The row edits `offers_poll_s` / `join_poll_s` only "if the 30 s or 60 s legs read over". The DEMO read film listed 2.16 s / narrowed 10.47 s (30 s leg) and plug-in doc 1.17 s / library listed 8.36 s (60 s leg), all inside, but exited 1 on answer 0.8 and plug-in 0.0, where the fourth's one ask ran the whole 120 s `JOIN_WATCH_S` and left a 0-byte json.
+- Chose: Close the row as "no tune needed", with no knob edited and no new row. The answer bar and the plug-in answer stay owed by REVIEW-DEMO-rr-1-run. Corrects A25's "which A24 and rr-1-tune own": rr-1-tune cannot own them.
+- Because: Neither knob can move a synthesis. `join_poll_s` only spaces re-asks (scripts/ring-room-demo.sh:419), and a single ask already uses the whole watch. B §Tuning (campaign.md:65-67) makes any other knob (`JOIN_WATCH_S`, `ASK_TIMEOUT_S`, the room's model) a design change that escalates, so it is the operator's, and the review row's §6 is where it reaches them. REVIEW-AFTER: forecast below.
+
 ## Flags for the operator
+
+- A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
 
 - A25: the invite link a's `mesh status` prints is `opened`, not typed, the same as A18's doc URLs. `mesh join` is the verb; if the operator reads the link as typed until rr-2's QR, the walk count reads 1 again and rr-1 cannot reach 0.
 
@@ -5119,5 +5126,23 @@ Edit or mark the row in ralph/next/ring-room/STATE.md, then
 (a) The unit is STATE.md row rr-1-nothing-typed-to-zero, built in e618e023d. DEMO-WAIT exited 1, and the walk count read 1.
 (b) The runs: clean 0, lint 0, test sovereign-cli-llm 0 (1112/0), test sovereign-mesh 0 (587/0), demo exit 1. Rows: answer 0.8 FAILED, doc 1.0, film 1.0 (listed 8.39 s, narrowed 10.53 s, first byte 0.32 s), plug-in 0.0 FAILED (c_answer_names false), nothing-typed 1 PASSED.
 (c) Decisions: (1) the join link: extend the provenance rule to it, or keep it counted until rr-2. (2) Close on the row's own bar, or wait for the answer bar and the plug-in's 120 s ask, which A24 and rr-1-tune own.
+
+</details>
+
+## A26 · 2026-09-19 — rr-1-tune: no timed leg read over, so nothing is tuned; the answer bars are not this row's
+
+<details>
+
+**Fork.** (1) Close rr-1-tune as "no tune needed" on a DEMO that exited 1 only on the synthesis bars, or (2) mint a row for the answer leg's budget (`ASK_TIMEOUT_S` / `JOIN_WATCH_S` / the room's model).
+
+**Evidence** (reproduced from target/ring-room-demo and target/ralph/demo.log). room-film.json: `listed_s 2.16, narrowed_s 10.47`, film PASSED. room-join.json: `doc.a_s 1.172, listed_s 8.36, answered_s null, asks 1`. plug-in legs: a_doc true, b_library true, d_n true, c_answer_names false. room-join-answer-0.json is 0 bytes, and its .err holds only the question banner, so `timeout 120` killed the ask. answer 0.8: q1 and q2 read `mixed`, released 0. doc 1.0 (p99 1.39). nothing-typed 0, walk empty, with the Jellyfin login as the only exclusion. Row text in STATE.md: "EDIT only … if the 30 s or 60 s legs read over". campaign.md:65-67: "Any other knob is a design change and escalates."
+
+**Choice.** (1). The row's condition did not fire, so doing nothing is its prescribed outcome. (2) is a design change, which B §Tuning escalates and this charter leaves to the operator. The review row already routes a failure there through §6 with the rows attached. A new row would add scope and could not decide anything more.
+
+**Falsified if** a rerun shows the film or plug-in timed legs over their windows on the same tree. Then the knobs are live, and this row reopens.
+
+**Worker's package (ralph/NEEDS_HUMAN.md, removed by this commit).**
+
+(a) Row rr-1-tune, left `[~]`. (b) clean exit 0; demo-bg; demo-wait ×3 → exit 1; no knob edited. film listed 2.16 / narrowed 10.47 PASSED; plug-in doc a_s 1.172, library 8.36, both inside 60; doc PASSED p99 1.39; nothing-typed PASSED 0; answer FAILED 0.8 (q2, q3 `mixed`, released 0); plug-in FAILED 0.0 on c_answer_names only (0-byte json, 120 s JOIN_WATCH_S). (c) Close as no-tune with the answer bars owed by REVIEW-DEMO, or give the synthesis budget its own row (a design change under B §Tuning).
 
 </details>
