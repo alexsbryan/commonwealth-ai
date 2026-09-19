@@ -1558,11 +1558,18 @@ fn truncate(s: &str, max: usize) -> String {
 /// asks per-fact whether the concept is conveyed; results land in
 /// `synth.judge_fact_score`. The strict keyword scorer always runs
 /// regardless. See `score::score_facts_judge`.
+///
+/// `mode` is the turn mode every question runs under. `Grounded` is the
+/// pipeline this harness has always driven; `Naked` is the closed-book arm
+/// (`--closed-book`), which bypasses retrieval, the router, the grounding
+/// gate, tools and the atlas — see `run_question_synth` for what that means
+/// for the row's `retrieved`.
 pub async fn run_bank_synth(
     session: &ChatSession,
     bank: &EvalBank,
     judge: bool,
     isolate: bool,
+    mode: sovereign_contracts::types::TurnMode,
 ) -> Result<EvalRun, String> {
     let started_at_unix = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -1598,7 +1605,7 @@ pub async fn run_bank_synth(
 
     let mut results = Vec::with_capacity(bank.questions.len());
     for q in &bank.questions {
-        let result = run_question_synth(session, q, judge, isolate_corpora.as_deref()).await;
+        let result = run_question_synth(session, q, judge, isolate_corpora.as_deref(), mode).await;
         results.push(result);
     }
 
@@ -1614,11 +1621,22 @@ pub async fn run_bank_synth(
     })
 }
 
+/// One question, one fresh conversation, one turn under `mode`.
+///
+/// Under `TurnMode::Naked` the assistant row persists `metadata: None`
+/// (`Runtime::handle_message_stream_naked_unleased`), so `retrieved`,
+/// `corpora_hit` and every provenance-derived field below are empty BY
+/// CONSTRUCTION — that is the closed-book arm's definition, not a failure.
+/// The row stays a measurement: `empty_synth_result` is reached only when
+/// `collect_turn` returns `Err`, and `degraded_router` reads `None` from
+/// absent provenance rather than stamping the row unmeasured. A naked answer
+/// is scored on its text, which is the whole point of the arm.
 async fn run_question_synth(
     session: &ChatSession,
     q: &Question,
     judge: bool,
     isolate_corpora: Option<&[String]>,
+    mode: sovereign_contracts::types::TurnMode,
 ) -> EvalResult {
     let conversation_id = uuid::Uuid::new_v4().to_string();
     let t_wall = Instant::now();
@@ -1671,7 +1689,7 @@ async fn run_question_synth(
         session.store.as_ref(),
         &conversation_id,
         &q.question,
-        sovereign_contracts::types::TurnMode::Grounded,
+        mode,
         None,
     )
     .await
