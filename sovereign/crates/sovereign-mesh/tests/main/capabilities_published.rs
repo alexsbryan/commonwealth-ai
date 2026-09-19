@@ -253,3 +253,112 @@ async fn gossip_round_carries_media_allow_into_offered_to() {
     assert_eq!(rows.len(), 1, "{rows:?}");
     assert_eq!(rows[0].offered_to, vec!["LittleMac".to_string()]);
 }
+
+/// The holder's presence rides the same self-stamp, and a WITHDRAWN offer
+/// takes it with it — within the one gossip round, not at the next restart.
+///
+/// Both halves matter. The first is what makes a viewer's "in use right now"
+/// true. The second is `svrn mesh media withdraw`: the verb clears
+/// `[iroh] media_origin`, the acceptor stops publishing the media kind, and
+/// this round must drop the offer AND the reading that described it — a
+/// presence outliving its offer is a claim about a library nobody serves.
+#[tokio::test]
+async fn gossip_round_carries_presence_and_drops_it_with_the_offer() {
+    let holder = NodeId::from_u128(1);
+    let viewer = NodeId::from_u128(2);
+    let record = MemberRecord {
+        removed_at: None,
+        node_pubkey: None,
+        relay_url: None,
+        iroh_direct_addrs: Vec::new(),
+        dial_info_version: 0,
+        dial_info_sig: None,
+        node_id: holder,
+        name: "Host".into(),
+        invited_by: holder,
+        joined_at: 0,
+        last_seen: 100,
+        status: NodeStatus::Online,
+        capabilities: empty_node_capabilities(),
+        addresses: vec!["127.0.0.1:9742".parse().unwrap()],
+    };
+    let mesh = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
+        id: MeshId::from_u128(42),
+        name: "Test".into(),
+        invite_key_hash: [1u8; 32],
+        invite_version: 0,
+        require_encryption: false,
+        members: HashMap::from([(holder, record)]),
+        peers: vec![],
+    };
+    let state = AppState::new(holder, mesh);
+    // The holder is watching their own library: what the presence poll wrote.
+    state.update_local_media_available(Some(0.0)).await;
+    state
+        .inner
+        .fabric
+        .dial_info
+        .publish(Arc::new(|| commonwealth_core::mesh::IrohDialInfo {
+            relay_url: None,
+            direct_addrs: Vec::new(),
+            origins: vec![commonwealth_core::capabilities::OriginKind::Media],
+            media_allow: Vec::new(),
+        }));
+
+    let round = || {
+        gossip::run_one_round(
+            &*state.inner.fabric,
+            state.inner.node.corpus_engine.as_ref(),
+            &state,
+            Duration::from_secs(60),
+        )
+    };
+    round().await.expect("gossip round must succeed");
+
+    {
+        let m = state.inner.fabric.mesh.read().await;
+        let rows = commonwealth_media::offers(
+            viewer,
+            &commonwealth_media::roster_of(&m),
+            &[],
+            commonwealth_core::capabilities::OriginKind::Media,
+        );
+        assert_eq!(rows.len(), 1, "{rows:?}");
+        assert_eq!(
+            rows[0].media_available,
+            Some(0.0),
+            "the holder's in-use reading must reach a member's offer row"
+        );
+    }
+
+    // Withdrawn: the acceptor publishes no media origin from this round on.
+    state
+        .inner
+        .fabric
+        .dial_info
+        .publish(Arc::new(|| commonwealth_core::mesh::IrohDialInfo {
+            relay_url: None,
+            direct_addrs: Vec::new(),
+            origins: Vec::new(),
+            media_allow: Vec::new(),
+        }));
+    round().await.expect("gossip round must succeed");
+
+    let m = state.inner.fabric.mesh.read().await;
+    let rows = commonwealth_media::offers(
+        viewer,
+        &commonwealth_media::roster_of(&m),
+        &[],
+        commonwealth_core::capabilities::OriginKind::Media,
+    );
+    assert!(
+        rows.is_empty(),
+        "one gossip round after the withdrawal there must be no offer: {rows:?}"
+    );
+    assert_eq!(
+        m.members[&holder].capabilities.media_available, None,
+        "the presence must not outlive the offer it described"
+    );
+}
