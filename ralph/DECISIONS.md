@@ -184,6 +184,12 @@ exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 - Chose: (1) Render the scores. `ScoreRecord::terms` + `deciding_term` name the one term that separates the winner from its closest rival (the score is a product, so the largest per-term ratio IS the cause); the info line gains `scores` and `decided_by`. Nothing is gathered — the record has carried every term since the scorer was written. (2) Measure before changing anything: `scenario::ring_room_gpu_keeper` reproduces the room with every rate measured on this host, and the sweep says the deciding term is the peer's frozen `cold_start_weight`. (3) **CHANGE NOTHING IN THE RANKING**, on both directions measured. (4) Log the `could-not-judge` CAUSE, which is one decider with a watched-failing test; leave the primary slot's probe skip alone, which is not. (5) Fix `with-cargo-lock.sh`'s `lock_age`, found while sharing the lock with the rr-2 loop.
 - Because: The sim's own numbers close the ranking question rather than open it. `keeper-gpu` (2,200 tok/s prefill) and `plus-one-cpu` (33 tok/s) score **identically — 0.698** — so the scheduler has no measurement of a peer at all; what keeps work home is `cold_start_weight` 1.000 vs 0.700 and locality 1.15 vs 1.05, and what eventually sends it away is the origin's own queue depth eroding `load_penalty`. Lifting that floor (`Arm::WarmStart`) is worth 5× here (efficiency 0.05 → 0.25) and costs 33% on `mixed-hubs` (0.55 → 0.37, mean +51%), which is F7's +235% reproduced in the same direction — opposite signs on one constant, so it is not this campaign's to change (principle 7), and it would not fix the room regardless: the scheduler would offload more, not smarter. The signal this fleet needs does not exist and the obvious way to mint it is the rate card canon `dc3c9856` forbids. The primary-slot probe skip needs a distinction the type does not carry ("may be distributed" vs "IS a distributed child") across four call sites AND changes a safety gate's verdict on every daemon's primary slot — not one decider, and it wants its own row with a measurement.
 
+**A36 · 2026-09-19 · rr-2-guest-ask-carries-the-member · director (worker package)** — commit 71db62fb7 (row) + this commit
+- Needed: The row said 'add ONE field for the iroh path to the outcome record'. The worker measured: `RoutingOutcome` is `sovereign-scheduler/src/decision_log.rs:667` (the row's `read:` pointer named a file that does not exist), built in `sovereign-serving-host` (`peer_inference.rs:744`) which depends on neither `sovereign-mesh` nor `commonwealth-transport`; `PeerPath` is produced only from a live iroh Endpoint at two sites above it (`daemon.rs:4482`, `iroh_access.rs:232`). One field there is a new dependency edge (layer-gate) or a new port through VenueHost with a filler at every ServedBy arm; a field without a filler serializes None everywhere (ARCH 6).
+- Chose: Strike the clause. Bar clause (d) reads the path from the daemon's existing peer-path observation (`observe_peer_paths`) beside `served_by`; the row is done at 71db62fb7 (everything else landed with its gates). The pointer is corrected.
+- Because: The path is already observed and logged; the bar wants it visible, not relocated. The smaller reversible step (charter), reuse over a new port (ARCH 11), and the layer line stays where it is (ARCH 12).
+
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -5633,5 +5639,17 @@ numeric guard. Seen live while sharing the lock with the rr-2 loop.
 **Owed.** The production ranking is unchanged and the bar is unchanged by this stage. The
 open question — how a scheduler earns a peer speed signal without the forbidden rate card — is
 scheduler design with its own measurement, not campaign work.
+
+</details>
+
+## A36 · 2026-09-19 — rr-2: the iroh path is read where it is observed, not relocated into the outcome record
+
+<details>
+
+**Fork.** (1) Strike the clause; the instrument reads the path from `observe_peer_paths`. (2) A `VenueHost` port carrying `PeerPath` down into `sovereign-serving-host`, filled by the daemon. (3) A second record joined on decision_id — forbidden by the row.
+
+**Evidence.** The worker's package (ralph/NEEDS_HUMAN.md, removed by this commit): `git ls-files '*decision_log*'` → sovereign-scheduler and studio only; `sovereign-serving-host/Cargo.toml` names neither sovereign-mesh nor commonwealth-transport; `git grep observe_peer_paths` → daemon.rs:4482, iroh_access.rs:232. Also: `sovereign-scheduler/src/decision_log.rs` held uncommitted (+284) by the scheduler worker session (A35's `ScoreRecord::terms`) during this row — the two sessions' staging collided twice; the loop's remaining rows do not touch that file.
+
+**Decision.** (1). Falsified if the instrument cannot attribute an observed path to the ask's peer within the ask window (then the observation is too coarse and (2) is reopened as its own row).
 
 </details>
