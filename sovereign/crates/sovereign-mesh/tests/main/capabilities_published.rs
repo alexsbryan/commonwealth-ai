@@ -222,12 +222,16 @@ async fn gossip_round_carries_media_allow_into_offered_to() {
         peers: vec![],
     };
     let state = AppState::new(holder, mesh);
-    state.inner.fabric.dial_info.publish(Arc::new(|| commonwealth_core::mesh::IrohDialInfo {
-        relay_url: None,
-        direct_addrs: Vec::new(),
-        origins: vec![commonwealth_core::capabilities::OriginKind::Media],
-        media_allow: vec!["LittleMac".into()],
-    }));
+    state
+        .inner
+        .fabric
+        .dial_info
+        .publish(Arc::new(|| commonwealth_core::mesh::IrohDialInfo {
+            relay_url: None,
+            direct_addrs: Vec::new(),
+            origins: vec![commonwealth_core::capabilities::OriginKind::Media],
+            media_allow: vec!["LittleMac".into()],
+        }));
 
     gossip::run_one_round(
         &*state.inner.fabric,

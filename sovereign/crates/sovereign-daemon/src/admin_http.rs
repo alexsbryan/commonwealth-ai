@@ -563,14 +563,20 @@ mod tests {
         origin_set.iroh.media_origin = Some("127.0.0.1:8096".into());
         let d = ConfigDiff::diff(&base, &origin_set);
         assert_eq!(d.media_changed, vec!["iroh.media_origin"]);
-        assert!(d.restart_required.is_empty(), "the media origin reloads live");
+        assert!(
+            d.restart_required.is_empty(),
+            "the media origin reloads live"
+        );
         assert!(!d.is_noop(), "a changed config must never read as a no-op");
 
         let mut allow_set = base.clone();
         allow_set.iroh.media_allow = vec!["LittleMac".into()];
         let d = ConfigDiff::diff(&base, &allow_set);
         assert_eq!(d.media_changed, vec!["iroh.media_allow"]);
-        assert!(d.restart_required.is_empty(), "the media allow list reloads live");
+        assert!(
+            d.restart_required.is_empty(),
+            "the media allow list reloads live"
+        );
         assert!(!d.is_noop());
 
         let mut app_published = base.clone();
@@ -1242,8 +1248,8 @@ mod tests {
     /// carried it left peers dialing a stale endpoint for 120 s).
     #[tokio::test]
     async fn reload_moves_the_media_origin_without_a_restart() {
-        use sovereign_mesh::iroh_access::{AcceptorRoutes, AppRoutes, OfferRoutes};
         use commonwealth_core::ids::NodePubkey;
+        use sovereign_mesh::iroh_access::{AcceptorRoutes, AppRoutes, OfferRoutes};
         let tmp = tempfile::tempdir().unwrap();
         let path = write_cfg(&tmp, "/m/primary.gguf");
         let initial = SetupConfig::load_from(&path).unwrap();
@@ -1266,10 +1272,12 @@ mod tests {
         };
         let member = NodePubkey([7u8; 32]);
         let check: sovereign_mesh::iroh_access::MemberCheck = Arc::new(|_| {
-            Box::pin(std::future::ready(Some(sovereign_mesh::iroh_access::MemberIdentity {
-                name: "Bo".into(),
-                node_id: commonwealth_core::ids::NodeId::from_u128(0xB0),
-            })))
+            Box::pin(std::future::ready(Some(
+                sovereign_mesh::iroh_access::MemberIdentity {
+                    name: "Bo".into(),
+                    node_id: commonwealth_core::ids::NodeId::from_u128(0xB0),
+                },
+            )))
         });
         let media = commonwealth_transport::iroh::MEDIA_ALPN;
         assert_eq!(routes.forward_for(media, member, &check).await, None);
