@@ -434,7 +434,10 @@ try:
     doc = json.load(open(f"{d}/room-join-doc.json"))
 except Exception as e:
     doc = {"fatal": f"the fourth's page wrote nothing: {e}"}
-json.dump({"name": name, "n_before": int(nb), "n_after": int(na), "doc": doc,
+# An empty `mesh status --json` from a is recorded as a null count and named,
+# never an int('') crash that erases the doc and library legs with it.
+unread = [f"a's mesh status --json printed nothing ({k})" for k, v in (("n_before", nb), ("n_after", na)) if not v]
+json.dump({"name": name, "n_before": int(nb) if nb else None, "n_after": int(na) if na else None, "n_unread": unread, "doc": doc,
            "corpus": cid, "ingest_rc": int(rc), "shared_meta": bool(meta),
            "answered_s": float(answered) if answered else None, "asks": int(asks) + (1 if answered else 0),
            "listed_s": float(listed) if listed else None,
@@ -581,9 +584,9 @@ else:
                                           and doc.get("a_name") == j["name"] and within(doc.get("a_s")),
             "b_library_listed": within(j["listed_s"]),
             "c_answer_names": within(j["answered_s"]),
-            "d_n_from_mesh_only": j["n_after"] == j["n_before"] + 1 and not hits}
+            "d_n_from_mesh_only": None not in (j["n_before"], j["n_after"]) and j["n_after"] == j["n_before"] + 1 and not hits}
     row("ra-room-plug-in-live", 1.0 if all(legs.values()) else 0.0, "", legs=legs, window_s=win,
-        **{k: j[k] for k in ("name", "n_before", "n_after", "listed_s", "answered_s", "asks", "library")},
+        **{k: j.get(k) for k in ("name", "n_before", "n_after", "n_unread", "listed_s", "answered_s", "asks", "library")},
         doc={k: doc.get(k) for k in ("d_self", "a_name", "a_s", "a_roster", "fatal", "errors")})
 
 # 5 — nothing typed

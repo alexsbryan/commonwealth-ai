@@ -365,8 +365,19 @@ pub async fn knowledge_search(
                     }
                     all_results.extend(served.results);
                 }
-                crate::fanout::PeerVerdict::Failed { .. }
-                | crate::fanout::PeerVerdict::NeverAsked { .. } => {
+                crate::fanout::PeerVerdict::Failed { ref reason }
+                | crate::fanout::PeerVerdict::NeverAsked { ref reason } => {
+                    // The reason rides on the captured `knowledge` target: the
+                    // core's own count is under `fanout`, which a daemon's
+                    // filter leaves dark, and a corpus marked unavailable with
+                    // no cause beside it cannot be told from a peer outage.
+                    tracing::warn!(
+                        peer = %row.node_id,
+                        peer_name = %row.name,
+                        elapsed_ms = row.elapsed_ms,
+                        reason = %reason,
+                        "knowledge: fan-out peer did not serve"
+                    );
                     if let Some(corpora) = asked.get(&row.node_id) {
                         for c in corpora {
                             corpora_unavailable.insert(c.clone());

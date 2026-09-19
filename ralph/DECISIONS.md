@@ -137,6 +137,11 @@ exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 - Chose: Close the row as "no tune needed", with no knob edited and no new row. The answer bar and the plug-in answer stay owed by REVIEW-DEMO-rr-1-run. Corrects A25's "which A24 and rr-1-tune own": rr-1-tune cannot own them.
 - Because: Neither knob can move a synthesis. `join_poll_s` only spaces re-asks (scripts/ring-room-demo.sh:419), and a single ask already uses the whole watch. B §Tuning (campaign.md:65-67) makes any other knob (`JOIN_WATCH_S`, `ASK_TIMEOUT_S`, the room's model) a design change that escalates, so it is the operator's, and the review row's §6 is where it reaches them. REVIEW-AFTER: forecast below.
 
+**A27 · 2026-09-18 · REVIEW-DEMO-rr-1-run · director (supervisor resolution 1)** — this commit
+- Needed: Both cold runs exited 1. Run 2 gave answer 0.8 and plug-in COULD-NOT-JUDGE. The package blamed both on the 2B's synthesis latency. For the plug-in answer that is right, but plug-in's COULD-NOT-JUDGE came from a driver crash, and q3's miss was a fan-out failure whose cause no log line records.
+- Chose: Fix the two instruments. First, the driver records an empty `mesh status --json` as a null count with a named reason instead of crashing on `int('')`. Replayed on run 2's artifacts, plug-in now reads FAILED on `c_answer_names` and `d_n` only; the doc leg (1.198 s) and the library leg (8.36 s) passed. Second, each fan-out peer that does not serve logs its reason on the captured `knowledge` target. The synthesis budget goes back to the operator; the row stays `[~]`.
+- Because: A crash that turns a FAILED into could-not-judge, and throws away two legs that passed, violates principle 6. A corpus marked unavailable with no cause beside it is dark (principle 1), and guessing at q3's cause would be whack-a-mole (2). The 60 s window and the room's model are a design change that B §Tuning escalates (A26), and this charter leaves bar windows to the operator.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -5144,5 +5149,26 @@ Edit or mark the row in ralph/next/ring-room/STATE.md, then
 **Worker's package (ralph/NEEDS_HUMAN.md, removed by this commit).**
 
 (a) Row rr-1-tune, left `[~]`. (b) clean exit 0; demo-bg; demo-wait ×3 → exit 1; no knob edited. film listed 2.16 / narrowed 10.47 PASSED; plug-in doc a_s 1.172, library 8.36, both inside 60; doc PASSED p99 1.39; nothing-typed PASSED 0; answer FAILED 0.8 (q2, q3 `mixed`, released 0); plug-in FAILED 0.0 on c_answer_names only (0-byte json, 120 s JOIN_WATCH_S). (c) Close as no-tune with the answer bars owed by REVIEW-DEMO, or give the synthesis budget its own row (a design change under B §Tuning).
+
+</details>
+
+## A27 · 2026-09-18 — REVIEW-DEMO-rr-1-run: two instrument faults fixed; the synthesis budget is the operator's
+
+<details>
+
+**Fork.** The package asked three things. (1) What the answer leg's synthesis budget should be. (2) Whether the driver's member count should fail with a name instead of crashing. (3) Whether a's empty `mesh status --json` is a daemon defect worth its own row.
+
+**Evidence, reproduced.** Run 2's artifacts are in `target/ring-room-demo/`.
+- Driver. `target/ring-room-demo-join.log` holds both tracebacks: the JSONDecodeError at the member count and `int('')` in the writer. `room-join.json` is 0 bytes, so the report read `phase-missing`.
+- q3 is NOT latency. a/daemon.err 03:37:28 → 03:37:31: `fan-out plan … ("Bo","Online",["room-Aktguz"])`, then `fan-out complete corpora_unavailable={"room-Aktguz"}` 3.0 s later. That is `PEER_TIMEOUT` (routes_knowledge.rs:37). No line gives a cause, then `no chunks — answering from parametric knowledge`. b/daemon.err has no `internal knowledge_search: served` line between 03:35 and 03:38:35. It shows idle-unloads of fast (03:36:54), primary (03:37:14) and embed (03:37:34). The per-peer reason only reaches the `fanout` target (commonwealth-transport fanout.rs:201), which the daemon's filter leaves dark. So the cause cannot be read from this run. The idle-unload timing is a hypothesis, not a finding.
+- The plug-in answer IS latency. a/daemon.err 03:43:49 → 03:44:32: the route classify alone took 38,384 ms for 1,288 tokens on the CPU 2B. The fan-out served Bo (5 hits) and ring-doc-d (1 hit) in 37 ms. Synthesis started at 03:44:33 and was still running when `timeout 120` killed the ask.
+
+**Change.** `scripts/ring-room-demo.sh`: the join writer records `n_before`/`n_after` as null plus `n_unread` naming the empty read, and the report's `d_n_from_mesh_only` is false when either count is null. Checked by replaying the writer and the report on a copy of run 2's artifacts (`target/ralph/rr-replay`, with the writer given an empty `n_before`): plug-in FAILED 0.0, legs `a_doc true, b_library true, c_answer false, d_n false`, `n_unread` named. The old code's failure on the same input is run 2's own log. `routes_knowledge.rs`: a WARN `knowledge: fan-out peer did not serve` with peer, name, elapsed_ms and reason, for each Failed/NeverAsked row. Checks: lint on the scope (sovereign-daemon and its dependents) clean; `sovereign-test --package sovereign-daemon --filter knowledge` 8/0. No test asserts on the log line. The next demo is its check.
+
+**(3)** was not reproduced, happened once in two runs, and the driver now names it. No row for it until it recurs.
+
+**Falsified if** the next demo's q3-class miss still shows `corpora_unavailable` with no `did not serve` line beside it. Also falsified if an empty member count again produces `phase-missing`.
+
+**Worker's package (ralph/NEEDS_HUMAN.md, rewritten by this commit to fork (1) only).** Run 1: answer 0.6, doc 1.0, film 1.0, plug-in 0.0, nothing-typed 0. Run 2: answer 0.8 (q3 unverified, "knowledge base inaccessible"), doc 1.0, film 1.0, plug-in COULD-NOT-JUDGE `phase-missing`, nothing-typed 0 with only the Jellyfin login excluded. Asks: (1) the synthesis budget; (2) a named fatal for the member count; (3) whether the empty `mesh status --json` is a daemon defect.
 
 </details>
