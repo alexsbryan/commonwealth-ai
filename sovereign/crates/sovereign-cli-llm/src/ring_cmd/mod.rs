@@ -463,9 +463,17 @@ async fn roster_list(namespace: &str) -> i32 {
     // The rail's precedence with its first rung already refused by the
     // caller: a `roster.json` narrows the ring, and without one the daemon's
     // default — the mesh — answers (`RingRail::default_roster`).
-    let narrowed = ring_journal(namespace)
-        .map(|j| j.roster_path().exists())
-        .unwrap_or(false);
+    // A journal this CLI cannot open is not "no roster.json": refuse rather
+    // than report the ring as open to the whole mesh.
+    let narrowed = match ring_journal(namespace) {
+        Ok(j) => j.roster_path().exists(),
+        Err(e) => {
+            eprintln!(
+                "ring roster show: cannot tell whether a roster.json narrows {namespace}: {e}"
+            );
+            return 1;
+        }
+    };
     if !narrowed {
         println!("everyone in the mesh");
     } else if roster.members.is_empty() {
