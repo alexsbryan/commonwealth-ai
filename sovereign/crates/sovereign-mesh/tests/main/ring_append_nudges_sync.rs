@@ -23,8 +23,8 @@ use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_rail::{Person, RingRail, RingSigner, Roster};
 use ed25519_dalek::SigningKey;
-use sovereign_api::server::{client_router, internal_router};
-use sovereign_api::state::AppState;
+use sovereign_daemon::server::{client_router, internal_router};
+use sovereign_daemon::state::AppState;
 
 use crate::common;
 
@@ -64,8 +64,9 @@ fn node(
     self_id: NodeId,
     mesh: Mesh,
 ) -> (AppState, Arc<RingRail>) {
-    let state = AppState::new(self_id, mesh);
-    state.install_client_token(Some(Arc::<str>::from(TOKEN)));
+    // The token and the rail are construction arguments now (domains
+    // REVIEW-build-appstate-*-installs, DC §4.2 "Construction is staged, and
+    // parts are total"); the seed-shaped entry point is the tests' door.
     let rail = Arc::new(RingRail::new(dir, Arc::new(key.clone())));
     let mut members = std::collections::BTreeMap::new();
     members.insert(Person::from("alex"), vec![key.actor()]);
@@ -73,7 +74,22 @@ fn node(
         .unwrap()
         .set_roster(&Roster::new(members))
         .unwrap();
-    state.install_ring_rail(rail.clone());
+    let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric_and_serving_and_node(
+        self_id,
+        mesh,
+        Arc::new(commonwealth_state::MeshStore::in_memory().expect("in-memory MeshStore")),
+        Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new()),
+        None,
+        None,
+        sovereign_daemon::state::fabric::FabricSeed {
+            ring_rail: Some(Arc::clone(&rail)),
+            ..Default::default()
+        },
+        Default::default(),
+        sovereign_daemon::state::node::NodeSeed {
+            client_token: Some(Arc::<str>::from(TOKEN)),
+        },
+    );
     (state, rail)
 }
 
@@ -105,7 +121,7 @@ async fn an_act_appended_over_http_is_held_by_the_peer_within_two_seconds() {
     let a_addr = common::spawn_router(client_router(a_state.clone())).await;
 
     let _sync = sovereign_mesh::ring_sync::spawn_ring_sync_loop(
-        a_state.clone(),
+        a_state.inner.fabric.clone(),
         sovereign_mesh::ring_sync::DEFAULT_RING_SYNC_INTERVAL,
         a_state.ring_write_nudge(),
     );

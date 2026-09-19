@@ -160,8 +160,8 @@ struct PeerDelivery {
 /// holds an authenticated connection (`ring-apps-shelf.md` §gossip, "default
 /// impl").
 async fn push_ephemeral(state: &AppState, namespace: &str, payload: &str) -> Vec<PeerDelivery> {
-    let mesh = state.inner.mesh.read().await;
-    let self_id = *state.inner.self_node_id_swap.load_full().as_ref();
+    let mesh = state.inner.fabric.mesh.read().await;
+    let self_id = state.inner.fabric.identity.current();
     let peers: Vec<_> = mesh
         .members
         .values()
