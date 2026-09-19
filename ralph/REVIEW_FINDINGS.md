@@ -1335,3 +1335,33 @@ Foreign reds seen by this audit (outside the campaign, not fixed here):
 before); `hakari-verify` (`.config/hakari.toml:54` names `corpus-engine-vocab`,
 removed by `e9db0b96c`); `size-gate` (advisory, mostly new unbaselined crates
 from the domains landing); `concept-gate` could-not-judge (stale graph).
+
+### Second pass — after REVIEW-build-rr-1-band-split (range `9a2194f5d..7cf49fc9d`)
+
+Checks: TESTALL exit=100 (13424 pass, 3 fail) before the fixes below; PREPUSH
+exit=0 (arch-gate passed, 206 files / 201889 lines in the band; size-gate and
+hakari-verify advisory-red, concept-gate could-not-judge — all three foreign,
+as in the first pass). The one red left in TESTALL is
+`every_journey_cites_a_doc_that_exists`: `sovereign/docs/cli-contract.toml`
+cites the gitignored `docs/internal/RING_APPLICATIONS.md` (`.gitignore:67`),
+added by `a3bd715f5`, an ancestor of the queue start `efe2aa080` — foreign,
+under the DECISIONS.md:605 reading.
+
+Findings, fixed (commits `b606f9587`, `7cf49fc9d`):
+
+- **ARCH 5 (a gate that stopped seeing its subject)** ·
+  `sovereign/crates/sovereign-desktop/src-tauri/tests/mesh_status_one_decider.rs:28`
+  · the guard read only `mesh_commands.rs`; `e85076537` moved
+  `MemberStatus::deserialize` to `mesh_commands/state_response.rs`, so it went
+  red, and a hand `"online" =>` arm in any child file would have sailed past.
+  Now reads the whole module; planted in the child file, watched red.
+- **ARCH 3/8 (a registry row not moved with the code)** ·
+  `sovereign/crates/sovereign-core/tests/main/f26_egress_census.rs:280` · the
+  F26 row for `admin_http.rs` (14 loopback test sites) went stale when
+  `e85076537` moved its test module; replaced by rows for `admin_http/tests.rs`
+  (6) and `admin_http/tests/reload.rs` (8), same `Class::Mesh`.
+- **ARCH 4 (a claim with no citation)** · `e85076537`'s body says
+  "behaviour-preserving" citing lint and arch-gate only; the two guards above
+  scan source text, so a file move is not behaviour-preserving for them. No
+  code fix — recorded so a split row names the source-scanning tests in its
+  checks.
