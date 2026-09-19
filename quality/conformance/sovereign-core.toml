@@ -111,15 +111,15 @@ asserts = 6
 [[claim]]
 requirement = "GR-46"
 test = "sovereign-core::runtime::epistemic::tests::one_assembly_returns_holdings_verdict_and_gaps_that_agree_with_each_other"
-file = "sovereign/crates/sovereign-core/src/runtime/epistemic.rs"
-line = 976
+file = "sovereign/crates/sovereign-core/src/runtime/epistemic/tests.rs"
+line = 235
 asserts = 9
 
 [[claim]]
 requirement = "GR-47"
 test = "sovereign-core::runtime::epistemic::tests::tool_derived_verdicts"
-file = "sovereign/crates/sovereign-core/src/runtime/epistemic.rs"
-line = 914
+file = "sovereign/crates/sovereign-core/src/runtime/epistemic/tests.rs"
+line = 173
 asserts = 3
 
 [[claim]]
