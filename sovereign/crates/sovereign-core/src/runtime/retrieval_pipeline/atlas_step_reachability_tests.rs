@@ -436,16 +436,37 @@ mod ledger {
             walk.nodes_reached,
             walk.requests
         );
+        // Against the FIXTURE's own atoms, not against the echo's self-report
+        // (ARCH §5: assert on something the subject cannot author). `atom_id`
+        // merely being non-empty is satisfied by any literal the echo builder
+        // chooses — which is the shape that let the wrong-slot guard pass on
+        // an SSE `model` field the client had supplied. These two ids and
+        // titles come out of the store `write_wiki_atlas` wrote.
         for n in &walk.nodes {
-            assert!(
-                !n.atom_id.is_empty(),
-                "every echoed node needs its atom id — it is the join key a \
-                 reach study is made of. node {n:?}"
+            let expected_id =
+                corpus_engine::enrichment::atlas::wiki_store::wiki_atom_id(&n.name, "wikish");
+            assert_eq!(
+                n.atom_id, expected_id,
+                "the echoed atom id must be the one the fixture's store minted \
+                 for `{}` — it is the join key a reach study is made of, and an \
+                 id the echo authored joins to nothing. node {n:?}",
+                n.name
             );
             assert!(
-                !n.kind.is_empty(),
-                "every echoed node needs its kind label; an empty one means \
-                 the AtomType did not survive the echo. node {n:?}"
+                ["Alpha", "Beta"].contains(&n.name.as_str()),
+                "the fixture wrote exactly two articles; a walk reporting any \
+                 other name did not read that store. node {n:?}"
+            );
+            assert_eq!(
+                n.kind, "entity",
+                "the wiki store builds Entity atoms, so the echoed kind is \
+                 `AtomType::Entity.label()`. node {n:?}"
+            );
+            assert_eq!(
+                n.subtype,
+                corpus_engine::enrichment::atlas::wiki_store::WIKI_ENTITY_TYPE,
+                "the echoed subtype must be the fixture's declared entity type \
+                 — the field a declared-ontology study groups by. node {n:?}"
             );
         }
     }
