@@ -121,6 +121,8 @@ mod local_pod_smoke;
 mod loopback_parity;
 #[path = "main/manifest_fanout_concurrency.rs"]
 mod manifest_fanout_concurrency;
+#[path = "main/mesh_sim_ring_room.rs"]
+mod mesh_sim_ring_room;
 #[path = "main/mesh_sim_scoreboard.rs"]
 mod mesh_sim_scoreboard;
 #[path = "main/mesh_switch.rs"]

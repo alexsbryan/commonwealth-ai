@@ -336,6 +336,100 @@ pub struct ScoreRecord {
     pub final_score: f32,
 }
 
+impl ScoreRecord {
+    /// The seven multiplicative terms, in the order
+    /// `oicp_types::score_with_adjustments` multiplies them, so a reader can
+    /// map a log field straight back to the line that produced it.
+    ///
+    /// The final score is a PRODUCT — `claim × observation × load × locality ×
+    /// cold_start × throughput × availability` — which is the whole reason
+    /// [`deciding_term`] can name one term rather than hand-waving at a sum.
+    pub fn terms(&self) -> [(&'static str, f32); 7] {
+        [
+            ("claim_score", self.claim_score),
+            ("observation_mult", self.observation_mult),
+            ("load_penalty", self.load_penalty),
+            ("locality_bonus", self.locality_bonus),
+            ("cold_start_weight", self.cold_start_weight),
+            ("throughput_factor", self.throughput_factor),
+            ("availability", self.availability),
+        ]
+    }
+}
+
+/// Which single term separated two candidates, and by how much.
+///
+/// `None` when no term separates them by more than [`TERM_TIE_RATIO`] — a real
+/// answer ("they were the same and the tie-break decided"), reported rather
+/// than collapsed into an arbitrary winner (principle 6).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DecidingTerm {
+    /// One of [`ScoreRecord::terms`]' names.
+    pub term: &'static str,
+    pub winner: f32,
+    pub runner_up: f32,
+}
+
+impl std::fmt::Display for DecidingTerm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}({:.3}>{:.3})", self.term, self.winner, self.runner_up)
+    }
+}
+
+/// Ratio below which two terms are "the same number" for attribution.
+///
+/// Deliberately coarser than [`oicp_types::SCORING_EPSILON`], which decides
+/// WHO WINS and must be tight. This one decides only what the log SAYS about a
+/// decision already made, and a 0.1% difference in one factor is not an
+/// explanation a reader should be handed as the cause.
+pub const TERM_TIE_RATIO: f32 = 1.001;
+
+/// Name the term that carried the winner over the runner-up.
+///
+/// **Why this exists.** The `routing decision` info line carried the winner and
+/// a candidate count and no scores, so a decision like `wl-route-06303aff`
+/// (`verdict=stay_local scored=3 excluded=1`, then 38.2 s of local work with an
+/// idle GPU peer in the mesh) could not be explained from the artifact at all —
+/// the record held every term and nothing rendered them (ralph A33, A35).
+/// Principle 1: the operator must see WHY without attaching a debugger.
+///
+/// **How.** The score is a product, so a candidate's advantage decomposes
+/// exactly into per-term ratios and the largest one is the cause, with no
+/// weighting choice to make. A non-positive runner-up term is decisive by
+/// construction (the runner-up scored zero on it). Terms where the runner-up is
+/// AHEAD are skipped: this answers "what carried the winner", not "what was
+/// different", and those two questions have different answers whenever one term
+/// outweighs another pulling the other way.
+///
+/// This derives; it never decides. Nothing here feeds ranking.
+pub fn deciding_term(winner: &ScoreRecord, runner_up: &ScoreRecord) -> Option<DecidingTerm> {
+    let mut best: Option<(f32, DecidingTerm)> = None;
+    for ((term, w), (_, r)) in winner.terms().into_iter().zip(runner_up.terms()) {
+        // A term the runner-up scored zero (or negative) on is decisive and has
+        // no finite ratio; rank it above every finite one.
+        let ratio = if r <= 0.0 {
+            if w <= 0.0 {
+                continue; // both zero — separated nothing
+            }
+            f32::INFINITY
+        } else {
+            w / r
+        };
+        if ratio <= TERM_TIE_RATIO {
+            continue;
+        }
+        let cand = DecidingTerm {
+            term,
+            winner: w,
+            runner_up: r,
+        };
+        if best.as_ref().is_none_or(|(b, _)| ratio > *b) {
+            best = Some((ratio, cand));
+        }
+    }
+    best.map(|(_, t)| t)
+}
+
 impl From<&ScoreBreakdown> for ScoreRecord {
     fn from(b: &ScoreBreakdown) -> Self {
         Self {
@@ -1050,6 +1144,199 @@ mod yield_refusal_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A `ScoreRecord` whose seven terms are given explicitly, with
+    /// `final_score` computed as their product — the same product
+    /// `score_with_adjustments` forms, so a fixture cannot quietly disagree
+    /// with the scorer about what a score IS.
+    fn score_of(
+        claim: f32,
+        observation: f32,
+        load: f32,
+        locality: f32,
+        cold: f32,
+        throughput: f32,
+        availability: f32,
+    ) -> ScoreRecord {
+        ScoreRecord {
+            claim_score: claim,
+            observation_mult: observation,
+            load_penalty: load,
+            locality_bonus: locality,
+            cold_start_weight: cold,
+            throughput_factor: throughput,
+            throughput_source: "observed".into(),
+            availability,
+            final_score: claim * observation * load * locality * cold * throughput * availability,
+        }
+    }
+
+    /// **The ring-room fleet, composed from the shipped constants** — and the
+    /// arithmetic is the finding, not the fixture. Every factor below is read
+    /// from `oicp_types` rather than typed in, so this test cannot drift from
+    /// the scorer it describes.
+    ///
+    /// A CPU origin and a GPU peer running the SAME model, so `claim_score` is
+    /// identical and cancels. What is left:
+    ///
+    /// | term | origin (CPU) | peer (GPU) | why |
+    /// |---|---|---|---|
+    /// | locality | 1.15 | 1.05 | `LOCALITY_LOCAL_BONUS` vs `..._NEAR_BONUS` |
+    /// | cold start | 1.0 | 0.7 | peer `samples` never ramps on the ranked path (F9) |
+    /// | throughput | 0.7 | 1.0 | origin measured 14 tok/s; the peer is scored a blind neutral (§4.5) |
+    ///
+    /// Origin 0.805, peer 0.735 — **the origin wins by 9.5%, and the term
+    /// that carries it is the PEER'S FROZEN COLD-START WEIGHT.** Nothing here
+    /// measures the peer's speed: a GPU node and a CPU node score identically
+    /// as peers. The only thing that moves is how far the origin has clamped
+    /// itself, and it has to clamp past a constant to lose.
+    #[test]
+    fn deciding_term_names_the_peers_frozen_cold_start() {
+        use oicp_types::{
+            COLD_START_MIN_WEIGHT, LOCALITY_LOCAL_BONUS, LOCALITY_NEAR_BONUS,
+            THROUGHPUT_REFERENCE_TG_TOK_S,
+        };
+        // The origin's measured 14 tok/s, through the shipped clamp.
+        let origin_tput = 14.0 / THROUGHPUT_REFERENCE_TG_TOK_S;
+        let local = score_of(0.9, 1.0, 1.0, LOCALITY_LOCAL_BONUS, 1.0, origin_tput, 1.0);
+        let peer = score_of(
+            0.9,
+            1.0,
+            1.0,
+            LOCALITY_NEAR_BONUS,
+            COLD_START_MIN_WEIGHT,
+            1.0,
+            1.0,
+        );
+        assert!(
+            local.final_score > peer.final_score,
+            "the origin keeps its own work: local {} vs peer {}",
+            local.final_score,
+            peer.final_score
+        );
+        let d = deciding_term(&local, &peer).expect("a term separates them");
+        assert_eq!(
+            d.term, "cold_start_weight",
+            "what keeps work home is the peer's frozen ramp, NOT any speed \
+             signal — got {d}"
+        );
+    }
+
+    /// The knife-edge, and the reason the room split three-two.
+    ///
+    /// The origin's lead is 9.5%, and `load_penalty` is `1/(1 + 0.05·n)`. At
+    /// two concurrent local calls — an ordinary chat turn overlaps synthesis,
+    /// judges and housekeeping — the origin pays 0.909 and lands at 0.732
+    /// against the peer's constant 0.735. **The same fleet, the same models,
+    /// the same second, and the work now leaves the node.**
+    ///
+    /// Nothing about the peer changed. A scheduler whose local/peer choice
+    /// turns on the origin's own queue depth to within half a percent is not
+    /// choosing the faster machine; it is oscillating around a constant.
+    #[test]
+    fn two_local_requests_in_flight_flip_the_same_fleet_to_the_peer() {
+        use oicp_types::{
+            load_penalty, NodeObservations, COLD_START_MIN_WEIGHT, LOCALITY_LOCAL_BONUS,
+            LOCALITY_NEAR_BONUS, THROUGHPUT_REFERENCE_TG_TOK_S,
+        };
+        let busy = load_penalty(&NodeObservations {
+            in_flight: 2,
+            ..Default::default()
+        });
+        let origin_tput = 14.0 / THROUGHPUT_REFERENCE_TG_TOK_S;
+        let local = score_of(0.9, 1.0, busy, LOCALITY_LOCAL_BONUS, 1.0, origin_tput, 1.0);
+        let peer = score_of(
+            0.9,
+            1.0,
+            1.0,
+            LOCALITY_NEAR_BONUS,
+            COLD_START_MIN_WEIGHT,
+            1.0,
+            1.0,
+        );
+        assert!(
+            peer.final_score > local.final_score,
+            "two in flight is enough to tip it: local {} vs peer {}",
+            local.final_score,
+            peer.final_score
+        );
+        assert!(
+            (peer.final_score / local.final_score) < 1.01,
+            "and it tips by well under a percent — {}",
+            peer.final_score / local.final_score
+        );
+        let d = deciding_term(&peer, &local).expect("a term separates them");
+        assert_eq!(
+            d.term, "throughput_factor",
+            "once it tips, what carries the peer is the ORIGIN's clamp — still \
+             no measurement of the peer — got {d}"
+        );
+    }
+
+    /// The question is "what carried the winner", not "what differs". A term
+    /// the runner-up LEADS on explains nothing about why it lost, and naming
+    /// it would point an operator at the wrong line.
+    #[test]
+    fn deciding_term_skips_terms_the_runner_up_leads_on() {
+        let winner = score_of(0.9, 1.0, 1.0, 1.0, 1.0, 0.7, 1.0);
+        let loser = score_of(0.9, 1.0, 1.0, 1.05, 0.7, 1.0, 1.0);
+        let d = deciding_term(&winner, &loser).expect("a term separates them");
+        assert_ne!(
+            d.term, "throughput_factor",
+            "winner is behind on throughput"
+        );
+        assert_ne!(d.term, "locality_bonus", "winner is behind on locality");
+    }
+
+    /// Absence reported, never defaulted (principle 6). Two identical
+    /// candidates were separated by the tie-break, not by a term, and saying
+    /// so is the honest answer — inventing a cause here would be a fabricated
+    /// explanation with a number attached.
+    #[test]
+    fn deciding_term_reports_a_tie_rather_than_inventing_a_cause() {
+        let a = score_of(0.9, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0);
+        let b = score_of(0.9, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0);
+        assert_eq!(deciding_term(&a, &b), None);
+
+        // And a difference under the tie ratio is still a tie: a 0.05% wobble
+        // in one factor is not an explanation.
+        let c = score_of(0.9, 1.0, 1.0, 1.0, 1.0, 1.0005, 1.0);
+        assert_eq!(deciding_term(&c, &a), None);
+    }
+
+    /// A term the runner-up scored ZERO on is decisive, and must outrank every
+    /// finite ratio rather than producing a division that sorts anywhere.
+    #[test]
+    fn a_zero_term_on_the_runner_up_is_decisive() {
+        let winner = score_of(0.9, 1.0, 1.0, 1.0, 1.0, 0.31, 1.0);
+        let loser = score_of(0.9, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0);
+        let d = deciding_term(&winner, &loser).expect("a zero term separates them");
+        assert_eq!(d.term, "load_penalty");
+        assert_eq!(d.runner_up, 0.0);
+    }
+
+    /// The names are the log's contract and the reader's map back to the
+    /// scorer, and the order is the order the product is formed in.
+    #[test]
+    fn the_seven_terms_are_named_in_multiply_order() {
+        let names: Vec<&str> = score_of(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0)
+            .terms()
+            .iter()
+            .map(|(n, _)| *n)
+            .collect();
+        assert_eq!(
+            names,
+            [
+                "claim_score",
+                "observation_mult",
+                "load_penalty",
+                "locality_bonus",
+                "cold_start_weight",
+                "throughput_factor",
+                "availability",
+            ]
+        );
+    }
 
     fn facts() -> RequestFacts {
         RequestFacts {

@@ -317,6 +317,65 @@ pub fn pair(seed: u64) -> Scenario {
     }
 }
 
+/// **The ring-room, as it actually ran** — every rate measured on this host,
+/// not chosen (`ralph/DECISIONS.md` A35).
+///
+/// Four podman nodes on one machine, one of them given the host's render node
+/// via `RING_DOC_GPU_NODES`. Every node serves the SAME model
+/// (`Qwen3.5-2B.Q6_K`), so every node is in band 0 and the capability axis is
+/// flat by construction: the only thing that differs is how fast the machine
+/// is. That is precisely the fleet `throughput_factor` claims to handle and
+/// `SCHEDULER_QUALITY.md` §4.5 says it cannot see.
+///
+/// Rates, from `target/ring-room-demo/*/daemon.err` of the 2026-09-19 run:
+///
+/// | node | prefill | decode | from |
+/// |---|---|---|---|
+/// | asker (CPU) | 33 tok/s | 14 tok/s | 1,265 tok in 38.16 s; 163 tok after a 160.8 s ttft |
+/// | keeper (GPU) | 2,200 tok/s | 45 tok/s | 5,366 tok at 2.13 s ttft; 425 tok in 9.96 s |
+/// | plus-one (CPU) | 33 tok/s | 14 tok/s | the fourth node, same container shape as the asker |
+///
+/// **`advertises_benchmark: false` on every node, and that is the load-bearing
+/// line.** No node on this mesh publishes a `BenchmarkResult` — the probe that
+/// produced them was deleted 2026-07-28 and reviving it is a measured
+/// regression (canon `dc3c9856`). A fixture that let these nodes advertise a
+/// rate card would hand the scorer the one signal the room does not have, and
+/// would answer a question nobody asked.
+///
+/// `availability: None` for the same reason: nothing in the room gossips one.
+///
+/// Only the asker has a user. In the room a person types at `a`; `b` is the
+/// machine in the corner with the GPU.
+pub fn ring_room_gpu_keeper(seed: u64) -> Scenario {
+    // One model, one size, one band — `hub_speed` keeps every node's claim
+    // identical so a difference in the ranking can only come from the
+    // operational terms.
+    let blind = |n: &mut NodeSpec| {
+        n.advertises_benchmark = false;
+        n.availability = None;
+    };
+    let mut asker = hub_speed("asker-cpu", 33.0, 14.0, 45.0);
+    let mut keeper = hub_speed("keeper-gpu", 2_200.0, 45.0, 45.0);
+    let mut plus_one = hub_speed("plus-one-cpu", 33.0, 14.0, 45.0);
+    blind(&mut asker);
+    blind(&mut keeper);
+    blind(&mut plus_one);
+    // Only the asker hosts a user; the other two are machines in the room.
+    keeper.mean_arrival_gap_s = None;
+    plus_one.mean_arrival_gap_s = None;
+
+    let nodes = vec![asker, keeper, plus_one];
+    let duration_ms = 20 * 60 * 1000;
+    let arrivals = generate_arrivals(&nodes, duration_ms, seed);
+    Scenario {
+        name: "ring-room-gpu-keeper".into(),
+        rtt_ms: lan_rtts(nodes.len()),
+        nodes,
+        duration_ms,
+        arrivals,
+    }
+}
+
 /// A deliberately heterogeneous fleet: one slow-but-capable hub and
 /// four fast-but-small laptops, all above the 20 tok/s reference. The
 /// scorer's heterogeneity term is constant across every node here.

@@ -179,6 +179,11 @@ exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 - Because: What a guest reads is what members already share with the mesh; the widening is one exact path with a per-grant bound, the smallest reversible step (ARCH 11/12: the door owns the conversation, the guest owns nothing).
 
 
+**A35 · 2026-09-19 · rr-1-scorer-ranking · worker (director order, stage 2)** — commit <SHA> + this commit
+- Needed: Stage 1 opened both gates on the intent classify and the bar still failed — the classify reached the scorer (`verdict=stay_local scored=3`) and ranked local for 38.2 s of a 60 s window, while 3 of 5 syntheses went to the GPU peer and 2 stayed home. The `routing decision` info line carried a winner and a candidate count and NO scores, so which term decided could not be read from the artifact at all.
+- Chose: (1) Render the scores. `ScoreRecord::terms` + `deciding_term` name the one term that separates the winner from its closest rival (the score is a product, so the largest per-term ratio IS the cause); the info line gains `scores` and `decided_by`. Nothing is gathered — the record has carried every term since the scorer was written. (2) Measure before changing anything: `scenario::ring_room_gpu_keeper` reproduces the room with every rate measured on this host, and the sweep says the deciding term is the peer's frozen `cold_start_weight`. (3) **CHANGE NOTHING IN THE RANKING**, on both directions measured. (4) Log the `could-not-judge` CAUSE, which is one decider with a watched-failing test; leave the primary slot's probe skip alone, which is not. (5) Fix `with-cargo-lock.sh`'s `lock_age`, found while sharing the lock with the rr-2 loop.
+- Because: The sim's own numbers close the ranking question rather than open it. `keeper-gpu` (2,200 tok/s prefill) and `plus-one-cpu` (33 tok/s) score **identically — 0.698** — so the scheduler has no measurement of a peer at all; what keeps work home is `cold_start_weight` 1.000 vs 0.700 and locality 1.15 vs 1.05, and what eventually sends it away is the origin's own queue depth eroding `load_penalty`. Lifting that floor (`Arm::WarmStart`) is worth 5× here (efficiency 0.05 → 0.25) and costs 33% on `mixed-hubs` (0.55 → 0.37, mean +51%), which is F7's +235% reproduced in the same direction — opposite signs on one constant, so it is not this campaign's to change (principle 7), and it would not fix the room regardless: the scheduler would offload more, not smarter. The signal this fleet needs does not exist and the obvious way to mint it is the rate card canon `dc3c9856` forbids. The primary-slot probe skip needs a distinction the type does not carry ("may be distributed" vs "IS a distributed child") across four call sites AND changes a safety gate's verdict on every daemon's primary slot — not one decider, and it wants its own row with a measurement.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -5520,5 +5525,113 @@ observation from `Hardware.tg_tok_s`) is the honest next step and is not done he
 **Falsified if** a guest bearer can reach any `/v1/conversations*` path (the row's test), or a second grant can read the first grant's conversation (the PLANT), or the guest's evidence includes a corpus no member shares (`query_sharing` false).
 
 **Worker's package (ralph/NEEDS_HUMAN.md, removed by this commit).** Options (A)/(B)/(C) as above, with the measured facts; question 2 (one bearer via `--rail` or a separate flag) answered: the wall grant minted by `rr-2-grant-for-the-room` carries the ask route with its rail scope — one bearer for the wall.
+
+</details>
+
+## A35 · 2026-09-19 — rr-1 stage 2: the scorer cannot see a GPU, and the one term that decides is measured in both directions
+
+<details><summary>the scores, the sim, the two directions, and what was deliberately not changed</summary>
+
+**Fork.** Stage 1 landed the two gates and the bar still read FAILED. Three questions, in
+the order the director set them: can the decision be READ at all; what does the sim say the
+deciding term is; and may that term be changed.
+
+**1 — the artifact could not answer the question it exists to answer.** `ScoreRecord`
+(`sovereign-scheduler/src/decision_log.rs`) has carried all seven scoring terms per candidate
+since the scorer was written, and the `routing decision` info line rendered none of them:
+winner, `scored`, `excluded`, and nothing else. So `wl-route-06303aff` — `verdict=stay_local
+scored=3 excluded=1`, then `total_ms=Some(38163)` on a CPU node with an idle GPU peer — was
+unexplainable from the log.
+
+Added: `ScoreRecord::terms` (the seven, in multiply order) and `deciding_term(winner,
+runner_up)`. The score is a PRODUCT, so a candidate's advantage decomposes exactly into
+per-term ratios and the largest one is the cause — no weighting choice to make, and the
+derivation decides nothing. `scores` and `decided_by` now ride the info line.
+
+**The simulator immediately caught a hole in it.** A `StayLocal` verdict marks NO candidate
+`selected` — which is why that line has always read `winner=<none>` — so `decided_by` would
+have read `n/a` on precisely the decisions that motivated the work. On `StayLocal` the local
+candidate IS the chosen one; pinned by
+`a_stay_local_decision_still_names_the_term_that_kept_it_home`.
+
+**2 — what the sim says** (`scenario::ring_room_gpu_keeper`, seed 20260726; every rate
+measured on this host, `advertises_benchmark: false` and `availability: None` on every node
+because the room has neither — asserted in the test rather than trusted):
+
+```
+decision sim-0-150 (StayLocal)
+  local        final 1.092 = claim 0.950 × obs 1.000 × load 1.000 × loc 1.150 × cold 1.000 × tput 1.000 (neutral)
+  keeper-gpu   final 0.698 = claim 0.950 × obs 1.000 × load 1.000 × loc 1.050 × cold 0.700 × tput 1.000 (neutral)
+  plus-one-cpu final 0.698 = claim 0.950 × obs 1.000 × load 1.000 × loc 1.050 × cold 0.700 × tput 1.000 (neutral)
+  -> local chosen; decided_by cold_start_weight(1.000>0.700) vs plus-one-cpu
+```
+
+**`keeper-gpu` at 2,200 tok/s prefill and `plus-one-cpu` at 33 tok/s score identically to
+three decimals.** The scheduler holds no measurement of a peer. What keeps work home is the
+peer's frozen `cold_start_weight` (0.700 — F9's peer half never ramps on the ranked path)
+times the local `locality_bonus` (1.150 vs 1.050). What eventually sends it away is the
+ORIGIN's own queue depth eroding `load_penalty` — 1.000, 0.952, 0.909, 0.870, 0.833, 0.800 —
+until local finally falls under a constant 0.698. The three-two split in the room looks
+arbitrary because it is: nothing in the decision is about the peer.
+
+Scoreboard, as-implemented on that fleet: **efficiency 0.05** against the perfect-information
+oracle (p50 30.4 s / p95 2,593.9 s vs the oracle's 20.1 / 36.7), `off% 62`, **`wasted_offloads`
+0, `slower_than_local` 0** — the offloads that do happen are right; there are just too few and
+for the wrong reason. `downgrades` / `declined_upgrades` 0 and `unbanded` 0, by construction:
+one model, one band. `blind-local-load` and `blind-observations` both collapse to `off% 0` and
+p50 4,402 s, which is the proof that the origin's own signals are the ONLY thing driving
+offload. Every `predicted-time` arm also reads `off% 0` — `Unpredictable::NoThroughput` with
+no rate card, exactly as F10 half B predicts.
+
+*(Pre-registered before the run and recorded here: `wasted_offloads` ≈ 0, band metrics 0, and
+the oracle gap not recoverable by any visible term — all three held. The prediction that the
+ORIGIN's throughput clamp would be the deciding term did NOT hold: its `tput` reads 1.000
+`(neutral)`, because the EWMA is unset at these decisions. Corrected here rather than quietly
+dropped.)*
+
+**3 — both directions, before touching anything.** The single term that decides is
+`cold_start_weight`'s 0.7 floor, and `Arm::WarmStart` is the arm that lifts it:
+
+| fleet | as-implemented | warm-start | |
+|---|---|---|---|
+| `ring-room-gpu-keeper` | eff **0.05**, p95 2,593.9 s | eff **0.25**, p95 606.3 s | **5× better** |
+| `mixed-hubs` | eff **0.55**, mean 19,176 ms, declined-upgrades 30 | eff **0.37**, mean 28,908 ms, declined-upgrades 1 | **33% worse, +51% mean** |
+
+Opposite signs on one constant. The `mixed-hubs` column reproduces F7's +235% finding in the
+same direction, on this host, today. So the term is NOT changed — and it would not have fixed
+the room anyway: with the floor lifted the scorer still cannot distinguish the GPU from the
+CPU, so it offloads more, not smarter. **The ranking is not repairable by any term this
+campaign may touch; the scheduler is blind to the quantity that matters.** Reported, and
+stopped, as the order's own stop condition directs.
+
+**4 — the two named defects, judged separately.** The `could-not-judge` CAUSE is one decider
+and is fixed: `PartialKvVerdict::cause()` beside `label()`, carried on the gate from the SAME
+verdict, rendered as `cause=` (the line now reads `verdict=could-not-judge
+cause=<the real reason>`). PLANT red:
+`left: None, right: Some("SOVEREIGN_CAPABILITY_PROBE=0")`.
+
+The primary slot's probe skip is NOT fixed, and the reason is the bar the order set.
+`distributable` means "this slot may be the mesh's sharded primary", and it is `true` for the
+ordinary primary on four paths (`engine.rs:2611`, `:3343`, `:3785`, `:4219` — verified
+directly, not from a report). The comment at `model_slot.rs:2170` says the skip is for
+distributed CHILDREN, which is a different fact the type does not carry. Fixing it means
+minting that distinction across those call sites AND changing a safety gate's verdict on every
+daemon's primary slot. Not one decider, and it wants its own row with a measurement of the
+affected models.
+
+**5 — incidental, and named because both loops depend on it.** `scripts/with-cargo-lock.sh`'s
+`lock_age` tried BSD `stat -f %m` first. On Linux `-f` is "filesystem status": it SUCCEEDS,
+prints a six-line block, and `$((now - born))` then died under `set -u` with `File: unbound
+variable`, after which the caller compared an empty string with `-gt`. The dead-holder reclaim
+still worked; the **stale-holder reclaim could never fire on Linux**. GNU form first, with a
+numeric guard. Seen live while sharing the lock with the rr-2 loop.
+
+**Falsified if** a decision's `decided_by` names a term the runner-up leads on; if a
+`StayLocal` line reads `winner=<none>` with `decided_by n/a`; or if `mixed-hubs` under
+`warm-start` is ever measured no worse than `as-implemented`, which would reopen the term.
+
+**Owed.** The production ranking is unchanged and the bar is unchanged by this stage. The
+open question — how a scheduler earns a peer speed signal without the forbidden rate card — is
+scheduler design with its own measurement, not campaign work.
 
 </details>
