@@ -1299,3 +1299,39 @@ Recorded, not changed:
 - **`size-gate` (advisory)** · 69 keys grew, the campaign's accretion;
   `warn_gate` by design. Not re-pinned.
 - **`concept-gate` could-not-judge** · exit 4, declared; not blocking.
+
+## ring-room — REVIEW-audit-rr-1
+
+Range audited: `git log --first-parent efe2aa080..HEAD` (the queue's start), 54
+non-merge commits; the domains merge `cf1638ca6` is foreign and was read only to
+attribute reds. Checks: TESTALL exit=100 (13425 pass, 2 fail); PREPUSH exit=1
+(arch-gate blocking). Rail predicate holds: the campaign's `commonwealth-rail`
+diff is the roster door (`lib.rs` :112-290) plus its test (`tests.rs:252`); the
+two `RingJournal` doc hunks (:545, :608) are `e9db0b96c`'s path renames.
+
+Findings, fixed (commit `9a2194f5d`):
+
+- **ARCH 6 (an `Err` collapsed into a success-shaped value)** ·
+  `sovereign/crates/sovereign-cli-llm/src/ring_cmd/mod.rs:466` · `roster show`
+  read an unopenable journal as "no roster.json" and printed "everyone in the
+  mesh". Now names the error and exits 1 (from `e94b26826`).
+- **ARCH 3 (a generated record not landed with the code)** ·
+  `quality/conformance/sovereign-daemon.toml` · three tags stale on lines this
+  campaign moved (`admission.rs` 771→796, 1093→1118; `daemon.rs` 5367→5375).
+  Regenerated.
+
+Open, operator's call (`ralph/NEEDS_HUMAN.md`):
+
+- **arch-gate (blocking), campaign growth** · `sovereign-core/src/runtime/epistemic.rs`
+  1444→1574 (`2ae717138`, `7c2ecdc94`); `sovereign-daemon/src/admin_http.rs`
+  1308→1387 (rr-1-media-origin-live, carried by the merge); approach band
+  207→209 files, 202703→204979 lines. The files that entered the band are
+  `commonwealth-rail/src/lib.rs` 798→846 (the permitted hunk, untouchable here),
+  `sovereign-cli-llm/src/mesh_media.rs` 595→931 and
+  `sovereign-mesh/tests/main/knowledge_fanout_e2e.rs` 644→987.
+
+Foreign reds seen by this audit (outside the campaign, not fixed here):
+`every_journey_cites_a_doc_that_exists` (gitignored `RING_APPLICATIONS.md`, as
+before); `hakari-verify` (`.config/hakari.toml:54` names `corpus-engine-vocab`,
+removed by `e9db0b96c`); `size-gate` (advisory, mostly new unbaselined crates
+from the domains landing); `concept-gate` could-not-judge (stale graph).
