@@ -189,6 +189,12 @@ exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 - Chose: Strike the clause. Bar clause (d) reads the path from the daemon's existing peer-path observation (`observe_peer_paths`) beside `served_by`; the row is done at 71db62fb7 (everything else landed with its gates). The pointer is corrected.
 - Because: The path is already observed and logged; the bar wants it visible, not relocated. The smaller reversible step (charter), reuse over a new port (ARCH 11), and the layer line stays where it is (ARCH 12).
 
+**A37 · 2026-09-19 · rr-2-media-posture · director (worker package from REVIEW-build-rr-2-room-topology)** — commit a5b57bb01 (the instrument) + this commit
+- Needed: The room instrument read five bars PASSED and `ra-room-film-from-littlemac` FAILED on clause (f) — the library never read "in use". The cause is not the instrument: `viewer::provision` sends `POST /Users/{id}/Policy` a PARTIAL document, and Jellyfin 12 refuses it whole (400, naming `AuthenticationProviderId` and `PasswordResetProviderId`), so no viewer is declared, `MediaRoute::viewer_user()` is `None` and `media_presence` publishes nothing. A second `offer` then fails again at `POST /Users/New` (400) because the user from the first attempt already exists. Both are inside the ALREADY-LANDED row rr-2-media-posture (ee1c6b388), whose clause (d) states the behaviour the code does not deliver.
+- Chose: Fix `viewer::provision`, in the already-landed row rather than in a new one. `POST .../Policy` REPLACES a policy, so the verb now GETs the user's policy, writes its own keys over it and sends the whole document — carrying the origin's two required provider ids forward and refusing by name if the origin did not state them. And it FINDS the viewer by name in `GET /Users` before creating it, resetting the password it cannot recover via `POST /Users/Password?userId=`. `REVIEW-build-rr-2-room-topology` is marked `[x]` at a5b57bb01 and no bar, floor or row expectation is edited: `REVIEW-DEMO-rr-2-run` still expects all seven clauses.
+- Because: The instrument did its job — it measured a real defect in another row and named the clause and the cause, which is what its check asks of it. The charter gives the director a row whose premise the tree contradicts when the order already implies the fix, and order (vi) measured the premise this code fails to meet. The smaller move (ARCH 11): no new row, no new type, no bar weakened; the seven-clause expectation is left for the demo row to judge rather than lowered to match today's tree.
+
+
 
 ## Flags for the operator
 
@@ -5651,5 +5657,98 @@ scheduler design with its own measurement, not campaign work.
 **Evidence.** The worker's package (ralph/NEEDS_HUMAN.md, removed by this commit): `git ls-files '*decision_log*'` → sovereign-scheduler and studio only; `sovereign-serving-host/Cargo.toml` names neither sovereign-mesh nor commonwealth-transport; `git grep observe_peer_paths` → daemon.rs:4482, iroh_access.rs:232. Also: `sovereign-scheduler/src/decision_log.rs` held uncommitted (+284) by the scheduler worker session (A35's `ScoreRecord::terms`) during this row — the two sessions' staging collided twice; the loop's remaining rows do not touch that file.
 
 **Decision.** (1). Falsified if the instrument cannot attribute an observed path to the ask's peer within the ask window (then the observation is too coarse and (2) is reopened as its own row).
+
+</details>
+
+
+## A37 · 2026-09-19 — rr-2: a policy write is a REPLACE, and a fixed account name means find before create
+
+<details>
+
+**The fork.** The room instrument is built and correct (a5b57bb01); one of its
+six bars reads FAILED. Either (1) fix `viewer::provision` — a change to the
+already-landed row rr-2-media-posture, which §7 forbids the BUILD row from
+making — or (2) accept clause (f) as a known rr-2 gap and edit
+`REVIEW-DEMO-rr-2-run` down to six of seven.
+
+**Chose (1).** Not a new row: the defect is inside rr-2-media-posture's own
+clause (d) ("the offer verb creates a Jellyfin user with … false, reads its
+policy back, and declares THAT user's `AccessToken`"). The code does not
+deliver that, so this restores the row's stated behaviour rather than widening
+it. The charter authorises exactly this ("fixing a row whose premise the tree
+contradicts, when the order already implies the fix"), and it stays inside the
+rr-2 media bound — a read-only user and `/Sessions`, nothing more.
+
+**The evidence, reproduced this session.**
+
+- The first failure, at INSTALL:
+  `target/ring-room-rr2-demo/room-holder-setup-little.out:10` —
+  `POST /Users/ba24…/Policy` → 400,
+  `{"errors":{"PasswordResetProviderId":["…required"],"AuthenticationProviderId":["…required"]}}`.
+- Its consequence, at the second call:
+  `target/ring-room-rr2-demo/room-offer.out:4` — `POST /Users/New` → 400, the
+  user already existing.
+- The schema, from the running origin's own OpenAPI rather than memory (the
+  inventory row's rule): `target/ralph/jf-inventory/openapi.json`, Jellyfin
+  12.0.0 — `components.schemas.UserPolicy.required` is exactly
+  `["AuthenticationProviderId","PasswordResetProviderId"]`, both
+  `minLength: 1`, so neither can be sent empty. `GET /Users` exists at
+  `DefaultAuthorization`; the password endpoint is
+  `POST /Users/Password?userId={uuid}` taking `UpdateUserPassword`
+  (`NewPw`, `ResetPassword`, no required field) — there is no
+  `/Users/{id}/Password`.
+- The code that sent the partial document:
+  `sovereign-cli-llm/src/mesh_media/viewer.rs` `read_only_policy()`, posted
+  alone; and the unconditional `POST /Users/New` above it.
+
+**What the fix is.** `merge_read_only(base)` builds the document actually
+sent: the origin's own policy with this verb's keys written over it. A
+`POST .../Policy` replaces rather than patches, so everything the verb does
+NOT decide has to be carried forward too — asserted on `MaxActiveSessions`.
+The two provider ids name which plugin owns the account; this verb has no
+business choosing one, so it forwards the origin's and refuses by name if the
+origin left it unstated (ARCH 6 — not invented, not defaulted).
+`viewer_id_in(users)` finds the fixed `commonwealth-mesh` name in `GET /Users`
+before creating it; a found account gets the invented password set on it,
+since the module deliberately keeps no password (the token is the durable
+half).
+
+**Watched fail (ARCH 5).** Both defects were planted back and the run gone red
+before the fix was trusted:
+
+- Plant A, `merge_read_only` sends the bare keys again →
+  `the_merged_policy_carries_the_origins_required_provider_ids` and
+  `the_merged_policy_overrules_every_right_a_viewer_must_not_have` FAILED.
+- Plant B, `viewer_id_in` always returns `None` →
+  `a_viewer_left_by_an_earlier_offer_is_found_not_recreated` FAILED.
+
+Restored: `sovereign-test --package sovereign-cli-llm --filter viewer`
+10 passed / 0 failed; `sovereign-lint --human` 0 errors.
+
+**What would falsify this.** The next `RING_ROOM_TOPOLOGY=room` run reading
+`ra-room-film-from-littlemac` FAILED on clause (f) again. That is
+`REVIEW-DEMO-rr-2-run`'s job and it has NOT been run here — the fix is proven
+against Jellyfin 12's published schema and at the unit seam, not against a
+live origin in this session. If (f) still fails, the next place to look is
+whether the merged write now reads back with `EnableMediaPlayback` true and
+whether `/Sessions` distinguishes the viewer's `UserId` from the holder's —
+`media_presence.rs:41-49` publishes nothing rather than guessing, so the
+symptom will look identical from the rail.
+
+**Not decided here.** No bar, floor or goodhart in
+`quality/campaigns/ring-room.toml` was touched; `REVIEW-DEMO-rr-2-run` still
+expects all seven clauses; no `[[exception]]` and no `except` list moved; no
+diff under `commonwealth-rail*`.
+
+**The worker's package, inline.** `ralph/NEEDS_HUMAN.md` as written at
+a5b57bb01 — its section (c) is the three questions above; (d) discloses two
+check corrections made between runs 1 and 2 (bar 1 clause (b) read a term that
+measured 0 on every node and proved nothing; bar 6 clause (b) matched a table
+header rather than a row) and two real instrument bugs found and fixed (a node
+on two podman networks was forwarded on the wrong one; a podman bridge NATs to
+the internet, so the `room` network is `--internal` now and the offline bar
+went FAILED → PASSED). Neither check correction was a loosening to green a red
+row, and both are argued in the code — reviewed and accepted as measured, not
+re-litigated here.
 
 </details>
