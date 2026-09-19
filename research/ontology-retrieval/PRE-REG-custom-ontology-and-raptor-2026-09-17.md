@@ -197,11 +197,23 @@ The arc is authored on camera, so its record is data.
   `atlas/ontology.json`. The comparison refuses arms whose hashes differ from
   the frozen pair. An edit after freeze is a deviation and re-runs every arm for
   that corpus.
+- **Model and host.** The manifest also records the synthesis model id, the
+  judge model id and the host. The comparison refuses a corpus whose arms
+  differ on any of the three: the closed-book exclusion set is a property of
+  one model, so arms run on two models do not share a bank. The model is named
+  at ratification (**open: not yet chosen**).
 
 ## Arms — one shape for every corpus
 
 Each arm runs as its own process, three times:
-`svrn eval run --bank <b> --synth --prod-pipeline --isolate --limit 30 --format json`.
+`svrn eval run --bank <b> --synth --isolate --format json`.
+
+(Corrected 2026-09-18, before ratification. The draft command also passed
+`--prod-pipeline --limit 30`. Under `--synth` both are dead: the dispatcher
+takes the synth branch first and never reads `prod_pipeline`
+(`sovereign/crates/sovereign-cli-llm/src/eval_cmd/mod.rs:872-890`), and
+`run_bank_synth` is not passed `a.limit` (`mod.rs:883`). The synth lane drives
+the full chat pipeline, so it is the production path without the flag.)
 
 | Arm | Ontology corpora | Literary |
 |---|---|---|
@@ -212,8 +224,19 @@ Each arm runs as its own process, three times:
 | **full** | custom ontology, walk and atom-enum on (`quality/env-flags.toml:248`, `:304`, `:311`) | the same copy after `svrn enrich summary-atoms` |
 | **oracle** | bare, against a corpus holding only the attesting passages | the held-out plot summary as the only context |
 
-- **Closed-book** needs the study's one Rust addition. No flag in
-  `sovereign/crates/sovereign-cli-llm/src/eval_cmd/mod.rs` suppresses retrieval
+- **Deep pool has no knob today (open, found 2026-09-18).** `--limit 80` does
+  nothing under `--synth` (above). What reaches synthesis is fixed by two
+  constants, `KQ_MERGED_LIMIT = 20` (`prompts.rs:366`) and
+  `MAX_KNOWLEDGE_CHARS = 24000` (`formatters.rs:39`). An arm that answers "just
+  retrieve more" has to raise both, through one declared env knob
+  (`quality/env-flags.toml`, status `experiment`), and its ceiling is the synth
+  model's context. The multiplier is fixed at ratification together with the
+  model; until then this arm is never-ran, not a null.
+- **Closed-book** is a flag over an existing seam, not new machinery:
+  `TurnMode::Naked` (`sovereign-contracts/src/types/turn.rs:418-424`) already
+  bypasses retrieval, router, gate and atlas, and `collect_turn` already takes
+  a `TurnMode` (`runner.rs:1669-1676` passes `Grounded`). No flag in
+  `sovereign/crates/sovereign-cli-llm/src/eval_cmd/mod.rs` selects it
   (checked 2026-09-17). Questions that closed-book answers (judge ≥ 0.5 on all
   three runs) are excluded, and their count is shown on the scoreboard.
 - **Literary ablation and full** are two states of one build. That is the
@@ -285,8 +308,16 @@ member is one `expected_facts` entry
 ## Bars — proposed, fixed at ratification
 
 Each bar is the mean of three runs, pooled per kind across the corpora that
-carry that kind. A kind needs n ≥ 20 pooled questions or its verdict is
-could-not-judge. Banks hold 10 questions per (corpus, kind) carried.
+carry that kind. A kind needs n ≥ 20 pooled questions **after** closed-book
+exclusions and kind-rule drops, or its verdict is could-not-judge. Banks hold
+15 questions per (corpus, kind) carried, and 20 for K2.
+
+K2 is sized apart because only ANS and Hollinger carry it. At 10 per cell it
+pooled to exactly 20 before any exclusion, so one excluded question made the
+kind unjudgeable, and an unbuilt Hollinger (stage 1b slipping) left it at 10.
+At 20 per cell, ANS alone clears the floor with no exclusions and the pair
+survives a 50% drop. The other kinds pool across three corpora or three books
+and survive a 55% drop at 15.
 
 1. **Doesn't hurt lookups (K0).** Full ≥ bare − band, on every corpus.
 2. **Wins where predicted (K1–K3 for the ontology, K4 for RAPTOR).**
