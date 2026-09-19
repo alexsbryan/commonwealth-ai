@@ -1,4 +1,6 @@
 # at most one heavy row per wave
 REVIEW-build-e7-path-synth
+REVIEW-build-e7x-head-noun-merge
 REVIEW-build-e7-compare-core
 REVIEW-build-e7-checks
+REVIEW-DEMO-e7-pod-window

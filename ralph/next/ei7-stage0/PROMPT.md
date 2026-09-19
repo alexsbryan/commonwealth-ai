@@ -38,7 +38,7 @@ comment beyond the one the row asks for (ARCH principle 2).
 
 | prefix | what you do |
 |---|---|
-| `e7-` | build the unit (§3) |
+| `e7-`, `e7x-` | build the unit (§3). `e7x-` rows are product fixes the spikes required; the same rules apply |
 | `REVIEW-build-e7-` | build the unit (§3); it needs judgment, which is why the stronger model runs it |
 | `REVIEW-mint-e7-` | do not build; decompose into rows (§4), never more than the row's `cap` |
 | `REVIEW-audit-e7-` | full gate and principles review (§4) |
@@ -151,6 +151,7 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
 - **No tuning.** Never change a walk budget, a prompt, a threshold or a
   retrieval constant's DEFAULT. The one knob this queue adds ships default-off.
   A row that seems to need a default changed is §6.
+- **The rented pod.** Never run `scripts/dev-pod.sh up`: renting is the operator's act (`HUMAN-e7-pod-up`). The ONLY thing that touches a rented pod is `research/ontology-retrieval/harness/pod_window.sh`, which destroys it on every exit. If you ever find a pod billing with no window running (`scripts/dev-pod.sh status`), run `scripts/dev-pod.sh down`, then §6.
 - Never acquire a study corpus (ANS, EDGAR, NarrativeQA) and make no outbound
   network request. Stage 0 runs on what is installed.
 - When a row changes a subsystem `sovereign/SYSTEM_OVERVIEW.md` describes, fix
