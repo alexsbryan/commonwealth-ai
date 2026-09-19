@@ -157,6 +157,11 @@ exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 - Chose: ESCALATION STANDS. No row, code or baseline change. The row stays `[~]` and `ralph/NEEDS_HUMAN.md` stays in place. Re-running the resolution cannot move this; only the operator can.
 - Because: Reproduced on 4b6cd17be, which is 0 commits behind origin/main: all five growing files are this branch's. Splitting every campaign file leaves the band at 207 files / 203069 lines against 202703, +366. The one entrant that cannot move is the rail's lib.rs (846), and it moves only with a rail diff. Closing that gap takes `--update-baseline` (PROMPT §7; charter: operator's) or a rail diff (charter: operator's). The only row after the audit is HUMAN-rr-1-the-room, so the operator is the next step in either case.
 
+**A31 · 2026-09-18 · REVIEW-audit-rr-1 · director (supervisor resolution 3)** — this commit
+- Needed: The supervisor re-opened the escalation a third time. Nothing in the tree or on origin has changed since A30.
+- Chose: ESCALATION STANDS, for the third time. No row, code or baseline change. The row stays `[~]` and `ralph/NEEDS_HUMAN.md` stays in place. A fourth resolution will reach the same result unless the operator acts first.
+- Because: At 34a005f7f, `cargo xtask arch-gate` exits 1 with the same numbers as A29 and A30: 209 files / 204987 lines, epistemic.rs +130, admin_http.rs +79. The branch is 66 ahead of origin/main and 0 behind. Getting to green still takes either a baseline raise (PROMPT §7; charter: operator's) or a rail diff (charter: operator's), and the next row, HUMAN-rr-1-the-room, is the operator's in either case.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -5284,5 +5289,26 @@ line. Recommendation: (2), as A29 said.
 
 Falsified if: a split inside the charter brings the band to ≤202703 lines without a rail diff or
 touching an unrelated band file, or origin/main moves and absorbs any of the five files' growth.
+
+</details>
+
+## A31 · 2026-09-18 — REVIEW-audit-rr-1: third resolution, same fork, same answer
+
+<details>
+
+Fork: A29's, unchanged: accept the growth or split the files.
+
+Evidence (this session): `scripts/with-cargo-lock.sh cargo xtask arch-gate` from `corpus-engine/`
+at 34a005f7f, exit 1: "209 file(s) / 204987 lines in the 800-1200 approach band"; epistemic.rs
+1444 → 1574 (+130); admin_http.rs 1308 → 1387 (+79); files 207 -> 209; lines 202703 -> 204987.
+`git rev-list --left-right --count HEAD...origin/main` after a fetch = `66 0`. No `ralph/STOP`.
+
+Nothing the charter allows closes the gap, because the rail's lib.rs (846) cannot move without a
+rail diff. A29 has the options and their costs. The recommendation is still (2): split the four
+campaign files, then hand-raise the band by the ~366-line rail residue, with a §10 ledger line.
+
+Falsified if: the operator has chosen (NEEDS_HUMAN removed by them, or a baseline or split commit
+is on the branch), or an arch-gate run reads ≤202703 band lines with both per-file rows inside
+slack.
 
 </details>
