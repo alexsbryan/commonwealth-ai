@@ -201,9 +201,16 @@ imageproc = { version = "0.26", optional = true }
 # Polygon offset ("unclip") for detection boxes. Already in the tree
 # transitively (4.0.7); pinning `4` here resolves the single version.
 i_overlay = { version = "4", optional = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [features]
-default = []
+# `treesitter` is default-on since build-latency move bl-hakari: the gate
+# feature list (`corpus-engine/treesitter`) resolves it in every full build, so
+# default-on keeps a `-p` scope from compiling a second sovereign-tools
+# (quality/BUILD_LATENCY.md D1). `atos` and `dev-tools` are NOT here, and were
+# for one uncommitted afternoon: they pull back-of-house crates, and layer-gate
+# forbids those in the default build (quality/ARCH_LAYERS.toml, back-of-house).
+default = ["treesitter"]
 email = ["lettre"]
 treesitter = ["corpus-engine/treesitter"]
 # `atos` is the experimental agent feature-lifecycle subsystem (charter →

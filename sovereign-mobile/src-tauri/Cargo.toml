@@ -47,6 +47,7 @@ tracing = { workspace = true }
 # The `iroh` feature brings HttpBridge + the pairing-string parser —
 # dial-by-key host access with no VPN (TRANSPORT_MIGRATION.md Track M).
 commonwealth-transport = { path = "../../commonwealth/crates/commonwealth-transport", features = ["iroh"] }
+workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 # Pin-time decision (see connection/keychain.rs): the crate that backs
 # iOS Keychain *and* Android Keystore under Tauri 2 mobile. Candidates:

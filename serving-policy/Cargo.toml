@@ -22,6 +22,7 @@ serde = { workspace = true }
 # embedded `default_pipelines.toml`. Third-party, so it costs the crate no
 # in-repo edge — which is the only budget this crate keeps.
 toml = { workspace = true }
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [lints]
 workspace = true

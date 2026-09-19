@@ -235,6 +235,12 @@ members = [
     # layer-gate (Cargo-declared edges) and the code-intel arch_report
     # (SCIP-observed edges) so the two halves can't drift.
     "quality/arch-layers",
+
+    # Quality program (2026-07-11) — schema + evaluator for the declared
+    # layer map (quality/ARCH_LAYERS.toml). One parser shared by the xtask
+    # layer-gate (Cargo-declared edges) and the code-intel arch_report
+    # (SCIP-observed edges) so the two halves can't drift.
+    "workspace-hack",
 ]
 
 [workspace.package]

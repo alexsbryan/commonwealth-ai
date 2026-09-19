@@ -71,6 +71,8 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ADAPTER="${SCRIPT_DIR}/../sovereign/crates/sovereign-tools/src/code/test_adapters/sovereign-cargo-check-adapter"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+# shellcheck source=lib/cargo-scope.sh
+source "${SCRIPT_DIR}/lib/cargo-scope.sh"
 
 # resolve_cargo_jobs — the concurrency budget, shared with sovereign-test.sh
 # so both gates throttle by the same rule. See lib/cargo-jobs.sh.
@@ -329,6 +331,51 @@ cargo_args+=(--all-targets)
 # gap: cargo fingerprints on features, so alternating lint and test would
 # rebuild the affected crates on every switch.
 #
+# `sovereign-mesh/mesh-sim` (the Tier-1 scheduler simulator,
+# SCHEDULER_QUALITY.md §5) rides along on the same rule. It is
+# off-by-default so production never links a measurement harness, but
+# a harness nothing compiles is a harness that silently rots — and
+# this one is pure compute with no extra dependencies, so checking it
+# costs a few seconds. Same leaf-crate conditional as dev-tools.
+#
+# `sovereign-cli/code-intel` (2026-08-06) is the `svrn code index` / `svrn
+# refresh` surface that ships in the release binary
+# (scripts/release-cli-local.sh passes it). Without it here the gate would
+# never COMPILE ~1,500 lines that real users run — a worse failure than a
+# gate that goes red, because nothing ever goes red. Same leaf-crate rule.
+#
+# `sovereign-cli/awareness` (2026-08-21, nc-26) is here for that exact reason,
+# and it is the closure loop for the bug that put it here. `awareness_cmd`
+# imported `crate::enrich_cmd::inference_client` from a crate that does not
+# contain `enrich_cmd`; `--features awareness` failed with two E0433 from the
+# 2026-05-22 slice-5 split until nc-26 found it — THREE MONTHS — because no
+# gate anywhere built the feature. The repair moved the module to the crate
+# that owns the import, which fixes today's break; this line is what stops the
+# next crate split from re-opening it silently. A feature nothing compiles is a
+# feature that rots, and the rot is invisible precisely because it is green.
+#
+# Cost measured when it was added, macOS peer, `cargo check --workspace
+# --all-targets` alternated A/A/B/B on one warm tree: 37s, 31s WITHOUT the
+# flag; 31s, 31s WITH it. Warm steady-state delta is ZERO to the second, and
+# the flip between feature sets costs nothing either — cargo fingerprints the
+# two configurations separately and keeps both. (Do not read the wall-clock of
+# the whole script the same way: `jobs:` is derived from FREE MEMORY, so two
+# runs minutes apart can differ by 2x for reasons that have nothing to do with
+# the feature list.)
+#
+# The reason it is nearly free: enabling it links sovereign-cli-llm into the
+# dispatcher — llama.cpp, the grammars, arrow — but this same workspace run
+# already builds every one of those for the sibling binary. What is genuinely
+# new is awareness_cmd's 7,526 lines, and it is paid once.
+# Feature resolution is SHARED with sovereign-test.sh: `resolve_features` in
+# scripts/lib/cargo-scope.sh. It is closure-aware — a `<pkg>/<feature>` flag
+# is emitted only when <pkg> is reachable from the scope AND nameable (a
+# direct dep of a selected package; cargo rejects the flag otherwise). Until
+# 2026-09-17 this script carried its own inline copy that started from
+# `corpus-engine/treesitter` unconditionally, so a scope whose closure has
+# no corpus-engine (sovereign-desktop alone: 409 file-edits in the 30 days
+# before) failed in 32 ms with cargo's "package does not contain this
+# feature" and was reported as a Fedora-host toolchain failure
 # It emits a `<pkg>/<feature>` flag only when cargo can NAME that package from
 # this selection — a selected package, or a direct dependency of one. An
 # unconditional flag is a hard cargo error, not a no-op, when its package is

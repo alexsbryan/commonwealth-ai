@@ -22,6 +22,7 @@ getrandom = "0.3"
 hex = "0.4"
 tracing = "0.1"
 ed25519-dalek = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 # `toml` is a DEV-dependency only, since 2026-09-04. `model_aliases` was this
 # crate's ONLY production TOML parser and it left for `oicp-types`; the three

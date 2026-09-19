@@ -544,6 +544,10 @@ class PoolTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = self.fixture(tmp, "- [ ] dm-a — depends []\n- [ ] dm-b — depends []\n")
             pool = self.make(root, lambda cwd, env=None: FakeLane(cwd, body=cwd.name, shared=True))
+    def test_merge_conflict_halts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] dm-a — depends []\n- [ ] dm-b — depends []\n")
+            pool = self.make(root, lambda cwd: FakeLane(cwd, body=cwd.name, shared=True))
             self.assertEqual(pool.run(), 3)
             pkg = (root / "ralph/NEEDS_HUMAN.md").read_text()
             self.assertIn("merge conflict", pkg)
@@ -577,6 +581,23 @@ class GuardTests(unittest.TestCase):
             self.assertEqual(rc, 3)
             self.assertIn("No space left",
                           (pathlib.Path(tmp) / "ralph/NEEDS_HUMAN.md").read_text())
+
+
+class PathsForTests(unittest.TestCase):
+    def test_run_flags_reach_paths(self):
+        import argparse, tempfile
+        with tempfile.TemporaryDirectory() as d:
+            a = argparse.Namespace(workdir=d, prompt="ralph/next/x/PROMPT.md", state="ralph/next/x/STATE.md")
+            p = ralph.paths_for(a)
+            self.assertEqual(p.state, "ralph/next/x/STATE.md")
+            self.assertEqual(p.prompt, "ralph/next/x/PROMPT.md")
+
+    def test_absent_flags_keep_the_defaults(self):
+        import argparse, tempfile
+        with tempfile.TemporaryDirectory() as d:
+            p = ralph.paths_for(argparse.Namespace(workdir=d))
+            self.assertEqual(p.state, "ralph/STATE.md")
+            self.assertEqual(p.prompt, "ralph/PROMPT.md")
 
 
 if __name__ == "__main__":

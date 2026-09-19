@@ -45,7 +45,7 @@ fn main() {
     println!("cargo:rustc-env=SOVEREIGN_GIT_SHA={sha}{dirty}");
     // Re-run when HEAD moves so the SHA stays current without a clean
     // build. `.git/HEAD` changes on commit / branch switch.
-    println!("cargo:rerun-if-changed=../../.git/HEAD");
-    println!("cargo:rerun-if-changed=../../.git/index");
+    println!("cargo:rerun-if-changed=../../../.git/HEAD");
+    println!("cargo:rerun-if-changed=../../../.git/index");
     println!("cargo:rerun-if-env-changed=SOVEREIGN_GIT_SHA");
 }

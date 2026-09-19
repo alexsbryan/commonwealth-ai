@@ -60,6 +60,7 @@ tracing = { workspace = true }
 # `LaneWarmth::Deferred` spawns the meta-atlas warm on a blocking thread so a
 # service's boot does not block on a ~1 GB JSON parse.
 tokio = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [lints]
 workspace = true

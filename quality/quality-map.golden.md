@@ -31,6 +31,7 @@
 | `env-gate` | `cargo xtask env-gate` | hard | F0 | 3s | yes |
 | `feature-matrix` | `cargo hack check --each-feature --no-dev-deps` | advisory | F0 | unmeasured | **no** |
 | `feature-powerset` | `cargo hack check --feature-powerset --depth 2 --no-dev-deps` | advisory | F0 | unmeasured | **no** |
+| `hakari-verify` | `cargo hakari verify` | advisory | F0 | 3s | **no** |
 | `hook-wiring` | `bash .claude/hooks/tests/settings-wiring.sh` | hard | F0 | 0.30s | **no** |
 | `instrument-gate` | `cargo xtask instrument-gate` | hard | F0 | 0.04s | yes |
 | `judge-funnel-gate` | `cargo xtask judge-funnel-gate` | hard | F0 | 0.42s | yes |
@@ -287,7 +288,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 | `ci:suites` | `hook-selftests`, `pre-push-fail-closed`, `settings-wiring-self-test`, `shell-selftests` |
 | `ci:test` | `bench-compile`, `cli-journey-selftest`, `dst-scenarios`, `sovereign-test` |
 | `nightly` | `contract-nightly` |
-| `prepush` | `arch-gate`, `boundary-gate`, `clock-gate`, `concept-gate`, `deletion-manifest`, `docs-gate`, `env-gate`, `hook-wiring`, `instrument-gate`, `judge-funnel-gate`, `judge-replay-control`, `layer-gate`, `layout-gate`, `lifecycle-gate`, `lock-gate`, `rustfmt`, `size-gate`, `sovereign-lint-scoped` |
+| `prepush` | `arch-gate`, `boundary-gate`, `clock-gate`, `concept-gate`, `deletion-manifest`, `docs-gate`, `env-gate`, `hakari-verify`, `hook-wiring`, `instrument-gate`, `judge-funnel-gate`, `judge-replay-control`, `layer-gate`, `layout-gate`, `lifecycle-gate`, `lock-gate`, `rustfmt`, `size-gate`, `sovereign-lint-scoped` |
 | `run-if-stale` | `co-sweep`, `contract-nightly`, `daemon-concurrency-soak`, `daemon-concurrency-soak-control`, `daemon-concurrency-soak-selftest`, `daemon-soak-report`, `daemon-soak-report-selftest`, `judge-replay-bank`, `judge-replay-bank-feed`, `oicp-conformance` |
 | `smoke:0` | `desktop-check`, `desktop-e2e-synthetic`, `desktop-vitest`, `sovereign-lint`, `sovereign-test` |
 | `smoke:1` | `desktop-ttfi`, `mtp-probe`, `smoke-attach-mode`, `throughput-probe` |
@@ -368,6 +369,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 - `evidence-verdict` — AGENTS.md §Code Intelligence (the tool table row: "Does the test my commit body cites actually SEE the change?") · runs in: by-hand
 - `feature-matrix` — .github/workflows/weekly.yml (header) · runs in: weekly:features
 - `feature-powerset` — .github/workflows/weekly.yml (header) · runs in: weekly:features
+- `hakari-verify` — quality/BUILD_LATENCY.md D1 — the workspace-hack crate keeps feature resolution scope-invariant; `cargo hakari generate` after any dependency change, or this reports drift. Advisory until a week of pushes shows no false positive (AGENTS.md §Definition of done); needs cargo-hakari installed (`cargo install cargo-hakari --locked`). · runs in: prepush
 - `hook-wiring` — .claude/hooks/tests/settings-wiring.sh · runs in: prepush
 - `inner-chaos-calibrate` — sovereign/crates/sovereign-desktop/tests/e2e/CHAOS_QA_METHODOLOGY.md · runs in: smoke:2
 - `inner-chaos-soak` — sovereign/bench/chaos_monkey/README.md · runs in: smoke:5

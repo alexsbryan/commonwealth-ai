@@ -287,6 +287,14 @@ pub struct AppStateInner {
     /// (DC §4.2). An `Arc` because the mesh loops take a handle to the part
     /// (they may not name this crate's `AppState`).
     pub fabric: std::sync::Arc<fabric::FabricPart>,
+    /// The ring rail's LIVE lane: what peers have pushed ephemerally and
+    /// nobody has drained yet (main, 2026-09-18). Held by the daemon — the
+    /// `LiveBuffer` type lives in this crate's `routes_rail_live`, which the
+    /// mesh's `FabricPart` may not name — and read through one accessor
+    /// (ARCH §7.5). Main's original placement was beside `ring_write_nudge`
+    /// in the flat `AppStateInner`; the dissolution moved the rail's durable
+    /// state into `FabricPart`, and the live lane stays here with its routes.
+    pub rail_live_buffer: std::sync::Arc<crate::routes_rail_live::LiveBuffer>,
     /// Serving's part: the model, pipeline and slot aliases, the servable
     /// model files, the local inference handle, the peer and client admission
     /// schedulers with their caps, switch, tallies, rejected-header record and
@@ -568,6 +576,13 @@ impl AppState {
     /// §7.5).
     pub fn ring_write_nudge(&self) -> Arc<tokio::sync::Notify> {
         Arc::clone(&self.inner.fabric.ring_write_nudge)
+    }
+
+    /// The live lane's arrived-payload buffer. ONE accessor for ONE buffer
+    /// (ARCH §7.5): the internal receiver pushes through it and the client
+    /// drain empties it, and nothing else may hold a second one.
+    pub fn rail_live_buffer(&self) -> Arc<crate::routes_rail_live::LiveBuffer> {
+        Arc::clone(&self.inner.rail_live_buffer)
     }
 
     /// The configured client-API bearer token. `None` ⇒ no token configured.
@@ -1068,6 +1083,7 @@ impl AppState {
         Self {
             inner: Arc::new(AppStateInner {
                 fabric,
+                rail_live_buffer: Arc::new(crate::routes_rail_live::LiveBuffer::default()),
                 serving: serving::ServingPart {
                     model_aliases: ModelAliasTable::default_table(),
                     pipeline_aliases:

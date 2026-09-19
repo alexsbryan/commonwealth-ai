@@ -16,6 +16,7 @@ use crate::routes_oicp;
 use crate::routes_oicp_ingest;
 use crate::routes_ollama;
 use crate::routes_rail;
+use crate::routes_rail_live;
 use crate::routes_responses;
 use crate::routes_status;
 use crate::state::AppState;
@@ -267,6 +268,14 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
         Router::new()
             .route("/v1/rail/append", post(routes_rail::append))
             .route("/v1/rail/log", get(routes_rail::log))
+            // The live lane — delivery, not record. Beside `append`
+            // because the same page uses both and the same listener
+            // decides who may reach either; nothing it carries lands in
+            // a store, a journal or on disk. See `routes_rail_live`.
+            .route(
+                "/v1/rail/live",
+                post(routes_rail_live::live_push).get(routes_rail_live::live_drain),
+            )
     } else {
         Router::new()
     };
@@ -473,6 +482,11 @@ pub fn internal_router(state: AppState) -> Router {
         // store is a projection of these journals now, so a ledger that only
         // grows is carried by digest instead of by snapshot.
         .route("/internal/ring/sync", post(routes_internal::ring_sync))
+        // The live lane's receiver. Deliberately NOT beside `ring/sync` in
+        // the census of replicated-state senders: what arrives here reaches
+        // the bounded in-memory buffer on `AppState` and nothing else, so a
+        // restart is the whole of its retention policy.
+        .route("/internal/ring/live", post(routes_internal::ring_live))
         // Runtime slot management — load/unload extras chat slots
         // without daemon restart. Complements the static
         // `[models.extra]` config table (loaded at startup) by

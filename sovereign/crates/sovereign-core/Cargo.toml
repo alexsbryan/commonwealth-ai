@@ -82,6 +82,7 @@ oicp-client = { workspace = true }
 pdf-extract = "0.7"
 # Staging file for the PDF leg — the extractor takes a path, not bytes.
 tempfile = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
 tokio = { workspace = true }

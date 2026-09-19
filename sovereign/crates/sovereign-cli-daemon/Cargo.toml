@@ -120,6 +120,7 @@ tempfile = "3"
 # dev-dependencies 2026-08-10: the daemon's own path resolution now goes
 # through `rebrand`, so this is a real dependency, not a test-only one.
 sovereign-contracts = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
 tower = { workspace = true, features = ["util"] }

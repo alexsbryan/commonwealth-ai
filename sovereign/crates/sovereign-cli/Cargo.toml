@@ -143,6 +143,7 @@ regex = { workspace = true }
 # 2026-08-21; it moved to sovereign-cli-llm and took its own copy of this dep
 # with it, so this stays non-optional for memory_cmd alone.)
 rusqlite = { version = "0.35", features = ["bundled"] }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 # `libc` is used by `serve_cmd` for `kill -TERM` via /bin/kill and by
 # `stop_cmd` for `process_alive`. Unix-only.
 [target.'cfg(unix)'.dependencies]

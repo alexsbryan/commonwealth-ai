@@ -1,0 +1,33 @@
+/home/alexbryan/.bashrc: line 51: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+  sovereign/crates/sovereign-core/src/deep_research/mod.rs lint=17.7s(rc=0) test=15.6s(rc=0)
+  sovereign/crates/sovereign-mesh/src/daemon.rs lint=9.2s(rc=0) test=14.6s(rc=0)
+  sovereign/crates/sovereign-cli-llm/src/lib.rs lint=8.2s(rc=0) test=9.8s(rc=0)
+  corpus-engine/src/engine/mod.rs lint=29.3s(rc=0) test=12.6s(rc=0)
+  sovereign/crates/sovereign-desktop/src-tauri/src/state.rs lint=3.1s(rc=0) test=5.2s(rc=0)
+  sovereign/crates/sovereign-contracts/src/setup_config.rs lint=24.8s(rc=0) test=4.2s(rc=0)
+  sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/mod.rs lint=5.0s(rc=0) test=5.5s(rc=0)
+  sovereign/crates/sovereign-turn-client/src/lib.rs lint=9.9s(rc=0) test=2.1s(rc=0)
+  sovereign/crates/sovereign-tools/src/local_corpus/manager.rs lint=12.4s(rc=0) test=7.9s(rc=0)
+  sovereign/crates/sovereign-core/tests/main/f26_egress_census.rs lint=–s(rc=0) test=3.0s(rc=0)
+no fn body found in kernel-types/src/lib.rs
+no fn body found in kernel-types/src/lib.rs
+no fn body found in kernel-types/src/lib.rs
+no fn body found in kernel-types/src/lib.rs
+  kernel-types/src/lib.rs lint=7.4s(rc=0) test=0.8s(rc=0)
+  sovereign/crates/sovereign-core/src/deep_research/mod.rs lint=17.6s(rc=0) test=15.8s(rc=0)
+  sovereign/crates/sovereign-mesh/src/daemon.rs lint=8.8s(rc=0) test=15.4s(rc=0)
+  sovereign/crates/sovereign-cli-llm/src/lib.rs lint=8.0s(rc=0) test=9.5s(rc=0)
+  corpus-engine/src/engine/mod.rs lint=30.1s(rc=0) test=12.8s(rc=0)
+  sovereign/crates/sovereign-desktop/src-tauri/src/state.rs lint=3.0s(rc=0) test=5.2s(rc=0)
+  sovereign/crates/sovereign-contracts/src/setup_config.rs lint=25.6s(rc=0) test=4.2s(rc=0)
+  sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/mod.rs lint=4.9s(rc=0) test=5.5s(rc=0)
+  sovereign/crates/sovereign-turn-client/src/lib.rs lint=9.4s(rc=0) test=2.0s(rc=0)
+  sovereign/crates/sovereign-tools/src/local_corpus/manager.rs lint=13.0s(rc=0) test=8.0s(rc=0)
+  sovereign/crates/sovereign-core/tests/main/f26_egress_census.rs lint=–s(rc=0) test=2.8s(rc=0)
+no fn body found in kernel-types/src/lib.rs
+no fn body found in kernel-types/src/lib.rs
+no fn body found in kernel-types/src/lib.rs
+no fn body found in kernel-types/src/lib.rs
+  kernel-types/src/lib.rs lint=7.6s(rc=0) test=0.8s(rc=0)
+{"primary_1": 22.43, "primary_2": 22.61, "band": 0.008, "verdict": "passed", "runs": [{"primary_s": 22.43, "rows": [{"file": "sovereign/crates/sovereign-core/src/deep_research/mod.rs", "crate": "sovereign-core", "weight": 148, "lint_s": 17.7, "test_s": 15.6, "lint_rc": 0, "test_rc": 0}, {"file": "sovereign/crates/sovereign-mesh/src/daemon.rs", "crate": "sovereign-mesh", "weight": 181, "lint_s": 9.2, "test_s": 14.6, "lint_rc": 0, "test_rc": 0}, {"file": "sovereign/crates/sovereign-cli-llm/src/lib.rs", "crate": "sovereign-cli-llm", "weight": 140, "lint_s": 8.2, "test_s": 9.8, "lint_rc": 0, "test_rc": 0}, {"file": "corpus-engine/src/engine/mod.rs", "crate": "corpus-engine", "weight": 137, "lint_s": 29.3, "test_s": 12.6, "lint_rc": 0, "test_rc": 0}, {"file": "sovereign/crates/sovereign-desktop/src-tauri/src/state.rs", "crate": "sovereign-desktop", "weight": 137, "lint_s": 3.1, "test_s": 5.2, "lint_rc": 0, "test_rc": 0}, {"file": "sovereign/crates/sovereign-contracts/src/setup_config.rs", "crate": "sovereign-contracts", "weight": 83, "lint_s": 24.8, "test_s": 4.2, "lint_rc": 0, "test_rc": 0}, {"file": "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/mod.rs", "crate": "sovereign-cli-daemon", "weight": 74, "lint_s": 5.0, "test_s": 5.5, "lint_rc": 0, "test_rc": 0}, {"file": "sovereign/crates/sovereign-turn-client/src/lib.rs", "crate": "sovereign-turn-client", "weight": 53, "lint_s": 9.9, "test_s": 2.1, "lint_rc": 0, "test_rc": 0}, {"file": "sovereign/crates/sovereign-tools/src/local_corpus/manager.rs", "crate": "sovereign-tools", "weight": 50, "lint_s": 12.4, "test_s": 7.9, "lint_rc": 0, "test_rc": 0}, {"file": "sovereign/crates/sovereign-core/tests/main/f26_egress_census.rs", "crate": "sovereign-core", "weight": 37, "lint_s": null, "test_s": 3.0, "lint_rc": 0, "test_rc": 0}, {"file": "kernel-types/src/lib.rs", "crate": "kernel-types", "weight": 18, "lint_s": 7.4, "test_s": 0.8, "lint_rc": 0, "test_rc": 0}], "failed": []}, {"primary_s": 22.61, "rows": [{"file": "sovereign/crates/sovereign-core/src/deep_research/mod.rs", "crate": "sovereign-core", "weight": 148, "lint_s": 17.6, "test_s": 15.8, "lint_rc": 0, "test_rc": 0}, {"file": "sovereign/crates/sovereign-mesh/src/daemon.rs", "crate": "sovereign-mesh", "weight": 181, "lint_s": 8.8, "test_s": 15.4, "lint_rc": 0, "test_rc": 0}, {"file": "sovereign/crates/sovereign-cli-llm/src/lib.rs", "crate": "sovereign-cli-llm", "weight": 140, "lint_s": 8.0, "test_s": 9.5, "lint_rc": 0, "test_rc": 0}, {"file": "corpus-engine/src/engine/mod.rs", "crate": "corpus-engine", "weight": 137, "lint_s": 30.1, "test_s": 12.8, "lint_rc": 0, "test_rc": 0}, {"file": "sovereign/crates/sovereign-desktop/src-tauri/src/state.rs", "crate": "sovereign-desktop", "weight": 137, "lint_s": 3.0, "test_s": 5.2, "lint_rc": 0, "test_rc": 0}, {"file": "sovereign/crates/sovereign-contracts/src/setup_config.rs", "crate": "sovereign-contracts", "weight": 83, "lint_s": 25.6, "test_s": 4.2, "lint_rc": 0, "test_rc": 0}, {"file": "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/mod.rs", "crate": "sovereign-cli-daemon", "weight": 74, "lint_s": 4.9, "test_s": 5.5, "lint_rc": 0, "test_rc": 0}, {"file": "sovereign/crates/sovereign-turn-client/src/lib.rs", "crate": "sovereign-turn-client", "weight": 53, "lint_s": 9.4, "test_s": 2.0, "lint_rc": 0, "test_rc": 0}, {"file": "sovereign/crates/sovereign-tools/src/local_corpus/manager.rs", "crate": "sovereign-tools", "weight": 50, "lint_s": 13.0, "test_s": 8.0, "lint_rc": 0, "test_rc": 0}, {"file": "sovereign/crates/sovereign-core/tests/main/f26_egress_census.rs", "crate": "sovereign-core", "weight": 37, "lint_s": null, "test_s": 2.8, "lint_rc": 0, "test_rc": 0}, {"file": "kernel-types/src/lib.rs", "crate": "kernel-types", "weight": 18, "lint_s": 7.6, "test_s": 0.8, "lint_rc": 0, "test_rc": 0}], "failed": []}]}
+aa exit 0

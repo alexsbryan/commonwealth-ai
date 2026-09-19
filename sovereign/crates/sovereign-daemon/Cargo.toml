@@ -95,6 +95,7 @@ tokio-stream = { version = "0.1", features = ["sync"] }
 if-addrs = "0.13"
 chrono = { workspace = true }
 tempfile = "3"
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 # `listener_watch`'s self-SIGTERM on a lost client listener (moved here with
 # the composition half at domains `dm-daemon-cli-composition`).

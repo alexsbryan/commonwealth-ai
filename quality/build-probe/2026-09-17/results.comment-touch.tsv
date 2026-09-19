@@ -1,0 +1,11 @@
+probe	crate	shape	run	wall_s	exit	note
+warm	-	check-full	0	158.7	0	
+warm	-	check-full	1	7.2	0	
+warm	-	build-ws	0	13.2	0	
+warm	-	build-ws	1	11.4	0	
+sovereign/crates/sovereign-mesh/src/daemon.rs	sovereign-mesh	lint-scoped	0	192.0	0	
+sovereign/crates/sovereign-mesh/src/daemon.rs	sovereign-mesh	lint-scoped	1	7.1	0	
+sovereign/crates/sovereign-mesh/src/daemon.rs	sovereign-mesh	check-full	1	8.4	0	
+sovereign/crates/sovereign-mesh/src/daemon.rs	sovereign-mesh	build-ws	1	12.5	0	
+ABORTED Thu Sep 17 10:48:22 PDT 2026
+sovereign/crates/sovereign-mesh/src/daemon.rs	sovereign-mesh	test	0	6.8	143	

@@ -4,18 +4,230 @@
 # committed artifact: the `[[rung]]` table owns rung STATUS and the `[[bar]]`
 # rows own the numbers. The rationale lives in campaign.md.
 id        = "ring-apps"
-objective = "Commonwealth is a pure substrate for ring-scale applications - commerce and social realized over the ring rail, where the ledger, the namespace and the ordering are handed out separately instead of fused in a platform. The first rung makes the NAMESPACE half honest: a person in a ring can be traced to the member who vouched for them and the act they vouched on, without asking anyone what they remember"
-spec      = "docs/internal/RING_APPLICATIONS.md (GITIGNORED, per-host) - the vision, the borrow-and-refuse table, and the substrate assessment S1-S8. Its first draft claimed rings were mesh-wide and singular; that was the exception generalised into the rule and is corrected in the doc under 'What a ring is today'. Read the CORRECTED section, not a memory of the claim."
+objective = "A way to BUILD robust applications and DISTRIBUTE them on a mesh the way AWS lets a builder ship to the internet - identity, an ordered log, a doc, blobs, a live lane, a stream, discovery, availability and a deploy verb handed out as primitives the app never re-derives - such that the end user barely feels the infrastructure: an average urban person joins by one QR code with no account, lives on the ring apps for a fortnight - the feed, the album, movie night, a game, a shared doc, a jam, a call, a reshare, the offline atlas, and the expenses as the boring thing they should be - and on day fourteen does not want Instagram, Docs, Spotify and the group chat back. Organised by primitive and abstraction layer; the ladder is APPLICATION-LED with the hardest apps first, because a hard app is what bends an abstraction before it sets"
+spec      = "docs/internal/RING_APPLICATIONS.md (GITIGNORED, per-host; ABSENT on the Halo as of 2026-09-17). REFRAMED 2026-09-17 by operator direction in two steps: first the AWS-shaped builder proposition + the fortnight, then the re-cut from a co-op bulletin board to social, media, play and collaborative docs, hardest first. The rationale, the fortnight by day, and the ambiguity policy live in .sovereign/features/ring-apps/campaign.md on this host; the layer and rung tables below are the committed structure, and quality/campaigns/ring-apps-shelf.md is the committed INVENTORY (ARCH 11: it outranks the plan) - every `shelf` field and every SHELF sentence below cites it, and an order under any rung reads the row there before it prices a build."
 declared  = "2026-09-13"
 status    = "active"
 
+# ── THE LAYERS, bottom up ────────────────────────────────────────────────────
+# L0 transport   iroh 1.0.2 endpoint, relay, TrafficClass seams. Exists; no rung.
+# L1 bytes       how bytes move: journal | blob | gossip | stream. The axis a
+#                substrate row RIDES.
+# L2 substrate   what a builder reaches for, named by the thing they already
+#                know. Each row rides one L1 primitive.
+# L3 deployment  manifest + page over rails + `svrn ring deploy` + the grant.
+# L4 application the reference apps. NOT rows here - they are RUNGS, because
+#                an app is what a person watches and a primitive is what lands
+#                underneath it.
+#
+# DATA, not prose (ARCH 9). Readers (co-resume/co-ladder/co-lineage) use
+# .get() on rows, so these tables are inert to them (checked 2026-09-17).
+# `shelf` names what we pull off the shelf for the row (verdicts and citations:
+# quality/campaigns/ring-apps-shelf.md, verified 2026-09-17 - re-check before an
+# order cites a version). `status` is a closed set - landed | partial | open - and is the ONLY field
+# that says whether a row exists in code (journal is landed by the rail crates
+# with no rung of its own). `landed_by` names the rung that lands the row;
+# `pulled_by` the app rungs that force its shape. A row with status open and
+# a non-empty pulled_by is a primitive an app is waiting on - the frontier.
+
+[[primitive]]
+id = "journal"
+shelf = "landed; borrow p2panda-core log shape (read only) and the in-toto/DSSE statement envelope for package acts"
+status = "landed"
+layer = "bytes"
+builders_know_it_as = "an append-only log"
+on_the_ring = "the rail: signed ops, total order, corrections, seal + snapshot, gaps; 64 KiB per act; digest sync, 60 s ceiling on idleness, write nudge"
+landed_by = []
+pulled_by = ["ra-13", "ra-19", "ra-20"]
+note = "LANDED (commonwealth-rail-core, commonwealth-rail). The doc rung is the first to ask whether total order and a commutative merge coexist, and whether the rail must learn anything to carry a CRDT - the answer the campaign wants is no."
+
+[[primitive]]
+id = "blob"
+shelf = "iroh-blobs 0.103 with a vendored-fork posture; bao-tree 0.16.1 over raw QUIC is the named escape hatch; blake3"
+status = "open"
+layer = "bytes"
+builders_know_it_as = "S3"
+on_the_ring = "content-addressed by BLAKE3, encrypted on device BEFORE coding, k-of-n shares one per member, hot full copies on keepers, verified range requests, repair after a stated absence"
+landed_by = ["ra-3"]
+pulled_by = ["ra-15", "ra-18", "ra-19", "ra-21"]
+note = "NEW. Nothing serves: no blob noun on the rail, `Payload` capped at 64 KiB to refuse files (rail-core/src/payload.rs:55-61), iroh-blobs absent from Cargo.lock, no erasure code anywhere. Seams to reuse: TrafficClass::ModelTransfer (TRANSPORT_MIGRATION.md:393), model_files.rs RFC-7233 ranges + 206 (:189-195, :273-308)."
+
+[[primitive]]
+id = "gossip"
+shelf = "iroh-gossip 0.101 behind a trait; DIRECT FAN-OUT to N-1 with (origin,seq) dedup is the default impl at ring scale; raise max_message_size (4096 default, oversize fails silently #131)"
+status = "open"
+layer = "bytes"
+builders_know_it_as = "SNS/SQS"
+on_the_ring = "one topic per ring; presence, cursors, reactions, chat and doc-change DELIVERY; nothing durable rides here - the record is always a journal act"
+landed_by = ["ra-6"]
+pulled_by = ["ra-13", "ra-16", "ra-19"]
+note = "NEW on the existing TrafficClass::Gossip seam. iroh-gossip absent (the one hit is a test mock, commonwealth-transport/src/routed.rs:312). Must be PROVABLY non-durable: tests/main/replication_sender_census.rs pins /internal/ring/sync as the ONE sender of replicated state (gossip.rs:31-36)."
+
+[[primitive]]
+id = "stream"
+shelf = "iroh QUIC streams/datagrams from the native shell; the browser never gets one (relay-only, p2p-webtransport archived 2026-06-23)"
+status = "open"
+layer = "bytes"
+builders_know_it_as = "a socket"
+on_the_ring = "a QUIC stream between two members with a latency budget; direct when the path allows, relayed when not, and the app is TOLD which"
+landed_by = ["ra-17"]
+pulled_by = ["ra-16", "ra-18"]
+note = "iroh gives the stream; nothing above transport reaches for it yet (all iroh use is in commonwealth-transport/src/iroh.rs behind the `iroh` feature). The honesty row: relays learn who talks to whom - the guarantees sheet says so."
+
+[[primitive]]
+id = "identity"
+shelf = "frost-ed25519 3.0 for ring-as-one acts; age 0.12 for wrap-to-members; a SEPARATE X25519 key on the roster row; WebAuthn PRF unwraps the local key (passkeys unlock, never sign); fast_qr/rqrr; Signal-direction QR invite in iroh-tickets encoding; sharks AVOID (RUSTSEC-2024-0398)"
+status = "partial"
+layer = "substrate"
+builders_know_it_as = "IAM + KMS"
+rides = "journal"
+on_the_ring = "the node key signs, the roster binds; vouch chain; linked devices; recovery by m PEOPLE; retired keys refused; the phone is the wallet"
+landed_by = ["ra-1", "ra-5"]
+pulled_by = ["ra-19", "ra-15"]
+note = "ra-1 landed in code 2026-09-13 (Roster.vouches, trace, svrn ring introduce). Device linking is ALREADY Traced (introduce.rs:191-193, pinned tests_introduce.rs:256-259)."
+
+[[primitive]]
+id = "membership"
+shelf = "Carry adopts Nostr NIP-18 kind 6/16 repost shape as payload, rail signature kept"
+status = "open"
+layer = "substrate"
+builders_know_it_as = "an org / an account"
+rides = "journal"
+on_the_ring = "join by QR with no account; rings of rings; Carry an act across rings under your own key; curation by vouch chain instead of follow/block"
+landed_by = ["ra-2", "ra-11"]
+pulled_by = ["ra-19", "ra-16"]
+note = "Carry (ra-2) is the RESHARE primitive - the thing that makes a social paradigm out of rings. It sat last on the first ladder; it is pulled early by the feed now."
+
+[[primitive]]
+id = "doc"
+shelf = "Yjs 13.6 in the page + yrs 0.28 in the node; Tiptap 3 + y-tiptap + prosemirror-tables; y-protocols awareness on the live lane; ~50-line update-to-act adapter, NO framework; Loro is engine 2 (shallow snapshots); iroh-docs AVOID (a second durable log)"
+status = "open"
+layer = "substrate"
+builders_know_it_as = "Google Docs / Notion"
+rides = "journal"
+on_the_ring = "a CRDT whose changes are ordinary journal acts and whose live cursors ride gossip; snapshot at seal; the page holds the merge, the rail holds the record"
+landed_by = ["ra-14"]
+pulled_by = ["ra-13"]
+note = "NEW, and FIRST by operator direction: the app most likely to bend the abstractions. The design bet is that the rail learns NOTHING - Automerge changes are commutative so total order is harmless, changes are small so 64 KiB holds (a large paste must chunk or refuse, named), and the seal-with-snapshot the rail already has (ring_sync.rs:1426-1443) is the doc snapshot. Automerge-over-iroh is experimental upstream; that is a measurement to take, not a reason. NOUN: `Document` is almost certainly taken by corpus-engine - converge before minting."
+
+[[primitive]]
+id = "store"
+shelf = "age STREAM payload format (64 KiB seekable chunks), content-address the CIPHERTEXT PAYLOAD ONLY with wrapped keys in a rail act; Tahoe convergence secret; reed-solomon-simd 3.1 on KEEPERS (the phone never encodes); Tahoe lease model as recurring acts; LAN gateway answers 206 never 200"
+status = "open"
+layer = "substrate"
+builders_know_it_as = "S3 + Glacier"
+rides = "blob"
+on_the_ring = "the album, the loop library, the atlas: put a blob, it is on every device that wants it and survives any n-k members offline"
+landed_by = ["ra-3"]
+pulled_by = ["ra-15", "ra-19", "ra-21"]
+note = "The blob primitive as an app sees it. k is MEASURED from the worst observed hour, and no presence history exists (MemberRecord.last_seen is one LWW scalar, commonwealth-core/src/mesh/mod.rs:207) - a sampler is owed before k is declared."
+
+[[primitive]]
+id = "play"
+shelf = "gstreamer-rs 0.25 stream-copy REMUX (never transcode); Symphonia 0.6 as indexer; hls.js 1.7 EXT-X-BYTERANGE over the one file; Cast Default Media Receiver + HDMI browser floor; Jellyfin AVOID (GPL-2.0-ONLY)"
+status = "open"
+layer = "substrate"
+builders_know_it_as = "CloudFront + a media server"
+rides = "stream"
+on_the_ring = "range-served playback of a blob from whichever holder is up, keeper hot copy so the owner's sleeping laptop does not buffer; commonwealth-media becomes the ring's library rather than a per-member URL"
+landed_by = ["ra-18"]
+pulled_by = ["ra-18"]
+note = "commonwealth-media exists as a Jellyfin-shaped PROXY (commonwealth/crates/commonwealth-media/src/lib.rs:1-40; fanout caps bodies and never streams, origin_fanout.rs:13-19). Converge, do not mint a second library. NOUN: `Stream` likely collides - converge."
+
+[[primitive]]
+id = "realtime"
+shelf = "GGRS 0.13 over iroh datagrams (key dialling IS the signalling); Galene 1.2 on a keeper for calls, named as a SERVER; boardgame.io reducer + phase machine copied, dep avoided"
+status = "open"
+layer = "substrate"
+builders_know_it_as = "WebRTC / a game server"
+rides = "stream"
+on_the_ring = "a call, a real-time game: two members, one stream, presence to know who is around, and the app is told direct vs relayed"
+landed_by = ["ra-17"]
+pulled_by = ["ra-16"]
+note = "NEW. Turn-based play is NOT this - a turn-based game is already the rail (a log of moves in total order, the fold is the rules) and is the small rung ra-20."
+
+[[primitive]]
+id = "discovery"
+shelf = "Nostr NIP-51 sets as the curation layer the vouch chain drives; Blossom (NIP-B7) for photo blobs; nostr-relay-builder facade so Coracle runs UNMODIFIED against the rail"
+status = "open"
+layer = "substrate"
+builders_know_it_as = "Route53 + a store"
+rides = "journal"
+on_the_ring = "computed catalogue over fanout with never_asked rows; every row carries its vouch; filter by vouch chain from a person you trust; any holder serves a package blob"
+landed_by = ["ra-4"]
+pulled_by = ["ra-19", "ra-10"]
+note = "ra-4 FUNDED 2026-09-13. The app store is this over package blobs once ra-3 lands."
+
+[[primitive]]
+id = "availability"
+shelf = "nothing to pull; Tahoe servers_of_happiness = our k"
+status = "open"
+layer = "substrate"
+builders_know_it_as = "availability zones"
+rides = "blob"
+on_the_ring = "a keeper role on the roster: holds journal + blobs, authors nothing, can never introduce; catch-up after a seal is to compacted state and says so"
+landed_by = ["ra-7"]
+pulled_by = ["ra-18", "ra-15"]
+note = "REUSE ring_sync (author-blind republish, commonwealth-rail/src/lib.rs:482-487; empty digest asks for everything, routes_internal/ring_sync.rs:89-92). NOUN: `Anchor` taken twice (meta_atlas + AnchorProfile.can_anchor = tensor-split worker, commonwealth-core/src/capabilities.rs:148-156) - converge `Keeper`."
+
+[[primitive]]
+id = "guarantees"
+shelf = "nothing to pull; kernel_types::Judgement rows in-repo"
+status = "open"
+layer = "substrate"
+builders_know_it_as = "CloudWatch + the SLA"
+rides = "journal"
+on_the_ring = "gaps, audits, SequenceFork, and `svrn ring guarantees`: three tiers computed from n, k and m, could-not-judge where a number cannot be measured yet"
+landed_by = ["ra-8"]
+pulled_by = []
+note = "REUSE kernel_types::Judgement through posture_cmd.rs (sources() :48-60, render_rows :546, honesty_footer :570). Equivocation ALREADY lands as RailGap::SequenceFork (admit.rs:369-392)."
+
+[[primitive]]
+id = "commons"
+shelf = "ValueFlows vocabulary (Agent/Economic Event/Resource/Process); Tahoe leases; Filecoin AVOID (threat-model mismatch)"
+status = "open"
+layer = "substrate"
+builders_know_it_as = "billing"
+rides = "journal"
+on_the_ring = "GB-hours PROVEN by audit acts, weighted by scarcity, per person via the roster join; norms and hot-copy priority, never a price, never a ban"
+landed_by = ["ra-9"]
+pulled_by = []
+note = "EXTEND LedgerEventKind - StorageSnapshot is already GB-hours per node (commonwealth-core/src/contributions.rs:107-112); add a variant in its own units per the JobUnitCompleted precedent (:113-137). `Commons` has zero definitions and needs a home crate."
+
+[[primitive]]
+id = "compute"
+shelf = "nothing to pull for v1"
+status = "open"
+layer = "substrate"
+builders_know_it_as = "Lambda / EC2"
+rides = "stream"
+on_the_ring = "a page over rails by default; server-side compute is a declared escalation on a keeper; search and the house AI live on a hub and every answer names which machine it depended on"
+landed_by = ["ra-12"]
+pulled_by = []
+note = "docs/LAZY_INFERENCE_ON_THE_RAIL.md already treats the GPU node as the seam. Last on the ladder by the pasted argument: on a peer network availability and trust are the hard problems, not the AI."
+
+[[primitive]]
+id = "deployment"
+shelf = "Tauri 2.11.5 + uniffi 0.32 as the phone shell (Android foreground service; iOS offline while backgrounded); DSSE statement in a signed act as the package envelope (Web Bundles and SXG both retiring); Pear mechanics mined (release = move a pointer, rollback = a correction); `sovereign meshapp publish|install` + registry + _sdk/bridge.js ALREADY EXIST - sign the entry and widen the bridge"
+status = "open"
+layer = "deployment"
+builders_know_it_as = "CloudFormation + an app store"
+rides = "journal"
+on_the_ring = "manifest + static page + rail scopes; `svrn ring deploy <dir>`; the app appears on every member's device uninstalled; the grant admits the app, the roster names the person"
+landed_by = ["ra-10"]
+pulled_by = ["ra-13"]
+note = "The ring-deploy order (.sovereign/features/ring-deploy/order.md, draft 2026-08-30) M1-M5. Sequenced right after the doc because the doc is the first thing to distribute. `svrn ring dev` already exists for local iteration (ring_cmd/mod.rs:69-76)."
+
 # ── THE PREDICATE ────────────────────────────────────────────────────────────
-# TWO-SIDED. The affirmative half alone passes vacuously: a roster with one row
-# that carries a warrant proves nothing about a roster that can also REFUSE.
-# The negative half is the refusal this repo already holds and must keep
-# holding - an op arriving over the wire moves no roster, ever.
+# TWO-SIDED since the 2026-09-17 reframe, and the BUILDER side is the one a
+# program judges. The user side (the fortnight) is the demo gate in campaign.md.
+# `check` today decides only the record leg - the rail's own tests, which hold
+# the two refusals ra-1 depends on (a roster row resolves to its warrant; an op
+# arriving over the wire moves no roster). The diff-free-build leg and the
+# partition drill are OWED instruments and read could-not-judge until they
+# exist; nothing here fabricates a verdict for them (ARCH 5, ARCH 6).
 [predicate]
-statement = "A key in a ring's roster resolves to the signed op that introduced it and to the member who signed that op, and an `Introduce` op arriving from a peer over ring-sync changes no roster row on the receiving node"
+statement = "A ring app is a manifest plus a static page over the rails: a builder who is not the rail's author ships the next reference app from the docs with zero diffs under commonwealth/crates/commonwealth-rail*, distributes it with one verb, and it survives the partition drill; every surface a joined person touches renders a person, never a key; and the two ra-1 refusals hold - a roster key resolves to the signed op that introduced it and its signer, and an `Introduce` arriving over ring-sync changes no roster row"
 check     = "./scripts/sovereign-test.sh --human --package commonwealth-rail --package commonwealth-rail-core"
 
 # ── BARS ─────────────────────────────────────────────────────────────────────
@@ -91,150 +303,302 @@ instrument_note = "The same four daemons, `svrn mesh offers --why`. ONE run cont
 goodhart     = "1.0 with every row reading `unknown` is a perfect score for a join that never ran. At least one row must name a person and an op id. And per the ra-1 worker's finding, a caller must never fall back to its OWN roster file for a remote seller's warrant - that is the substitution ARCH 6 refuses, and `ring roster show` already guards the local version of it by warning and exiting 1."
 status       = "open"
 
-# ra-3 bars, declared 2026-09-14 with order ring-3-blobs (approval pending).
-# Pre-registered BEFORE any data from the real plane. The numbers they cite are
-# from a throwaway spike (note 1b685c8e, harness at
-# .sovereign/features/ring-3-blobs/spike/, per-host).
-
 [[bar]]
-id           = "ra-send-reaches-only-the-grantee"
-demo         = "Send a folder to one member; it arrives there and nowhere else"
-rung         = "ra-3"
-one_line     = "CLAIM: in one two-daemon run the grantee receives a nested directory byte-identical, and a non-member, a member outside the grant, a Get for an unpublished hash, and a push are each refused"
-derives_from = "the mesh has no verb that moves an arbitrary file to a member (checked 2026-09-14 against `svrn mesh --help` and every mesh route). iroh-blobs 0.103 admits through an accept loop we own (`provider::handle_connection` takes an already-accepted connection) and can deny per request, but its event mask gates EVERY request kind on the `get` setting (iroh-blobs src/provider/events.rs:462), so an admitted member's push is STORED under default settings - spike q1, note 1b685c8e."
-floor        = 0.0
-floor_basis  = "structural: FRACTION of the five legs observed in the same run - one served fetch compared byte-for-byte, four refusals. Zero at declaration: no verb exists."
-target       = 1.0
-direction    = "higher_is_better"
-# instrument   = (none yet) - co-lineage EXECS this field. Owed: a verdict-emitting
-#   command in the shape of `scripts/ring-offers-demo.sh verdict <bar-id>`.
-instrument_note = "two real daemons, real iroh. The served leg compares every file's bytes, not a file count. Each refusal is read from BOTH sides - the dialer's error and the provider's store afterwards: a push that errors on the wire but lands in the store is a failed leg, and the spike watched exactly that happen."
-goodhart     = "four refusals are trivially produced by a provider that refuses everything, so the served leg must be in the SAME run. A refusal of a dialer that was never a member says nothing about the member-outside-the-grant leg; that dialer must be a real, admitted member."
-status       = "open"
-
-[[bar]]
-id           = "ra-bytes-never-served-wrong"
-demo         = "Send a folder to one member; it arrives there and nowhere else"
-rung         = "ra-3"
-one_line     = "CLAIM: a published file changed after publish is refused and then served under its new hash after re-import, a deleted one is refused by name, and a transfer killed mid-way resumes without re-sending completed files"
-derives_from = "spike q3: with ImportMode::TryReference a file overwritten after import stays `Complete` in the store across restarts, remote getters see a generic code-3 reset, and the provider's local export and BlobReader return the changed bytes with no error (iroh-blobs src/store/fs.rs:1186, :1276). No wrong byte crossed the wire - bao aborted at the first bad 16 KiB group. Spike q7: a resumed fetch sent 2,762 bytes beyond the missing remainder of 91 MB."
-floor        = 0.0
-floor_basis  = "structural: FRACTION of three legs in one run - (1) mutated file refused, then served under its new hash after re-import; (2) deleted file refused by name; (3) resumed fetch sends at most the missing bytes plus 1%, against 0.003% measured in the spike."
-target       = 1.0
-direction    = "higher_is_better"
-# instrument   = (none yet) - see ra-send-reaches-only-the-grantee.
-instrument_note = "same rig. Leg 1 overwrites bytes in the MIDDLE of a published file (the spike used 4 KiB at 32 MiB) so the first groups still verify; a check that only reads the head would pass a provider that never looked."
-goodhart     = "refusal alone scores legs 1 and 2 and ships a provider that stops serving a folder forever after one edit - a worse product than today. The served-after-re-import half of leg 1 is load-bearing."
-status       = "open"
-
-[[bar]]
-id           = "ra-blob-lan-parity"
-demo         = "Models move between two machines on the same plane as a send"
-rung         = "ra-3"
-one_line     = "CLAIM: a multi-GB blob fetch between two real machines on one LAN reaches at least 0.9 of plain HTTP throughput between the same pair, with the iroh path kind reported"
-derives_from = "spike q6, loopback only: iroh-blobs streamed 162 MiB/s with dependencies optimized and 49 MiB/s at the workspace [profile.dev], which the deployed debug daemon runs, against 3.7 GiB/s for plain HTTP; CPU was mostly kernel UDP time. Loopback says nothing about a LAN pair where the link caps both, and this bar is what licenses deleting the HTTP model-file routes."
-floor        = 0.9
-floor_basis  = "PRE-REGISTERED, not derived: RATIO of median blob MiB/s to median HTTP MiB/s, three runs each, same pair, same file of at least 4 GiB, same hour. 0.9 reads as the link, not the stack, being the limit."
-target       = 1.0
-direction    = "higher_is_better"
-# instrument   = (none yet) - the spike harness run across two hosts.
-instrument_note = "spike q6 across this Mac and the Fedora peer; the operator starts the provider on the peer, because nothing on the mesh can start a process there (note 04b80710). Report every run and its path kind; a run reading relayed or mixed is DISCARDED, counted and reported, never averaged in."
-goodhart     = "0.9 against a slow control is easy. The control must be plain HTTP over the same LAN path - not over tailnet WireGuard, not an x86_64 curl under Rosetta (the spike's loopback control was one). A reading taken before the dev-profile overrides land measures the build, not the stack."
-status       = "open"
-
-[[bar]]
-id           = "ra-origin-audience-per-name"
-demo         = "Everyone sees the print queue; two people see the chore ledger"
-rung         = "ra-3"
-one_line     = "CLAIM: on a two-daemon mesh one node publishes two apps with different allow lists, and in the same run one member is served by the first and refused by name by the second"
-derives_from = "`commonwealth_media::admit_app` motivates App as its own trust class with the sentence 'everyone may see the print queue, two people may see my films' (commonwealth-media/src/identity.rs:181-186). Per-kind lists express that ACROSS kinds, but `AppRoutes.allow` is ONE list for every published app (sovereign-mesh/src/iroh_access.rs:382-394), so between two apps - a print queue and a chore ledger - it cannot be said at all. The audience belongs to the origin, not the kind, which is what collapsing Media/App/Offer into one registry buys."
-floor        = 0.0
-floor_basis  = "structural: FRACTION of the two legs - served by app A, refused by app B - for the SAME member against the SAME node in one run. Zero at declaration: no config can express it."
-target       = 1.0
-direction    = "higher_is_better"
-# instrument   = (none yet) - co-lineage EXECS this field, and a cargo test filter
-#   naming a test that does not exist yet runs zero tests and exits 0: a vacuous
-#   pass. Owed once the test exists and has been watched failing.
-instrument_note = "the existing two-daemon rig (commonwealth-rails/tests/two_daemons.rs) before any new one. Real iroh; the dialing member is identical across both legs, and the refusal body names the origin, never its allow list."
-goodhart     = "an app that refuses everyone scores the refused leg, and a dialer refused for not being a member proves nothing about per-origin audience. Both legs, one admitted member, one run."
-status       = "open"
-
-# ra-5 bar, declared 2026-09-18 with the membership amendment, before any code.
-# It fills the campaign to the 9-bar cap; ra-6's two bars are pre-stated in
-# campaign.md and move here when a slot frees.
-
-[[bar]]
-id           = "ra-membership-is-order-free"
-demo         = "Undo a leaked invite in one act, and every node agrees who is in"
+id           = "ra-linked-device-is-legible"
+demo         = "Alex's second laptop reads as Alex's, linked by Alex - not vouched for by a stranger"
 rung         = "ra-5"
-one_line     = "CLAIM: over an op set containing Admit, Remove and voids of both, every permutation admits byte-identically, and each of the three recoveries is one act"
-derives_from = "admit's one property: 'The result is a function of the op SET' (commonwealth-rail-core/src/admit.rs:23), asserted today over permutations of app acts only. Membership on the journal is the first time admission depends on acts that change who may sign, so the property must be re-proven over them - including the one case with two self-consistent answers, two members removing each other."
-floor        = 0.0
-floor_basis  = "structural: FRACTION of five legs in one test run - (1) every permutation of a membership-bearing set, with a mutual removal and an Admit racing its own void, yields a byte-identical Admission, gaps included; (2) voiding one Admit drops that key and every key it transitively admitted; (3) voiding a Remove restores the member and admits what they wrote while removed; (4) a replacement key admitted under the same person, with the old key removed through its last seq, leaves every past act admitted; (5) a parser without the new acts reads them as NewerVersionLine, never as admitted and never as MalformedLine. Zero at declaration: the acts do not exist."
+one_line     = "CLAIM: every roster row whose introducer is the same PERSON renders 'linked device', and every row whose introducer is another person renders 'vouched by <name>' - never the wrong one, never blank"
+derives_from = "the mechanism already exists and is pinned: a key in the roster introducing a second key for the same person resolves to `Traced` today (commonwealth-rail-core/src/introduce.rs:191-193, asserted at tests_introduce.rs:256-259). What is missing is the SURFACE: the roster has no per-key metadata beyond one vouch (lib.rs:170, :188), and nothing computes whether `by_actor` belongs to the row's own person - `trace_op` compares keys only (introduce.rs:338), so same-person vs other-person is a distinction no reader makes today (verified 2026-09-17)."
+floor        = 1.0
+floor_basis  = "structural: FRACTION of roster rows with a resolved vouch whose rendering matches `roster.person_for(by_actor) == row.person` - 'linked device' when equal, 'vouched by' when not. Both classes seeded in one run, because a run with only one class cannot tell a working classifier from a constant."
 target       = 1.0
 direction    = "higher_is_better"
-# instrument   = (none yet) - co-lineage EXECS this field, and a cargo test filter
-#   naming a test that does not exist yet runs zero tests and exits 0: a vacuous
-#   pass. Owed once the test exists and has been watched failing.
-instrument_note = "a rail-core test beside the existing permutation test, not a new harness. Leg 5 is a fixture line at the bumped version read by the current parser, not a second build. Watch each leg fail first: leg 1 against a membership function that folds in arrival order, leg 2 against one that voids only the direct Admit."
-goodhart     = "a membership function that ignores Admit and Remove passes leg 1 perfectly - every permutation agrees on the seed. Legs 2-4 are what prove the acts do anything, and they run in the same test binary. ra-roster-stays-independent must read 0 in the same run: passing here by writing roster.json would move the roster route into a file."
+# instrument   = (none yet) — owed in the shape of ra-4's `scripts/ring-offers-demo.sh verdict <bar-id>`.
+instrument_note = "`svrn ring roster show --why` over a roster seeded with BOTH a same-person link and a cross-person vouch, resolved against a real admission. Distinctness is computed via `person_for`, never read off the op - the op's `person` field is what the WRITER claims and is exactly the field ARCH §18.1 says not to assert on."
+goodhart     = "1.0 over a roster holding only cross-person vouches is a constant function scoring perfectly. Seed both classes. And a self-vouch (signer key == introduced key) must still render `SelfVouch`, unchanged (introduce.rs:249-253) - this bar adds a class, it does not relax one."
+status       = "open"
+
+[[bar]]
+id           = "ra-recovery-names-m-people"
+demo         = "Alex's phone died; the replacement key shows three housemates by name, and 'Alex' on every past expense is untouched"
+rung         = "ra-5"
+one_line     = "CLAIM: a key admitted as a RECOVERY carries m or more vouches that resolve to m DISTINCT PEOPLE, and a person's earlier ops fold identically before and after the recovery"
+derives_from = "the largest code change in the rung, and the first draft did not acknowledge it: `Roster.vouches` is `BTreeMap<String, Vouch>` - exactly one vouch per key (lib.rs:188); `bind_key` takes `Option<Vouch>`, singular (lib.rs:206); `svrn ring roster add` takes one `--on <op-id>` (sovereign-cli-llm/src/ring_cmd/mod.rs:313-322). m-of-n needs the field to become a collection and `trace`/`trace_op` (introduce.rs:274, :310) to return per-vouch statuses. Nothing today checks that two introducers are different PEOPLE (worker finding 2026-09-17): distinctness is `person_for(by_actor)`, computed, asserted."
+floor        = 1.0
+floor_basis  = "structural: FRACTION of rows marked recovered whose vouches resolve, via `person_for`, to at least m distinct people, where m is the ring's declared quorum (default 1 for a house; a ring raises it in its own config). AND the reference app's balances over the same acts are byte-identical before and after the row is added - the no-re-division test (ring_cmd/templates/expenses.test.mjs:120-128) re-run unchanged with a recovery in the roster."
+target       = 1.0
+direction    = "higher_is_better"
+# instrument   = (none yet) — owed.
+instrument_note = "seed three introductions for one new key from three keys belonging to three people, and a control of three introductions from three keys belonging to ONE person (three laptops). The first resolves recovered; the second resolves to one person and does not meet m=3. A run without the control has not shown that people are counted rather than keys."
+goodhart     = "three laptops of one person is one person. A quorum satisfied by keys rather than people is the Sybil hole the pasted design names as the main attack on bigger scrip systems, and known membership is only a defence if the count is over PEOPLE. Also: the derived-roster namespaces refuse `roster add` and `ring introduce` today (`refuse_derived_roster`, ring_cmd/mod.rs:149) and must refuse the recovery verb too, or ra-5 reopens the hole §7.1 closed."
+status       = "open"
+
+[[bar]]
+id           = "ra-retired-key-is-refused"
+demo         = "The old laptop cannot sign any more, and everything it signed before still counts"
+rung         = "ra-5"
+one_line     = "CLAIM: ops under a retired key at seq > retired_at are reported as a gap and never admitted, and ops at seq <= retired_at are admitted exactly as before"
+derives_from = "admission holds the roster as a parameter and has `op.actor` and `op.kind.seq` in hand at the membership check (commonwealth-rail-core/src/admit.rs:339, :349) and implements no seq-bounded membership of any kind - grep for retire/revoke/expire/since finds only Seal prose. Retirement is therefore ROSTER METADATA on the row (retired_at seq), operator-written like every roster fact, consulted by admit - and NOT an op: an act that changes what admission admits is the rail learning meaning, which introduce.rs:33-38 refuses, and it makes membership a function of the log, which lib.rs:151-160 refuses and the no-re-division test pins. NOT `Seal` either: a seal retires the signer's OWN history BEFORE its seq and cannot name another key (lib.rs:265-282, sync.rs:115-122) - the opposite direction on both axes."
+floor        = 0.0
+floor_basis  = "structural: COUNT of ops admitted whose actor is retired in the roster and whose seq exceeds that key's retired_at. Zero, as a new `RailGap` variant (name it `RetiredSigner`; `Retire` and `Recovery` are free nouns, converge-checked 2026-09-17) - membership and authenticity are the rail's half of the cut (lib.rs module docs) so a gap variant is legitimate where an act variant is not."
+target       = 0.0
+direction    = "near_zero"
+# instrument   = (none yet) — owed.
+instrument_note = "one actor, two ops: seq 3 before retirement and seq 4 after, retired_at = 3. The run must show seq 3 ADMITTED and seq 4 in the gap list under the new variant, with the test watched failing before the variant exists (ARCH 5). Then `compact`/sealed floors re-run unchanged, because retirement must not move where hole-reporting begins (admit.rs:404-416)."
+goodhart     = "zero is the expected good result and proves nothing alone (ARCH 5): a retired key that never signed anything scores zero perfectly. The same run must carry the positive control - the pre-retirement op admitted and folded. And a retirement that also dropped the key's EARLIER ops would re-divide history, which is the exact failure the roster/op-set separation exists to prevent."
 status       = "open"
 
 # ── THE LADDER ───────────────────────────────────────────────────────────────
+# LANDING ORDER = TABLE ORDER; ids are identity, not position (ra-4's note).
+# THE 9-BAR CAP (co-lineage.py MAX_BARS, a load error) means this umbrella
+# carries only CROSS-CUTTING bars; each APPLICATION rung that gets funded
+# opens a CHILD campaign `quality/campaigns/<app>.toml` with `parent =
+# "ring-apps"`, and the rung names it in `campaign`. First child: ring-doc.
+# Application-led: an APP rung is what a person watches and names the primitive
+# rows it pulls and the abstraction it is expected to STEER; a PRIMITIVE rung
+# lands a row and sits directly after the app that pulled it. The hardest apps
+# come first by operator direction 2026-09-17 - a hard app bends an abstraction
+# before it sets, a small one only confirms it. In-flight rungs stay in flight.
 
+# ── in flight ──
 [[rung]]
 id     = "ra-1"
+kind   = "primitive"
+lands  = ["identity"]
 title  = "ring-1-introduce: a roster row carries its warrant, and an act is the evidence"
 status = "open"
 demo   = "D1"
 moves  = ["ra-introduction-is-traceable", "ra-roster-stays-independent"]
-note   = "S1 + S2 from RING_APPLICATIONS.md, landed together: provenance with nothing to populate it is a field nobody fills, and an act with nowhere to land is a payload nobody reads. SAME-RING ONLY — cross-ring introduction needs S3 and the Carry vocabulary."
+note   = "S1 + S2 from RING_APPLICATIONS.md, landed together in code 2026-09-13; bars open until their instruments exist. SAME-RING ONLY - cross-ring introduction needs S3 and the Carry vocabulary (ra-2)."
 
 [[rung]]
 id     = "ra-4"
+kind   = "primitive"
+lands  = ["discovery"]
 title  = "an Offer origin kind, the computed catalogue, and the vouch join"
 status = "open"
-demo   = "D4"
+demo   = "D8"
 moves  = ["ra-offers-catalogue-computed", "ra-seller-carries-their-vouch"]
-note   = "S6, FUNDED 2026-09-13 and lands NEXT despite the id — ids are identity, not position. Promoted ahead of ra-2 because ra-1's worker found the campaign's byproduct stop condition unmet: an Introduce cannot ride a transaction when no transaction act exists, so `svrn ring introduce` is the separate civic act the spec named as the PGP failure mode. This rung builds the first transaction vocabulary, which is what an introduction can later be a byproduct OF. Building Carry (ra-2) on an attestation nobody writes would be building on the rot."
+note   = "S6, FUNDED 2026-09-13 and finishes before the doc rung starts - it is small, already priced, and its vouch join is what the feed (ra-19) filters by. Promoted ahead of ra-2 because ra-1's worker found an Introduce cannot ride a transaction when no transaction act exists; this builds the first transaction vocabulary."
 
 [[rung]]
-id     = "ra-2"
-title  = "standalone op verification, and Carry across rings"
+id     = "ra-23"
+kind   = "primitive"
+lands  = ["journal"]
+title  = "substrate prep - bump iroh 1.0.2 to 1.2, collapse the two ed25519-dalek majors, and state that the page is never the node"
 status = "open"
-demo   = "D2"
+demo   = "D1"
 moves  = []
-note   = "S3. DEFERRED behind ra-4, see that rung's note. Verify a foreign op's signature and derived id without holding the foreign roster, then Carry it into this ring under the carrier's own key. Names no bar yet — declare one before drafting the order."
+note   = "From the shelf pass (ring-apps-shelf.md, findings 1 and 3). Every protocol crate we adopt (iroh-gossip 0.101, iroh-blobs 0.103, p2panda-net ^1.0.3) sits on the 1.x line; the lock carries ed25519-dalek 2.2.0 (ours) and 3.0.0-rc.0 (iroh) while stable 3.0.0 shipped 2026-07-06; iroh's PublicKey is a 32-byte Ed25519 key so the roster key can BE the node id once the split is gone. And the architecture doc gains one paragraph: a browser cannot be a peer (relay-only wasm, p2p-webtransport archived 2026-06-23, no gossip wasm target, blobs MemStore-only), so the Tauri shell holds the endpoint/journal/blobs/gossip and the page talks over the local bridge. Small, mechanical, and every later rung depends on it. Bar to declare: the workspace builds and the rail tests pass on iroh 1.2 with ONE dalek major."
 
+# ── the hard applications, hardest first ──
 [[rung]]
-id     = "ra-3"
-title  = "blob distribution — iroh-blobs for the bytes an act references"
-status = "open"
-demo   = "D3"
-moves  = ["ra-send-reaches-only-the-grantee", "ra-bytes-never-served-wrong", "ra-blob-lan-parity", "ra-origin-audience-per-name"]
-note   = "S5. Independent of ra-1 and ra-2 and can run in parallel with a different pair of hands. Nothing visual works in either domain while a photo radiates from one node's first hop. BARS DECLARED 2026-09-14 with order ring-3-blobs (approval pending), consolidated here by operator direction: the byte plane, a private send to one member, the GGUF plane moved onto it so the mesh keeps one way to move files, and the Media/App/Offer origin stacks collapsed into one registry with an audience per name. Demo 3 is UNBLOCKED by that order, not delivered - a photo in an offer is the public case, a ring act carrying a blob reference."
-
-
-[[rung]]
-id     = "ra-5"
-title  = "membership is two acts from the founder's seed"
+id     = "ra-13"
+kind   = "application"
+pulls  = ["doc", "gossip", "journal", "deployment"]
+steers = "whether the rail must learn ANYTHING to carry a CRDT (the bet is no); delivery-on-gossip / record-on-journal as the general pattern; the 64 KiB act ceiling against a large paste; seal-with-snapshot as the doc snapshot; the 60 s sync ceiling against an edit rate"
+title  = "APP: the doc - three people write the party invite together, cursors visible, no account"
 status = "open"
 demo   = "D5"
-moves  = ["ra-membership-is-order-free"]
-note   = "S9, from the 2026-09-18 membership amendment (RING_APPLICATIONS.md; campaign.md Decisions). Admit and Remove join Record/Correct/Seal behind one membership function; the seed is roster.json as today; undo is the existing Correct. Lands first among the club rungs - ra-6 selects peers from this membership. ra-roster-stays-independent must hold at 0 through it."
+moves  = []
+campaign = "ring-doc"
+note   = "WEEK ONE: child campaign quality/campaigns/ring-doc.toml holds this rung's five bars (the 9-bar cap is a LOAD ERROR in co-lineage, so an umbrella of 23 rungs cannot carry per-app bars - each hard app gets a child campaign); order ring-doc-week1 (drafted 2026-09-17, demo on day six) serves ring-doc and its demo script is the DoD; the live lane lands as direct fan-out inside this rung, so ra-6 is PARTIALLY landed by it. FIRST by operator direction: the app most likely to bend the abstractions. Automerge in the page (wasm), changes as ordinary `Record` payloads of kind `doc-change`, cursors and change DELIVERY on the live lane, the journal as the record. Also calendar, tasks, notes and the house wiki, which are the same primitive with a different fold. Names no bar yet; the two to declare first, both watched failing: two writers partitioned, both edits survive the merge (an LWW store loses one - that is the failing input); and a cursor that only ever rode gossip is NOT in the history and the replication census stays green. SHELF: Yjs in the page, yrs in the node, Tiptap 3, y-protocols awareness; no adapter framework - the adapter is ~50 lines. Measured 2026-09-17: a keystroke is 18 B and ~38,000 words fit one act, so the 64 KiB ceiling is not the constraint. The FIRST negative leg is the one the shelf cannot supply: the Yjs clientID inside an act is self-asserted and must be bound to the roster key at validation and at gossip ingress."
+
+[[rung]]
+id     = "ra-14"
+kind   = "primitive"
+lands  = ["doc"]
+title  = "the doc primitive - CRDT changes as journal acts, cursors on gossip, snapshot at seal"
+status = "open"
+demo   = "D5"
+moves  = []
+note   = "Lands inside ra-13. If the rail turns out to need a branch for doc changes, that is a FINDING against the whole design and escalates - it is the stop condition, not a fix. NOUN: converge `Document` (corpus-engine surely owns it) before minting; `DocChange` or the like. SHELF: Yjs/yrs adopted, Loro named as engine 2 for shallow snapshots; iroh-docs avoided (a second durable log next to the rail)."
 
 [[rung]]
 id     = "ra-6"
-title  = "a ring is joined by a link and reaches only its members"
+kind   = "primitive"
+lands  = ["gossip"]
+title  = "the live lane - presence, cursors, reactions and delivery in under a second, nothing durable on it"
+status = "open"
+demo   = "D5"
+moves  = []
+note   = "Lands inside ra-13 (the doc is the first thing that cannot wait 60 s). One topic per ring; delivery here, record on the rail. The rail syncs by digest with a 60 s ceiling on idleness (ring_sync.rs:87, :19-24); the old 10 s snapshot push is GONE (cw-lift 2e, gossip.rs:22-37). Nearest existing thing: TrafficClass::Gossip seam + announce_presence_change (gossip.rs:925-970), which carries DURABLE membership and is not pub-sub. `Presence` bare noun free (kin: PresenceChange). Negative leg first: a message that only rode gossip is NOT in the history. SHELF: iroh-gossip 0.101 behind a trait with direct fan-out as the default impl at n<=10; its 4096-byte default drops oversize messages SILENTLY (#131) and #86 is a three-peer partition bug - our exact topology. y-protocols awareness times out at 30 s, which is the proof presence cannot ride the 60 s digest."
+
+[[rung]]
+id     = "ra-10"
+kind   = "primitive"
+lands  = ["deployment"]
+title  = "the builder leg - `svrn ring deploy`, and the doc appears on a second phone uninstalled"
+status = "open"
+demo   = "D12"
+moves  = []
+note   = "The ring-deploy order adopted as a rung: rail listener (M1), identity-is-the-namespace (M2), one grant vocabulary (M3), page-over-rails (M4), append_key promotion (M5). Right after the doc because the doc is the first thing to distribute. Clause 3 there - someone who is not the author builds the next app from the docs in an evening with no rail change - is the campaign predicate's builder leg; the small app that proves it is ra-20. Done-when 5, 6 and 9 are the negative legs to declare. SHELF: `sovereign meshapp publish|install|dev|list` + meshapp-registry.toml + _sdk/bridge.js ALREADY EXIST (ARCH 11); the registry comment names ed25519 signing as the next step and the bridge is read-only/corpus-bound. This rung is: sign the entry (DSSE statement in a rail act), distribute by rail-gossiped digest, widen the bridge to rail-append + roster + subscribe. Pear mechanics mined: release = move a pointer, rollback = a correction."
+
+[[rung]]
+id     = "ra-15"
+kind   = "application"
+pulls  = ["blob", "store", "identity", "availability"]
+steers = "blob size classes and hot-copy policy (a loop is 1-10 MB and hot for an evening); encrypt-before-code; the phone as a full member on cheap Android; export to moderated public places (Scratch, BandLab) instead of a public feed"
+title  = "APP: the studio - someone starts a loop, someone adds a bassline, by evening there is a track nobody made alone"
 status = "open"
 demo   = "D6"
 moves  = []
-note   = "S10. ring invite/join with the invite secret on the minting node; ring_sync picks peers from the ring's membership and dials them by key; the receiver refuses a namespace from a non-member. Ends the plaintext copy on every non-member mesh peer and the one-active-mesh limit for rings. Its two bars are pre-stated in campaign.md and wait for a slot under the 9-bar cap."
+note   = "The Endlesss shape - trading loops like messages - on a local-first substrate tuned for a cheap phone; Web Audio in the page, loops as blobs, the jam as journal acts. Second because it is the second-hardest and it is the first app whose users are not the house. Names no bar yet; first to declare: a loop added on a phone plays on a laptop that was closed when it was added (pulls keeper + blob), and the phone that added it can be OFF. SHELF: grid not clock (Endlesss delays each player one loop); Tone.js pinned to an explicit `next`; wasm Opus at 96 kbps; a 2-bar loop rides the act, longer is a blob; .sb3-shaped project act; no SharedArrayBuffer."
 
 [[rung]]
-id     = "ra-7"
-title  = "the app travels with the ring, and a version mismatch is named"
+id     = "ra-3"
+kind   = "primitive"
+lands  = ["blob", "store"]
+title  = "blob distribution - encrypt, code k-of-n, tier hot copies, audit by range; the bytes an act references"
+status = "open"
+demo   = "D2"
+moves  = []
+note   = "S5. Lands inside ra-15 and is pulled again by ra-18/ra-19/ra-21. A photo cannot be referenced by a ring act AT ALL today - no blob noun, 64 KiB ceiling that exists to refuse files (payload.rs:55-61), iroh-blobs absent, no erasure code. NEW on existing seams: TrafficClass::ModelTransfer (TRANSPORT_MIGRATION.md:393, :530), model_files.rs range + 206 (:189-195, :273-308); a RANGED verification hash is the new part. Recipe: encrypt on device before coding; one share per member; hot copies on keepers, more for recent; repair only past a stated absence. k MEASURED from the worst hour - a presence sampler is owed first (MemberRecord.last_seen is one LWW scalar, mesh/mod.rs:207). NOUN: `Share` sits in the shared-model kin family - converge another word. Negative leg first: n-k members off, blob fetches; n-k+1 off, it says NOT HELD rather than hanging. SHELF: iroh-blobs 0.103 vendored-fork posture with bao-tree over raw QUIC as the escape hatch; age STREAM payload format; content-address the ciphertext payload ONLY and put wrapped keys in a rail act (a joiner must not re-hash every blob); reed-solomon-simd on keepers, the phone never encodes; audit = one verified range (~17 KiB), the PoR Tahoe specified and never built."
+
+[[rung]]
+id     = "ra-11"
+kind   = "primitive"
+lands  = ["membership"]
+title  = "day zero - join by one QR code on a phone, no account, and see a name not a key"
+status = "open"
+demo   = "D1"
+moves  = []
+note   = "Lands inside ra-15 (the studio is the first app that is phone-first). The guest-grant deep link already carries the QR shape (deep_link.rs); the phone key is a linked device (ra-5) so the phone IS the wallet. Mobile transport unverified on this host (memory: mobile Tauri WS down) - measure before pricing. SHELF: Tauri 2.11.5 + uniffi is the only shell where static page + Rust node is the native shape; a PWA cannot be a node. Android needs a foreground service; iOS is offline while backgrounded; iroh-inside-Tauri-mobile is UNPROVEN and is this rung's first measurement."
+
+[[rung]]
+id     = "ra-16"
+kind   = "application"
+pulls  = ["realtime", "stream", "gossip", "membership"]
+steers = "the direct row: latency budget, direct-vs-relayed told to the app, presence as who-is-around; the honesty row that relays learn who talks to whom; ring-to-ring calls as the first cross-ring act"
+title  = "APP: the call and the arcade - a call to the friends in the other building; two people play across the hall on their phones and a third watches"
 status = "open"
 demo   = "D7"
 moves  = []
-note   = "S11. Bundle hash stamped on each record at the daemon; window.ring in _sdk/ behind a desktop rail bridge on a rail-scoped grant; a membership panel beside the gap panel in the scaffold. Names no bar yet - declare one before drafting an order."
+note   = "Third: it is the only app that cannot be built on the journal at all, so it is what proves the stream row rather than assumes it. Names no bar yet; first to declare: a call between two members that iroh cannot connect directly still connects via relay, the app is TOLD it is relayed, and the guarantees sheet row for it reads accordingly. SHELF: GGRS over iroh datagrams, no signalling server; Galene on a keeper and it is named as a server; hidden state needs commit-reveal because the journal has none."
+
+[[rung]]
+id     = "ra-17"
+kind   = "primitive"
+lands  = ["stream", "realtime"]
+title  = "the stream primitive - a QUIC stream between two members with a latency budget, and the app is told direct vs relayed"
+status = "open"
+demo   = "D7"
+moves  = []
+note   = "Lands inside ra-16. iroh gives the stream; nothing above commonwealth-transport reaches for it yet. NOUN: converge `Stream` and `Realtime` before minting."
+
+[[rung]]
+id     = "ra-18"
+kind   = "application"
+pulls  = ["play", "blob", "availability", "stream"]
+steers = "k-of-n against a 4 GB file; hot-copy tiering by recency; the repair window against nightly laptop sleep; commonwealth-media convergence (library over blobs, not per-member URLs); the presence sampler that k needs"
+title  = "APP: the library - movie night streamed to the TV from whichever machine has it, and it does not buffer when the owner's laptop sleeps"
+status = "open"
+demo   = "D3"
+moves  = []
+note   = "Fourth, and the one that makes the keeper and k real numbers. Music is the same app. Names no bar yet; first to declare: playback continues across the owner's node going offline mid-film (pulls keeper hot copy), and a file with n-k+1 holders offline reports NOT HELD before play starts, never mid-film. SHELF: remux never transcode (gstreamer-rs); hls.js EXT-X-BYTERANGE over the one file; Jellyfin is GPL-2.0-ONLY and closed to us; the LAN gateway answers 206 never 200."
+
+[[rung]]
+id     = "ra-7"
+kind   = "primitive"
+lands  = ["availability"]
+title  = "the keeper role - an always-on member that holds the journal and blobs and never authors"
+status = "open"
+demo   = "D3"
+moves  = []
+note   = "Lands inside ra-18. REUSE ring_sync; extend only the roster: a closed enum member | keeper so a keeper's ops are gaps and it can never introduce. After a seal a rejoiner catches up to COMPACTED state (ring_sync.rs:1426-1443) and the demo says so. NOUN: converge `Keeper` (`Anchor` taken twice)."
+
+[[rung]]
+id     = "ra-19"
+kind   = "application"
+pulls  = ["membership", "discovery", "blob", "gossip", "identity"]
+steers = "Carry as reshare (cross-ring identity, what a carried act keeps and loses); curation by vouch chain instead of follow/block; live reactions on gossip with the record on the rail; the honest limit that there is no discovery beyond the rings you can reach and no moderator"
+title  = "APP: the feed - photos from last weekend, posts, reactions landing live, and a reshare from the other building that carries who vouched for them"
+status = "open"
+demo   = "D4"
+moves  = []
+note   = "Fifth, after the primitives it composes exist: it is the social paradigm and it is mostly composition - posts and reactions are journal acts, photos are blobs, live reactions ride gossip, reshare is Carry, following is a vouch-chain filter over ra-4's catalogue shape. The album (forty party photos on every device) is this app's blob half. Rings of rings, joined by people carrying acts under their own names, is the paradigm in place of a global feed - and the sheet says what that costs. Names no bar yet; first to declare: a carried post resolves on the receiving ring to the carrier AND the original author's vouch, or renders warrant-unknown - never blank, never substituted. SHELF: Nostr kinds 0/1/6/16/7/30023 + NIP-51 as act payloads with the rail signature kept; Blossom for photos; Coracle unmodified behind a nostr-relay-builder facade; the rail-to-relay filter index is what we build."
+
+[[rung]]
+id     = "ra-2"
+kind   = "primitive"
+lands  = ["membership"]
+title  = "standalone op verification, and Carry across rings"
+status = "open"
+demo   = "D4"
+moves  = []
+note   = "S3. Lands inside ra-19 - promoted from LAST on the first ladder to the feed's primitive, because Carry is the reshare primitive and reshare is the social graph. Verify a foreign op's signature and derived id without holding the foreign roster, then Carry it into this ring under the carrier's own key. Names no bar yet - declare one before drafting the order."
+
+# ── cross-cutting substrate, after the hard apps have bent the abstractions ──
+[[rung]]
+id     = "ra-5"
+kind   = "primitive"
+lands  = ["identity"]
+title  = "your keys survive your devices - linked devices legible, recovery by m people, retired keys refused"
+status = "open"
+demo   = "D9"
+moves  = ["ra-linked-device-is-legible", "ra-recovery-names-m-people", "ra-retired-key-is-refused"]
+note   = "The end-user pick on 2026-09-17: a group on this for a year loses a phone with certainty, and no-password-reset is the failure that makes key-based systems unusable by ordinary people. Sequenced after the hard apps so recovery is designed against real device churn (the studio on phones) rather than imagined. Three corrections from the citation pass are in each bar: linking is landed and only needs a surface; recovery needs `vouches` to become a collection; retirement is roster metadata read by admit, never an op and never Seal. SHELF: frost-ed25519 for ring-as-one acts; recovery is a rail act not a Shamir reassembly (Keybase/Argent/Safe/Apple all converge on quorum-vouches-a-NEW-key; add a cancellable delay window); a separate X25519 roster key; WebAuthn PRF unwraps the phone key; sharks avoided."
+
+[[rung]]
+id     = "ra-8"
+kind   = "primitive"
+lands  = ["guarantees"]
+title  = "`svrn ring guarantees` - a sheet computed from n, k and m that names what is not protected"
+status = "open"
+demo   = "D11"
+moves  = []
+note   = "After ra-16 and ra-18 so the relay row and the k row are real rather than hypothetical. Three tiers: guaranteed by math on the device; guaranteed up to a stated threshold (n-k+1 to censor a blob, more than m to rewrite the roster); not protected (who talks to whom via relays, deletion beyond crypto-shredding, a compromised device). REUSE Judgement rows via posture_cmd.rs; THREAT_MODEL.md is the prose to cite from (:15-24). k and m render could-not-judge until a sampler and a quorum config exist (ARCH 6); `quorum` collides with SOVEREIGN_RPC_QUORUM_ANCHORS (rpc_distribution.rs:1422) - avoid the word. `svrn ring` has new|roster|introduce|dev|log|seal; this adds one."
+
+[[rung]]
+id     = "ra-9"
+kind   = "primitive"
+lands  = ["commons"]
+title  = "the commons ledger - GB-hours proven by audit, weighted by scarcity, folded like balances"
+status = "open"
+demo   = "D13"
+moves  = []
+note   = "After ra-18: audits exist once the library's blobs do. EXTEND LedgerEventKind (StorageSnapshot is already GB-hours per node, contributions.rs:107-112; JobUnitCompleted precedent :113-137); per PERSON via the roster join; replicated on the ring via DAEMON_OWN_NAMESPACES (ring_roster.rs:258); `svrn mesh balance` renders. Reward storage PROVEN, never offered. No spendable credit at ring scale; graduated response is hot-copy priority only. `Commons` needs a home crate. SHELF: ValueFlows vocabulary adopted; Tahoe leases as recurring acts; Filecoin avoided."
+
+# ── the small applications ──
+[[rung]]
+id     = "ra-20"
+kind   = "application"
+pulls  = ["journal", "deployment"]
+steers = "nothing new - that is the point: it is the third-party builder test (ring-deploy clause 3), built by someone who is not the author, from the docs, in an evening"
+title  = "APP: the turn-based arcade - a game is a log of moves in total order and the fold is the rules"
+status = "open"
+demo   = "D4"
+moves  = []
+note   = "Small. The rail is already a turn-based game engine; corrections are take-backs. Do NOT build it - it is the evidence that distinguishes rails from our code with extra steps."
+
+[[rung]]
+id     = "ra-21"
+kind   = "application"
+pulls  = ["store", "availability"]
+steers = "keeper seeding of large read-only blob sets; a phone with no data plan as the reader"
+title  = "APP: the atlas - offline Wikipedia and the city map are just there on your phone"
+status = "open"
+demo   = "D10"
+moves  = []
+note   = "Small once ra-3 and ra-7 exist: seed the blobs on the keeper, and every phone in the ring has them. sovereign already holds a Wikipedia corpus and a wikipedia_fetch tool - converge, do not re-ingest. SHELF: PMTiles is an exact fit (pmtiles 0.24 AsyncBackend over iroh, no fork; Berlin z0-15 in 11.9 s / 80 MB); ZIM is the hard half (~50 round trips per cold article, kiwix-js refused remote ranges) - zim crate 0.5.0 + a sparse pointer sidecar with a pre-registered p50/p99 bar; start at top_maxi 7.8 G; native app not browser; OpenStreetMap attribution required."
+
+[[rung]]
+id     = "ra-22"
+kind   = "application"
+pulls  = ["journal", "deployment"]
+steers = "nothing new; these are the one-screen folds the rail was born for"
+title  = "APP: the utilities - expenses, chores, lending; one screen each, the boring things they should be"
+status = "open"
+demo   = "D10"
+moves  = []
+note   = "The ring-deploy order's M6 (house expenses, already a `svrn ring new` template with 20 tests) and M7 (lending board, on the claims store; the repo_id unblock at repo_id.rs:38-49 is required). Day ten of the fortnight, not the anchor demo. Bar is the order's clause 1: a real month settles here and nobody opens Splitwise."
+
+[[rung]]
+id     = "ra-12"
+kind   = "primitive"
+lands  = ["compute"]
+title  = "hubs named honestly - search and the house AI live on one machine, and every answer says which"
+status = "open"
+demo   = "D13"
+moves  = []
+note   = "Last. Search has no central index and a shared local AI is a server wherever the GPU is; the honest answer is a hub-like peer, attributed. Every hub-served answer carries the same kind of row ra-4 carries: which single node this depended on. Off the first ladder by the pasted argument."

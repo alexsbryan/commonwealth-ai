@@ -13,6 +13,7 @@ corpus-engine.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [lints]
 workspace = true

@@ -39,6 +39,7 @@ rusqlite = { version = "0.35", features = ["bundled"] }
 # Matching the version corpus-engine previously declared for the
 # same parser.
 pulldown-cmark = { version = "0.12", default-features = false, features = ["simd"] }
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

@@ -288,6 +288,7 @@ tempfile = "3"
 # Wrapping Vec<u8> for MeshStore::set in MeshNewsworthyHost. One call
 # site; explicit dep keeps the host's API surface honest.
 bytes = "1"
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [features]
 default = []
@@ -328,7 +329,9 @@ iroh-relay-only = ["commonwealth-transport/iroh-relay-only"]
 # `sovereign_mesh::reindexer`.
 sovereign-daemon = { path = "../sovereign-daemon", features = ["treesitter"] }
 # `auto_recover` moved to `sovereign-grants` at domains `dm-auto-recover-move`;
-# the fold-ingest integration tests read it there.
+# the fold-ingest integration tests read it there. The ring's live-lane
+# namespace tests (`tests/main/ring_live_non_durable.rs`) also issue real rail
+# grants through `Scope::Rails` (merged 2026-09-18).
 sovereign-grants = { workspace = true }
 tempfile = "3"
 # `ServiceExt::oneshot` lets the worker_http integration tests dispatch

@@ -18,7 +18,7 @@ use axum::{
 
 use super::{
     daemon_client_port, flag, http_client, mint_rail_grant, rail_log, RAIL_APPEND_PATH,
-    RAIL_LOG_PATH,
+    RAIL_LIVE_PATH, RAIL_LOG_PATH,
 };
 
 struct RingCtx {
@@ -112,16 +112,29 @@ pub(super) async fn run_dev(args: &[String]) -> i32 {
     0
 }
 
-/// **The whole op table: two ops, because the rail is two routes.**
+/// **The whole op table: four ops, because the rail is three routes and the
+/// live one is two directions.**
 ///
 /// `meshapp dev`'s equivalent has twelve arms, one per bridge call, because
 /// each is a different query over a corpus. A ring app is not querying — it is
-/// appending to and reading one log — so a third arm here would mean the rail
-/// had grown a third route, and that is where the decision belongs. The app
-/// decides what an op MEANS; this proxy only carries it, with the credential
-/// attached (which is the one thing the browser must not hold).
+/// appending to and reading one log, and telling peers where its cursor is —
+/// so a fifth op here would mean the rail had grown another route, and that is
+/// where the decision belongs. The app decides what an op MEANS; this proxy
+/// only carries it, with the credential attached (which is the one thing the
+/// browser must not hold).
 ///
-/// **Why these two arms are not [`rail_log`] and
+/// The live lane is TWO ops rather than one carrying a direction, because its
+/// push body reaches the daemon verbatim as opaque text
+/// (`sovereign-api/src/routes_rail_live.rs` `live_push`) and so cannot carry a
+/// field of ours. `None` for a content-type is a request with no body, which
+/// is what both GETs are.
+///
+/// It is a FUNCTION rather than arms inlined in [`op_handler`] so the table
+/// can be asserted without binding a socket: a row that pointed the live push
+/// at the append route would put presence in the journal, and that is the one
+/// failure this lane exists to rule out.
+///
+/// **Why these rows are not [`rail_log`] and
 /// [`rail_append`](super::rail_append).** Those are the OPERATOR clients: they
 /// hit `:9741`, which admits a loopback caller before it reads a bearer, and
 /// they take a typed act and hand back parsed JSON. This is a reverse proxy on
@@ -130,41 +143,47 @@ pub(super) async fn run_dev(args: &[String]) -> i32 {
 /// operator surface, and make the namespace scoping decorative. It would also
 /// have to re-parse and re-serialise the browser's body to fit their
 /// signatures, when the contract is to pass those bytes through unread and
-/// return the daemon's status and text verbatim. What IS shared is the pair of
-/// route constants (ARCH §10.6): one spelling of each path, three callers.
+/// return the daemon's status and text verbatim. What IS shared is the route
+/// constants (ARCH §10.6): one spelling of each path, every caller.
+fn upstream(op: &str) -> Option<(reqwest::Method, &'static str, Option<&'static str>)> {
+    match op {
+        "log" => Some((reqwest::Method::GET, RAIL_LOG_PATH, None)),
+        "append" => Some((
+            reqwest::Method::POST,
+            RAIL_APPEND_PATH,
+            Some("application/json"),
+        )),
+        "live" => Some((reqwest::Method::POST, RAIL_LIVE_PATH, Some("text/plain"))),
+        "live-drain" => Some((reqwest::Method::GET, RAIL_LIVE_PATH, None)),
+        _ => None,
+    }
+}
+
 async fn op_handler(
     AxPath(op): AxPath<String>,
     State(ctx): State<Arc<RingCtx>>,
     body: axum::body::Bytes,
 ) -> Response {
-    let result = match op.as_str() {
-        "log" => {
-            ctx.http
-                .get(format!("{}{RAIL_LOG_PATH}", ctx.base))
-                .bearer_auth(&ctx.token)
-                .send()
-                .await
-        }
-        "append" => {
-            ctx.http
-                .post(format!("{}{RAIL_APPEND_PATH}", ctx.base))
-                .bearer_auth(&ctx.token)
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(body)
-                .send()
-                .await
-        }
-        other => {
-            return (
-                StatusCode::NOT_FOUND,
-                format!(
-                    "ring dev: no op `{other}` — this rail carries `log` and `append`, \
-                     and an app's own vocabulary is built out of those two"
-                ),
-            )
-                .into_response()
-        }
+    let Some((method, path, ctype)) = upstream(&op) else {
+        return (
+            StatusCode::NOT_FOUND,
+            format!(
+                "ring dev: no op `{op}` — this rail carries `log`, `append`, `live` and \
+                 `live-drain`, and an app's own vocabulary is built out of those four"
+            ),
+        )
+            .into_response();
     };
+    let mut req = ctx
+        .http
+        .request(method, format!("{}{path}", ctx.base))
+        .bearer_auth(&ctx.token);
+    // A body only where the op has one: the two GETs carry the browser's
+    // bytes nowhere, and a content-type on a bodiless request is a lie.
+    if let Some(ctype) = ctype {
+        req = req.header(header::CONTENT_TYPE, ctype).body(body);
+    }
+    let result = req.send().await;
     match result {
         Ok(resp) => {
             let status = resp.status();
@@ -210,6 +229,9 @@ async fn static_handler(State(ctx): State<Arc<RingCtx>>, uri: Uri) -> Response {
 /// never touch `log.ops` directly. Hand somebody a raw log and hope, and the
 /// first thing they write is `ops.filter(...).sort(...)` — and their house
 /// disagrees with itself about who owes what.
+///
+/// `live` is the fourth thing and it is a different kind: it writes nothing
+/// down, so it is namespaced apart rather than sitting beside `record`.
 const DEV_SHIM: &str = r#"(function () {
   const call = async (op, body) => {
     const r = await fetch('/__ring/' + op, {
@@ -239,6 +261,23 @@ const DEV_SHIM: &str = r#"(function () {
     // gone. To bring something back, write it again.
     correct: (correctsId, replacement) =>
       call('append', { op: 'correct', corrects: correctsId, replacement: replacement || null }),
+    // The live lane: delivery, not record. Nothing here reaches a journal.
+    //
+    // `send` is a raw fetch and NOT the `call` helper on purpose: the daemon
+    // reads the push body as opaque text, so `call`'s JSON.stringify would
+    // wrap an already-stringified envelope in quotes and every peer would
+    // skip it without saying anything.
+    live: {
+      send: async (payload) => {
+        const r = await fetch('/__ring/live', {
+          method: 'POST', headers: { 'content-type': 'text/plain' }, body: payload,
+        });
+        if (!r.ok) throw new Error('ring: live send failed (' + r.status + ')');
+        return r.json();
+      },
+      // A drain, not a read: the daemon hands each payload out once.
+      drain: () => call('live-drain', {}),
+    },
     // Fold the journal with your reducer.
     //
     // Skips the acts a correction voided and the corrections that state no
@@ -289,6 +328,60 @@ mod tests {
             !DEV_SHIM.contains("expense:") && !DEV_SHIM.contains("settle:"),
             "the shim knows about money again — that belongs in the app's own \
              module, where it has tests"
+        );
+    }
+
+    /// **The live lane's two ops must point at the live route, and only at
+    /// it.** A `live` row pointing anywhere else is presence written down —
+    /// the one thing the lane exists to rule out — and it would look like a
+    /// working page until somebody read the journal.
+    #[test]
+    fn the_op_table_carries_both_directions_of_the_live_lane() {
+        assert_eq!(
+            upstream("live"),
+            Some((reqwest::Method::POST, RAIL_LIVE_PATH, Some("text/plain")))
+        );
+        assert_eq!(
+            upstream("live-drain"),
+            Some((reqwest::Method::GET, RAIL_LIVE_PATH, None))
+        );
+        assert_eq!(
+            upstream("log"),
+            Some((reqwest::Method::GET, RAIL_LOG_PATH, None))
+        );
+        assert_eq!(
+            upstream("append"),
+            Some((
+                reqwest::Method::POST,
+                RAIL_APPEND_PATH,
+                Some("application/json")
+            ))
+        );
+        assert!(upstream("nope").is_none());
+    }
+
+    /// **The push body must leave the browser exactly as the app wrote it.**
+    /// `call` would `JSON.stringify` an envelope the app already stringified,
+    /// and `decodePresence` on the other side would skip every payload
+    /// silently — no error, no cursor, nothing to read.
+    ///
+    /// A string assertion for the same reason as the two tests above: the
+    /// shim is JS inside a Rust const, and the double-encode is what it is
+    /// watching for.
+    #[test]
+    fn the_shim_reaches_the_live_lane_without_re_encoding() {
+        assert!(DEV_SHIM.contains("live: {"));
+        assert!(DEV_SHIM.contains("send: async (payload)"));
+        assert!(DEV_SHIM.contains("drain: () => call('live-drain', {})"));
+        assert!(
+            DEV_SHIM.contains("body: payload,"),
+            "the live send stopped handing the payload through verbatim — a \
+             `call(` here would double-encode it and every peer would skip it"
+        );
+        assert!(
+            DEV_SHIM.contains("return r.json();"),
+            "the live send stopped returning the daemon's answer — without \
+             `peers` the page cannot name a peer that did not get its presence"
         );
     }
 }

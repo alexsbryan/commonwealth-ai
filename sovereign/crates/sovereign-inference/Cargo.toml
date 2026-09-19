@@ -64,6 +64,7 @@ minijinja = { workspace = true }
 # exist in 0.2.x, so we call llguidance from `ConstrainedSampler`
 # alongside the existing in-house `JsonConstraint` mask.
 llguidance = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 # llama.cpp's GPU backend is picked per-OS. Linux uses Vulkan because
 # ROCm crashes in `ggml_cpu_extra_work_size` during Qwen3-A3B MoE
