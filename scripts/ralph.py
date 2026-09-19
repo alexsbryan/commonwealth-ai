@@ -319,6 +319,107 @@ def select_model_args(row_id, model, review_model, variant):
     return args
 
 
+# The checks ralph-check.sh implements itself. A manifest may not redeclare one:
+# one name, one decider.
+BUILTIN_CHECKS = ("clean", "lint", "test", "testfn", "layer", "env", "docs",
+                  "testall", "prepush")
+MANIFEST_MODEL_KEYS = {"worker": "MODEL", "review": "REVIEW_MODEL",
+                       "resolve": "RESOLVE_MODEL", "variant": "VARIANT"}
+MANIFEST_PATH_KEYS = {"state": "STATE.md", "prompt": "PROMPT.md", "charter": "CHARTER.md",
+                      "conflicts": "conflicts.txt", "heavy": "heavy.txt", "control_dir": "ctl"}
+
+
+@dataclasses.dataclass(frozen=True)
+class QueueManifest:
+    """`ralph/next/<name>/queue.toml`: everything one queue owns, as data.
+    Named apart from `Queue`, which is the row grammar of its STATE.md."""
+    name: str
+    path: str
+    label: str
+    state: str
+    prompt: str
+    charter: str
+    conflicts: str
+    heavy: str
+    control_dir: str
+    models: dict
+    checks: dict
+    session_timeout: int | None = None
+    worker_bin: str = ""
+    settings: str = ""
+    prompt_declared: bool = False
+
+
+def manifest_rel(name):
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", name or ""):
+        raise ValueError(f"queue name {name!r} must be one path segment under {STAGED_DIR}/")
+    return f"{STAGED_DIR}/{name}/queue.toml"
+
+
+def load_manifest(workdir, name):
+    """Strict: an unknown key, a mistyped value or a missing file is refused by
+    name. A typo that silently fell back to a default is how a queue ends up
+    running another queue's files."""
+    import tomllib          # 3.11+; imported here so legacy launch lines need no manifest support
+    rel = manifest_rel(name)
+    file = pathlib.Path(workdir) / rel
+    if not file.is_file():
+        raise ValueError(f"no queue manifest at {rel} (workdir {workdir})")
+    try:
+        data = tomllib.loads(file.read_text())
+    except tomllib.TOMLDecodeError as e:
+        raise ValueError(f"{rel}: {e}") from e
+
+    def bad(key, want):
+        return ValueError(f"{rel}: `{key}` must be {want}")
+
+    known = {"label", "session_timeout", "worker_bin", "settings", "models", "checks",
+             *MANIFEST_PATH_KEYS}
+    for key in data:
+        if key not in known:
+            raise ValueError(f"{rel}: unknown key `{key}` (known: {', '.join(sorted(known))})")
+    strings = {}
+    for key in ("label", "worker_bin", "settings", *MANIFEST_PATH_KEYS):
+        if key in data and not isinstance(data[key], str):
+            raise bad(key, "a string")
+        strings[key] = data.get(key, "")
+    timeout = data.get("session_timeout")
+    if timeout is not None and (isinstance(timeout, bool) or not isinstance(timeout, int)
+                                or timeout <= 0):
+        raise bad("session_timeout", "a positive integer of seconds")
+    models = {}
+    table = data.get("models", {})
+    if not isinstance(table, dict):
+        raise bad("models", "a table")
+    for key, value in table.items():
+        if key not in MANIFEST_MODEL_KEYS:
+            raise ValueError(f"{rel}: unknown [models] key `{key}` "
+                             f"(known: {', '.join(MANIFEST_MODEL_KEYS)})")
+        if not isinstance(value, str):
+            raise bad(f"models.{key}", "a string")
+        models[MANIFEST_MODEL_KEYS[key]] = value
+    checks = {}
+    table = data.get("checks", {})
+    if not isinstance(table, dict):
+        raise bad("checks", "a table")
+    for key, argv in table.items():
+        if key in BUILTIN_CHECKS:
+            raise ValueError(f"{rel}: [checks] `{key}` is a ralph-check.sh built-in "
+                             "and cannot be redeclared")
+        if (not isinstance(argv, list) or not argv
+                or not all(isinstance(a, str) and a and "\n" not in a for a in argv)):
+            raise bad(f"checks.{key}", "a non-empty argv list of one-line strings")
+        checks[key] = tuple(argv)
+    base = f"{STAGED_DIR}/{name}"
+    return QueueManifest(
+        name=name, path=rel, label=strings["label"] or name,
+        models=models, checks=checks, session_timeout=timeout,
+        worker_bin=strings["worker_bin"], settings=strings["settings"],
+        prompt_declared="prompt" in data,
+        **{key: strings[key] or f"{base}/{default}"
+           for key, default in MANIFEST_PATH_KEYS.items()})
+
+
 @dataclasses.dataclass
 class Paths:
     workdir: pathlib.Path

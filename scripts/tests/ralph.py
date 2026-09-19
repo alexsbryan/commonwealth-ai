@@ -63,6 +63,74 @@ class QueueTests(unittest.TestCase):
                 ralph.Queue(pathlib.Path(tmp) / "ralph/STATE.md")
 
 
+MANIFEST = """\
+label = "alpha"
+session_timeout = 7200
+worker_bin = "scripts/ralph-claude-shim.sh"
+settings = "ralph/claude-settings.json"
+
+[models]
+worker = "w/x"
+review = "r/y"
+resolve = "d/z"
+variant = "high"
+
+[checks]
+hello = ["sh", "-c", "echo from-a"]
+"""
+
+
+class QueueManifestTests(unittest.TestCase):
+    def test_loads_every_key_and_defaults_the_paths_from_the_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "ralph/next/a/queue.toml", MANIFEST)
+            m = ralph.load_manifest(tmp, "a")
+            self.assertEqual((m.name, m.label), ("a", "alpha"))
+            self.assertEqual(m.state, "ralph/next/a/STATE.md")
+            self.assertEqual(m.prompt, "ralph/next/a/PROMPT.md")
+            self.assertEqual(m.charter, "ralph/next/a/CHARTER.md")
+            self.assertEqual(m.conflicts, "ralph/next/a/conflicts.txt")
+            self.assertEqual(m.heavy, "ralph/next/a/heavy.txt")
+            self.assertEqual(m.control_dir, "ralph/next/a/ctl")
+            self.assertEqual(m.models, {"MODEL": "w/x", "REVIEW_MODEL": "r/y",
+                                        "RESOLVE_MODEL": "d/z", "VARIANT": "high"})
+            self.assertEqual(m.checks, {"hello": ("sh", "-c", "echo from-a")})
+            self.assertEqual(m.session_timeout, 7200)
+            self.assertEqual(m.worker_bin, "scripts/ralph-claude-shim.sh")
+            self.assertEqual(m.settings, "ralph/claude-settings.json")
+
+    def test_an_empty_manifest_is_all_defaults(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "ralph/next/b/queue.toml", "")
+            m = ralph.load_manifest(tmp, "b")
+            self.assertEqual(m.label, "b")
+            self.assertEqual((m.models, m.checks, m.session_timeout, m.worker_bin),
+                             ({}, {}, None, ""))
+
+    def test_a_missing_manifest_is_refused_by_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaisesRegex(ValueError, "ralph/next/ghost/queue.toml"):
+                ralph.load_manifest(tmp, "ghost")
+
+    def test_schema_errors_name_the_key(self):
+        bad = {"lable = 'x'\n": "lable",
+               "[models]\nworkr = 'x'\n": "workr",
+               "[checks]\nhello = 'echo hi'\n": "hello",
+               "[checks]\nlint = ['true']\n": "lint",
+               "session_timeout = 'long'\n": "session_timeout"}
+        for text, key in bad.items():
+            with tempfile.TemporaryDirectory() as tmp:
+                write(tmp, "ralph/next/a/queue.toml", text)
+                with self.assertRaisesRegex(ValueError, key):
+                    ralph.load_manifest(tmp, "a")
+
+    def test_a_name_is_one_path_segment(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in ("../x", "a/b", ""):
+                with self.assertRaises(ValueError):
+                    ralph.load_manifest(tmp, name)
+
+
 class ModelTests(unittest.TestCase):
     def test_load_and_review_routing(self):
         with tempfile.TemporaryDirectory() as tmp:
