@@ -23,6 +23,7 @@ import argparse
 import dataclasses
 import enum
 import hashlib
+import itertools
 import os
 import pathlib
 import re
@@ -946,6 +947,16 @@ class Supervisor:
                 say(f"supervisor: resolution {attempt} cleared the halt — resuming the campaign")
 
 
+def conflict_pairs(text):
+    """A line of N ids means all N-choose-2 pairs; `#` starts a comment. Reading
+    only the first two dropped the third id of ring-doc's line without a word."""
+    pairs = set()
+    for line in text.splitlines():
+        ids = line.split("#")[0].split()
+        pairs.update(frozenset(pair) for pair in itertools.combinations(ids, 2))
+    return pairs
+
+
 class Pool:
     """The parallel driver: waves of ready units in git worktrees, serial
     merges, a conflict halts (never auto-resolved). REVIEW rows run serially
@@ -987,14 +998,8 @@ class Pool:
             return None
 
     def _conflict_pairs(self):
-        pairs = set()
         p = self.paths.p(self.conflicts)
-        if p.exists():
-            for line in p.read_text().splitlines():
-                parts = line.split()
-                if len(parts) >= 2:
-                    pairs.add(frozenset(parts[:2]))
-        return pairs
+        return conflict_pairs(p.read_text()) if p.exists() else set()
 
     def _heavy(self):
         """The heavy rows (ralph/heavy.txt): at most one per wave."""

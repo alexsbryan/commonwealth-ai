@@ -922,6 +922,23 @@ class PoolTests(unittest.TestCase):
             self.assertEqual(q.pick_wave(4, {frozenset(("dm-a", "dm-c"))}),
                              ["dm-a", "dm-d"])
 
+    def test_a_conflicts_line_of_n_ids_means_every_pair(self):
+        # ring-doc's line names three rows; until 2026-09-19 only the first two conflicted.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            write(tmp, "ralph/conflicts.txt", (REPO / "ralph/next/ring-doc/conflicts.txt").read_text())
+            write(tmp, "ralph/STATE.md", "".join(
+                f"- [ ] {u} — depends []\n"
+                for u in ("rd-1-adapter", "rd-1-awareness", "rd-1-attribution")))
+            pairs = self.make(root, lambda cwd, env=None: None)._conflict_pairs()
+            for a, b in (("rd-1-adapter", "rd-1-awareness"), ("rd-1-adapter", "rd-1-attribution"),
+                         ("rd-1-awareness", "rd-1-attribution")):
+                self.assertIn(frozenset((a, b)), pairs)
+            self.assertEqual(ralph.Queue(root / "ralph/STATE.md").pick_wave(3, pairs),
+                             ["rd-1-adapter"])
+            self.assertEqual(ralph.conflict_pairs("a b  # why\n# c d\n\nsolo\n"),
+                             {frozenset(("a", "b"))})
+
     def test_wave_merges_marks_and_writes_done(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = self.fixture(tmp, "- [ ] dm-a — depends []\n- [ ] dm-b — depends []\n")
