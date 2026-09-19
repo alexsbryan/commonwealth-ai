@@ -1647,7 +1647,9 @@ rule, and the "44 GB boot peak" were all this one corpus.
   — it EDITS the shipped `phase1_section_extraction_schema`, extending the
   entity enum, adding a type slot plus one union `attributes` object per kind
   — the object REQUIRED, its slots optional, since a strict grammar omits an
-  optional object at will and enforces only `required`; and `subject`
+  optional object at will and enforces only `required`; the one slot that is
+  also required by name is a declared `deontic`, the directive's force, which
+  an open-but-empty bag left filled on 46 of 1,221 obligations; and `subject`
   inserted BEFORE the bag, because property order is the model's generation
   order under llguidance and a `subject` asked for after an empty `{}` was
   skipped (note 5c06bc92; `corpus-engine` declares serde_json

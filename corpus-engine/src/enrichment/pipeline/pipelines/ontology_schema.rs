@@ -128,6 +128,7 @@ pub fn phase1_schema_for(policies: &OntologyPolicies) -> Value {
             require_attributes(defs, "claim_sketch");
             let deontic = union_of(&claims, |t| t.deontic.iter().map(wire_name).collect());
             let grades = union_of(&claims, |t| t.grades.clone());
+            let declares_deontic = !deontic.is_empty();
             for (key, values) in [("deontic", deontic), ("grade", grades)] {
                 if !values.is_empty() {
                     set_attribute_property(
@@ -141,6 +142,15 @@ pub fn phase1_schema_for(policies: &OntologyPolicies) -> Value {
             // A grade-only bag (no declared claim attributes) is created just
             // above, after `attach_attributes` declined to; it is required too.
             require_attributes(defs, "claim_sketch");
+            // The bag being required only obliges the model to OPEN it, and
+            // `{}` stays legal — which is what a declared deontic mode got:
+            // filled on 46 of 1,221 obligations (spike 3, 2026-09-19). The
+            // mode is the directive's force, not an optional fact about it,
+            // so the one slot that carries it is required by name. `grade`
+            // is not: an ungraded claim is still a claim.
+            if declares_deontic {
+                require_attribute_key(defs, "claim_sketch", "deontic");
+            }
         }
 
         // Argument reconstruction is an opt-in derivation pass. Carrying its
@@ -286,6 +296,27 @@ fn require_attributes(defs: &mut Defs, sketch: &str) {
     if let Some(list) = required.as_array_mut() {
         if !list.iter().any(|k| k == "attributes") {
             list.push(Value::String("attributes".to_string()));
+        }
+    }
+}
+
+/// Make ONE key INSIDE a sketch's `attributes` object required — the bag's
+/// own `required` list, not the sketch's. [`require_attributes`] obliges the
+/// model to open the bag; this obliges it to fill one named slot. Idempotent,
+/// and a no-op when the sketch carries no bag.
+fn require_attribute_key(defs: &mut Defs, sketch: &str, key: &str) {
+    let Some(attrs) = properties_of(defs, sketch).and_then(|p| p.get_mut("attributes")) else {
+        return;
+    };
+    let Some(obj) = attrs.as_object_mut() else {
+        return;
+    };
+    let required = obj
+        .entry("required".to_string())
+        .or_insert_with(|| Value::Array(Vec::new()));
+    if let Some(list) = required.as_array_mut() {
+        if !list.iter().any(|k| k == key) {
+            list.push(Value::String(key.to_string()));
         }
     }
 }
