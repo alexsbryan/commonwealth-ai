@@ -582,6 +582,28 @@ for m in d.get("members") or []:
 '
 }
 
+# ATTACH THE KEY TO THE INSTANCE. A key registered on the Vast ACCOUNT
+# (`vastai show ssh-keys`) is not thereby on the instance: on 2026-09-19 both
+# local keys were registered, instance 51635391 refused them with "Permission
+# denied (publickey)", and 30 billed minutes went by before `vastai attach ssh`
+# let the tunnel in. So `up` attaches it, and `tunnel` checks before it loops.
+# POD_SSH_PUBKEY overrides the key file.
+pod_pubkey() {
+  local k="${POD_SSH_PUBKEY:-}"
+  [ -n "$k" ] || for k in "$HOME/.ssh/id_ed25519.pub" "$HOME/.ssh/id_rsa.pub"; do [ -f "$k" ] && break; k=""; done
+  [ -n "$k" ] && [ -f "$k" ] || { echo "[dev-pod] no public key found (set POD_SSH_PUBKEY)" >&2; return 1; }
+  echo "$k"
+}
+attach_key() {   # attach_key <instance-id>
+  local k; k=$(pod_pubkey) || return 1
+  if vastai attach ssh "$1" "$(cat "$k")" >/dev/null 2>&1; then
+    echo "[dev-pod] attached $(basename "$k") to instance $1" >&2
+  else
+    echo "[dev-pod] !! could not attach $(basename "$k") to $1 — the tunnel will be refused; run: vastai attach ssh $1 \"\$(cat $k)\"" >&2
+    return 1
+  fi
+}
+
 case "${1:-}" in
 plan)
   # What does the configured loadout need, and would a given card hold it?
@@ -698,6 +720,7 @@ print(d["new_contract"])
 ') || { echo "[dev-pod] create FAILED — nothing rented, nothing billing"; exit 1; }
   echo "$id"
   echo "[dev-pod] rented $id -- billing runs until 'dev-pod.sh down', which needs no id" >&2
+  attach_key "$id" || true    # reported, never fatal: the pod is already billing
   echo "[dev-pod] watch it:  ./dev-pod.sh logs    first boot ~4-6 min: image pull, 30 GB models, slot load" >&2
   if [ "$mode" = mesh ]; then
     echo "[dev-pod] the join is a BACKGROUND step inside the pod — grep the log for JOINED/JOIN FAILED," >&2
@@ -824,6 +847,23 @@ tunnel)
   # nothing (§18.3 — absence is reported, never defaulted).
   #
   # `exec` is gone on purpose: the point is to outlive one connection.
+  # AUTH PREFLIGHT. The loop below retries forever, which is right for a dropped
+  # route and wrong for a refused key: that never heals, and the pod bills while
+  # the loop spins. One batch-mode probe; on a publickey refusal attach the key
+  # and probe once more; still refused is exit 1 with the cause named.
+  probe() { ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 \
+                -p "${hostport##*:}" "root@${hostport%%:*}" true 2>&1; }
+  # `probe | grep` would be wrong here: under `pipefail` the pipeline takes
+  # ssh's 255 even when grep matched, so the refusal would read as "fine".
+  refused() { local o; o=$(probe || true); case "$o" in *"Permission denied (publickey)"*) return 0 ;; esac; return 1; }
+  if refused; then
+    echo "[dev-pod] the instance refused this machine's key — attaching it" >&2
+    attach_key "$id" && sleep 10
+    if refused; then
+      echo "[dev-pod] !! still refused after attach. The pod is BILLING and unreachable: fix the key or run 'dev-pod.sh down'." >&2
+      exit 1
+    fi
+  fi
   attempt=0
   while :; do
     attempt=$((attempt + 1))
@@ -832,8 +872,11 @@ tunnel)
         -o ServerAliveInterval=15 -o ServerAliveCountMax=3 \
         -o ExitOnForwardFailure=yes -o ConnectTimeout=15 \
         -L "$LOCAL_PORT:127.0.0.1:9741" \
-        -p "${hostport##*:}" "root@${hostport%%:*}"
-    echo "[dev-pod] tunnel dropped (status $?) — retrying in 5s; ctrl-c to stop"
+        -p "${hostport##*:}" "root@${hostport%%:*}" && st=0 || st=$?
+    # `&& st=0 || st=$?` is what makes this a loop at all: under `set -e` a bare
+    # failing ssh ended the script on the first drop, so the reconnect below
+    # never ran (seen 2026-09-19: one attempt in the log, then nothing).
+    echo "[dev-pod] tunnel dropped (status $st) — retrying in 5s; ctrl-c to stop"
     sleep 5
   done
   ;;

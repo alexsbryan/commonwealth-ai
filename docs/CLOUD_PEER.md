@@ -39,7 +39,12 @@ answers "is anything costing me money right now, and how much so far".
   account, `status` says so and exits 2.
 - **An SSH key registered with Vast** — `vastai show ssh-keys`; register one
   with `vastai create ssh-key "$(cat ~/.ssh/id_ed25519.pub)"`. Without it
-  `tunnel` and the teardown's mesh-leave have no way in.
+  `tunnel` and the teardown's mesh-leave have no way in. Registration on the
+  account is not always enough: an instance can still refuse the key
+  (2026-09-19, 30 billed minutes). `up` therefore attaches the key to the
+  instance (`vastai attach ssh`), and `tunnel` probes first — on a refused key
+  it attaches and retries once, then exits 1 naming the cause instead of
+  retrying while the pod bills. `POD_SSH_PUBKEY` picks a different key file.
 - **For `--mesh` only: a running local daemon in the mesh you want joined.**
   `up --mesh` reads the founder's invite from `127.0.0.1:9741` and refuses to
   rent if it cannot (no daemon, wrong mesh, still a solo mesh, or an invite
