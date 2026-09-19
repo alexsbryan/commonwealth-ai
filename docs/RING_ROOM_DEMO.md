@@ -42,6 +42,22 @@ RING_DOC_BACKEND=podman scripts/ring-room-demo.sh verdict all
 scripts/ring-room-demo.sh down
 ```
 
+Since rr-2 the same two scripts also carry a SECOND topology, chosen with
+`RING_ROOM_TOPOLOGY=room`: four nodes named for the machines they stand in for
+(`ring-room-beefy`, `halo`, `little`, `phone`) on TWO podman networks — `room`
+is the venue's WiFi and is created `--internal`, `uplink` is its internet. The
+wall is the one member in the room and holds the host's render node; the keeper
+and the library holder sit behind the uplink; the phone is on the room's WiFi
+only, runs a stock node image, and has no daemon and no key. Cutting `uplink`
+from the wall is the venue's internet going down with the room still working.
+Nothing of the node door was copied to do it: the node set, the container
+prefix, the founder, the networks, the per-node image and the forwarder are
+parameters of `ring-doc-demo.sh` now, and rr-1's three-node run is unchanged.
+
+```bash
+RING_ROOM_TOPOLOGY=room scripts/ring-room-demo.sh verdict all
+```
+
 `up` empties the run directory, starts the three nodes, joins them, and names
 them at init so what appears on screen is a word. In the recorded run the
 names were `ring-doc-a`, `Bo` and `Cy`. Everything the script does from here

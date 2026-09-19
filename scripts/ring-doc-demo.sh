@@ -87,6 +87,40 @@ NET=ring-doc
 # Fixed addresses, so a healed container comes back where its forwarder listens.
 SUBNET=10.89.49.0/24
 declare -A IP=([a]=10.89.49.11 [b]=10.89.49.12 [c]=10.89.49.13)
+# The node SET, the container-name prefix and the founder, so a SECOND topology
+# can drive this same door without copying it: scripts/ring-room-demo.sh under
+# RING_ROOM_TOPOLOGY=room runs four nodes named for the machines they stand in
+# for (`ring-room-beefy`…). Unset, these are rd-1's three and nothing moves.
+NODES=(${RING_DOC_NODES:-a b c})
+CPREFIX="${RING_DOC_CPREFIX:-ring-doc}"
+FOUNDER="${RING_DOC_FOUNDER:-a}"
+# Every network the topology creates (name -> subnet), each node's PRIMARY
+# attachment (the address its forwarder binds and a heal restores), and an
+# optional SECOND one written podman's way, `<net>:ip=<addr>`. Two networks are
+# what lets a cut take one path and leave the other: the room's wall is on the
+# room's WiFi and on the uplink, and only the uplink is cut.
+declare -A NETS=([$NET]=$SUBNET)
+# Extra `podman network create` flags per network. `--internal` is the one that
+# matters: a podman bridge NATs to the internet by default, so a topology that
+# "cuts the uplink" while leaving another bridge attached cuts nothing at all
+# (measured 2026-09-19: the answer during the cut still cited the keeper).
+declare -A NET_FLAGS=()
+declare -A PNET=([a]=$NET [b]=$NET [c]=$NET)
+declare -A XNET=()
+# A node may need a DIFFERENT image: the room's phone is a person's handset,
+# which carries a browser and nothing of this repo's toolchain, so it runs a
+# stock node image rather than the build toolbox. Unset is the toolbox.
+declare -A NODE_IMAGE=()
+# A node with nothing to serve needs no forwarder (the phone has no page and
+# the stock image has no python3 to run one).
+declare -A NOFWD=()
+# The address node `n` holds on network `net` — its primary, or the one its
+# second attachment spells. One reader, so `heal_node` cannot guess.
+node_ip() { # node net
+  local n=$1 net=$2
+  [ "$net" = "${PNET[$n]}" ] && { echo "${IP[$n]}"; return 0; }
+  case "${XNET[$n]:-}" in "$net:ip="*) echo "${XNET[$n]#*:ip=}" ;; *) echo "" ;; esac
+}
 # The image the binaries link against. The toolbox was created from this tag;
 # when the tag has moved on (it is not pulled here), the toolbox's own image
 # is used and the substitution is printed.
@@ -100,7 +134,7 @@ RING_DOC_GPU_NODES="${RING_DOC_GPU_NODES:-}"
 node_exec() {
   local n=$1; shift
   if [ "$BACKEND" = podman ]; then
-    "${PODMAN[@]}" exec -e SOVEREIGN_DATA_DIR="$D/$n" -e SOVEREIGN_NO_STALE_WARN=1 "ring-doc-$n" "$@"
+    "${PODMAN[@]}" exec -e SOVEREIGN_DATA_DIR="$D/$n" -e SOVEREIGN_NO_STALE_WARN=1 "$CPREFIX-$n" "$@"
   else
     SOVEREIGN_DATA_DIR="$D/$n" "$@"
   fi
@@ -120,9 +154,16 @@ node_bg() { # node pidfile out err cmd…
 node_kill() { local n=$1 pidf=$2; [ -f "$pidf" ] && node_exec "$n" kill "$(cat "$pidf")" 2>/dev/null; return 0; }
 
 # The instrument's forwarder (podman only): container-address:port → 127.0.0.1:port.
+#
+# ONE listener per address the node holds, because a node on two networks is
+# published on whichever podman picked, and a forwarder bound to the other one
+# is a host port that answers nothing (measured 2026-09-19: the wall's page was
+# unreachable from the host for the whole wall leg, and became reachable the
+# moment the cut left it on one network). `0.0.0.0` is not the fix — it would
+# own 127.0.0.1:port too, which is where the thing being forwarded TO listens.
 FWD_PY='
 import socket, sys, threading
-host, port = sys.argv[1], int(sys.argv[2])
+port, hosts = int(sys.argv[1]), sys.argv[2:]
 def pipe(a, b):
     try:
         while True:
@@ -137,15 +178,21 @@ def serve(c):
     except OSError: c.close(); return
     t = threading.Thread(target=pipe, args=(u, c), daemon=True); t.start()
     pipe(c, u); t.join(); c.close(); u.close()
-srv = socket.create_server((host, port))
-while True:
-    c, _ = srv.accept()
-    threading.Thread(target=serve, args=(c,), daemon=True).start()
+def listen(host):
+    srv = socket.create_server((host, port))
+    while True:
+        c, _ = srv.accept()
+        threading.Thread(target=serve, args=(c,), daemon=True).start()
+for h in hosts[:-1]:
+    threading.Thread(target=listen, args=(h,), daemon=True).start()
+listen(hosts[-1])
 '
 start_forwarder() { # node
   local n=$1
   node_kill "$n" "$D/$n/fwd.pid"
-  node_bg "$n" "$D/$n/fwd.pid" "$D/$n/fwd.out" "$D/$n/fwd.err" python3 -c "$FWD_PY" "${IP[$n]}" "${DPORT[$n]}"
+  local second="${XNET[$n]:-}"; second="${second#*:ip=}"
+  node_bg "$n" "$D/$n/fwd.pid" "$D/$n/fwd.out" "$D/$n/fwd.err" \
+    python3 -c "$FWD_PY" "${DPORT[$n]}" "${IP[$n]}" ${second:+"$second"}
 }
 
 need_binaries() {
@@ -156,6 +203,11 @@ need_binaries() {
   fi
   [ "$BACKEND" = podman ] || return 0
   "${PODMAN[@]}" version >/dev/null 2>&1 || { echo "ring-doc-demo: podman is not reachable (${PODMAN[*]})" >&2; exit 3; }
+  local img
+  for img in "${NODE_IMAGE[@]}"; do
+    "${PODMAN[@]}" image exists "$img" 2>/dev/null \
+      || { echo "ring-doc-demo: image $img is not on this host (podman pull $img)" >&2; exit 3; }
+  done
   if ! "${PODMAN[@]}" image exists "$IMAGE" 2>/dev/null; then
     local tb; tb=$("${PODMAN[@]}" inspect sovereign-vulkan --format '{{.Image}}' 2>/dev/null)
     [ -n "$tb" ] || { echo "ring-doc-demo: image $IMAGE is not on this host and there is no sovereign-vulkan toolbox to take it from" >&2; exit 3; }
@@ -166,41 +218,52 @@ need_binaries() {
 
 containers_down() {
   local n
-  for n in a b c; do "${PODMAN[@]}" rm -f -t 2 "ring-doc-$n" >/dev/null 2>&1; done
-  "${PODMAN[@]}" network rm -f "$NET" >/dev/null 2>&1
+  for n in "${NODES[@]}"; do "${PODMAN[@]}" rm -f -t 2 "$CPREFIX-$n" >/dev/null 2>&1; done
+  for n in "${!NETS[@]}"; do "${PODMAN[@]}" network rm -f "$n" >/dev/null 2>&1; done
   return 0
 }
 
+# ONE node's container, so a topology that adds a node later brings it up
+# through the same body rather than a reconstruction of this one. (It was a
+# `declare -f containers_up | sed` in ring-room-demo.sh until 2026-09-19, with
+# a guard that fired when this function's SHAPE changed — which it now has.)
+container_up_one() {
+  local n=$1
+  # label=disable, as the toolbox runs: relabelling a bind-mounted repo is not ours to do.
+  # HOME is the node's own data dir: with keep-id and no HOME the container resolved
+  # HOME to the workdir, and every binary's startup migrator renames $HOME/.sovereign
+  # to .svrnmesh (rebrand.rs) — on 2026-09-18 it renamed the REPO's tracked project dir
+  # (restored by hand). Note 746c91f2 carries the product-side guard.
+  # RING_DOC_GPU_NODES: the room's laptop. A knob of the INSTRUMENT, not a
+  # product change — nothing in the daemon reads it; it only decides which
+  # containers see the host's render node, exactly as the `sovereign-vulkan`
+  # toolbox does (`--volume /dev:/dev`). Every node is CPU by default, which
+  # is the rehearsed topology and what every recorded run so far measured.
+  #
+  # Measured before use, with a control (2026-09-19, this host):
+  #   with `--device /dev/dri`:  vulkaninfo GPU0 vendorID 0x1002 deviceID 0x1586
+  #   without (same image):      vulkaninfo GPU0 vendorID 0x10005 deviceID 0x0000
+  # The second is lavapipe, Mesa's software rasteriser — which is why a node
+  # with no device reports `ggml_vulkan: No devices found` and runs on CPU.
+  local dev=()
+  case " $RING_DOC_GPU_NODES " in *" $n "*) dev=(--device /dev/dri) ;; esac
+  "${PODMAN[@]}" run -d --name "$CPREFIX-$n" --hostname "$CPREFIX-$n" \
+    --network "${PNET[$n]}:ip=${IP[$n]}" ${XNET[$n]:+--network "${XNET[$n]}"} \
+    --init --userns=keep-id --security-opt label=disable -v "$REPO:$REPO" -w "$REPO" \
+    -e HOME="$D/$n" "${dev[@]+"${dev[@]}"}" \
+    -p "${DPORT[$n]}:${DPORT[$n]}" --pull=never "${NODE_IMAGE[$n]:-$IMAGE}" sleep infinity >/dev/null \
+    || { echo "podman: could not start $CPREFIX-$n" >&2; return 1; }
+  [ -n "${NOFWD[$n]:-}" ] || start_forwarder "$n"
+}
+
 containers_up() {
-  local n
+  local n net
   containers_down
-  "${PODMAN[@]}" network create --subnet "$SUBNET" "$NET" >/dev/null || { echo "podman: could not create network $NET" >&2; return 1; }
-  for n in a b c; do
-    # label=disable, as the toolbox runs: relabelling a bind-mounted repo is not ours to do.
-    # HOME is the node's own data dir: with keep-id and no HOME the container resolved
-    # HOME to the workdir, and every binary's startup migrator renames $HOME/.sovereign
-    # to .svrnmesh (rebrand.rs) — on 2026-09-18 it renamed the REPO's tracked project dir
-    # (restored by hand). Note 746c91f2 carries the product-side guard.
-    # RING_DOC_GPU_NODES: the room's laptop. A knob of the INSTRUMENT, not a
-    # product change — nothing in the daemon reads it; it only decides which
-    # containers see the host's render node, exactly as the `sovereign-vulkan`
-    # toolbox does (`--volume /dev:/dev`). Every node is CPU by default, which
-    # is the rehearsed topology and what every recorded run so far measured.
-    #
-    # Measured before use, with a control (2026-09-19, this host):
-    #   with `--device /dev/dri`:  vulkaninfo GPU0 vendorID 0x1002 deviceID 0x1586
-    #   without (same image):      vulkaninfo GPU0 vendorID 0x10005 deviceID 0x0000
-    # The second is lavapipe, Mesa's software rasteriser — which is why a node
-    # with no device reports `ggml_vulkan: No devices found` and runs on CPU.
-    local dev=()
-    case " $RING_DOC_GPU_NODES " in *" $n "*) dev=(--device /dev/dri) ;; esac
-    "${PODMAN[@]}" run -d --name "ring-doc-$n" --hostname "ring-doc-$n" --network "$NET" --ip "${IP[$n]}" \
-      --init --userns=keep-id --security-opt label=disable -v "$REPO:$REPO" -w "$REPO" \
-      -e HOME="$D/$n" "${dev[@]+"${dev[@]}"}" \
-      -p "${DPORT[$n]}:${DPORT[$n]}" --pull=never "$IMAGE" sleep infinity >/dev/null \
-      || { echo "podman: could not start ring-doc-$n" >&2; return 1; }
-    start_forwarder "$n"
+  for net in "${!NETS[@]}"; do
+    "${PODMAN[@]}" network create --subnet "${NETS[$net]}" ${NET_FLAGS[$net]:-} "$net" >/dev/null \
+      || { echo "podman: could not create network $net" >&2; return 1; }
   done
+  for n in "${NODES[@]}"; do container_up_one "$n" || return 1; done
 }
 
 mkcfg() { # node
@@ -263,12 +326,12 @@ wait_homed() { # node…
 wait_online() { # display-name
   local deadline=$(( $(date +%s) + 120 ))
   while [ "$(date +%s)" -lt "$deadline" ]; do
-    node_curl a -s --max-time 3 "$(at "${CPORT[a]}")/v1/mesh/status" 2>/dev/null \
+    node_curl "$FOUNDER" -s --max-time 3 "$(at "${CPORT[$FOUNDER]}")/v1/mesh/status" 2>/dev/null \
       | python3 -c "import sys,json; sys.exit(0 if any(m['name']=='$1' and m.get('status')=='online' for m in json.load(sys.stdin)['members']) else 1)" 2>/dev/null \
       && return 0
     sleep 3
   done
-  echo "join: a never saw $1 online inside 120s" >&2
+  echo "join: $FOUNDER never saw $1 online inside 120s" >&2
   return 1
 }
 
@@ -278,7 +341,7 @@ join_one() { # node
   # joiner is confirmed by a gossip round, because rotating earlier could
   # partition the mesh it is building.
   for i in $(seq 1 30); do
-    key=$(sv a mesh rotate | awk '/Join key:/{print $3}')
+    key=$(sv "$FOUNDER" mesh rotate | awk '/Join key:/{print $3}')
     [ -n "$key" ] && break
     sleep 3
   done
@@ -288,14 +351,14 @@ join_one() { # node
   # `relay=` hint would POST to A's internal port, which is loopback-bound.
   local link="" deadline=$(( $(date +%s) + 60 ))
   while [ "$(date +%s)" -lt "$deadline" ]; do
-    link=$(node_curl a -s --max-time 3 "$(at "${CPORT[a]}")/v1/mesh/status" 2>/dev/null \
+    link=$(node_curl "$FOUNDER" -s --max-time 3 "$(at "${CPORT[$FOUNDER]}")/v1/mesh/status" 2>/dev/null \
       | python3 -c "import sys,json; print(json.load(sys.stdin).get('join_link') or '')" 2>/dev/null)
     case "$link" in *"$key"*dial=*|*dial=*"$key"*) break ;; esac
     sleep 2
   done
   case "$link" in *"$key"*dial=*|*dial=*"$key"*) ;; *)
-    echo "join: a's join_link never carried dial= and the rotated key inside 60s: '$link'" >&2
-    tail -n 20 "$D/a/daemon.err" >&2
+    echo "join: $FOUNDER's join_link never carried dial= and the rotated key inside 60s: '$link'" >&2
+    tail -n 20 "$D/$FOUNDER/daemon.err" >&2
     return 1 ;;
   esac
   node_curl "$n" -s --max-time 90 -X POST "$(at "${CPORT[$n]}")/v1/mesh/join" \
@@ -309,17 +372,20 @@ join_one() { # node
 # as mesh status reports them — so the attribution leg's expected names come
 # from membership, never from a list this script wrote. A member whose key
 # has not been gossiped yet is waited for, not skipped.
+# MEMBERS_EXPECTED: how many members must be visible with a key. Every node
+# in the set by default; the room's phone is a guest and never joins, so its
+# bring-up passes the daemon count instead.
 members_from_mesh() {
-  local deadline=$(( $(date +%s) + 90 ))
+  local deadline=$(( $(date +%s) + 90 )) MEMBERS_EXPECTED="${1:-${#NODES[@]}}"
   while [ "$(date +%s)" -lt "$deadline" ]; do
-    node_curl a -s --max-time 3 "$(at "${CPORT[a]}")/v1/mesh/status" 2>/dev/null \
-      | python3 -c "import sys,json; m={x['node_pubkey']:x['name'] for x in json.load(sys.stdin)['members'] if x.get('node_pubkey')}; sys.exit(1) if len(m)<3 else json.dump(m,sys.stdout)" \
+    node_curl "$FOUNDER" -s --max-time 3 "$(at "${CPORT[$FOUNDER]}")/v1/mesh/status" 2>/dev/null \
+      | python3 -c "import sys,json; m={x['node_pubkey']:x['name'] for x in json.load(sys.stdin)['members'] if x.get('node_pubkey')}; sys.exit(1) if len(m)<int(sys.argv[1]) else json.dump(m,sys.stdout)" "$MEMBERS_EXPECTED" \
       > "$D/members.json" 2>/dev/null && break
     sleep 3
   done
-  [ -s "$D/members.json" ] || { echo "roster: a never saw three members with keys inside 90s" >&2; return 1; }
-  sv a ring roster $RING | grep -qx 'everyone in the mesh' \
-    || { echo "roster: \`ring roster $RING\` on a does not say everyone in the mesh" >&2; return 1; }
+  [ -s "$D/members.json" ] || { echo "roster: $FOUNDER never saw $MEMBERS_EXPECTED members with keys inside 90s" >&2; return 1; }
+  sv "$FOUNDER" ring roster $RING | grep -qx 'everyone in the mesh' \
+    || { echo "roster: \`ring roster $RING\` on $FOUNDER does not say everyone in the mesh" >&2; return 1; }
 }
 
 start_proxy() { # node — the page's door to its daemon, holding the grant
@@ -355,29 +421,34 @@ cmd_up() {
   need_binaries
   rm -rf "$D"; mkdir -p "$D"
   local n
-  for n in a b c; do mkcfg $n; done
+  for n in "${NODES[@]}"; do mkcfg $n; done
   if [ "$BACKEND" = podman ]; then containers_up || exit 3; fi
-  for n in a b c; do start_daemon $n; done
-  wait_all_up a b c || exit 3
-  wait_homed a b c || exit 3
-  join_one b && wait_online Bo || exit 3
-  join_one c && wait_online Cy || exit 3
+  for n in "${NODES[@]}"; do start_daemon $n; done
+  wait_all_up "${NODES[@]}" || exit 3
+  wait_homed "${NODES[@]}" || exit 3
+  # Every node but the founder joins, under the mesh name the table gives it.
+  for n in "${NODES[@]:1}"; do join_one $n && wait_online "${MESHNAME[$n]}" || exit 3; done
   # One more gossip round, so B has heard about C from A.
   sleep 12
   members_from_mesh || exit 3
-  for n in a b c; do start_proxy $n || exit 3; done
+  for n in "${NODES[@]}"; do start_proxy $n || exit 3; done
   echo "up ($BACKEND): a(${PERSON[a]}) b(${PERSON[b]}) c(${PERSON[c]}) — proxies on ${DPORT[a]} ${DPORT[b]} ${DPORT[c]}"
 }
 
 # The cut phase 2 makes: on local C's daemon stops; on podman C's container
 # leaves the network, daemon still running — a real partition.
-cut_node() { # node
-  if [ "$BACKEND" = podman ]; then "${PODMAN[@]}" network disconnect "$NET" "ring-doc-$1"; else stop_node "$1"; fi
+cut_node() { # node [network — the node's primary by default]
+  local net="${2:-${PNET[$1]}}"
+  if [ "$BACKEND" = podman ]; then "${PODMAN[@]}" network disconnect "$net" "$CPREFIX-$1"; else stop_node "$1"; fi
 }
-heal_node() { # node
+heal_node() { # node [network]
+  local net="${2:-${PNET[$1]}}" ip
   if [ "$BACKEND" = podman ]; then
-    "${PODMAN[@]}" network connect --ip "${IP[$1]}" "$NET" "ring-doc-$1" || return 1
-    start_forwarder "$1"
+    ip=$(node_ip "$1" "$net")
+    "${PODMAN[@]}" network connect ${ip:+--ip "$ip"} "$net" "$CPREFIX-$1" || return 1
+    # Only the primary carries the forwarder; a healed second path has none.
+    [ "$net" = "${PNET[$1]}" ] && start_forwarder "$1"
+    return 0
   else
     start_node "$1"
   fi
@@ -385,7 +456,7 @@ heal_node() { # node
 
 cmd_tabs() { # each page's URL on this host, and the mesh name its node signs as
   local n name
-  for n in a b c; do
+  for n in "${NODES[@]}"; do
     name=$(node_curl "$n" -s --max-time 3 "$(at "${CPORT[$n]}")/v1/mesh/status" 2>/dev/null \
       | python3 -c "import sys,json; print(next((m['name'] for m in json.load(sys.stdin)['members'] if m.get('is_self')), ''))" 2>/dev/null)
     echo "$n  $(tab_url $n)/  ${name:-<not in the mesh>}"
@@ -394,7 +465,7 @@ cmd_tabs() { # each page's URL on this host, and the mesh name its node signs as
 
 cmd_down() {
   local n
-  for n in a b c; do
+  for n in "${NODES[@]}"; do
     node_kill "$n" "$D/$n/dev.pid"
     node_kill "$n" "$D/$n/pid"
   done
