@@ -1,0 +1,39 @@
+[package]
+name = "sovereign-pods"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+hex = "0.4"
+sha2 = { workspace = true }
+ed25519-dalek = { workspace = true }
+base64 = "0.22"
+rand = "0.9"
+sovereign-time = { workspace = true }
+# `worker_pod` moved to this shared leaf (domains REVIEW-build-serving-worker-port):
+# the owner↔pod wire protocol has two speakers in two contexts, and a package
+# `[[exception]]` for `sovereign-serving-host -> sovereign-pods` would be the
+# third — the kill clause (SERVING_BOUNDARY.md "Grandfathered"). `sovereign-pods`
+# re-exports the module at its historical path.
+sovereign-contracts = { workspace = true }
+axum = { workspace = true }
+tokio = { workspace = true }
+reqwest = { workspace = true, features = ["stream"] }
+futures = { workspace = true }
+tokio-stream = { version = "0.1", features = ["sync"] }
+tracing = { workspace = true }
+bytes = "1"
+urlencoding = "2"
+axum-server = { version = "0.7", features = ["tls-rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["std", "aws_lc_rs"] }
+
+[dev-dependencies]
+tower = { workspace = true }
+tempfile = "3"
+
+[lints]
+workspace = true

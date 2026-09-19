@@ -316,7 +316,7 @@ async fn run_terminal_join(
     // guard checked the requested port and the bind then failed on 9741,
     // reported as an expired invite.
     let data_dir = run_data_dir(opts);
-    let daemon = std::sync::Arc::new(sovereign_mesh::daemon::EmbeddedDaemon::new(
+    let daemon = std::sync::Arc::new(sovereign_daemon::daemon::EmbeddedDaemon::new(
         data_dir.clone(),
         SetupConfig {
             daemon: sovereign_contracts::setup_config::DaemonSection {
@@ -552,7 +552,7 @@ async fn daemon_is_listening(port: u16) -> bool {
 }
 
 /// The `DaemonServices` bundle a one-shot admin action needs.
-fn admin_services() -> Result<sovereign_mesh::DaemonServices, String> {
+fn admin_services() -> Result<sovereign_daemon::DaemonServices, String> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let launch = sovereign_contracts::launch::Launch::parse(
         &args,
@@ -561,7 +561,7 @@ fn admin_services() -> Result<sovereign_mesh::DaemonServices, String> {
             args: args.clone(),
         },
     );
-    sovereign_mesh::assemble(&launch, sovereign_mesh::LaunchParts::Admin)
+    sovereign_daemon::assemble(&launch, sovereign_daemon::LaunchParts::Admin)
         .map_err(|refusal| refusal.to_string())
 }
 
@@ -572,7 +572,7 @@ fn admin_services() -> Result<sovereign_mesh::DaemonServices, String> {
 /// `(node_id_hex, name, v1_base, facts)` per holder.
 #[allow(clippy::type_complexity)]
 async fn find_holders(
-    daemon: &sovereign_mesh::daemon::EmbeddedDaemon,
+    daemon: &sovereign_daemon::daemon::EmbeddedDaemon,
     client: &reqwest::Client,
 ) -> Result<Vec<(String, String, String, EntryNodeFacts)>, String> {
     const WINDOW: Duration = Duration::from_secs(30);

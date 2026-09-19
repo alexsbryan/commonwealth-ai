@@ -310,7 +310,7 @@ fn sessions_root_from_env_under(
 }
 
 /// The project registry written by `sovereign project register`
-/// (`sovereign-mesh/src/projects.rs`) and read by the daemon's startup
+/// (`corpus-engine-watchers/src/projects.rs`) and read by the daemon's startup
 /// re-registration and code-tool path resolution. Deliberately rooted at
 /// [`svrnmesh_root`] (home-based), NOT [`data_dir`] — the writer has
 /// never honored the `DATA_DIR` override, and reader/writer must agree.

@@ -37,7 +37,7 @@ use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::{MemberRecord, NodeStatus};
 use commonwealth_discovery::membership;
 use sovereign_core::setup_config::SetupConfig;
-use sovereign_mesh::daemon::{EmbeddedDaemon, MeshError};
+use sovereign_daemon::daemon::{EmbeddedDaemon, MeshError};
 use sovereign_mesh::deep_link;
 use sovereign_mesh::persist;
 
@@ -60,7 +60,7 @@ fn unreachable_invite() -> deep_link::DeepLink {
 async fn add_peer(daemon: &EmbeddedDaemon, name: &str) {
     let state = daemon.app_state().await.expect("app_state");
     let peer_id = NodeId::from_u128(0x9911_2233_4455_6677);
-    let mut mesh = state.inner.mesh.write().await;
+    let mut mesh = state.inner.fabric.mesh.write().await;
     mesh.members.insert(
         peer_id,
         MemberRecord {

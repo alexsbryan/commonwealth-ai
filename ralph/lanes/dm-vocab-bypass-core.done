@@ -1,0 +1,13 @@
+unit: dm-vocab-bypass-core
+commits: d36220870 (the conversion)
+what: sovereign/crates/sovereign-core/src/runtime/evidence_loop/anchoring.rs
+  cached_atoms now parses atoms.json through
+  corpus_engine_vocab::read::read_atlas_atoms, the door dm-vocab-door-move
+  moved to the vocab leaf, replacing its own serde_json::from_str::<AtomsFile>.
+  The atlas directory is built with the leaf's read::ATLAS_DIRNAME constant
+  (dm-vocab-atlas-dirname). Behaviour unchanged: mtime-keyed cache, best-effort
+  None on missing/garbled atlas, borrow-in-place over file.atoms.
+  The row's premise held: the only atoms.json parse in the crate is that one
+  site (grep -n 'from_str::<AtomsFile>' -> the line converted).
+checks: CLEAN exit=0 (0G, under 50G); LINT exit=0 (sovereign-core + 17
+  dependents, 0 errors); TEST(sovereign-core) exit=0 pass=1646 fail=0.

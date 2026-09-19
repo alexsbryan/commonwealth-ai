@@ -267,7 +267,7 @@ fn load_entities(
 ) -> std::io::Result<Vec<corpus_engine::enrichment::atlas::Entity>> {
     let file = read_atlas_atoms(atlas_dir)?;
     let mut entities = Vec::new();
-    for a in file.atoms {
+    for a in file.atoms().iter().cloned() {
         if let AtomEnvelope::Entity(e) = a {
             entities.push(e);
         }

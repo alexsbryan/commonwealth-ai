@@ -47,7 +47,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use corpus_engine_vocab::ontology::WalkPolicy;
+use understanding_vocab::ontology::WalkPolicy;
 
 use super::atoms::AtomType;
 use super::edges::EdgeType;
@@ -217,7 +217,7 @@ pub struct KindSet {
 impl KindSet {
     /// Does an `Entity` seed narrowed to `types` find one of them here? An
     /// empty narrowing means any entity.
-    fn entity_seed_carried(&self, types: &[corpus_engine_vocab::taxonomy::EntityType]) -> bool {
+    fn entity_seed_carried(&self, types: &[understanding_vocab::taxonomy::EntityType]) -> bool {
         if !self.atoms.contains(&AtomType::Entity) {
             return false;
         }
@@ -393,7 +393,7 @@ impl RowInert {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use corpus_engine_vocab::ontology::{NavigationPolicy, QuestionKind};
+    use understanding_vocab::ontology::{NavigationPolicy, QuestionKind};
 
     /// Wikipedia as the wiki-class store builds it: every atom an `Entity`
     /// with subtype `article`, every edge an `Involves`, nothing declared.

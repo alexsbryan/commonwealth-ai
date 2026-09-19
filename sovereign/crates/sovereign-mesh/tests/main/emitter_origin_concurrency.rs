@@ -38,8 +38,8 @@ use commonwealth_core::ids::NodeId;
 use commonwealth_state::MeshStore;
 use corpus_engine::index::{CorpusIndex, InsertChunk};
 use corpus_engine::{CorpusEngine, EmbedFn};
-use sovereign_api::server::internal_router;
-use sovereign_api::state::AppState;
+use sovereign_daemon::server::internal_router;
+use sovereign_daemon::state::AppState;
 use sovereign_meshapp_registry::registry::AppRegistry;
 
 use crate::common;
@@ -170,6 +170,7 @@ async fn concurrent_serves_stamp_origin_as_self_for_every_event() {
     // Inspect the ledger.
     let events = state
         .inner
+        .fabric
         .contribution_emitter
         .events()
         .expect("emitter.events() reads");
@@ -279,7 +280,7 @@ async fn origin_unaffected_by_requester_header_swap() {
         .unwrap();
     assert_eq!(resp.status(), reqwest::StatusCode::OK);
 
-    let events = state.inner.contribution_emitter.events().unwrap();
+    let events = state.inner.fabric.contribution_emitter.events().unwrap();
     let served: Vec<_> = events
         .iter()
         .filter(|e| matches!(e.kind, LedgerEventKind::KnowledgeQueryServed { .. }))

@@ -18,9 +18,9 @@ pub mod asset_store;
 // corpus-engine-archaeology (step 4 of the decomposition plan,
 // 2026-05-23). corpus-engine has no internal users of these
 // modules — they only ever served the CLI + tool layer.
-// `lookup_key` lives in the `corpus-engine-vocab` leaf since 2026-09-03;
+// `lookup_key` lives in the `understanding-vocab` leaf since 2026-09-03;
 // the historical module path is kept.
-pub use corpus_engine_vocab::canonical as atlas_canonical;
+pub use understanding_vocab::canonical as atlas_canonical;
 pub mod atlas_traversal;
 pub mod canonical_sync;
 pub mod chunkers;
@@ -33,12 +33,12 @@ pub mod engine;
 pub mod enrichment;
 pub mod error;
 pub mod extractors;
-pub mod facts;
+pub use code_facts::facts; // shim: moved by domains REVIEW-build-code-facts
 #[cfg(feature = "treesitter")]
-pub mod facts_check;
+pub use code_facts::facts_check; // shim: moved by domains REVIEW-build-code-facts
 /// SQLite-backed, per-file-patchable home for the fact base (rusqlite → `stores`).
 #[cfg(feature = "stores")]
-pub mod facts_store;
+pub use code_facts::facts_store; // shim: moved by domains REVIEW-build-code-facts
 pub mod filters;
 pub mod freshness;
 pub mod harness;

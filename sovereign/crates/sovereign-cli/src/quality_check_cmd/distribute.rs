@@ -34,7 +34,7 @@
 //! precondition half by `commonwealth_work::refusal::host_satisfies` (which
 //! moved out of `work_donor` at cw-lift 5f's last hole, so both donors ask one
 //! decider), the checkout and registry halves still by
-//! `sovereign-mesh/src/work_donor.rs`'s `resolve_workdir` and `resolve_offer`
+//! `sovereign-daemon/src/work_donor.rs`'s `resolve_workdir` and `resolve_offer`
 //! — and a refusal there is a `continue`, not an act: nothing reaches the rail.
 //! So a unit that every offer accepts on the rail and nobody leases is
 //! reported as exactly that, and the three host-side checks are NAMED as the

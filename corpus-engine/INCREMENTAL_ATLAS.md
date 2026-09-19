@@ -191,5 +191,5 @@ logs it + falls through to full rebuild).
 - `corpus-engine/src/meta_atlas/builder.rs::rebuild_for_corpus` — partial rebuild
 - `corpus-engine/src/chunkers/mod.rs::chunk_delta` — delta-aware chunking primitive
 - `corpus-engine/src/update/newsworthy_watcher.rs` — P5.a wiring + CommittedDocs
-- `sovereign/crates/sovereign-mesh/src/newsworthy_host.rs` — host hook stub
+- `sovereign/crates/sovereign-daemon/src/newsworthy_host.rs` — host hook stub
 - `sovereign/crates/sovereign-cli/src/atlas_cmd/{migrate_ids,build_doc_index,stats}.rs` — CLI surface

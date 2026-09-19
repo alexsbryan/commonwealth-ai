@@ -250,11 +250,15 @@ fn sovereign_cannot_stamp_an_acquisition() {
     );
 }
 
-/// Every `pub fn acquired_from_*` in corpus-engine — the doors that hand an
-/// `Acquired` stamp to a caller who is not an index.
+/// Every `pub fn acquired_from_*` in the index crates — the doors that hand an
+/// `Acquired` stamp to a caller who is not an index. The types moved to the
+/// `corpus-index` read-port leaf at `REVIEW-build-index-read-port`, so the scan
+/// follows them there; `corpus-engine` keeps its `pub use` shims.
 fn doors(root: &Path) -> BTreeSet<String> {
     let mut out = BTreeSet::new();
-    walk_doors(&root.join("corpus-engine/src"), &mut out);
+    for crate_dir in ["corpus-index/src", "corpus-engine/src"] {
+        walk_doors(&root.join(crate_dir), &mut out);
+    }
     out
 }
 

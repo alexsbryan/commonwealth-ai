@@ -231,7 +231,7 @@ pub fn compute_summary(atlas_dir: &Path) -> io::Result<AtlasSummary> {
 
     let fingerprint = atoms_content_hash(atlas_dir)?;
     let atoms = read_atlas_atoms(atlas_dir)?;
-    let atom_count = atoms.atoms.len() as u64;
+    let atom_count = atoms.atoms().len() as u64;
 
     // Single pass over atoms — count tier-2 (extracted entities) and
     // per-type totals together. The previous code iterated only
@@ -239,7 +239,7 @@ pub fn compute_summary(atlas_dir: &Path) -> io::Result<AtlasSummary> {
     // variants without a second pass.
     let mut tier2_count: u64 = 0;
     let mut atom_counts: BTreeMap<AtomType, u64> = BTreeMap::new();
-    for a in &atoms.atoms {
+    for a in atoms.atoms() {
         if let AtomEnvelope::Entity(e) = a {
             if matches!(e.enrichment_depth, EnrichmentDepth::Extracted) {
                 tier2_count += 1;
@@ -249,7 +249,7 @@ pub fn compute_summary(atlas_dir: &Path) -> io::Result<AtlasSummary> {
     }
     // The declared-subtype census comes from the ONE tally, which the
     // ontology-coverage rollup also calls — two readers, one count (§10.6).
-    let (subtype_counts, unsubtyped) = super::projection::subtype_tally(&atoms.atoms);
+    let (subtype_counts, unsubtyped) = super::projection::subtype_tally(atoms.atoms());
     // Traced as a total, not per atom (§9.1): the decision an operator needs
     // to see is "how many atoms this census does not account for", and this
     // loop runs over every atom in the corpus — 1.5M on the meta-atlas — so a
@@ -469,7 +469,8 @@ mod tests {
         assert!(read_current_summary(tmp.path()).is_some());
 
         // The store lands after atoms.json, with one Involves edge.
-        let atoms = read_atlas_atoms(tmp.path()).unwrap().atoms;
+        let atoms_file = read_atlas_atoms(tmp.path()).unwrap();
+        let atoms = atoms_file.atoms();
         let edges = vec![Edge {
             id: EdgeId::from_raw("e1"),
             edge_type: EdgeType::Involves,

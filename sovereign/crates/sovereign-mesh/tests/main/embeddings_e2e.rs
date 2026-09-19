@@ -29,9 +29,10 @@ use serde_json::json;
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::Mesh;
 use commonwealth_state::MeshStore;
-use sovereign_api::server::client_router;
-use sovereign_api::state::{AppState, LocalInferenceService};
 use sovereign_core::traits::InferenceProvider;
+use sovereign_daemon::server::client_router;
+use sovereign_daemon::slot_manifest::CoreSlotManifest;
+use sovereign_daemon::state::{AppState, LocalInferenceService, ServingSeed};
 use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
 use sovereign_meshapp_registry::registry::AppRegistry;
 
@@ -61,10 +62,15 @@ fn build_app_state(with_embed: bool) -> AppState {
     };
     let mesh_store = Arc::new(MeshStore::in_memory().unwrap());
     let app_registry = Arc::new(AppRegistry::new());
-    let app_state =
-        AppState::new_with_platform_and_engine(self_id, mesh, mesh_store, app_registry, None);
     if !with_embed {
-        return app_state;
+        return AppState::new_with_platform_and_engine_and_serving(
+            self_id,
+            mesh,
+            mesh_store,
+            app_registry,
+            None,
+            ServingSeed::default(),
+        );
     }
     // Marker-encoded vector: `embed("foo") = [3.0; 8]`. Lets the
     // test verify per-input ordering survives the fan-out.
@@ -73,9 +79,21 @@ fn build_app_state(with_embed: bool) -> AppState {
             .with_model_id("stub-embed")
             .with_embed_marker(|input| vec![input.len() as f32; 8]),
     );
-    let adapter: Arc<dyn LocalInferenceService> =
-        Arc::new(SovereignInferenceAdapter::new(provider));
-    app_state.with_local_inference(adapter)
+    let adapter: Arc<dyn LocalInferenceService> = Arc::new(SovereignInferenceAdapter::new(
+        provider,
+        Arc::new(CoreSlotManifest),
+    ));
+    AppState::new_with_platform_and_engine_and_serving(
+        self_id,
+        mesh,
+        mesh_store,
+        app_registry,
+        None,
+        ServingSeed {
+            local_inference: Some(adapter),
+            ..Default::default()
+        },
+    )
 }
 
 async fn spawn(state: AppState) -> SocketAddr {
@@ -145,7 +163,7 @@ async fn batch_input_yields_one_embedding_per_input_with_sequential_index() {
 
 #[tokio::test]
 async fn no_local_inference_backend_returns_503_with_documented_error_code() {
-    // `with_embed = false` → `state.inner.local_inference == None`.
+    // `with_embed = false` → `state.inner.serving.local_inference == None`.
     // The route documents this exact error code; the desktop
     // bootstrap branches on it to decide whether to fall back to
     // a peer-served embedding.

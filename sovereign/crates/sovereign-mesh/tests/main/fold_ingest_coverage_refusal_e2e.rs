@@ -54,17 +54,17 @@ use commonwealth_rail::{RingRail, SigningKey};
 use commonwealth_work::WORK_NAMESPACE;
 use corpus_engine::index::CorpusIndex;
 use corpus_engine::Corpus;
-use sovereign_api::auto_recover::{
+use sovereign_daemon::ingest_executor::fold_coverage_for;
+use sovereign_daemon::state::AppState;
+use sovereign_grants::auto_recover::{
     merge_from_fold_coverage, try_recover_stranded_partitions, RecoveryOutcome,
 };
-use sovereign_api::state::AppState;
-use sovereign_mesh::ingest_executor::fold_coverage_for;
 use tempfile::TempDir;
 
 use crate::common::corpus_at;
 use crate::fold_ingest_cross_node_merge_e2e::{
-    actor, key, leader_node, node_state, peer_node, probe_canonical, ring, terminal_handoff,
-    terminal_handoff_ops, write_donor_partition, LEADER_ONLY_TERM,
+    actor, key, leader_node, node_state_with_seed, peer_node, probe_canonical, ring,
+    terminal_handoff, terminal_handoff_ops, write_donor_partition, LEADER_ONLY_TERM,
 };
 
 /// The instant the in-memory readings ask the fold about. Same as the sibling
@@ -90,12 +90,26 @@ async fn dead_peer_addr() -> std::net::SocketAddr {
 /// journal and nowhere this node can reach, which is exactly the shape the
 /// coverage guard is for: the fold says two, the disk can supply one.
 async fn leader_alone(corpus: &str) -> (TempDir, std::path::PathBuf, AppState) {
+    leader_alone_with_seed(corpus, sovereign_daemon::state::FabricSeed::default()).await
+}
+
+/// [`leader_alone`] with Fabric's construction seed, for the one test that
+/// needs a rail on the node — a construction argument now (DC §4.2).
+async fn leader_alone_with_seed(
+    corpus: &str,
+    seed: sovereign_daemon::state::FabricSeed,
+) -> (TempDir, std::path::PathBuf, AppState) {
     let home = TempDir::new().expect("leader tempdir");
     let dir = home.path().join("indexes");
     std::fs::create_dir_all(&dir).expect("index dir");
     write_donor_partition(&dir, leader_node(), corpus, 0, LEADER_ONLY_TERM).await;
     let addr = dead_peer_addr().await;
-    let state = node_state(leader_node(), &dir, &[(peer_node(), &addr.to_string())]);
+    let state = node_state_with_seed(
+        leader_node(),
+        &dir,
+        &[(peer_node(), &addr.to_string())],
+        seed,
+    );
     (home, dir, state)
 }
 
@@ -138,8 +152,9 @@ async fn a_two_donor_fold_missing_its_peer_refuses_and_writes_no_canonical() {
          partition this node can reach",
     );
 
+    let node = sovereign_daemon::routes_internal::fold_recovery(&state).await;
     let outcome = merge_from_fold_coverage(
-        &state,
+        node,
         CORPUS,
         coverage.handoff_id,
         &coverage.nodes,
@@ -179,8 +194,9 @@ async fn a_two_donor_fold_missing_its_peer_refuses_and_writes_no_canonical() {
 
     // ── The paired positive: drop the bar, and the same disk merges half ──
     let (_home2, dir2, state2) = leader_alone(CORPUS).await;
+    let node2 = sovereign_daemon::routes_internal::fold_recovery(&state2).await;
     let dropped = merge_from_fold_coverage(
-        &state2,
+        node2,
         CORPUS,
         coverage.handoff_id,
         &coverage.nodes,
@@ -331,7 +347,12 @@ impl tracing_subscriber::fmt::MakeWriter<'_> for BufWriter {
 /// `key(1)` because `fold_coverage_for` compares the handoff's submitter
 /// against `rail.signer().actor()`: this node has to BE the leader for the
 /// arm under test to be reached at all.
-fn install_fold(state: &AppState, rail_dir: &std::path::Path, corpus: &str) {
+/// Build the fixture rail — the signer is `key(1)` because `fold_coverage_for`
+/// compares the handoff's submitter against `rail.signer().actor()`: this node
+/// has to BE the leader for the arm under test to be reached at all — and
+/// return it as a construction seed, since the rail is a construction argument
+/// now (DC §4.2 "Construction is staged, and parts are total").
+fn fold_seed(rail_dir: &std::path::Path, corpus: &str) -> sovereign_daemon::state::FabricSeed {
     let signer: SigningKey = key(1);
     let rail = Arc::new(RingRail::new(rail_dir, Arc::new(signer)));
     let journal = rail.journal(WORK_NAMESPACE).expect("the work journal");
@@ -344,7 +365,10 @@ fn install_fold(state: &AppState, rail_dir: &std::path::Path, corpus: &str) {
         "every fixture op must land on the journal, or the loop folds a \
          different handoff than the one this test is about",
     );
-    state.install_ring_rail(rail);
+    sovereign_daemon::state::FabricSeed {
+        ring_rail: Some(rail),
+        ..Default::default()
+    }
 }
 
 /// Poll `f` until it is true or `budget` elapses. Returns whether it became
@@ -400,9 +424,9 @@ async fn the_folds_refusal_is_final_and_the_disk_path_never_runs() {
     // A port nothing serves, for the loop's own `corpus_collaborate` POST.
     let daemon_port = dead_peer_addr().await.port();
 
-    let (_home, dir, state) = leader_alone(CORPUS).await;
     let rail_home = TempDir::new().expect("rail tempdir");
-    install_fold(&state, rail_home.path(), CORPUS);
+    let seed = fold_seed(rail_home.path(), CORPUS);
+    let (_home, dir, state) = leader_alone_with_seed(CORPUS, seed).await;
 
     let buf = Arc::new(Mutex::new(Vec::new()));
     let subscriber = tracing_subscriber::fmt()
@@ -412,7 +436,8 @@ async fn the_folds_refusal_is_final_and_the_disk_path_never_runs() {
         .finish();
     let _guard = tracing::subscriber::set_default(subscriber);
 
-    let _loop_handle = sovereign_mesh::auto_ingest::spawn_auto_collaborate_loop(state, daemon_port);
+    let _loop_handle =
+        sovereign_daemon::auto_ingest::spawn_auto_collaborate_loop(state, daemon_port);
 
     let captured = || String::from_utf8_lossy(&buf.lock().expect("capture").clone()).into_owned();
     let saw_refusal = within(std::time::Duration::from_secs(60), || {
@@ -473,7 +498,8 @@ async fn without_a_fold_the_same_tick_publishes_the_partial_canonical() {
         "the control's premise: this node has no `work` journal to fold",
     );
 
-    let _loop_handle = sovereign_mesh::auto_ingest::spawn_auto_collaborate_loop(state, daemon_port);
+    let _loop_handle =
+        sovereign_daemon::auto_ingest::spawn_auto_collaborate_loop(state, daemon_port);
 
     let appeared = within(std::time::Duration::from_secs(60), || {
         corpus_at(&dir, CORPUS).is_installed()

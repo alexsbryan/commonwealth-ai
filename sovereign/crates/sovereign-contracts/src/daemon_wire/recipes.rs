@@ -2,7 +2,7 @@
 //! Wire shapes of the recipe-registry routes —
 //! `POST /internal/corpus/recipes/import` and
 //! `GET /internal/corpus/recipes/{corpus}/parameters`
-//! (`sovereign_mesh::recipe_http`). Moved below the daemon 2026-09-11
+//! (`sovereign_daemon::recipe_http`). Moved below the daemon 2026-09-11
 //! (thin-desktop order): the desktop validated a recipe with an engine of
 //! its own, wrote it into the daemon's recipes dir itself and read the
 //! registry in-process to render a parameter form — three reasons a thin

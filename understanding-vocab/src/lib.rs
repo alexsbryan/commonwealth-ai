@@ -1,0 +1,61 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! `understanding-vocab` — the atlas vocabulary, as a leaf.
+//!
+//! What an enrichment PRODUCES, separated from what produces it. Four
+//! modules, every one of them data:
+//!
+//! - [`atoms`] — `AtomsFile` / `AtomEnvelope` and the eleven atom kinds
+//!   (Entity, Event, State, Relation, Claim, Question, Configuration,
+//!   ArgumentReconstruction, Position, Opposition, Asset); the on-disk
+//!   shape of `atlas/atoms.json`.
+//! - [`edges`] — `Edge` / `EdgesFile`; the shape of `atlas/edges.json`.
+//! - [`taxonomy`] — `EnrichmentDepth` and the kind vocabularies every atom
+//!   names.
+//! - [`ontology`] — `OntologyPolicies` (five axes + prose) and, under
+//!   [`ontology::decl`], everything an author declares: `OntologyTypeDecl`,
+//!   `TypeKind`, `AttrDecl`, `OntologyV1`, the investigation
+//!   `EntityTypeDecl` / `RelationshipTypeDecl` / `PatternDecl`, and
+//!   `OntologyVocabulary`; the shape of `atlas/ontology.json`.
+//! - [`canonical`] — `lookup_key`, the canonical-name fold both the
+//!   resolver and retrieval-time lookups use.
+//! - [`stable_key`] — `StableAtomKey`, an atom's content-derived identity
+//!   (ARCH §7.5). It reads only atom fields, and an inherent `impl
+//!   AtomEnvelope` has to live where `AtomEnvelope` does.
+//! - [`reading_formatters`] — the one pure presentation projection over an
+//!   [`atoms::AtomEnvelope`] (`atom_surface_fields`), used by the glass-box
+//!   reading surface. Moved here from `sovereign-mesh` by domains
+//!   `dm-mesh-move-reading-formatters` (DC §4.3: "Understanding's read
+//!   model").
+//! - [`skeleton`] — the field skeleton (`FieldSkeleton`, `PartialSkeleton`
+//!   and the question/position/fault-line/open-question closure) plus
+//!   `FieldModelStats`, the primary artifact of a v1 field-model enrichment.
+//!   Moved here from `corpus-engine`'s `enrichment::{skeleton,clustering}` by
+//!   domains `REVIEW-build-field-skeleton-vocab` (DE "The read-port leaf,
+//!   measured again"); its JSON IO stayed host.
+//! - [`articulation`] — `Articulation` and `ArticulationVector`, the per-atom
+//!   axis the meta-atlas classifier tags every anchor with. Moved here from
+//!   `corpus-engine`'s `stream_axes` by domains
+//!   `REVIEW-build-articulation-vocab` (DE "The read-port leaf, measured
+//!   again": "the per-atom articulation types go to the language"); the
+//!   per-corpus stability half stayed behind.
+//! - [`read`] — the read door: `read_atlas_atoms` / `read_atlas_edges`, the
+//!   constructors for the products a consumer outside `corpus-engine` reads.
+//!   Moved here by domains `dm-vocab-door-move` (DE "The door"), so that
+//!   reading `atoms.json` no longer links the engine that wrote it.
+//!
+//! Closure: `serde`, `serde_json`, `kernel-types`, `blake3` (the stable
+//! key's hash — changing it would re-key every curation overlay). No
+//! features; the one IO is [`read`], the door. A
+//! consumer that wants to name an atom links this; a consumer that wants
+//! to MAKE one links `corpus-engine`.
+
+pub mod articulation;
+pub mod atoms;
+pub mod canonical;
+pub mod edges;
+pub mod ontology;
+pub mod read;
+pub mod reading_formatters;
+pub mod skeleton;
+pub mod stable_key;
+pub mod taxonomy;

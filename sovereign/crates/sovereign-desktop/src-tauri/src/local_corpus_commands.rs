@@ -15,7 +15,7 @@
 //! `lc_incomplete_jobs`, `lc_check_git`, `lc_list_snapshots`,
 //! `lc_rollback`, `lc_clean`, `lc_search` (D5) and now `lc_ingest`,
 //! `lc_cancel` and `lc_ocr_available` (D8) are one call each onto
-//! `sovereign_mesh::lc_http`'s `/internal/corpus/local/` routes over
+//! `sovereign_daemon::lc_http`'s `/internal/corpus/local/` routes over
 //! [`lc_client`], and so are the config reads inside `lc_ingest` and
 //! `lc_enrich_now`. Return types are unchanged, so the webview sees the
 //! same bytes. Two defaults moved DOWN to the route: `lc_search`'s 10 and
@@ -76,7 +76,7 @@
 //! (`attach_construction_census` pins this process's count at zero), so
 //! the manager this app builds serves no ingest and the context it was
 //! handed read nothing. The daemon that ingests installs its own
-//! (`daemon_cmd/ocr_install.rs`, feature `ocr`), probing
+//! (`sovereign-daemon/src/ocr_install.rs`, feature `ocr`), probing
 //! `SOVEREIGN_PADDLE_OCR_MODEL_DIR`, `{data_dir}/models/paddle-ocr` and
 //! `~/.svrnmesh/models/paddle-ocr`; `lc_ocr_available` reports THAT
 //! context, so the "Read them with OCR" affordance reflects the engine

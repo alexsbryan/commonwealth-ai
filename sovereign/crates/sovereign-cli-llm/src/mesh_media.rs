@@ -86,7 +86,7 @@ pub(crate) async fn cmd_media(args: &[String]) -> i32 {
         );
         return 1;
     }
-    let reach: sovereign_mesh::media_reach::MediaReach = match serde_json::from_str(&body) {
+    let reach: sovereign_daemon::media_reach::MediaReach = match serde_json::from_str(&body) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("mesh media: response shape mismatch ({e}): {body}");
@@ -212,7 +212,7 @@ async fn list_offers(client: &reqwest::Client, url: &str, json_out: bool) -> i32
     }
     #[derive(serde::Deserialize)]
     struct Offers {
-        offering: Vec<sovereign_mesh::media_reach::MediaOffer>,
+        offering: Vec<sovereign_daemon::media_reach::MediaOffer>,
     }
     let offers: Offers = match serde_json::from_str(&body) {
         Ok(o) => o,

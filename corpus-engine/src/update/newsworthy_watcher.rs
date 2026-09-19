@@ -178,7 +178,7 @@ pub trait NewsworthyHost: Send + Sync {
     ///
     /// Default no-op so tests + minimal hosts don't have to wire
     /// the atlas pipeline. The production host
-    /// (`sovereign-mesh::newsworthy_host::MeshNewsworthyHost`)
+    /// (`sovereign-daemon::newsworthy_host::MeshNewsworthyHost`)
     /// implements this against
     /// `corpus_engine::enrichment::atlas::postinstall::rebuild_structural_atlas`.
     fn on_chunks_committed(&self, _affected: &[(String, &'static str)]) {}

@@ -22,7 +22,8 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use corpus_engine::enrichment::pipeline::{ChatCompletionFn, ChatPrompt};
+use corpus_engine::enrichment::pipeline::ChatPrompt;
+use corpus_engine::InferenceFn;
 use futures::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
 
@@ -318,11 +319,11 @@ fn parse_flag(args: &[String], key: &str) -> Option<String> {
     None
 }
 
-async fn ask(chat: &ChatCompletionFn, system: &str, user: String) -> String {
+async fn ask(chat: &InferenceFn, system: &str, user: String) -> String {
     let prompt = ChatPrompt::new(system, user)
         .with_temperature(0.1)
         .with_max_output_tokens(120);
-    match (chat)(&prompt).await {
+    match (chat)(&prompt, None).await {
         Ok(s) => s.trim().to_string(),
         Err(e) => format!("[verify unavailable: {e}]"),
     }

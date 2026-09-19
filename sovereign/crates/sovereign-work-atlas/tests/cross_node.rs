@@ -20,7 +20,7 @@ use std::sync::Arc;
 
 use commonwealth_state::{is_gossip_excluded, MeshStore};
 use kernel_types::NodeId;
-use sovereign_contracts::peer::{PeerEntry, PeerStore, PeerStoreError};
+use sovereign_contracts::peer::{ReplicatedKv, ReplicatedKvEntry, ReplicatedKvError};
 use uuid::Uuid;
 
 use sovereign_core::time::unix_now_u64;
@@ -30,12 +30,12 @@ use sovereign_work_atlas::model::{
 use sovereign_work_atlas::store::ScopeMatch;
 use sovereign_work_atlas::WorkAtlasStore;
 
-/// `PeerStore` over the REAL `MeshStore`, so these tests drive the actual
+/// `ReplicatedKv` over the REAL `MeshStore`, so these tests drive the actual
 /// replication path rather than a stand-in — the outbox `replicate` drains and
 /// the projection it applies are the mesh's own, and the privacy invariant is
 /// only worth asserting against them.
 ///
-/// This is the same delegation `sovereign_mesh::peer_adapter::MeshPeerStore`
+/// This is the same delegation `sovereign_mesh::peer_adapter::MeshReplicatedKv`
 /// performs, and it is repeated here because this crate cannot reach that one:
 /// `sovereign-mesh` sits in the `mesh-api` layer, above `capabilities`, and
 /// the arrow only points down. Twenty lines in a test file is the cheaper
@@ -43,17 +43,17 @@ use sovereign_work_atlas::WorkAtlasStore;
 struct MeshPeer(Arc<MeshStore>);
 
 impl MeshPeer {
-    fn new(store: &Arc<MeshStore>) -> Arc<dyn PeerStore> {
+    fn new(store: &Arc<MeshStore>) -> Arc<dyn ReplicatedKv> {
         Arc::new(Self(Arc::clone(store)))
     }
 }
 
-fn port_err(e: commonwealth_state::error::Error) -> PeerStoreError {
-    PeerStoreError::Backend(e.to_string())
+fn port_err(e: commonwealth_state::error::Error) -> ReplicatedKvError {
+    ReplicatedKvError::Backend(e.to_string())
 }
 
-fn port_entry(e: commonwealth_state::StoreEntry) -> PeerEntry {
-    PeerEntry {
+fn port_entry(e: commonwealth_state::StoreEntry) -> ReplicatedKvEntry {
+    ReplicatedKvEntry {
         app_id: e.app_id,
         key: e.key,
         value: e.value,
@@ -62,8 +62,8 @@ fn port_entry(e: commonwealth_state::StoreEntry) -> PeerEntry {
     }
 }
 
-impl PeerStore for MeshPeer {
-    fn get(&self, app_id: &str, key: &str) -> Result<Option<PeerEntry>, PeerStoreError> {
+impl ReplicatedKv for MeshPeer {
+    fn get(&self, app_id: &str, key: &str) -> Result<Option<ReplicatedKvEntry>, ReplicatedKvError> {
         self.0
             .get(app_id, key)
             .map(|o| o.map(port_entry))
@@ -76,15 +76,19 @@ impl PeerStore for MeshPeer {
         key: &str,
         value: bytes::Bytes,
         origin: NodeId,
-    ) -> Result<bool, PeerStoreError> {
+    ) -> Result<bool, ReplicatedKvError> {
         self.0.set(app_id, key, value, origin).map_err(port_err)
     }
 
-    fn delete(&self, app_id: &str, key: &str) -> Result<bool, PeerStoreError> {
+    fn delete(&self, app_id: &str, key: &str) -> Result<bool, ReplicatedKvError> {
         self.0.delete(app_id, key).map_err(port_err)
     }
 
-    fn scan(&self, app_id: &str, prefix: &str) -> Result<Vec<PeerEntry>, PeerStoreError> {
+    fn scan(
+        &self,
+        app_id: &str,
+        prefix: &str,
+    ) -> Result<Vec<ReplicatedKvEntry>, ReplicatedKvError> {
         self.0
             .scan(app_id, prefix)
             .map(|v| v.into_iter().map(port_entry).collect())

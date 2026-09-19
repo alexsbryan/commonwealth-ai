@@ -1,0 +1,12 @@
+# Heavy rows — at most ONE of these runs in a wave (2026-09-17, operator
+# direction: derisk the big moves first, sequentially; the second lane takes
+# non-heavy rows). One unit id per line; '#' starts a comment.
+dm-daemon-api-edge                # the api host cluster, ~19k lines, one commit
+dm-daemon-cli-composition         # the cli-daemon composition half
+dm-mesh-workbench-move-watchers   # 3.3k over three crates
+dm-mesh-sim-move                  # mesh_sim 3.8k -> the test harness
+dm-next-edit-move                 # 4.5k, five modules
+dm-vocab-door-move                # the corpus-engine vocab door
+dm-decision-extractor-move
+dm-auto-recover-move
+dm-mesh-workbench-move-scip       # 761 lines, but a crate-boundary repoint

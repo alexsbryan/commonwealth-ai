@@ -1,0 +1,12 @@
+unit: DEMO-d5-misnamed
+commits: 92299ed8d (merge ralph/domains-campaign: resolves ralph/STATE.md and
+  ralph/DECISIONS.md, brings in code-facts + the corpus-engine-watchers move)
+what: RUN `python3 scripts/domains-census.py misnamed`; expected sovereign-mesh
+  at 100% fabric (own == total, no MISNAMED flag).
+checks: misnamed exit=0. The sovereign-mesh line:
+    sovereign-mesh                 fabric                   13860 /   13860  100.0%
+  own == total, no MISNAMED flag — the expected verdict. Its only former
+  non-fabric modules (projects.rs 674, reindexer.rs 2155) moved to
+  corpus-engine-watchers under REVIEW-build-mesh-workbench-deferred cf5357cfe.
+  tag-table digest: 66974155fdfe; value: 39 crates whose name describes less
+  than half of what they hold (the campaign's other bars, not this demo's).

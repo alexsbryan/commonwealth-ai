@@ -15,7 +15,7 @@ proves nothing else.
 
 `INFERENCE_APP_ID` already exists and is already on the ring.
 
-- `sovereign/crates/sovereign-serving/src/store_adapter.rs:31` —
+- `commonwealth/crates/commonwealth-state/src/store_adapter.rs:31` —
   `pub const INFERENCE_APP_ID: &str = "inference"`. `InferenceStateStore` is a
   thin `MeshStore` wrapper over `get(APP_ID, key)` / `set(APP_ID, key, bytes,
   node_id)`, with a `node_id_hex` helper already there for per-node keys
@@ -36,16 +36,16 @@ signed, ordered, deduped, self-compacting. The rail needs no work at all.
 
 ## What is there today, and why it is the thing to replace
 
-Cross-node routing decides in `sovereign-mesh/src/scheduler_core.rs:339`
+Cross-node routing decides in `sovereign-scheduler/src/scheduler_core.rs:339`
 (`rank`), scoring each peer's `ProviderManifest` through
 `oicp_types::scoring::best_claim_for_request` (`oicp-types/src/scoring.rs:481`,
 per-claim at `:585-609`).
 
 A manifest reaches the ranker by being **pulled**: `get_peer_manifest` in
-`sovereign-mesh/src/peer_inference.rs` fetches `GET /oicp/v1/capabilities` from
+`sovereign-serving-host/src/peer_inference.rs` fetches `GET /oicp/v1/capabilities` from
 each peer with `MANIFEST_FETCH_TIMEOUT = 800ms` (`:230`), cached for
 `MANIFEST_TTL = 60s` (`:85`). Manifests are built by `synthesize_default_claims`
-(`sovereign-api/src/routes_oicp.rs:40-97`) and served at `:234-273`.
+(`sovereign-daemon/src/routes_oicp.rs:40-97`) and served at `:234-273`.
 
 That is a timeout-bounded network probe on the routing path, repeated by every
 node against every other node once a minute, to learn facts that change only
@@ -85,7 +85,7 @@ the same limit.
 **1. The rail fails open; the pull failed closed.** A peer that is off returns
 nothing to a pull. A converged row persists, so it keeps saying "this node holds
 a 122B" long after the laptop closed. Liveness must still come from the member
-table — keep the existing `is_queryable`-shaped gate (`sovereign-api/src/
+table — keep the existing `is_queryable`-shaped gate (`sovereign-daemon/src/
 routes_knowledge.rs:585-590` is the analogous one on the corpus path) and let
 the rail supply only what a node *can* serve. Skip this and the demo routes
 every turn to someone asleep.

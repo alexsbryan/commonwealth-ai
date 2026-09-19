@@ -4,11 +4,15 @@
 //!
 //! Lifted out of `mechanism_fidelity::classes::attribution` so the attribution
 //! reasoning class and the flywheel's I1 corpus generator mine claims through
-//! one implementation. Robust to mixed atom shapes (parses `data` lazily) and
-//! returns an empty vec on any I/O / shape problem so callers report "no
+//! one implementation. Reads the atlas product through the vocabulary leaf's
+//! door (`understanding_vocab::read::read_atlas_atoms`, `dm-vocab-bypass-rest`)
+//! and returns an empty vec on any I/O or shape problem so callers report "no
 //! probes" rather than panicking.
 
 use std::path::Path;
+
+use understanding_vocab::atoms::AtomEnvelope;
+use understanding_vocab::read::{read_atlas_atoms, ATLAS_DIRNAME};
 
 /// One mined claim with a genuine supporting excerpt.
 #[derive(Debug, Clone)]
@@ -45,58 +49,39 @@ pub fn cheatable(content: &str, excerpt: &str) -> bool {
 /// fragment (a live scan found only ~2 of 13 enriched corpora carry a real
 /// `quotable_excerpt`).
 pub fn mine_claims(corpus: &Path, preview_fallback: bool) -> Vec<MinedClaim> {
-    let path = corpus.join("atlas").join("atoms.json");
-    let Ok(text) = std::fs::read_to_string(&path) else {
-        return Vec::new();
-    };
-    let Ok(root) = serde_json::from_str::<serde_json::Value>(&text) else {
-        return Vec::new();
-    };
-    let Some(atoms) = root.get("atoms").and_then(|v| v.as_array()) else {
+    // The atlas product is read through the vocabulary leaf's door: one
+    // constructor for `atoms.json`, and the one name for the directory it
+    // opens. A missing, unreadable, or untyped file — including one carrying
+    // an atom kind outside the closed set — is the "no probes" case this
+    // miner has always answered with an empty vec.
+    let atlas_dir = corpus.join(ATLAS_DIRNAME);
+    let Ok(file) = read_atlas_atoms(&atlas_dir) else {
         return Vec::new();
     };
 
     let mut out = Vec::new();
-    for a in atoms {
-        if a.get("atom_type").and_then(|v| v.as_str()) != Some("Claim") {
+    for atom in file.atoms() {
+        let AtomEnvelope::Claim(claim) = atom else {
+            continue;
+        };
+        if claim.evidence.is_empty() {
             continue;
         }
-        let Some(d) = a.get("data") else { continue };
-        let has_evidence = d
-            .get("evidence")
-            .and_then(|v| v.as_array())
-            .map(|e| !e.is_empty())
-            .unwrap_or(false);
-        if !has_evidence {
-            continue;
-        }
-        let id = d
-            .get("id")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-        let content = d
-            .get("content")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .trim()
-            .to_string();
-        let mut excerpt = d
-            .get("quotable_excerpt")
-            .and_then(|v| v.as_str())
+        let id = claim.id.as_str().to_string();
+        let content = claim.content.trim().to_string();
+        let mut excerpt = claim
+            .quotable_excerpt
+            .as_deref()
             .unwrap_or("")
             .trim()
             .to_string();
         // Fall back to the first evidence entry's passage_preview when there's
-        // no quotable_excerpt and the caller opted in. `.get` on a non-object
-        // value returns None, so a malformed evidence entry is skipped safely.
+        // no quotable_excerpt and the caller opted in.
         if excerpt.len() < 12 && preview_fallback {
-            excerpt = d
-                .get("evidence")
-                .and_then(|v| v.as_array())
-                .and_then(|a| a.first())
-                .and_then(|e| e.get("passage_preview"))
-                .and_then(|v| v.as_str())
+            excerpt = claim
+                .evidence
+                .first()
+                .and_then(|e| e.passage_preview.as_deref())
                 .unwrap_or("")
                 .trim()
                 .to_string();
@@ -128,21 +113,37 @@ mod tests {
         let atlas = root.join("atlas");
         std::fs::create_dir_all(&atlas).unwrap();
         let atoms = serde_json::json!({
-            "schema_version": 1,
+            "schema_version": "2.0",
             "atoms": [
                 {"atom_type": "Claim", "data": {
                     "id": "claim-aaaa",
                     "content": "The ingest pipeline keys downstream behavior on the recipe's chunker, not the corpus id.",
+                    "discourse_act": "assert",
+                    "epistemic_status": "confident",
+                    "scope": "universal",
                     "evidence": [{"chunk_id": "sec_1", "passage_preview": "pipeline is source-agnostic"}],
-                    "quotable_excerpt": "downstream keys on the threaded_turns chunker and conversational domain"
+                    "quotable_excerpt": "downstream keys on the threaded_turns chunker and conversational domain",
+                    "enrichment_depth": "extracted"
                 }},
                 {"atom_type": "Claim", "data": {
                     "id": "claim-cheat",
                     "content": "the sky is blue today",
+                    "discourse_act": "assert",
+                    "epistemic_status": "confident",
+                    "scope": "universal",
                     "evidence": [{"chunk_id": "sec_3", "passage_preview": "x"}],
-                    "quotable_excerpt": "the sky is blue today"
+                    "quotable_excerpt": "the sky is blue today",
+                    "enrichment_depth": "extracted"
                 }},
-                {"atom_type": "Section", "data": {"id": "sec-zzzz", "title": "ignored non-claim"}}
+                {"atom_type": "Entity", "data": {
+                    "id": "entity-zzzz",
+                    "canonical_name": "ignored non-claim",
+                    "entity_type": "concept",
+                    "first_appearance": {"chunk_id": "sec_1"},
+                    "description": "",
+                    "salience": 0.0,
+                    "enrichment_depth": "extracted"
+                }}
             ]
         });
         let mut f = std::fs::File::create(atlas.join("atoms.json")).unwrap();
@@ -177,11 +178,16 @@ mod tests {
         let atlas = root.join("atlas");
         std::fs::create_dir_all(&atlas).unwrap();
         let atoms = serde_json::json!({
+            "schema_version": "2.0",
             "atoms": [{"atom_type": "Claim", "data": {
                 "id": "claim-prev",
                 "content": "The daemon pins the fast slot and the embed model at startup.",
-                "evidence": [{"chunk_id": "c1", "passage_preview": "the daemon eagerly loads the fast 9B and 0.6B embed at boot"}]
+                "discourse_act": "assert",
+                "epistemic_status": "confident",
+                "scope": "universal",
+                "evidence": [{"chunk_id": "c1", "passage_preview": "the daemon eagerly loads the fast 9B and 0.6B embed at boot"}],
                 // no quotable_excerpt
+                "enrichment_depth": "extracted"
             }}]
         });
         std::fs::File::create(atlas.join("atoms.json"))

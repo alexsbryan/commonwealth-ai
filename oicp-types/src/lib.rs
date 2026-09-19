@@ -32,20 +32,34 @@ pub mod error;
 // privacy true rather than intended — a `git grep` before the move found zero
 // consumers outside the module that travels with it.
 mod glob;
+pub mod inference_service;
 pub mod ingest;
 pub mod job;
 pub mod jsonrpc;
 pub mod knowledge;
 pub mod manifest;
 pub mod model_aliases;
+pub mod openai_types;
 pub mod origin;
+/// Per-pipeline context-injection flags carried by a resolved pipeline alias —
+/// moved down from `serving-policy` so the middleware seam can name it without
+/// a `sovereign-contracts → serving-policy` edge (domains
+/// `REVIEW-build-middleware-seam`).
+pub mod pipeline_context;
 pub mod registry;
 pub mod requirements;
 pub mod response;
+pub mod responses_types;
 pub mod scoring;
 pub mod slot;
 pub mod tenant;
 pub mod tool;
+/// Tool-call extraction from free-form model output — the lenient parser the
+/// serving host and the embedded engine both need, pure `serde_json` + `std`.
+/// Moved down from `sovereign-inference` (domains
+/// `REVIEW-build-serving-drop-inference`) so the host reaches it without
+/// linking the inference stack.
+pub mod tool_calls;
 pub mod version;
 
 pub use completion::{
@@ -70,6 +84,9 @@ pub use capability::{
     infer_hint_from_profile, proficiency, Capability, CapabilityClaim, CapabilityHint,
     CapabilityProfile, InvalidCapabilityHint, LatencyClass, ProficiencyLevel,
 };
+pub use inference_service::{
+    EditSlotStatus, FimCompletionRequest, FimStreamStart, LocalInferenceError,
+};
 pub use ingest::{
     CorpusIngestProgress, CorpusInstallRequest, CorpusInstallResponse, CorpusProgressResponse,
     IngestEndpoints, IngestPhase, RecipeStageReport, RecipeTestOptions, RecipeTestReport,
@@ -80,22 +97,23 @@ pub use knowledge::{
     LandscapeDigestRequest, LandscapeDigestResponse,
 };
 pub use manifest::{
-    features, CorpusDescriptor, EmbedModelInfo, FederationManifest, KnowledgeManifest, ModelStatus,
-    NormalizationStrategy, PeerDescriptor, PoolingStrategy, ProviderInfo, ProviderManifest,
-    ProviderModel, ProviderType,
+    features, CorpusDescriptor, EmbedModelInfo, FederatedMeshDescriptor, FederationManifest,
+    KnowledgeManifest, ModelStatus, NormalizationStrategy, PoolingStrategy, ProviderInfo,
+    ProviderManifest, ProviderModel, ProviderType,
 };
 pub use model_aliases::{AliasResolution, ModelAlias, ModelAliasConfig, ModelAliasTable};
+pub use pipeline_context::PipelineContextConfig;
 pub use registry::{ExtensionRegistry, ExtensionStats};
 pub use requirements::{InferenceRequirements, PrivacyRequirements, ShardingPrivacy};
 pub use response::{MatchQuality, OicpResponseMeta};
 pub use scoring::{
-    best_claim_for_request, cold_start_weight, effective_affinity, hint_match_score,
-    latency_match_score, load_penalty, locality_bonus, pick_better, score_claim_for_request,
-    score_with_adjustments, throughput_factor, throughput_factor_source, BenchmarkResult,
-    NodeLocality, NodeObservations, ScoreBreakdown, ScoredClaim, COLD_START_MIN_WEIGHT,
-    COLD_START_SAMPLES, CONFIDENCE_SAMPLES, HINT_GENERAL_FALLBACK_SCORE, LATENCY_ADJACENT_SCORE,
-    LATENCY_TWO_CLASS_SCORE, LOAD_COEFFICIENT, LOCALITY_FAR_BONUS, LOCALITY_LOCAL_BONUS,
-    LOCALITY_NEAR_BONUS, SCORING_EPSILON, THROUGHPUT_EWMA_ALPHA, THROUGHPUT_FLOOR,
-    THROUGHPUT_OBSERVATION_THRESHOLD, THROUGHPUT_REFERENCE_TG_TOK_S,
+    apply_throughput_observation, best_claim_for_request, cold_start_weight, effective_affinity,
+    hint_match_score, latency_match_score, load_penalty, locality_bonus, pick_better,
+    score_claim_for_request, score_with_adjustments, throughput_factor, throughput_factor_source,
+    BenchmarkResult, NodeLocality, NodeObservations, ScoreBreakdown, ScoredClaim,
+    COLD_START_MIN_WEIGHT, COLD_START_SAMPLES, CONFIDENCE_SAMPLES, HINT_GENERAL_FALLBACK_SCORE,
+    LATENCY_ADJACENT_SCORE, LATENCY_TWO_CLASS_SCORE, LOAD_COEFFICIENT, LOCALITY_FAR_BONUS,
+    LOCALITY_LOCAL_BONUS, LOCALITY_NEAR_BONUS, SCORING_EPSILON, THROUGHPUT_EWMA_ALPHA,
+    THROUGHPUT_FLOOR, THROUGHPUT_OBSERVATION_THRESHOLD, THROUGHPUT_REFERENCE_TG_TOK_S,
 };
 pub use version::OICP_VERSION;

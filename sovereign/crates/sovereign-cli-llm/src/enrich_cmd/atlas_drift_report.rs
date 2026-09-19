@@ -294,7 +294,7 @@ impl StructuralIndex {
         let mut by_id = HashMap::new();
         let mut by_name = BTreeMap::new();
         let mut degrees: Vec<usize> = Vec::new();
-        for a in &atoms.atoms {
+        for a in atoms.atoms() {
             if let AtomEnvelope::Entity(ent) = a {
                 let id = ent.id.as_str().to_string();
                 let deg = in_degree.get(&id).copied().unwrap_or(0);
@@ -407,7 +407,7 @@ impl NarrativeIndex {
         cross: &Vec<Value>,
     ) -> Self {
         let mut views: Vec<NarrativeAtomView> = Vec::new();
-        for a in &atoms.atoms {
+        for a in atoms.atoms() {
             views.push(narrative_view(&atlas_id, a));
         }
 

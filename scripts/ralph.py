@@ -26,6 +26,7 @@ import hashlib
 import os
 import pathlib
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -43,6 +44,9 @@ def say(msg: str) -> None:
 
 
 def notify(title: str, body: str, enabled: bool = True) -> None:
+    """Titles carry the tier so a popup says who must act (2026-09-17):
+    "OPERATOR — …" a human act is required; "auto — …" the loop is handling it
+    (a director dispatch, a retry); "DONE" / "stopped" are terminal."""
     if not enabled:
         return
     try:
@@ -84,10 +88,10 @@ def halt(paths, reason, *, notifier=notify, notify_enabled=True):
                    f"{paths.stop} {paths.needs_human}\n")
     if not pkg.stat().st_size:
         say(f"HALT could not write {pkg} (disk full?) — no decision package exists")
-        notifier("halt-unwritable", reason, notify_enabled)
+        notifier("OPERATOR — halt unwritable", reason, notify_enabled)
     paths.p(paths.stop).write_text(f"halt: {reason}\n")
     say(f"HALT: {reason}")
-    notifier("HALT", reason, notify_enabled)
+    notifier("auto — halted, director next", reason, notify_enabled)
     return Result(Outcome.HALT, reason)
 
 
@@ -431,7 +435,7 @@ class Session:
                 break
         if proc.poll() is None:
             say(f"session exceeded {self.timeout}s — killing its group")
-            self.notifier("timeout", f"killed at {self.timeout}s", self.notify_enabled)
+            self.notifier("auto — session timeout", f"killed at {self.timeout}s", self.notify_enabled)
             self._kill(proc)
         rc = proc.wait()
         self.heartbeat(f"session-end {self.paths.workdir.name}")
@@ -441,7 +445,7 @@ class Session:
             rejects = 0
         if rejects:
             say(f"WARNING: {rejects} permission auto-rejections — extend opencode.json")
-            self.notifier("permissions", f"{rejects} auto-rejections", self.notify_enabled)
+            self.notifier("auto — permission rejects", f"{rejects} auto-rejections", self.notify_enabled)
         _ACTIVE_SESSIONS.discard(proc)
         return rc
 
@@ -578,7 +582,7 @@ class Supervisor:
     def terminal_stop(self):
         if self.paths.p(self.paths.done).exists():
             say("supervisor: campaign DONE")
-            self.notifier("DONE", "campaign complete", self.notify_enabled)
+            self.notifier("DONE — campaign complete", "every row is [x]", self.notify_enabled)
             return 0
         stop = self.paths.p(self.paths.stop)
         pkg = self.paths.p(self.paths.needs_human)
@@ -587,7 +591,7 @@ class Supervisor:
         # the supervisor dispatching resolutions (2026-09-16).
         if stop.exists() and not stop.stat().st_size:
             say("supervisor: operator STOP — leaving it stopped")
-            self.notifier("STOP", "operator stop preserved", self.notify_enabled)
+            self.notifier("stopped — operator stop preserved", self.paths.stop, self.notify_enabled)
             return 0
         if stop.exists() and stop.stat().st_size and not (pkg.exists() and pkg.stat().st_size):
             pkg.write_text(f"{stop.read_text()}\nresolve by hand, then remove "
@@ -597,7 +601,7 @@ class Supervisor:
         unit = queue.current() if queue else None
         if unit is not None and unit.id.startswith("HUMAN-"):
             say(f"supervisor: operator approval required — {unit.id} (no resolution session)")
-            self.notifier("NEEDS_HUMAN", f"approval required: {unit.id}", self.notify_enabled)
+            self.notifier("OPERATOR — approval required", f"{unit.id} is a HUMAN row at the head; approve or mark it", self.notify_enabled)
             return 2
         return None
 
@@ -623,7 +627,8 @@ class Supervisor:
             if attempt > self.resolve_max:
                 say(f"supervisor: {self.resolve_max} resolution attempts did not clear it "
                     "— leaving it to the operator")
-                self.notifier("supervisor", f"unresolved after {self.resolve_max}: {reason}",
+                self.notifier("OPERATOR — unresolved after "
+                              f"{self.resolve_max} resolutions", reason,
                               self.notify_enabled)
                 return 2
             pkg_before = file_hash(pkg)
@@ -632,7 +637,7 @@ class Supervisor:
             if pkg.exists() and pkg.stat().st_size:
                 stop_file.unlink(missing_ok=True)
             say(f"supervisor: dispatching resolution session {attempt} — {reason}")
-            self.notifier("resolving", f"attempt {attempt}: {reason}", self.notify_enabled)
+            self.notifier("auto — resolving", f"attempt {attempt}: {reason}", self.notify_enabled)
             self.resolver_run(attempt, reason)
             head_after = head_of(self.paths.workdir)
             if head_after and head_after != head_before:
@@ -645,7 +650,7 @@ class Supervisor:
             if pkg.exists() and pkg.stat().st_size:
                 if file_hash(pkg) == pkg_before and head_of(self.paths.workdir) == head_before:
                     say(f"supervisor: resolution {attempt} changed nothing — escalating")
-                    self.notifier("escalate", f"resolution achieved nothing: {reason}",
+                    self.notifier("OPERATOR — resolution achieved nothing", reason,
                                   self.notify_enabled)
                     return 2
                 say(f"supervisor: resolution {attempt} left NEEDS_HUMAN — retrying")
@@ -740,7 +745,7 @@ class Pool:
             if queue.all_done():
                 self.paths.p(self.paths.done).write_text("")
                 say("pool: DONE — all units [x]")
-                self.notifier("DONE", "pool complete", self.notify_enabled)
+                self.notifier("DONE — pool complete", "every row is [x]", self.notify_enabled)
                 return 0
             marker = wait_for_marker(self.paths, self.marker_timeout)
             if marker is not None and marker != "wait":
@@ -810,7 +815,7 @@ class Pool:
             pkg = self.paths.p(self.paths.needs_human)
             if pkg.exists() and pkg.stat().st_size:
                 say(f"pool: review {review.id} left NEEDS_HUMAN.md — stopping for the director")
-                self.notifier("NEEDS_HUMAN", first_line(pkg), self.notify_enabled)
+                self.notifier("auto — halt package, director next", first_line(pkg), self.notify_enabled)
                 return 3
             marker = wait_for_marker(self.paths, self.marker_timeout)
             if marker == "wait":
@@ -820,6 +825,27 @@ class Pool:
             say(f"pool: review {review.id} did not mark [x] (attempt {attempt}) — resuming")
         return self._halt(f"review {review.id} did not finish after "
                           f"{self.max_review_attempts} attempts")
+
+    def _provision_host_pointers(self, wt):
+        """Copy the per-host pointer dirs into a lane worktree.
+
+        A row's `read: O8` names `.sovereign/features/<id>/order.md`, which is
+        gitignored (`.gitignore:44`), so `git worktree add` never brings it and
+        a lane cannot execute its row (dm-vocab-compile-fail-test, 2026-09-17,
+        three waves). This is the copy `ralph/STATE.md` tells the operator to
+        make for a peer checkout. A COPY, not a symlink: the ignore pattern is
+        `.sovereign/features/` (directory-only), so a symlink is NOT ignored
+        and the lane's `git add -A` would commit it.
+        """
+        src = self.paths.workdir / ".sovereign" / "features"
+        dst = wt / ".sovereign" / "features"
+        if not src.is_dir() or dst.exists():
+            return
+        try:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(src, dst, symlinks=True)
+        except OSError as e:
+            say(f"pool: could not provision {dst} from {src}: {e}")
 
     def run_lane(self, unit):
         wt = self.paths.workdir / ".ralph" / "wt" / unit
@@ -832,10 +858,43 @@ class Pool:
             say(f"pool: lane start {unit} (worktree {wt})")
         else:
             say(f"pool: lane {unit} resuming in its existing worktree")
+            # A lane worktree is created once from the base branch and kept
+            # across waves, so a harness fix that lands on the base never
+            # reaches it. dm-daemon-api-edge burned its three waves on the
+            # stale `.opencode/opencode.json` that `bdb0f24e0` fixed on the
+            # base minutes after the lane exhausted (2026-09-17). Fast-forward
+            # a lane that has no commits of its own onto the base; a lane with
+            # work is left alone (--ff-only refuses to rewrite it).
+            own = self._git("rev-list", "--count", f"{self.base_branch}..HEAD", cwd=wt)
+            if own.returncode == 0:
+                if own.stdout.strip() == "0":
+                    ff = self._git("merge", "--ff-only", self.base_branch, cwd=wt)
+                    if ff.returncode == 0:
+                        say(f"pool: lane {unit} refreshed onto {self.base_branch}")
+                    else:
+                        say(f"pool: lane {unit} not refreshed: {ff.stderr.strip()}")
+                else:
+                    # A lane with its own commits was skipped entirely, so it ran
+                    # on a stale base and the conflict landed at the POOL's merge
+                    # as an escalation (2026-09-18: dm-rename-leaf-words,
+                    # dm-next-edit-move). Merge the base in HERE, where the
+                    # session can resolve it.
+                    m = self._git("merge", "--no-edit", self.base_branch, cwd=wt)
+                    if m.returncode == 0:
+                        say(f"pool: lane {unit} merged {self.base_branch} in")
+                    else:
+                        say(f"pool: lane {unit} conflicts with {self.base_branch} — "
+                            "the session resolves it")
+        self._provision_host_pointers(wt)
         note = (f"POOL LANE: you are working unit {unit} in an isolated git worktree.\n"
                 f"Commit your work here. When the unit passes its OWN tests, write "
                 f"ralph/lanes/{unit}.done and commit it — the pool merges your branch then.\n"
-                "Do NOT edit ralph/STATE.md; the pool marks the unit done after the merge.\n\n")
+                "Do NOT edit ralph/STATE.md except to correct your own row's premises "
+                "(PROMPT §6); the pool marks the unit done after the merge.\n\n")
+        if self._git("rev-parse", "-q", "--verify", "MERGE_HEAD", cwd=wt).returncode == 0:
+            note = ("Your worktree has a MERGE IN PROGRESS: the pool merged the base "
+                    "branch in and it conflicted. Resolve every conflict, `git add` the "
+                    "files, `git commit --no-edit`, then do your unit.\n\n") + note
         model_args = select_model_args(unit, self.model, self.review_model, self.variant)
         # One lock per lane: a lane builds in its own worktree/target, so the
         # shared /tmp lock would only serialize lanes against each other and
@@ -857,6 +916,19 @@ class Pool:
             branch = f"ralph/{unit}"
             if not wt.exists():
                 continue
+            lane_pkg = wt / "ralph" / "NEEDS_HUMAN.md"
+            if lane_pkg.exists() and lane_pkg.stat().st_size:
+                # A lane writes its package in ITS worktree — the main-tree
+                # check never saw it, so the wave re-ran the row to the failure
+                # limit with the package sitting right there (2026-09-17,
+                # dm-daemon-api-edge). Surface it where the operator and the
+                # director look, then stop.
+                main_pkg = self.paths.p(self.paths.needs_human)
+                main_pkg.write_text(f"# lane {unit} left this package "
+                                    f"({lane_pkg})\n\n" + lane_pkg.read_text())
+                say(f"pool: lane {unit} left NEEDS_HUMAN.md — stopping for the director")
+                self.notifier("auto — halt package, director next", first_line(lane_pkg), self.notify_enabled)
+                return 3
             if not (wt / "ralph" / "lanes" / f"{unit}.done").exists():
                 # A lane that keeps ending without its marker would otherwise be
                 # re-run forever (2026-09-17: ~50 sessions over 2.5h on
@@ -954,8 +1026,14 @@ class Watch:
             return None
         cond, body = condition
         if cond != last_cond or now - last_ts >= nag_secs:
-            title = {"needs-human": "needs human", "down": "loop down",
-                     "stalled": "loop stalled", "disk-low": "disk low"}[cond.split(":")[0]]
+            base = cond.split(":")[0]
+            if base == "needs-human" and not self.running():
+                title = "OPERATOR — halt package, loop down"
+            else:
+                title = {"needs-human": "auto — halt package (loop running)",
+                         "down": "OPERATOR — loop down",
+                         "stalled": "auto — no heartbeat",
+                         "disk-low": "OPERATOR — disk low"}[base]
             if self.dry:
                 print(f"notify: {title}: {body}")
             else:

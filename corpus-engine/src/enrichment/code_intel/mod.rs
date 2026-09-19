@@ -11,7 +11,7 @@
 //! Design (SOLID, single-responsibility, dependency-injected):
 //!  - [`SymbolMeta`] + [`SymbolEnrichment`] are plain data.
 //!  - [`enrich_symbol`] is the unit of work: `(meta, body) -> enrichment`,
-//!    pure given the injected [`ChatCompletionFn`]. It does NO file IO, NO
+//!    pure given the injected [`InferenceFn`]. It does NO file IO, NO
 //!    SCIP access, and bakes in NO storage decision — those are later slices,
 //!    so this core is identical whether the result lands as Atlas atoms or
 //!    chunk-index rows.
@@ -33,7 +33,7 @@ use std::sync::LazyLock;
 use serde::{Deserialize, Serialize};
 
 use crate::enrichment::pipeline::prompts::load_or_baked;
-use crate::enrichment::pipeline::types::{ChatCompletionFn, ChatPrompt};
+use crate::enrichment::pipeline::types::{ChatPrompt, InferenceFn};
 use crate::error::{Error, Result};
 
 /// SCIP-sourced symbol enumeration (slice 2) — gated on `treesitter`, the
@@ -189,10 +189,10 @@ pub struct SymbolMeta {
     /// Display name, e.g. `select_route`.
     pub name: String,
     /// Fully-qualified SCIP descriptor, e.g.
-    /// `sovereign_mesh::peer_inference::MeshInferenceProvider::select_route`.
+    /// `sovereign_serving_host::peer_inference::InferenceRouter::select_route`.
     pub qualified_name: String,
     /// Source file (corpus-relative), e.g.
-    /// `crates/sovereign-mesh/src/peer_inference.rs`.
+    /// `crates/sovereign-serving-host/src/peer_inference.rs`.
     pub file_path: String,
     /// 1-based inclusive line span of the symbol definition.
     pub line_start: u32,
@@ -467,7 +467,7 @@ fn split_asks(raw: &str) -> Vec<String> {
 /// [`Error::Extraction`] if the model yields no usable summary (surfaced, not
 /// silently stored, per the glassbox principle).
 pub async fn enrich_symbol(
-    chat: &ChatCompletionFn,
+    chat: &InferenceFn,
     meta: SymbolMeta,
     body: &str,
 ) -> Result<SymbolEnrichment> {
@@ -476,13 +476,13 @@ pub async fn enrich_symbol(
 
 /// Enrich one symbol, asked as the right kind of thing.
 pub async fn enrich_symbol_as(
-    chat: &ChatCompletionFn,
+    chat: &InferenceFn,
     kind: PromptKind,
     meta: SymbolMeta,
     body: &str,
 ) -> Result<SymbolEnrichment> {
     let prompt = compose_symbol_prompt_for(kind, &meta.qualified_name, &meta.file_path, body);
-    let raw = (chat)(&prompt).await?;
+    let raw = (chat)(&prompt, None).await?;
     let (summary, asks) = parse_symbol_response(&raw);
     if summary.is_empty() {
         return Err(Error::Extraction(format!(
@@ -509,7 +509,7 @@ pub async fn enrich_symbol_as(
 /// identical bodies share one summary, and a rename/move with an unchanged
 /// body reuses it (only the `meta` is refreshed).
 pub async fn enrich_symbols_incremental(
-    chat: &ChatCompletionFn,
+    chat: &InferenceFn,
     symbols: Vec<SymbolSource>,
     prior: &HashMap<String, SymbolEnrichment>,
 ) -> (Vec<SymbolEnrichment>, IncrementalReport) {
@@ -712,8 +712,8 @@ mod tests {
 
     /// A fake injected provider: counts calls and returns a fixed response, so
     /// tests assert on plumbing + the incremental-skip behaviour without a model.
-    fn fake_chat(resp: &'static str, calls: Arc<AtomicUsize>) -> ChatCompletionFn {
-        Arc::new(move |_p: &ChatPrompt| {
+    fn fake_chat(resp: &'static str, calls: Arc<AtomicUsize>) -> InferenceFn {
+        Arc::new(move |_p: &ChatPrompt, _max_tokens: Option<u32>| {
             calls.fetch_add(1, Ordering::SeqCst);
             let r = resp.to_string();
             Box::pin(async move { Ok(r) })

@@ -28,7 +28,7 @@
 //! reachable", which is not "can anything serve this" — that gap is why
 //! `/v1/models` advertised ids chat completions refused. The manifest
 //! path's own gate lives in
-//! `sovereign_api::routes_inference::list_models_tests`.
+//! `sovereign_daemon::routes_inference::list_models_tests`.
 //!
 //! Two assertions:
 //!
@@ -50,11 +50,11 @@ use std::sync::Arc;
 
 use commonwealth_core::ids::{MeshId, ModelId, NodeId};
 use commonwealth_core::mesh::Mesh;
+use commonwealth_core::model::{ModelArchitecture, ModelInfo};
 use commonwealth_state::MeshStore;
-use sovereign_api::server::client_router;
-use sovereign_api::state::AppState;
+use sovereign_daemon::server::client_router;
+use sovereign_daemon::state::AppState;
 use sovereign_meshapp_registry::registry::AppRegistry;
-use sovereign_serving::model::{ModelArchitecture, ModelInfo};
 
 use crate::common;
 use crate::common::{member, spawn_router};
@@ -112,6 +112,7 @@ async fn locally_owned_model_appears_in_v1_models_response() {
     // self_id from AppState).
     state
         .inner
+        .store
         .inference_store
         .set_model_info(&empty_model_info(1, "test-local-model"));
 
@@ -176,7 +177,7 @@ async fn offline_peer_only_model_is_filtered_out_of_v1_models() {
     // Set up: the offline peer is NOT in the mesh's members, so
     // `live_nodes` will be `{self_id}` only.
     {
-        let mesh = state.inner.mesh.read().await;
+        let mesh = state.inner.fabric.mesh.read().await;
         assert!(
             !mesh.members.contains_key(&offline_peer_id),
             "test precondition: the offline peer must NOT be in the \
@@ -186,8 +187,8 @@ async fn offline_peer_only_model_is_filtered_out_of_v1_models() {
 
     // Construct a second store handle keyed to the offline peer so
     // any writes through it stamp `offline_peer_id` as the origin.
-    let peer_store = sovereign_serving::InferenceStateStore::new(
-        Arc::clone(&state.inner.mesh_store),
+    let peer_store = commonwealth_state::store_adapter::InferenceStateStore::new(
+        Arc::clone(&state.inner.fabric.mesh_store),
         offline_peer_id,
     );
     peer_store.set_model_info(&empty_model_info(2, "ghost-model"));
@@ -195,7 +196,7 @@ async fn offline_peer_only_model_is_filtered_out_of_v1_models() {
     // Sanity: the store sees BOTH the self-owned + peer-owned
     // entries — the filter is the only thing standing between this
     // and the wire.
-    let raw_count = state.inner.inference_store.list_models().len();
+    let raw_count = state.inner.store.inference_store.list_models().len();
     assert_eq!(
         raw_count, 1,
         "test precondition: with no local-self model registered, \

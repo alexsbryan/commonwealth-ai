@@ -1,0 +1,5 @@
+dm-vocab-bypass-corpus-mcp
+commit 8f5575ab1
+LINT exit=0
+TEST(corpus-mcp) exit=0 pass=42 fail=0
+premise: grep -rn 'fn read_atoms' corpus-mcp/ -> no matches

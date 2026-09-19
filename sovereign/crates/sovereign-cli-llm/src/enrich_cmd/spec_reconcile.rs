@@ -41,8 +41,9 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use corpus_engine::enrichment::code_intel::SymbolEnrichment;
-use corpus_engine::enrichment::pipeline::{ChatCompletionFn, ChatPrompt};
+use corpus_engine::enrichment::pipeline::ChatPrompt;
 use corpus_engine::types::EmbedFn;
+use corpus_engine::InferenceFn;
 use futures::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
 
@@ -520,7 +521,7 @@ fn render_bundle(cand: &[usize], fns: &[FnMeta]) -> String {
 
 /// One strict per-condition adjudication call. Never panics — a chat or parse
 /// failure degrades to the prototype's `unrelated` fallback (→ Gap).
-async fn adjudicate(chat: &ChatCompletionFn, claim: &Claim, bundle: &str) -> SpecVerdict {
+async fn adjudicate(chat: &InferenceFn, claim: &Claim, bundle: &str) -> SpecVerdict {
     let user = format!(
         "CLAIM: {}\nCONDITIONS: {:?}\n\nCANDIDATE FUNCTIONS:\n{}",
         claim.statement, claim.conditions, bundle
@@ -530,7 +531,7 @@ async fn adjudicate(chat: &ChatCompletionFn, claim: &Claim, bundle: &str) -> Spe
         .with_phase_id(PHASE_ID)
         .with_temperature(TEMPERATURE)
         .with_max_output_tokens(MAX_OUTPUT_TOKENS);
-    match (chat)(&prompt).await {
+    match (chat)(&prompt, None).await {
         Ok(raw) => parse_verdict(&raw).unwrap_or_else(|| SpecVerdict::parse_fail("[parse-fail]")),
         Err(e) => SpecVerdict::parse_fail(&format!("[chat-error: {e}]")),
     }

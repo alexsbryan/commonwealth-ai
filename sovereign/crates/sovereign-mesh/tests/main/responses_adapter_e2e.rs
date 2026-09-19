@@ -34,9 +34,10 @@ use std::sync::Arc;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_state::MeshStore;
-use sovereign_api::server::client_router;
-use sovereign_api::state::{AppState, LocalInferenceService};
 use sovereign_core::traits::InferenceProvider;
+use sovereign_daemon::server::client_router;
+use sovereign_daemon::slot_manifest::CoreSlotManifest;
+use sovereign_daemon::state::{AppState, LocalInferenceService, ServingSeed};
 use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
 use sovereign_meshapp_registry::registry::AppRegistry;
 
@@ -66,17 +67,27 @@ fn build_state() -> AppState {
     };
     let mesh_store = Arc::new(MeshStore::in_memory().unwrap());
     let app_registry = Arc::new(AppRegistry::new());
-    let state =
-        AppState::new_with_platform_and_engine(self_id, mesh, mesh_store, app_registry, None);
     let provider: Arc<dyn InferenceProvider> = Arc::new(
         TestProvider::new()
             .with_model_id("responses-stub")
             .with_complete_text("hello from responses adapter")
             .with_stream_chunks(vec!["hello ".to_string(), "world".to_string()]),
     );
-    let adapter: Arc<dyn LocalInferenceService> =
-        Arc::new(SovereignInferenceAdapter::new(provider));
-    state.with_local_inference(adapter)
+    let adapter: Arc<dyn LocalInferenceService> = Arc::new(SovereignInferenceAdapter::new(
+        provider,
+        Arc::new(CoreSlotManifest),
+    ));
+    AppState::new_with_platform_and_engine_and_serving(
+        self_id,
+        mesh,
+        mesh_store,
+        app_registry,
+        None,
+        ServingSeed {
+            local_inference: Some(adapter),
+            ..Default::default()
+        },
+    )
 }
 
 #[tokio::test]

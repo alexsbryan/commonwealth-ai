@@ -204,7 +204,7 @@ without a full rebuild.
 **Correction to the roadmap:** `SOVEREIGN_ATLAS_INCREMENTAL` is
 described as "read today and unused" (`ENRICHMENT_ROADMAP.md:466-468`,
 `SIZING:263-265`). It is read **and load-bearing** at
-`sovereign-mesh/src/newsworthy_host.rs:318-340`: it gates the
+`sovereign-daemon/src/newsworthy_host.rs:318-340`: it gates the
 refresh-role rebuild fallback, and portal-role corpora deliberately
 bypass it because the legacy full-rebuild path collapses a portal page
 into a useless single-Entity atlas. Anyone planning P2.3(a) should read

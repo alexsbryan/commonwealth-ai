@@ -1,0 +1,22 @@
+unit: dm-rename-daemon-words
+commits: e7a33f7ad (the four in-place renames)
+what: Applies the four DT [[noun]] dispositions (quality/DOMAINS.toml:2104-2212)
+  in sovereign/crates/sovereign-daemon — identifiers only, no behaviour change.
+  PeerMeasurementDto -> MemberMeasurementDto (mesh_http.rs:581),
+  PeerMeasurementsQuery -> MemberMeasurementsQuery (:598), PeerMeasurementsResponse
+  -> MemberMeasurementsResponse (:637), IrohPeerPath -> MemberReach (daemon.rs:490).
+  Every referrer repointed (`grep -rn` for the four old names over the tree is
+  empty after the change): mesh_http.rs (StatusResponse.iroh_transport :232, the
+  route's Query/Response/Dto uses :753-841), daemon.rs (iroh_transport_snapshot
+  :2017,:2043), sovereign-cli-llm/src/mesh_travel.rs:316-328 (the wire-seam
+  test), sovereign-contracts/src/daemon_wire/mesh.rs:399 (doc),
+  sovereign/SYSTEM_OVERVIEW.md:6538 (doc). The registry rows are the design
+  record and are untouched.
+checks: CLEAN exit=0 (debug target 0G, under 50G — cache kept); LINT exit=0
+  (sovereign-daemon, sovereign-contracts, sovereign-cli-llm among the crates
+  checked; 0 errors, cargo exit 0).
+census: python3 scripts/domains-census.py peer-outside — 20 in 7 crates -> 16
+  in 7 crates; sovereign/crates/sovereign-daemon 5 -> 1 (PeerCanonicalLead,
+  auto_ingest.rs:1368, out of this row's four).
+evidence: git diff is 20 insertions / 20 deletions, every hunk an identifier
+  swap.

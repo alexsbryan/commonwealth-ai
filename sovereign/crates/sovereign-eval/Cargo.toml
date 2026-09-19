@@ -18,6 +18,10 @@ sovereign-time = { workspace = true }
 # Path SSOT: per-user svrnmesh paths come from `rebrand` (never hand-rolled $HOME).
 sovereign-contracts = { workspace = true }
 corpus-engine.workspace = true
+# The atlas vocabulary + its read door (`read_atlas_atoms`) — a two-crate leaf
+# closure, so the flywheel's claim-miner reads atoms.json without naming the
+# engine that writes it (domains dm-vocab-bypass-rest).
+understanding-vocab = { workspace = true }
 sovereign-authoring-harness.workspace = true
 serde.workspace = true
 serde_json.workspace = true

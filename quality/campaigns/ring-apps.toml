@@ -250,6 +250,9 @@ instrument_note = "a test that writes an introduction, admits a key on it, and r
 goodhart     = "1.0 over one row proves nothing, and 1.0 is also what you measure when the warrant field is present but the op id resolves to nothing - the check must RESOLVE the op, not merely find a string. A verdict citing only the affirmative leg is reporting half the predicate; ra-roster-stays-independent must be at target in the same run."
 status       = "open"
 
+# Scope under the 2026-09-18 membership amendment (ra-5): this bar counts
+# changes to roster.json, the SEED, and it stays at 0. Admit/Remove acts change
+# computed membership, never the file. Numbers unchanged.
 [[bar]]
 id           = "ra-roster-stays-independent"
 demo         = "A peer sends an introduction and nothing in my ring changes until I say so"

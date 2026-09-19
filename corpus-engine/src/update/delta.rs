@@ -266,9 +266,9 @@ impl CorpusUpdater {
                 return Ok(());
             }
         };
-        if !atoms_file.atoms.is_empty()
+        if !atoms_file.atoms().is_empty()
             && !atoms_file
-                .atoms
+                .atoms()
                 .iter()
                 .all(|env| env.id().is_content_hash())
         {

@@ -1,0 +1,28 @@
+unit: dm-rename-contracts-kv
+commits: 088a60389 (the four renames + every referrer)
+what: Applies the DT [[noun]] dispositions (quality/DOMAINS.toml:2016-2058) to
+  the C8 replicated-KV family in sovereign/crates/sovereign-contracts/src/
+  peer.rs — identifiers only, no behaviour change. PeerStore -> ReplicatedKv
+  (:101), PeerStoreError -> ReplicatedKvError (:58), PeerEntry ->
+  ReplicatedKvEntry (:79), SoloPeerStore -> SoloReplicatedKv (:221), with
+  their doc links and Display/Error impls. Every referrer repointed:
+  sovereign-mesh/src/peer_adapter.rs (MeshReplicatedKv's impl + to_port_error
+  / to_port_entry); sovereign-work-atlas/src/{lib,store,gc,observer,
+  tools/resource_may_i}.rs and tests/cross_node.rs (the MeshPeer test impl);
+  sovereign-daemon/src/bootstrap.rs (:17,:1329,:1524,:2529);
+  sovereign-cli-daemon/src/daemon_cmd/mod.rs (:851,:859);
+  sovereign-cli-dev/src/{project_cmd/serve.rs:501, tools_cmd/registry.rs:236}.
+  Two Cargo.toml comments naming the old path/port updated in the same commit.
+  MeshPeer in cross_node.rs is left for its own DT row (MeshReplicatedKvStub,
+  quality/DOMAINS.toml:2400), which this row's four names do not cover.
+checks: CLEAN exit=0 (debug target 0G, under 50G — cache kept); LINT exit=0
+  (errors 0, cargo exit 0; scope names sovereign-contracts, sovereign-mesh,
+  sovereign-work-atlas, sovereign-daemon, sovereign-cli-daemon, sovereign-cli-dev
+  and 26 more). The row names no TEST: this is a mechanical rename and tests
+  ride the wave audit (PROMPT §4).
+evidence: `git grep -n 'PeerStore|PeerEntry|SoloPeerStore' -- '*.rs'` is empty
+  after the change (exit 1). `python3 scripts/domains-census.py peer-outside`
+  falls 24 in 8 crates -> 20 in 7 crates, sovereign/crates/sovereign-contracts
+  leaving the list (the four definitions this unit renamed). git diff is
+  identifier swaps plus the rustfmt line-wraps the longer names force on the
+  four `fn scan` signatures.

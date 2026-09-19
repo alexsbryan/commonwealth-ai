@@ -5,7 +5,7 @@
 //! JSON-RPC 2.0 envelope is a wire contract by definition. It names nothing
 //! above itself — `serde` and `serde_json::Value` only — so the whole
 //! specification lives here and both the daemon's MCP router
-//! (`sovereign_mesh::mcp_router`) and the standalone server's
+//! (`sovereign_daemon::mcp_router`) and the standalone server's
 //! (`sovereign_server::routes_mcp`) import it instead of re-declaring it.
 //!
 //! Until this module existed the two declared their own copies and had

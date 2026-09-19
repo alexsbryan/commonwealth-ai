@@ -1,0 +1,30 @@
+unit: dm-next-edit-move
+commits: 4ca691697 (the move)
+what: sovereign-api/src/{next_edit.rs 983, next_edit_model.rs 2462,
+  next_edit_symbols.rs 714, next_edit_syntax.rs 342, next_edit_journal.rs 381}
+  and src/prompts/ moved to code-next-edit (the code-intel package's tenth
+  crate). routes_edit_predictions.rs STAYS in sovereign-api — its mount lives in
+  server.rs::client_router_for (server.rs:161-177) and sovereign-api ->
+  sovereign-daemon is a Cargo cycle (the daemon names sovereign-api,
+  Cargo.toml:9) plus [[forbid]] sovereign-api -> sovereign-* with no
+  sovereign-daemon except (ARCH_LAYERS.toml:711-714) — so it lands with
+  server.rs at dm-daemon-api-edge. The journal outcome route splits to the host
+  shell sovereign-api/src/routes_edit_predictions/outcome.rs.
+  The tree-sitter registry rides a PORT: code-next-edit/src/grammar.rs declares
+  Grammar + GrammarLookup, and routes_edit_predictions::grammar_for is the host
+  adapter naming corpus-engine (one registry, .tsx cannot drift, ARCH 8). Shims
+  in sovereign-api/src/lib.rs keep the old paths resolving; the example and the
+  e2e test repoint to code_next_edit::*. DT [[module]] rows re-keyed; new rows
+  for grammar.rs and outcome.rs; oversized.txt re-keys next_edit_model.rs.
+  Premise correction (PROMPT §6, ralph/DECISIONS.md): the row's shell
+  destination and consumer list were stale, and src/prompts/ had to move with
+  next_edit_model.rs. Two fan-ins hand-raised with a SYSTEM_OVERVIEW.md §10.1ad
+  ledger (corpus-engine-scip 10 -> 11, sovereign-contracts 32 -> 33;
+  --update-baseline not run).
+checks: CLEAN exit=0; LINT exit=0 (WORKSPACE, errors: 0); LAYER exit=0
+  ("fan-in within caps"); BOUNDARY exit=0 (code-intel 6/6 crates present);
+  TOML exit=0; CENSUS exit=0 (11/11 positives caught, 11/11 negatives refused);
+  TEST(code-next-edit) exit=0 (75 pass, 0 fail); TEST(sovereign-api) exit=0
+  (481 pass, 0 fail). docs-gate is RED at HEAD with 3 pre-existing unresolved
+  citations from earlier lanes (decision_extractor.rs, response_mine.rs,
+  mesh_sim/mod.rs); this unit adds none.

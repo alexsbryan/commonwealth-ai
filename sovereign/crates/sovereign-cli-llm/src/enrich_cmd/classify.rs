@@ -303,7 +303,7 @@ pub async fn cmd_classify(args: &[String]) -> i32 {
             return 1;
         }
     };
-    let (_embed, chat, _chat_with_tokens) = client.into_closures_with_tokens();
+    let (_embed, chat) = client.into_closures();
     let chat: Arc<_> = chat;
 
     let total = targeted.len();

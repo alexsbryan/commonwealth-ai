@@ -58,7 +58,7 @@ pub fn list_enriched_corpora() -> Result<Vec<EnrichedCorpusSummary>> {
 
 /// [`list_enriched_corpora`] over an explicit store root — the daemon's
 /// `<data_dir>/enrichment`, which is not this process's default root on an
-/// attached boot. Added 2026-09-11 for `sovereign_mesh::enrich_http`.
+/// attached boot. Added 2026-09-11 for `sovereign_daemon::enrich_http`.
 pub fn list_enriched_corpora_in(root: &Path) -> Result<Vec<EnrichedCorpusSummary>> {
     list_in(root)
 }

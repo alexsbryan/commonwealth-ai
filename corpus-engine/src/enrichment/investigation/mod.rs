@@ -20,7 +20,7 @@
 //! - the [`Recipe`] (carries the entity / relationship / pattern
 //!   schema declarations).
 //! - the corpus chunks to extract from.
-//! - a [`ChatCompletionFn`] that maps `ChatPrompt` → response
+//! - a [`InferenceFn`] that maps `ChatPrompt` → response
 //!   string. Production wraps the daemon's chat slot; tests pass a
 //!   deterministic closure returning canned JSON.
 //! - the output directory under which `investigation/` will be
@@ -40,7 +40,7 @@ pub mod recoalesce;
 
 use std::path::Path;
 
-use crate::enrichment::pipeline::types::ChatCompletionFn;
+use crate::enrichment::pipeline::types::InferenceFn;
 use crate::error::{Error, Result};
 use crate::recipe::Recipe;
 
@@ -87,7 +87,7 @@ pub struct InvestigationOutput {
 pub async fn run_investigation<'a>(
     recipe: &Recipe,
     chunks: &[ChunkInput<'a>],
-    chat: ChatCompletionFn,
+    chat: InferenceFn,
     output_dir: &Path,
 ) -> Result<InvestigationOutput> {
     let enrichment = recipe.enrichment.as_ref().ok_or_else(|| {
@@ -170,7 +170,7 @@ pub async fn run_investigation<'a>(
         );
         let mut parsed: Option<extract::ExtractedChunk> = None;
         for attempt in 1..=MAX_CHUNK_ATTEMPTS {
-            match (chat)(&prompt).await {
+            match (chat)(&prompt, None).await {
                 Ok(response) => match extract::parse_extract_response(&response) {
                     Ok(p) => {
                         parsed = Some(p);
@@ -332,9 +332,9 @@ mod tests {
     /// the first time it's invoked, then an empty array for every
     /// subsequent invocation. Lets us drive the pipeline with one
     /// chunk producing relationships and one chunk producing none.
-    fn scripted_chat(canned: &'static str) -> ChatCompletionFn {
+    fn scripted_chat(canned: &'static str) -> InferenceFn {
         let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        Arc::new(move |_prompt| {
+        Arc::new(move |_prompt, _max_tokens| {
             let calls = calls.clone();
             Box::pin(async move {
                 let n = calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -464,8 +464,8 @@ customer = "revenue.to"
     async fn refuses_when_enrichment_type_is_not_investigation() {
         let mut recipe = make_recipe();
         recipe.enrichment.as_mut().unwrap().enrichment_type = "atlas".into();
-        let chat: ChatCompletionFn =
-            Arc::new(|_| Box::pin(async { Ok(r#"{"relationships":[]}"#.to_string()) }));
+        let chat: InferenceFn =
+            Arc::new(|_, _| Box::pin(async { Ok(r#"{"relationships":[]}"#.to_string()) }));
         let dir = tempfile::tempdir().unwrap();
         let err = run_investigation(&recipe, &[], chat, dir.path())
             .await
@@ -477,8 +477,8 @@ customer = "revenue.to"
     async fn refuses_when_no_entity_types_declared() {
         let mut recipe = make_recipe();
         recipe.enrichment.as_mut().unwrap().entity_types.clear();
-        let chat: ChatCompletionFn =
-            Arc::new(|_| Box::pin(async { Ok(r#"{"relationships":[]}"#.to_string()) }));
+        let chat: InferenceFn =
+            Arc::new(|_, _| Box::pin(async { Ok(r#"{"relationships":[]}"#.to_string()) }));
         let dir = tempfile::tempdir().unwrap();
         let err = run_investigation(&recipe, &[], chat, dir.path())
             .await
@@ -489,8 +489,8 @@ customer = "revenue.to"
     #[tokio::test]
     async fn no_chunks_produces_empty_outputs_on_disk() {
         let recipe = make_recipe();
-        let chat: ChatCompletionFn =
-            Arc::new(|_| Box::pin(async { Ok(r#"{"relationships":[]}"#.to_string()) }));
+        let chat: InferenceFn =
+            Arc::new(|_, _| Box::pin(async { Ok(r#"{"relationships":[]}"#.to_string()) }));
         let dir = tempfile::tempdir().unwrap();
         let out = run_investigation(&recipe, &[], chat, dir.path())
             .await
@@ -522,9 +522,9 @@ customer = "revenue.to"
         }];
 
         let attempts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let chat: ChatCompletionFn = {
+        let chat: InferenceFn = {
             let attempts = attempts.clone();
-            Arc::new(move |_prompt| {
+            Arc::new(move |_prompt, _max_tokens| {
                 let attempts = attempts.clone();
                 Box::pin(async move {
                     let n = attempts.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -575,7 +575,7 @@ customer = "revenue.to"
             source_title: None,
             content: "Whatever.",
         }];
-        let chat: ChatCompletionFn = Arc::new(|_| {
+        let chat: InferenceFn = Arc::new(|_, _| {
             Box::pin(async { Err(crate::error::Error::Serialization("always fails".into())) })
         });
         let dir = tempfile::tempdir().unwrap();
@@ -621,9 +621,9 @@ customer = "revenue.to"
 
         // Counts LLM calls; a resume must skip chunk-0 entirely.
         let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let chat: ChatCompletionFn = {
+        let chat: InferenceFn = {
             let calls = calls.clone();
-            Arc::new(move |_p| {
+            Arc::new(move |_p, _max_tokens| {
                 let calls = calls.clone();
                 Box::pin(async move {
                     calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);

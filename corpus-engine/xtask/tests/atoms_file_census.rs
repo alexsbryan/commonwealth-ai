@@ -11,10 +11,10 @@
 //! re-derived the schema by key name (and asked for a `statement` key no
 //! atom kind has). Now there is one, here, and every reader names it.
 //!
-//! # Why `xtask` and not `corpus-engine-vocab`
+//! # Why `xtask` and not `understanding-vocab`
 //!
 //! It lived beside the type it counts, which reads as the obvious home and is
-//! the wrong one: `corpus-engine-vocab` is a `[[package_leaf]]`
+//! the wrong one: `understanding-vocab` is a `[[package_leaf]]`
 //! (`quality/ARCH_LAYERS.toml`), so `corpus-mcp` — and through the global leaf
 //! set, every declared package — must build STANDALONE WITH ITS TESTS. This
 //! census resolves the repo root from `CARGO_MANIFEST_DIR` and then
@@ -45,7 +45,7 @@ fn roots() -> Vec<PathBuf> {
     let ws = repo_root();
     let mut roots = vec![
         ws.join("corpus-engine/src"),
-        ws.join("corpus-engine-vocab/src"),
+        ws.join("understanding-vocab/src"),
     ];
     for entry in std::fs::read_dir(ws.join("sovereign/crates")).unwrap() {
         let src = entry.unwrap().path().join("src");
@@ -71,6 +71,12 @@ fn rs_files(dir: &Path, out: &mut Vec<PathBuf>) {
 /// `struct AtomsFile`, `struct AtomsFile<Suffix>` (the `Lite` lookalike), or
 /// `struct RawAtom` (the untyped envelope). `DocToAtomsFile` is a different
 /// artifact (`doc_to_atoms.json`) and is deliberately not matched.
+///
+/// `AtomsFileWire` is NOT a second shape. It is the private deserialize twin of
+/// `AtomsFile` in the same home — the mechanism that lets `AtomsFile` itself be
+/// not `Deserialize` while `read_atlas_atoms` stays the only parser (domains
+/// `REVIEW-build-vocab-seal`; `quality/DOMAINS.md` §10.5 "The correction"). It
+/// is part of the ONE declaration, so the census does not count it.
 fn is_atoms_file_decl(line: &str) -> bool {
     let t = line.trim_start();
     let t = t.strip_prefix("pub ").unwrap_or(t);
@@ -82,7 +88,7 @@ fn is_atoms_file_decl(line: &str) -> bool {
         .chars()
         .take_while(|c| c.is_alphanumeric() || *c == '_')
         .collect();
-    name == "RawAtom" || name.starts_with("AtomsFile")
+    name == "RawAtom" || (name.starts_with("AtomsFile") && name != "AtomsFileWire")
 }
 
 #[test]
@@ -109,7 +115,7 @@ fn the_atoms_json_shape_is_declared_exactly_once() {
         }
     }
 
-    let home = "corpus-engine-vocab/src/atoms.rs";
+    let home = "understanding-vocab/src/atoms.rs";
     assert_eq!(
         hits.len(),
         1,
@@ -126,6 +132,9 @@ fn the_matcher_sees_the_three_shapes_that_were_deleted() {
     assert!(is_atoms_file_decl("struct AtomsFileLite {"));
     assert!(is_atoms_file_decl("struct RawAtom {"));
     assert!(is_atoms_file_decl("pub struct AtomsFile {"));
+    // The wire twin is the one declaration's private deserialize half, not a
+    // second shape: refused by the matcher (domains REVIEW-build-vocab-seal).
+    assert!(!is_atoms_file_decl("pub(crate) struct AtomsFileWire {"));
     assert!(!is_atoms_file_decl("pub struct AtomEnvelope {"));
     assert!(!is_atoms_file_decl("struct EdgesFile {"));
     assert!(!is_atoms_file_decl("pub struct DocToAtomsFile {"));

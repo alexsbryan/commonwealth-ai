@@ -51,20 +51,32 @@ pub struct RecipeWriteStructuredTool {
     /// Runs the on-disk validation after writing (the RecipeTester seam, so
     /// this tool carries no corpus-engine dependency).
     tester: Arc<dyn RecipeTester>,
+    /// The injected recipe variant-catalog descriptor (the bytes of
+    /// `sovereign-recipes/schema/recipe_schema_descriptor.json`). The monolith
+    /// supplies `corpus_engine::recipe_schema::RECIPE_SCHEMA_DESCRIPTOR_JSON`;
+    /// this crate may not name `corpus-engine`, and the shared leaf may not
+    /// embed the artifact (that embed escapes its crate root).
+    descriptor_json: &'static str,
 }
 
 impl RecipeWriteStructuredTool {
-    pub fn new(tester: Arc<dyn RecipeTester>) -> Self {
+    pub fn new(tester: Arc<dyn RecipeTester>, descriptor_json: &'static str) -> Self {
         Self {
             recipes_dir: None,
             tester,
+            descriptor_json,
         }
     }
 
-    pub fn with_recipes_dir(tester: Arc<dyn RecipeTester>, dir: PathBuf) -> Self {
+    pub fn with_recipes_dir(
+        tester: Arc<dyn RecipeTester>,
+        dir: PathBuf,
+        descriptor_json: &'static str,
+    ) -> Self {
         Self {
             recipes_dir: Some(dir),
             tester,
+            descriptor_json,
         }
     }
 }
@@ -103,7 +115,7 @@ impl Tool for RecipeWriteStructuredTool {
                             "Recipe id (writes to <id>/recipe.toml) or \
                              relative path under ~/.svrnmesh/recipes/."
                     },
-                    "recipe": recipe_json_schema(),
+                    "recipe": recipe_json_schema(self.descriptor_json),
                 }
             }),
             examples: vec![ToolExample {

@@ -35,7 +35,7 @@
 use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
-use corpus_engine::EmbedFn;
+use corpus_index::types::EmbedFn;
 use serde_json::Value;
 use sovereign_contracts::embed_quirks::EmbedQuirks;
 

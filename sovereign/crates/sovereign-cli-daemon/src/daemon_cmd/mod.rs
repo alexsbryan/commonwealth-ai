@@ -33,14 +33,12 @@ use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_inference::embedded::EmbeddedLlamaCpp;
 
-// §3.2 split: the run_daemon bootstrap stays here (it's the orchestrator);
-// the separable lifecycle / workspace / provider / worker / tool-registry
-// concerns moved to submodules. `home_dir_buf` + `warn_orphaned_indexes`
-// stay here (the former is shared with submodules as an ancestor-private).
-mod atlas_builder;
-pub(crate) mod bootstrap;
-pub(crate) mod build;
-mod discovery_policy;
+// The composition half of `daemon_cmd` (the bootstrap phases, `build/`, the
+// tool registry, the solve surface and the assembly helpers) moved to
+// `sovereign-daemon` at domains `dm-daemon-cli-composition` (2026-09-17);
+// `run_daemon` below calls `sovereign_daemon::…`. What stays is the process
+// half: argv dispatch, `HELP`, `run_daemon`, the lifecycle verbs and the
+// pidfile.
 mod rlimit;
 mod vram_plan;
 // `pub(crate)` so `setup_cmd::fim` can reach `restart_daemon` directly.
@@ -49,28 +47,19 @@ mod vram_plan;
 // mid-flow would break the one-command promise and leave the verify
 // ladder below with nothing to verify.
 pub(crate) mod lifecycle;
-// Headless OCR install. Compiled unconditionally — the module carries both
-// cfg arms of `install_ocr_ctx` so the single call site in `bootstrap` never
-// grows a `#[cfg]`, and a build without `--features ocr` still logs WHY OCR
-// is unavailable instead of doing nothing.
-mod ocr_install;
-mod solve_http;
-mod solve_tools;
 // Liveness probe for the pidfile-managed (manual) daemon — consumed by
 // `install-service`'s double-start guard and doctor's supervision check.
 pub(crate) use lifecycle::read_daemon_pid;
-mod provider;
-mod tool_registry;
-mod worker;
-mod workflow_trigger;
-mod workspace;
 
 use lifecycle::{
     reload_daemon, restart_daemon, start_daemon, status_daemon, stop_daemon, wait_for_shutdown,
 };
-use tool_registry::build_tool_registry;
-use worker::run_worker_daemon;
-use workspace::resolve_workspace_dir;
+use sovereign_daemon::bootstrap;
+use sovereign_daemon::solve_http;
+use sovereign_daemon::tool_registry;
+use sovereign_daemon::tool_registry::build_tool_registry;
+use sovereign_daemon::worker::run_worker_daemon;
+use sovereign_daemon::workspace::resolve_workspace_dir;
 
 /// Entry point routed from `main.rs` when the user invokes
 /// `svrn daemon` or one of its subcommands.
@@ -301,7 +290,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     // wakeups; 30 min is comfortably long for a stat() + size check.
     // Supervised: a panic must not silently stop rotation for the rest
     // of the process's life (DAEMON_RESILIENCE.md P0.4).
-    let _rotation_handle = crate::supervise::spawn_supervised("log_rotation", {
+    let _rotation_handle = sovereign_daemon::supervise::spawn_supervised("log_rotation", {
         let log_dir = log_dir.clone();
         move || {
             crate::log_rotation::rotation_loop(
@@ -322,9 +311,10 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     // (`scripts/daemon-supervised.sh` sets it). See `crate::memory_watch`.
     // Supervised: a panicked sampler used to silently disarm the OOM
     // defense (DAEMON_RESILIENCE.md P0.4).
-    let _memory_watch_handle = crate::supervise::spawn_supervised("memory_watch", || {
-        crate::memory_watch::watch_loop(std::time::Duration::from_secs(60))
-    });
+    let _memory_watch_handle =
+        sovereign_daemon::supervise::spawn_supervised("memory_watch", || {
+            crate::memory_watch::watch_loop(std::time::Duration::from_secs(60))
+        });
 
     // ── Load config ───────────────────────────────────────────────
     let config = match config_override.as_ref() {
@@ -425,7 +415,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     let config_path_in_use = config_override
         .clone()
         .unwrap_or_else(sovereign_core::setup_config::SetupConfig::default_path);
-    if !build::preflight::check_vram_reporting(&config, &config_path_in_use) {
+    if !sovereign_daemon::build::preflight::check_vram_reporting(&config, &config_path_in_use) {
         return 1;
     }
 
@@ -473,7 +463,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
 
     // Inference provider — load the embedded llama.cpp provider (3 GGUF
     // slots + extras/idle/rerank wiring); full rationale on
-    // `build::inference::load_provider`. `engine_handle` (concrete) feeds
+    // `sovereign_daemon::build::inference::load_provider`. `engine_handle` (concrete) feeds
     // the RPC-worker auto-reload path; `resolved_embed_family` feeds the
     // mesh embed-model advertisement.
     //
@@ -483,9 +473,12 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     // exactly as a commissioned-but-stopped daemon until `bind` — no peers — so
     // a terminal booting ahead of gossip reports its entry node unreachable
     // rather than inventing an address for it.
-    let deferred_daemon = Arc::new(sovereign_mesh::DeferredDaemon::new());
+    let deferred_daemon = Arc::new(sovereign_daemon::DeferredDaemon::new());
     let (provider, raw_engine, resolved_embed_family, distributed_primary_slot) =
-        match build::inference::load_provider(&config, Arc::clone(&deferred_daemon)) {
+        match sovereign_daemon::build::inference::load_provider(
+            &config,
+            Arc::clone(&deferred_daemon),
+        ) {
             Ok(t) => t,
             Err(()) => return 1,
         };
@@ -767,7 +760,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     // search, which is silent, correct, and progressively slower. A desktop
     // user has no way to notice or fix that, so the daemon owns it. See
     // `crate::corpus_maintenance`.
-    crate::corpus_maintenance::spawn(Arc::clone(&engine));
+    sovereign_daemon::corpus_maintenance::spawn(Arc::clone(&engine));
 
     // ── Folder tiered deps ───────────────────────────────────────
     // Watched-folder corpora reuse the conv-tiered table shape
@@ -842,7 +835,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     // no slot this bootstrap can forget. `DeferredDaemon` breaks the one
     // genuine cycle — the daemon serves peers through a provider that routes
     // to peers — and carries no capability of its own.
-    let (deferred_daemon, mesh_provider) =
+    let (deferred_daemon, mesh_provider, in_flight_gauge) =
         bootstrap::build_mesh_provider(Arc::clone(&provider), deferred_daemon).await;
     let routed_provider: Arc<dyn InferenceProvider> = mesh_provider.clone();
 
@@ -855,7 +848,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
 
     bootstrap::wire_note_propagation_sink(
         Arc::clone(&notes_store),
-        Arc::clone(&work_atlas_mesh_store) as Arc<dyn sovereign_contracts::peer::PeerStore>,
+        Arc::clone(&work_atlas_mesh_store) as Arc<dyn sovereign_contracts::peer::ReplicatedKv>,
         self_node_id,
         Arc::clone(&convergence_recorder) as Arc<dyn sovereign_contracts::peer::Convergence>,
     );
@@ -863,7 +856,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     bootstrap::spawn_notes_tier_backfill(Arc::clone(&notes_store));
 
     bootstrap::spawn_notes_ingest_poller(
-        Arc::clone(&work_atlas_mesh_store) as Arc<dyn sovereign_contracts::peer::PeerStore>,
+        Arc::clone(&work_atlas_mesh_store) as Arc<dyn sovereign_contracts::peer::ReplicatedKv>,
         Arc::clone(&notes_store),
         self_node_id,
         Arc::clone(&convergence_recorder) as Arc<dyn sovereign_contracts::peer::Convergence>,
@@ -911,9 +904,9 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
         &data_dir,
         &config,
         folder_tiered_deps,
-        Some(atlas_builder::in_process_atlas_builder(Arc::clone(
-            &routed_provider,
-        ))),
+        Some(sovereign_daemon::atlas_builder::in_process_atlas_builder(
+            Arc::clone(&routed_provider),
+        )),
     )
     .await;
 
@@ -1078,7 +1071,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
             // reachable. Byte-identical to the behaviour this host had
             // before `LaneScope` existed.
             scope: sovereign_runtime_recipe::LaneScope::All,
-            // `build::inference::load_provider` above already installed a
+            // `sovereign_daemon::build::inference::load_provider` above already installed a
             // rerank slot INSIDE the embedded engine from the same
             // `SOVEREIGN_RERANK_MODEL_PATH`. A standalone one here would put
             // the same GGUF in this process twice, and the VRAM pre-flight
@@ -1088,7 +1081,42 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
         &sovereign_runtime_recipe::TracingProgress,
     )
     .await;
-    let runtime = sovereign_runtime_recipe::commission(common.parts);
+    // ── The turn's Scope: resolved, not absent ───────────────────────────
+    //
+    // `quality/DAEMON_CORE.md` §3.3 measured BOTH slots at named absence on
+    // this host, and absence was permissive: `sensitive_corpora: None` meant
+    // "no sensitivity gate, all corpora eligible" and `corpus_principal: None`
+    // meant the turn's `corpus_ceiling` was never computed. The daemon is the
+    // host that answers turns, so both are wired here.
+    //
+    //   * `sensitive_corpora` — the daemon's OWN watched-folder manager (the
+    //     canonical `SensitiveCorpusOracle`, the same handle `lc_http` serves
+    //     over). A corpus the user marked sensitive is structurally absent
+    //     from ambient retrieval on the daemon, not only in the desktop's old
+    //     in-process build.
+    //   * `corpus_principal` — the local owner. The daemon is single-user, so
+    //     every conversation it serves resolves and `build_context` produces a
+    //     `Some(..)` ceiling rather than an absent one. A resolver that cannot
+    //     name a caller returns `None`, and that turn REFUSES
+    //     (`PrincipalScope::Unresolved`) instead of seeing every corpus.
+    let sensitive_corpora: Option<Arc<dyn sovereign_core::traits::SensitiveCorpusOracle>> =
+        sovereign_daemon::watched_folder_runtime::manager()
+            .map(|m| m as Arc<dyn sovereign_core::traits::SensitiveCorpusOracle>);
+    if sensitive_corpora.is_none() {
+        // Named, not silent: the subsystem failed to install above, so there is
+        // no oracle to consult. `None` here still means "no sensitivity gate"
+        // (the pre-v1 behaviour) — reported so the gap is visible (ARCH §18.3).
+        tracing::warn!(
+            "daemon: no LocalCorpusManager installed — the sensitivity gate is \
+             absent; sensitive watched-folder corpora will not be excluded from \
+             ambient retrieval"
+        );
+    }
+    let runtime = sovereign_runtime_recipe::commission(sovereign_core::RuntimeParts {
+        sensitive_corpora,
+        corpus_principal: Some(Arc::new(sovereign_daemon::principal::LocalOwnerPrincipal)),
+        ..common.parts
+    });
     tracing::info!(
         tools = runtime.tools.count(),
         "daemon: Runtime commissioned — this process can serve a turn"
@@ -1114,20 +1142,25 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     // ── Commission, through THE assembler ─────────────────────────────
     //
     // This bootstrap no longer names its own variant. It hands its parts to
-    // `sovereign_mesh::assemble`, the one exhaustive match over `Launch` that
+    // `sovereign_daemon::assemble`, the one exhaustive match over `Launch` that
     // constructs anything (`quality/TOPOLOGY.md` §10, Falsifier 3), and that
     // match decides what `sovereign daemon run` composes into. A refusal is
     // fatal and names both sides — a daemon that came up as the wrong shape is
     // the hazard, so there is nothing to degrade to (§18.3).
-    let services = match sovereign_mesh::assemble(
+    let services = match sovereign_daemon::assemble(
         launch,
-        sovereign_mesh::LaunchParts::Serving {
-            serving: sovereign_mesh::ServingProfile {
-                core: sovereign_mesh::ServingCore {
+        sovereign_daemon::LaunchParts::Serving {
+            serving: sovereign_daemon::ServingProfile {
+                core: sovereign_daemon::ServingCore {
                     // The engine the auto_ingest loop and the
                     // /internal/corpus/* surface both read.
                     corpus_engine: Arc::clone(&engine),
                     inference_provider: Arc::clone(&routed_provider),
+                    // The gauge the router above was built with, so AppState
+                    // holds the same counter the provider's guards write
+                    // (`quality/DAEMON_CORE.md` §4.2 "Where an install slot
+                    // breaks a cycle").
+                    in_flight_gauge: Some(in_flight_gauge),
                     // Phase 3: the headless daemon's own `sovereign.db`,
                     // opened at the top of this function. `reading_http` now
                     // resolves conversation titles on this variant too.
@@ -1143,10 +1176,10 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
                     // silently is not there.
                     features: features_store,
                 },
-                capability: sovereign_mesh::ServingCapability {
+                capability: sovereign_daemon::ServingCapability {
                     mcp: bootstrap::build_mcp_surface(tools, Arc::clone(&notes_store)),
                     project_http,
-                    corpus_watch_http: sovereign_mesh::corpus_watch_http::corpus_watch_router(),
+                    corpus_watch_http: sovereign_daemon::corpus_watch_http::corpus_watch_router(),
                     // sv-surface rung 5: workflow execution is a daemon job
                     // surface (`/internal/workflows/*`). The runtime routes
                     // `model:`/`embed:` steps back through this daemon's own
@@ -1159,11 +1192,11 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
                 },
                 advertise_embed,
             },
-            headless: Some(sovereign_mesh::HeadlessExtras {
-                rails: sovereign_mesh::HeadlessRails {
+            headless: Some(sovereign_daemon::HeadlessExtras {
+                rails: sovereign_daemon::HeadlessRails {
                     // Rebuilds the provider when `models.*` changes on disk. Holds
                     // the same deferred handle, bound below.
-                    provider_factory: Arc::new(provider::LlamaCppFactory {
+                    provider_factory: Arc::new(sovereign_daemon::provider::LlamaCppFactory {
                         daemon: Arc::clone(&deferred_daemon),
                     }),
                     // The work atlas writes into THIS store, so its entries reach
@@ -1185,7 +1218,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
             return 1;
         }
     };
-    let daemon = sovereign_mesh::EmbeddedDaemon::new(data_dir.clone(), config.clone(), services);
+    let daemon = sovereign_daemon::EmbeddedDaemon::new(data_dir.clone(), config.clone(), services);
     deferred_daemon.bind(Arc::clone(&daemon));
 
     // Host side of distributed-inference auto-warm. When this node distributes a
@@ -1195,7 +1228,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     // manual `SOVEREIGN_RPC_ASSUME_WARMED` for the common case. Installed
     // unconditionally (harmless on a node that never distributes) so both
     // auto-discovered and manual (`SOVEREIGN_RPC_WORKERS`) hosts auto-warm.
-    sovereign_mesh::rpc_warm_http::install_rpc_warm_orchestrator(Arc::clone(&daemon));
+    sovereign_daemon::rpc_warm_http::install_rpc_warm_orchestrator(Arc::clone(&daemon));
 
     // Must be installed BEFORE discovery starts spawning the child: the
     // manifest is a boot-time snapshot taken while the slot is still unspawned,
@@ -1233,7 +1266,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
             // here, loudly and by name, rather than letting the profile
             // quietly turn a fleet joiner into a split-brained solo node
             // (ARCH §18.3 — refuse, never silently substitute).
-            let profile = sovereign_mesh::LocalOnlyProfile::resolve(config.daemon.local_only);
+            let profile = sovereign_daemon::LocalOnlyProfile::resolve(config.daemon.local_only);
             if profile.is_local_only() && disc.join_key.is_some() {
                 eprintln!(
                     "error: [daemon] local_only is set (source: {}) but [discovery] \
@@ -1241,7 +1274,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
                      peer. Unset one of them: drop join_key to run a solo node, or \
                      unset local_only / {}=0 to join the fleet.",
                     profile.source().as_str(),
-                    sovereign_mesh::local_only::ENV_VAR,
+                    sovereign_daemon::local_only::ENV_VAR,
                 );
                 return 1;
             }
@@ -1343,12 +1376,12 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
         .client_listener(std::time::Duration::from_secs(60))
         .await
     {
-        sovereign_mesh::ClientListener::Bound(addr) => addr,
-        sovereign_mesh::ClientListener::Failed(e) => {
+        sovereign_daemon::ClientListener::Bound(addr) => addr,
+        sovereign_daemon::ClientListener::Failed(e) => {
             eprintln!("error: the client API is not listening — {e}");
             return 1;
         }
-        sovereign_mesh::ClientListener::Pending => {
+        sovereign_daemon::ClientListener::Pending => {
             eprintln!(
                 "error: the client API bind did not settle within 60s — \
                  refusing to report a daemon that may be serving nothing"
@@ -1377,8 +1410,8 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     let _listener_watch_handle = {
         let bind = config.daemon.client_bind.clone();
         let port = config.daemon.client_port;
-        crate::supervise::spawn_supervised("listener_watch", move || {
-            crate::listener_watch::watch_loop(bind.clone(), port)
+        sovereign_daemon::supervise::spawn_supervised("listener_watch", move || {
+            sovereign_daemon::listener_watch::watch_loop(bind.clone(), port)
         })
     };
 
@@ -1419,7 +1452,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
 /// `0` on every deliberate shutdown. On macOS it `_exit`s to skip the
 /// ggml-metal destructor assertion (full rationale inline).
 async fn shutdown_daemon(
-    daemon: Arc<sovereign_mesh::EmbeddedDaemon>,
+    daemon: Arc<sovereign_daemon::EmbeddedDaemon>,
     pid_path: &std::path::Path,
     self_pid: u32,
 ) -> i32 {
@@ -1455,7 +1488,7 @@ async fn shutdown_daemon(
     // inside `__cxa_finalize_ranges → ggml_metal_device_free`. The
     // assertion checks Metal resource-set drain; our llama contexts
     // are owned by `Arc<EmbeddedLlamaCpp>` references scattered
-    // across AppState, MeshInferenceProvider, the inference adapter,
+    // across AppState, InferenceRouter, the inference adapter,
     // and several background tasks. Drop ordering is non-trivial,
     // and even one straggling reference (e.g., a slot guard held
     // briefly by a closing in-flight request) leaves a non-empty
@@ -1485,7 +1518,7 @@ async fn shutdown_daemon(
     let exit_code: i32 = if crate::memory_watch::hard_exit_requested() {
         eprintln!("svrn daemon exiting non-zero: RSS hard limit (service manager will relaunch)");
         102
-    } else if crate::listener_watch::exit_requested() {
+    } else if sovereign_daemon::listener_watch::exit_requested() {
         eprintln!(
             "svrn daemon exiting non-zero: client listener lost (service manager will relaunch)"
         );

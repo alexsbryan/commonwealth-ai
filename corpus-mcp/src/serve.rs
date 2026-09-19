@@ -31,7 +31,8 @@
 use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
-use corpus_engine::{CorpusEngine, CorpusIndex, CorpusSpec};
+use corpus_engine::{CorpusEngine, CorpusSpec};
+use corpus_index::index::CorpusIndex;
 
 use crate::tools;
 

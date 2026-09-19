@@ -190,7 +190,7 @@ metadata at `routes.rs:48`). Scheduler fairness is per-tenant, but model
 choice is not. The daemon side already has the machinery a `model` field
 would ride: slot aliases — a request names an advertised alias
 (`commonwealth/fast`), the daemon resolves it against resident slots
-(`sovereign_mesh::slot_aliases::resolution_alias_keys`, `daemon_cmd/build/inference.rs:94,
+(`sovereign_scheduler::slot_aliases::resolution_alias_keys`, `daemon_cmd/build/inference.rs:94,
 293-305, 357-359`; the alias map exists because clients advertise stems and
 the daemon must map them to the role slot actually resident). So Shape A is:
 add `model` to the server's request types, a per-tenant allowed-backend set

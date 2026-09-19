@@ -455,16 +455,11 @@ pub enum EnrichmentProgress {
 }
 
 /// Summary statistics for a completed enrichment run.
-#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
-pub struct FieldModelStats {
-    pub total_chunks: u64,
-    pub classified_chunks: u64,
-    pub unclassified_chunks: u64,
-    pub cluster_count: usize,
-    pub questions_count: usize,
-    pub positions_count: usize,
-    pub fault_lines_count: usize,
-}
+///
+/// Moved to `understanding-vocab`'s `skeleton` module by domains
+/// `REVIEW-build-field-skeleton-vocab`; re-exported here so the historical
+/// `enrichment::clustering::FieldModelStats` path keeps resolving.
+pub use understanding_vocab::skeleton::FieldModelStats;
 
 #[cfg(test)]
 mod tests {

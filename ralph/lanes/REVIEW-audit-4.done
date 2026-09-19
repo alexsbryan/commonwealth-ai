@@ -1,0 +1,34 @@
+unit: REVIEW-audit-4
+commits: fb75de1ad (the audit fixes)
+what: AUDIT the vocab door. The door wave (dm-vocab-compile-fail-test,
+  dm-vocab-door-move, dm-vocab-atlas-dirname, the four dm-vocab-bypass-* rows,
+  REVIEW-build-vocab-seal) verified against O8's "Done when": read.rs holds
+  read_atlas_atoms/read_atlas_edges/ATLAS_DIRNAME (two of the four readers
+  DEFERRED, the row corrected — ralph/DECISIONS.md 2026-09-17); AtomsFile is
+  sealed (no Deserialize, pub(crate) atoms, private AtomsFileWire, read_atlas_atoms
+  the only parser) and the trybuild suite flipped t.pass -> t.compile_fail with
+  .stderr from the sealed type; corpus-mcp's fn read_atoms is gone; the only
+  typed atoms.json parse outside corpus-engine is through the door
+  (sovereign-tools/src/atlas_view/atom_browse.rs:258); vocab is still a leaf
+  (kernel-types, serde, serde_json, blake3; trybuild dev-only) and boundary-gate
+  green. Findings fixed behaviour-preserving, recorded in ralph/REVIEW_FINDINGS.md
+  "REVIEW-audit-4":
+  - TESTALL red conformance_tags_are_fresh — sovereign-api.toml:52 stale
+    (line 90 vs 89, routes_edit_predictions/outcome.rs); regenerated.
+  - docs-gate — SYSTEM_OVERVIEW.md cited three moved paths (the two
+    dm-decision-extractor-move sources, mesh_sim/mod.rs); repointed.
+  - arch-gate — re-keyed quality/baselines/oversized.txt for the mesh_sim move
+    (§3a.6, path re-key, no debt); split routes_edit_predictions.rs's wire
+    contract to wire.rs (1474 -> 1357, within slack); split admission.rs's test
+    module to admission/tests.rs (922 -> 548), which cuts the approach band from
+    202836 back under the 202703 baseline — the cut REVIEW-audit-daemon-2's
+    director ruling (2220dbf93) required.
+  - quality/DOMAINS.toml — [[module]] rows for the two new files, parents
+    re-measured.
+  - corpus-engine-vocab/Cargo.toml — the "behaviour-free leaf" comment now names
+    read.rs's one IO.
+checks: CLEAN exit=0; LINT exit=0 (sovereign-api, sovereign-serving-host +
+  dependents); TEST(sovereign-serving-host) exit=0 pass=224 fail=0;
+  TEST(sovereign-api) exit=0 pass=481 fail=0; arch-gate exit=0 (206 files /
+  201914 band lines); docs-gate exit=0; TESTALL exit=0 pass=13394 fail=0;
+  PREPUSH exit=0 (1 of 18 attention: size-gate, the advisory warn_gate).

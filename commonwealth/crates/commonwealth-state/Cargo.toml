@@ -15,6 +15,9 @@ commonwealth-core = { workspace = true }
 # substrate; the forbidden direction is the reverse one (rail -> state), which
 # quality/ARCH_LAYERS.toml blocks by name.
 commonwealth-rail-core = { workspace = true }
+# `store_adapter`'s test names `Capability`/`CapabilityProfile`; a global
+# `[[package_leaf]]`, so it costs the `commonwealth` closure no new leaf.
+oicp-types = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }

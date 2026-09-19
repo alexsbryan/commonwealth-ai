@@ -26,11 +26,31 @@ oplog = { workspace = true }
 # 2026-08-20).
 corpus-engine-sections = { workspace = true }
 # The atlas vocabulary (atoms/edges/taxonomy/canonical) — a behaviour-free
-# leaf re-exported at its historical paths. See corpus-engine-vocab/Cargo.toml.
-corpus-engine-vocab = { workspace = true }
+# leaf re-exported at its historical paths. See understanding-vocab/Cargo.toml.
+understanding-vocab = { workspace = true }
+# The retrieval read-port leaf (CorpusIndex, IndexInfo, the persisted settings,
+# the search/evidence surface) — re-exported at its historical paths so nothing
+# in the monorepo changed when it was carved out (domains
+# REVIEW-build-index-read-port, DE "The read-port leaf, measured again").
+corpus-index = { workspace = true }
+# The code-intel package's fact base — `facts`/`facts_check`/`facts_store`
+# moved out at domains REVIEW-build-code-facts (docs/CODE_TOOLING_BOUNDARY.md §2
+# Phase 2) and re-exported at their historical paths here, so no in-monorepo
+# importer changed. The `stores`/`treesitter` features forward below, keeping
+# the engine's build contract identical.
+code-facts = { workspace = true }
+# Understanding's pure tier — a temporary shim edge: the pure files that leave
+# `corpus-engine` for `understanding-atlas` are re-exported at their historical
+# paths here (domains REVIEW-build-understanding-crate-tree, §3a step 5) until
+# their in-engine importers repoint. The final audit deletes the shims, and the
+# edge with them (DE "Direction: Understanding reads Ingest and Retrieval,
+# never the reverse").
+understanding-atlas = { workspace = true }
 
 # What is LEFT of the sovereign edge after that move, and why it is left.
-# Census 2026-08-20 — three modules, no types, seven call sites:
+# Census 2026-08-20, minus the descriptor const (removed 2026-09-16: it now
+# embeds from corpus-engine's own OUT_DIR, so it no longer re-exports through
+# the leaf) — two modules, no types, five call sites:
 #   rebrand::svrnmesh_root              (registry.rs, meta_atlas/{builder,bridge/edges}.rs
 #                                        + 2 examples) — the workspace path SSOT.
 #                                        220 call sites over 15 crates; clippy's
@@ -39,7 +59,6 @@ corpus-engine-vocab = { workspace = true }
 #                                        this must stay ONE accessor (ARCH §10.6).
 #                                        Relocating it is its own rung.
 #   recipe::url_template::render_template   (acquirers/http_api/template.rs)
-#   recipe::schema::RECIPE_SCHEMA_DESCRIPTOR_JSON  (recipe_schema.rs, re-exported)
 # Unlike the detectors, these are not corpus-engine vocabulary parked upstairs:
 # they are things the engine and the recipe package must agree on bit-for-bit,
 # with no natural home below. `nc-boundary.py` never saw them — it counts TYPES,
@@ -174,13 +193,6 @@ hdbscan = "0.12"
 # Time
 chrono = { workspace = true }
 
-# Unicode normalization — used by the atlas resolver's `fold()` to
-# strip Latin combining diacritics so `Karámazov` and `Karamazov`
-# collapse to the same folded key. NFD decomposes the precomposed
-# á into a + U+0301 (combining acute accent); dropping marks
-# afterwards yields plain a. Small, pure-Rust, widely used.
-unicode-normalization = "0.1"
-
 # Unique IDs (used by NoteStore). Workspace declares ["v4", "serde"];
 # the extra `serde` feature is harmless here.
 uuid = { workspace = true }
@@ -241,7 +253,7 @@ markdown = ["dep:pulldown-cmark"]
 # (wikipedia_graph, wikipedia_columnar, notes_sync) and pulls in
 # `corpus-engine-notes` for the internal NoteStore users. Cheap to
 # enable — rusqlite is bundled (no system dep) and SQLite is small.
-stores = ["dep:rusqlite", "dep:notify", "dep:walkdir", "dep:corpus-engine-notes"]
+stores = ["dep:rusqlite", "dep:notify", "dep:walkdir", "dep:corpus-engine-notes", "code-facts/stores"]
 treesitter = [
     "stores",
     "dep:tree-sitter",
@@ -257,6 +269,9 @@ treesitter = [
     # gate keeps the corpus-engine surface backwards-compatible with
     # consumers that opt into `treesitter`.
     "dep:corpus-engine-scip",
+    # The fact base's grammars + SCIP dispatch now live in `code-facts`; the
+    # engine's `treesitter` forwards to its feature of the same name.
+    "code-facts/treesitter",
 ]
 
 [dev-dependencies]

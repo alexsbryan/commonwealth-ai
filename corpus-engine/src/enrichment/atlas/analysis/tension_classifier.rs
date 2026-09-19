@@ -191,7 +191,7 @@ impl<'a> AtomIndex<'a> {
         let mut claims = std::collections::HashMap::new();
         let mut states = std::collections::HashMap::new();
         let mut entities = std::collections::HashMap::new();
-        for atom in &atoms.atoms {
+        for atom in atoms.atoms() {
             match atom {
                 AtomEnvelope::Claim(c) => {
                     claims.insert(c.id.clone(), c);
@@ -381,7 +381,7 @@ pub fn classification_to_same_as_claim(
 /// atom is this".
 pub fn next_claim_ordinal(atoms: &AtomsFile) -> usize {
     atoms
-        .atoms
+        .atoms()
         .iter()
         .filter_map(|a| match a {
             AtomEnvelope::Claim(c) => {
@@ -405,11 +405,12 @@ pub fn next_claim_ordinal(atoms: &AtomsFile) -> usize {
 /// run holds. Only CLASSIFIER-grade merges are replaced — a `same_as` claim
 /// carrying any other grade came from the reconciler and is left alone.
 pub fn merge_same_as_claims(atoms: AtomsFile, new_claims: Vec<Claim>) -> (AtomsFile, usize) {
-    let before = atoms.atoms.len();
+    let before = atoms.atoms().len();
     let schema_version = atoms.schema_version.clone();
     let mut kept: Vec<AtomEnvelope> = atoms
-        .atoms
-        .into_iter()
+        .atoms()
+        .iter()
+        .cloned()
         .filter(|a| match a {
             AtomEnvelope::Claim(c) => {
                 let is_same_as = c.claim_kind.as_deref() == Some(SAME_AS_CLAIM_KIND);
@@ -425,13 +426,7 @@ pub fn merge_same_as_claims(atoms: AtomsFile, new_claims: Vec<Claim>) -> (AtomsF
         .collect();
     let replaced = before - kept.len();
     kept.extend(new_claims.into_iter().map(AtomEnvelope::Claim));
-    (
-        AtomsFile {
-            schema_version,
-            atoms: kept,
-        },
-        replaced,
-    )
+    (AtomsFile::from_atoms(schema_version, kept), replaced)
 }
 
 /// `claim_kind` of a reified merge. The ONE spelling — the Phase-6

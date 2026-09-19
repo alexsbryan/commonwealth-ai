@@ -1,0 +1,1071 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! Reading-surface HTTP — `/internal/corpus/{corpus}/chunks/…` and
+//! `/internal/corpus/{corpus}/atoms/…`.
+//!
+//! Serves the desktop's glass-box reading experience over the daemon's own
+//! `CorpusEngine`: a cited chunk, its immediate textual neighbours within one
+//! `source_doc_id`, the corpus's atlas atoms paged, an atom's card, and where
+//! else that atom appears.
+//!
+//! Loopback-only, both layers — the router-level
+//! [`crate::loopback_guard::loopback_only`] middleware plus the per-handler
+//! [`crate::loopback_guard::LocalOnly`] extractor (ARCH §5, defence in depth).
+//! Every other route family in this crate names this file's posture.
+//!
+//! Deferred, named rather than dropped: section-bounded reading — neighbours
+//! are id-ordered within `source_doc_id`, never bounded by section.
+
+use std::sync::Arc;
+
+use axum::extract::{Extension, Path, Query};
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
+use axum::routing::get;
+use axum::{Json, Router};
+use serde::{Deserialize, Serialize};
+
+use corpus_engine::atlas_traversal::{detect_atom_spans, AtomSpan as DetectorAtomSpan};
+use corpus_engine::enrichment::atlas::{
+    read_atlas_atoms, read_atlas_cross_corpus_edges, read_atlas_edges, AtomEnvelope, AtomId,
+    CrossCorpusEdge, Edge,
+};
+use corpus_engine::EnrichmentChunkRow;
+
+use crate::daemon::EmbeddedDaemon;
+use crate::http_response::{internal_error, not_found, service_unavailable};
+use crate::loopback_guard::{LocalOnly, LoopbackRouter};
+
+// ─── Response shapes ───────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChunkRecord {
+    pub chunk_id: u64,
+    pub corpus_id: String,
+    pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_doc_id: Option<String>,
+    /// Section identifier extracted from chunk metadata when the
+    /// `sectioned` chunker was used. The AtomSpan detector joins
+    /// atom evidence (`section_id`-anchored) to chunk text via
+    /// this field; non-sectioned chunks have `None` and the atom
+    /// layer no-ops gracefully on the frontend.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub section_id: Option<String>,
+    /// Atom mentions located inside this chunk's `content`. Empty
+    /// when no atlas exists for the corpus, when the chunk has no
+    /// section_id, or when no atom is anchored at this section.
+    /// Each span carries byte offsets into `content`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub atom_spans: Vec<AtomSpan>,
+    /// Raw extractor metadata (parsed JSON object). Empty object
+    /// when the chunk has no metadata. Surfaced verbatim so the
+    /// desktop can display extractor-specific fields without the
+    /// HTTP layer needing to know about every extractor's shape.
+    pub metadata: serde_json::Value,
+    /// Populated only when `corpus_id == "conversation-history"`.
+    /// The reading surface reads this to render conversation chunks
+    /// as role-tagged segments instead of book paragraphs and to
+    /// expose a "View conversation" jump back to the chat. `None`
+    /// for every other corpus (book / SEP / Wikipedia / catalog).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub conversation: Option<ConversationChunkMeta>,
+}
+
+/// Conversation-shaped metadata derived from a
+/// `conversation-history` corpus chunk. The chunk's content is the
+/// recipe-built `[role] message\n\n[role] message…` string, so the
+/// segments here are produced by parsing that delimiter — no
+/// schema change in the underlying corpus, just a frontend-friendly
+/// view of the same bytes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConversationChunkMeta {
+    /// The owning conversation's id. Equal to `source_doc_id` on
+    /// the chunk; surfaced explicitly so the desktop can wire the
+    /// "View conversation" button without re-deriving from
+    /// `source_doc_id` (which is "untyped" — could mean different
+    /// things for different corpora).
+    pub conversation_id: String,
+    /// User-or-system-set conversation title, when available.
+    /// Resolved at request time from the `conversations` table via
+    /// the daemon's `StateStore`. `None` means the conversation has
+    /// no title yet (auto-titling pending) or the lookup failed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// Last-modified epoch seconds, sourced from the same store
+    /// lookup. `None` when the lookup is unavailable. The desktop
+    /// uses this to render a "Last updated <date>" line in the
+    /// breadcrumb.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<i64>,
+    /// Role-tagged segments parsed from the chunk content. Empty
+    /// when the chunk's content doesn't carry the recipe's
+    /// `[role] …\n\n[role] …` format (defensive — degrades to
+    /// raw-text rendering on the frontend).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub segments: Vec<ConversationSegment>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ConversationSegment {
+    /// Either `"user"`, `"assistant"`, or `"system"`. The recipe
+    /// writes whatever the messages table holds in `role`; we don't
+    /// reinterpret beyond preserving the raw value.
+    pub role: String,
+    pub content: String,
+}
+
+/// Wire shape mirrors `corpus_engine::atlas_traversal::AtomSpan`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AtomSpan {
+    pub atom_id: String,
+    pub atom_type: String,
+    pub span_start: usize,
+    pub span_end: usize,
+    pub surface_form: String,
+}
+
+impl From<DetectorAtomSpan> for AtomSpan {
+    fn from(s: DetectorAtomSpan) -> Self {
+        Self {
+            atom_id: s.atom_id,
+            atom_type: s.atom_type.to_string(),
+            span_start: s.span_start,
+            span_end: s.span_end,
+            surface_form: s.surface_form,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NeighborWindowResponse {
+    pub center: ChunkRecord,
+    pub prev: Vec<ChunkRecord>,
+    pub next: Vec<ChunkRecord>,
+    /// Outbound link to the canonical document, when present
+    /// (mirrors `center.url`). The desktop surfaces this as the
+    /// "Read the full source" footer.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub outbound_url: Option<String>,
+    /// How neighbors were resolved. Currently always
+    /// `"id_within_source_doc"`; future section-anchored ordering
+    /// will set a different discriminator.
+    pub ordering: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct NeighborQuery {
+    /// Maximum number of prev / next chunks to include on each
+    /// side. Clamped to `[0, 5]` — the reading surface only ever
+    /// shows the immediately-adjacent paragraphs in v1.
+    #[serde(default = "default_radius")]
+    pub radius: usize,
+}
+
+fn default_radius() -> usize {
+    1
+}
+
+// ─── Whole-atlas atom paging (sv-surface D3) ───────────────────
+//
+// The wire form of `commands::meshapp::load_atoms` —
+// `installed_indexes()` + `read_atlas_atoms()`, then fold a
+// projection over the resulting `Vec<AtomEnvelope>`. It deliberately
+// serves ENVELOPES, not the projected rows
+// `sovereign_tools::atlas_view::list_atoms` returns: the meshapp
+// folds read type-specific fields (parcel attributes, claim
+// evidence) that a browse row does not carry.
+//
+// CORRECTION to the D3 ladder row, measured 2026-09-10. That row
+// says the desktop's "17 reads funnel through ONE primitive
+// (meshapp.rs:85-108 load_atoms) so one route serves all 17". The
+// code says THREE of them do — `meshapp_read_corpus` (:132),
+// `meshapp_search_parcels` (:168) and `meshapp_parcel_analytics`
+// (:219). Thirteen more go through a DIFFERENT primitive,
+// `resolve_index_path` (meshapp.rs:312), which hands an on-disk
+// index path to `sovereign_meshapp::{load_graph, graph_nodes,
+// subgraph, timeline, corpus_stats, …}` — the projection library
+// the desktop host and `sovereign meshapp dev` already share. The
+// seventeenth, `meshapp_open_outer_work` (:580), focuses a window
+// and emits a Tauri event; it reads nothing and is app-local by the
+// same rule as the rest of the closed set.
+//
+// So this route retires the three, and the other thirteen need a
+// `meshapp_http` route family over `sovereign-meshapp` — mechanical,
+// because every DTO those calls return already lives in that shared
+// lib, but a rung of its own and NOT this one.
+
+/// Default page size for `GET /internal/corpus/{corpus}/atoms`.
+/// Matches `atlas_view::PageCursor`'s own default so the two
+/// paginated atom surfaces answer with the same granularity.
+pub const ATOMS_PAGE_DEFAULT: usize = 200;
+
+/// Hard cap on `limit`. A request asking for more is SERVED at this
+/// size — never refused, never silently satisfied: `limit` in the
+/// response says what was actually applied, and `next_offset` says
+/// the read is unfinished (ARCH §18.3).
+///
+/// Why a cap at all, measured rather than guessed: on this host
+/// `~/.svrnmesh/indexes/wikipedia/atlas/atoms.json` is 846,211,326
+/// bytes and `commonwealth-ai-self-atlas` is 3,575,689. An
+/// unpaginated route over the first would serialise ~846 MB into
+/// one response body; the desktop's in-process `load_atoms` got
+/// away with returning the whole `Vec` because it never crossed a
+/// socket.
+pub const ATOMS_PAGE_MAX: usize = 2_000;
+
+#[derive(Debug, Deserialize)]
+pub struct AtomsPageQuery {
+    #[serde(default)]
+    pub offset: usize,
+    #[serde(default = "default_atoms_limit")]
+    pub limit: usize,
+}
+
+fn default_atoms_limit() -> usize {
+    ATOMS_PAGE_DEFAULT
+}
+
+/// One page of a corpus's atlas atoms.
+///
+/// `total` and `next_offset` are ALWAYS present, so a caller can
+/// tell a finished read from a clipped one without comparing
+/// `atoms.len()` against a limit it may not have chosen (the server
+/// clamps). `next_offset` is `None` exactly when this page reached
+/// the end.
+#[derive(Debug, Clone, Serialize)]
+pub struct CorpusAtomsPage {
+    pub corpus_id: String,
+    /// `atoms.json`'s own `schema_version`, passed through verbatim.
+    /// A client that folds type-specific fields needs it to know
+    /// which variants it may encounter.
+    pub schema_version: String,
+    /// Atom count in the whole atlas, not in this page.
+    pub total: usize,
+    pub offset: usize,
+    /// The limit the server ACTUALLY applied after clamping to
+    /// [`ATOMS_PAGE_MAX`] — which may be smaller than the one asked
+    /// for.
+    pub limit: usize,
+    /// Offset to pass next, or `null` when this page ended the read.
+    ///
+    /// Deliberately NOT `skip_serializing_if`: "the read is finished"
+    /// is an ANSWER, and a reader should not have to infer it from a
+    /// key's absence — which is indistinguishable from a field the
+    /// host is too old to send (ARCH §18.3).
+    pub next_offset: Option<usize>,
+    pub atoms: Vec<AtomEnvelope>,
+}
+
+// ─── Atom card / elsewhere shapes ──────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AtomCard {
+    pub atom_id: String,
+    pub atom_type: String,
+    pub corpus_id: String,
+    pub canonical_name: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub aliases: Vec<String>,
+    pub description: String,
+    pub salience: Option<f32>,
+    /// Enrichment depth — `"Extracted"` / `"Structural"` /
+    /// `"StructuralClassified"`. Drives language calibration in
+    /// the brief assembler; surfaced here so the desktop can
+    /// calibrate its own framing.
+    pub enrichment_depth: String,
+    /// One-hop edges from this atom — for an entity, the relations
+    /// + states + claims + events that mention it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub related: Vec<RelatedAtom>,
+    /// Cross-corpus bridges this atom participates in. Empty when
+    /// no cross-corpus edges exist for this corpus.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cross_corpus: Vec<CrossCorpusLink>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RelatedAtom {
+    pub atom_id: String,
+    pub atom_type: String,
+    pub canonical_name: String,
+    pub edge_type: String,
+    /// `"source"` if this atom is the edge source, `"target"` if
+    /// the target. Used by the desktop to phrase the relationship
+    /// in the right direction.
+    pub role: String,
+    pub confidence: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CrossCorpusLink {
+    pub peer_corpus_id: String,
+    pub peer_atom_id: String,
+    pub peer_canonical_name: String,
+    pub edge_type: String,
+    pub signal: String,
+    pub confidence: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AtomElsewhere {
+    pub atom_id: String,
+    pub corpus_id: String,
+    /// Sections in this corpus where the atom appears, with a
+    /// resolved chunk_id when one could be located. Sorted by
+    /// section_id.
+    pub same_corpus: Vec<SectionRef>,
+    pub cross_corpus: Vec<CrossCorpusLink>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SectionRef {
+    pub section_id: String,
+    /// First chunk id in this section, when resolvable. `None`
+    /// means the section_id is in atom evidence but no chunk in
+    /// the index carries it (legacy ingest, partial reshard).
+    /// The desktop should grey out the row in this case.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chunk_id: Option<u64>,
+    /// Short preview text from the atom evidence's
+    /// passage_preview, when populated.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview: Option<String>,
+}
+
+// ─── Router ────────────────────────────────────────────────────
+
+pub fn reading_router(daemon: Arc<EmbeddedDaemon>) -> Router {
+    Router::new()
+        .route("/internal/corpus/status", get(get_corpus_status))
+        .route(
+            "/internal/corpus/{corpus}/chunks/{chunk_id}",
+            get(get_chunk),
+        )
+        .route(
+            "/internal/corpus/{corpus}/chunks/{chunk_id}/neighbors",
+            get(get_neighbors),
+        )
+        .route("/internal/corpus/{corpus}/atoms", get(get_corpus_atoms))
+        .route(
+            "/internal/corpus/{corpus}/atoms/{atom_id}",
+            get(get_atom_card),
+        )
+        .route(
+            "/internal/corpus/{corpus}/atoms/{atom_id}/elsewhere",
+            get(get_atom_elsewhere),
+        )
+        .localhost_only_with(daemon)
+}
+
+// ─── Handlers ──────────────────────────────────────────────────
+
+/// GET /internal/corpus/status — the one status row, served (sv-surface
+/// rung 1).
+///
+/// The decider is `corpus_engine::engine::status::scan_corpus_rows` — the
+/// same function the CLI's `svrn corpus status` prints from, so the wire's
+/// answer and the terminal's answer cannot drift apart. Before this route
+/// the CLI walked the indexes dir privately and the desktop walked it
+/// through `installed_indexes` with different rules: the §10.6 twin the
+/// sv-surface campaign exists to delete. The row carries `state_label`
+/// beside the typed `state` so a shell over the route greps the SAME
+/// spelling the CLI prints.
+async fn get_corpus_status(
+    _: LocalOnly,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+) -> impl IntoResponse {
+    let engine = match daemon.corpus_engine() {
+        Some(e) => e,
+        None => return service_unavailable("corpus engine not initialised"),
+    };
+    match corpus_engine::engine::status::scan_corpus_rows(engine.index_dir()) {
+        Ok(rows) => (StatusCode::OK, Json(rows)).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "error": "indexes_dir_unreadable",
+                "detail": e.to_string(),
+            })),
+        )
+            .into_response(),
+    }
+}
+
+/// GET /internal/corpus/{corpus}/atoms?offset=&limit= — the whole
+/// atlas, paged (sv-surface D3).
+///
+/// The wire form of the desktop's `commands::meshapp::load_atoms`
+/// primitive: `installed_indexes()` to find the corpus, then
+/// `read_atlas_atoms()` on its `atlas/` dir. Three `meshapp_*`
+/// commands fold a projection over that `Vec<AtomEnvelope>` and are
+/// what this route retires — see the correction beside
+/// [`CorpusAtomsPage`] for why it is three and not seventeen.
+///
+/// Failure posture matches `load_atoms`, deliberately: a corpus
+/// that is not installed, or an `atoms.json` that will not parse,
+/// is an ERROR with a reason — never an empty page. (The sibling
+/// `load_atlas_atoms` helper in this file degrades to `None`
+/// instead, because there the atom layer is a garnish on a chunk
+/// read; here the atoms ARE the answer.)
+async fn get_corpus_atoms(
+    _: LocalOnly,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Path(corpus): Path<String>,
+    Query(AtomsPageQuery { offset, limit }): Query<AtomsPageQuery>,
+) -> impl IntoResponse {
+    let limit = limit.min(ATOMS_PAGE_MAX);
+    let engine = match daemon.corpus_engine() {
+        Some(e) => e,
+        None => return service_unavailable("corpus engine not initialised"),
+    };
+    let Some((atlas_dir, _index_path)) = atlas_dir_for_corpus(&engine, &corpus).await else {
+        return not_found("corpus not installed or atlas missing");
+    };
+    let file = match read_atlas_atoms(&atlas_dir) {
+        Ok(f) => f,
+        Err(e) => return internal_error(&format!("read atoms for `{corpus}`: {e}")),
+    };
+
+    let total = file.atoms().len();
+    let page: Vec<AtomEnvelope> = file
+        .atoms()
+        .iter()
+        .cloned()
+        .skip(offset)
+        .take(limit)
+        .collect();
+    let next_offset = {
+        let end = offset.saturating_add(page.len());
+        (end < total).then_some(end)
+    };
+    tracing::debug!(
+        corpus = %corpus,
+        offset,
+        limit,
+        returned = page.len(),
+        total,
+        next_offset = ?next_offset,
+        "reading_http: atlas atom page served",
+    );
+    let response = CorpusAtomsPage {
+        corpus_id: corpus,
+        schema_version: file.schema_version,
+        total,
+        offset,
+        limit,
+        next_offset,
+        atoms: page,
+    };
+    (StatusCode::OK, Json(response)).into_response()
+}
+
+async fn get_chunk(
+    _: LocalOnly,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Path((corpus, chunk_id)): Path<(String, u64)>,
+) -> impl IntoResponse {
+    let engine = match daemon.corpus_engine() {
+        Some(e) => e,
+        None => return service_unavailable("corpus engine not initialised"),
+    };
+    let index = match engine.open_index_for_corpus(&corpus).await {
+        Ok(i) => i,
+        Err(e) => return corpus_open_failure(&engine, &corpus, &e),
+    };
+    let mut rows = match index.chunks_by_ids(&[chunk_id]).await {
+        Ok(r) => r,
+        Err(e) => return internal_error(&format!("chunks_by_ids: {e}")),
+    };
+    let Some(row) = rows.pop() else {
+        return not_found("chunk not found");
+    };
+    let atlas_atoms = load_atlas_atoms(&engine, &corpus).await;
+    let conv = maybe_resolve_conversation_meta(&daemon, &corpus, &row).await;
+    let record = chunk_record_from_row_with_conv(&corpus, &row, atlas_atoms.as_deref(), conv);
+    (StatusCode::OK, Json(record)).into_response()
+}
+
+async fn get_neighbors(
+    _: LocalOnly,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Path((corpus, chunk_id)): Path<(String, u64)>,
+    Query(NeighborQuery { radius }): Query<NeighborQuery>,
+) -> impl IntoResponse {
+    let radius = radius.min(5);
+    let engine = match daemon.corpus_engine() {
+        Some(e) => e,
+        None => return service_unavailable("corpus engine not initialised"),
+    };
+    let index = match engine.open_index_for_corpus(&corpus).await {
+        Ok(i) => i,
+        Err(e) => return corpus_open_failure(&engine, &corpus, &e),
+    };
+    let window = match index.neighbors(chunk_id, radius).await {
+        Ok(Some(w)) => w,
+        Ok(None) => return not_found("chunk not found"),
+        Err(e) => return internal_error(&format!("neighbors: {e}")),
+    };
+
+    // Load atlas atoms once and reuse across all three chunks in
+    // the window. atoms.json is small (hundreds of atoms on BK);
+    // re-reading per chunk would just multiply IO without benefit.
+    let atlas_atoms = load_atlas_atoms(&engine, &corpus).await;
+    let atoms_ref = atlas_atoms.as_deref();
+
+    // Conversation augmentation: resolve once per chunk in the
+    // window. The store lookup is keyed on `source_doc_id` so
+    // adjacent paragraphs in the same conversation incur the same
+    // (cheap) SQLite hit; we don't bother memoising across the
+    // three-chunk radius.
+    let center_conv = maybe_resolve_conversation_meta(&daemon, &corpus, &window.center).await;
+    let center = chunk_record_from_row_with_conv(&corpus, &window.center, atoms_ref, center_conv);
+    let outbound_url = center.url.clone();
+    let mut prev_records = Vec::with_capacity(window.prev.len());
+    for r in &window.prev {
+        let conv = maybe_resolve_conversation_meta(&daemon, &corpus, r).await;
+        prev_records.push(chunk_record_from_row_with_conv(&corpus, r, atoms_ref, conv));
+    }
+    let prev = prev_records;
+    let mut next_records = Vec::with_capacity(window.next.len());
+    for r in &window.next {
+        let conv = maybe_resolve_conversation_meta(&daemon, &corpus, r).await;
+        next_records.push(chunk_record_from_row_with_conv(&corpus, r, atoms_ref, conv));
+    }
+    let next = next_records;
+
+    let response = NeighborWindowResponse {
+        center,
+        prev,
+        next,
+        outbound_url,
+        ordering: window.ordering.to_string(),
+    };
+    (StatusCode::OK, Json(response)).into_response()
+}
+
+async fn get_atom_card(
+    _: LocalOnly,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Path((corpus, atom_id)): Path<(String, String)>,
+) -> impl IntoResponse {
+    let engine = match daemon.corpus_engine() {
+        Some(e) => e,
+        None => return service_unavailable("corpus engine not initialised"),
+    };
+    let Some((atlas_dir, _index_path)) = atlas_dir_for_corpus(&engine, &corpus).await else {
+        return not_found("corpus not installed or atlas missing");
+    };
+
+    let atoms = match read_atlas_atoms(&atlas_dir) {
+        Ok(file) => file.atoms().to_vec(),
+        Err(e) => return internal_error(&format!("read atoms: {e}")),
+    };
+    let target_id = AtomId::from_raw(atom_id.clone());
+    let Some(atom) = atoms.iter().find(|a| *a.id() == target_id) else {
+        return not_found("atom not found");
+    };
+
+    let edges = read_atlas_edges(&atlas_dir)
+        .map(|f| f.edges)
+        .unwrap_or_default();
+    let cross_edges = read_atlas_cross_corpus_edges(&atlas_dir)
+        .map(|f| f.edges)
+        .unwrap_or_default();
+
+    let card = build_atom_card(&corpus, atom, &atoms, &edges, &cross_edges);
+    (StatusCode::OK, Json(card)).into_response()
+}
+
+async fn get_atom_elsewhere(
+    _: LocalOnly,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Path((corpus, atom_id)): Path<(String, String)>,
+) -> impl IntoResponse {
+    let engine = match daemon.corpus_engine() {
+        Some(e) => e,
+        None => return service_unavailable("corpus engine not initialised"),
+    };
+    let index = match engine.open_index_for_corpus(&corpus).await {
+        Ok(i) => i,
+        Err(e) => return corpus_open_failure(&engine, &corpus, &e),
+    };
+    let Some((atlas_dir, _)) = atlas_dir_for_corpus(&engine, &corpus).await else {
+        return not_found("corpus not installed or atlas missing");
+    };
+
+    let atoms = match read_atlas_atoms(&atlas_dir) {
+        Ok(file) => file.atoms().to_vec(),
+        Err(e) => return internal_error(&format!("read atoms: {e}")),
+    };
+    let target_id = AtomId::from_raw(atom_id.clone());
+    let Some(atom) = atoms.iter().find(|a| *a.id() == target_id) else {
+        return not_found("atom not found");
+    };
+
+    let evidence = atom.evidence_anchors();
+    let unique_sections: Vec<String> = {
+        let mut seen = std::collections::HashSet::new();
+        evidence
+            .iter()
+            .map(|(s, _)| s.clone())
+            .filter(|s| seen.insert(s.clone()))
+            .collect()
+    };
+
+    let section_to_chunk = match index.resolve_sections_to_chunks(&unique_sections).await {
+        Ok(m) => m,
+        Err(e) => return internal_error(&format!("resolve_sections: {e}")),
+    };
+
+    let mut same_corpus: Vec<SectionRef> = Vec::new();
+    let mut seen_sections = std::collections::HashSet::new();
+    for (section_id, preview) in &evidence {
+        if !seen_sections.insert(section_id.clone()) {
+            continue;
+        }
+        same_corpus.push(SectionRef {
+            section_id: section_id.clone(),
+            chunk_id: section_to_chunk.get(section_id).copied(),
+            preview: preview.clone(),
+        });
+    }
+    same_corpus.sort_by(|a, b| a.section_id.cmp(&b.section_id));
+
+    let cross_edges = read_atlas_cross_corpus_edges(&atlas_dir)
+        .map(|f| f.edges)
+        .unwrap_or_default();
+    let cross_corpus = cross_corpus_links_for_atom(&target_id, &cross_edges);
+
+    let response = AtomElsewhere {
+        atom_id: target_id.as_str().to_string(),
+        corpus_id: corpus,
+        same_corpus,
+        cross_corpus,
+    };
+    (StatusCode::OK, Json(response)).into_response()
+}
+
+// ─── Helpers ───────────────────────────────────────────────────
+
+/// Load this corpus's atlas atoms.json once per request. Returns
+/// `None` when the corpus has no atlas (no atom layer to surface)
+/// or when reading the atoms file fails — both degrade silently to
+/// "no atom spans" rather than failing the whole reading-surface
+/// fetch.
+async fn load_atlas_atoms(
+    engine: &Arc<corpus_engine::CorpusEngine>,
+    corpus_id: &str,
+) -> Option<Vec<AtomEnvelope>> {
+    let (atlas_dir, _) = atlas_dir_for_corpus(engine, corpus_id).await?;
+    match read_atlas_atoms(&atlas_dir) {
+        Ok(file) => Some(file.atoms().to_vec()),
+        Err(e) => {
+            tracing::warn!(
+                corpus = %corpus_id,
+                atlas_dir = ?atlas_dir,
+                error = %e,
+                "reading_http: atlas atoms.json read failed; atom layer disabled for this chunk",
+            );
+            None
+        }
+    }
+}
+
+/// Resolve `(atlas_dir, index_dir)` for a corpus, when both exist.
+async fn atlas_dir_for_corpus(
+    engine: &Arc<corpus_engine::CorpusEngine>,
+    corpus_id: &str,
+) -> Option<(std::path::PathBuf, std::path::PathBuf)> {
+    let installed = engine.installed_indexes().await.ok()?;
+    let entry = installed.iter().find(|i| i.corpus_id == corpus_id)?;
+    let atlas_dir = entry.path.join("atlas");
+    if !atlas_dir.exists() {
+        return None;
+    }
+    Some((atlas_dir, entry.path.clone()))
+}
+
+/// Convert an `AtomEnvelope` to the wire shape: render atom-type
+/// label + extract surface fields. Mirrors the
+/// `AtomType::label` mapping; kept inline
+/// here to avoid leaking the spans module's pub seam.
+fn build_atom_card(
+    corpus_id: &str,
+    atom: &AtomEnvelope,
+    all_atoms: &[AtomEnvelope],
+    edges: &[Edge],
+    cross_edges: &[CrossCorpusEdge],
+) -> AtomCard {
+    let atom_type = atom.atom_type().label().to_string();
+    let (canonical_name, aliases, description, salience) = atom_surface_fields(atom);
+
+    let target_id = atom.id();
+    let related: Vec<RelatedAtom> = edges
+        .iter()
+        .filter(|e| e.source == *target_id || e.target == *target_id)
+        .filter_map(|e| {
+            let (other_id, role) = if e.source == *target_id {
+                (&e.target, "source")
+            } else {
+                (&e.source, "target")
+            };
+            let other = all_atoms.iter().find(|a| *a.id() == *other_id)?;
+            let (other_name, _, _, _) = atom_surface_fields(other);
+            Some(RelatedAtom {
+                atom_id: other_id.as_str().to_string(),
+                atom_type: other.atom_type().label().to_string(),
+                canonical_name: other_name,
+                edge_type: e.edge_type.label().to_string(),
+                role: role.to_string(),
+                confidence: e.confidence,
+            })
+        })
+        .collect();
+
+    let cross_corpus = cross_corpus_links_for_atom(target_id, cross_edges);
+
+    AtomCard {
+        atom_id: target_id.as_str().to_string(),
+        atom_type,
+        corpus_id: corpus_id.to_string(),
+        canonical_name,
+        aliases,
+        description,
+        salience,
+        enrichment_depth: format!("{:?}", atom.enrichment_depth()),
+        related,
+        cross_corpus,
+    }
+}
+
+use sovereign_mesh::reading_formatters::atom_surface_fields;
+
+fn cross_corpus_links_for_atom(
+    atom_id: &AtomId,
+    edges: &[CrossCorpusEdge],
+) -> Vec<CrossCorpusLink> {
+    edges
+        .iter()
+        .filter(|e| e.edge.source == *atom_id || e.edge.target == *atom_id)
+        .map(|e| CrossCorpusLink {
+            peer_corpus_id: e.peer.corpus_id.clone(),
+            peer_atom_id: e.peer.atom_id.as_str().to_string(),
+            peer_canonical_name: e.peer.canonical_name.clone(),
+            edge_type: e.edge.edge_type.label().to_string(),
+            signal: e.trace.signal.clone(),
+            confidence: e.trace.confidence,
+        })
+        .collect()
+}
+
+pub(crate) fn chunk_record_from_row_with_conv(
+    corpus_id: &str,
+    row: &EnrichmentChunkRow,
+    atoms: Option<&[AtomEnvelope]>,
+    conversation: Option<ConversationChunkMeta>,
+) -> ChunkRecord {
+    let metadata: serde_json::Value = row
+        .metadata_raw
+        .as_deref()
+        .and_then(|m| serde_json::from_str(m).ok())
+        .unwrap_or_else(|| serde_json::json!({}));
+    let section_id = metadata
+        .as_object()
+        .and_then(|obj| obj.get("section_id"))
+        .and_then(|v| v.as_str())
+        .map(String::from);
+
+    let atom_spans = match (atoms, section_id.as_deref()) {
+        (Some(atoms), Some(_)) => detect_atom_spans(&row.content, section_id.as_deref(), atoms)
+            .into_iter()
+            .map(AtomSpan::from)
+            .collect(),
+        _ => Vec::new(),
+    };
+
+    ChunkRecord {
+        chunk_id: row.id,
+        corpus_id: corpus_id.to_string(),
+        content: row.content.clone(),
+        title: row.title.clone(),
+        url: row.url.clone(),
+        source_doc_id: row.source_doc_id.clone(),
+        section_id,
+        atom_spans,
+        metadata,
+        conversation,
+    }
+}
+
+/// The `conversation-history` corpus_id is special-cased on the
+/// reading surface. Centralised here so handlers don't repeat the
+/// magic string and a future view-id rename has one site to update.
+pub(crate) const CONVERSATION_HISTORY_CORPUS_ID: &str = "conversation-history";
+
+/// Parse the recipe's `[role] msg\n\n[role] msg…` chunk content
+/// into role-tagged segments. Returns an empty vector when the
+/// content doesn't carry the leading `[role]` marker, so the
+/// frontend can fall back to plain rendering on legacy / non-
+/// conversation chunks misclassified as conversation.
+pub(crate) fn parse_conversation_segments(content: &str) -> Vec<ConversationSegment> {
+    // Recipe writes the marker at the start of every line that
+    // begins a message. Splitting on `\n\n[` (after stripping the
+    // initial `[`) recovers the per-message blocks robustly even
+    // when a message body contains lone `[` characters.
+    if !content.starts_with('[') {
+        return Vec::new();
+    }
+    let mut segments: Vec<ConversationSegment> = Vec::new();
+    // Walk the content message-by-message. Each message begins at
+    // `[` and runs until the next `\n\n[` (or end-of-string).
+    let mut idx = 0usize;
+    while idx < content.len() {
+        if !content[idx..].starts_with('[') {
+            break;
+        }
+        // Find the closing `]` of the role tag.
+        let role_close = match content[idx + 1..].find(']') {
+            Some(rel) => idx + 1 + rel,
+            None => break, // malformed — bail
+        };
+        let role = content[idx + 1..role_close].to_string();
+        // Body starts after `] ` (the recipe inserts a space) but
+        // we accept `]` alone too.
+        let body_start = if content[role_close + 1..].starts_with(' ') {
+            role_close + 2
+        } else {
+            role_close + 1
+        };
+        // Body ends at `\n\n[` or end of content.
+        let body_end = match content[body_start..].find("\n\n[") {
+            Some(rel) => body_start + rel,
+            None => content.len(),
+        };
+        let body = content[body_start..body_end].to_string();
+        if !role.is_empty() {
+            segments.push(ConversationSegment {
+                role,
+                content: body,
+            });
+        }
+        // Advance past the trailing `\n\n` separator.
+        idx = if body_end == content.len() {
+            content.len()
+        } else {
+            body_end + 2 // skip "\n\n", land on `[`
+        };
+    }
+    segments
+}
+
+/// Look up conversation metadata for a chunk, when applicable.
+/// Returns `None` for non-conversation corpora and for conversation
+/// chunks whose `source_doc_id` couldn't be resolved (deleted
+/// conversation, store unavailable). Errors are swallowed because
+/// the reading surface should still render the chunk text even when
+/// the augmentation fails — a partial card beats a failed request.
+pub(crate) async fn maybe_resolve_conversation_meta(
+    daemon: &EmbeddedDaemon,
+    corpus_id: &str,
+    row: &EnrichmentChunkRow,
+) -> Option<ConversationChunkMeta> {
+    if corpus_id != CONVERSATION_HISTORY_CORPUS_ID {
+        return None;
+    }
+    let conversation_id = row.source_doc_id.clone()?;
+    let segments = parse_conversation_segments(&row.content);
+    let store = daemon.state_store();
+    let (title, updated_at) = match store {
+        Some(s) => match s.get_conversation(&conversation_id).await {
+            Ok(c) => (c.title.clone(), Some(c.updated_at)),
+            Err(_) => (None, None),
+        },
+        None => (None, None),
+    };
+    Some(ConversationChunkMeta {
+        conversation_id,
+        title,
+        updated_at,
+        segments,
+    })
+}
+
+/// Classify an `open_index_for_corpus` failure into "the caller asked for a
+/// corpus that isn't here" (404) versus "this corpus IS here and I could not
+/// open it" (503).
+///
+/// Why this exists: every one of these handlers used to answer `not_found` for
+/// both, and the desktop's `daemon_reading_get` maps ANY 404 to `Ok(None)` —
+/// which the frontend renders as a plain "no such chunk". So a structurally
+/// broken index was indistinguishable from an absent one, in Attach mode,
+/// which is the mode every shipped desktop runs. The specific fault that hid
+/// behind it: a solo ingest whose `promote_single_shard` refused a non-empty
+/// canonical dir, leaving all the Lance data in `<corpus>-partition-*` and the
+/// canonical dir without `_corpus_meta.json`. Retrieval still found the chunks
+/// (`installed_indexes()` enumerates directories and keys off each meta's
+/// `corpus_id`, which the partition carries), so every citation resolved to a
+/// silent null while search looked perfectly healthy.
+///
+/// The un-promoted case gets named explicitly rather than folded into a generic
+/// 503: it is the difference between "your disk is corrupt" and "finalise never
+/// ran, the data is right there".
+fn corpus_open_failure(
+    engine: &corpus_engine::CorpusEngine,
+    corpus: &str,
+    err: &dyn std::fmt::Display,
+) -> axum::response::Response {
+    let canonical = engine.canonical_path(corpus);
+
+    if !canonical.join("_corpus_meta.json").exists() {
+        if let Some(partition) = stranded_partition(engine, corpus) {
+            return service_unavailable(&format!(
+                "corpus '{corpus}' has un-promoted ingest data at {} — the canonical \
+                 index at {} is missing _corpus_meta.json, so finalise_solo_ingest \
+                 never completed. Search may still work (it resolves corpora by \
+                 metadata, not directory name) while every citation into this corpus \
+                 fails to dereference. Underlying open error: {err}",
+                partition.display(),
+                canonical.display(),
+            ));
+        }
+        if !canonical.exists() {
+            return not_found(&format!("corpus '{corpus}' is not installed: {err}"));
+        }
+    }
+
+    service_unavailable(&format!(
+        "corpus '{corpus}' is installed at {} but its index could not be opened: {err}",
+        canonical.display(),
+    ))
+}
+
+/// A `<corpus>-partition-*` sibling that carries `_corpus_meta.json` — i.e. a
+/// completed ingest whose promotion to canonical never landed.
+fn stranded_partition(
+    engine: &corpus_engine::CorpusEngine,
+    corpus: &str,
+) -> Option<std::path::PathBuf> {
+    let prefix = format!("{corpus}-partition-");
+    std::fs::read_dir(engine.index_dir())
+        .ok()?
+        .flatten()
+        .map(|e| e.path())
+        .find(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.starts_with(&prefix))
+                && p.join("_corpus_meta.json").exists()
+        })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_radius_is_one() {
+        assert_eq!(default_radius(), 1);
+    }
+
+    #[test]
+    fn chunk_record_extracts_section_id_from_metadata() {
+        let row = EnrichmentChunkRow {
+            id: 7,
+            content: "passage".into(),
+            title: Some("BK Ch 1".into()),
+            url: Some("https://example.org/bk".into()),
+            metadata_raw: Some(r#"{"section_id":"sec_0001","other":"x"}"#.into()),
+            source_doc_id: Some("brothers_karamazov".into()),
+        };
+        let record = chunk_record_from_row_with_conv("brothers_karamazov", &row, None, None);
+        assert_eq!(record.chunk_id, 7);
+        assert_eq!(record.section_id.as_deref(), Some("sec_0001"));
+        assert_eq!(record.source_doc_id.as_deref(), Some("brothers_karamazov"));
+        assert!(record.atom_spans.is_empty(), "no atoms passed");
+    }
+
+    #[test]
+    fn chunk_record_handles_missing_metadata() {
+        let row = EnrichmentChunkRow {
+            id: 1,
+            content: "x".into(),
+            title: None,
+            url: None,
+            metadata_raw: None,
+            source_doc_id: None,
+        };
+        let record = chunk_record_from_row_with_conv("any", &row, None, None);
+        assert!(record.section_id.is_none());
+        assert_eq!(record.metadata, serde_json::json!({}));
+        assert!(record.atom_spans.is_empty());
+        assert!(
+            record.conversation.is_none(),
+            "non-conversation corpora must not populate conversation meta"
+        );
+    }
+
+    #[test]
+    fn parse_conversation_segments_handles_two_message_chunk() {
+        let content = "[user] How does Schrödinger frame negative entropy?\n\n\
+                       [assistant] He argues life sustains order by feeding on it.";
+        let segs = parse_conversation_segments(content);
+        assert_eq!(segs.len(), 2);
+        assert_eq!(segs[0].role, "user");
+        assert_eq!(
+            segs[0].content,
+            "How does Schrödinger frame negative entropy?"
+        );
+        assert_eq!(segs[1].role, "assistant");
+        assert_eq!(
+            segs[1].content,
+            "He argues life sustains order by feeding on it."
+        );
+    }
+
+    #[test]
+    fn parse_conversation_segments_handles_three_messages_with_inline_brackets() {
+        // Body containing a lone `[` must NOT be treated as a new
+        // role tag — the splitter only re-arms after `\n\n[`.
+        let content = "[user] What about [bracket] inside?\n\n\
+                       [assistant] Brackets like [foo] in prose stay attached.\n\n\
+                       [user] Got it.";
+        let segs = parse_conversation_segments(content);
+        assert_eq!(segs.len(), 3);
+        assert_eq!(segs[0].content, "What about [bracket] inside?");
+        assert_eq!(
+            segs[1].content,
+            "Brackets like [foo] in prose stay attached."
+        );
+        assert_eq!(segs[2].content, "Got it.");
+    }
+
+    #[test]
+    fn parse_conversation_segments_returns_empty_on_non_role_content() {
+        // A chunk that doesn't start with `[role]` (e.g. mid-section
+        // chunk from a different corpus or legacy ingest) returns
+        // empty so the frontend renders the raw content.
+        let content = "Plain prose paragraph without role markers.";
+        assert!(parse_conversation_segments(content).is_empty());
+    }
+
+    #[test]
+    fn parse_conversation_segments_handles_empty_string() {
+        assert!(parse_conversation_segments("").is_empty());
+    }
+
+    #[test]
+    fn parse_conversation_segments_handles_malformed_role_tag() {
+        // `[user` (missing close bracket) is malformed — return what
+        // we got rather than panic.
+        let content = "[user no close bracket";
+        let segs = parse_conversation_segments(content);
+        assert!(
+            segs.is_empty(),
+            "malformed role tag should not produce a segment"
+        );
+    }
+}

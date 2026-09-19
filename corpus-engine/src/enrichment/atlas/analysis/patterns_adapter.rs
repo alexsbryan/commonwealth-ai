@@ -84,7 +84,7 @@ pub struct InvestigationGraph {
 /// through unchanged, so the same atlas yields the same findings.
 pub fn to_investigation_graph(atoms: &AtomsFile) -> InvestigationGraph {
     let mut out = InvestigationGraph::default();
-    for a in &atoms.atoms {
+    for a in atoms.atoms() {
         match a {
             AtomEnvelope::Entity(e) => out.entities.push(InvestigationEntity {
                 id: e.id.as_str().to_string(),
@@ -172,23 +172,20 @@ mod tests {
 
     #[test]
     fn patterns_adapter_maps_two_participant_relations() {
-        let atoms = AtomsFile {
-            schema_version: AtomsFile::SCHEMA_VERSION.to_string(),
-            atoms: vec![
-                entity(1, "Aldfrith penny", "coin"),
-                entity(2, "Eoforwic", "mint"),
-                relation(1, "struck_at", vec![AtomId::entity(1), AtomId::entity(2)]),
-                // Three participants: no unambiguous from/to, so skipped
-                // and COUNTED.
-                relation(
-                    2,
-                    "struck_at",
-                    vec![AtomId::entity(1), AtomId::entity(2), AtomId::entity(1)],
-                ),
-                // One participant: same rule.
-                relation(3, "struck_at", vec![AtomId::entity(1)]),
-            ],
-        };
+        let atoms = AtomsFile::new(vec![
+            entity(1, "Aldfrith penny", "coin"),
+            entity(2, "Eoforwic", "mint"),
+            relation(1, "struck_at", vec![AtomId::entity(1), AtomId::entity(2)]),
+            // Three participants: no unambiguous from/to, so skipped
+            // and COUNTED.
+            relation(
+                2,
+                "struck_at",
+                vec![AtomId::entity(1), AtomId::entity(2), AtomId::entity(1)],
+            ),
+            // One participant: same rule.
+            relation(3, "struck_at", vec![AtomId::entity(1)]),
+        ]);
         let g = to_investigation_graph(&atoms);
 
         assert_eq!(g.entities.len(), 2);
@@ -210,10 +207,7 @@ mod tests {
 
     #[test]
     fn an_atlas_with_no_relations_projects_an_empty_edge_set() {
-        let atoms = AtomsFile {
-            schema_version: AtomsFile::SCHEMA_VERSION.to_string(),
-            atoms: vec![entity(1, "Eoforwic", "mint")],
-        };
+        let atoms = AtomsFile::new(vec![entity(1, "Eoforwic", "mint")]);
         let g = to_investigation_graph(&atoms);
         assert_eq!(g.entities.len(), 1);
         assert!(g.relationships.is_empty());

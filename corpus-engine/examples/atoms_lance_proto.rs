@@ -339,7 +339,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 1. Parse the real atoms.json (the v1 canonical source).
     let t0 = Instant::now();
     let atoms = corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir)?;
-    let n = atoms.atoms.len();
+    let n = atoms.atoms().len();
     println!(
         "parse atoms.json: {} ms | {n} atoms | RSS {} MB",
         t0.elapsed().as_millis(),
@@ -360,7 +360,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let limit = cap.unwrap_or(usize::MAX);
     let mut written = 0usize;
     let mut buf: Vec<Row> = Vec::with_capacity(BATCH.min(limit));
-    for atom in atoms.atoms.iter().take(limit) {
+    for atom in atoms.atoms().iter().take(limit) {
         buf.push(project(atom));
         if buf.len() == BATCH {
             tbl.add(vec![batch(&buf, &sch, embed_dims, written)])

@@ -2,7 +2,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::context::{build_context, format_history_as_prompt};
+use crate::context::{build_context, format_history_as_prompt, PrincipalScope};
 use crate::error::Result;
 use crate::executor::{Executor, TaskContext};
 use crate::memory;
@@ -339,8 +339,9 @@ pub struct Runtime {
     /// wires sovereign-tools' `LocalCorpusManager` here.
     pub sensitive_corpora: Option<Arc<dyn crate::traits::SensitiveCorpusOracle>>,
     /// Resolves the per-request principal from a conversation id so
-    /// `build_context` can hide other principals' `Private` corpora on a
-    /// multi-user hub. `None` (desktop / CLI / tests) ⇒ no corpus is hidden.
+    /// `build_context` hides other principals' `Private` corpora. `None` here
+    /// (no resolver) hides nothing; a wired resolver that cannot name the
+    /// caller resolves to [`PrincipalScope::Unresolved`] and refuses.
     pub corpus_principal: Option<Arc<dyn crate::traits::PrincipalResolver>>,
     /// Per-folder metadata oracle. Folder-ingest v1 §6.3 — when
     /// retrieval pulls chunks from a watched-folder corpus, this
@@ -436,10 +437,10 @@ pub struct Runtime {
 ///   the *field* non-optional means giving every test harness a real engine,
 ///   which is a separate change; naming the absence is what this one buys.
 /// - `sensitive_corpora: None` still means "no sensitivity gate applied, all
-///   corpora eligible" — a privacy control whose absence is permissive, which
-///   §3.5 flags as §7 inverted. A host must now write the `None`, so the
-///   choice is at least visible at the call site. The semantics are unchanged
-///   and still wrong.
+///   corpora eligible" — permissive by absence, which §3.5 flags as §7
+///   inverted. The daemon now resolves it (`REVIEW-build-corpus-ceiling`); the
+///   field semantics are unchanged, and a host with no oracle still writes the
+///   `None` where the choice is visible.
 pub struct RuntimeParts {
     pub inference: Arc<dyn InferenceProvider>,
     pub router: Box<dyn Router>,
@@ -663,6 +664,12 @@ impl Runtime {
         }
     }
 
+    /// Resolve this turn's caller into the scope [`build_context`] consumes;
+    /// [`PrincipalScope`] carries why an unattributable caller refuses.
+    pub(crate) fn principal_scope(&self, conversation_id: &str) -> PrincipalScope {
+        PrincipalScope::from_resolver(self.corpus_principal.as_deref(), conversation_id)
+    }
+
     /// Merge this turn's fresh relational recall with the entries the
     /// witness has actually SPOKEN ABOUT in this conversation (pinned
     /// by `pin_referenced_memory` from the grounding verifier's
@@ -822,7 +829,8 @@ impl Runtime {
     pub async fn end_conversation(&self, conversation_id: &str) -> Result<()> {
         // Memory-extraction pass at conversation end — no retrieval, so no
         // principal scoping is needed.
-        let context = build_context(self.store.as_ref(), conversation_id, "", None).await?;
+        let scope = PrincipalScope::Unscoped;
+        let context = build_context(self.store.as_ref(), conversation_id, "", scope).await?;
         if context.conversation.messages.len() < 4 {
             return Ok(());
         }

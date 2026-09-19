@@ -24,7 +24,7 @@ use sovereign_core::types::{
     Effect, Idempotency, Latency, Scope, StepOutput, ToolContext, ToolDescriptor,
 };
 use sovereign_core::Tool;
-use sovereign_mesh::mcp_router::{mcp_router, FeatureRoot, McpNotifier};
+use sovereign_daemon::mcp_router::{mcp_router, FeatureRoot, McpNotifier};
 
 /// Stub tool — we only care that the registry resolves the id and
 /// the dispatch fires; the body is a single-line text response.

@@ -405,7 +405,7 @@ pub fn build_entity_inventory(index_dir: &Path) -> EntityInventory {
         let Ok(atoms_file) = read_atlas_atoms(&atlas_dir) else {
             continue;
         };
-        for atom in &atoms_file.atoms {
+        for atom in atoms_file.atoms() {
             if let AtomEnvelope::Entity(e) = atom {
                 let name = e.canonical_name.trim();
                 if !name.is_empty() {

@@ -184,7 +184,7 @@ async fn cmd_facts(args: &[String]) -> i32 {
         roots = vec![".".to_string()];
     }
 
-    let facts = corpus_engine::facts::extract_facts(&repo, &roots);
+    let facts = code_facts::facts::extract_facts(&repo, &roots);
 
     let out_dir = sovereign_root().join("indexes").join(&corpus_id);
     if let Err(e) = std::fs::create_dir_all(&out_dir) {
@@ -194,7 +194,7 @@ async fn cmd_facts(args: &[String]) -> i32 {
     // Write the SQLite fact store (per-file patchable), not the legacy
     // monolithic facts.json. `replace_all` swaps this corpus's facts atomically.
     let out = out_dir.join("facts.db");
-    let store = match corpus_engine::facts_store::FactStore::open(&out) {
+    let store = match code_facts::facts_store::FactStore::open(&out) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("cannot open fact store {}: {e}", out.display());
@@ -381,7 +381,7 @@ async fn tag_claim(
     model: &str,
     stmt: &str,
     conds: &[String],
-) -> corpus_engine::facts_check::Tag {
+) -> code_facts::facts_check::Tag {
     let user = format!("CLAIM: {stmt}\nCONDITIONS: {conds:?}");
     let body = serde_json::json!({
         "model": model, "temperature": 0.1, "max_tokens": 300,
@@ -404,7 +404,7 @@ async fn tag_claim(
             .as_str()?;
         let start = content.find('{')?;
         let end = content.rfind('}')? + 1;
-        serde_json::from_str::<corpus_engine::facts_check::Tag>(&content[start..end]).ok()
+        serde_json::from_str::<code_facts::facts_check::Tag>(&content[start..end]).ok()
     };
     attempt.await.unwrap_or_default()
 }
@@ -469,7 +469,7 @@ async fn cmd_check_spec(args: &[String]) -> i32 {
     // Load facts from the SQLite store (migrating a legacy facts.json in on
     // first read). `check-spec`'s deterministic checks iterate `Facts` in
     // memory, so we reconstruct the in-memory shape for this one corpus.
-    let facts = match corpus_engine::facts_store::FactStore::open_for_dir(&idx, &corpus).await {
+    let facts = match code_facts::facts_store::FactStore::open_for_dir(&idx, &corpus).await {
         Ok(Some(store)) => match store.load_all(&corpus).await {
             Ok(f) => f,
             Err(e) => {
@@ -492,7 +492,7 @@ async fn cmd_check_spec(args: &[String]) -> i32 {
     let graph =
         corpus_engine_scip::scip_graph::ScipGraph::open(&idx.join("scip_graph.db"), &corpus).ok();
     let adj = match &graph {
-        Some(g) => Some(corpus_engine::facts_check::build_adjacency(g).await), // load edges once → fast in-memory BFS
+        Some(g) => Some(code_facts::facts_check::build_adjacency(g).await), // load edges once → fast in-memory BFS
         None => None,
     };
     let entries = load_entries(&sovereign_root(), &corpus);
@@ -535,7 +535,7 @@ async fn cmd_check_spec(args: &[String]) -> i32 {
     let (mut drift, mut corrob, mut unver, mut fuzzy_used) = (0u32, 0u32, 0u32, 0u32);
     for (stmt, conds) in &claims {
         let tag = tag_claim(&http, port, &chat_model, stmt, conds).await;
-        let v = corpus_engine::facts_check::check_claim(
+        let v = code_facts::facts_check::check_claim(
             &facts,
             adj.as_ref(),
             &entries,
@@ -547,16 +547,15 @@ async fn cmd_check_spec(args: &[String]) -> i32 {
         // deterministic-first: a cited drift/corroborated wins; on abstention, fall back to the
         // fuzzy spec-reconcile verdict (labeled, lower-confidence) if one exists.
         let (verdict, source, receipt) = match v.kind {
-            corpus_engine::facts_check::VerdictKind::Drift => {
+            code_facts::facts_check::VerdictKind::Drift => {
                 drift += 1;
                 ("DRIFT".to_string(), "det", v.receipt)
             }
-            corpus_engine::facts_check::VerdictKind::Corroborated => {
+            code_facts::facts_check::VerdictKind::Corroborated => {
                 corrob += 1;
                 ("corrob".to_string(), "det", v.receipt)
             }
-            corpus_engine::facts_check::VerdictKind::Unverifiable => match fuzzy.get(stmt.as_str())
-            {
+            code_facts::facts_check::VerdictKind::Unverifiable => match fuzzy.get(stmt.as_str()) {
                 Some(fk) => {
                     fuzzy_used += 1;
                     (
@@ -1838,7 +1837,7 @@ fn local_brief_overlaps(
     if !mesh_db.exists() {
         return Vec::new();
     }
-    let Ok(mesh_store) = sovereign_mesh::peer_adapter::MeshPeerStore::open(&mesh_db) else {
+    let Ok(mesh_store) = sovereign_mesh::peer_adapter::MeshReplicatedKv::open(&mesh_db) else {
         return Vec::new();
     };
     let node_id = crate::atlas_identity::atlas_node_id();

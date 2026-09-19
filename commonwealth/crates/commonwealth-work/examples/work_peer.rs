@@ -10,7 +10,7 @@
 //! commonwealth substrate with **zero sovereign-\* and zero corpus-engine**.
 //! This is it: a third party's whole program, holding a roster key, folding
 //! the `work` journal, leasing, running and reporting — the same lease → run →
-//! renew → report shape as `sovereign-mesh/src/work_donor.rs`, with none of
+//! renew → report shape as `sovereign-daemon/src/work_donor.rs`, with none of
 //! `sovereign-mesh` underneath it. Its entire import surface is
 //! `commonwealth-work`, `commonwealth-rail`, `commonwealth-core`,
 //! `oicp-types`, `kernel-types` and `tokio`.

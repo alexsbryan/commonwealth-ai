@@ -31,8 +31,8 @@ use std::sync::Arc;
 use commonwealth_state::MeshStore;
 use corpus_engine::index::{CorpusIndex, InsertChunk};
 use corpus_engine::{CorpusEngine, EmbedFn};
-use sovereign_mesh::daemon::EmbeddedDaemon;
-use sovereign_mesh::reading_http::reading_router;
+use sovereign_daemon::daemon::EmbeddedDaemon;
+use sovereign_daemon::reading_http::reading_router;
 
 use crate::common;
 use crate::common::spawn_router;

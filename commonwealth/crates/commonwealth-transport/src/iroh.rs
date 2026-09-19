@@ -96,7 +96,7 @@ pub const CLIENT_ALPN: &[u8] = b"cwth/client/0";
 ///
 /// So a guest gets its own protocol, forwarded to a SECOND bind of the client
 /// router whose auth layer does not trust loopback
-/// (`sovereign_api::client_auth::ClientAuthPolicy`). A guest connection
+/// (`sovereign_daemon::client_auth::ClientAuthPolicy`). A guest connection
 /// cannot reach the trusted listener, and a peer's inference is untouched.
 pub const GUEST_ALPN: &[u8] = b"cwth/guest/0";
 
@@ -1627,7 +1627,7 @@ mod tests {
 
     /// An unchanged contact re-resolves to the SAME bridge with no rebind. This
     /// is what makes the mesh's per-tick re-mint of a known bridged worker
-    /// (`sovereign_mesh::daemon::reaffirm_plan` → `Rebridge`) free: it replaces
+    /// (`sovereign_daemon::daemon::reaffirm_plan` → `Rebridge`) free: it replaces
     /// a `/status` probe that rode the same congested iroh path as the tunnel.
     #[tokio::test]
     async fn repeated_resolution_of_an_unchanged_peer_reuses_the_bridge() {

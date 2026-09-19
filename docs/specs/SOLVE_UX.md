@@ -1,7 +1,7 @@
 # SOLVE — give the daemon a coding goal, get a green tree back
 
 Status: built + live-verified 2026-07-07, both paths. Daemon job
-host in `sovereign-cli-daemon/src/daemon_cmd/solve_http.rs` (+ MCP
+host in `sovereign-daemon/src/solve_http.rs` (+ MCP
 tools in `solve_tools.rs`, CLI in `sovereign-cli-llm/src/solve_cmd.rs`,
 composition in `sovereign-tdd/src/tasks/solve.rs`). Fix path:
 failing tests → reached with a minimal diff, rounds streamed live.

@@ -1,0 +1,33 @@
+[package]
+name = "understanding-atlas"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Understanding's pure tier — the arithmetic over the published language: analysis, resolution by name, classification, the ground walk, domains, ontology, reconciliation, pipeline types and schemas, meta-atlas and traversal logic. Names the language, kernel-types and the index leaf's row types; no async fn."
+
+# The pure tier (DE "Step 7, redrawn", "The shape"). It may name
+# `understanding-vocab` (the published language), `kernel-types`, the row types
+# the `corpus-index` leaf publishes, and the `oplog` journal — never
+# `corpus-engine`, and it carries no `async fn`. The dependencies below are
+# wired from the files the tier HOLDS (domains
+# `REVIEW-build-understanding-crate-tree`): `chrono` is `enrichment::ontology::
+# clock`'s date parser (the row's list omitted it — corrected in the DECISIONS
+# entry); `tracing` is the glassbox surface the analysis passes will carry.
+
+[dependencies]
+understanding-vocab = { workspace = true }
+corpus-index = { workspace = true }
+kernel-types = { workspace = true }
+oplog = { workspace = true }
+chrono = { workspace = true }
+regex = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+# `enrichment::atlas::fold`'s NFD diacritic strip (moved from corpus-engine's
+# `resolution.rs` by dm-understanding-pure-1). Same version as corpus-engine.
+unicode-normalization = "0.1"
+
+[lints]
+workspace = true

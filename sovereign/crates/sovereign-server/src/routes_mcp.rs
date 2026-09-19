@@ -41,7 +41,7 @@ use sovereign_core::types::{StepOutput, ToolContext};
 //
 // Imported, not re-declared. The envelope is a wire contract, so it lives at
 // layer 0 in `oicp-types` (reached here through `sovereign_core`'s re-export,
-// per ARCH §8.3) and `sovereign_mesh::mcp_router` imports the same one.
+// per ARCH §8.3) and `sovereign_daemon::mcp_router` imports the same one.
 //
 // Until 2026-08-21 this file and the daemon's router each declared their own
 // and had drifted. `id` is `Option<Value>` here now instead of a `Value`

@@ -374,7 +374,7 @@ pub async fn cmd_spec_intel(args: &[String]) -> i32 {
             .with_temperature(TEMPERATURE)
             .with_max_output_tokens(MAX_OUTPUT_TOKENS);
 
-        let raw = match (chat)(&prompt).await {
+        let raw = match (chat)(&prompt, None).await {
             Ok(s) => s,
             Err(e) => {
                 failed += 1;

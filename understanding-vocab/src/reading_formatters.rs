@@ -1,0 +1,137 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! Pure formatters used by the glass-box reading surface.
+//!
+//! Why this lives outside `reading_http`: the projection here is a
+//! per-variant match over `AtomEnvelope` with no I/O, no async, and no
+//! daemon state, which keeps `reading_http.rs` under ARCH §3.1's
+//! "justify yourself" threshold.
+//!
+//! What used to live here and deliberately no longer does: the atom and
+//! edge type LABELS, and the evidence-anchor extraction. Each was
+//! duplicated into sovereign-desktop, and in both cases the two copies had
+//! DIVERGED — the desktop's answered `unreachable!` for kinds the resolver
+//! actually emits. They are accessors on the atom now (`AtomType::label`,
+//! `EdgeType::label`, `AtomEnvelope::evidence_anchors`), so there is one
+//! spelling per closed set. What is left is the one projection that is
+//! genuinely presentation rather than atom knowledge.
+
+use crate::atoms::AtomEnvelope;
+
+/// Pull the human-readable fields for any atom type. Not every
+/// type has every field — for atoms without a clean canonical name
+/// we synthesize from the most descriptive available text so the
+/// panel still shows something sensible.
+pub fn atom_surface_fields(atom: &AtomEnvelope) -> (String, Vec<String>, String, Option<f32>) {
+    match atom {
+        AtomEnvelope::Entity(e) => (
+            e.canonical_name.clone(),
+            e.aliases.clone(),
+            e.description.clone(),
+            Some(e.salience),
+        ),
+        AtomEnvelope::Event(e) => (
+            truncate(&e.description, 80),
+            Vec::new(),
+            e.description.clone(),
+            None,
+        ),
+        AtomEnvelope::State(s) => (
+            s.label.clone(),
+            Vec::new(),
+            format!("State of {}: {}", s.entity_id.as_str(), s.label),
+            s.confidence,
+        ),
+        AtomEnvelope::Relation(r) => (r.label.clone(), Vec::new(), r.label.clone(), None),
+        AtomEnvelope::Claim(c) => (
+            truncate(&c.content, 80),
+            Vec::new(),
+            c.content.clone(),
+            c.confidence,
+        ),
+        AtomEnvelope::Question(q) => (
+            truncate(&q.content, 80),
+            Vec::new(),
+            q.content.clone(),
+            None,
+        ),
+        AtomEnvelope::Configuration(c) => (
+            c.label.clone(),
+            Vec::new(),
+            c.description.clone(),
+            Some(c.confidence),
+        ),
+        AtomEnvelope::ArgumentReconstruction(a) => (
+            a.name.clone(),
+            Vec::new(),
+            format!(
+                "{}{}{}",
+                a.premises
+                    .iter()
+                    .enumerate()
+                    .map(|(i, p)| format!("P{}. {}", i + 1, p))
+                    .collect::<Vec<_>>()
+                    .join(" "),
+                if !a.premises.is_empty() { " " } else { "" },
+                if !a.conclusion.is_empty() {
+                    format!("C. {}", a.conclusion)
+                } else {
+                    String::new()
+                }
+            ),
+            None,
+        ),
+        AtomEnvelope::Position(p) => (
+            p.canonical_name.clone(),
+            Vec::new(),
+            p.content.clone(),
+            Some(p.salience),
+        ),
+        AtomEnvelope::Opposition(o) => (
+            o.canonical_label.clone(),
+            Vec::new(),
+            if o.framing.is_empty() {
+                format!("{} vs {}", o.left_label, o.right_label)
+            } else {
+                o.framing.clone()
+            },
+            Some(o.salience),
+        ),
+        AtomEnvelope::Asset(a) => {
+            let name = if a.original_filename.is_empty() {
+                format!("{} ({})", a.asset_kind, &a.sha256[..12.min(a.sha256.len())])
+            } else {
+                a.original_filename.clone()
+            };
+            let detail = format!(
+                "{} asset, {} bytes, sha256:{}",
+                a.asset_kind,
+                a.size,
+                &a.sha256[..16.min(a.sha256.len())]
+            );
+            (name, Vec::new(), detail, None)
+        }
+        AtomEnvelope::Summary(sm) => {
+            // The label says "Summary" and the level in it. A reading
+            // surface must be able to tell derived text from source text
+            // at a glance, and this projection is the only thing the
+            // panel shows — an unlabelled paraphrase beside real
+            // passages reads as a quotation, which is precisely what
+            // `AtomType::grain` says it is not.
+            (
+                format!("Summary (level {})", sm.level),
+                Vec::new(),
+                sm.text.clone(),
+                None,
+            )
+        }
+    }
+}
+
+pub(crate) fn truncate(s: &str, max_chars: usize) -> String {
+    let trimmed: String = s.chars().take(max_chars).collect();
+    if trimmed.chars().count() < s.chars().count() {
+        format!("{trimmed}…")
+    } else {
+        trimmed
+    }
+}

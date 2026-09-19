@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! sv-surface rung 3's conversation family census: the conversation wire
-//! surface belongs to the routes (`sovereign_mesh::turn_http`) and the
+//! surface belongs to the routes (`sovereign_daemon::turn_http`) and the
 //! family client (`sovereign-turn-client`) — the desktop consumes, it does
 //! not re-derive.
 //!
@@ -100,7 +100,7 @@ fn the_conversation_surface_defines_no_wire_envelope() {
     assert!(
         src.contains("sovereign_contracts::daemon_wire::ConversationListEntry"),
         "the conversation list entry must be the wire type, re-exported. It \
-         moved out of `sovereign_mesh::turn_http` at sv-surface svt-3 — same \
+         moved out of `sovereign_daemon::turn_http` at sv-surface svt-3 — same \
          definition, same bytes, one layer down — so this pin follows it \
          rather than the desktop growing a twin."
     );

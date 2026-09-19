@@ -18,7 +18,7 @@
 //!
 //! All three are TurnClient calls now —
 //! `POST /internal/corpus/recipes/test` and
-//! `POST /internal/corpus/recipes/harness` (`sovereign_mesh::recipe_http`) —
+//! `POST /internal/corpus/recipes/harness` (`sovereign_daemon::recipe_http`) —
 //! and the daemon runs the same `corpus_engine::harness` code over ITS engine
 //! and ITS data root. The two result shapes below are unchanged, so
 //! `RecipeTestingPanel.svelte` and `HarnessLadderCard.svelte` are untouched.

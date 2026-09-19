@@ -174,7 +174,7 @@ struct PeerRow {
 
 /// What peers have measured, plus why the list might be shorter than expected.
 #[derive(Debug, Default, Clone)]
-pub(crate) struct PeerHistory {
+pub(crate) struct TravelHistory {
     /// Peer records, ready to hand to [`mm::near_misses`].
     pub(crate) records: Vec<mm::ForeignRecord>,
     /// Entries the daemon held but could not read — usually a peer on an
@@ -186,7 +186,7 @@ pub(crate) struct PeerHistory {
     pub(crate) note: Option<String>,
 }
 
-impl PeerHistory {
+impl TravelHistory {
     /// Nothing, because the daemon could not be asked. Deliberately not an
     /// error: `mesh plan` answers plenty of questions without a mesh.
     fn unreachable(why: String) -> Self {
@@ -202,28 +202,28 @@ impl PeerHistory {
 ///
 /// Excludes our own by construction — the daemon filters on the KV entry's
 /// origin, and our copy on disk is the authoritative one.
-pub(crate) async fn peer_history() -> PeerHistory {
+pub(crate) async fn peer_history() -> TravelHistory {
     let url = endpoint();
     let client = match client() {
         Ok(c) => c,
-        Err(e) => return PeerHistory::unreachable(e),
+        Err(e) => return TravelHistory::unreachable(e),
     };
     let resp = match client.get(&url).send().await {
         Ok(r) => r,
         Err(_) => {
             // Silent on the common case: `mesh plan` with no daemon running is a
             // normal invocation and a warning here would be noise on every run.
-            return PeerHistory::default();
+            return TravelHistory::default();
         }
     };
     if !resp.status().is_success() {
-        return PeerHistory::unreachable(format!(
+        return TravelHistory::unreachable(format!(
             "the daemon answered HTTP {} for peer measurements",
             resp.status()
         ));
     }
     match resp.json::<PeerBody>().await {
-        Ok(b) => PeerHistory {
+        Ok(b) => TravelHistory {
             records: b
                 .records
                 .into_iter()
@@ -236,7 +236,7 @@ pub(crate) async fn peer_history() -> PeerHistory {
             unreadable: b.unreadable,
             note: None,
         },
-        Err(e) => PeerHistory::unreachable(format!(
+        Err(e) => TravelHistory::unreachable(format!(
             "the daemon's peer-measurement answer was unreadable ({e})"
         )),
     }
@@ -313,7 +313,7 @@ mod tests {
 
     /// The seam that would fail silently.
     ///
-    /// `PeerMeasurementDto` (daemon, `Serialize`) and `PeerRow` (here,
+    /// `MemberMeasurementDto` (daemon, `Serialize`) and `PeerRow` (here,
     /// `Deserialize`) are two separate declarations of one wire shape. If a field
     /// is renamed on one side, nothing fails to compile — `#[serde(default)]`
     /// swallows the mismatch and `peer_history` quietly returns an empty list
@@ -324,8 +324,8 @@ mod tests {
     /// it.
     #[test]
     fn the_daemons_shape_and_this_readers_shape_are_the_same_shape() {
-        let body = sovereign_mesh::mesh_http::PeerMeasurementsResponse {
-            records: vec![sovereign_mesh::mesh_http::PeerMeasurementDto {
+        let body = sovereign_daemon::mesh_http::MemberMeasurementsResponse {
+            records: vec![sovereign_daemon::mesh_http::MemberMeasurementDto {
                 origin_node: "b88252e4325bc3771122334455667788".into(),
                 origin_name: Some("BeefyMac".into()),
                 record: sample_record(),

@@ -36,11 +36,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use ed25519_dalek::SigningKey;
-use sovereign_mesh::worker_controller::{
+use sovereign_mesh::worker_pod::{encode_bootstrap, mint_bootstrap, BootstrapInputs};
+use sovereign_pods::worker_controller::{
     ControllerConfig, JobSpec, ProviderError, ProviderInstance, ProviderResult, PublicAddress,
     WorkerController, WorkerProvider,
 };
-use sovereign_mesh::worker_pod::{encode_bootstrap, mint_bootstrap, BootstrapInputs};
 
 const IMAGE_TAG: &str = "sovereign-worker-local:test";
 const CONTAINER_NAME: &str = "sovereign-worker-local-test-instance";
@@ -327,7 +327,7 @@ async fn local_pod_smoke_full_lifecycle() {
     config.health_poll_timeout = Duration::from_secs(60);
     let controller = WorkerController::new(provider, owner.clone(), config);
 
-    let client = sovereign_mesh::worker_controller::build_pinned_client_for(&blob)
+    let client = sovereign_pods::worker_controller::build_pinned_client_for(&blob)
         .expect("build_pinned_client_for");
     let handle = sovereign_mesh::worker_pod::WorkerHandle::new(
         "127.0.0.1".to_string(),
@@ -351,17 +351,17 @@ async fn local_pod_smoke_full_lifecycle() {
         label: "smoke".into(),
         uploads: BTreeMap::new(),
         units: vec![
-            sovereign_mesh::worker_http::WorkUnit {
+            sovereign_pods::worker_http::WorkUnit {
                 unit_id: 1,
                 kind: "u1".into(),
                 payload: serde_json::json!({"q": "first"}),
             },
-            sovereign_mesh::worker_http::WorkUnit {
+            sovereign_pods::worker_http::WorkUnit {
                 unit_id: 2,
                 kind: "u2".into(),
                 payload: serde_json::json!({"q": "second"}),
             },
-            sovereign_mesh::worker_http::WorkUnit {
+            sovereign_pods::worker_http::WorkUnit {
                 unit_id: 3,
                 kind: "u3".into(),
                 payload: serde_json::json!({"q": "third"}),
@@ -465,7 +465,7 @@ async fn local_pod_rejects_impostor_owner() {
     };
     let bad_token = sovereign_mesh::worker_pod::sign_worker_token(&owner_b, &claims).unwrap();
 
-    let client = sovereign_mesh::worker_controller::build_pinned_client_for(&blob).unwrap();
+    let client = sovereign_pods::worker_controller::build_pinned_client_for(&blob).unwrap();
     let handle = sovereign_mesh::worker_pod::WorkerHandle::new(
         "127.0.0.1".to_string(),
         host_port,
@@ -503,7 +503,7 @@ async fn local_pod_rejects_impostor_owner() {
 #[tokio::test]
 #[ignore]
 async fn local_pod_pool_three_containers_drain() {
-    use sovereign_mesh::multi_pod_coordinator::{
+    use sovereign_pods::multi_pod_coordinator::{
         partition_units, CoordinatorConfig, PoolHandle, PoolPod,
     };
     use tokio::sync::Mutex as AsyncMutex;
@@ -538,8 +538,8 @@ async fn local_pod_pool_three_containers_drain() {
     // mesh-level e2e test pattern). unit_ids must start at 1 — the
     // /completed cursor uses `> since` watermark semantics.
     let total_units = 7usize;
-    let units: Vec<sovereign_mesh::worker_http::WorkUnit> = (1..=total_units)
-        .map(|i| sovereign_mesh::worker_http::WorkUnit {
+    let units: Vec<sovereign_pods::worker_http::WorkUnit> = (1..=total_units)
+        .map(|i| sovereign_pods::worker_http::WorkUnit {
             unit_id: i as u64,
             kind: format!("u{i}"),
             payload: serde_json::json!({"i": i}),
@@ -580,7 +580,7 @@ async fn local_pod_pool_three_containers_drain() {
                 String::from_utf8_lossy(&run.stderr)
             );
         }
-        let client = sovereign_mesh::worker_controller::build_pinned_client_for(&blob).unwrap();
+        let client = sovereign_pods::worker_controller::build_pinned_client_for(&blob).unwrap();
         let handle = sovereign_mesh::worker_pod::WorkerHandle::new(
             "127.0.0.1".to_string(),
             host_port,
@@ -589,7 +589,7 @@ async fn local_pod_pool_three_containers_drain() {
             job_id.clone(),
             owner.clone(),
         );
-        let instance = sovereign_mesh::worker_controller::ProviderInstance {
+        let instance = sovereign_pods::worker_controller::ProviderInstance {
             instance_id: names[i].clone(),
             gpu_name: "Local-Container".into(),
             cost_per_hour: 0.0,
@@ -606,12 +606,12 @@ async fn local_pod_pool_three_containers_drain() {
 
     // Wait for each container's /health to come up, then dispatch its
     // partition. Same controller for all (the owner key is shared).
-    let mut config = sovereign_mesh::worker_controller::ControllerConfig::default();
+    let mut config = sovereign_pods::worker_controller::ControllerConfig::default();
     config.health_poll_interval = Duration::from_millis(250);
     config.health_poll_timeout = Duration::from_secs(60);
     let provider = Arc::new(FailingProvider);
     let controller =
-        sovereign_mesh::worker_controller::WorkerController::new(provider, owner.clone(), config);
+        sovereign_pods::worker_controller::WorkerController::new(provider, owner.clone(), config);
 
     for (i, pp) in pool_pods.iter().enumerate() {
         if let Err(e) = controller.wait_for_health(&pp.handle, &pp.client).await {

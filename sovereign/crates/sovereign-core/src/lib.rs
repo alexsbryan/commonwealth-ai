@@ -3,6 +3,7 @@
 // sovereign — and moved there in noun-convergence rung 6. Re-exported at its
 // historical path so every `sovereign_core::atlas_context::*` import stands.
 pub use corpus_engine::enrichment::atlas::context as atlas_context;
+pub mod answering;
 pub mod approval_desk;
 pub mod context;
 pub mod conv_briefing;
@@ -56,6 +57,7 @@ pub mod stubs;
 pub mod time;
 pub mod title;
 pub mod tool_loop;
+pub mod turn_approval;
 
 // The daemon↔package contract lives in `sovereign-contracts`; re-export every
 // item at its historical `sovereign_core::{error, traits, registry, types,
@@ -76,6 +78,60 @@ pub use sovereign_contracts::{
 // store already depends on this crate — and follows the rule the block above
 // states, that a contracts module is reachable at its `sovereign_core::` path.
 pub use sovereign_contracts::daemon_wire;
+
+// Fabric's identity, at `sovereign_core::identity`. Added 2026-09-16 for
+// `sovereign-api`, whose `FabricPart` must NAME `IdentityReader`
+// (`quality/DAEMON_CORE.md` §4.2 "Identity is a reader, not a value"). Naming
+// `sovereign-contracts` directly grew that crate's fan-in 30 → 31 and
+// `cargo xtask layer-gate` refused it — the same refusal the `daemon_wire`
+// block above records. This re-export costs no new edge (sovereign-api already
+// depends on this crate) and follows the rule above: a contracts module is
+// reachable at its `sovereign_core::` path.
+pub use sovereign_contracts::identity;
+
+// The in-flight gauge, at `sovereign_core::in_flight`. Added 2026-09-16 for
+// `sovereign-api`, whose `ServingPart` holds the gauge the daemon creates
+// before the provider (`quality/DAEMON_CORE.md` §4.2 "Where an install slot
+// breaks a cycle"). Naming `sovereign-contracts` directly would grow that
+// crate's fan-in and `cargo xtask layer-gate` refuses it — the same refusal
+// the `identity` block above records — while this re-export costs no new
+// edge, following the rule that a contracts module is reachable at its
+// `sovereign_core::` path.
+pub use sovereign_contracts::in_flight;
+
+// The self-claims port, at `sovereign_core::self_claims`. Added 2026-09-16 for
+// `sovereign-api`, whose `AppState` implements `SelfClaims`
+// (`quality/DAEMON_CORE.md` §4.2 "Gossip asks the node what to claim"). Naming
+// `sovereign-contracts` directly would grow that crate's fan-in and
+// `cargo xtask layer-gate` refuses it — the same refusal the `identity` block
+// above records — while this re-export costs no new edge, following the rule
+// that a contracts module is reachable at its `sovereign_core::` path.
+pub use sovereign_contracts::self_claims;
+
+// The peer ports and their shared recorder, at `sovereign_core::peer`. Added
+// 2026-09-16 for `sovereign-api`, whose `FabricPart` carries the
+// `ConvergenceRecord` `/status` reads (domains
+// `REVIEW-build-mesh-api-decouple`: the definition moved down so
+// `sovereign-mesh`'s `peer_adapter` can name it without naming the host).
+// Naming `sovereign-contracts` directly would grow that crate's fan-in and
+// `cargo xtask layer-gate` refuses it — the same refusal the `identity` block
+// above records — while this re-export costs no new edge, following the rule
+// that a contracts module is reachable at its `sovereign_core::` path.
+pub use sovereign_contracts::peer;
+
+// The middleware seam, at `sovereign_core::middleware`. Added 2026-09-16 for
+// `sovereign-api` and `sovereign-atos`, which name `Middleware`,
+// `PipelineContext`, `MiddlewareSession`, `MiddlewareError`, `ResponseView` and
+// the `ArtifactDelta` payload the session carries (domains
+// `REVIEW-build-middleware-seam`). The seam lives in `sovereign-contracts`
+// because the Workspace decision extractor's home (`corpus-engine-notes`) may
+// name only that one sovereign crate (`quality/DAEMON_CORE.md` §4.2 "Risks
+// carried"); naming it directly from `sovereign-api`/`sovereign-atos` would
+// grow that crate's fan-in and `cargo xtask layer-gate` refuses it — the same
+// refusal the `identity` block above records — while this re-export costs no
+// new edge, following the rule that a contracts module is reachable at its
+// `sovereign_core::` path.
+pub use sovereign_contracts::middleware;
 
 // Re-export commonly used items at the crate root.
 //

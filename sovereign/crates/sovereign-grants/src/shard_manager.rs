@@ -601,7 +601,7 @@ impl ShardManager {
         // complete, gets re-advertised on gossip, and leaves every peer
         // holding a different "complete" canonical that it will then
         // defend (the 17/38 wikipedia case recorded in
-        // `sovereign-mesh/src/auto_ingest.rs`).
+        // `sovereign-daemon/src/auto_ingest.rs`).
         //
         // Placed BEFORE the empty check so that, whenever a bar is set,
         // exactly ONE error names the decision; `NoShardsFound` stays

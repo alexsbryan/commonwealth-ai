@@ -34,8 +34,10 @@ status    = "active"
 # crate — which is why Phase C exists and why the predicate cannot be green by
 # accident before it.
 #
-# UNTIL domains-3 lands, the check below reads could-not-judge (instrument
-# missing). That is the honest reading — never-ran is not passed (§18.2).
+# AS OF 2026-09-14 (rung 3 landed) the check below RUNS and reads FALSE:
+# `domains-census.py predicate` names which kept contexts lack a package and
+# which crates define Peer, and exits 1. It reads TRUE only when both lists are
+# empty — never-ran is not passed (§18.2).
 [predicate]
 statement = "Every context kept in quality/DOMAINS.toml names a [[package]] in quality/ARCH_LAYERS.toml that cargo xtask boundary-gate passes, and no crate outside the commonwealth package defines a pub type named Peer*"
 check     = "python3 scripts/domains-census.py predicate && (cd corpus-engine && cargo xtask boundary-gate)"
@@ -77,7 +79,7 @@ check     = "python3 scripts/domains-census.py predicate && (cd corpus-engine &&
 #   sovereign-mesh: 88,255 lines (DOMAINS.md §3 said 82,241 on 09-11; +6,014
 #      in two days as sv-surface moved routes INTO it — the bar below starts
 #      with its trend running the wrong way, and says so).
-#   corpus-engine-vocab: 5,161 lines, recursive — DOMAINS.md §5 is right; an
+#   understanding-vocab: 5,161 lines, recursive — DOMAINS.md §5 is right; an
 #      earlier draft of this file said 2,769 off a non-recursive glob that
 #      missed src/ontology/ (1,719) and atoms/tests.rs (673). Corrected, and
 #      recorded because the next reader will run the same glob.
@@ -205,7 +207,7 @@ status       = "open"
 # ALLOW-LIST below), 7 projections that are the read model built in the wrong
 # crate (five already use vocab's AtomId/AtomType/StableAtomKey), 1 duplicate
 # (reading_http.rs AtomSpan). The instrument counts pub Atom* definitions
-# outside corpus-engine-vocab/ and enrichment/, minus an ALLOW-LIST of named
+# outside understanding-vocab/ and enrichment/, minus an ALLOW-LIST of named
 # binders — never a path pattern: `*_http.rs` returns 9 and silently drops
 # AtomSpan/AtomCard/AtomElsewhere, three types the bar exists to catch.
 # Whole-tree the count is 12 (corpus-engine-archaeology adds AtomWitness and
@@ -285,17 +287,35 @@ instrument   = "python3 scripts/domains-census.py queue --json"
 goodhart     = "this can hit target while the predicate is still false if a crate is made 100% its own context by RETAGGING modules (the tag table is data; a tag change with no git mv in the same commit is refused by review) or by moving a cluster into a destination that is itself the wrong context — the plan asserts dest is in the context's `crates` list and enqueues any destination whose share drops"
 kill         = "if a move empties a crate's window (no destination tier satisfies both its deps and its consumers) and the only exit is a new [[exception]] row, the cluster is two clusters — split it and re-plan; never widen the ledger to keep the loop moving"
 
-# ── NOT YET REGISTERED, deliberately ────────────────────────────────────────
+[[bar]]
+id           = "dm-context-congestion"
+one_line     = "A change stops needing to touch many contexts at once"
+derives_from = "DOMAINS.md §8 (the outcome) — nc-congestion's shape at the CONTEXT altitude; minted 2026-09-14 by scripts/domains-census.py congestion"
+status       = "open"
+# THE ONE OUTCOME BAR. Every other bar here measures structure — this one
+# measures whether the structure bought anything, since the point of bounded
+# contexts is that a change stops needing to touch five of them at once. A
+# ceiling to HOLD, not a climb (campaign K7). It was held back until its floor
+# could be minted, deliberately: a hold-bar with an invented target is
+# telemetry theater (co-lineage refuses an instrument with no threshold for the
+# same reason). It is the ninth bar, at the 9-bar cap.
 #
-# `dm-context-congestion` — distinct CONTEXTS touched per .rs commit, by author
-# month, over the registry's module tags: the one OUTCOME bar (nc-congestion's
-# shape, at the context altitude). It is the number that says whether bounded
-# contexts bought anything. It is NOT declared here because it has no minted
-# floor and a hold-bar with an invented target is telemetry theater
-# (co-lineage refuses an instrument with no threshold for the same reason).
-# domains-3 mints it over the last 90 days of history and registers it as the
-# eighth bar in the same commit as the instrument. The 9-bar cap leaves room
-# for it and one more; a ninth is a smell.
+# MEASURED, distinct module-tag contexts per `.rs` commit by AUTHOR month over
+# the last 90 days (the rolling window), 2026-09-14:
+#   2026-06  2.04  (n=90)
+#   2026-07  1.99  (n=252)
+#   2026-08  1.75  (n=344)
+#   2026-09  1.70  (n=509)
+# The value is the mean of the monthly means (1.87). Untagged files are
+# reported, never counted: the registry tags the current tree, so a path that
+# has since moved has no row and UNDER-counts, which a hold-bar can tolerate.
+floor        = 1.87
+floor_basis  = "2026-09-14, `scripts/domains-census.py congestion` over the last 90 days of `.rs` commits by AUTHOR month — the mean of the four monthly means of distinct module-tag contexts per commit (1,195 commits; untagged files reported, not counted). A rolling window, so a re-mint is a row edit"
+target       = 1.87
+direction    = "lower_is_better"
+instrument   = "python3 scripts/domains-census.py congestion --json"
+goodhart     = "this can hit target while the predicate is still false if commits get SMALLER rather than less coupled — nc-congestion measured exactly this confound (raw congestion tracks files-per-commit almost exactly), so a month with more single-file commits reads lower for reasons that are not convergence; the instrument prints files-per-commit and the untagged rate beside the value"
+kill         = "if this rises above its floor while the structural bars improve, the campaign is buying structure at the cost of the thing structure was for — stop and re-read the strategy (campaign K7)"
 
 # ── The ladder ──────────────────────────────────────────────────────────────
 #
@@ -359,65 +379,107 @@ kill         = "if a move empties a crate's window (no destination tier satisfie
 
 [[rung]]
 id = "domains-3-instrument"
+title = "the instrument — registry, census, controls, queue/plan"
+status = "done"
+sha = ["83967dafd", "0d7261da2"]
+demo = "D4"
 moves = ["dm-peer-outside-fabric", "dm-atom-outside", "dm-contexts-liftable", "dm-mesh-lines", "dm-misnamed-crates"]
 one_line = "quality/DOMAINS.toml + scripts/domains-census.py with a positive and a negative control per axis, floors minted; daemon-route-census HOSTS repaired — SCAFFOLDING, deletes nothing"
 
 [[rung]]
 id = "domains-4-adjudication"
+title = "the words, the Peer rows, the collision families (data)"
+status = "done"
+sha = ["4b58188e0"]
+demo = "none"
+note = "data only — the words and Peer dispositions; the moves ride later rungs"
 moves = []
 one_line = "Every Peer* type gets a disposition row (keep-Fabric / rename-to-word / delete / merge); the four context words are chosen against the converge evidence; §9's open items are classified — DATA only, zero code"
 
 [[rung]]
 id = "dm-mesh-serving"
+title = "serving leaves sovereign-mesh"
+status = "open"
+demo = "D1"
 moves = ["dm-queue", "dm-mesh-lines", "dm-misnamed-crates", "dm-contexts-liftable", "dm-peer-outside-fabric", "dm-shared-edges", "dm-word-owners"]
 one_line = "WAVE 1 sovereign-mesh — the serving cluster (20,488) leaves for sovereign-scheduler + sovereign-serving-host per SERVING_BOUNDARY.md; Peer->Venue rides the move; VenueSource is the port; serving-lift verdict 1 — unrepresentable: a routing decision that cannot be replayed outside the daemon"
 
 [[rung]]
 id = "dm-mesh-host"
+title = "the host cluster leaves for sovereign-daemon"
+status = "open"
+demo = "none"
 moves = ["dm-queue", "dm-mesh-lines", "dm-misnamed-crates"]
 one_line = "WAVE 1 — the host cluster (25,432: daemon.rs, the *_http.rs handlers, app-state builders) leaves for the host crate the cluster graph names; routes move as-is, daemon-core consolidates them where they land — unrepresentable: a daemon handler linked by a client that wants a roster"
 
 [[rung]]
 id = "dm-mesh-compute"
+title = "compute's home; Peer → Donor"
+status = "open"
+demo = "D2"
 moves = ["dm-queue", "dm-mesh-lines", "dm-misnamed-crates", "dm-peer-outside-fabric", "dm-shared-edges", "dm-word-owners"]
 one_line = "WAVE 1 — the compute cluster (9,740: work_donor, worker/pod modules, guest tunnel) leaves for its home; Peer->Donor rides the move; DonorReach is the port; cw-work-lift verdict unchanged"
 
 [[rung]]
 id = "dm-mesh-workbench"
+title = "workbench leaves for code-intel"
+status = "open"
+demo = "none"
 moves = ["dm-queue", "dm-mesh-lines", "dm-misnamed-crates", "dm-contexts-liftable"]
 one_line = "WAVE 1 — the workbench cluster (4,811: fim_adapter, lsp_tier, next-edit's mesh half) leaves for the code-intel package crate; the taxonomy does not enter oicp-types (nc-2b)"
 
 [[rung]]
 id = "dm-mesh-back-of-house"
+title = "back-of-house leaves, feature-gated"
+status = "open"
+demo = "none"
 moves = ["dm-queue", "dm-mesh-lines", "dm-misnamed-crates"]
 one_line = "WAVE 1 — mesh_sim/ and dst.rs (4,841) leave for sovereign-mesh-test-harness or a feature-gated back-of-house crate; nothing product-side depends on them after"
 
 [[rung]]
 id = "dm-mesh-ingest-understanding"
+title = "ingest and understanding leave"
+status = "open"
+demo = "none"
 moves = ["dm-queue", "dm-mesh-lines", "dm-misnamed-crates"]
 one_line = "WAVE 1 — the ingest (3,410) and understanding (2,316) glue leave for corpus-engine's clusters (to travel again in wave 3) or the host, by what each module imports"
 
 [[rung]]
 id = "dm-mesh-small"
+title = "answering, workspace, retrieval leave"
+status = "open"
+demo = "none"
 moves = ["dm-queue", "dm-mesh-lines", "dm-misnamed-crates"]
 one_line = "WAVE 1 — answering (747), workspace (233), retrieval (209) leave for sovereign-core, corpus-engine-notes, corpus-engine; one rung, three commits"
 
 [[rung]]
 id = "dm-mesh-closed"
+title = "sovereign-mesh reads 100% fabric"
+status = "open"
+demo = "D5"
 moves = ["dm-mesh-lines", "dm-misnamed-crates", "dm-queue"]
 one_line = "WAVE 1 verdict — sovereign-mesh reads 100% fabric and <= 20,000 lines (registry fabric total 16,028); lib.rs says what it holds; sovereign-mesh leaves dm-queue and the crates its clusters enlarged enter it"
 
 [[rung]]
 id = "dm-wave-2-sovereign-api"
+title = "sovereign-api dissolves"
+status = "open"
+demo = "D2"
 moves = ["dm-queue", "dm-misnamed-crates", "dm-contexts-liftable"]
 one_line = "WAVE 2 — sovereign-api (43,163) DISSOLVES: nine clusters to their homes in the plan's order (its serving cluster may need to travel WITH wave 1's — the cluster graph decides); its three [[exception]] rows retire to zero; rungs minted by `domains-census.py plan` when the loop reaches it"
 
 [[rung]]
 id = "dm-wave-3-corpus-engine"
+title = "corpus-engine's vocab door"
+status = "open"
+demo = "D3"
 moves = ["dm-queue", "dm-misnamed-crates", "dm-contexts-liftable", "dm-atom-outside"]
 one_line = "WAVE 3 — corpus-engine (172,204): Understanding leaves first through vocab's door (domains-8's spec, corrected in §10.5), then workbench, workspace, build-feedback (its §2 verdict on the way out); ingest + retrieval stay; rungs minted by the plan"
 
 [[rung]]
 id = "dm-wave-n"
+title = "waves until the queue reads 0"
+status = "open"
+demo = "D4"
 moves = ["dm-queue"]
 one_line = "WAVES 4+ — the loop: whatever `dm-queue` lists next (sovereign-core's research cluster, sovereign-tools, the destinations wave 1-3 enlarged), until dm-queue = 0 and the predicate exits 0"

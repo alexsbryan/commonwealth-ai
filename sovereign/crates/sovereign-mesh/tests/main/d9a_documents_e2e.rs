@@ -40,8 +40,8 @@ use sovereign_core::traits::StateStore;
 use sovereign_core::types::{
     AssetState, DocumentAsset, DocumentChunk, DocumentTypeTag, SourceType,
 };
-use sovereign_mesh::daemon::EmbeddedDaemon;
-use sovereign_mesh::documents_http::documents_router;
+use sovereign_daemon::daemon::EmbeddedDaemon;
+use sovereign_daemon::documents_http::documents_router;
 
 use crate::common::{
     desktop_services_with_store, engine_at, mesh_admin_services, spawn_router, TestProvider,

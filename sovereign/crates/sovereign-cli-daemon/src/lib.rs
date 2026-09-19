@@ -10,25 +10,21 @@
 //! inherits every daemon defense (panic hook, supervised background
 //! tasks, RAM-derived OOM limits, run lock, listener watchdog).
 
-pub(crate) mod corpus_maintenance;
 mod daemon_cmd;
 mod doctor_cmd;
 mod install_service_cmd;
-mod listener_watch;
 pub(crate) mod log_rotation;
 mod memory_watch;
 mod model_cmd;
 mod panic_hook;
 mod setup_cmd;
 mod setup_config;
-pub(crate) mod supervise;
-mod watcher_supervisor;
 
 /// Keep the mesh self-manifest in step with the distributed primary's
 /// lifecycle. Re-exported so the acceptance test can drive the REAL wiring
 /// rather than a copy of it — the bug this closes was a missing subscription,
 /// which a reimplementation in the test would silently paper over.
-pub use daemon_cmd::bootstrap::spawn_self_manifest_refresh;
+pub use sovereign_daemon::bootstrap::spawn_self_manifest_refresh;
 
 use sovereign_cli_shared::tracing_init::init_tracing;
 use sovereign_contracts::launch::Launch;
@@ -56,7 +52,7 @@ const DAEMON_TRACING_FILTER: &str = "sovereign_cli_daemon=info,\
      sovereign_inference=info,\
      corpus_engine=info,\
      commonwealth_discovery=info,\
-     sovereign_api=info,\
+     sovereign_daemon=info,\
      commonwealth_core=info,\
      prefix_state=info,\
      capability=info,\

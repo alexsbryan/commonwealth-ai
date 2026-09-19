@@ -16,7 +16,7 @@ use tree_sitter::{Parser, Query, QueryCursor};
 const REPO: &str = "/home/alexbryan/dev/commonwealth-ai";
 const FILES: &[&str] = &[
     "sovereign/crates/sovereign-core/src/runtime/handlers/knowledge_query.rs", // #12 config
-    "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/worker.rs",          // chat URL
+    "sovereign/crates/sovereign-daemon/src/worker.rs",                         // chat URL
     "corpus-engine/src/enrichment/code_intel/mod.rs",                          // SUMMARY:/ASKS:
     "sovereign/crates/sovereign-mesh/src/peer_inference.rs",                   // select_route
 ];

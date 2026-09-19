@@ -31,7 +31,11 @@ use crate::types::BuiltinCorpus;
 // The bundled catalog is `sovereign-recipes/registry.toml`, vendored by
 // build.rs into OUT_DIR (single source of truth — no checked-in snapshot
 // copy in this crate). See `corpus-engine/build.rs`.
-const BUNDLED_SNAPSHOT: &str = include_str!(concat!(env!("OUT_DIR"), "/registry_snapshot.toml"));
+//
+// Public because the recipe-authoring package receives it INJECTED (it cannot
+// carry a `corpus-engine` dependency); `sovereign-tools` holds both sides.
+pub const BUNDLED_REGISTRY_TOML: &str =
+    include_str!(concat!(env!("OUT_DIR"), "/registry_snapshot.toml"));
 
 // ── Registry snapshot schema ─────────────────────────────────────────────────
 
@@ -146,7 +150,7 @@ impl RecipeRegistry {
     /// Pass `Some(recipes_dir)` so local files in `corpus-engine/recipes/`
     /// work during development, and so cached recipes work for delta updates.
     pub fn from_bundled(overrides_dir: Option<PathBuf>) -> Self {
-        let snapshot = toml::from_str(BUNDLED_SNAPSHOT)
+        let snapshot = toml::from_str(BUNDLED_REGISTRY_TOML)
             .expect("bundled registry_snapshot.toml failed to parse");
         Self {
             snapshot,

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The client's read of `GET /internal/corpus/local/{corpus}/ingest/progress`
-//! (`sovereign_mesh::lc_http::IngestProgress`).
+//! (`sovereign_daemon::lc_http::IngestProgress`).
 //!
 //! NOT a relocation. `IngestProgress` closes over
 //! `corpus_engine::enrichment::state::EnrichmentState` (the phase file),
@@ -52,7 +52,7 @@ pub struct IngestPhaseView {
     pub message: Option<String>,
 }
 
-/// The terminal receipt (`sovereign_mesh::corpus_watch_http::IngestOutcome`),
+/// The terminal receipt (`sovereign_daemon::corpus_watch_http::IngestOutcome`),
 /// as a client reads it. Exactly one of `stats` / `error` is set by the
 /// recorder; a receipt with neither is a host contradiction, and the
 /// desktop says so rather than closing the panel on an invented success.
@@ -84,7 +84,7 @@ pub struct IngestOutcomeView {
 /// it. `corpus_engine::IngestProgress` re-exports this, so the engine, its
 /// `ProgressCallback` and commonwealth-api are unchanged; pure serde over
 /// primitives, no engine type closes over it. Distinct from
-/// `sovereign_mesh::lc_http::IngestProgress` (the local-corpus outcome
+/// `sovereign_daemon::lc_http::IngestProgress` (the local-corpus outcome
 /// file), which is a different route's answer and keeps its own name.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum IngestProgress {

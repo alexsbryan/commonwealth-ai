@@ -267,14 +267,14 @@ mod tests {
     use super::*;
     use crate::model::{AgentKind, Privacy, SessionRecord, SymbolRef};
     use kernel_types::NodeId;
-    use sovereign_contracts::peer::{PeerStore, SoloPeerStore};
+    use sovereign_contracts::peer::{ReplicatedKv, SoloReplicatedKv};
     use sovereign_core::types::{ConversationId, ToolContext};
     use std::path::PathBuf;
     use uuid::Uuid;
 
     fn mk_store() -> WorkAtlasStore {
-        let mesh = Arc::new(SoloPeerStore::new());
-        WorkAtlasStore::new(mesh as Arc<dyn PeerStore>, NodeId::from_u128(1))
+        let mesh = Arc::new(SoloReplicatedKv::new());
+        WorkAtlasStore::new(mesh as Arc<dyn ReplicatedKv>, NodeId::from_u128(1))
     }
 
     fn ctx() -> ToolContext {

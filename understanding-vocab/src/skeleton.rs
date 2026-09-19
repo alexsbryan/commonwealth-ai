@@ -1,0 +1,510 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! Field skeleton types — the primary artifact of enrichment.
+//!
+//! `FieldSkeleton` is the complete field model, serialized to
+//! `field_skeleton.json` in the corpus index directory.
+//! `PartialSkeleton` is used during the pipeline as a working structure.
+//!
+//! Moved here from `corpus-engine`'s `enrichment::skeleton` by domains
+//! `REVIEW-build-field-skeleton-vocab` (DE "The read-port leaf, measured
+//! again": "`FieldSkeleton` goes to the language"). The JSON IO stayed host
+//! (`corpus_engine::index::field_skeleton`); this module is data only.
+
+use serde::{Deserialize, Serialize};
+
+/// A partial skeleton built during Phase 1 (skeleton extraction).
+/// Grows as positions are extracted from overview chunks.
+#[derive(Debug, Clone, Default)]
+pub struct PartialSkeleton {
+    pub domain_id: String,
+    pub questions: Vec<SkeletonQuestion>,
+}
+
+impl PartialSkeleton {
+    pub fn new(domain_id: &str) -> Self {
+        Self {
+            domain_id: domain_id.to_string(),
+            questions: Vec::new(),
+        }
+    }
+}
+
+/// A question identified during skeleton extraction.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkeletonQuestion {
+    pub id: String,
+    pub question: String,
+    pub question_type: String,
+    pub status: String,
+    pub primary_article_ids: Vec<String>,
+    pub positions: Vec<SkeletonPosition>,
+}
+
+/// A named position within a skeleton question.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkeletonPosition {
+    pub id: String,
+    pub name: String,
+    pub claim: String,
+    pub status: String,
+    pub proponents: Vec<String>,
+    pub source: String, // "skeleton" | "discovered"
+    pub cluster_ids: Vec<i32>,
+    pub centroid_chunk_ids: Vec<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub discovery_confidence: Option<f32>,
+}
+
+/// A fault line in the skeleton (from overview extraction or detection).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkeletonFaultLine {
+    pub id: String,
+    pub between_positions: Vec<String>,
+    pub crux: String,
+    pub key_chunk_ids: Vec<u64>,
+    pub confidence: f32,
+    pub source: String, // "skeleton" | "detected"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resolution_condition: Option<String>,
+}
+
+/// An open question identified in the field.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkeletonOpenQuestion {
+    pub id: String,
+    pub question: String,
+    pub status: String,
+    /// Kind of question (e.g. `"conceptual"`). Carried from the detector's
+    /// `OpenQuestion::question_type` for fidelity. `#[serde(default)]` so old
+    /// sidecars written before I3 (no field) still parse.
+    #[serde(default)]
+    pub question_type: Option<String>,
+    pub related_question_id: Option<String>,
+    pub representative_chunk_ids: Vec<u64>,
+}
+
+/// Summary statistics for a completed enrichment run.
+///
+/// Moved here from `corpus-engine`'s `enrichment::clustering` by domains
+/// `REVIEW-build-field-skeleton-vocab`: it is the `field_stats` field of
+/// [`FieldSkeleton`] and carries no behaviour, so it belongs with the
+/// language rather than with the clustering that fills it in.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct FieldModelStats {
+    pub total_chunks: u64,
+    pub classified_chunks: u64,
+    pub unclassified_chunks: u64,
+    pub cluster_count: usize,
+    pub questions_count: usize,
+    pub positions_count: usize,
+    pub fault_lines_count: usize,
+}
+
+/// The complete field skeleton — the primary enrichment artifact.
+/// Serialized to `field_skeleton.json` for small bounded domains.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FieldSkeleton {
+    pub schema_version: u32,
+    pub corpus_id: String,
+    pub generated_at: String,
+    pub extraction_method: String,
+    pub prompt_version: String,
+    pub domain_id: String,
+    pub canonical_questions: Vec<CanonicalQuestion>,
+    pub open_questions: Vec<SkeletonOpenQuestion>,
+    pub field_stats: FieldModelStats,
+}
+
+/// A canonical question with positions and fault lines.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CanonicalQuestion {
+    pub id: String,
+    pub question: String,
+    pub status: String,
+    pub question_type: String,
+    pub primary_entries: Vec<String>,
+    pub positions: Vec<SkeletonPosition>,
+    pub fault_lines: Vec<SkeletonFaultLine>,
+}
+
+impl FieldSkeleton {
+    /// Find the canonical question most relevant to a query embedding.
+    /// Returns the question whose embedded text is most similar.
+    pub fn find_question_by_text(&self, topic: &str) -> Option<&CanonicalQuestion> {
+        // Simple text matching — for embedding-based search, use LanceDB.
+        let topic_lower = topic.to_lowercase();
+        self.canonical_questions
+            .iter()
+            .find(|q| q.question.to_lowercase().contains(&topic_lower))
+    }
+
+    /// Look up a position's display name by ID.
+    pub fn position_name(&self, position_id: &str) -> Option<&str> {
+        for q in &self.canonical_questions {
+            for p in &q.positions {
+                if p.id == position_id {
+                    return Some(&p.name);
+                }
+            }
+        }
+        None
+    }
+
+    /// Get open questions related to a canonical question.
+    pub fn open_questions_for_question(&self, question_id: &str) -> Vec<&SkeletonOpenQuestion> {
+        self.open_questions
+            .iter()
+            .filter(|oq| oq.related_question_id.as_deref() == Some(question_id))
+            .collect()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.canonical_questions.is_empty()
+    }
+
+    /// Render a compact, budget-bounded markdown landscape digest of this field
+    /// skeleton for **ambient injection into a system prompt**. Domain-agnostic:
+    /// the caller supplies the `heading` (e.g. `"Field guide — sep"`). Three
+    /// clearly-labelled sections — Settled concerns / Live tensions / Open
+    /// questions — each capped at five bullets and gated against `budget_tokens`
+    /// with a conservative upper-bound estimator (we'd rather drop a line than
+    /// overflow the prompt).
+    ///
+    /// This is the canonical `FieldSkeleton` → digest renderer. It lives here,
+    /// beside the type at the lowest crate layer, so BOTH the shared runtime's
+    /// ambient field_model step (`sovereign-core`, which cannot reach
+    /// `sovereign-tools`) and the knowledge-view manager (`sovereign-tools`) can
+    /// produce the same shape without duplicating the budgeting logic. (The
+    /// `sovereign-tools` `format_landscape` predates this and still has its own
+    /// copy keyed on `ViewKind` titles + glassbox tracing; converging it onto
+    /// this method is a low-risk follow-up.)
+    pub fn render_landscape(&self, heading: &str, budget_tokens: usize) -> String {
+        let mut out = String::new();
+        out.push_str(heading);
+        out.push_str(":\n\n");
+
+        // Settled concerns: canonical questions with at least one
+        // consensus/dominant/settled-style position.
+        let settled: Vec<_> = self
+            .canonical_questions
+            .iter()
+            .filter(|q| q.positions.iter().any(|p| is_settled_status(&p.status)))
+            .collect();
+        if !settled.is_empty() {
+            out.push_str("  Settled concerns:\n");
+            for q in settled.iter().take(5) {
+                let line = format!("    — {}\n", q.question);
+                if estimate_digest_tokens(&out) + estimate_digest_tokens(&line) > budget_tokens {
+                    break;
+                }
+                out.push_str(&line);
+            }
+            out.push('\n');
+        }
+
+        // Live tensions: fault lines flattened across all canonical questions.
+        let fault_lines: Vec<_> = self
+            .canonical_questions
+            .iter()
+            .flat_map(|q| q.fault_lines.iter())
+            .collect();
+        if !fault_lines.is_empty() {
+            out.push_str("  Live tensions:\n");
+            for fl in fault_lines.iter().take(5) {
+                let line = format!("    — {}\n", fl.crux);
+                if estimate_digest_tokens(&out) + estimate_digest_tokens(&line) > budget_tokens {
+                    break;
+                }
+                out.push_str(&line);
+            }
+            out.push('\n');
+        }
+
+        // Open questions.
+        if !self.open_questions.is_empty() {
+            out.push_str("  Open questions:\n");
+            for oq in self.open_questions.iter().take(5) {
+                let line = format!("    — {}\n", oq.question);
+                if estimate_digest_tokens(&out) + estimate_digest_tokens(&line) > budget_tokens {
+                    break;
+                }
+                out.push_str(&line);
+            }
+        }
+
+        // Hard guard: if a long per-bullet entry squeaked past the per-line
+        // check, trim at the last newline that keeps us under budget.
+        // Conservative — better to lose a line than leak past the prompt budget.
+        while estimate_digest_tokens(&out) > budget_tokens {
+            match out.rfind('\n') {
+                Some(idx) if idx > 0 => out.truncate(idx),
+                _ => {
+                    out.clear();
+                    break;
+                }
+            }
+        }
+        out
+    }
+}
+
+/// Conservative upper-bound BPE token estimate for digest budgeting (ported
+/// from the knowledge-view formatter so the renderer is self-contained at this
+/// layer). NOT a real tokenizer — bounds prompt sections only; biased to
+/// over-count so the budget guard truncates early rather than overflowing.
+fn estimate_digest_tokens(text: &str) -> usize {
+    let mut tokens: f32 = 0.0;
+    for word in text.split_whitespace() {
+        let total_chars = word.chars().count();
+        if total_chars == 0 {
+            continue;
+        }
+        let non_ascii = word.chars().filter(|c| !c.is_ascii()).count();
+        let ascii = total_chars - non_ascii;
+        if non_ascii > 0 {
+            tokens += non_ascii as f32 * 0.75;
+            tokens += ascii as f32 * 0.35;
+        } else if total_chars > 15 {
+            tokens += (total_chars as f32 / 4.0).ceil();
+        } else {
+            tokens += 1.3;
+        }
+    }
+    tokens.ceil() as usize
+}
+
+/// `true` when a position `status` marks it as consensus / dominant / settled.
+/// Lowercased before comparison so capitalised variants still match.
+fn is_settled_status(status: &str) -> bool {
+    matches!(
+        status.to_lowercase().as_str(),
+        "held" | "dominant" | "majority" | "settled" | "established" | "recurring"
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_skeleton() -> FieldSkeleton {
+        FieldSkeleton {
+            schema_version: 1,
+            corpus_id: "sep".into(),
+            generated_at: "2026-04-09T00:00:00Z".into(),
+            extraction_method: "dual_pass_v1".into(),
+            prompt_version: "1.0.0".into(),
+            domain_id: "philosophy".into(),
+            canonical_questions: vec![
+                CanonicalQuestion {
+                    id: "q_free_will".into(),
+                    question: "Is free will compatible with determinism?".into(),
+                    status: "contested".into(),
+                    question_type: "conceptual".into(),
+                    primary_entries: vec!["Free Will".into()],
+                    positions: vec![
+                        SkeletonPosition {
+                            id: "p_compatibilism".into(),
+                            name: "Compatibilism".into(),
+                            claim: "Free will is compatible with determinism".into(),
+                            status: "majority".into(),
+                            proponents: vec!["Frankfurt".into(), "Dennett".into()],
+                            source: "skeleton".into(),
+                            cluster_ids: vec![1, 2],
+                            centroid_chunk_ids: vec![100, 200],
+                            discovery_confidence: None,
+                        },
+                        SkeletonPosition {
+                            id: "p_hard_incompatibilism".into(),
+                            name: "Hard Incompatibilism".into(),
+                            claim: "Moral responsibility is impossible".into(),
+                            status: "minority".into(),
+                            proponents: vec!["Pereboom".into()],
+                            source: "skeleton".into(),
+                            cluster_ids: vec![3],
+                            centroid_chunk_ids: vec![300],
+                            discovery_confidence: None,
+                        },
+                    ],
+                    fault_lines: vec![SkeletonFaultLine {
+                        id: "fl_1".into(),
+                        between_positions: vec![
+                            "p_compatibilism".into(),
+                            "p_hard_incompatibilism".into(),
+                        ],
+                        crux: "Whether alternative possibilities are required".into(),
+                        key_chunk_ids: vec![100, 300],
+                        confidence: 0.91,
+                        source: "detected".into(),
+                        resolution_condition: None,
+                    }],
+                },
+                CanonicalQuestion {
+                    id: "q_personal_identity".into(),
+                    question: "What constitutes personal identity over time?".into(),
+                    status: "contested".into(),
+                    question_type: "conceptual".into(),
+                    primary_entries: vec!["Personal Identity".into()],
+                    positions: vec![],
+                    fault_lines: vec![],
+                },
+            ],
+            open_questions: vec![SkeletonOpenQuestion {
+                id: "oq_1".into(),
+                question: "What explains manipulation arguments?".into(),
+                status: "active_research".into(),
+                question_type: Some("conceptual".into()),
+                related_question_id: Some("q_free_will".into()),
+                representative_chunk_ids: vec![500],
+            }],
+            field_stats: FieldModelStats::default(),
+        }
+    }
+
+    #[test]
+    fn find_question_by_text_matches() {
+        let skeleton = test_skeleton();
+        let q = skeleton.find_question_by_text("free will").unwrap();
+        assert_eq!(q.id, "q_free_will");
+    }
+
+    #[test]
+    fn find_question_by_text_case_insensitive() {
+        let skeleton = test_skeleton();
+        let q = skeleton.find_question_by_text("FREE WILL").unwrap();
+        assert_eq!(q.id, "q_free_will");
+    }
+
+    #[test]
+    fn find_question_by_text_no_match() {
+        let skeleton = test_skeleton();
+        assert!(skeleton
+            .find_question_by_text("quantum mechanics")
+            .is_none());
+    }
+
+    #[test]
+    fn position_name_lookup() {
+        let skeleton = test_skeleton();
+        assert_eq!(
+            skeleton.position_name("p_compatibilism"),
+            Some("Compatibilism")
+        );
+        assert_eq!(
+            skeleton.position_name("p_hard_incompatibilism"),
+            Some("Hard Incompatibilism")
+        );
+        assert!(skeleton.position_name("p_nonexistent").is_none());
+    }
+
+    #[test]
+    fn open_questions_for_question_filters() {
+        let skeleton = test_skeleton();
+        let oqs = skeleton.open_questions_for_question("q_free_will");
+        assert_eq!(oqs.len(), 1);
+        assert_eq!(oqs[0].question, "What explains manipulation arguments?");
+
+        let oqs_empty = skeleton.open_questions_for_question("q_personal_identity");
+        assert!(oqs_empty.is_empty());
+    }
+
+    #[test]
+    fn is_empty_checks_questions() {
+        let skeleton = test_skeleton();
+        assert!(!skeleton.is_empty());
+
+        let empty = FieldSkeleton {
+            canonical_questions: vec![],
+            ..test_skeleton()
+        };
+        assert!(empty.is_empty());
+    }
+
+    #[test]
+    fn render_landscape_has_heading_and_three_sections() {
+        let skeleton = test_skeleton();
+        let out = skeleton.render_landscape("Field guide — sep", 400);
+        // Caller-supplied heading.
+        assert!(
+            out.starts_with("Field guide — sep:"),
+            "missing heading in:\n{out}"
+        );
+        // Settled concerns (the free-will question has a `majority` position).
+        assert!(
+            out.contains("Settled concerns:"),
+            "missing settled section:\n{out}"
+        );
+        assert!(out.contains("Is free will compatible with determinism?"));
+        // Live tensions (the fault-line crux).
+        assert!(
+            out.contains("Live tensions:"),
+            "missing tensions section:\n{out}"
+        );
+        assert!(out.contains("Whether alternative possibilities are required"));
+        // Open questions.
+        assert!(
+            out.contains("Open questions:"),
+            "missing open section:\n{out}"
+        );
+        assert!(out.contains("What explains manipulation arguments?"));
+    }
+
+    #[test]
+    fn render_landscape_respects_token_budget() {
+        let skeleton = test_skeleton();
+        // A tiny budget keeps the heading but truncates the bullet body.
+        let tight = skeleton.render_landscape("Field guide — sep", 8);
+        assert!(
+            estimate_digest_tokens(&tight) <= 8,
+            "overshot budget:\n{tight}"
+        );
+    }
+
+    #[test]
+    fn skeleton_json_round_trip() {
+        let skeleton = test_skeleton();
+        let json = serde_json::to_string_pretty(&skeleton).unwrap();
+        let parsed: FieldSkeleton = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.corpus_id, "sep");
+        assert_eq!(parsed.domain_id, "philosophy");
+        assert_eq!(parsed.canonical_questions.len(), 2);
+        assert_eq!(parsed.canonical_questions[0].positions.len(), 2);
+        assert_eq!(parsed.canonical_questions[0].fault_lines.len(), 1);
+        assert_eq!(parsed.open_questions.len(), 1);
+
+        let pos = &parsed.canonical_questions[0].positions[0];
+        assert_eq!(pos.name, "Compatibilism");
+        assert_eq!(pos.proponents, vec!["Frankfurt", "Dennett"]);
+        assert_eq!(pos.source, "skeleton");
+        assert!(pos.discovery_confidence.is_none());
+
+        // I3: question_type survives the round trip.
+        assert_eq!(
+            parsed.open_questions[0].question_type.as_deref(),
+            Some("conceptual")
+        );
+    }
+
+    /// I3 back-compat: a sidecar written before `question_type` existed (the
+    /// field is simply absent) must still parse, defaulting to `None`.
+    #[test]
+    fn open_question_without_type_defaults_to_none() {
+        let legacy = r#"{
+            "id": "oq_legacy",
+            "question": "Does the old sidecar still load?",
+            "status": "active_research",
+            "related_question_id": null,
+            "representative_chunk_ids": [7]
+        }"#;
+        let parsed: SkeletonOpenQuestion = serde_json::from_str(legacy).unwrap();
+        assert_eq!(parsed.id, "oq_legacy");
+        assert!(parsed.question_type.is_none());
+    }
+
+    #[test]
+    fn partial_skeleton_new() {
+        let ps = PartialSkeleton::new("philosophy");
+        assert_eq!(ps.domain_id, "philosophy");
+        assert!(ps.questions.is_empty());
+    }
+}

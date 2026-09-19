@@ -578,7 +578,7 @@ fn render_structural(
         Err(_) => return Ok(String::new()),
     };
     let mut matches: Vec<(String, &AtomEnvelope, PathBuf)> = Vec::new();
-    for atom in &atoms_file.atoms {
+    for atom in atoms_file.atoms() {
         let id = atom.id().as_str().to_string();
         let Some(path) = atom_path.get(&id) else {
             continue;

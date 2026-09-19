@@ -40,6 +40,17 @@ members = [
     # NoteStore + project_docs + notes_sync. Step 3 of the corpus-engine
     # decomposition. notes.rs (2781 LOC) cleared from the §3.1 list.
     "corpus-engine-notes",
+    # The code-intel package's next-edit crate (docs/CODE_TOOLING_BOUNDARY.md
+    # §2; domains REVIEW-build-next-edit-crate). A root sibling of the package's
+    # carve-outs, holding the pure rule/model/symbol/syntax lanes + the journal
+    # policy split out of sovereign-api's workbench cluster. A stub until
+    # dm-next-edit-move lands the modules.
+    "code-next-edit",
+    # The code-intel package's deterministic fact base
+    # (docs/CODE_TOOLING_BOUNDARY.md §2, Phase 2; domains
+    # REVIEW-build-code-facts). The `facts`/`facts_check`/`facts_store` modules
+    # split out of corpus-engine, which re-exports them at their old paths.
+    "code-facts",
     # Git archaeology — commit-history mining, rough-edge surfacing,
     # atom-provenance evaluation. Step 4 of the decomposition.
     "corpus-engine-archaeology",
@@ -61,7 +72,20 @@ members = [
     # lookup_key) — a serde + kernel-types leaf carved out 2026-09-03 so a thin
     # host can READ atlas/atoms.json without linking corpus-engine (Step 2 of
     # the enrichment-as-plugin plan).
-    "corpus-engine-vocab",
+    "understanding-vocab",
+    # The retrieval read-port leaf — CorpusIndex, IndexInfo, the persisted
+    # settings and the search/evidence surface. Carved out of corpus-engine by
+    # domains REVIEW-build-index-read-port (DE: The read-port leaf, measured
+    # again) so a thin host can open an index by corpus id without linking the
+    # engine that produced it.
+    "corpus-index",
+    # Understanding's two carved tiers (DE Step 7, redrawn; the domains
+    # campaign's rung 7). `understanding-atlas` is the pure arithmetic over the
+    # published language and `understanding-host` the ports and the knot; both
+    # are stubs until REVIEW-mint-understanding-tiers classifies the 170-file
+    # cluster and mints the move rows.
+    "understanding-atlas",
+    "understanding-host",
     # The thin knowledge host — cited search + atlas atom lookup over MCP/stdio
     # against any OpenAI-compatible endpoint; links corpus-engine + the vocab
     # leaf and nothing that carries llama.cpp, ort or iroh (enrichment-as-plugin
@@ -115,11 +139,31 @@ members = [
     # desktop Tauri host and the `sovereign meshapp dev` CLI server.
     "sovereign/crates/sovereign-meshapp",
     "sovereign/crates/sovereign-mesh",
+    # The node's host crate (DAEMON_CORE.md §4.1), beside sovereign-mesh in the
+    # `mesh-api` layer. Created as a stub so the boundary has a crate to name;
+    # receives sovereign-mesh's host modules and sovereign-api's host cluster.
+    "sovereign/crates/sovereign-daemon",
+    # The daemon-to-daemon wire types both ends of an internal exchange must
+    # spell the same way (domains dm-daemon-api-edge (a)): the receiving route
+    # lives in sovereign-daemon and the sending loop in sovereign-mesh, so the
+    # shared body needs a leaf neither makes the other's dependency.
+    "sovereign/crates/sovereign-peer-wire",
     # Supervised compute-child process boundary (DISTRIBUTED_PILOT_READINESS.md
     # P1) — child-process supervisor (extracted from sovereign-desktop) + the
     # native lossless wire + child server/entrypoint + daemon-side provider
     # facade & replica pool.
     "sovereign/crates/sovereign-compute",
+    # Compute's remote isolation — leasing a rented machine and running work on
+    # it (DOMAINS.md §11.2). Receives the worker_http / controller / daemon /
+    # subprocess-runner / multi-pod-coordinator modules; `worker_pod`'s wire
+    # protocol lives in `sovereign-contracts` (REVIEW-build-serving-worker-port).
+    "sovereign/crates/sovereign-pods",
+    # The serving package's two crates (SERVING_BOUNDARY.md "The two tiers"),
+    # created as stubs so the boundary has crates to name. The scheduler half
+    # of sovereign-mesh moves into sovereign-scheduler, the host half into
+    # sovereign-serving-host.
+    "sovereign/crates/sovereign-scheduler",
+    "sovereign/crates/sovereign-serving-host",
     "sovereign/crates/sovereign-service",
     "sovereign/crates/sovereign-server",
     "sovereign/crates/sovereign-desktop/src-tauri",
@@ -153,8 +197,6 @@ members = [
     # IP overlay today; iroh slots in behind the same trait later.
     "commonwealth/crates/commonwealth-transport",
     "commonwealth/crates/commonwealth-discovery",
-    "sovereign/crates/sovereign-serving",
-    "sovereign/crates/sovereign-api",
     "sovereign/crates/sovereign-grants",
     # The ring rail, split in two on 2026-09-04 (cw-lift 1b). `-rail-core` is
     # the pure fold — vocabulary, signing, admission, sync digest, zero I/O —
@@ -281,11 +323,15 @@ corpus-engine-archaeology = { path = "corpus-engine-archaeology" }
 corpus-engine-yield = { path = "corpus-engine-yield" }
 corpus-engine-watchers = { path = "corpus-engine-watchers" }
 corpus-engine-sections = { path = "corpus-engine-sections" }
-corpus-engine-vocab = { path = "corpus-engine-vocab" }
+understanding-vocab = { path = "understanding-vocab" }
+understanding-atlas = { path = "understanding-atlas" }
+corpus-index = { path = "corpus-index" }
+code-facts = { path = "code-facts" }
 arch-layers = { path = "quality/arch-layers" }
 sovereign-contracts = { path = "sovereign/crates/sovereign-contracts" }
 sovereign-core = { path = "sovereign/crates/sovereign-core" }
 sovereign-inference = { path = "sovereign/crates/sovereign-inference" }
+sovereign-scheduler = { path = "sovereign/crates/sovereign-scheduler" }
 sovereign-store = { path = "sovereign/crates/sovereign-store" }
 sovereign-time = { path = "sovereign/crates/sovereign-time" }
 sovereign-tools = { path = "sovereign/crates/sovereign-tools" }
@@ -301,6 +347,8 @@ sovereign-workflow-host = { path = "studio/crates/sovereign-workflow-host" }
 sovereign-studio = { path = "studio/crates/sovereign-studio" }
 sovereign-meshapp = { path = "sovereign/crates/sovereign-meshapp" }
 sovereign-mesh = { path = "sovereign/crates/sovereign-mesh" }
+sovereign-daemon = { path = "sovereign/crates/sovereign-daemon" }
+sovereign-peer-wire = { path = "sovereign/crates/sovereign-peer-wire" }
 sovereign-compute = { path = "sovereign/crates/sovereign-compute" }
 sovereign-service = { path = "sovereign/crates/sovereign-service" }
 sovereign-atos = { path = "sovereign/crates/sovereign-atos" }
@@ -315,8 +363,6 @@ sovereign-tdd = { path = "sovereign/crates/sovereign-tdd" }
 commonwealth-core = { path = "commonwealth/crates/commonwealth-core" }
 commonwealth-transport = { path = "commonwealth/crates/commonwealth-transport" }
 commonwealth-discovery = { path = "commonwealth/crates/commonwealth-discovery" }
-sovereign-serving = { path = "sovereign/crates/sovereign-serving" }
-sovereign-api = { path = "sovereign/crates/sovereign-api" }
 sovereign-grants = { path = "sovereign/crates/sovereign-grants" }
 commonwealth-rail-core = { path = "commonwealth/crates/commonwealth-rail-core" }
 commonwealth-rail = { path = "commonwealth/crates/commonwealth-rail" }

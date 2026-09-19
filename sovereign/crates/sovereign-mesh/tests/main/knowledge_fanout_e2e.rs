@@ -54,8 +54,8 @@ use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
 use commonwealth_state::MeshStore;
 use corpus_engine::index::{CorpusIndex, InsertChunk};
 use corpus_engine::{CorpusEngine, EmbedFn};
-use sovereign_api::server::{client_router, internal_router};
-use sovereign_api::state::AppState;
+use sovereign_daemon::server::{client_router, internal_router};
+use sovereign_daemon::state::AppState;
 use sovereign_meshapp_registry::registry::AppRegistry;
 
 use crate::common;
@@ -579,6 +579,7 @@ async fn fan_out_stamps_x_node_id_so_peer_emits_ledger() {
     // Pre-condition: A's ledger has no KnowledgeQueryServed.
     let pre_events = state_a
         .inner
+        .fabric
         .contribution_emitter
         .events()
         .expect("emitter.events() ok");
@@ -607,6 +608,7 @@ async fn fan_out_stamps_x_node_id_so_peer_emits_ledger() {
     // event stamped with `for_node = id_b` and `corpus_id = "sep"`.
     let post_events = state_a
         .inner
+        .fabric
         .contribution_emitter
         .events()
         .expect("emitter.events() ok");

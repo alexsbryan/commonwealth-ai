@@ -21,18 +21,42 @@
 //!   concrete watchers. They poll a shared [`corpus_engine_yield::YieldHook`]
 //!   so their subprocess runs back off while the node serves
 //!   foreground inference.
+//! - [`commit_harvest`] — the commit-message harvester the daemon's
+//!   reindexer fires on a git-HEAD change (moved in from sovereign-mesh
+//!   by domains `dm-mesh-workbench-move-watchers`). It writes
+//!   `source='committed'` notes and touches no tree-sitter.
+//! - [`projects`] — the per-project state machine (`ProjectState`,
+//!   `Registry`, the watcher toggles/statuses) the daemon's reindexer and
+//!   watchers write. Moved in from sovereign-mesh by domains
+//!   `REVIEW-build-mesh-workbench-deferred`; carries no IO.
+//! - [`reindexer`] — the daemon-side SCIP rebuild pipeline. Moved in by
+//!   the same row, behind the `treesitter` feature it carried at its old
+//!   home.
 //!
 //! ## What does NOT live here
 //! The SCIP `CodeWatcher` (`corpus_engine::update::watch`) stays in
 //! corpus-engine — it is genuinely tree-sitter/SCIP-coupled, unlike
 //! these watchers (whose old `treesitter` gate was vestigial: they
-//! only spawn `cargo` subprocesses and touch SQLite). This crate
-//! therefore compiles unconditionally, with no feature flags.
+//! only spawn `cargo` subprocesses and touch SQLite). The watchers and
+//! [`projects`] therefore compile unconditionally; only [`reindexer`]
+//! is behind `treesitter`.
 
+pub mod commit_harvest;
 pub mod error;
 pub mod lint_results;
 pub mod lint_watcher;
 pub mod project_index_watcher;
+/// The per-project state machine the daemon's reindexer + watchers write
+/// and the MCP tools / HTTP endpoints read. Moved in from `sovereign-mesh`
+/// by domains `REVIEW-build-mesh-workbench-deferred`; it carries no IO.
+pub mod projects;
+/// The daemon-side SCIP rebuild pipeline. Moved in from `sovereign-mesh`
+/// by domains `REVIEW-build-mesh-workbench-deferred`. Behind the
+/// `treesitter` feature, the gate it carried at its old home, so the
+/// grammars and the SCIP graph stay out of the closure of the consumers
+/// that do not rebuild a graph.
+#[cfg(feature = "treesitter")]
+pub mod reindexer;
 pub mod test_results;
 pub mod test_watcher;
 pub mod watcher_coordinator;

@@ -13,7 +13,7 @@ use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
 use commonwealth_state::MeshStore;
 use corpus_engine::index::{CorpusIndex, InsertChunk};
 use corpus_engine::{CorpusEngine, EmbedFn};
-use sovereign_api::state::AppState;
+use sovereign_daemon::state::AppState;
 use sovereign_mesh::gossip;
 use sovereign_meshapp_registry::registry::AppRegistry;
 use std::collections::HashMap;
@@ -143,7 +143,7 @@ async fn gossip_round_publishes_live_hosted_corpora() {
     // Sanity pre-condition: before the round, `hosted_corpora` is empty
     // (matching every constructor in the Commonwealth tree today).
     {
-        let m = state.inner.mesh.read().await;
+        let m = state.inner.fabric.mesh.read().await;
         assert!(m
             .members
             .get(&self_id)
@@ -156,11 +156,16 @@ async fn gossip_round_publishes_live_hosted_corpora() {
     // One round. No peers, so there's nothing to gossip WITH, but
     // the "refresh self capabilities" path runs regardless — it
     // doesn't depend on a peer being reachable.
-    gossip::run_one_round(&state, Duration::from_secs(60))
-        .await
-        .expect("gossip round must succeed even with no peers");
+    gossip::run_one_round(
+        &*state.inner.fabric,
+        state.inner.node.corpus_engine.as_ref(),
+        &state,
+        Duration::from_secs(60),
+    )
+    .await
+    .expect("gossip round must succeed even with no peers");
 
-    let m = state.inner.mesh.read().await;
+    let m = state.inner.fabric.mesh.read().await;
     let caps = &m.members.get(&self_id).unwrap().capabilities;
     assert_eq!(
         caps.hosted_corpora.len(),

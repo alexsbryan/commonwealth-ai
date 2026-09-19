@@ -31,7 +31,7 @@
 use std::sync::Arc;
 
 use commonwealth_core::Result as CorpusResult;
-use sovereign_mesh::landscape_digest_http::landscape_digest_router;
+use sovereign_daemon::landscape_digest_http::landscape_digest_router;
 use sovereign_tools::knowledge_view::KnowledgeViewManager;
 
 use crate::common;
@@ -51,7 +51,7 @@ async fn bare_manager() -> Arc<KnowledgeViewManager> {
     let _ = std::fs::File::create(&db_path).unwrap();
     let embed: corpus_engine::EmbedFn =
         Arc::new(|_| Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 4]) }));
-    let infer: corpus_engine::InferenceFn = Arc::new(|_, _: Option<&serde_json::Value>| {
+    let infer: corpus_engine::InferenceFn = Arc::new(|_, _: Option<u32>| {
         Box::pin(async { Ok::<String, corpus_engine::Error>("{}".into()) })
     });
     let engine = Arc::new(corpus_engine::CorpusEngine::new(

@@ -44,6 +44,8 @@ mod playwright_actuator;
 mod rag_tests;
 #[path = "main/recipe_author_tools.rs"]
 mod recipe_author_tools;
+#[path = "main/recipe_schema.rs"]
+mod recipe_schema;
 #[path = "main/smoke_tests.rs"]
 mod smoke_tests;
 #[path = "main/tavily_real_e2e.rs"]
