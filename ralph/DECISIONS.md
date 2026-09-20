@@ -257,6 +257,10 @@ exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 - Needed: The audit landed its five findings (f2e497d71) and its guest-door re-read; TESTALL is green apart from one foreign pre-existing citation of a gitignored doc; PREPUSH is red on one blocking ratchet, arch-gate's approach band (+1 file, +1475 lines), which no ralph worker may re-baseline. The package asked accept / trim / absorb, and whether to row the advisory hakari one-liner.
 - Chose: The row is done at f2e497d71 with PREPUSH recorded red on arch-gate only, the growth itemised, and the acceptance left to the operator at push: `cargo xtask arch-gate --update-baseline` (or the AGENTS.md re-pin recipe) plus a `SYSTEM_OVERVIEW.md §10` line naming what the lines bought — the room seal, the offer view and its merge instrument, the offer-clock and return-sync tests, the wall grant and QR. No split row: taking `mesh_media.rs` back under 800 removes one file from the band and leaves the line count red. hakari-verify's stale `corpus-engine-vocab` line is flagged, not rowed — outside the campaign and advisory.
 - Because: Every line of the growth is rr-2's by measurement, so absorbing it here would absorb nothing foreign, but the acceptance is the gate `git push` runs and the push is the operator's (charter; AGENTS.md "commit freely, never push"). Recording the attribution is the half the seat owns; the ledger line at push is the half the operator owns, and it costs one command.
+**A52 · 2026-09-20 · ring-guest (new campaign) + ring-media-origins · OPERATOR** — this commit
+- Needed: After rr-2's machine work closed, the operator asked whether the system generalizes to the class or was built to the demo. Measured: the substrate is general (4 `ring-doc` literals in product source, all examples; the three product bugs rr-2 found were substrate bugs), but everything the room learned about guests lives in ring-doc, and the scaffold from `svrn ring new` mentions guest zero times — so a second app shows a guest's act under the member's name alone. Operator: "Guest should be part of the substrate not something applications need to think about — separate concerns", and media "should be photos, audio … very extensible / pluggable". Four forks were put to the operator with a recommendation each.
+- Chose (operator: "go with your recommendations on all four, start the guest order"): D1 a guest's identity rides a signed `on_behalf_of` beside the payload in rail-core, not a door-owned reserved payload key; D2 the name binds to a door-issued guest session under the grant, asked once by the door's shim, so one QR serves a room; media-D1 discovery and presence are profile DATA and the least-privilege credential is a closed enum of strategies with parameters as data; media-D2 the rail row gains `kind` and `source` so the ring-native library (umbrella primitive `play`, ra-18) arrives as one more source. The guest order starts now as campaign `ring-guest` (five bars pre-registered in `quality/campaigns/ring-guest.toml` before any row ran; queue `ralph/next/ring-guest-substrate/`); the media order is decided and not started.
+- Because: a reserved payload key cannot stamp a payload-less correction (`RailAct::Correct { replacement: None }`, `commonwealth-rail-core/src/lib.rs:252-264`) and is a convention an app can collide with, while rr-2's "no rail diff" clause guarded against a guest ROLE on the roster, which provenance on an act is not. This REVISES the ring-room charter's standing rule for exactly one row, `rg-1-on-behalf-of`, and the new queue's prompt and charter say so. New campaign files rather than rungs on `ring-room.toml`, which holds 11 bars against the cap of 9.
 
 **A44 · 2026-09-19 · rr-2-gossip-claim-one-decider · director (supervisor resolution, attempt 1)** — commit: this one
 - Needed: A43 wrote the row on the premise that a SECOND site builds the claim gossip sends. The worker measured the send path and found one, stopped at the premise check without improvising a target, and asked whether to rewrite or strike the row.
@@ -7335,5 +7339,53 @@ Advisory, outside the campaign: `hakari-verify` has been red across three audits
 > 
 > The tree compiles (LINT exit=0) and is clean apart from the `[~]` mark on the
 > row; nothing is half-applied.
+
+</details>
+
+## A52 · 2026-09-20 — the operator puts guests in the substrate and opens the rail for one field
+
+<details>
+
+### The fork, as put to the operator
+
+1. **Where a guest's identity rides.** (a) a door-owned reserved payload key: no rail diff,
+   cannot stamp `Correct { replacement: None }`, collidable. (b) a signed `on_behalf_of`
+   beside the payload in rail-core: structural, covers every act kind, verifiable on every
+   replica; a wire change. Recommended (b). CHOSEN (b).
+2. **One QR, many phones.** rr-2 minted a grant per phone (`scripts/ring-room-demo.sh:266-274`).
+   Recommended a door-issued session under the grant: the grant stays the scope and the TTL,
+   the session is the person. CHOSEN.
+3. **Media profiles.** Data for discovery and presence; a closed enum of credential strategies
+   (`none`, `declared-header`, `minted-read-only-user`) with parameters as data, because least
+   privilege is a procedure that must read its own write back. CHOSEN.
+4. **Media against the umbrella.** `quality/campaigns/ring-apps.toml` primitive `play` says
+   the destination is a ring-native library and "converge, do not mint a second library".
+   The rail row gains `kind` and `source`. CHOSEN.
+
+### Evidence the forks rest on (measured 2026-09-20)
+
+- Guest handling is ring-doc's: `sovereign/apps/ring-doc/app.js:36-46,294-302`,
+  `adapter.js:64-68,347-359`. The route reads one payload field the app volunteers
+  (`sovereign-daemon/src/routes_rail.rs:174-178,234-244`) and holds the `Guest` principal
+  without stamping it (`:208-212`).
+- The scaffold (`sovereign-cli-llm/src/ring_cmd/templates/`): `grep -ci guest` = 0 on all
+  four files; it renders `op.person` (`app.js:65`) and never resolves a key.
+- The door is app-blind but serves one directory at one prefix (`guest_door.rs:41,82-83`).
+- rr-2's diff: product source +4,517, product tests +3,043, instrument +1,818.
+
+### What falsifies the campaign's premise
+
+The order's Predictions section, registered before any row: `sovereign-daemon` under ~250
+lines outside tests, `commonwealth-rail*` under ~60, `sovereign-mesh` 0, the scaffold 0,
+ring-doc negative. The audit row reads the diff against it line by line. `sovereign-daemon`
+over ~500, or one line in the scaffold, and the honest answer to "did we overbuild to the
+demo" is yes.
+
+### Revises
+
+The ring-room charter's "any diff under `commonwealth/crates/commonwealth-rail*`" is the
+operator's — still true, and the operator has now made that call for ONE field in ONE row.
+rr-2's bar clause `ra-room-guest-edit-attributed` (c) (`git diff` over the rail crates is
+empty "for rr-2") stands for rr-2 and is not edited.
 
 </details>

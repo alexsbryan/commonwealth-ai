@@ -1,0 +1,90 @@
+# Flight rules — read raw. Verdicts come from measurement rows, never prose here.
+#
+# CHILD of ring-apps, after ring-room. The falsifier for "did we build the
+# class or the demo": the app a person would make SECOND (`svrn ring new`, the
+# house-expenses scaffold, docs/HOUSE_EXPENSES.md), UNMODIFIED, on the same
+# wall, through the same door, with the same phones. Guests are the
+# substrate's (operator 2026-09-20: "Guest should be part of the substrate not
+# something applications need to think about — separate concerns"). Orders
+# under it `serves: ring-guest <bar-id ...>`.
+#
+# PRE-REGISTERED 2026-09-20 by the seat, before any row ran and before any
+# datum exists. Operator decisions the bars assume (same day): D1 a guest's
+# identity rides a signed `on_behalf_of` beside the payload in rail-core, not a
+# reserved payload key; D2 the name binds to a door-issued guest SESSION under
+# the grant, so one QR serves a room.
+id        = "ring-guest"
+parent    = "ring-apps"
+objective = "A person scaffolds a ring app with one command and never thinks about guests: on the wall a guest's act in that app reads '<name>, guest of <member>', on every replica, for every kind of act, and the app's files never mention the word. The same guest is the same person across every app on the wall, and the app that taught us this, ring-doc, loses its own guest code and still passes."
+spec      = ".sovereign/features/ring-guest-substrate/order.md (Demo, Decisions, Predictions); quality/campaigns/ring-room.toml rr-2 bars (the regression set); docs/THREAT_MODEL.md (the guest posture, NOT widened); docs/HOUSE_EXPENSES.md (the second app)"
+declared  = "2026-09-20"
+status    = "active"
+
+[predicate]
+statement = "With ring-doc and an UNMODIFIED `svrn ring new` scaffold both on the wall of the room stand-in, `RING_ROOM_TOPOLOGY=room scripts/ring-room-demo.sh verdict all` reads PASSED on every rg-* bar and on all six rr-2 bars, twice from cold, and `git diff --stat` over `sovereign-cli-llm/src/ring_cmd/templates/` is empty across the campaign."
+check     = "./scripts/sovereign-test.sh --human --package sovereign-daemon --package commonwealth-rail-core --package commonwealth-rail --package sovereign-grants"
+
+[[bar]]
+id           = "rg-second-app-zero-lines"
+demo         = "A guest scans the expenses QR, records 'propane, 40', and the wall row reads 'Wren, guest of BeefyMac'. The app was made by `svrn ring new` and nobody edited it."
+rung         = "rg-1"
+one_line     = "CLAIM: an unmodified scaffold names a guest correctly, and its files contain the word 'guest' zero times before and after"
+derives_from = "the scaffold already renders the substrate's name and never resolves a key (`ring_cmd/templates/app.js:65`, `op.person`); `grep -ci guest` over the four template files read 0 on 2026-09-20; members are on that seam and guests are not"
+floor        = 1.0
+floor_basis  = "structural: 1.0 iff (a) the instrument scaffolds the app with `svrn ring new` at run time and serves THAT directory, byte-equal to the templates (hash compared), (b) `grep -ci guest` over it reads 0, (c) the wall's row for the guest's act reads the guest's name AND the word 'guest' AND the member's mesh name within 1.4 s, (d) `git diff --stat f51b66112..HEAD -- sovereign/crates/sovereign-cli-llm/src/ring_cmd/templates` is empty. Any false is 0.0."
+target       = 1.0
+direction    = "higher_is_better"
+goodhart     = "reads 1.0 for nothing if the instrument serves a copy it patched (clause (a) hashes it against the templates); reads 1.0 while the app still does the work if guest handling moved into the templates under another word (clause (d) is the whole directory, not a grep)"
+status       = "open"
+
+[[bar]]
+id           = "rg-guest-stamped-by-the-door"
+demo         = "A page that sends no guest field, or lies in one, still has its guest's act attributed to the guest. `svrn ring log` on the Halo names them after sync."
+rung         = "rg-1"
+one_line     = "CLAIM: the guest's identity on an act is written by the door from the session it authenticated, never read from anything the page supplied"
+derives_from = "the route holds the `Guest` principal at append time and does not stamp it (`sovereign-daemon/src/routes_rail.rs:208-212`, `client_auth.rs:333`); today's only check asserts on a field the subject supplies (`routes_rail.rs:174-178,234-244`) — ARCH 5's smell by name"
+floor        = 1.0
+floor_basis  = "structural: 1.0 iff (a) an append from a guest session whose body carries NO guest field is logged with the session's name on every replica, (b) an append whose body claims a DIFFERENT guest name is logged with the session's name, not the claimed one, (c) an append from a member's own loopback session carrying a forged on_behalf_of is refused or stripped and the log says which, (d) the stamp verifies on the Halo's replica under the door's node key. Any false is 0.0."
+target       = 1.0
+direction    = "higher_is_better"
+goodhart     = "reads 1.0 while still trusting the page if the instrument's page happens to send the right name (clauses (a) and (b) are the two pages that do not); reads 1.0 on one node only if the stamp is a local annotation rather than part of what was signed (clause (d))"
+status       = "open"
+
+[[bar]]
+id           = "rg-every-act-names-the-guest"
+demo         = "A guest retracts their expense. The retraction is attributed to the guest, not to BeefyMac."
+rung         = "rg-1"
+one_line     = "CLAIM: a correction with no replacement payload is attributed to the guest who made it — the act kind the payload-key design could not stamp"
+derives_from = "`RailAct` is `Record { payload }` and `Correct { corrects, replacement: Option<Payload> }` (`commonwealth-rail-core/src/lib.rs:252-264`): a payload-less correction has nowhere inside a payload to carry a name, which is why D1 chose a field beside it"
+floor        = 1.0
+floor_basis  = "structural: 1.0 iff for each of record, correct-with-replacement and correct-with-none made by a guest, the log on the wall AND on the Halo names the guest and the member. Three of three, or 0.0."
+target       = 1.0
+direction    = "higher_is_better"
+goodhart     = "reads 1.0 on two of three if the instrument never makes the payload-less correction (the row count is in the verdict row: 3)"
+status       = "open"
+
+[[bar]]
+id           = "rg-one-person-across-apps"
+demo         = "One QR serves the room. The same phone opens the doc after the expenses app and is not asked its name again; a second phone on the same code has its own name; a phone claiming the wall's member name is refused on either app."
+rung         = "rg-2"
+one_line     = "CLAIM: the name binds to a door-issued guest session under the grant, asked once by the door's shim, and the door serves each app's page for its own rail namespace"
+derives_from = "rr-2 minted one grant per phone (`scripts/ring-room-demo.sh:266-274`) and the door serves ONE directory at ONE prefix (`guest_door.rs:41,82-83`); the `App` origin kind already argues a registry behind one route (`oicp-types/src/origin.rs`); the collision refusal and its sentence exist (`routes_rail.rs:234-244`)"
+floor        = 1.0
+floor_basis  = "structural: 1.0 iff (a) two phones scanning the SAME QR hold two distinct names on the wall, (b) a phone named in app one is attributed under that name in app two with a typed-string census of ONE name across both, (c) a claim of the member's name is refused with HTTP 409 on both apps, (d) `svrn mesh status` members are unchanged and `svrn mesh grant --list` shows ONE grant for the room. Any false is 0.0."
+target       = 1.0
+direction    = "higher_is_better"
+goodhart     = "reads 1.0 with one grant per phone as today if the instrument mints two QRs (clause (d) counts the grants); reads 1.0 while the app still asks the name if the page has a name field (the census names WHICH element took the string, and it must be the shim's)"
+status       = "open"
+
+[[bar]]
+id           = "rg-ring-doc-sheds-its-guest-code"
+demo         = "ring-doc's own guest handling is deleted and the six rr-2 bars still pass."
+rung         = "rg-2"
+one_line     = "CLAIM: what the substrate now does, the first app no longer does — measured as deleted lines with its bars green, not promised as a number"
+derives_from = "ring-doc asks the name (`app.js:36-46,294-302`), volunteers it (`adapter.js:64-68` `changeAct`'s third parameter) and renders it (`adapter.js:347-359` `displayName`'s guest arm) — about 40 lines on 2026-09-20"
+floor        = 1.0
+floor_basis  = "structural: 1.0 iff (a) `grep -ci guest sovereign/apps/ring-doc/app.js sovereign/apps/ring-doc/adapter.js` reads 0 outside the ask panel (`routes_guest_ask` is a different concern and is named in the row), (b) all six rr-2 bars read PASSED in the same cold run, (c) the deleted line count is reported in the verdict row. Any false is 0.0."
+target       = 1.0
+direction    = "higher_is_better"
+goodhart     = "reads 1.0 by renaming if the guest arm survives under another identifier (the row diffs the functions, not the word); reads 1.0 with rr-2 quietly weakened if a bar's clause was edited in the same campaign (`git diff` over `quality/campaigns/ring-room.toml` must be empty)"
+status       = "open"
