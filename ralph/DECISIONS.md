@@ -5642,6 +5642,45 @@ numeric guard. Seen live while sharing the lock with the rr-2 loop.
 `StayLocal` line reads `winner=<none>` with `decided_by n/a`; or if `mixed-hubs` under
 `warm-start` is ever measured no worse than `as-implemented`, which would reopen the term.
 
+**The three-run baseline (order item 3).** Three COLD runs on the GPU-keeper topology
+(`RING_DOC_GPU_NODES="b"`), which is the n the answer bar is judged on from now on:
+
+| run | answer | plug-in | doc p99 | film | nothing-typed |
+|---|---|---|---|---|---|
+| 1 | **0.8** (4/5) | 0.0 | 2.074 s | 1.0 | 0 |
+| 2 | **0.8** (4/5) | 0.0 | 2.360 s | 1.0 | 0 |
+| 3 | **0.8** (4/5) | 0.0 | 2.060 s | 1.0 | 0 |
+
+**The answer bar's baseline on this topology is 0.8, not 1.0.** Identical across three cold
+runs — a tighter result than the 0.6/0.8/1.0 spread the CPU-only topology produced, and the
+number any future claim about this bar is measured against. Every run's miss is ONE question
+released with no evidence (`released 0`), never a fan-out or attribution failure: every
+question that released anything named Bo, and `fanout_members` is `["Bo"]` throughout.
+
+`ra-room-plug-in-live` read 0.0 in all three, on `c_answer_names` ALONE — `a_doc_names_and_attributes`,
+`b_library_listed` and `d_n_from_mesh_only` true every time, the fourth node joining cleanly
+(n_before 3 → n_after 4, roster `["Bo","Cy","ring-doc-a","ring-doc-d"]`, doc attribution 1.17 s,
+library listed 2.13 s). `answered_s: null, asks: 1`: the ask simply does not finish inside 60 s.
+
+**Per-synthesis TTFT by server — the stage-2 finding in product form:**
+
+| run | served_by / ttft_ms |
+|---|---|
+| 1 | local 163,445 · **peer:Bo 1,587** · local 7,617 · local 6,975 |
+| 2 | local 179,404 · **peer:Bo 1,530** · local 164,644 · **peer:Bo 2,134** · **peer:Bo 1,693** |
+| 3 | local 166,488 · local 172,083 · local 6,924 · local 6,555 · **peer:Bo 1,573** |
+
+Peer-served TTFT clusters at **1,530–2,134 ms** across all three runs; local-served splits
+bimodally into 163,445–179,404 ms (cold) and 6,555–7,617 ms (warm). The same prompt, the same
+two machines, and a ~100× difference decided by which side of a ~1% margin the origin's queue
+depth happened to fall on. Nothing in the scorer distinguishes the machines.
+
+**One caveat on the timed legs, stated rather than buried.** `ra-room-doc-name-from-membership`
+read 0.0 in all three runs on `d_p99` ALONE (2.06–2.36 s; attribution 9/9, roster derived from
+the mesh, no `roster add` in the command log). That is a wall-clock leg measured while a second
+agent's cargo builds shared the host, so it is load-contaminated rather than a regression —
+and it is a reason to treat p99 legs on a shared host as could-not-judge rather than failed.
+
 **Owed.** The production ranking is unchanged and the bar is unchanged by this stage. The
 open question — how a scheduler earns a peer speed signal without the forbidden rate card — is
 scheduler design with its own measurement, not campaign work.
