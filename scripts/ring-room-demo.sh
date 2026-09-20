@@ -263,6 +263,25 @@ PY
 }
 
 mesh_json() { sv "$1" mesh status --json; }
+
+# How many members a node's own `mesh status --json` names — read once and,
+# when it prints nothing, once more 2 s later. Third recurrence of an empty
+# read (A27, A40), and an empty read is a reading the instrument FAILED to
+# make, never a count and never a false leg (ARCH 6): the exit code and the
+# first line of stderr come back beside it so the bar can name what happened.
+# Prints `<count>|<exit code>|<stderr>`; count is empty when both tries were.
+mesh_members() { # node
+  local n=$1 try out rc="" count=""
+  for try in 1 2; do
+    out=$(mesh_json "$n" 2>"$D/room-$n-members.err"); rc=$?
+    count=$(printf '%s' "$out" \
+      | python3 -c "import sys,json; print(len(json.load(sys.stdin)['members']))" 2>/dev/null)
+    [ -n "$count" ] && break
+    [ "$try" = 1 ] && sleep 2
+  done
+  printf '%s|%s|%s\n' "$count" "$rc" "$(tr '\n\t' '  ' < "$D/room-$n-members.err" | cut -c1-200)"
+}
+
 self_name() { mesh_json "$1" | python3 -c "import sys,json; print(next((m['name'] for m in json.load(sys.stdin)['members'] if m.get('is_self')), ''))" 2>/dev/null; }
 
 # ── leg 1: the answer names the machine ──────────────────────────────────────
@@ -521,8 +540,7 @@ JS
 # doc and the answer, c's rail for the library — on the host clock they share.
 leg_join() {
   local out="$D/room-join.json" n_before n_after link="" dname t0
-  local members='import sys,json; print(len(json.load(sys.stdin)["members"]))'
-  n_before=$(mesh_json a | python3 -c "$members")
+  n_before=$(mesh_members a)
   mkcfg d
   fatal() { python3 -c "import json,sys; print(json.dumps({'fatal': sys.argv[1]}))" "$1" > "$out"; }
   if [ "$BACKEND" = podman ]; then container_up_one d || { fatal "the fourth container did not start"; return; }; fi
@@ -542,7 +560,7 @@ leg_join() {
   dname=$(self_name d)
   [ -n "$dname" ] || { fatal "the fourth's mesh status names no self after the join, see room-join.out"; return; }
   wait_online "$dname" 2> "$D/room-join-online.err" || { fatal "a never saw the fourth online"; return; }
-  n_after=$(mesh_json a | python3 -c "$members")
+  n_after=$(mesh_members a)
 
   # (a) the doc: its page names it, and its edit is attributed on a.
   start_proxy d 2> "$D/room-join-proxy.err"
@@ -588,15 +606,38 @@ try:
     doc = json.load(open(f"{d}/room-join-doc.json"))
 except Exception as e:
     doc = {"fatal": f"the fourth's page wrote nothing: {e}"}
-# An empty `mesh status --json` from a is recorded as a null count and named,
-# never an int('') crash that erases the doc and library legs with it.
-unread = [f"a's mesh status --json printed nothing ({k})" for k, v in (("n_before", nb), ("n_after", na)) if not v]
-json.dump({"name": name, "n_before": int(nb) if nb else None, "n_after": int(na) if na else None, "n_unread": unread, "doc": doc,
+# An empty `mesh status --json` from a is recorded as a null count and named
+# WITH the exit code and stderr of the second try, never an int('') crash that
+# erases the doc and library legs with it and never a count the read never
+# made. `mesh_members` hands each reading over as `<count>|<rc>|<stderr>`.
+def read(s):
+    c, rc, err = (s.split("|", 2) + ["", ""])[:3]
+    return (int(c) if c else None, rc, err.strip())
+nb, nb_rc, nb_err = read(nb)
+na, na_rc, na_err = read(na)
+unread = [f"a's mesh status --json printed nothing ({k}: exit {rc}" + (f"; {err}" if err else "") + ")"
+          for k, v, rc, err in (("n_before", nb, nb_rc, nb_err), ("n_after", na, na_rc, na_err)) if v is None]
+json.dump({"name": name, "n_before": nb, "n_after": na, "n_unread": unread, "doc": doc,
            "corpus": cid, "ingest_rc": int(rc), "shared_meta": bool(meta),
            "answered_s": float(answered) if answered else None, "asks": int(asks) + (1 if answered else 0),
            "listed_s": float(listed) if listed else None,
            "library": None if backend == "podman" else "backend local: Jellyfin needs a node netns to sit in"}, sys.stdout)
 PY
+}
+
+# TRUE when the join that just failed failed the ONE way waiting can fix: the
+# joiner's iroh tunnel timed out (`join.rs:412`) while the relay was still
+# holding a torn-down node's endpoint id from a previous run ("Another endpoint
+# connected with the same endpoint id"). Two of four joins on 2026-09-19 went
+# this way. This instrument reuses no key — `room_up` does `rm -rf "$D"` before
+# any node has a data dir, so every run's endpoint key is minted fresh; the
+# wait is the relay's own, not ours. Any OTHER failure is the run's verdict and
+# is never retried.
+room_join_lost_to_the_relay() { # node
+  local n=$1
+  grep -qs "iroh tunnel" "$D/join-$n.json" \
+    && grep -qs "Another endpoint connected with the same endpoint id" \
+         "$D/$n/daemon.err" "$D/beefy/daemon.err"
 }
 
 # ── the room's bring-up ─────────────────────────────────────────────────────
@@ -613,7 +654,17 @@ room_up() {
   for n in beefy halo little; do room_start_daemon "$n"; done
   wait_all_up beefy halo little || return 3
   wait_homed beefy halo little || return 3
-  for n in halo little; do join_one "$n" && wait_online "${MESHNAME[$n]}" || return 3; done
+  local retries=0
+  for n in halo little; do
+    if ! { join_one "$n" && wait_online "${MESHNAME[$n]}"; }; then
+      room_join_lost_to_the_relay "$n" || return 3
+      echo "room: $n's join lost its iroh tunnel while the relay still held a previous endpoint id — one retry, 30 s" >&2
+      sleep 30; retries=$(( retries + 1 ))
+      join_one "$n" && wait_online "${MESHNAME[$n]}" || return 3
+    fi
+  done
+  python3 -c "import json,sys; json.dump({'join_retries': int(sys.argv[1])}, sys.stdout)" \
+    "$retries" > "$D/room-up.json"
   sleep 12
   members_from_mesh 3 || return 3
   # The wall's own screen: the member's page, loopback, exactly as rr-1 runs it.
@@ -888,8 +939,14 @@ print('\n'.join(urls))" "$D/beefy/daemon.err" "$1" 2>/dev/null
 # was still reachable measures nothing at all. Two readings on beefy, both
 # inside the cut and before the phone types anything:
 #   (1) `mesh status --json` stops calling the two uplink members online,
-#       within one gossip round;
-#   (2) every address in `room_peer_urls` refuses an OICP capabilities fetch.
+#       within one gossip round — RECORDED into `$D/room-cut-status.out` and
+#       NOT gating (A42): `online` is the roster's own liveness clock, which a
+#       member keeps until its last-seen window closes; a roster that has not
+#       caught up yet is not an uplink that is still carrying bytes, and the
+#       bar was reading COULD-NOT-JUDGE on it while the cut was real.
+#   (2) every address in `room_peer_urls` refuses an OICP capabilities fetch —
+#       this alone decides, because it is the only reading that fails when a
+#       byte still crosses the uplink.
 # Echoes the surviving address, or nothing. The leg reads COULD-NOT-JUDGE on a
 # survivor — never FAILED, never PASSED.
 room_assert_cut() {
@@ -905,7 +962,7 @@ print(' '.join(m.get('name','') for m in ms
     [ "$(date +%s)" -ge "$deadline" ] && break
     sleep 3
   done
-  [ -n "$online" ] && { echo "mesh status on beefy still calls $online online 30 s after the cut"; return 0; }
+  printf '%s' "$online" > "$D/room-cut-status.out"
   for u in $(room_peer_urls "${MESHNAME[halo]}"); do
     node_curl beefy -s --max-time 5 -o /dev/null "$u" 2>/dev/null \
       && { echo "$u still answers an OICP capabilities fetch from beefy"; return 0; }
@@ -914,7 +971,7 @@ print(' '.join(m.get('name','') for m in ms
 }
 
 leg_room_offline() {
-  local out="$D/room-offline.json" q wallpid before_beefy after_beefy after_halo t0 conv="" survivor=""
+  local out="$D/room-offline.json" q wallpid before_beefy after_beefy after_halo t0 conv="" survivor="" status_online=""
   q=$(BANK="$BANK" python3 -c "import json,os; print(json.loads(os.environ['BANK'])[1][1])")
   : > "$D-wall-cut.ndjson"
   REPO="$REPO" PA="$(tab_url beefy)" OUT="$D-wall-cut.ndjson" POLL_MS=250 WATCH_S=900 \
@@ -922,7 +979,8 @@ leg_room_offline() {
   wallpid=$!
   cut_node beefy "$UPLINK" > "$D/room-cut.out" 2>&1
   survivor=$(room_assert_cut)
-  echo "${survivor:-the cut is a cut: no uplink member online on beefy, no logged peer address answers}" > "$D/room-cut-assert.out"
+  status_online=$(cat "$D/room-cut-status.out" 2>/dev/null)
+  echo "${survivor:-the cut is a cut: no logged peer address answers an OICP fetch from beefy}${status_online:+ [recorded, not gating: mesh status on beefy still calls $status_online online]}" > "$D/room-cut-assert.out"
   sleep 10
   room_phone phone-cut "$PAGE/wall-qr.svg" "$GUEST_ONE" 1 "$q" ""
   kill "$wallpid" 2>/dev/null
@@ -934,12 +992,16 @@ leg_room_offline() {
     [ -n "$after_halo" ] && [ "$after_halo" = "$after_beefy" ] && { conv=$(( $(date +%s) - t0 )); break; }
     sleep 3
   done
-  python3 - "${before_beefy:-}" "${after_beefy:-}" "${after_halo:-}" "${conv:-}" "$q" "$survivor" > "$out" <<'PY'
+  python3 - "${before_beefy:-}" "${after_beefy:-}" "${after_halo:-}" "${conv:-}" "$q" "$survivor" "$status_online" > "$out" <<'PY'
 import json, sys
-before, after_b, after_h, conv, q, survivor = sys.argv[1:7]
+before, after_b, after_h, conv, q, survivor, status_online = sys.argv[1:8]
 json.dump({"question": q, "beefy_at_cut": before, "beefy_after": after_b, "halo_after": after_h,
            "converged_s": int(conv) if conv else None,
            "byte_equal": bool(after_h) and after_h == after_b,
+           # The roster reading, kept because it is worth seeing and gating on
+           # nothing: only `cut_not_a_cut` — a peer address that still answers
+           # — can withhold this bar's verdict.
+           "status_online_at_cut": status_online or None,
            "cut_not_a_cut": survivor or None}, sys.stdout)
 PY
 }
@@ -1109,6 +1171,10 @@ if topology != "room":
         row("ra-room-plug-in-live", None, "phase-missing")
     elif j.get("fatal"):
         row("ra-room-plug-in-live", None, j["fatal"])
+    elif j.get("n_unread"):
+        # ARCH 6: a member count the instrument could not read is not a count
+        # of zero and not a leg that is false. The exit code is the finding.
+        row("ra-room-plug-in-live", None, "; ".join(j["n_unread"]), n_unread=j["n_unread"])
     else:
         within = lambda s: s is not None and win is not None and s <= win
         doc = j["doc"]
@@ -1332,7 +1398,8 @@ if topology == "room":
                                                  and off_w is not None and o["converged_s"] <= off_w}
         row("ra-room-offline-room-says-so", 1.0 if all(legs.values()) else 0.0, "", legs=legs,
             window_s=off_w, edit_seen_s=cut_s, wall_showed=cut_line,
-            cited_during_the_cut=cut_cites, gaps=len(cut_es.get("gaps") or []),
+            cited_during_the_cut=cut_cites, status_online_at_cut=o.get("status_online_at_cut"),
+            gaps=len(cut_es.get("gaps") or []),
             turn_verdict=cut_es.get("verdict"), answer=(cut_ask.get("answer") or "")[:400],
             converged_s=o.get("converged_s"), journals={"beefy": o.get("beefy_after"), "halo": o.get("halo_after")})
 

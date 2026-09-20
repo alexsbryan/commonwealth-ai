@@ -237,9 +237,31 @@ need_binaries() {
   fi
 }
 
+# Both the up path (below) and the down path come through here, so a topology
+# left up by a killed run cannot kill the next one — EXCEPT that `podman rm -f`
+# refuses a container another container's network namespace sits in, and then
+# `network rm -f` refuses the network that undeleted container holds, so the
+# next `network create` dies with `network name uplink already used`. The media
+# holder is exactly such a dependent (`CW_MEDIA_NETWORK=container:<node>`).
+# Measured on this host 2026-09-19 with a two-container stand-in:
+#   rm -f a          → "container <a> has dependent containers which must be
+#                       removed before it: <side>: container already exists"
+#   network rm -f X  → the same refusal
+#   network create X → "network name X already used: network already exists"
+# podman names the dependent in that refusal, so it is taken from the error and
+# removed, and the node is retried. Nothing here guesses at a sidecar's name.
 containers_down() {
-  local n
-  for n in "${NODES[@]}"; do "${PODMAN[@]}" rm -f -t 2 "$CPREFIX-$n" >/dev/null 2>&1; done
+  local n out dep
+  for n in "${NODES[@]}"; do
+    out=$("${PODMAN[@]}" rm -f -t 2 "$CPREFIX-$n" 2>&1) || {
+      for dep in $(printf '%s\n' "$out" \
+        | sed -n 's/.*dependent containers which must be removed before it: \([0-9a-f,]*\).*/\1/p' \
+        | tr ',' ' '); do
+        "${PODMAN[@]}" rm -f -t 2 "$dep" >/dev/null 2>&1
+      done
+      "${PODMAN[@]}" rm -f -t 2 "$CPREFIX-$n" >/dev/null 2>&1
+    }
+  done
   for n in "${!NETS[@]}"; do "${PODMAN[@]}" network rm -f "$n" >/dev/null 2>&1; done
   return 0
 }
