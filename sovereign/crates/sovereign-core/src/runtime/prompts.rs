@@ -383,11 +383,26 @@ pub(crate) const KQ_MERGED_LIMIT: usize = 20;
 pub(crate) fn kq_pool_scale() -> usize {
     static SCALE: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
     *SCALE.get_or_init(|| {
-        let scale = std::env::var("SOVEREIGN_KQ_POOL_SCALE")
-            .ok()
+        let raw = std::env::var("SOVEREIGN_KQ_POOL_SCALE").ok();
+        let asked = raw
+            .as_deref()
             .and_then(|v| v.trim().parse::<usize>().ok())
-            .filter(|n| (1..=8).contains(n))
-            .unwrap_or(1);
+            .filter(|n| (1..=8).contains(n));
+        // NAME the substitution instead of defaulting through it
+        // (ARCH §18.3). Unset means 1 and is the declared default, but
+        // a SET value we could not honour is a different thing: a pod
+        // run launched with a typo'd or out-of-range scale would
+        // otherwise execute at 1 and still be recorded as the
+        // deep-pool arm — a well-formed result that is wrong.
+        if let (Some(v), None) = (raw.as_deref(), asked) {
+            tracing::warn!(
+                requested = v,
+                effective = 1,
+                "SOVEREIGN_KQ_POOL_SCALE is not an integer in 1..=8 — running \
+                 at 1. This run does NOT have a deeper pool."
+            );
+        }
+        let scale = asked.unwrap_or(1);
         let (merged, chars) = pool_limits_at(scale);
         tracing::debug!(
             scale,
