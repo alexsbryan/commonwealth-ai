@@ -5650,3 +5650,15 @@ beyond it is not.
 **For the operator.** Should a too-short skip make `enrich extract` exit non-zero? "Skipped" reported as "failed" is what turned a complete extraction into a failed batch line (ARCH 6). And the ralph library needs a row-level session timeout: inventory item 12 for `ralph-lib`.
 
 </details>
+
+## A39 · 2026-09-20 — the I2 fork: fix the bank, add a route census, leave I2 alone (OPERATOR decision)
+
+<details>
+
+**Decided by the operator in session** ("let's go with your recs"), on the seat's recommendation. The pilot exited 4: six of eight K4 items are writing commands, the router sends those to GenerativeQuery, and that route retrieves nothing by design — the `full` arm was closed-book on them and I2 abstained correctly. Refused: narrowing I2's population (tunes a pre-registered instrument toward passing) and carving I2 out of the pilot (a borrowed reason). Not attempted here: making Generative retrieve — a product question with its own order (`routing-blemishes-1` C1, `turn-pipeline-2`).
+
+**What lands:** K4 items re-asked by ONE fixed template, applied once, before any route or score is seen; a new check I7 (route census) and an `excluded_ungrounded_route` count in `compare.py study`; I2 and its 50% threshold untouched. REVIEW-DEMO-e7-pod-window is closed on its re-census half (`0635b244e`); its PILOT check moves to REVIEW-DEMO-e7-pilot-rerun. The scope sentence is PROPOSED under Deviations; placing it in the pre-reg body is the operator's at ratification.
+
+**Falsified if** I2 is still under 50% after the rewrite — then the K4 treatment does not reach question-shaped asks either, and that is a finding about the product, recorded as a result.
+
+</details>
