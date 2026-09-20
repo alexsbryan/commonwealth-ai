@@ -51,6 +51,18 @@ const RANK_K: f64 = 20.0;
 /// once by their own global rank, once by the decay.)
 const ARTICLE_DECAY: f64 = 0.7;
 
+/// Denominator of the merge budget that atom-enum virtual chunks may
+/// PIN. The pin below was unconditional, so a pool holding
+/// `KQ_MERGED_LIMIT` or more virtual chunks took every slot before the
+/// demand slots and the greedy fill ran and NO real passage reached
+/// synthesis (spike 1, 2026-09-19, `research/ontology-retrieval/spikes/
+/// k1-ceiling/full_topk40.log:444`: at top-K 40, `atom_enum_survived=20`
+/// of `total=20`). Virtual chunks past the reserve are not dropped —
+/// they compete in steps 2-3 on rank like any other chunk. The half is
+/// a mechanism, pre-registered in `PRE-REG-custom-ontology-and-raptor-
+/// 2026-09-17.md` decision D2, not a value tuned on any bank.
+const ATOM_ENUM_MERGE_SHARE_DEN: usize = 2;
+
 /// `SOVEREIGN_MERGE_SELECT`: demand-aware composition (entity fetch
 /// obligations + merge_demand_select) in place of the legacy
 /// cap/reserves/truncate stack. Default ON (promoted 2026-07-17
@@ -124,7 +136,11 @@ pub(crate) fn merge_demand_select(
         .collect();
 
     // 1. Pins. RAPTOR is additive (does not consume budget); atom-enum
-    //    consumes budget as it did under the legacy reserve.
+    //    consumes budget as it did under the legacy reserve, but only up
+    //    to its reserved share of it, so passages always keep the rest.
+    let atom_enum_pin_cap = budget / ATOM_ENUM_MERGE_SHARE_DEN;
+    let mut atom_enum_pinned = 0usize;
+    let mut atom_enum_competing = 0usize;
     for (i, c) in chunks.iter().enumerate() {
         // Summary tier, off the typed stamp — was `source == "raptor"`, which
         // matched an indexed rollup row and an in-process one through a
@@ -132,10 +148,26 @@ pub(crate) fn merge_demand_select(
         // chunk as a rollup, so this one IS provenance.
         if c.provenance.grain() == kernel_types::Grain::Summary {
             selected[i] = true;
-        } else if routed_by(c, "atom-enum") && spent < budget {
-            selected[i] = true;
-            spent += 1;
+        } else if routed_by(c, "atom-enum") {
+            if atom_enum_pinned < atom_enum_pin_cap && spent < budget {
+                selected[i] = true;
+                spent += 1;
+                atom_enum_pinned += 1;
+            } else {
+                atom_enum_competing += 1;
+            }
         }
+    }
+    if atom_enum_competing > 0 {
+        tracing::debug!(
+            target: "retrieval_audit",
+            event = "merge_select_atom_enum_reserve",
+            budget,
+            cap = atom_enum_pin_cap,
+            pinned = atom_enum_pinned,
+            competing = atom_enum_competing,
+            "retrieval_audit: atom-enum reserve bound; unpinned virtual chunks compete on rank"
+        );
     }
 
     // 2. Demand slots: best (earliest-ranked) title-matching chunk per
@@ -298,6 +330,23 @@ mod tests {
         assert!(out.iter().any(|c| c.title.as_deref() == Some("atoms")));
         // 10 budget slots (atom-enum inside) + 1 additive raptor pin.
         assert_eq!(out.len(), 11);
+    }
+
+    #[test]
+    fn virtual_chunks_never_take_more_than_half_the_merge() {
+        // Spike 1 (2026-09-19, top-K 40): `atom_enum_survived=20` of
+        // `total=20` — the unconditional pin spent every slot on virtual
+        // chunks and no real passage reached synthesis. Virtual chunks
+        // carry no query embedding and sort last (module doc §1), so the
+        // real passages rank ahead of them here.
+        let mut pool: Vec<_> = (0..10).map(|i| chunk(&format!("R{i}"), None)).collect();
+        for i in 0..40 {
+            pool.push(chunk(&format!("V{i}"), Some("atom-enum")));
+        }
+        let out = merge_demand_select(pool, &[], 20);
+        let real = out.iter().filter(|c| !routed_by(c, "atom-enum")).count();
+        assert!(real >= 10, "real = {real}, out = {}", out.len());
+        assert_eq!(out.len(), 20);
     }
 
     #[test]

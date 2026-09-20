@@ -3847,7 +3847,8 @@ metadata with no query-token overlap that the floor would drop
 (`step_atom_enum`). That exemption is load-bearing and dangerous in equal
 measure: nothing downstream can reject an irrelevant chunk once injected, and
 `merge_demand_select` **pins** `source=atom-enum` chunks ahead of the ranked
-pool. Measured on `bench sep/summarize --prod-pipeline`, the overview-claim
+pool, up to half the merge budget (`ATOM_ENUM_MERGE_SHARE_DEN`; past that they
+compete on rank like any chunk). Measured on `bench sep/summarize --prod-pipeline`, the overview-claim
 injector was spending 5-8 of ~30 slots per turn on
 `commonwealth-ai-arch-principles` in **14 of 14** questions — the same three
 claims each time, because its selector ranked on `(has_evidence, has_excerpt,
