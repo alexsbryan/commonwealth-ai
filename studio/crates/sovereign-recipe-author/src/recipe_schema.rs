@@ -433,6 +433,8 @@ fn ontology_schema(descriptor: &Value) -> Value {
             "guidance": { "type": "string" },
             "vocabulary": vocabulary_schema(),
             "must_not": { "type": "array", "items": { "type": "string" } },
+            // Range is `recipe_ontology/language.rs`'s check; absent = 15.
+            "max_entities_per_section": { "type": "integer", "minimum": 5, "maximum": 60 },
             "types": { "type": "array", "items": ontology_type_schema(descriptor) },
             "voices": {
                 "type": "object",
