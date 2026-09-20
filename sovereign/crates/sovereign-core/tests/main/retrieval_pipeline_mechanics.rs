@@ -337,7 +337,10 @@ async fn simple_query_retrieval_is_labelled_simple_query() {
         "the runner emits one row per step — capturing none means this test \
          watched nothing and cannot fail for the right reason"
     );
-    let deep: Vec<&String> = rows.iter().filter(|r| r.contains("pipeline=deep_query")).collect();
+    let deep: Vec<&String> = rows
+        .iter()
+        .filter(|r| r.contains("pipeline=deep_query"))
+        .collect();
     assert!(
         deep.is_empty(),
         "a SimpleQuery turn must not label its retrieval rows `deep_query`: {deep:?}"
