@@ -13,7 +13,12 @@ fired per question, read from <arm>.log in question order ("walking the map
 
 **study** reads the runs `research/ontology-retrieval/harness/run_arm.py`
 writes — `<dir>/<arm>/run-<N>/{eval.json,manifest.json}` — and emits
-`scoreboard.json` plus a fixed-width category x arm table. It REFUSES arms that
+`scoreboard.json` plus a fixed-width category x arm table, and
+`sidebyside.{json,md}`: one block per question, three columns (bare, ablation,
+full), each carrying gold members found/missed, fabricated members
+(`--vocabulary <truth.json>`; without one the metric reads never-ran),
+numbered citations and the walk's evidence path. `--recipe <recipe.toml>` with
+`[corpus].query_sharing = false` withholds the snippets and says so. It REFUSES arms that
 are not comparable (PRE-REG-custom-ontology-and-raptor-2026-09-17, "Corpora and
 held-out truth" > Freeze / Model and host, and check I3): that refusal is the
 verdict `could-not-judge` and exit 4, never a number computed across two
@@ -504,8 +509,12 @@ def write_board(out_dir, board):
     return d / "scoreboard.json"
 
 
-def study(runs_root, out_dir, quiet=False):
-    """`(exit_code, scoreboard)`. 0 clean · 2 nothing to compare · 4 refused."""
+def study(runs_root, out_dir, quiet=False, vocabulary=None, recipe=None):
+    """`(exit_code, scoreboard)`. 0 clean · 2 nothing to compare · 4 refused.
+
+    `sidebyside.json` / `sidebyside.md` land beside `scoreboard.json` on the
+    clean path only: a refusal has no comparable arms to put in three columns.
+    """
     arms, incomplete = load_runs(runs_root)
     if not arms:
         board = {"schema": SCHEMA, "runs": str(runs_root), "verdict": "never-ran",
@@ -531,9 +540,371 @@ def study(runs_root, out_dir, quiet=False):
         return 4, board
     board = build_scoreboard(arms, incomplete, identity, i3, runs_root)
     write_board(out_dir, board)
+    sbs = build_sidebyside(arms, board, runs_root, vocabulary=vocabulary,
+                           recipe=recipe)
+    path = write_sidebyside(out_dir, sbs)
     if not quiet:
         print_table(board)
+        miss = (f", never-ran: {', '.join(sbs['missing_arms'])}"
+                if sbs["missing_arms"] else "")
+        print(f"side-by-side: {len(sbs['questions'])} question(s) x "
+              f"{len(sbs['arms'])} arm(s){miss} -> {path}")
+        if not sbs["snippets"]["shown"]:
+            print(f"snippets withheld — {sbs['snippets']['reason']}")
+        if sbs["vocabulary"]["verdict"] != "passed":
+            print(f"fabricated members: never-ran — {sbs['vocabulary']['reason']}")
     return 0, board
+
+
+# ── the three-way side-by-side ───────────────────────────────────────────────
+
+SIDEBYSIDE_SCHEMA = "ei7-sidebyside/v1"
+# The pre-reg's three columns ("What the study must emit" — bare, generic,
+# custom; `generic` is the ablation build and `custom` is full).
+SIDEBYSIDE_ARMS = [BARE_ARM, ABLATION_ARM, FULL_ARM]
+# The md's cap only. `sidebyside.json` carries the run's own snippet text,
+# which the runner already truncates to ~600 chars (`runner.rs:239-241`).
+SNIPPET_CHARS = 240
+NO_WALK = "no walk"
+WALK_REACHED_NOTHING = "walk ran, reached nothing"
+# An atom whose `subtype` is empty carries no declared type. On the ablation
+# build that is every atom, by construction — so the word is a reading of the
+# arm, not a blank to hide.
+UNTYPED = "untyped"
+
+HARNESS = Path(HERE).parents[3] / "research" / "ontology-retrieval" / "harness"
+
+
+def load_fabricated_scorer():
+    """`(fabricated_members, None)` from the harness, or `(None, reason)`.
+
+    Imported, never re-derived. The matching rules the count depends on —
+    case-folded, word-bounded, longest name first — are one decider and it
+    lives in `research/ontology-retrieval/harness/fabricated.py` (ARCH §8). A
+    checkout without the harness reports the absence; it does not score 0.
+    """
+    import importlib.util
+    path = HARNESS / "fabricated.py"
+    if not path.is_file():
+        return None, f"no fabricated-member scorer at {path}"
+    spec = importlib.util.spec_from_file_location("ei7_fabricated", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.fabricated_members, None
+
+
+def load_vocabulary(path):
+    """`(names, note)` from a truth JSON — `(None, note)` when there is none.
+
+    The shape is the pre-reg's ("A2. Typed reach ... in the
+    `sovereign-recipes/wessex-hoard/truth.json` shape"): `entities` maps each
+    declared type to a list of members carrying `name`. A bare JSON list of
+    names is read too, because that is the literal of the scorer's own
+    `vocabulary: list[str]` parameter.
+
+    A file that yields NO name is `never-ran`, not an empty vocabulary: an
+    empty list scores every answer 0 fabricated, which reads exactly like a
+    clean run (ARCH §6).
+    """
+    note = {"verdict": "never-ran", "path": None if path is None else str(path),
+            "names": 0, "reason": "no `--vocabulary` was given"}
+    if path is None:
+        return None, note
+    p = Path(os.path.expanduser(str(path)))
+    if not p.is_file():
+        note["reason"] = f"no such vocabulary file: {p}"
+        return None, note
+    try:
+        doc = json.loads(p.read_text())
+    except (ValueError, OSError) as e:
+        note["reason"] = f"{p} did not parse: {type(e).__name__}: {e}"
+        return None, note
+    names = []
+    if isinstance(doc, list):
+        names = [str(x) for x in doc if isinstance(x, str) and x.strip()]
+    elif isinstance(doc, dict):
+        for members in (doc.get("entities") or {}).values():
+            for m in members or []:
+                name = m.get("name") if isinstance(m, dict) else m
+                if isinstance(name, str) and name.strip():
+                    names.append(name)
+    seen, unique = set(), []
+    for n in names:
+        if n.casefold() not in seen:
+            seen.add(n.casefold())
+            unique.append(n)
+    if not unique:
+        note["reason"] = (f"{p} holds no name — expected `entities` in the "
+                          f"truth.json shape, or a list of names")
+        return None, note
+    note.update(verdict="passed", names=len(unique), reason=None)
+    return unique, note
+
+
+def snippet_policy(recipe):
+    """Whether the side-by-side may print chunk text, and why.
+
+    `[corpus].query_sharing` is the recipe's answer to "may a peer search this
+    and receive cited snippets back?" (`corpus-engine/src/recipe.rs:785-799`),
+    and the pre-reg hands the renderer that same flag: "when it is false, the
+    renderer withholds snippets and says so". `None` there falls back to
+    `mesh_sharing`, which is the field's own documented back-compat rule.
+
+    With no `--recipe`, no custody declaration was read at all: that is said in
+    the header rather than resolved to `true`, and the snippets are printed —
+    withholding on a flag nobody read would be the same invented answer facing
+    the other way.
+    """
+    import tomllib
+    pol = {"shown": True, "verdict": "never-ran", "recipe": None,
+           "query_sharing": None, "source": None,
+           "reason": "no `--recipe` was given — custody was not read"}
+    if recipe is None:
+        return pol
+    p = Path(os.path.expanduser(str(recipe)))
+    pol["recipe"] = str(p)
+    if not p.is_file():
+        pol["reason"] = f"no such recipe: {p} — custody was not read"
+        return pol
+    try:
+        doc = tomllib.loads(p.read_text())
+    except (tomllib.TOMLDecodeError, OSError) as e:
+        pol["reason"] = f"{p} did not parse: {type(e).__name__}: {e}"
+        return pol
+    corpus = doc.get("corpus") or {}
+    flag, source = corpus.get("query_sharing"), "query_sharing"
+    if flag is None:
+        flag, source = corpus.get("mesh_sharing"), "mesh_sharing"
+    if flag is None:
+        pol["reason"] = (f"{p} declares neither `query_sharing` nor "
+                         f"`mesh_sharing` under [corpus]")
+        return pol
+    pol.update(shown=bool(flag), verdict="passed", query_sharing=bool(flag),
+               source=source,
+               reason=(f"{source} = {bool(flag)} in {p.name}"))
+    return pol
+
+
+def walk_path(row):
+    """`(verdict, lines)` for one row's evidence path.
+
+    Three outcomes, not two (ARCH §6):
+
+      - no `atlas_walk` key   → `no walk`. The walk did not run for this row,
+        which is the truth for every bare run and is not "reached nothing".
+      - `atlas_walk`, no nodes → `walk ran, reached nothing`.
+      - nodes → one line each, in the echo's own order (highest walk weight
+        first, `types.rs:219-221`): a seed is `name (subtype)` and a hop is
+        `from (subtype) —via→ name (subtype)`.
+
+    A `from` the echo does not carry is beyond `MAP_NODE_CAP` — the atom id is
+    printed as it stands rather than dropping the hop.
+    """
+    walk = row.get("atlas_walk")
+    if not isinstance(walk, dict):
+        return NO_WALK, []
+    nodes = walk.get("nodes") or []
+    if not nodes:
+        return WALK_REACHED_NOTHING, []
+    by_id = {n.get("atom_id"): n for n in nodes}
+
+    def named(n):
+        return f"{n.get('name')} ({n.get('subtype') or UNTYPED})"
+
+    lines = []
+    for n in nodes:
+        src = n.get("from")
+        if not src:
+            lines.append(named(n))
+            continue
+        parent = by_id.get(src)
+        head = named(parent) if parent else f"{src} (beyond the node cap)"
+        lines.append(f"{head} —{n.get('via') or 'edge'}→ {named(n)}")
+    return "passed", lines
+
+
+def citations_of(row, show_snippets):
+    """Numbered references from `retrieved[].title`, in retrieval order."""
+    out = []
+    for i, c in enumerate(row.get("retrieved") or [], 1):
+        out.append({"n": i, "title": c.get("title"),
+                    "corpus_id": c.get("corpus_id"),
+                    "snippet": (c.get("snippet") if show_snippets else None)})
+    return out
+
+
+def first_measured(runs, qid):
+    """`(run, row)` for the lowest-numbered run that MEASURED `qid`.
+
+    A block shows one answer's text, citations and path, and there is no mean
+    of those — so the column names a run rather than averaging. The rule is the
+    lowest index that measured it, and the run rides in the column, so the pick
+    is checkable rather than a choice. A row the runner marked `error` is
+    skipped here exactly as the scoreboard skips it.
+    """
+    for r in runs:
+        row = next((x for x in rows_of(r) if x.get("question_id") == qid), None)
+        if row is not None and measured(row):
+            return r, row
+    return None, None
+
+
+def sidebyside_column(arm, runs, qid, vocab, fab, show_snippets):
+    """One arm's cell set for one question."""
+    if not runs:
+        return {"verdict": "never-ran", "run": None,
+                "reason": f"no `{arm}` arm under the runs dir"}
+    run, row = first_measured(runs, qid)
+    if row is None:
+        return {"verdict": "never-ran", "run": None,
+                "reason": f"no run of `{arm}` measured {qid}"}
+    gold = [{"fact": f, "present": p} for f, p in judge_members(row)]
+    answer = ((row.get("synth") or {}).get("answer")) or ""
+    if vocab is None or fab is None:
+        fabricated = {"verdict": "never-ran", "names": None, "count": None}
+    else:
+        names = fab(answer, vocab, [g["fact"] for g in gold if g["fact"]])
+        fabricated = {"verdict": "passed", "names": names, "count": len(names)}
+    verdict, lines = walk_path(row)
+    return {
+        "verdict": "passed", "run": run["run"], "reason": None,
+        "judge": judge_ratio(row), "kw": kw_ratio(row),
+        "gold": gold,
+        "found": sum(1 for g in gold if g["present"]),
+        "missed": sum(1 for g in gold if not g["present"]),
+        "fabricated": fabricated,
+        "citations": citations_of(row, show_snippets),
+        "path": {"verdict": verdict, "lines": lines},
+    }
+
+
+def build_sidebyside(arms, board, runs_root, vocabulary=None, recipe=None):
+    """One block per question, three columns (bare, ablation, full)."""
+    vocab, vocab_note = load_vocabulary(vocabulary)
+    fab, fab_reason = load_fabricated_scorer()
+    if fab is None and vocab_note["verdict"] == "passed":
+        vocab_note.update(verdict="never-ran", reason=fab_reason)
+    snippets = snippet_policy(recipe)
+    excluded = set(((board or {}).get("closed_book") or {}).get("excluded") or [])
+
+    meta = {}
+    for arm in SIDEBYSIDE_ARMS:
+        for r in arms.get(arm, []):
+            for row in rows_of(r):
+                meta.setdefault(row.get("question_id"),
+                                (row.get("category"), row.get("question")))
+    questions = []
+    for qid in sorted(meta, key=lambda q: (str(meta[q][0]), str(q))):
+        category, text = meta[qid]
+        questions.append({
+            "question_id": qid, "category": category, "question": text,
+            # Kept in the file and MARKED: a block is a reading, not a mean,
+            # and an excluded question is the one a reader most wants to see.
+            "closed_book_excluded": qid in excluded,
+            "columns": {arm: sidebyside_column(arm, arms.get(arm, []), qid,
+                                               vocab, fab, snippets["shown"])
+                        for arm in SIDEBYSIDE_ARMS},
+        })
+    return {
+        "schema": SIDEBYSIDE_SCHEMA,
+        "runs": str(runs_root),
+        "generated_at_unix": int(time.time()),
+        "arms": list(SIDEBYSIDE_ARMS),
+        "missing_arms": [a for a in SIDEBYSIDE_ARMS if not arms.get(a)],
+        "vocabulary": vocab_note,
+        "snippets": snippets,
+        "questions": questions,
+    }
+
+
+def _cell(lines):
+    """A markdown table cell. `|` would end the cell and a newline the row."""
+    if not lines:
+        return "—"
+    return "<br>".join(str(x).replace("|", "\\|").replace("\n", " ")
+                       for x in lines)
+
+
+def _citation_lines(col):
+    return [f"[{c['n']}] {c['title'] or '(untitled — ' + str(c['corpus_id']) + ')'}"
+            for c in col.get("citations") or []]
+
+
+def _fabricated_lines(col):
+    f = col.get("fabricated") or {}
+    if f.get("verdict") != "passed":
+        return ["never-ran"]
+    return [f"{len(f['names'])}: " + ", ".join(f["names"])] if f["names"] else ["0"]
+
+
+def render_sidebyside_md(sbs):
+    """The same blocks as `sidebyside.json`, as one markdown file."""
+    arms = sbs["arms"]
+    v, s = sbs["vocabulary"], sbs["snippets"]
+    out = ["# EI7 stage-0 — three-way side-by-side", ""]
+    out.append(f"runs: `{sbs['runs']}`")
+    out.append(f"arms: {', '.join(arms)}"
+               + (f" (never-ran: {', '.join(sbs['missing_arms'])})"
+                  if sbs["missing_arms"] else ""))
+    out.append("fabricated members: " + (
+        f"vocabulary of {v['names']} name(s) from `{v['path']}`"
+        if v["verdict"] == "passed" else f"never-ran — {v['reason']}"))
+    out.append("snippets: " + (
+        f"shown — {s['reason']}" if s["shown"]
+        else f"WITHHELD — {s['reason']}"))
+    out.append("")
+    out.append("A column names the run it read: the lowest-numbered run of that "
+               "arm that measured the question. `no walk` = the row carries no "
+               "`atlas_walk`, which is the truth for bare; it is not "
+               f"`{WALK_REACHED_NOTHING}`.")
+    for q in sbs["questions"]:
+        out += ["", f"## {q['question_id']} — {q['category']}"
+                    + ("  · closed-book excluded" if q["closed_book_excluded"] else ""),
+                "", f"> {q['question']}", ""]
+        cols = [q["columns"][a] for a in arms]
+        out.append("| | " + " | ".join(arms) + " |")
+        out.append("|---" * (len(arms) + 1) + "|")
+
+        def line(label, fn, why=False):
+            # A never-ran column states its reason ONCE, on the `run` row; the
+            # rows under it still read `never-ran` rather than a dash, because
+            # a dash in a score column reads as a zero.
+            out.append(f"| {label} | " + " | ".join(
+                (_cell([f"never-ran — {c['reason']}" if why else "never-ran"])
+                 if c["verdict"] != "passed" else fn(c)) for c in cols) + " |")
+
+        line("run", lambda c: f"run-{c['run']}", why=True)
+        line("judge / kw", lambda c: f"{fmt(c['judge'], 0).strip()} / "
+                                     f"{fmt(c['kw'], 0).strip()}")
+        line("gold members", lambda c: _cell(
+            [("+ " if g["present"] else "- ") + str(g["fact"]) for g in c["gold"]]))
+        line("found / missed", lambda c: f"{c['found']} / {c['missed']}")
+        line("fabricated", lambda c: _cell(_fabricated_lines(c)))
+        line("citations", lambda c: _cell(_citation_lines(c)))
+        line("evidence path", lambda c: _cell(
+            c["path"]["lines"] or [c["path"]["verdict"]]))
+        if not sbs["snippets"]["shown"]:
+            out += ["", f"snippets withheld — {sbs['snippets']['reason']}"]
+            continue
+        quoted = []
+        for arm, c in zip(arms, cols):
+            for cite in (c.get("citations") or []) if c["verdict"] == "passed" else []:
+                if cite["snippet"]:
+                    text = re.sub(r"\s+", " ", cite["snippet"]).strip()
+                    if len(text) > SNIPPET_CHARS:
+                        text = text[:SNIPPET_CHARS] + "…"
+                    quoted.append(f"- {arm} [{cite['n']}] {text}")
+        if quoted:
+            out += ["", f"snippets (first {SNIPPET_CHARS} chars):"] + quoted
+    return "\n".join(out) + "\n"
+
+
+def write_sidebyside(out_dir, sbs):
+    d = Path(out_dir)
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "sidebyside.json").write_text(json.dumps(sbs, indent=2) + "\n")
+    (d / "sidebyside.md").write_text(render_sidebyside_md(sbs))
+    return d / "sidebyside.md"
 
 
 # ── self-test ────────────────────────────────────────────────────────────────
@@ -562,14 +933,20 @@ def self_test():
              "recipe_sha256": "r" * 64, "ontology_sha256": "o" * 64,
              "chunks_listing_sha256": "k" * 64}
 
-    def row(qid, category, judge, kw, members=None, error=None):
-        """One eval.json result. `members` is [(fact, present)]."""
+    def row(qid, category, judge, kw, members=None, error=None, answer="a",
+            retrieved=None, walk=None):
+        """One eval.json result. `members` is [(fact, present)].
+
+        `walk=None` writes NO `atlas_walk` key at all, which is what a bare run
+        looks like — distinct from `walk={"nodes": []}`, a walk that ran.
+        """
         ev = [{"fact": f, "present": p, "evidence": "q" if p else "(absent)"}
               for f, p in (members or [])]
         r = {"question_id": qid, "category": category, "question": qid,
-             "retrieved": [], "fact_score": {"matched": [], "missing": [],
-                                             "total_expected": 1, "ratio": kw},
-             "synth": {"answer": "a",
+             "retrieved": retrieved or [],
+             "fact_score": {"matched": [], "missing": [],
+                            "total_expected": 1, "ratio": kw},
+             "synth": {"answer": answer,
                        # PLANT: the rollup's name lists are EMPTY while the
                        # audit trail is not. found/missed read off `matched`
                        # would be 0 here and the table would not notice.
@@ -579,6 +956,8 @@ def self_test():
                        "judge_evidence": ev}}
         if error:
             r["error"] = error
+        if walk is not None:
+            r["atlas_walk"] = walk
         return r
 
     def fixture(root, arm, run, rows, ident=None):
@@ -824,6 +1203,191 @@ def self_test():
                   and "I3 (" in text)
             return ok, f"header={len(head)} tokens, {len(text.splitlines())} lines"
 
+    # ── the three-way side-by-side ───────────────────────────────────────────
+
+    WALK = {"kind": "K1", "seeds": 1, "edges_followed": 2, "nodes_reached": 3,
+            "requests": 2, "summaries_appended": 0, "added": 2, "considered": 4,
+            "nodes": [
+                {"atlas": "a", "atom_id": "n1", "name": "Vale dossier",
+                 "kind": "entity", "subtype": "dossier", "hop": 0,
+                 "via": None, "from": None, "score": 0.9},
+                {"atlas": "a", "atom_id": "n2", "name": "Marcus Vale",
+                 "kind": "entity", "subtype": "", "hop": 1,
+                 "via": "mentions", "from": "n1", "score": 0.5},
+                {"atlas": "a", "atom_id": "n3", "name": "Kepler cell",
+                 "kind": "claim", "subtype": "operation", "hop": 2,
+                 "via": "supports", "from": "n9", "score": 0.2}]}
+    CHUNKS = [{"corpus_id": "c", "title": "Dossier 4", "url": None, "score": 0.8,
+               "snippet": "Vale   signed\nthe Kepler order."},
+              {"corpus_id": "c", "title": None, "url": None, "score": 0.4,
+               "snippet": "An untitled fragment."}]
+
+    def sbs_of(t, root, **kw):
+        """`(exit, sidebyside.json, sidebyside.md)` — read off disk, so the
+        files landing is part of every assertion below."""
+        code, _b = study(root, Path(t) / "out", quiet=True, **kw)
+        return (code,
+                json.loads((Path(t) / "out" / "sidebyside.json").read_text()),
+                (Path(t) / "out" / "sidebyside.md").read_text())
+
+    def block(j, qid):
+        return next(q for q in j["questions"] if q["question_id"] == qid)
+
+    def vocabulary_file(t):
+        p = Path(t) / "truth.json"
+        p.write_text(json.dumps({
+            "corpus_id": "c",
+            "entities": {"person": [{"name": "Elena Ward"}, {"name": "Marcus Vale"}],
+                         "operation": [{"name": "Dmitri Kel"}]}}))
+        return p
+
+    def recipe_file(t, sharing):
+        p = Path(t) / f"recipe-{sharing}.toml"
+        p.write_text(f'[corpus]\nid = "c"\nmesh_sharing = true\n'
+                     f'query_sharing = {str(bool(sharing)).lower()}\n')
+        return p
+
+    def block_per_question_three_columns():
+        with tempfile.TemporaryDirectory() as t:
+            root = clean(Path(t) / "runs")
+            code, j, md = sbs_of(t, root)
+            b = block(j, "q00")
+            ok = (code == 0 and len(j["questions"]) == 24
+                  and j["arms"] == [BARE_ARM, ABLATION_ARM, FULL_ARM]
+                  and sorted(b["columns"]) == sorted(j["arms"])
+                  and all(c["verdict"] == "passed" for c in b["columns"].values())
+                  and b["columns"][FULL_ARM]["found"] == 1
+                  and b["columns"][FULL_ARM]["missed"] == 1
+                  and "| | bare | ablation | full |" in md
+                  and md.count("## q") == 24)
+            return ok, (f"{len(j['questions'])} block(s), "
+                        f"found/missed={b['columns'][FULL_ARM]['found']}/"
+                        f"{b['columns'][FULL_ARM]['missed']}")
+
+    def missing_arm_is_a_never_ran_column():
+        with tempfile.TemporaryDirectory() as t:
+            root = clean(Path(t) / "runs")
+            # PLANT: no ablation arm — the pilot's own case. Dropping the column
+            # would render a two-arm block that reads like a three-way study.
+            shutil.rmtree(root / ABLATION_ARM)
+            _code, j, md = sbs_of(t, root)
+            col = block(j, "q00")["columns"][ABLATION_ARM]
+            ok = (j["missing_arms"] == [ABLATION_ARM]
+                  and col["verdict"] == "never-ran"
+                  and ABLATION_ARM in col["reason"]
+                  and "| | bare | ablation | full |" in md)
+            return ok, f"ablation: {col['verdict']} — {col['reason']}"
+
+    def no_vocabulary_is_never_ran_not_zero():
+        with tempfile.TemporaryDirectory() as t:
+            root = clean(Path(t) / "runs")
+            # PLANT: no --vocabulary. A 0 here reads "nothing was fabricated",
+            # which is a measurement nobody made (ARCH §6).
+            _code, j, md = sbs_of(t, root)
+            fab = block(j, "q00")["columns"][FULL_ARM]["fabricated"]
+            ok = (fab["verdict"] == "never-ran" and fab["count"] is None
+                  and j["vocabulary"]["verdict"] == "never-ran"
+                  and "never-ran" in md.split("## q")[0])
+            return ok, f"fabricated={fab['verdict']} count={fab['count']!r}"
+
+    def fabricated_counts_vocabulary_non_gold_only():
+        with tempfile.TemporaryDirectory() as t:
+            root = clean(Path(t) / "runs")
+            # PLANT: the answer states one gold name (never fabricated), one
+            # vocabulary non-gold name (counted once), and one name in no
+            # vocabulary at all (the scorer's stated limit — not counted).
+            for r in (1, 2, 3):
+                fixture(root, FULL_ARM, r,
+                        [row(q, "K1", 0.7, 0.35,
+                             members=[("Elena Ward", True), ("Dmitri Kel", False)],
+                             answer="Elena Ward met Marcus Vale, and Marcus Vale "
+                                    "briefed Colonel Sandoval.") for q in QIDS])
+            _code, j, _md = sbs_of(t, root, vocabulary=vocabulary_file(t))
+            fab = block(j, "q00")["columns"][FULL_ARM]["fabricated"]
+            ok = (j["vocabulary"]["verdict"] == "passed"
+                  and j["vocabulary"]["names"] == 3
+                  and fab["names"] == ["Marcus Vale"] and fab["count"] == 1)
+            return ok, f"names={fab['names']} (vocabulary={j['vocabulary']['names']})"
+
+    def bare_has_no_walk_and_full_renders_the_path():
+        with tempfile.TemporaryDirectory() as t:
+            root = clean(Path(t) / "runs")
+            for r in (1, 2, 3):
+                fixture(root, FULL_ARM, r,
+                        [row(q, "K1", 0.7, 0.35, members=[("f1", True)],
+                             retrieved=CHUNKS, walk=WALK) for q in QIDS])
+            _code, j, md = sbs_of(t, root)
+            cols = block(j, "q00")["columns"]
+            path = cols[FULL_ARM]["path"]
+            ok = (cols[BARE_ARM]["path"]["verdict"] == NO_WALK
+                  and not cols[BARE_ARM]["path"]["lines"]
+                  and path["lines"] == [
+                      "Vale dossier (dossier)",
+                      "Vale dossier (dossier) —mentions→ Marcus Vale (untyped)",
+                      "n9 (beyond the node cap) —supports→ Kepler cell (operation)"]
+                  and NO_WALK in md
+                  and "[2] (untitled — c)" in md)
+            return ok, f"bare={cols[BARE_ARM]['path']['verdict']}; full: {path['lines'][1]}"
+
+    def walk_that_reached_nothing_is_not_no_walk():
+        with tempfile.TemporaryDirectory() as t:
+            root = clean(Path(t) / "runs")
+            # PLANT: the walk RAN and reached no atom. Reading that as `no walk`
+            # loses the one distinction the echo exists to carry
+            # (`runner.rs:158-160`: absent is never "reached nothing").
+            for r in (1, 2, 3):
+                fixture(root, FULL_ARM, r,
+                        [row(q, "K1", 0.7, 0.35, members=[("f1", True)],
+                             walk={**WALK, "nodes": [], "nodes_reached": 0})
+                         for q in QIDS])
+            _code, j, md = sbs_of(t, root)
+            path = block(j, "q00")["columns"][FULL_ARM]["path"]
+            ok = (path["verdict"] == WALK_REACHED_NOTHING and not path["lines"]
+                  and WALK_REACHED_NOTHING in md)
+            return ok, f"verdict={path['verdict']!r}"
+
+    def query_sharing_false_withholds_snippets():
+        with tempfile.TemporaryDirectory() as t:
+            root = clean(Path(t) / "runs")
+            for r in (1, 2, 3):
+                fixture(root, FULL_ARM, r,
+                        [row(q, "K1", 0.7, 0.35, members=[("f1", True)],
+                             retrieved=CHUNKS) for q in QIDS])
+            # PLANT: a restricted-text corpus. The citation titles stay (they
+            # are the reference), the chunk text does not.
+            _c, closed, closed_md = sbs_of(t, root, recipe=recipe_file(t, False))
+            _c, open_, open_md = sbs_of(t, root, recipe=recipe_file(t, True))
+            shut = block(closed, "q00")["columns"][FULL_ARM]["citations"]
+            lets = block(open_, "q00")["columns"][FULL_ARM]["citations"]
+            ok = (closed["snippets"]["shown"] is False
+                  and closed["snippets"]["query_sharing"] is False
+                  and all(c["snippet"] is None for c in shut)
+                  and [c["title"] for c in shut] == ["Dossier 4", None]
+                  and "snippets withheld" in closed_md
+                  and "Vale signed the Kepler order." not in closed_md
+                  and open_["snippets"]["shown"] is True
+                  and lets[0]["snippet"].startswith("Vale")
+                  and "Vale signed the Kepler order." in open_md)
+            return ok, (f"withheld={not closed['snippets']['shown']} "
+                        f"titles kept={[c['title'] for c in shut]}")
+
+    def column_falls_to_the_next_run_that_measured():
+        with tempfile.TemporaryDirectory() as t:
+            root = clean(Path(t) / "runs")
+            # PLANT: run 1 of full lost q00 to a busy host. A column that reads
+            # run 1 regardless shows a 0.0 answer the model never gave; one that
+            # gives up shows never-ran while run 2 holds the answer.
+            fixture(root, FULL_ARM, 1,
+                    [row(q, "K1", 0.0, 0.0, members=[("f1", False)],
+                         error="503 host busy" if q == "q00" else None)
+                     for q in QIDS])
+            _code, j, _md = sbs_of(t, root)
+            first, other = block(j, "q00")["columns"][FULL_ARM], \
+                block(j, "q01")["columns"][FULL_ARM]
+            ok = (first["verdict"] == "passed" and first["run"] == 2
+                  and abs(first["judge"] - 0.72) < 1e-9 and other["run"] == 1)
+            return ok, f"q00 read run-{first['run']} judge={first['judge']}"
+
     case("clean-set-passes", clean_set_passes)
     case("band-is-bare-spread-over-its-runs", band_is_bare_spread_over_its_runs)
     case("recipe-hash-mismatch-refuses", recipe_hash_mismatch_refuses)
@@ -841,6 +1405,14 @@ def self_test():
     case("empty-runs-dir-is-never-ran", empty_runs_dir_is_never_ran)
     case("half-written-run-is-reported", half_written_run_is_reported_not_dropped)
     case("table-renders-every-arm", table_renders_every_arm)
+    case("sidebyside-block-per-question", block_per_question_three_columns)
+    case("sidebyside-missing-arm-is-never-ran", missing_arm_is_a_never_ran_column)
+    case("fabricated-no-vocabulary-is-never-ran", no_vocabulary_is_never_ran_not_zero)
+    case("fabricated-non-gold-vocabulary-only", fabricated_counts_vocabulary_non_gold_only)
+    case("path-bare-no-walk-full-renders", bare_has_no_walk_and_full_renders_the_path)
+    case("path-reached-nothing-is-not-no-walk", walk_that_reached_nothing_is_not_no_walk)
+    case("query-sharing-false-withholds", query_sharing_false_withholds_snippets)
+    case("column-falls-to-next-measured-run", column_falls_to_the_next_run_that_measured)
 
     for name, verdict, detail in results:
         print(f"  {name:<38} {verdict:<16} {detail}", file=sys.stderr)
@@ -863,8 +1435,15 @@ def main(argv):
     ap.add_argument("--runs", required=True,
                     help="runs root: <dir>/<arm>/run-<N>/{eval,manifest}.json")
     ap.add_argument("--out", required=True, help="where scoreboard.json lands")
+    ap.add_argument("--vocabulary", default=None,
+                    help="truth JSON naming the corpus's members; without it "
+                         "the fabricated-member metric reads never-ran")
+    ap.add_argument("--recipe", default=None,
+                    help="the corpus recipe; `[corpus].query_sharing = false` "
+                         "withholds snippets from the side-by-side")
     args = ap.parse_args(argv[1:])
-    code, _board = study(os.path.expanduser(args.runs), os.path.expanduser(args.out))
+    code, _board = study(os.path.expanduser(args.runs), os.path.expanduser(args.out),
+                         vocabulary=args.vocabulary, recipe=args.recipe)
     return code
 
 
