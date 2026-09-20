@@ -168,10 +168,31 @@ declare -f container_up_one >/dev/null \
 if [ "$TOPOLOGY" = room ]; then
   ROOM_NET=room; UPLINK=uplink
   NETS=([$ROOM_NET]=10.89.60.0/24 [$UPLINK]=10.89.61.0/24)
-  # The venue's WiFi reaches the wall and nothing else. Without this a podman
-  # bridge NATs to the internet, beefy keeps its relay through the room while
-  # "the uplink is cut", and the offline bar measures nothing.
-  NET_FLAGS=([$ROOM_NET]="--internal")
+  # The venue's WiFi reaches the wall and nothing else. Without `--internal` a
+  # podman bridge NATs to the internet, beefy keeps its relay through the room
+  # while "the uplink is cut", and the offline bar measures nothing.
+  #
+  # `isolate=true` closes the OTHER half of the same hole, and it is the half
+  # `podman network disconnect` cannot reach. `--internal` only stops beefy
+  # going OUT through the room; the host still forwards the uplink bridge INTO
+  # the room bridge, so a peer that had dialled beefy at its ROOM address kept
+  # that connection alive straight through the cut — beefy's replies go to the
+  # room gateway, which is on its own directly-connected subnet and needs no
+  # default route. Measured on this host 2026-09-20, same two-bridge shape,
+  # UDP flow every 1 s, with a control:
+  #   without isolate, after `network disconnect uplink`: uplink→wall's room
+  #     address REACHED, and an established flow kept answering
+  #   with isolate, after the same disconnect: uplink→wall's room address NO
+  #     REPLY, the established flow's last reply lands 52 ms BEFORE the cut,
+  #     and phone→wall still REACHED
+  # That is what a venue losing its uplink does — the room's WiFi does not
+  # route the outside world onto itself — and it is why run 4 of 2026-09-19
+  # had the keeper serving a knowledge fan-out 52 s into a "cut"
+  # (`beefy/daemon.err` 05:02:06.139 `fan-out served peer_name=RuggedFox`,
+  # `halo/daemon.err` 05:02:06.136 `internal knowledge_search: served`, heal
+  # not until 05:02:16). Published ports still work on an isolated network
+  # (measured the same day), so the wall's page reaches the host unchanged.
+  NET_FLAGS=([$ROOM_NET]="--internal --opt isolate=true")
   IP=([beefy]=10.89.60.11 [phone]=10.89.60.14 [halo]=10.89.61.12 [little]=10.89.61.13)
   PNET=([beefy]=$ROOM_NET [phone]=$ROOM_NET [halo]=$UPLINK [little]=$UPLINK)
   # The wall's second attachment. Its primary is the ROOM, so the forwarder
@@ -944,13 +965,43 @@ print('\n'.join(urls))" "$D/beefy/daemon.err" "$1" 2>/dev/null
 #       member keeps until its last-seen window closes; a roster that has not
 #       caught up yet is not an uplink that is still carrying bytes, and the
 #       bar was reading COULD-NOT-JUDGE on it while the cut was real.
-#   (2) every address in `room_peer_urls` refuses an OICP capabilities fetch —
-#       this alone decides, because it is the only reading that fails when a
-#       byte still crosses the uplink.
+#   (2) every address in `room_peer_urls` refuses an OICP capabilities fetch.
+#   (3) the fan-out the bar actually judges still refuses — see below.
 # Echoes the surviving address, or nothing. The leg reads COULD-NOT-JUDGE on a
 # survivor — never FAILED, never PASSED.
+#
+# (2) alone used to decide, and it decided the wrong thing. It probes a FRESH
+# dial, which proves new dials fail and says nothing about a connection the
+# daemon already holds — and an already-held connection is exactly what served
+# the keeper's corpus 52 s into the cut of 2026-09-19 while (2) was writing
+# "the cut is a cut". A guard that asserts on a different path from the one
+# the bar judges is ARCH 5's check with no failing input you can name. So (3)
+# drives the fan-out itself: an OICP knowledge search on beefy for the
+# keeper's corpus, which beefy does not host, over whatever path the transport
+# already has. The reading is the daemon's OWN `fan-out served` line (ARCH 4),
+# which fires whether or not the search had hits — a response body would not
+# distinguish "the peer answered with nothing" from "the peer never answered".
+room_cut_fanout_survivor() { # keeper-mesh-name
+  local before
+  [ -n "${ROOM_CORPUS:-}" ] \
+    || { echo "the keeper's corpus id is not known in this leg set, so the fan-out path was NOT probed"; return 0; }
+  before=$(wc -l < "$D/beefy/daemon.err" 2>/dev/null || echo 0)
+  node_curl beefy -s --max-time 30 -X POST "$(at "${CPORT[beefy]}")/v1/knowledge/search" \
+    -H 'content-type: application/json' \
+    -d "{\"query\":\"what the keeper holds\",\"corpora\":[\"$ROOM_CORPUS\"],\"limit\":5}" \
+    > "$D/room-cut-fanout.json" 2>/dev/null
+  tail -n "+$(( before + 1 ))" "$D/beefy/daemon.err" 2>/dev/null | python3 -c "
+import re, sys
+ansi = re.compile(r'\x1b\[[0-9;]*m')
+want = sys.argv[1]
+for line in sys.stdin:
+    m = re.search(r'fan-out served .*peer_name=(\S+) addr=(\S+)', ansi.sub('', line))
+    if m and m.group(1) == want:
+        print(m.group(2) + ' still served a knowledge fan-out to ' + want + ' from beefy')
+        break" "$1"
+}
 room_assert_cut() {
-  local deadline=$(( $(date +%s) + 30 )) online="" u
+  local deadline=$(( $(date +%s) + 30 )) online="" u survivor="" code=""
   while :; do
     online=$(mesh_json beefy | python3 -c "
 import json, sys
@@ -963,9 +1014,33 @@ print(' '.join(m.get('name','') for m in ms
     sleep 3
   done
   printf '%s' "$online" > "$D/room-cut-status.out"
+  # Recorded, gating nothing: beefy's own `peer_paths` INSIDE the cut. The
+  # endpoint is the only thing that can name the address a surviving path
+  # actually uses — `mesh status` names the roster, `room_peer_urls` names the
+  # local bridge mouth, and neither is the wire. Run 3 of 2026-09-20 needs
+  # this: with the uplink disconnected AND the room bridge isolated (so the
+  # host cannot forward uplink→room, measured), gossip rounds to both peers
+  # read `unreachable` while an OICP capabilities fetch to the keeper still
+  # returned HTTP 200. Whatever carries that is in here.
+  mesh_json beefy > "$D/room-cut-paths.json" 2>/dev/null
+  # (3) first, because it is the path the bar judges: a survivor here is the
+  # finding, and a survivor (2) alone reports is the same cut read one hop
+  # further from what the bar actually measures.
+  survivor=$(room_cut_fanout_survivor "${MESHNAME[halo]}")
+  [ -n "$survivor" ] && { printf '%s' "$survivor"; return 0; }
+  # A STATUS, not merely a response. `curl -s -o /dev/null` exits 0 on any
+  # HTTP reply, and the local end of an iroh bridge answers a dead peer with
+  # its own 5xx — so the un-statused form reported a survivor in the plant run
+  # of 2026-09-20 05:35 while (3)'s fan-out to the same peer had just failed,
+  # gossip rounds to it were FAILED, and the watchdog called the endpoint
+  # unhealthy. That is a false COULD-NOT-JUDGE, which withholds a verdict the
+  # leg had earned. Only a 2xx is the keeper answering; the code is echoed
+  # either way so the next reader sees which it was.
   for u in $(room_peer_urls "${MESHNAME[halo]}"); do
-    node_curl beefy -s --max-time 5 -o /dev/null "$u" 2>/dev/null \
-      && { echo "$u still answers an OICP capabilities fetch from beefy"; return 0; }
+    code=$(node_curl beefy -s --max-time 5 -o /dev/null -w '%{http_code}' "$u" 2>/dev/null)
+    case "$code" in
+      2??) echo "$u still answers an OICP capabilities fetch from beefy (HTTP $code)"; return 0 ;;
+    esac
   done
   return 0
 }
