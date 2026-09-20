@@ -332,8 +332,8 @@ use sovereign_grants::{GuestGrant, Scope};
 
 /// A live grant over `models`, as `client_auth` would have inserted it.
 fn guest_for(models: &[&str]) -> Option<axum::Extension<crate::client_auth::Guest>> {
-    Some(axum::Extension(crate::client_auth::Guest(Arc::new(
-        GuestGrant {
+    Some(axum::Extension(crate::client_auth::Guest {
+        grant: Arc::new(GuestGrant {
             token: "t".into(),
             scopes: vec![Scope::Models(
                 models.iter().map(|m| m.to_string()).collect(),
@@ -342,8 +342,10 @@ fn guest_for(models: &[&str]) -> Option<axum::Extension<crate::client_auth::Gues
             issued_at_ms: 0,
             expires_at_ms: u64::MAX,
             revoked: false,
-        },
-    ))))
+        }),
+        // A model grant is not a room; nobody claims a name on it.
+        session: None,
+    }))
 }
 
 async fn chat_as_guest(model: Option<&str>, granted: &[&str]) -> (StatusCode, serde_json::Value) {

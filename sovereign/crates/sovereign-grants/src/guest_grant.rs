@@ -117,6 +117,15 @@ impl Scope {
                 // returns only the answer and its ledger — no conversation id,
                 // no history, nothing a guest could use to reach another's.
                 "/v1/guest/ask",
+                // Where a phone claims its NAME for this room
+                // (`sovereign-daemon/src/routes_guest_session.rs`). It rides
+                // with the rail for the same reason the ask does: one QR
+                // serves a room, so every phone presents this grant, and the
+                // name that tells them apart has to be claimed somewhere the
+                // grant reaches. It buys no capability — a session names no
+                // scope and `permits_path` stays the only decider of what may
+                // be reached.
+                "/v1/guest/session",
             ],
         }
     }
@@ -370,6 +379,8 @@ mod tests {
         // A model scope is not a door: the ask route belongs to the rail arm,
         // so a plain lend-me-your-GPU grant cannot reach the room's answer.
         assert!(!g.permits_path("/v1/guest/ask"));
+        // Nor the name claim: a lend-me-your-GPU grant has no wall to be named on.
+        assert!(!g.permits_path("/v1/guest/session"));
         assert!(!g.permits_path("/v1/embeddings"));
         assert!(!g.permits_path("/v1/apps"));
         assert!(!g.permits_path("/internal/guest/grant"));
@@ -390,6 +401,7 @@ mod tests {
             "/v1/rail/log",
             "/v1/rail/live",
             "/v1/guest/ask",
+            "/v1/guest/session",
             "/v1/models",
             "/v1/chat/completions",
         ]

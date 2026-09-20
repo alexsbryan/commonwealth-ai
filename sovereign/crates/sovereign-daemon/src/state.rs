@@ -14,7 +14,7 @@ use corpus_engine::CorpusEngine;
 use oicp_types::model_aliases::ModelAliasTable;
 use serving_policy::fair_sched::{reciprocity_weight, SchedCore, TryGrant};
 use sovereign_core::identity::IdentityReader;
-use sovereign_grants::{EphemeralGrantStore, GuestGrantStore, WorkQueueManager};
+use sovereign_grants::{EphemeralGrantStore, GuestGrantStore, GuestSessionStore, WorkQueueManager};
 use sovereign_meshapp_registry::registry::AppRegistry;
 use sovereign_serving_host::admission::Principal;
 
@@ -1144,6 +1144,7 @@ impl AppState {
                     corpus_engine,
                     started_at: std::time::Instant::now(),
                     guest_grants: Arc::new(GuestGrantStore::new()),
+                    guest_sessions: Arc::new(GuestSessionStore::new()),
                     // 0 sentinel = no foreground activity observed yet.
                     // The yield hook treats 0 as "never active", regardless
                     // of the window — so a fresh boot doesn't accidentally
@@ -1236,6 +1237,15 @@ impl AppState {
     /// costs is unbounded growth of the grant map over a long-lived daemon.
     pub fn start_guest_grant_reaper(&self) -> tokio::task::JoinHandle<()> {
         Arc::clone(&self.inner.node.guest_grants).spawn_reaper()
+    }
+
+    /// Spawn the guest-SESSION sweep. Same bookkeeping-not-enforcement story
+    /// as [`Self::start_guest_grant_reaper`]: `GuestSessionStore::live`
+    /// evaluates the grant's liveness and the session's own expiry on every
+    /// read, so skipping this leaves no session usable a moment longer than
+    /// its grant — it only lets the map grow.
+    pub fn start_guest_session_reaper(&self) -> tokio::task::JoinHandle<()> {
+        Arc::clone(&self.inner.node.guest_sessions).spawn_reaper()
     }
 
     /// This node's NodeId, by value. Cheap (atomic load + Arc deref).

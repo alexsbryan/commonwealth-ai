@@ -3346,6 +3346,8 @@ impl EmbeddedDaemon {
         // with no caller is exactly the shape that left `ingest_grant`'s
         // expiry unenforced, so it gets a caller at birth.
         let _guest_reaper = app_state.start_guest_grant_reaper();
+        // And the names claimed under those grants, for the same reason.
+        let _guest_session_reaper = app_state.start_guest_session_reaper();
 
         // Register the locally-loaded model slots so `/v1/models`
         // answers with something meaningful instead of an empty list.

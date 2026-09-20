@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use commonwealth_state::ActivityEmitter;
 use corpus_engine::CorpusEngine;
-use sovereign_grants::GuestGrantStore;
+use sovereign_grants::{GuestGrantStore, GuestSessionStore};
 
 /// Everything the node's part is constructed with (DC §4.2 "Construction is
 /// staged, and parts are total"): the values that exist before the part is
@@ -55,6 +55,12 @@ pub struct NodePart {
     /// touches `Mesh` — a guest is not a member and cannot become one.
     /// See `commonwealth-knowledge::guest_grant`.
     pub guest_grants: Arc<GuestGrantStore>,
+    /// The NAMES claimed under those grants — one QR serves a room, so the
+    /// grant cannot say which phone is asking and the session does. A session
+    /// is not a second credential: it names no scope, `GuestGrant::permits_path`
+    /// stays the only decider, and it dies with the grant it was claimed under.
+    /// See `sovereign_grants::guest_session`.
+    pub guest_sessions: Arc<GuestSessionStore>,
     /// Unix-seconds timestamp of the last foreground inference request
     /// observed at `chat_completions`. `0` means "never touched" — the
     /// initial state at boot. Bumped via

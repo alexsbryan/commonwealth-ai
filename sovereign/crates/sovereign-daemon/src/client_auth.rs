@@ -65,7 +65,7 @@
 //! inference (which carries no `Authorization` at all) keep working.
 
 use commonwealth_core::ct::constant_time_eq;
-use sovereign_grants::GuestGrant;
+use sovereign_grants::{GuestGrant, GuestSession};
 use sovereign_serving_host::admission::Principal;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -260,7 +260,38 @@ pub async fn client_auth_layer(
                             scopes = %grant.summary(),
                             "client_auth: guest grant admitted"
                         );
-                        request.extensions_mut().insert(Guest(Arc::new(grant)));
+                        // WHO, beside WHAT. A handle the store does not know
+                        // under this grant is REFUSED rather than dropped to
+                        // `None`: "this phone's session lapsed" and "this phone
+                        // never claimed a name" are the two answers a guest
+                        // most needs to tell apart, and defaulting the first to
+                        // the second would silently un-name them mid-room
+                        // (ARCH 6).
+                        let session = match request
+                            .headers()
+                            .get(crate::routes_guest_session::RING_SESSION_HEADER)
+                        {
+                            None => None,
+                            Some(raw) => {
+                                let handle = raw.to_str().unwrap_or("").trim();
+                                match state.inner.node.guest_sessions.live(handle, &grant, now) {
+                                    Some(s) => Some(s),
+                                    None => {
+                                        tracing::info!(
+                                            peer = %peer,
+                                            path = %request.uri().path(),
+                                            "client_auth: guest session handle is not live \
+                                             under this grant"
+                                        );
+                                        return stale_session();
+                                    }
+                                }
+                            }
+                        };
+                        request.extensions_mut().insert(Guest {
+                            grant: Arc::new(grant),
+                            session,
+                        });
                         return next.run(request).await;
                     }
                     Some(grant) => {
@@ -330,7 +361,35 @@ pub async fn client_auth_layer(
 /// `Arc` because the grant is cloned out of the store once per request and read
 /// by more than one place in a handler.
 #[derive(Clone)]
-pub struct Guest(pub Arc<GuestGrant>);
+pub struct Guest {
+    /// What this caller may reach. THE decider — see
+    /// [`GuestGrant::permits_path`].
+    pub grant: Arc<GuestGrant>,
+    /// WHO is holding the phone, when they have claimed a name
+    /// ([`routes_guest_session`](crate::routes_guest_session)). `None` is a
+    /// guest who has not claimed one yet — one QR serves a room, so the grant
+    /// cannot answer this and the absence is never read as a name. A session
+    /// carries no scope of its own: it says who, never what.
+    pub session: Option<GuestSession>,
+}
+
+/// 409 for a phone presenting a session handle this grant does not know — a
+/// grant that lapsed and was re-issued, a handle from another room, or a
+/// session swept after its grant's expiry.
+///
+/// Its audience is a page that can fix it: the handle is not a credential, so
+/// naming the state leaks nothing, and the shim's answer is to ask for the name
+/// again. A 401 would be wrong — the BEARER authenticated fine.
+fn stale_session() -> Response {
+    (
+        StatusCode::CONFLICT,
+        Json(serde_json::json!({
+            "error": "this ring session is no longer live under this link — claim a name again",
+            "code": "stale_session",
+        })),
+    )
+        .into_response()
+}
 
 /// 403 for a live grant that simply doesn't cover this route.
 ///

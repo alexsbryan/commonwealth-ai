@@ -319,6 +319,85 @@ async fn the_door_opens_at_the_first_rail_grant_and_closes_at_the_last_expiry() 
     }
 }
 
+/// **The name is claimed at the door, once, and the phone carries a handle.**
+/// One QR serves a room, so the grant cannot say who is holding the phone —
+/// the session does. Everything a page could get wrong about it is refused
+/// HERE, where the name is claimed: a member's name, a name somebody in this
+/// room already has, and a handle this grant never issued.
+#[tokio::test]
+async fn the_door_claims_a_name_once_and_refuses_the_three_collisions() {
+    let dir = tempfile::tempdir().unwrap();
+    let key = SigningKey::from_bytes(&[1u8; 32]);
+    let a = with_guest(
+        state_with_rail(dir.path(), &key),
+        vec![Scope::Rails(NS.into())],
+    );
+    let (_root, page) = page_dir();
+    let claim = |name: &str| {
+        request(
+            "POST",
+            "/v1/guest/session",
+            LAN_PEER,
+            Some(GUEST_TOKEN),
+            Some(serde_json::json!({ "name": name })),
+        )
+    };
+
+    // A member's name, in any case — the refusal the append route has spoken
+    // since the rail shipped, now at the moment the name is claimed.
+    for member in ["bo", "Alex"] {
+        let (status, body) = door(a.clone(), &page, claim(member)).await;
+        assert_eq!(status, StatusCode::CONFLICT, "claimed member {member}");
+        assert!(
+            body.contains("is a member of this ring"),
+            "the member refusal lost its sentence: {body}"
+        );
+    }
+
+    // A name of their own is bound, and the handle comes back.
+    let (status, body) = door(a.clone(), &page, claim("ana")).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let claimed: serde_json::Value = serde_json::from_str(&body).unwrap();
+    let handle = claimed["session"].as_str().expect("a handle").to_string();
+    assert_eq!(claimed["name"], "ana");
+
+    // Two guests must never be shown as one person, so the second phone
+    // typing it is refused rather than quietly renaming the first.
+    let (status, body) = door(a.clone(), &page, claim(" Ana ")).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert!(body.contains("already someone else in this room"), "{body}");
+
+    // The handle is accepted on the routes behind the door…
+    let act = serde_json::json!({
+        "op": "record",
+        "payload": { "kind": "doc-change", "doc": "ring-doc", "update": "AA==" },
+    });
+    let mut req = request(
+        "POST",
+        "/v1/rail/append",
+        LAN_PEER,
+        Some(GUEST_TOKEN),
+        Some(act),
+    );
+    req.headers_mut().insert(
+        axum::http::HeaderName::from_static("x-ring-session"),
+        axum::http::HeaderValue::from_str(&handle).unwrap(),
+    );
+    let (status, body) = door(a.clone(), &page, req).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+
+    // …and one this grant never issued is refused by name, rather than read as
+    // "this phone has not claimed a name yet" (ARCH 6).
+    let mut req = request("GET", "/v1/rail/log", LAN_PEER, Some(GUEST_TOKEN), None);
+    req.headers_mut().insert(
+        axum::http::HeaderName::from_static("x-ring-session"),
+        axum::http::HeaderValue::from_static("not-a-handle"),
+    );
+    let (status, body) = door(a, &page, req).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert!(body.contains("stale_session"), "{body}");
+}
+
 /// **A guest cannot write under a member's name.** The door signs with its
 /// member's key, so the name a guest types is the only thing telling the two
 /// apart on the wall; one that IS a member's name (any case) is refused, and

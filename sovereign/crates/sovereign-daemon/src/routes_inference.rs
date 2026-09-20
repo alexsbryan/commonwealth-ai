@@ -48,7 +48,7 @@ pub async fn chat_completions(
     // for a guest would mean: asked for the model they were granted, got a
     // different one, HTTP 200, no way to tell. That is §18.3's `d45489a3`
     // verbatim — same model string, seconds apart, served by something else.
-    if let Some(axum::Extension(crate::client_auth::Guest(grant))) = guest.as_ref() {
+    if let Some(axum::Extension(crate::client_auth::Guest { grant, .. })) = guest.as_ref() {
         let named = request.model.as_deref().map(str::trim).unwrap_or("");
         if !grant.allows_model(named) {
             let asked = if named.is_empty() {
@@ -785,7 +785,7 @@ pub async fn list_models(
     // refused reintroduces exactly the defect this endpoint was rewritten to
     // remove, in a new place: the list would advertise, and the request would
     // refuse, and the refusal would point back at the list.
-    if let Some(axum::Extension(crate::client_auth::Guest(grant))) = guest.as_ref() {
+    if let Some(axum::Extension(crate::client_auth::Guest { grant, .. })) = guest.as_ref() {
         data.retain(|m| grant.allows_model(&m.id));
     }
     // Stable order, and the dedup key is the id a caller would actually

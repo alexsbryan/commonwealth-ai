@@ -29,6 +29,10 @@ use serde::Deserialize;
 use sovereign_grants::GuestGrant;
 
 use crate::client_auth::Guest;
+// The member-name comparison lives beside the route where a name is now
+// CLAIMED; this route's remaining check calls it rather than keeping a second
+// spelling of it (ARCH 8).
+use crate::routes_guest_session::names_a_member;
 use crate::state::AppState;
 
 /// Query parameters common to every rail route.
@@ -84,7 +88,7 @@ fn not_in_roster_refusal(origin: RosterOrigin, e: &RailError) -> String {
 ///   name the namespace explicitly; absent, we refuse rather than guess.
 pub fn namespace_for(guest: Option<&Guest>, requested: Option<&str>) -> Result<String, Response> {
     match guest {
-        Some(Guest(grant)) => resolve_granted(grant, requested),
+        Some(Guest { grant, .. }) => resolve_granted(grant, requested),
         None => requested.map(str::to_string).ok_or_else(|| {
             err(
                 StatusCode::BAD_REQUEST,
@@ -120,7 +124,7 @@ fn resolve_granted(grant: &Arc<GuestGrant>, requested: Option<&str>) -> Result<S
 /// caller may not touch is a 403 about them; a rail with no storage installed
 /// is a 503 about this daemon. Collapsing either into an empty success would
 /// hand the app a plausible `[]` and let it carry on (ARCH §18.3).
-fn journal_for(
+pub(crate) fn journal_for(
     state: &AppState,
     guest: Option<&Guest>,
     requested: Option<&str>,
@@ -176,17 +180,6 @@ fn guest_name_in(body: &serde_json::Value) -> Option<String> {
         .iter()
         .find_map(|k| body.get(*k)?.get("guest")?.as_str())
         .map(str::to_string)
-}
-
-/// Whether `name` is a roster member's — the door's one refusal of a guest,
-/// so a guest is never shown under a member's name. Case and surrounding
-/// space do not make a different name to a reader.
-fn names_a_member(roster: &commonwealth_rail::Roster, name: &str) -> bool {
-    let name = name.trim();
-    roster
-        .members
-        .keys()
-        .any(|p| p.as_str().eq_ignore_ascii_case(name))
 }
 
 /// POST /v1/rail/append — sign and append one act to this caller's namespace.
@@ -427,14 +420,17 @@ mod tests {
     }
 
     fn grant_with(scopes: Vec<Scope>) -> Guest {
-        Guest(Arc::new(GuestGrant {
-            token: "t".into(),
-            scopes,
-            label: None,
-            issued_at_ms: 0,
-            expires_at_ms: u64::MAX,
-            revoked: false,
-        }))
+        Guest {
+            grant: Arc::new(GuestGrant {
+                token: "t".into(),
+                scopes,
+                label: None,
+                issued_at_ms: 0,
+                expires_at_ms: u64::MAX,
+                revoked: false,
+            }),
+            session: None,
+        }
     }
 
     #[test]

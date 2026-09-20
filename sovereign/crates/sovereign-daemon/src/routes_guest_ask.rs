@@ -84,7 +84,7 @@ pub async fn guest_ask(
     daemon: Option<Extension<Arc<EmbeddedDaemon>>>,
     Json(body): Json<GuestAskRequest>,
 ) -> Response {
-    let Some(Extension(Guest(grant))) = guest else {
+    let Some(Extension(Guest { grant, .. })) = guest else {
         // The operator mount. A local caller wanting a grounded turn has
         // `/v1/conversations/{id}/messages`; this door is for the person who
         // does not.

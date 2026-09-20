@@ -277,14 +277,62 @@ const RING_SHIM: &str = r#"(function () {
   const ROUTES = {
     log: ['GET', '/v1/rail/log'], append: ['POST', '/v1/rail/append'],
     live: ['POST', '/v1/rail/live'], 'live-drain': ['GET', '/v1/rail/live'],
-    ask: ['POST', '/v1/guest/ask'],
+    ask: ['POST', '/v1/guest/ask'], session: ['POST', '/v1/guest/session'],
   };
-  const send = (op, ctype, body) => {
+  // The NAME, asked by the door's shim and never by the app.
+  //
+  // One QR serves a room, so every phone holds the same bearer and the grant
+  // cannot say who is writing. The door binds the name to a session handle
+  // under that grant; this asks for it once per link per device and presents
+  // the handle from then on. Remembered against the bearer, so the same phone
+  // opening a SECOND app on the same wall is not asked again.
+  const SESSION_KEY = 'ring.session';
+  let SESSION = null;
+  const remembered = () => {
+    try {
+      const v = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+      return v && v.handle && v.token === bearer ? v : null;
+    } catch (_) { return null; }
+  };
+  const forget = () => { SESSION = null; try { localStorage.removeItem(SESSION_KEY); } catch (_) {} };
+  const claim = async () => {
+    for (;;) {
+      const typed = (window.prompt('Your name for the wall') || '').trim();
+      if (!typed) throw new Error('ring: the wall shows who wrote each line, so it needs a name');
+      const r = await fetch(RAIL + ROUTES.session[1], {
+        method: 'POST',
+        headers: { authorization: 'Bearer ' + bearer, 'content-type': 'application/json' },
+        body: JSON.stringify({ name: typed }),
+      });
+      let v = null;
+      try { v = await r.json(); } catch (_) { v = null; }
+      if (r.ok && v && v.session) {
+        SESSION = { token: bearer, handle: v.session, name: v.name };
+        try { localStorage.setItem(SESSION_KEY, JSON.stringify(SESSION)); } catch (_) {}
+        return SESSION;
+      }
+      // 409 is a name the door refused — a member's, or one somebody in this
+      // room already has. Both are re-askable, and the door's own sentence is
+      // what the person needs to read.
+      if (r.status === 409) { window.alert((v && v.error) || 'ring: that name is taken'); continue; }
+      throw new Error((v && v.error) || 'ring: could not claim a name');
+    }
+  };
+  const session = async () => {
+    // `ring dev` holds the grant itself: no room, nobody to tell apart.
+    if (RAIL === null) return null;
+    if (!SESSION) SESSION = remembered();
+    if (!SESSION) await claim();
+    return SESSION;
+  };
+  const send = async (op, ctype, body) => {
     if (RAIL === null) {
       return fetch('/__ring/' + op, { method: 'POST', headers: { 'content-type': ctype }, body });
     }
+    await session();
     const [method, path] = ROUTES[op];
     const headers = { authorization: 'Bearer ' + bearer };
+    if (SESSION) headers['x-ring-session'] = SESSION.handle;
     if (method === 'GET') return fetch(RAIL + path, { method, headers });
     headers['content-type'] = ctype;
     return fetch(RAIL + path, { method, headers, body });
@@ -294,7 +342,13 @@ const RING_SHIM: &str = r#"(function () {
     const t = await r.text();
     let v = null;
     try { v = t ? JSON.parse(t) : null; } catch (_) { v = { error: t }; }
-    if (!r.ok) throw new Error((v && v.error) || ('ring: ' + op + ' failed'));
+    if (!r.ok) {
+      // The handle outlived the grant it was claimed under (a re-issued link,
+      // a restarted daemon). Drop it so the next call asks again rather than
+      // presenting a dead one forever.
+      if (r.status === 409 && v && v.code === 'stale_session') forget();
+      throw new Error((v && v.error) || ('ring: ' + op + ' failed'));
+    }
     return v;
   };
   window.ring = {
@@ -361,6 +415,14 @@ const RING_SHIM: &str = r#"(function () {
       return acc;
     },
   };
+  // WHO this phone is, for a page that wants to greet them. READ-ONLY on
+  // purpose: a page may say hello to a guest, it may not decide which guest it
+  // has — that is claimed at the door and carried by the handle, and an app
+  // that could set it would be back to authoring the value the wall trusts.
+  Object.defineProperty(window.ring, 'guest', {
+    enumerable: true,
+    get: () => (SESSION ? SESSION.name : null),
+  });
 })();
 "#;
 
@@ -449,6 +511,46 @@ mod tests {
             assert!(RING_SHIM.contains(route), "shim lost {route}");
             assert!(unlocked.contains(&route.trim_matches('\'')));
         }
+    }
+
+    /// **The shim asks the name, and the shim carries the handle.** If either
+    /// half moved into an app, every app author would own a safety property
+    /// (`a guest is never mistakable for a member`) that the door can enforce
+    /// once — and the scaffolded app, which has no name field at all, would
+    /// have its guests shown under the member's name.
+    #[test]
+    fn the_shim_claims_the_guests_name_itself_and_presents_the_handle() {
+        assert!(RING_SHIM.contains("session: ['POST', '/v1/guest/session']"));
+        assert!(
+            RING_SHIM.contains("window.prompt('Your name for the wall')"),
+            "the shim stopped asking for the name — an app would have to"
+        );
+        assert!(
+            RING_SHIM.contains("headers['x-ring-session'] = SESSION.handle;"),
+            "the shim stopped presenting the session handle — the door would \
+             have nothing to name the guest from"
+        );
+        // Remembered against the bearer, which is what makes the second app on
+        // the same wall not ask again.
+        assert!(RING_SHIM.contains("v.token === bearer"));
+    }
+
+    /// **A page may greet a guest; it may not choose one.** A settable name
+    /// would be the payload convention this replaced, wearing a new spelling.
+    #[test]
+    fn the_pages_view_of_the_guests_name_is_read_only() {
+        assert!(
+            RING_SHIM.contains("Object.defineProperty(window.ring, 'guest', {")
+                && RING_SHIM.contains("get: () => (SESSION ? SESSION.name : null),"),
+            "the name stopped being an accessor"
+        );
+        assert!(
+            !RING_SHIM.contains("set: "),
+            "the shim grew a setter for the guest's name"
+        );
+        assert!(sovereign_grants::Scope::Rails("x".into())
+            .paths()
+            .contains(&crate::routes_guest_session::GUEST_SESSION_PATH));
     }
 
     /// The one parameter that picks the transport renders as JS: `null` for

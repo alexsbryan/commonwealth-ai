@@ -287,12 +287,20 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
     // `ClientSurface::serves_guest_ask_route` for why each is what it is, and
     // `routes_guest_ask` for what the handler refuses.
     let guest_ask: Router<AppState> = if surface.serves_guest_ask_route() {
-        Router::new().route(
-            crate::routes_guest_ask::GUEST_ASK_PATH,
-            post(crate::routes_guest_ask::guest_ask)
-                .layer(admission())
-                .layer(fair_share()),
-        )
+        Router::new()
+            .route(
+                crate::routes_guest_ask::GUEST_ASK_PATH,
+                post(crate::routes_guest_ask::guest_ask)
+                    .layer(admission())
+                    .layer(fair_share()),
+            )
+            // And where a phone claims its NAME for the room. On the same
+            // surfaces as the ask and for the same reason; it carries no
+            // admission gate because it runs no turn — one lock, one insert.
+            .route(
+                crate::routes_guest_session::GUEST_SESSION_PATH,
+                post(crate::routes_guest_session::claim_name),
+            )
     } else {
         Router::new()
     };
