@@ -222,6 +222,14 @@ pub struct AdmittedOp {
     /// replacement.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub payload: Option<Payload>,
+    /// [`SignedOp::on_behalf_of`](crate::SignedOp::on_behalf_of), carried
+    /// through unchanged. Carried and not interpreted: admission does not
+    /// look it up, does not refuse on it, and `person` still names the key's
+    /// owner. It is here because `admit` is the only place an `AdmittedOp` is
+    /// built, so a reader that never sees the signed line — the log route,
+    /// and every app behind it — could not otherwise reach the field at all.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub on_behalf_of: Option<String>,
 }
 
 impl AdmittedOp {
@@ -328,7 +336,7 @@ pub fn admit(
                 derived: derived.clone(),
             });
         }
-        let body = body_json(&op.kind.act);
+        let body = body_json(&op.kind.act, op.kind.on_behalf_of.as_deref());
         // Whatever the verifier cannot vouch for is a gap, never an act. A
         // `false` here is a refusal and is reported as one — there is no
         // answer that means "could not tell, carry on" (ARCH §18.3).
@@ -489,6 +497,7 @@ pub fn admit(
                 corrects,
                 voided: voided.contains(&a.id),
                 payload,
+                on_behalf_of: a.op.kind.on_behalf_of.clone(),
             }
         })
         .collect();
@@ -540,8 +549,25 @@ fn derived_id(op: &Op<SignedOp>) -> OpId {
     Op::new(op.kind.clone(), op.ts_unix, op.actor.clone()).id
 }
 
-/// The exact bytes the signature covers — the act alone, in declaration
-/// order, with its payload canonical (see [`Payload`](crate::Payload)).
-pub fn body_json(act: &RailAct) -> String {
-    serde_json::to_string(act).unwrap_or_default()
+/// The exact bytes the signature covers — the act, in declaration order, with
+/// its payload canonical (see [`Payload`](crate::Payload)), followed by
+/// `on_behalf_of` when the writer stated one.
+///
+/// The name is inside the signature because a stamp a peer could strip or
+/// rewrite in flight would attribute an act to whoever last handled it. It is
+/// LAST and omitted when `None`, so the bytes for an act with no name are
+/// byte-identical to what this function returned before the field existed and
+/// every op already on every replica verifies unchanged.
+pub fn body_json(act: &RailAct, on_behalf_of: Option<&str>) -> String {
+    // A borrowing mirror of `SignedOp`'s signed half rather than a second
+    // spelling of the rule: the act flattens in exactly as it serialises
+    // alone, and the one added field sits after it.
+    #[derive(serde::Serialize)]
+    struct Body<'a> {
+        #[serde(flatten)]
+        act: &'a RailAct,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        on_behalf_of: Option<&'a str>,
+    }
+    serde_json::to_string(&Body { act, on_behalf_of }).unwrap_or_default()
 }

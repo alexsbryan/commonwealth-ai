@@ -110,7 +110,7 @@ pub fn publish(
 ) -> Result<Op<SignedOp>, String> {
     let payload = to_payload(record)?;
     journal
-        .append(RailAct::Record { payload }, signer, roster)
+        .append(RailAct::Record { payload }, signer, roster, None)
         .map_err(|e| e.to_string())
 }
 

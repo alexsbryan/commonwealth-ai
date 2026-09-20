@@ -43,9 +43,12 @@ fn body_of_size(target: usize) -> Payload {
     let mut filler = target.saturating_sub(40);
     loop {
         let payload = Payload::new(serde_json::json!({ "b": "x".repeat(filler) })).unwrap();
-        let got = commonwealth_rail::body_json(&RailAct::Record {
-            payload: payload.clone(),
-        })
+        let got = commonwealth_rail::body_json(
+            &RailAct::Record {
+                payload: payload.clone(),
+            },
+            None,
+        )
         .len();
         if got >= target {
             return payload;
@@ -87,9 +90,9 @@ fn signed(key: &SigningKey, namespace: &str, seq: u64, act: RailAct) -> Op<Signe
         namespace,
         ts,
         seq,
-        &commonwealth_rail::body_json(&act),
+        &commonwealth_rail::body_json(&act, None),
     );
-    Op::new(SignedOp { seq, sig, act }, ts, key.actor())
+    Op::new(SignedOp { seq, sig, act, on_behalf_of: None }, ts, key.actor())
 }
 
 fn solo_roster(key: &SigningKey) -> Roster {

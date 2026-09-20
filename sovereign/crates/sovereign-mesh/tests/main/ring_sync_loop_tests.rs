@@ -54,7 +54,7 @@ pub fn body_of_size(target: usize) -> Payload {
     let mut filler = target.saturating_sub(40);
     loop {
         let p = Payload::new(serde_json::json!({ "b": "x".repeat(filler) })).unwrap();
-        let n = body_json(&RailAct::Record { payload: p.clone() }).len();
+        let n = body_json(&RailAct::Record { payload: p.clone() }, None).len();
         if n >= target {
             return p;
         }
@@ -73,8 +73,8 @@ pub fn signed(key: &SigningKey, seq: u64, act: RailAct) -> Op<SignedOp> {
 /// test on the second ring pass or fail for that reason alone.
 pub fn signed_in(ns: &str, key: &SigningKey, seq: u64, act: RailAct) -> Op<SignedOp> {
     let ts = 1_700_000_000i64 + seq as i64;
-    let sig = sign_ring_op(key, ns, ts, seq, &body_json(&act));
-    Op::new(SignedOp { seq, sig, act }, ts, actor_of(key))
+    let sig = sign_ring_op(key, ns, ts, seq, &body_json(&act, None));
+    Op::new(SignedOp { seq, sig, act, on_behalf_of: None }, ts, actor_of(key))
 }
 
 pub fn ops(key: &SigningKey, n: usize) -> Vec<Op<SignedOp>> {

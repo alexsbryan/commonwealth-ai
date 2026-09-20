@@ -606,6 +606,7 @@ mod tests {
                     .expect("canonical"),
             ),
             voided: false,
+            on_behalf_of: None,
         }
     }
 

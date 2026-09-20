@@ -5608,7 +5608,11 @@ line, bad signature, unknown signer, rewritten id, sequence hole, sequence
 fork, dangling correction, newer-format line), five about money. Not one of
 the first eight knows what an expense is, and a tool-lending board needs every
 one of them. So the line is now `RailAct` inside `Op<SignedOp>` —
-`Record{payload}`, `Correct{corrects, replacement?}` or `Seal`, a per-actor `seq`, and
+`Record{payload}`, `Correct{corrects, replacement?}` or `Seal`, a per-actor `seq`, an
+optional `on_behalf_of` naming whose words the act was when a door signed for
+somebody the ring holds no key for (a name, carried and never interpreted — the
+rail does not look it up in the `Roster`; absent by default and absent from the
+signed bytes when absent, so every op written before it verifies unchanged), and
 an Ed25519 signature over a domain-separated message that binds the namespace,
 so an op lifted from one ring and replayed into another fails the signature
 rather than a downstream check. **`Op.actor` is the signing public key**,

@@ -303,7 +303,7 @@ pub async fn pump_once(fabric: &FabricPart) -> PumpOutcome {
                     continue;
                 }
             };
-            match journal.append(RailAct::Record { payload }, rail.signer(), &roster) {
+            match journal.append(RailAct::Record { payload }, rail.signer(), &roster, None) {
                 Ok(appended) => {
                     debug!(
                         namespace,
@@ -607,7 +607,7 @@ async fn snapshot(
                 continue;
             }
         };
-        match journal.append(RailAct::Record { payload }, rail.signer(), roster) {
+        match journal.append(RailAct::Record { payload }, rail.signer(), roster, None) {
             Ok(_) => appended += 1,
             Err(e) => warn!(namespace, key = %row.key, error = %e,
                             "rail kv pump: a live row could not be snapshotted and is now below the floor"),
@@ -617,7 +617,7 @@ async fn snapshot(
         .map_err(|e| e.to_string())
         .and_then(|payload| {
             journal
-                .append(RailAct::Record { payload }, rail.signer(), roster)
+                .append(RailAct::Record { payload }, rail.signer(), roster, None)
                 .map_err(|e| e.to_string())
         }) {
         Ok(_) => info!(
@@ -745,7 +745,7 @@ fn snapshot_work(
 fn append_work_act(rail: &RingRail, journal: &RingJournal, roster: &Roster, act: &WorkAct) -> bool {
     match commonwealth_work::to_payload(act).and_then(|payload| {
         journal
-            .append(RailAct::Record { payload }, rail.signer(), roster)
+            .append(RailAct::Record { payload }, rail.signer(), roster, None)
             .map_err(|e| e.to_string())
     }) {
         Ok(_) => true,

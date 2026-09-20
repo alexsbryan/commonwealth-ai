@@ -50,13 +50,29 @@ pub fn signed(k: &SigningKey, ts: i64, seq: u64, act: RailAct) -> Op<SignedOp> {
 }
 
 pub fn signed_in(ns: &str, k: &SigningKey, ts: i64, seq: u64, act: RailAct) -> Op<SignedOp> {
-    let body = serde_json::to_string(&act).unwrap();
+    signed_for(ns, k, ts, seq, act, None)
+}
+
+/// [`signed_in`], stating whose words the act was. `body_json` and not a
+/// local `to_string` because the signed bytes have one definition
+/// (ARCH §10.6) — a fixture that spelled them itself would keep verifying
+/// after the real rule changed.
+pub fn signed_for(
+    ns: &str,
+    k: &SigningKey,
+    ts: i64,
+    seq: u64,
+    act: RailAct,
+    on_behalf_of: Option<&str>,
+) -> Op<SignedOp> {
+    let body = body_json(&act, on_behalf_of);
     let signature = sign_ring_op(k, ns, ts, seq, &body);
     Op::new(
         SignedOp {
             seq,
             sig: signature,
             act,
+            on_behalf_of: on_behalf_of.map(str::to_string),
         },
         ts,
         actor_of(k),

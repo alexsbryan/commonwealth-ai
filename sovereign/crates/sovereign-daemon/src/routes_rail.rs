@@ -253,7 +253,7 @@ pub async fn append(
             .map(|done| (done.op, Some(retire(&done.retired))))
     } else {
         journal
-            .append(act, rail.signer(), &roster)
+            .append(act, rail.signer(), &roster, None)
             .map(|op| (op, None))
     };
     match appended {

@@ -591,6 +591,7 @@ async fn two_nodes_converge_through_the_sync_route() {
             },
             &key_a,
             &roster,
+            None,
         )
         .unwrap();
     led_b
@@ -600,6 +601,7 @@ async fn two_nodes_converge_through_the_sync_route() {
             },
             &key_b,
             &roster,
+            None,
         )
         .unwrap();
     assert_ne!(
