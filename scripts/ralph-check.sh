@@ -55,13 +55,19 @@ case "$check" in
                exit 2
              fi
              s="${1:-${RALPH_DEMO_SCRIPT:-scripts/ring-doc-demo.sh}}"; rm -f target/ralph/demo.log
-             setsid nohup "$s" verdict all > target/ralph/demo.log 2>&1 < /dev/null &
+             # setsid detaches the demo, so it is nobody's child and `wait` cannot report it: a
+             # wrapper writes the demo's own exit code (its four-verdict rule) to demo.rc.
+             rm -f target/ralph/demo.rc
+             setsid nohup bash -c '"$1" verdict all > target/ralph/demo.log 2>&1; echo $? > target/ralph/demo.rc' _ "$s" < /dev/null > /dev/null 2>&1 &
              echo $! > target/ralph/demo.pid; echo "started pid=$(cat target/ralph/demo.pid) log=target/ralph/demo.log"; exit 0 ;;
     demo-wait) # poll the detached demo for up to 540 s; exit 3 = still running (call again), else the demo's exit code + its last 14 lines
              [ -f target/ralph/demo.pid ] || { echo "no detached demo (run demo-bg first)" >&2; exit 2; }
              pid=$(cat target/ralph/demo.pid); for _ in $(seq 1 108); do kill -0 "$pid" 2>/dev/null || break; sleep 5; done
              if kill -0 "$pid" 2>/dev/null; then echo "still running pid=$pid ($(ps -o etimes= -p "$pid" | tr -d ' ')s) — call demo-wait again"; tail -n 3 target/ralph/demo.log; exit 3; fi
-             wait "$pid" 2>/dev/null; rc=$?; [ "$rc" = 127 ] && rc=$(grep -c '"verdict": "PASSED"' target/ralph/demo.log | awk '{print ($1==5)?0:1}')
+             # Until 2026-09-20 this was `wait "$pid"` (always 127 on a setsid'd process) with a
+             # fallback counting PASSED rows against 5 — which read a six-row room run as exit=1
+             # when all six passed and exit=0 when one FAILED, and counted COULD-NOT-JUDGE as a pass.
+             rc=$(cat target/ralph/demo.rc 2>/dev/null); [ -n "$rc" ] || { rc=2; echo "the demo ended without writing its exit code (killed?)"; }
              echo "exit=$rc"; tail -n 14 target/ralph/demo.log; rm -f target/ralph/demo.pid; exit "$rc" ;;
     testall) run testall 12 ./scripts/with-cargo-lock.sh ./scripts/sovereign-test.sh --human ;;
     prepush) run prepush 20 ./scripts/pre-push.sh ;;
