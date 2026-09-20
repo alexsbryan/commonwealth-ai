@@ -200,6 +200,12 @@ exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 - Chose: Three fixes, one per cause. (1) `viewer::provision` now PROVES a viewer it finds instead of re-minting it — `offer` replaces the install credential with the viewer's own (`mesh_media.rs:650-652`), so every offer after the first holds a read-only token and cannot walk the mint path at all; `GET /Users/Me` answers who the credential is and what it may do in one request, and a policy that does not read back read-only is refused by name rather than written over. (2) rr-1's `verb_keys` admits `media_viewer_user`, matching what rr-2's own copy of the same clause already admitted. (3) `ralph-check.sh demo-bg` refuses to launch while a demo is running. The row returns to `[ ]` with the topology trap spelled out and a pre-registered bar for the slow offer listing.
 - Because: The package's root cause was wrong and all three of its candidates would have failed the same way. `"Invalid user or password entered."` is the NON-ADMIN branch of Jellyfin 12's `UpdateUserPassword` — an administrator skips the `CurrentPw` check — so the defect is a lost elevation, not an unsettable password, and a caller that cannot reset a password cannot delete or create a user either. Proving the account is also the smaller move (ARCH 11): no second credential slot, no new noun, nothing minted that already exists. Widening rr-1's clause restores parity rather than loosening a bar — what it discriminates, a person editing config by hand, is untouched.
 
+**A39 · 2026-09-20 · REVIEW-DEMO-rr-2-run · director (seat, correcting the package's 'no cause established')** — this commit
+- Needed: The package reported rr-1 regression attempt 1 killed 3.5 min into the walk (`walk a kill 6 / b / c`, `ring-doc` network gone at 00:15:22Z) with no cause. The cause is the seat's: at ~00:13Z the director woke the scheduler worker (A33/A35's session) and told it to tear its podman room down; it ran `ring-room-demo.sh down` at 00:15Z on the same `ring-doc-a/b/c` names the loop's regression run was using.
+- Chose: Record the cause; no code, no row. Attempt 2 (`target/ralph/rr1-run2.log`) is the reading.
+- Because: An unexplained kill in the ledger reads as a daemon defect (ARCH 6: absence reported, never defaulted). The rule it minted: two sessions on one host never share demo container names — rr-2's `ring-room-<n>` set was distinct by design; the rr-1 regression run reused rr-1's names, which the worker also held.
+
+
 
 ## Flags for the operator
 
