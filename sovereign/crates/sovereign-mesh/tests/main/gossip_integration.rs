@@ -22,7 +22,7 @@ use sovereign_daemon::server::internal_router;
 use sovereign_daemon::state::AppState;
 use sovereign_mesh::gossip;
 
-fn member_at(id: NodeId, name: &str, last_seen: u64, addr: SocketAddr) -> MemberRecord {
+pub(crate) fn member_at(id: NodeId, name: &str, last_seen: u64, addr: SocketAddr) -> MemberRecord {
     MemberRecord {
         removed_at: None,
         node_pubkey: None,
@@ -69,7 +69,7 @@ fn member_at(id: NodeId, name: &str, last_seen: u64, addr: SocketAddr) -> Member
 /// address and keep the server running for the test's lifetime.
 /// The JoinHandle is intentionally leaked — it lives as long as the
 /// test process, which is bounded by tokio::test's drop.
-async fn spawn_internal_router(state: AppState) -> SocketAddr {
+pub(crate) async fn spawn_internal_router(state: AppState) -> SocketAddr {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let router = internal_router(state);

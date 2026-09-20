@@ -878,17 +878,17 @@ pub async fn run_one_round(
                             "gossip: merged peer's view (last_seen refresh)"
                         );
                     }
-                    // Also bump THIS peer's last_seen in case their
-                    // view of themselves lagged — we successfully
-                    // reached them just now, so they're Online.
-                    //
-                    // Log the offline→online transition at INFO so
-                    // the operator can see "B is back" without
-                    // polling mesh_state() by hand. Symmetric to the
-                    // offline-decay log in the pass above.
+                    // Reached just now, so Online — but we do NOT write its
+                    // `last_seen`, which is self-stamped and is the LWW key
+                    // (`MemberRecord::event_time`). Writing it manufactures a
+                    // tie against the holder's own stamp of the same second and
+                    // the merge reads `local-record-not-older` until the next
+                    // round (room run B: an offer held 60 s). Liveness does not
+                    // need it: decay reads the LOCAL contact clock stamped at
+                    // `observe_peer_contact` above. The INFO line names the
+                    // offline→online edge, symmetric to the decay pass.
                     if let Some(peer) = mesh.members.get_mut(&peer_id) {
                         let was_offline = peer.status == NodeStatus::Offline;
-                        peer.last_seen = fabric.clock().now_unix_secs();
                         peer.status = NodeStatus::Online;
                         if was_offline {
                             info!(
@@ -911,7 +911,7 @@ pub async fn run_one_round(
                     // that, the working address goes first and the
                     // dead one is never tried again. If reachability
                     // truly breaks, every attempt fails and the peer
-                    // decays to Offline via the `last_seen` threshold,
+                    // decays to Offline via the local-contact threshold,
                     // which logs at INFO from the decay path.
                     debug!(
                         peer = %peer_id,

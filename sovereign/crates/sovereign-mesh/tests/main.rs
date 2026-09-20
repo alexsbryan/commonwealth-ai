@@ -74,6 +74,8 @@ mod fold_ingest_cross_node_merge_e2e;
 mod gossip_auth;
 #[path = "main/gossip_integration.rs"]
 mod gossip_integration;
+#[path = "main/gossip_offer_clock.rs"]
+mod gossip_offer_clock;
 #[path = "main/guest_lender_routing.rs"]
 mod guest_lender_routing;
 #[path = "main/guest_over_iroh_e2e.rs"]
