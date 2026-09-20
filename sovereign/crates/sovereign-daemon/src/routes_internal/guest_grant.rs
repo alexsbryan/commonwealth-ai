@@ -132,9 +132,10 @@ pub async fn guest_grant_issue(
     State(state): State<AppState>,
     Json(req): Json<GuestGrantRequest>,
 ) -> Result<Json<GuestGrantResponse>, (StatusCode, Json<ErrorBody>)> {
-    let scopes = req.scopes.into_scopes().map_err(|error| {
-        (StatusCode::BAD_REQUEST, Json(ErrorBody { error }))
-    })?;
+    let scopes = req
+        .scopes
+        .into_scopes()
+        .map_err(|error| (StatusCode::BAD_REQUEST, Json(ErrorBody { error })))?;
     if scopes.is_empty() {
         // A grant that permits nothing is a legal state in the store, but
         // minting one is always a mistake — refuse rather than hand back a

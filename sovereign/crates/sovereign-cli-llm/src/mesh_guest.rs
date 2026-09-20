@@ -643,7 +643,6 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
     0
 }
 
-
 async fn grant_list(port: u16) -> i32 {
     let client = match http_client(10) {
         Ok(c) => c,
@@ -1028,7 +1027,6 @@ async fn verify_link(link: &GuestLink) -> Result<Vec<String>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
 
     #[test]
     fn ttl_accepts_the_suffixes_the_help_advertises() {

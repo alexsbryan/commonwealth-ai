@@ -36,7 +36,10 @@ async fn door(state: AppState, page: &std::path::Path, req: Request<Body>) -> (S
     // "a guest reaches nothing else" assertions below expect from it.
     let resp = door_router(
         state,
-        std::sync::Arc::new(GuestPages::new(Some(page.to_path_buf()), Default::default())),
+        std::sync::Arc::new(GuestPages::new(
+            Some(page.to_path_buf()),
+            Default::default(),
+        )),
         None,
     )
     .oneshot(req)
@@ -688,7 +691,10 @@ async fn one_wall_bearer_reaches_every_declared_app_and_is_refused_the_rest() {
             dir.path(),
             &key,
             &[
-                (NS, sovereign_core::guest_pages::GuestPage::Open("/srv/a".into())),
+                (
+                    NS,
+                    sovereign_core::guest_pages::GuestPage::Open("/srv/a".into()),
+                ),
                 (
                     DOC_NS,
                     sovereign_core::guest_pages::GuestPage::Narrowed {
@@ -699,7 +705,10 @@ async fn one_wall_bearer_reaches_every_declared_app_and_is_refused_the_rest() {
                 // A config that should never have been written. The route
                 // refuses it anyway — `GuestPages::from_config` is not the
                 // only guard (ARCH 5).
-                (owned, sovereign_core::guest_pages::GuestPage::Open("/srv/c".into())),
+                (
+                    owned,
+                    sovereign_core::guest_pages::GuestPage::Open("/srv/c".into()),
+                ),
             ],
         ),
         vec![Scope::Wall],
