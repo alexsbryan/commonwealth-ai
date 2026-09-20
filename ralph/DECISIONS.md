@@ -289,6 +289,10 @@ exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 - Needed: the audit is done and committed (`a2a688d07`) and stopped on two red gates a worker may not close: TESTALL 13548 pass / 1 fail, and PREPUSH red on arch-gate's approach band (+5 files / +5077 lines against `origin/main`). The seat reproduced: `guest_door.rs` 463 -> 1077 and `routes_rail.rs` 483 -> 855 since `f51b66112`; the one test failure is `every_journey_cites_a_doc_that_exists` on `docs/internal/RING_APPLICATIONS.md`, absent on this host, ignored by `.gitignore:67`, cited at `sovereign/docs/cli-contract.toml:3571` since `a3bd715f5`, which is an ancestor of this campaign's base; A51's appendix records the identical red for rr-2.
 - Chose: the row closes on the campaign's share, as `REVIEW-audit-rr-2` did at A51, and is marked `[x] a2a688d07`. Every machine row of ring-guest is now `[x]`; `HUMAN-rg-the-wall` is the operator's. NOT decided here, all the operator's: (1) the arch-gate approach band — accept, trim or re-pin; ring-guest's share is +4 files / +3602 lines and rr-2's +1 / +1475 is still open under A51, so `--update-baseline` on this tree would absorb both; (2) the absent doc — restore it on this host or rename the citation; this is the third audit to report it; (3) whether size-gate's 76 unbaselined keys and hakari-verify's panic get an owner. No baseline was touched.
 - Because: both reds are foreign to the row's work or are the growth the row was written to measure, and the audit said so unsoftened — `sovereign-daemon` +1394 net non-test lines against a registered prediction of under ~250 and an overbuild line of ~500, substrate 2291 against ~250. The prediction was FALSIFIED on size and HELD on shape: the scaffold's template diff is empty, ring-doc is net negative, the rail came in at 53 of ~60 with one row touching it. Whether 1077 lines in `guest_door.rs` is the price of the wall or an overbuild to trim is the question the operator's walk should answer, not the seat.
+**A60 · 2026-09-20 · ra-room-scan-to-name clause (a) · OPERATOR (decided at A58, applied here)** — this commit
+- Needed: A58 decided this correction and held it until `REVIEW-audit-rg` landed, because the instrument printed "ring-room.toml is unedited" in that bar's row and the shed bar's goodhart forbids a clause edit to that file inside the campaign. The audit landed (`a2a688d07`, closed at A59).
+- Chose: clause (a) now asks that the grant's scope REACH this app, where it named `Scope::Rails(ring-doc)` + `Scope::Models`. The correction is in the bar's own text, says it came AFTER data existed, and says which runs were read under which wording. The instrument's row for that bar no longer claims the file is unedited. No other clause changed: vouch (b) stays as written (A58), edit-attributed (c) was already a faithful reading.
+- Because: A55 made the wall one grant, so the old text describes a grant this system no longer mints by default; leaving a false clause under a passing bar is the quiet version of the weakening the goodhart line exists to catch, and saying so in the text is the open version.
 
 **A44 · 2026-09-19 · rr-2-gossip-claim-one-decider · director (supervisor resolution, attempt 1)** — commit: this one
 - Needed: A43 wrote the row on the premise that a SECOND site builds the claim gossip sends. The worker measured the send path and found one, stopped at the premise check without improvising a target, and asked whether to rewrite or strike the row.
@@ -7650,5 +7654,14 @@ The campaign's predicate check is `scripts/threat-gaps-demo.sh verdict all`, whi
 <details>
 
 Demo evidence the walk starts from: both cold room runs eleven of eleven PASSED (`target/ralph/rg-room-run1.log`, `rg-room-run2.log`); rr-1 regression at its standing baseline (`ra-room-answer-names-the-machine` 0.8 and `ra-room-plug-in-live` 0.0, both on the model naming the machine — the same readings A49 and A50 recorded, and unowned). Margin recorded, not acted on: offline room converged in 55 s of a 60 s window in run 2 (16 s in run 1).
+
+</details>
+
+
+## A60 · 2026-09-20 — scan-to-name clause (a) corrected after data, openly
+
+<details>
+
+`co-lineage.py --self-test` exit 0 with the edit; `bash -n` and a `py_compile` of the embedded verdict block pass. Not re-run against the room: the change to the instrument is one string in a verdict row's annotation. Note 9ec551b2 is retired by this entry.
 
 </details>

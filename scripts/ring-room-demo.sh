@@ -1778,8 +1778,8 @@ if topology == "room":
             quiet_zone=(p1.get("qr") or {}).get("quiet_zone"), page=p1.get("apps"),
             clause_a_reading="A55: the wall is ONE grant reaching every registered app, so its "
                              f"summary reads 'the wall' where rr-2's read 'rail:{doc_ns}'. Clause (a) "
-                             "is read as 'the summary names a scope that reaches this app'; "
-                             "ring-room.toml is unedited.",
+                             "reads 'a scope that reaches this app' — corrected in the bar's own "
+                             "text 2026-09-20 (ledger A60), after data, by the operator.",
             phone_typed=[f"{e['leg']}: {e['string']}" for e in walk if e["node"].startswith("phone")],
             log_mentions_of_the_phone=guest_mentions, members=w.get("members_after"))
 
