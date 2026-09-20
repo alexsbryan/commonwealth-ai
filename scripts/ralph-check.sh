@@ -49,7 +49,11 @@ if [ -n "${RALPH_QUEUE:-}" ] && [ -n "$check" ]; then
 fi
 case "$check" in
     clean)   RALPH_CLEAN_MB="${RALPH_CLEAN_MB:-262144}" run build 5 ./scripts/dev-build.sh --clean --gate-only ;;
-    lint)    run lint 5 ./scripts/with-cargo-lock.sh ./scripts/sovereign-lint.sh --human ;;
+    # LINT is the one check every unit runs, so the file-size ratchet rides on it
+    # (2 s): a unit that grows a file past its arch-gate ceiling fails ITS OWN
+    # check, not an audit nine rows later. The ceiling is the invariant; rows and
+    # prompts carry no "this file is nearly full" text (2026-09-20).
+    lint)    run lint 8 ./scripts/with-cargo-lock.sh bash -c './scripts/sovereign-lint.sh --human && cd corpus-engine && cargo xtask arch-gate' ;;
     test)    [ -n "${1:-}" ] || { echo "usage: ralph-check.sh test <crate>" >&2; exit 2; }
              run test 8 ./scripts/with-cargo-lock.sh ./scripts/sovereign-test.sh --human --package "$1" ;;
     layer)   run layer 5 bash -c 'cd corpus-engine && ../scripts/with-cargo-lock.sh cargo xtask layer-gate' ;;

@@ -45,8 +45,6 @@ in the files the row points at. When a row and the tree disagree, you stop
   which route a turn takes, whether a gate runs, a default, a prompt or a
   threshold — that row was mis-tiered: §6 with what you found. Never "fix" an
   asymmetry you notice on the way; the order's tier B and C own those.
-- `sovereign/crates/sovereign-contracts/src/types/routing.rs` is AT its 1,200-line
-  ceiling: a row that needs a line there removes one in the same edit.
 - The line numbers in every row are from 2026-09-20. Re-locate each site with
   grep before editing; a moved line is normal, a missing SYMBOL is §6.
 - New tracing reuses an existing `target` and existing field names from the
