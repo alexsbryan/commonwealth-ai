@@ -199,9 +199,9 @@ pub struct SynthSnapshot {
     /// `provenance.total_latency_ms` from the persisted message
     /// metadata, when present.
     pub total_latency_ms: Option<u64>,
-    /// `provenance.intent` — what the classifier decided. Crucial for
-    /// debugging routing-layer regressions ("why is this question
-    /// routing to ChitChat instead of KnowledgeQuery?").
+    /// Which route the turn took — `routed_intent`, falling back to the
+    /// `provenance.intent` display label. Crucial for debugging
+    /// routing-layer regressions. See `super::routed_intent`.
     pub intent: Option<String>,
     /// Origins of every retrieval source the runtime touched, e.g.
     /// `corpus-wikipedia`, `web`, `conversation-history`. Empty when
@@ -1752,10 +1752,10 @@ async fn run_question_synth(
     let total_latency_ms = prov
         .and_then(|p| p.get("total_latency_ms"))
         .and_then(|v| v.as_u64());
-    let intent = prov
-        .and_then(|p| p.get("intent"))
-        .and_then(|v| v.as_str())
-        .map(str::to_string);
+    // WHICH ROUTE, not which display label — see `routed_intent` for why the
+    // two are different questions and why the old label is still the
+    // fallback.
+    let intent = super::routed_intent::snapshot_intent(&metadata);
     let source_origins: Vec<String> = prov
         .and_then(|p| p.get("sources"))
         .and_then(|s| s.as_array())

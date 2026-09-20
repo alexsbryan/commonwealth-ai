@@ -133,6 +133,9 @@ impl Runtime {
             created_at: now(),
             metadata: Some(serde_json::json!({
                 "intent": "CommissiveQuery",
+                // The route by variant name; the sibling "intent" above is
+                // the free-form display label.
+                "routed_intent": crate::types::Intent::CommissiveQuery.name(),
                 "kind": kind,
                 "phrase": phrase,
                 "note_id": note_id,

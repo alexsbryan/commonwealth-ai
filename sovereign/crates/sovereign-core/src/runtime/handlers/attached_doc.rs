@@ -1418,6 +1418,10 @@ impl Runtime {
 
         let mut metadata = serde_json::json!({
             "intent": "AttachedDoc",
+            // A literal, not an `Intent`: this door is taken in `turn.rs`
+            // BEFORE intent classification runs (`document_session` present),
+            // so no variant names it — same shape as `recipe_author.rs`.
+            "routed_intent": "AttachedDoc",
             "iterations": iterations,
             "tools_invoked": tool_ids_invoked.iter().cloned().collect::<Vec<_>>(),
             "retrieved_chunks_total": total_chunks,

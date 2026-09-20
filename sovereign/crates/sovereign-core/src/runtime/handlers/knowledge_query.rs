@@ -2114,6 +2114,13 @@ impl Runtime {
                     "tokens": completion.tokens_used,
                     "latency_ms": completion.latency_ms,
                     "intent": "knowledge_query",
+                    // Which route this turn actually took, by variant name.
+                    // The sibling "intent" above is a hardcoded path label and
+                    // this handler serves BOTH KnowledgeQuery and
+                    // ComparisonQuery, so it cannot answer "which surface did
+                    // this probe take?" — the same reason the streaming twin
+                    // stamps this key.
+                    "routed_intent": intent.name(),
                     "documents_found": plan.chunks.len(),
                     "search_ms": plan.search_ms,
                     "result_quality": plan.result_quality,

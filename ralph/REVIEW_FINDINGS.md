@@ -1365,3 +1365,27 @@ Findings, fixed (commits `b606f9587`, `7cf49fc9d`):
   scan source text, so a file move is not behaviour-preserving for them. No
   code fix — recorded so a split row names the source-scanning tests in its
   checks.
+
+## routing-blemishes — REVIEW-build-rb-routed-intent-everywhere
+
+One finding, recorded because the row and the tree disagreed and the build went
+with the tree. NOT a §6 stop: the decision lives in a file the row itself points
+at, so reading the pointer resolved it.
+
+- **ARCH 8 (one decider, one name) · row said `slug`, the key's contract says
+  `name`** · `sovereign/crates/sovereign-contracts/src/types/routing.rs:174`
+  and `types/projection.rs:208` · the row directs "STAMP it, from
+  `intent.row().slug`". `IntentRow::slug` is the snake_case WIRE key
+  (exemplars TOML, eval banks' `expected_intent`); `IntentRow::name` is
+  documented at routing.rs:174 as "the one rendering used wherever a route is
+  RECORDED (`routed_intent` on turn metadata, chaos transcript rows)", and
+  `TurnMetadata::routed_intent` at projection.rs:208 as "by variant name
+  (`DeepQuery`, `KnowledgeQuery`, …)". All four pre-existing stamp sites write
+  the PascalCase name (`streaming.rs:2365`, `:3522`, `complex_task.rs:512`,
+  `recipe_author.rs:489`/`:571`), and two consumers group on those values
+  (`bench_cmd/chaos_monkey.rs:2160`/`:2175` assert `"ComplexTask"` /
+  `"KnowledgeQuery"`; `quality_lane_cmd/chat_ask.rs:824` renders the field).
+  Stamping `slug` at the ten new sites would have put `knowledge_query` and
+  `KnowledgeQuery` under one key and split every grouping silently. Built with
+  `Intent::name()`; fixed-in the `REVIEW-build-rb-routed-intent-everywhere`
+  commit itself — there was no separate repair.

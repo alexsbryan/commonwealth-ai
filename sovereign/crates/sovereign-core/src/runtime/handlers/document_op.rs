@@ -94,6 +94,11 @@ impl Runtime {
                 created_at: now(),
                 metadata: Some(serde_json::json!({
                     "provenance": provenance,
+                    // A literal, not an `Intent`: this door is taken in
+                    // `turn.rs` on the `[Document attached: …]` prefix, BEFORE
+                    // intent classification runs, so no variant names it —
+                    // same shape as `recipe_author.rs`.
+                    "routed_intent": "DocumentOperation",
                     "document_source": resolved_source,
                     "document_chunks": 0,
                     "result_quality": "no_source",
@@ -360,6 +365,8 @@ impl Runtime {
             created_at: now(),
             metadata: Some(serde_json::json!({
                 "provenance": provenance,
+                // See the abstention branch above for why this is a literal.
+                "routed_intent": "DocumentOperation",
                 "document_source": resolved_source,
                 "document_chunks": chunk_count,
             })),

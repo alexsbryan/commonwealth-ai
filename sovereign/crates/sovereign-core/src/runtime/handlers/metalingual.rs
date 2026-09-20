@@ -608,6 +608,9 @@ impl Runtime {
             metadata: Some({
                 let mut m = serde_json::json!({
                     "intent": "MetalingualQuery",
+                    // The route by variant name; the sibling "intent" above is
+                    // the free-form display label.
+                    "routed_intent": crate::types::Intent::MetalingualQuery.name(),
                     "locator": format!("{:?}", locator),
                     "sources": sources,
                     "chunks_used": chunks.len(),

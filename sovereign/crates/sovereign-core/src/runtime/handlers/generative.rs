@@ -48,7 +48,13 @@ const GENERATIVE_SYSTEM_PROMPT: &str = "You are a skilled, versatile writer and 
 /// for a row that had one. `None` is the pump-published-nothing case (the
 /// persist below failed): the key is absent rather than fabricated.
 fn generative_metadata(provenance: Option<&ResponseProvenance>) -> serde_json::Value {
-    let mut metadata = serde_json::json!({ "intent": "GenerativeQuery" });
+    // `routed_intent` is the route by variant name; the sibling "intent" is
+    // the free-form display label. Both doors persist through this builder,
+    // so one stamp covers the stream and the collect-to-completion path.
+    let mut metadata = serde_json::json!({
+        "intent": "GenerativeQuery",
+        "routed_intent": crate::types::Intent::GenerativeQuery.name(),
+    });
     if let Some(provenance) = provenance {
         metadata["provenance"] = serde_json::json!(provenance);
     }

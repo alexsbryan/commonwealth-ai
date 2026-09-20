@@ -34,6 +34,7 @@ pub mod attribution;
 pub mod bank;
 pub mod lost_corpora;
 pub mod report;
+pub mod routed_intent;
 pub mod routing_metrics;
 pub mod runner;
 pub mod runner_threads;
