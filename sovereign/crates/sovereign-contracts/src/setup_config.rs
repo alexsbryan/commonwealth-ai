@@ -1429,17 +1429,13 @@ pub struct DaemonSection {
     pub internal_bind: String,
 
     /// `[daemon.guest_pages]` — one wall, more than one app: rail namespace
-    /// → bundle directory, served at `/ring/<namespace>/`. Which apps a wall
-    /// holds is data, not a code change (ARCH §9). Declared LAST because a
-    /// TOML table must follow this section's scalars.
-    ///
-    /// ```toml
-    /// [daemon.guest_pages]
-    /// ring-doc = "/srv/ring-doc"
-    /// house-expenses = "/srv/house"
-    /// ```
+    /// → bundle directory, served at `/ring/<namespace>/`. Registering an app
+    /// here is how its owner DECLARES that it admits guests; a wall grant
+    /// reaches exactly what is declared. Both entry spellings, the narrowing
+    /// and the worked example live on [`GuestPage`], its one type. Declared
+    /// LAST because a TOML table must follow this section's scalars.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
-    pub guest_pages: std::collections::BTreeMap<String, PathBuf>,
+    pub guest_pages: std::collections::BTreeMap<String, crate::guest_pages::GuestPage>,
 }
 
 /// Filesystem paths for mutable state.

@@ -260,6 +260,25 @@ pub const REGISTERED_NAMESPACES: &[&str] = &[
     corpus_engine::update::newsworthy_watcher::APP_ID_TRACKED,
 ];
 
+/// Is `namespace` one this daemon writes on its own behalf?
+///
+/// **THE decider, and the only one.** [`REGISTERED_NAMESPACES`] answers it for
+/// every ring whose roster this node derives; `work` is the one namespace that
+/// is daemon-written and deliberately NOT on that list, because joining it
+/// would flip the work plane's roster to `Derived` and orphan the operator's
+/// `rings/work/roster.json` (`commonwealth_work::WORK_NAMESPACE` records the
+/// same, and `crate::rail_kv_pump`'s header names it as the exception). Two
+/// questions, one answer each; this function is where they meet so a caller
+/// asking "may a stranger touch this?" does not have to know there are two.
+///
+/// The one caller today is the guest door: an entry in `[daemon.guest_pages]`
+/// naming a namespace this returns `true` for is refused at config load and
+/// refused again at the rail route (ARCH 5 — a registry that was wrong must
+/// not be the only guard).
+pub fn is_daemon_owned(namespace: &str) -> bool {
+    REGISTERED_NAMESPACES.contains(&namespace) || namespace == commonwealth_work::WORK_NAMESPACE
+}
+
 /// [`MeshRoster::from_membership`] as the rail sees it.
 ///
 /// Holds the daemon's membership WEAKLY: the rail lives beside it, so a strong

@@ -36,7 +36,7 @@ async fn door(state: AppState, page: &std::path::Path, req: Request<Body>) -> (S
     // "a guest reaches nothing else" assertions below expect from it.
     let resp = door_router(
         state,
-        GuestPages::new(Some(page.to_path_buf()), Default::default()),
+        std::sync::Arc::new(GuestPages::new(Some(page.to_path_buf()), Default::default())),
         None,
     )
     .oneshot(req)
@@ -269,7 +269,7 @@ async fn the_door_opens_at_the_first_rail_grant_and_closes_at_the_last_expiry() 
     tokio::spawn(serve(
         state.clone(),
         Some(addr.to_string()),
-        GuestPages::default(),
+        std::sync::Arc::new(GuestPages::default()),
         None,
     ));
     let http = reqwest::Client::builder()
@@ -643,6 +643,7 @@ async fn under_the_strict_binding_the_second_app_asks_again() {
             dir.path(),
             &key,
             sovereign_grants::GuestSessionBinding::Grant,
+            Default::default(),
         ),
         vec![Scope::Rails(NS.into())],
     );
@@ -668,4 +669,98 @@ async fn under_the_strict_binding_the_second_app_asks_again() {
     .await;
     assert_eq!(status, StatusCode::CONFLICT, "{body}");
     assert!(body.contains("stale_session"), "{body}");
+}
+
+/// **ONE bearer, the whole wall — and the wall is what the OWNER declared.**
+///
+/// The resource declares and the credential identifies: this grant names no
+/// namespace at all, so what it reaches is `[daemon.guest_pages]`, read at the
+/// route. Clause (e) of `rg-one-person-across-apps` is the three refusals here
+/// — a namespace nobody declared, one this daemon owns, and an append to an
+/// entry registered `guests = "read"` — each with a sentence naming it.
+#[tokio::test]
+async fn one_wall_bearer_reaches_every_declared_app_and_is_refused_the_rest() {
+    let dir = tempfile::tempdir().unwrap();
+    let key = SigningKey::from_bytes(&[1u8; 32]);
+    let owned = sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID;
+    let a = with_guest(
+        state_with_wall(
+            dir.path(),
+            &key,
+            &[
+                (NS, sovereign_core::guest_pages::GuestPage::Open("/srv/a".into())),
+                (
+                    DOC_NS,
+                    sovereign_core::guest_pages::GuestPage::Narrowed {
+                        dir: "/srv/b".into(),
+                        guests: sovereign_core::guest_pages::GuestAccess::Read,
+                    },
+                ),
+                // A config that should never have been written. The route
+                // refuses it anyway — `GuestPages::from_config` is not the
+                // only guard (ARCH 5).
+                (owned, sovereign_core::guest_pages::GuestPage::Open("/srv/c".into())),
+            ],
+        ),
+        vec![Scope::Wall],
+    );
+    second_app(&a, &key);
+    let (_root, page) = page_dir();
+    let handle = claimed(a.clone(), &page, GUEST_TOKEN, "ana").await;
+
+    let append = |ns: &str| {
+        as_guest(
+            "POST",
+            &format!("/v1/rail/append?namespace={ns}"),
+            GUEST_TOKEN,
+            &handle,
+            Some(serde_json::json!({ "op": "record", "payload": { "n": 1 } })),
+        )
+    };
+    let log = |ns: &str| {
+        as_guest(
+            "GET",
+            &format!("/v1/rail/log?namespace={ns}"),
+            GUEST_TOKEN,
+            &handle,
+            None,
+        )
+    };
+
+    // The declared, writable app: one bearer, and the guest's name on the act.
+    let (status, body) = door(a.clone(), &page, append(NS)).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (status, body) = door(a.clone(), &page, log(NS)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.contains("ana, guest of alex"), "{body}");
+
+    // The second app on the same wall, registered read-only. The SAME bearer
+    // reads it — narrowing what a guest may DO is not narrowing what they see.
+    let (status, body) = door(a.clone(), &page, log(DOC_NS)).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    // ...and its append is refused by name, with the mode the operator wrote.
+    let (status, body) = door(a.clone(), &page, append(DOC_NS)).await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+    assert!(body.contains(DOC_NS) && body.contains("read"), "{body}");
+
+    // A namespace nobody put on the wall: refused, and never served as one of
+    // the two that ARE on it.
+    let (status, body) = door(a.clone(), &page, log("someone-elses")).await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+    assert!(body.contains("someone-elses"), "{body}");
+
+    // The hard edge: a ring this daemon owns, declared by a config that was
+    // wrong, refused at the route regardless.
+    let (status, body) = door(a.clone(), &page, log(owned)).await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+    assert!(body.contains(owned), "{body}");
+
+    // And a wall grant that names nothing has not said what it wants.
+    let (status, body) = door(
+        a.clone(),
+        &page,
+        as_guest("GET", "/v1/rail/log", GUEST_TOKEN, &handle, None),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
 }

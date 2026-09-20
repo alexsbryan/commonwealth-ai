@@ -568,6 +568,14 @@ impl AppState {
         self.inner.fabric.ring_rail.clone()
     }
 
+    /// The apps this wall's owner declared open to guests — ONE accessor for
+    /// ONE registry (ARCH §7.5). The door's page routes and the rail's
+    /// namespace resolution both read it here, so "is this app on the wall"
+    /// cannot get two answers.
+    pub fn guest_pages(&self) -> Arc<crate::guest_door::GuestPages> {
+        Arc::clone(&self.inner.node.guest_pages)
+    }
+
     /// The wake-up that makes a local store write travel now.
     ///
     /// Raised by the KV pump after it signs a write onto a journal, and by the
@@ -1145,6 +1153,7 @@ impl AppState {
                     started_at: std::time::Instant::now(),
                     guest_grants: Arc::new(GuestGrantStore::new()),
                     guest_sessions: Arc::new(GuestSessionStore::new(node_seed.guest_sessions)),
+                    guest_pages: Arc::new(node_seed.guest_pages),
                     // 0 sentinel = no foreground activity observed yet.
                     // The yield hook treats 0 as "never active", regardless
                     // of the window — so a fresh boot doesn't accidentally

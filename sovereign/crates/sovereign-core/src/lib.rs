@@ -64,8 +64,8 @@ pub mod turn_approval;
 // observer, health, skills, intent_policy, mcp_config, setup_config, rebrand,
 // tool_manifest, tool_result_cache}` path so every existing importer is unaffected.
 pub use sovereign_contracts::{
-    error, health, intent_policy, launch, mcp_config, observer, rebrand, registry, setup_config,
-    skills, slot_policy, tool_manifest, tool_result_cache, traits, types,
+    error, guest_pages, health, intent_policy, launch, mcp_config, observer, rebrand, registry,
+    setup_config, skills, slot_policy, tool_manifest, tool_result_cache, traits, types,
 };
 
 // The daemon's wire shapes, at `sovereign_core::daemon_wire`. Added

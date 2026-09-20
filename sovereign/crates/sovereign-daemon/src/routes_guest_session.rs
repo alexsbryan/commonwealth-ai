@@ -31,6 +31,12 @@
 //! already holds so two guests are never shown as one person. The member
 //! refusal is the sentence `routes_rail::append` has spoken since the rail
 //! shipped, moved to where the name is now claimed rather than re-worded.
+//!
+//! The member check runs over EVERY namespace this bearer reaches
+//! (`routes_rail::reachable_namespaces`) — one app under a `Scope::Rails`
+//! grant, the whole wall under a `Scope::Wall` one. It has to: a name accepted
+//! on one app and refused on the next would make one person two, and the room
+//! the guest is standing in is the wall, not one page of it.
 
 use axum::extract::State;
 use axum::response::{IntoResponse, Response};
@@ -115,27 +121,48 @@ pub async fn claim_name(
         );
     }
 
-    // The roster comes from the rail's ONE reader, through the same resolver
-    // the append route uses — the namespace is the grant's and never the
-    // request's (`GuestGrant::rail_namespace`).
-    let (rail, journal) = match crate::routes_rail::journal_for(&state, Some(&guest), None) {
-        Ok(pair) => pair,
-        Err(refusal) => return refusal,
-    };
-    let roster = match rail.roster(&journal).await {
-        Ok(r) => r,
-        Err(e) => return refuse(axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
-    };
-    if names_a_member(&roster, &name) {
-        tracing::warn!(
-            namespace = journal.namespace(),
-            guest = name,
-            "guest_session: refused a guest name that is a roster member's"
-        );
+    // The rosters come from the rail's ONE reader, over every namespace this
+    // bearer reaches — which the RESOLVER answers, never the request. Under a
+    // wall grant that is every app the owner declared, and it has to be: "is
+    // this a member's name" is a question about the wall this phone is
+    // standing at, and a name refused on one app and accepted on the next
+    // would make one person two.
+    let namespaces = crate::routes_rail::reachable_namespaces(&state.guest_pages(), &guest);
+    if namespaces.is_empty() {
         return refuse(
-            axum::http::StatusCode::CONFLICT,
-            format!("'{name}' is a member of this ring; a guest writes under a name of their own"),
+            axum::http::StatusCode::FORBIDDEN,
+            "this grant reaches no app on this wall, so there is no room to be named in",
         );
+    }
+    let Some(rail) = state.ring_rail() else {
+        return refuse(
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            "this daemon has no ring storage installed, so there is no roster to check \
+             a name against — start it with a data directory",
+        );
+    };
+    for namespace in &namespaces {
+        let journal = match rail.journal(namespace) {
+            Ok(j) => j,
+            Err(e) => return refuse(axum::http::StatusCode::BAD_REQUEST, e.to_string()),
+        };
+        let roster = match rail.roster(&journal).await {
+            Ok(r) => r,
+            Err(e) => return refuse(axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+        };
+        if names_a_member(&roster, &name) {
+            tracing::warn!(
+                namespace,
+                guest = name,
+                "guest_session: refused a guest name that is a roster member's"
+            );
+            return refuse(
+                axum::http::StatusCode::CONFLICT,
+                format!(
+                    "'{name}' is a member of this ring; a guest writes under a name of their own"
+                ),
+            );
+        }
     }
 
     let handle = match commonwealth_transport::identity::generate_bearer_token() {
@@ -157,7 +184,7 @@ pub async fn claim_name(
     {
         Ok(session) => {
             tracing::info!(
-                namespace = journal.namespace(),
+                namespaces = ?namespaces,
                 guest = session.name,
                 grant = ?guest.grant.label,
                 expires_at_ms = session.expires_at_ms,
@@ -172,7 +199,7 @@ pub async fn claim_name(
         }
         Err(held) => {
             tracing::warn!(
-                namespace = journal.namespace(),
+                namespaces = ?namespaces,
                 guest = held.name,
                 "guest_session: refused a name another live session already holds"
             );

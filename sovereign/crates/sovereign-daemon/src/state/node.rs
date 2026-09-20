@@ -32,6 +32,12 @@ pub struct NodeSeed {
     /// default ([`GuestSessionBinding::Door`]) is a name that holds across
     /// this wall — see `sovereign_grants::guest_session`.
     pub guest_sessions: GuestSessionBinding,
+    /// Which apps this wall's owner declared open to guests, resolved from
+    /// `[daemon] guest_page_dir` and `[daemon.guest_pages]`. The door serves
+    /// its pages from this and the rail route scopes a wall grant by it — the
+    /// two cannot disagree, because there is one registry and it is decided
+    /// before either exists.
+    pub guest_pages: crate::guest_door::GuestPages,
 }
 
 impl NodeSeed {
@@ -42,21 +48,32 @@ impl NodeSeed {
     /// unparseable value is refused rather than quietly read as the default —
     /// an operator who asked for the strict binding and silently got the
     /// permissive one would never find out (ARCH 6).
+    ///
+    /// The guest-page registry is resolved here for the same reason and by
+    /// its own one reader ([`crate::guest_door::GuestPages::from_config`]),
+    /// which refuses a declaration this daemon's own rings would have to
+    /// honour. Either refusal reaches the caller as a config error and the
+    /// daemon declines to start; `Box<dyn Error>` is what lets the two keep
+    /// their own types rather than being flattened into a shared one.
     pub async fn resolved(
         client_token: Option<String>,
         config: &tokio::sync::RwLock<sovereign_core::setup_config::SetupConfig>,
-    ) -> Result<Self, sovereign_grants::UnknownBinding> {
-        let guest_sessions = match config.read().await.daemon.guest_sessions.as_deref() {
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        let daemon = config.read().await.daemon.clone();
+        let guest_sessions = match daemon.guest_sessions.as_deref() {
             None => GuestSessionBinding::default(),
             Some(raw) => GuestSessionBinding::parse(raw)?,
         };
+        let guest_pages = crate::guest_door::GuestPages::from_config(&daemon)?;
         tracing::debug!(
             guest_sessions = guest_sessions.as_str(),
-            "node seed: guest session binding resolved"
+            guest_pages = ?guest_pages,
+            "node seed: guest session binding and page registry resolved"
         );
         Ok(Self {
             client_token: client_token.map(Into::into),
             guest_sessions,
+            guest_pages,
         })
     }
 }
@@ -94,6 +111,11 @@ pub struct NodePart {
     /// grants it is recognised under. Which grants those are is
     /// [`NodeSeed::guest_sessions`]. See `sovereign_grants::guest_session`.
     pub guest_sessions: Arc<GuestSessionStore>,
+    /// The apps this wall's owner DECLARED open to guests, and what guests may
+    /// do on each. Read by the door's page routes and by
+    /// `routes_rail::namespace_for`, which is what scopes a wall grant — the
+    /// resource declares, the credential identifies.
+    pub guest_pages: Arc<crate::guest_door::GuestPages>,
     /// Unix-seconds timestamp of the last foreground inference request
     /// observed at `chat_completions`. `0` means "never touched" — the
     /// initial state at boot. Bumped via

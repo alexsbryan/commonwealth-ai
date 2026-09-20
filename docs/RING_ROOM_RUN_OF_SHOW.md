@@ -222,21 +222,32 @@ WiFi that is not the tailnet, with the Halo elsewhere, because the scan bar's
 goodhart clause says a run over a VPN proves nothing about the room's WiFi.
 
 The guest door is off unless configured. On BeefyMac, `[daemon] guest_bind`
-takes the room-facing `host:port` and `[daemon] guest_page_dir` takes a copy of
-`sovereign/apps/ring-doc`; the door serves that page under `/ring/`. A second
-app on the same wall goes in `[daemon.guest_pages]` instead — one line per rail
-namespace, `ring-doc = "/path/to/bundle"` — and each is served at
-`/ring/<namespace>/`, only while a live grant names that namespace. Each app
-is its own grant and its own QR, and a phone that typed its name on one of
-them is the same person on the next — set `[daemon] guest_sessions = "grant"`
-if you want each link to ask again. The wall's
-own screen is the member page, which `svrn ring dev ring-doc --dir
-sovereign/apps/ring-doc` serves on loopback. The QR comes from the grant verb, with `--url` set to the door:
+takes the room-facing `host:port`, and the apps on the wall go in
+`[daemon.guest_pages]` — one line per rail namespace,
+`ring-doc = "/path/to/bundle"`, or
+`house-expenses = { dir = "/path/to/bundle", guests = "read" }` for an app the
+room may only look at. Registering an app there is how you say it admits
+guests; a namespace the daemon writes itself (`mesh-measurements`, the work
+plane) is refused at config load. Each app is served at `/ring/<namespace>/`,
+and the bare `/ring/` is an index of the ones the scanned grant reaches.
+(`[daemon] guest_page_dir` still puts a single app at the bare `/ring/`
+instead, which is what the stand-in used before the wall grant; set it and the
+index is not served.)
+
+ONE QR serves the whole wall, and a phone that typed its name on one app is the
+same person on the next — set `[daemon] guest_sessions = "grant"` if you want
+each link to ask again. The wall's own screen is the member page, which
+`svrn ring dev ring-doc --dir sovereign/apps/ring-doc` serves on loopback. The
+QR comes from the grant verb, with `--url` set to the door:
 
 ```bash
-svrn mesh grant --model <id from /v1/models> --rail ring-doc --ttl 2h \
+svrn mesh grant --model <id from /v1/models> --wall --ttl 2h \
   --label wall --url http://<beefy's room address>:<port>/ring/ --qr-svg wall-qr.svg
 ```
+
+`--wall` is the flag that makes it one code for every registered app. Swap it
+for `--rail <ns>` to hand out a link that reaches exactly that one and is
+refused the others by name; the two cannot be combined.
 
 On the Halo, `svrn corpus ingest <folder> --share` makes the folder answerable
 from the room. On LittleMac, `svrn mesh media offer` and later

@@ -3706,11 +3706,12 @@ impl EmbeddedDaemon {
         // dressed as a 404.
         let turn_host = self.self_weak.upgrade();
         let door_turn_host = turn_host.clone();
-        let (guest_bind, guest_pages) = {
-            let c = self.setup_config.read().await;
-            let pages = crate::guest_door::GuestPages::from_config(&c.daemon);
-            (c.daemon.guest_bind.clone(), pages)
-        };
+        // The registry was resolved once, into the node's part, by
+        // `NodeSeed::resolved` — the one reader of those two config keys. The
+        // door serves what the rail route scopes by, because it is the same
+        // value and not a second read of the same config.
+        let guest_pages = door_state.guest_pages();
+        let guest_bind = self.setup_config.read().await.daemon.guest_bind.clone();
         // Each start (including an in-process re-create) answers the bind
         // question afresh; the serve task publishes the outcome below.
         self.client_listener.send_replace(ClientListener::Pending);

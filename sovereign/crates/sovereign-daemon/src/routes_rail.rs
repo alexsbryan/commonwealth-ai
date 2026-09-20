@@ -6,13 +6,21 @@
 //! not inference, not knowledge, not app management. That guarantee is the
 //! route set of the listener it can reach, not a check in this module (§7.1).
 //!
-//! **The namespace is on the grant, never in the request.** A ring app holds a
-//! [`Scope::Rails`](sovereign_grants::Scope::Rails) naming exactly one
-//! namespace, and these routes take no namespace parameter, so an app cannot
-//! reach another app's namespace because it has no way to *say* one. A guard
-//! reading a namespace the caller supplied would be the same defect as a
-//! wrong-slot guard reading an SSE `model` field the client echoed back
-//! (§18.1) — an assertion on what the subject authored.
+//! **What a guest may reach is never what the guest says.** A request MAY name
+//! a namespace — `?namespace=` has always been read here — and
+//! [`namespace_for`] decides what to do with it against something the caller
+//! does not author: a [`Scope::Rails`](sovereign_grants::Scope::Rails) grant's
+//! one namespace, or, for a [`Wall`](sovereign_grants::Scope::Wall) grant, the
+//! owner's `[daemon.guest_pages]` registry. Either way the answer comes from
+//! the door's side of the wire. A guard reading a namespace the caller
+//! supplied AND believing it would be the same defect as a wrong-slot guard
+//! reading an SSE `model` field the client echoed back (§18.1).
+//!
+//! (This paragraph said "these routes take no namespace parameter, so an app
+//! cannot reach another app's namespace because it has no way to *say* one"
+//! until 2026-09-20. `resolve_granted` refused `asked != granted` the whole
+//! time, so it was a CHECK described as a structural fact — and reading it as
+//! structural is what made a wall grant look impossible to scope.)
 //!
 //! An operator has no grant (they are trusted by the listener they reached, and
 //! can already touch every route on this daemon), so for them — and only them —
@@ -31,6 +39,7 @@ use serde::Deserialize;
 use sovereign_grants::GuestGrant;
 
 use crate::client_auth::Guest;
+use crate::guest_door::GuestPages;
 use crate::state::AppState;
 
 /// Query parameters common to every rail route.
@@ -84,9 +93,13 @@ fn not_in_roster_refusal(origin: RosterOrigin, e: &RailError) -> String {
 ///   refusal, not a path with a story.
 /// - **No grant at all** — an operator on a listener that trusts them. They
 ///   name the namespace explicitly; absent, we refuse rather than guess.
-pub fn namespace_for(guest: Option<&Guest>, requested: Option<&str>) -> Result<String, Response> {
+pub fn namespace_for(
+    pages: &GuestPages,
+    guest: Option<&Guest>,
+    requested: Option<&str>,
+) -> Result<String, Response> {
     match guest {
-        Some(Guest { grant, .. }) => resolve_granted(grant, requested),
+        Some(Guest { grant, .. }) => resolve_granted(pages, grant, requested),
         None => requested.map(str::to_string).ok_or_else(|| {
             err(
                 StatusCode::BAD_REQUEST,
@@ -97,7 +110,14 @@ pub fn namespace_for(guest: Option<&Guest>, requested: Option<&str>) -> Result<S
     }
 }
 
-fn resolve_granted(grant: &Arc<GuestGrant>, requested: Option<&str>) -> Result<String, Response> {
+fn resolve_granted(
+    pages: &GuestPages,
+    grant: &Arc<GuestGrant>,
+    requested: Option<&str>,
+) -> Result<String, Response> {
+    if grant.is_wall() {
+        return resolve_wall(pages, requested);
+    }
     let Some(granted) = grant.rail_namespace() else {
         return Err(err(
             StatusCode::FORBIDDEN,
@@ -116,6 +136,113 @@ fn resolve_granted(grant: &Arc<GuestGrant>, requested: Option<&str>) -> Result<S
     }
 }
 
+/// A wall grant names no namespace, so the request must — and the owner's
+/// registry, not the grant, says which ones exist.
+///
+/// Three refusals and they are three different facts, each said in its own
+/// words (ARCH §18.3): a request that named nothing, a namespace this daemon
+/// owns, and a namespace nobody put on the wall. None of them falls back to
+/// another app, which is the failure a "helpful" default would be.
+///
+/// The daemon-owned check is SECOND, before the registry is consulted, and
+/// that ordering is the point: `GuestPages::from_config` already refuses such
+/// an entry at config load, so this arm can only fire if that refusal was
+/// wrong or absent — which is exactly when a second guard is worth having
+/// (ARCH 5).
+fn resolve_wall(pages: &GuestPages, requested: Option<&str>) -> Result<String, Response> {
+    let Some(asked) = requested else {
+        tracing::info!("rail: a wall grant reached the rail without naming a namespace");
+        return Err(err(
+            StatusCode::BAD_REQUEST,
+            "this grant is for the whole wall, so it does not say which app you mean \
+             — name one with ?namespace=<id>",
+        ));
+    };
+    if sovereign_mesh::ring_roster::is_daemon_owned(asked) {
+        tracing::warn!(
+            namespace = asked,
+            "rail: refused a wall grant on one of this daemon's own rings"
+        );
+        return Err(err(
+            StatusCode::FORBIDDEN,
+            format!(
+                "'{asked}' is one of this daemon's own rings and is never open to guests, \
+                 whatever the page registry says"
+            ),
+        ));
+    }
+    if pages.declared(asked).is_none() {
+        tracing::info!(
+            namespace = asked,
+            "rail: refused a wall grant on a namespace the registry does not declare"
+        );
+        return Err(err(
+            StatusCode::FORBIDDEN,
+            format!(
+                "this wall's owner has not registered '{asked}' for guests — a wall grant \
+                 reaches the apps in [daemon.guest_pages] and nothing else on the rail"
+            ),
+        ));
+    }
+    Ok(asked.to_string())
+}
+
+/// Every namespace this caller may touch — one for a `Scope::Rails` grant,
+/// every declared app for a wall grant.
+///
+/// Decided BY [`namespace_for`] rather than beside it: the filter is literally
+/// "would the resolver accept this?", so the enumeration and the per-request
+/// decision cannot drift into two answers (ARCH 8). The one caller is the
+/// guest-session claim, which has to check a name against every roster the
+/// bearer reaches — under a wall grant "is this a member's name" is a question
+/// about the whole wall, not about one app.
+pub(crate) fn reachable_namespaces(pages: &GuestPages, guest: &Guest) -> Vec<String> {
+    if !guest.grant.is_wall() {
+        return guest
+            .grant
+            .rail_namespace()
+            .map(str::to_string)
+            .into_iter()
+            .collect();
+    }
+    pages
+        .declared_namespaces()
+        .filter(|ns| resolve_wall(pages, Some(ns)).is_ok())
+        .map(str::to_string)
+        .collect()
+}
+
+/// May a guest WRITE here? An entry registered `guests = "read"` says no, and
+/// says so naming the namespace and the mode the operator wrote.
+///
+/// A namespace the registry declares nothing about is unchanged — a
+/// `Scope::Rails` grant is its owner scoping one link to one app by hand, and
+/// there is no declaration to narrow it by. The narrowing is a property of the
+/// DECLARATION, which is the whole model here.
+fn refuse_read_only(
+    pages: &GuestPages,
+    guest: Option<&Guest>,
+    namespace: &str,
+) -> Option<Response> {
+    let page = guest.and(pages.declared(namespace))?;
+    if page.guests() != sovereign_core::guest_pages::GuestAccess::Read {
+        return None;
+    }
+    tracing::info!(
+        namespace,
+        mode = page.guests().as_str(),
+        "rail: refused a guest's append on a namespace registered read-only"
+    );
+    Some(err(
+        StatusCode::FORBIDDEN,
+        format!(
+            "'{namespace}' is registered for guests as `guests = \"{}\"` — guests read \
+             this app's journal and do not write to it",
+            page.guests().as_str()
+        ),
+    ))
+}
+
 /// Resolve the namespace AND the journal behind it, or the refusal to return.
 ///
 /// The two failures are different and are kept different. A namespace the
@@ -127,7 +254,7 @@ pub(crate) fn journal_for(
     guest: Option<&Guest>,
     requested: Option<&str>,
 ) -> Result<(Arc<RingRail>, Arc<RingJournal>), Response> {
-    let namespace = namespace_for(guest, requested)?;
+    let namespace = namespace_for(&state.guest_pages(), guest, requested)?;
     let rail = state.ring_rail().ok_or_else(|| {
         err(
             StatusCode::SERVICE_UNAVAILABLE,
@@ -268,6 +395,13 @@ pub async fn append(
         Ok(pair) => pair,
         Err(refusal) => return refusal,
     };
+    // The one place the registry's narrowing bites. Before the body is parsed
+    // and long before anything is signed: a refused write must leave no trace
+    // on the journal, and the cheapest way to promise that is to refuse before
+    // there is anything to write.
+    if let Some(refusal) = refuse_read_only(&state.guest_pages(), guest, journal.namespace()) {
+        return refusal;
+    }
     // Read before the body becomes an act, because `RailAct` does not carry
     // this field and serde drops it on the way in.
     let on_behalf_of = stamp_from(guest, &body);
@@ -582,7 +716,10 @@ mod tests {
     #[test]
     fn a_rail_grant_decides_its_own_namespace() {
         let g = grant_with(vec![Scope::Rails("house-expenses".into())]);
-        assert_eq!(namespace_for(Some(&g), None).unwrap(), "house-expenses");
+        assert_eq!(
+            namespace_for(&no_pages(), Some(&g), None).unwrap(),
+            "house-expenses"
+        );
     }
 
     /// The property this whole module exists for: an app cannot reach another
@@ -590,7 +727,7 @@ mod tests {
     #[test]
     fn a_request_cannot_widen_its_grant_by_naming_another_namespace() {
         let g = grant_with(vec![Scope::Rails("house-expenses".into())]);
-        let refusal = namespace_for(Some(&g), Some("someone-elses")).unwrap_err();
+        let refusal = namespace_for(&no_pages(), Some(&g), Some("someone-elses")).unwrap_err();
         assert_eq!(refusal.status(), StatusCode::FORBIDDEN);
     }
 
@@ -599,7 +736,7 @@ mod tests {
     fn naming_the_granted_namespace_is_accepted() {
         let g = grant_with(vec![Scope::Rails("house-expenses".into())]);
         assert_eq!(
-            namespace_for(Some(&g), Some("house-expenses")).unwrap(),
+            namespace_for(&no_pages(), Some(&g), Some("house-expenses")).unwrap(),
             "house-expenses"
         );
     }
@@ -607,7 +744,7 @@ mod tests {
     #[test]
     fn a_grant_without_a_rail_scope_is_refused() {
         let g = grant_with(vec![Scope::Models(vec!["m".into()])]);
-        let refusal = namespace_for(Some(&g), Some("anything")).unwrap_err();
+        let refusal = namespace_for(&no_pages(), Some(&g), Some("anything")).unwrap_err();
         assert_eq!(refusal.status(), StatusCode::FORBIDDEN);
     }
 
@@ -616,10 +753,103 @@ mod tests {
     #[test]
     fn an_operator_must_name_the_namespace_and_is_refused_without_one() {
         assert_eq!(
-            namespace_for(None, Some("house-expenses")).unwrap(),
+            namespace_for(&no_pages(), None, Some("house-expenses")).unwrap(),
             "house-expenses"
         );
-        let refusal = namespace_for(None, None).unwrap_err();
+        let refusal = namespace_for(&no_pages(), None, None).unwrap_err();
         assert_eq!(refusal.status(), StatusCode::BAD_REQUEST);
+    }
+    /// A door with nothing declared — the state every test above is about,
+    /// where the grant alone decides.
+    fn no_pages() -> GuestPages {
+        GuestPages::default()
+    }
+
+    /// A door whose owner declared two apps, one of them read-only.
+    fn wall_of(entries: &[(&str, sovereign_core::guest_pages::GuestPage)]) -> GuestPages {
+        GuestPages::new(
+            None,
+            entries
+                .iter()
+                .map(|(ns, p)| ((*ns).to_string(), p.clone()))
+                .collect(),
+        )
+    }
+
+    fn open(dir: &str) -> sovereign_core::guest_pages::GuestPage {
+        sovereign_core::guest_pages::GuestPage::Open(dir.into())
+    }
+
+    fn read_only(dir: &str) -> sovereign_core::guest_pages::GuestPage {
+        sovereign_core::guest_pages::GuestPage::Narrowed {
+            dir: dir.into(),
+            guests: sovereign_core::guest_pages::GuestAccess::Read,
+        }
+    }
+
+    /// The wall grant reaches every app the OWNER declared — one credential,
+    /// two apps, and the request says which.
+    #[test]
+    fn a_wall_grant_reaches_each_declared_namespace() {
+        let pages = wall_of(&[("house-expenses", open("/a")), ("ring-doc", open("/b"))]);
+        let g = grant_with(vec![Scope::Wall]);
+        for ns in ["house-expenses", "ring-doc"] {
+            assert_eq!(namespace_for(&pages, Some(&g), Some(ns)).unwrap(), ns);
+        }
+    }
+
+    /// Clause (e) of `rg-one-person-across-apps`: the wall is bounded by the
+    /// declaration, so a namespace nobody registered is refused BY NAME —
+    /// never served as another app's.
+    #[test]
+    fn a_wall_grant_is_refused_a_namespace_nobody_declared() {
+        let pages = wall_of(&[("house-expenses", open("/a"))]);
+        let g = grant_with(vec![Scope::Wall]);
+        let refusal = namespace_for(&pages, Some(&g), Some("someone-elses")).unwrap_err();
+        assert_eq!(refusal.status(), StatusCode::FORBIDDEN);
+    }
+
+    /// **The hard edge, and the second half of it.** A config that wrongly
+    /// declares one of this daemon's own rings is refused at load — and this
+    /// is the route refusing it anyway, which is the whole reason a registry
+    /// is not the only guard (ARCH 5).
+    #[test]
+    fn a_daemon_owned_namespace_is_refused_even_when_the_registry_declares_it() {
+        let owned = sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID;
+        let pages = wall_of(&[(owned, open("/a")), ("work", open("/b"))]);
+        let g = grant_with(vec![Scope::Wall]);
+        for ns in [owned, "work"] {
+            let refusal = namespace_for(&pages, Some(&g), Some(ns)).unwrap_err();
+            assert_eq!(
+                refusal.status(),
+                StatusCode::FORBIDDEN,
+                "{ns} was reachable through a wall grant"
+            );
+        }
+    }
+
+    /// A wall grant names no namespace, so a request that names none has not
+    /// said what it wants. Refused with a sentence, never resolved to the
+    /// first declared app (§18.3).
+    #[test]
+    fn a_wall_grant_with_no_namespace_on_the_request_is_refused() {
+        let pages = wall_of(&[("house-expenses", open("/a"))]);
+        let g = grant_with(vec![Scope::Wall]);
+        let refusal = namespace_for(&pages, Some(&g), None).unwrap_err();
+        assert_eq!(refusal.status(), StatusCode::BAD_REQUEST);
+    }
+
+    /// `guests = "read"` narrows what a guest may DO, not what they may see.
+    #[test]
+    fn a_read_only_entry_refuses_a_guests_append_and_nobody_elses() {
+        let pages = wall_of(&[("doc", read_only("/b")), ("house-expenses", open("/a"))]);
+        let g = grant_with(vec![Scope::Wall]);
+        assert!(refuse_read_only(&pages, Some(&g), "doc").is_some());
+        // The open app on the same wall is untouched...
+        assert!(refuse_read_only(&pages, Some(&g), "house-expenses").is_none());
+        // ...as is an operator, who holds no grant and is not a guest.
+        assert!(refuse_read_only(&pages, None, "doc").is_none());
+        // ...as is a namespace the registry says nothing about.
+        assert!(refuse_read_only(&pages, Some(&g), "undeclared").is_none());
     }
 }

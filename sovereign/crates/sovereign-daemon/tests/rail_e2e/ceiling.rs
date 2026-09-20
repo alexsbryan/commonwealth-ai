@@ -130,6 +130,7 @@ fn node(
             ..Default::default()
         },
         sovereign_grants::GuestSessionBinding::Door,
+        Default::default(),
     );
     (state, journal)
 }

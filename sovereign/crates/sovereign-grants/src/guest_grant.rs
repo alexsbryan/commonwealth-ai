@@ -80,12 +80,35 @@ pub enum Scope {
     Models(Vec<String>),
     /// The ring-app rail, scoped to exactly one namespace.
     ///
-    /// The namespace lives HERE, on the grant, and never in the request:
-    /// the rail routes take no namespace parameter, so a ring app cannot
-    /// reach another app's namespace because it has no way to *say* one
-    /// (§7.1). One namespace per grant — a grant that could name two would
-    /// make its own blast radius an argument rather than a fact.
+    /// The namespace lives HERE, on the grant. The rail route does accept a
+    /// requested namespace and REFUSES one that is not this — `asked !=
+    /// granted` is a 403 naming both (`routes_rail::resolve_granted`) — so
+    /// the grant remains the authority on what this bearer may touch, and a
+    /// grant that could name two would make its own blast radius an argument
+    /// rather than a fact.
+    ///
+    /// (This said a ring app "has no way to *say* a namespace" until
+    /// 2026-09-20. It was a check, not a structural fact, and reading it as
+    /// structural is what made the wall below look impossible.)
     Rails(String),
+    /// The whole WALL: every rail namespace this door's owner registered for
+    /// guests in `[daemon.guest_pages]`, and nothing else on the rail.
+    ///
+    /// **No namespace lives here, and that is the point.** The resource
+    /// declares, the credential identifies — the same model a recipe's
+    /// `mesh_sharing` already has for a corpus, where membership reaches what
+    /// was declared shared and nobody lists corpora on a membership. So one
+    /// QR serves a room however many apps the house put on the wall, and
+    /// widening the wall is an owner registering an app rather than a new
+    /// credential handed to every phone.
+    ///
+    /// The request must NAME the namespace (the door's shim renders it per
+    /// page), and `routes_rail::resolve_granted` refuses one the registry does
+    /// not declare, and refuses a namespace the daemon owns even if a registry
+    /// wrongly declares it. That check is not optional decoration: it is the
+    /// whole of this variant's scoping, which is why it lives beside the
+    /// handler the way [`Scope`]'s own docs require of a new variant.
+    Wall,
 }
 
 impl Scope {
@@ -102,7 +125,11 @@ impl Scope {
     pub fn paths(&self) -> &'static [&'static str] {
         match self {
             Scope::Models(_) => &["/v1/models", "/v1/chat/completions"],
-            Scope::Rails(_) => &[
+            // ONE arm for both rail scopes, deliberately: the wall and a
+            // single-namespace grant differ in WHICH namespace they reach,
+            // never in which routes, and two lists would be two answers to
+            // "what may a guest on the rail reach" (ARCH §10.6).
+            Scope::Rails(_) | Scope::Wall => &[
                 "/v1/rail/append",
                 "/v1/rail/log",
                 "/v1/rail/live",
@@ -135,6 +162,7 @@ impl Scope {
         match self {
             Scope::Models(_) => "models",
             Scope::Rails(_) => "rail",
+            Scope::Wall => "wall",
         }
     }
 }
@@ -183,7 +211,7 @@ impl GuestGrant {
     pub fn models(&self) -> Option<&[String]> {
         self.scopes.iter().find_map(|s| match s {
             Scope::Models(ids) => Some(ids.as_slice()),
-            Scope::Rails(_) => None,
+            Scope::Rails(_) | Scope::Wall => None,
         })
     }
 
@@ -198,8 +226,32 @@ impl GuestGrant {
     pub fn rail_namespace(&self) -> Option<&str> {
         self.scopes.iter().find_map(|s| match s {
             Scope::Rails(ns) => Some(ns.as_str()),
-            Scope::Models(_) => None,
+            // The wall names no namespace — see `is_wall`. Reporting one here
+            // would be inventing the very thing the registry is there to say.
+            Scope::Models(_) | Scope::Wall => None,
         })
+    }
+
+    /// Does this grant carry the WALL — every namespace this door's owner
+    /// registered for guests?
+    ///
+    /// Deliberately a predicate and not a namespace list: the list is the
+    /// owner's registry, read where the request is served, and answering it
+    /// from the grant would put a stale copy of the declaration on a bearer
+    /// minted before the owner's last `[daemon.guest_pages]` edit.
+    pub fn is_wall(&self) -> bool {
+        self.scopes.iter().any(|s| matches!(s, Scope::Wall))
+    }
+
+    /// Does this grant reach the rail AT ALL — by naming one namespace, or by
+    /// being the wall?
+    ///
+    /// THE question the guest door's lifecycle asks (`live_rail_grants`): the
+    /// listener is open because some grant can reach the rail, and asking it
+    /// as `rail_namespace().is_some()` would leave a door with only wall
+    /// grants out permanently shut.
+    pub fn reaches_the_rail(&self) -> bool {
+        self.is_wall() || self.rail_namespace().is_some()
     }
 
     /// Whether `model` is dispatchable under this grant. Exact match.
@@ -220,6 +272,7 @@ impl GuestGrant {
             .map(|s| match s {
                 Scope::Models(ids) => ids.join(", "),
                 Scope::Rails(ns) => format!("rail:{ns}"),
+                Scope::Wall => "the wall".to_string(),
             })
             .collect::<Vec<_>>()
             .join("; ")
@@ -409,6 +462,52 @@ mod tests {
         .collect();
         assert_eq!(paths, want);
         assert_eq!(g.rail_namespace(), Some("wall"));
+    }
+
+    /// The WALL grant `svrn mesh grant --wall --model …` mints: the same
+    /// routes a single-namespace rail grant unlocks, and NO namespace of its
+    /// own — the owner's registry is what says which apps it reaches, and
+    /// `routes_rail::resolve_wall` is where that is asked.
+    #[test]
+    fn a_wall_grant_unlocks_the_rail_and_names_no_namespace() {
+        let store = GuestGrantStore::new();
+        store.issue("tok", vec![Scope::Wall], None, 60, T0);
+        let g = store.live("tok", T0).expect("live");
+
+        let paths: HashSet<&str> = g.scopes.iter().flat_map(|s| s.paths()).copied().collect();
+        let rail: HashSet<&str> = Scope::Rails("x".into()).paths().iter().copied().collect();
+        assert_eq!(paths, rail, "the wall reaches the rail's routes, no others");
+
+        assert!(g.is_wall());
+        assert!(g.reaches_the_rail());
+        // The whole point: it names nothing, so nothing here can be read as a
+        // namespace it reaches. Collapsing this into `Some(something)` would
+        // put a stale copy of the owner's declaration on the bearer.
+        assert_eq!(g.rail_namespace(), None);
+        assert_eq!(g.summary(), "the wall");
+    }
+
+    /// The door's lifecycle counts grants that REACH the rail, and a wall
+    /// grant names no namespace — so asking `rail_namespace().is_some()`
+    /// would leave a door with only wall grants out permanently shut.
+    #[test]
+    fn a_single_namespace_grant_is_not_the_wall() {
+        let store = GuestGrantStore::new();
+        store.issue(
+            "tok",
+            vec![Scope::Rails("house-expenses".into())],
+            None,
+            60,
+            T0,
+        );
+        let g = store.live("tok", T0).expect("live");
+        assert!(!g.is_wall());
+        assert!(g.reaches_the_rail());
+
+        store.issue("m", models(&["big"]), None, 60, T0);
+        let m = store.live("m", T0).expect("live");
+        assert!(!m.is_wall());
+        assert!(!m.reaches_the_rail(), "a model grant opens no door");
     }
 
     /// Absence of permission must never read as permission.

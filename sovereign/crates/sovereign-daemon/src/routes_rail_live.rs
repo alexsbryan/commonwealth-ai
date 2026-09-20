@@ -300,7 +300,11 @@ pub async fn live_push(
     Query(q): Query<RailQuery>,
     body: axum::body::Bytes,
 ) -> Response {
-    let namespace = match namespace_for(guest.as_ref().map(|e| &e.0), q.namespace.as_deref()) {
+    let namespace = match namespace_for(
+        &state.guest_pages(),
+        guest.as_ref().map(|e| &e.0),
+        q.namespace.as_deref(),
+    ) {
         Ok(ns) => ns,
         Err(refusal) => return refusal,
     };
@@ -362,7 +366,11 @@ pub async fn live_drain(
     guest: Option<axum::Extension<Guest>>,
     Query(q): Query<RailQuery>,
 ) -> Response {
-    let namespace = match namespace_for(guest.as_ref().map(|e| &e.0), q.namespace.as_deref()) {
+    let namespace = match namespace_for(
+        &state.guest_pages(),
+        guest.as_ref().map(|e| &e.0),
+        q.namespace.as_deref(),
+    ) {
         Ok(ns) => ns,
         Err(refusal) => return refusal,
     };

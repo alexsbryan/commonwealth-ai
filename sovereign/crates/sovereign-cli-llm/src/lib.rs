@@ -79,6 +79,7 @@ mod mesh_app;
 mod mesh_bench;
 mod mesh_cmd;
 mod mesh_guest;
+mod mesh_guest_link;
 mod mesh_media;
 mod mesh_member_cmd;
 mod mesh_offers;

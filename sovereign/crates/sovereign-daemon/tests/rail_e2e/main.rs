@@ -55,6 +55,7 @@ fn bare_state() -> AppState {
     bare_state_with_seed(
         sovereign_daemon::state::FabricSeed::default(),
         sovereign_grants::GuestSessionBinding::Door,
+        Default::default(),
     )
 }
 
@@ -64,6 +65,7 @@ fn bare_state() -> AppState {
 fn bare_state_with_seed(
     seed: sovereign_daemon::state::FabricSeed,
     sessions: sovereign_grants::GuestSessionBinding,
+    pages: sovereign_daemon::guest_door::GuestPages,
 ) -> AppState {
     let node = NodeId::from_u128(1);
     let mesh = Mesh {
@@ -89,6 +91,7 @@ fn bare_state_with_seed(
         sovereign_daemon::state::NodeSeed {
             client_token: Some(Arc::<str>::from(TOKEN)),
             guest_sessions: sessions,
+            guest_pages: pages,
         },
     )
 }
@@ -97,7 +100,34 @@ fn bare_state_with_seed(
 /// that says that key is Alex. Its door binds guest sessions the default way:
 /// a name claimed on one of this wall's links is the same person on the next.
 fn state_with_rail(root: &std::path::Path, key: &SigningKey) -> AppState {
-    state_with_rail_sessions(root, key, sovereign_grants::GuestSessionBinding::Door)
+    state_with_rail_sessions(
+        root,
+        key,
+        sovereign_grants::GuestSessionBinding::Door,
+        Default::default(),
+    )
+}
+
+/// [`state_with_rail`] on a wall whose owner DECLARED `pages` — what a wall
+/// grant is scoped by. A test that mints `Scope::Wall` against a state with no
+/// registry is testing a door with nothing on it.
+fn state_with_wall(
+    root: &std::path::Path,
+    key: &SigningKey,
+    pages: &[(&str, sovereign_core::guest_pages::GuestPage)],
+) -> AppState {
+    state_with_rail_sessions(
+        root,
+        key,
+        sovereign_grants::GuestSessionBinding::Door,
+        sovereign_daemon::guest_door::GuestPages::new(
+            None,
+            pages
+                .iter()
+                .map(|(ns, p)| ((*ns).to_string(), p.clone()))
+                .collect(),
+        ),
+    )
 }
 
 /// [`state_with_rail`] with the session binding named — the `[daemon]
@@ -106,6 +136,7 @@ fn state_with_rail_sessions(
     root: &std::path::Path,
     key: &SigningKey,
     sessions: sovereign_grants::GuestSessionBinding,
+    pages: sovereign_daemon::guest_door::GuestPages,
 ) -> AppState {
     let rail = Arc::new(RingRail::new(root, Arc::new(key.clone())));
     let mut members = std::collections::BTreeMap::new();
@@ -124,6 +155,7 @@ fn state_with_rail_sessions(
             ..Default::default()
         },
         sessions,
+        pages,
     )
 }
 
@@ -600,6 +632,7 @@ async fn two_nodes_converge_through_the_sync_route() {
                 ..Default::default()
             },
             sovereign_grants::GuestSessionBinding::Door,
+            Default::default(),
         );
         (state, rail)
     };

@@ -444,11 +444,13 @@ fn one_sample_per_scope_variant() -> Vec<Scope> {
     let all = vec![
         Scope::Models(vec![GRANTED_MODEL.into()]),
         Scope::Rails("house-expenses".into()),
+        Scope::Wall,
     ];
     for s in &all {
         match s {
             Scope::Models(_) => {}
             Scope::Rails(_) => {}
+            Scope::Wall => {}
         }
     }
     all

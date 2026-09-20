@@ -64,17 +64,31 @@ Three zones, from most to least trusted:
   `Scope` has no variant that could express it. The grant lives only in
   the issuing node's memory and is never gossiped, so revocation is
   immediate rather than eventually-consistent. A grant with a rail scope
-  (`/v1/rail/append|log|live`, one namespace) is also the key to the
+  (`/v1/rail/append|log|live`) is also the key to the
   **guest door**: `[daemon] guest_bind = "host:port"` (default off) puts
   the same Guest router on a bind the room's WiFi reaches, listening only
   while such a grant is live and closed at the last expiry
   (`sovereign/crates/sovereign-daemon/src/guest_door.rs`), even on an
-  encrypted mesh. It adds one unauthenticated route, the ring page at
-  `/ring/` served from `[daemon] guest_page_dir` and never from outside it —
-  a wall holding several apps names them in `[daemon.guest_pages]` instead
-  (namespace → bundle), each served at `/ring/<namespace>/` and only while
-  a live grant names that namespace;
-  the page reads the bearer from the URL fragment, which the browser never
+  encrypted mesh. **A wall grant reaches every rail namespace this door's
+  owner registered for guests in `[daemon.guest_pages]`, for the grant's
+  TTL, and nothing else on the rail** — the resource declares and the
+  credential identifies, the same shape a recipe's `mesh_sharing` has for
+  a corpus. That is the default (`svrn mesh grant --wall`), so one QR
+  serves a whole wall. Two knobs narrow it and neither widens anything:
+  `--rail <ns>` mints a grant that reaches exactly one namespace and is
+  refused the rest by name, and an entry written
+  `<ns> = { dir = "…", guests = "read" }` serves its page and refuses a
+  guest's append. A namespace the daemon writes on its own behalf — the
+  work plane, the KV rings, the atlas, `mesh-measurements` — can never be
+  declared: it is refused at config load AND again at the route, so a
+  registry that was wrong is not the only guard. A request that names an
+  undeclared namespace is a 403 naming it, never a fall-through to another
+  app. It adds one unauthenticated route, the ring page at
+  `/ring/<namespace>/` served from that registry and never from outside
+  its bundle; `[daemon] guest_page_dir` still puts a single app at the bare
+  `/ring/`, and with that key unset the bare prefix is an index of the
+  declared apps a live grant reaches.
+  The page reads the bearer from the URL fragment, which the browser never
   sends. A guest's door-issued session carries a NAME and no scope, and
   `[daemon] guest_sessions` says what it is recognised under — `"door"`
   (default: any live grant this door minted, so one person walking between
