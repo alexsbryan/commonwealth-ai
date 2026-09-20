@@ -5662,3 +5662,19 @@ beyond it is not.
 **Falsified if** I2 is still under 50% after the rewrite — then the K4 treatment does not reach question-shaped asks either, and that is a finding about the product, recorded as a result.
 
 </details>
+
+## A40 · 2026-09-20 — re-census rulings, delegated by the operator to the seat's recommendations
+
+<details>
+
+Operator, in session: "1, 2, 3 — go with your recommendations". Read against PR's decision tree (`:206-214`) before ruling.
+
+- **D5 passed** (2681/2681) and **D4 passed** (0.729 >= 0.5): obligation questions and `recipient` questions are attempted. The head-noun criterion (A35) stops being a study dependency; it stays a product defect.
+- **D3 could-not-judge is an INSTRUMENT gap, and it is owed.** PR says "each service's own published list"; the row and `decisions.py` scored table cells only. New row `REVIEW-build-e7-d3-published-lists`: gold from published lists by a rule fixed and COMMITTED before it meets an atom; the 0.7-on-2-of-3 bar is untouched. If it then fails, PR D6 applies (ANS takes the stage) and the operator says so — the row stops there.
+- **Service attribution 0.504 vs 0.90: recorded as a result; no second fix round in stage 0.** It is not a D-branch. The structural fix is not another prompt change: an atom's chapter -> document -> service is known from provenance (`decisions.py` already derives it from `chapters.json`), so the attribute should be STAMPED at resolve time, never asked of the model (ARCH 10). Banked as product work, not built in this queue.
+- **D8: local, in a reserved window** — PR's own fallback. No second rental.
+- **D7: a recording fix**, row `e7-enrich-records-model-id`.
+- **K4 template title slot = "the novel"** (040e5a826): confirmed.
+- **The audit row now carries data**: a per-unit net-line ledger, `dry-report` clones involving symbols added since launch, and `converge noun` on every new type.
+
+</details>
