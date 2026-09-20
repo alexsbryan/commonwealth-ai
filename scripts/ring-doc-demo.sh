@@ -107,6 +107,11 @@ declare -A NETS=([$NET]=$SUBNET)
 declare -A NET_FLAGS=()
 declare -A PNET=([a]=$NET [b]=$NET [c]=$NET)
 declare -A XNET=()
+# A SECOND published port on a node, beside its page port. A wall holding two
+# apps runs a `ring dev` per app — one namespace each — and the host-side wall
+# watcher reads both. Unset everywhere but there, so rr-1's three nodes publish
+# exactly the one port they always did.
+declare -A XPUB=()
 # A node may need a DIFFERENT image: the room's phone is a person's handset,
 # which carries a browser and nothing of this repo's toolchain, so it runs a
 # stock node image rather than the build toolbox. Unset is the toolbox.
@@ -187,12 +192,18 @@ for h in hosts[:-1]:
     threading.Thread(target=listen, args=(h,), daemon=True).start()
 listen(hosts[-1])
 '
-start_forwarder() { # node
-  local n=$1
-  node_kill "$n" "$D/$n/fwd.pid"
+#
+# A node serving a SECOND page needs a second one of these: `-p` publishes the
+# container's own address, and everything here listens on the container's
+# loopback, so the published port answers nothing without the bridge. One
+# forwarder per port, each with its own pidfile; the unnamed one is the page
+# port and is what rr-1's three nodes have always had.
+start_forwarder() { # node [port]
+  local n=$1 port="${2:-${DPORT[$n]}}" pidf="$D/$1/fwd${2:+-$2}.pid"
+  node_kill "$n" "$pidf"
   local second="${XNET[$n]:-}"; second="${second#*:ip=}"
-  node_bg "$n" "$D/$n/fwd.pid" "$D/$n/fwd.out" "$D/$n/fwd.err" \
-    python3 -c "$FWD_PY" "${DPORT[$n]}" "${IP[$n]}" ${second:+"$second"}
+  node_bg "$n" "$pidf" "$D/$n/fwd.out" "$D/$n/fwd.err" \
+    python3 -c "$FWD_PY" "$port" "${IP[$n]}" ${second:+"$second"}
 }
 
 # Are the binaries older than the code this run would be judging? Echoes the
@@ -294,9 +305,11 @@ container_up_one() {
     --network "${PNET[$n]}:ip=${IP[$n]}" ${XNET[$n]:+--network "${XNET[$n]}"} \
     --init --userns=keep-id --security-opt label=disable -v "$REPO:$REPO" -w "$REPO" \
     -e HOME="$D/$n" "${dev[@]+"${dev[@]}"}" \
-    -p "${DPORT[$n]}:${DPORT[$n]}" --pull=never "${NODE_IMAGE[$n]:-$IMAGE}" sleep infinity >/dev/null \
+    -p "${DPORT[$n]}:${DPORT[$n]}" ${XPUB[$n]:+-p "${XPUB[$n]}:${XPUB[$n]}"} \
+    --pull=never "${NODE_IMAGE[$n]:-$IMAGE}" sleep infinity >/dev/null \
     || { echo "podman: could not start $CPREFIX-$n" >&2; return 1; }
   [ -n "${NOFWD[$n]:-}" ] || start_forwarder "$n"
+  [ -n "${NOFWD[$n]:-}" ] || [ -z "${XPUB[$n]:-}" ] || start_forwarder "$n" "${XPUB[$n]}"
 }
 
 containers_up() {

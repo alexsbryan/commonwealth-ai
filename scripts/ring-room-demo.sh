@@ -81,6 +81,14 @@ export RING_DOC_PHASES=1,3
 source "$REPO/scripts/ring-doc-demo.sh" _sourced
 
 ROOM_CAMPAIGN="$REPO/quality/campaigns/ring-room.toml"
+# The room's own six are the REGRESSION set and are read from the file above,
+# never edited. `ring-guest`'s five are this campaign's and are read from its
+# own file: two campaigns, one run, one `verdict all`.
+GUEST_CAMPAIGN="$REPO/quality/campaigns/ring-guest.toml"
+# The commit the ring-guest campaign starts from. Two bars read a diff against
+# it — the scaffold's, which must be empty, and the rail's, which is the one
+# row the operator opened (D1).
+GUEST_BASE=f51b66112
 ROOM_SCRIPT="$REPO/scripts/ring-room-demo.sh"
 MEDIA_SCRIPT="$REPO/scripts/cw-media-demo.sh"
 EMBED_GGUF="$REPO/sovereign/models/Qwen3-Embedding-0.6B-Q8_0.gguf"
@@ -109,7 +117,9 @@ node_exec() { printf '%s\t%s\t%s\n' "$STAGE" "$1" "${*:2}" >> "$CMDLOG"; ring_do
 # typed <node> <leg> <string> [note] [secret] [provenance] — a string the person would have
 # typed. The class is decided in ONE place, `classify` in the report, from the
 # string itself; only a credential cannot be recognised by shape, so it says so.
-typed() { printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$STAGE" "$1" "$2" "${5:-}" "$3" "${4:-}" "${6:-}" >> "$TYPED"; }
+# The eighth column is the ELEMENT that took the string — the door's own
+# prompt, a field on an app's page, or nothing when the instrument typed it.
+typed() { printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$STAGE" "$1" "$2" "${5:-}" "$3" "${4:-}" "${6:-}" "${7:-}" >> "$TYPED"; }
 
 # opened <node> <leg> <stdout-file> <label> — a URL the person OPENED: taken
 # verbatim from the tool's `open   :` stdout line, never assembled here. The
@@ -128,13 +138,77 @@ mkcfg() {
   case "$1" in
     a|b|d|beefy|halo) printf '\n[models]\nprimary = "%s"\nembed = "%s"\n' "$CHAT_GGUF" "$EMBED_GGUF" >> "$D/$1/config.toml" ;;
   esac
-  # The wall's guest door: its own bind on the room's WiFi, serving the ring
-  # page out of a directory this instrument owns (the grant writes the QR into
-  # it). Inserted INTO the `[daemon]` table ring_doc_mkcfg wrote — a second
-  # `[daemon]` header would be a duplicate key and the daemon would refuse the
-  # file. `client_bind` is untouched and stays loopback.
-  [ "$1" = beefy ] && sed -i "/^\[daemon\]$/a guest_bind = \"${IP[beefy]}:$GUEST_PORT\"\nguest_page_dir = \"$PAGE\"" "$D/$1/config.toml"
+  # The wall's guest door: its own bind on the room's WiFi. Inserted INTO the
+  # `[daemon]` table ring_doc_mkcfg wrote — a second `[daemon]` header would be
+  # a duplicate key and the daemon would refuse the file. `client_bind` is
+  # untouched and stays loopback.
+  #
+  # `guest_page_dir` is DELIBERATELY unset. It is the one-app spelling — the
+  # page at the bare `/ring/` — and with it set the door would serve an app
+  # there instead of the wall's index, and one QR could reach only that one.
+  # What the wall holds is the REGISTRY: the owner declaring, per rail
+  # namespace, which apps admit guests and what they may do there.
+  if [ "$1" = beefy ]; then
+    sed -i "/^\[daemon\]$/a guest_bind = \"${IP[beefy]}:$GUEST_PORT\"" "$D/$1/config.toml"
+    {
+      echo
+      echo '[daemon.guest_pages]'
+      echo "$RING = \"$PAGE\""
+      echo "$RING2 = \"$APP2\""
+      # The narrowing, spelled the way an operator would: an app the room reads
+      # and does not write to.
+      echo "$RING3 = { dir = \"$APP3\", guests = \"read\" }"
+    } >> "$D/$1/config.toml"
+  fi
   return 0
+}
+
+# The second app, scaffolded at run time and hashed against the templates it
+# came from — the campaign's falsifier, made a measurement rather than a claim.
+#
+# `svrn ring new` substitutes `{{NAME}}` into `index.html` at the title and the
+# heading and copies the other three files through, so `index.html` is compared
+# against the template WITH that substitution applied and the rest byte for
+# byte. Hashing the raw template against a patched-in-no-way scaffold would
+# read mismatch on a correct run and turn the bar's own falsifier into a false
+# alarm (inventory 0f2bba316 (v)).
+room_scaffold() { # dir name
+  local dir=$1 name=$2
+  "$CLI" ring new "$dir" --name "$name" > "$D/scaffold-$(basename "$dir").out" 2>&1 || return 1
+  # The falsifier's falsifier. With this set the instrument serves a scaffold
+  # it PATCHED by one line, and `rg-second-app-zero-lines` must read 0.0
+  # naming the file whose hash moved — a bar that stays green here is a bar
+  # measuring nothing.
+  [ -n "${RING_ROOM_PLANT_SCAFFOLD:-}" ] && echo "// planted: one line the templates do not have" >> "$dir/app.js"
+  return 0
+}
+
+# Per-file sha256 of a scaffolded directory against the templates, plus the
+# `grep -ci guest` the bar's clause (b) reads. Writes ONE json object.
+room_scaffold_proof() { # dir name out.json
+  python3 - "$1" "$2" "$REPO/sovereign/crates/sovereign-cli-llm/src/ring_cmd/templates" > "$3" <<'PY'
+import hashlib, json, os, re, sys
+scaffold, name, templates = sys.argv[1:4]
+def sha(b): return hashlib.sha256(b).hexdigest()[:16]
+files, equal = [], True
+for f in ("index.html", "app.js", "expenses.js", "expenses.test.mjs"):
+    tpl = open(os.path.join(templates, f), "rb").read()
+    # The ONE substitution the verb makes, applied to the template so the two
+    # sides are comparable. Every other file is compared as it was written.
+    if f == "index.html":
+        tpl = tpl.replace(b"{{NAME}}", name.encode())
+    try:
+        got = open(os.path.join(scaffold, f), "rb").read()
+    except OSError as e:
+        files.append({"file": f, "error": str(e)}); equal = False; continue
+    same = got == tpl
+    equal = equal and same
+    files.append({"file": f, "scaffold_sha": sha(got), "template_sha": sha(tpl), "equal": same,
+                  "guest_mentions": len(re.findall(rb"(?i)guest", got))})
+json.dump({"dir": scaffold, "name": name, "files": files,
+           "equal_to_templates": equal,
+           "guest_mentions": sum(f.get("guest_mentions", 0) for f in files)}, sys.stdout)
+PY
 }
 
 if command -v podman >/dev/null; then HOSTRUN=(); else HOSTRUN=(flatpak-spawn --host); fi
@@ -205,6 +279,14 @@ if [ "$TOPOLOGY" = room ]; then
   # `fetch` against the door, exactly as a browser would.
   NODE_IMAGE=([phone]=docker.io/library/node:20-bookworm-slim)
   NOFWD=([phone]=1)
+  # The wall's SECOND screen. Two apps on the wall means two `ring dev`
+  # proxies on beefy — one namespace each — and the host-side watcher reads
+  # both, so this port is published beside the page port.
+  # NOT client_port + 2: that is the daemon's own rail port, which `ring dev`
+  # proxies to (`commonwealth_core::config::rail_port`), and binding there
+  # fails with "Address already in use" at bring-up.
+  DPORT2=19948
+  XPUB=([beefy]=$DPORT2)
   CPORT=([beefy]=19941 [halo]=19951 [little]=19961 [phone]=19971)
   IPORT=([beefy]=19942 [halo]=19952 [little]=19962 [phone]=19972)
   DPORT=([beefy]=19949 [halo]=19959 [little]=19969 [phone]=19979)
@@ -214,13 +296,38 @@ if [ "$TOPOLOGY" = room ]; then
   # leaves loopback: the client API stays shut, as it must on an encrypted
   # mesh (O2 (ii)).
   GUEST_PORT=19947
+  # ONE door, ONE QR, and the scan lands on the door's INDEX of the apps the
+  # wall's owner registered (A55): `guest_page_dir` is left UNSET, so the bare
+  # prefix is that index rather than one app's page.
   DOOR="http://${IP[beefy]}:$GUEST_PORT/ring/"
   PAGE="$D/page"
+  # The app a person would make SECOND: `svrn ring new`, unmodified, on the
+  # same wall through the same door. And a THIRD, the same scaffold registered
+  # `guests = "read"` — an app the room may look at and not write to, which is
+  # the third of the three refusals `rg-one-person-across-apps` (e) asks for.
+  RING2=house-expenses
+  RING3=house-ledger
+  APP2="$D/$RING2"
+  APP3="$D/$RING3"
+  # The QR lives beside the apps, never inside one: a file the instrument drops
+  # into a served bundle would be a line nobody scaffolded, and the second
+  # app's whole claim is that its directory is the templates.
+  WALL_QR="$D/wall-qr.svg"
   WALL_LOG="$D-wall.ndjson"
+  WALL2_LOG="$D-wall2.ndjson"
   PHONE_PKG="$REPO/scripts/ring-room-phone"
-  # The two guests, named by themselves. Neither is ever a member.
+  # The guests, named by themselves. None of them is ever a member. There are
+  # MORE PHONES THAN APPS on purpose — three registered apps, four phones —
+  # so one grant for the wall cannot be mistaken for a grant per phone
+  # (C `rg-one-person-across-apps` clause (d)).
+  # Every one distinct, and that is now load-bearing: the name binds to a
+  # door-issued session and the door refuses a name another live session
+  # already holds, so two phones sharing one would deadlock the shim's ask.
   GUEST_ONE=Wren
   GUEST_TWO=Fen
+  GUEST_CUT=Juno
+  GUEST_NARROW_ONE=Pike
+  GUEST_NARROW_TWO=Rowan
   # The decision log and the stage ledger are custom tracing targets, so they
   # are dark unless named (glassbox allowlists). The ask bar reads served_by
   # off beefy's, which is why only beefy carries this.
@@ -244,14 +351,22 @@ room_start_daemon() { # node
 
 # One node's whole ring journal as a content fingerprint, so two nodes'
 # replicas can be compared without either one's paths appearing in it.
-room_journal() { # node
-  sv "$1" ring log "$RING" --json 2>/dev/null \
+room_journal() { # node [namespace]
+  sv "$1" ring log "${2:-$RING}" --json 2>/dev/null \
     | python3 -c "
 import hashlib, json, sys
 try: log = json.load(sys.stdin)
 except Exception: print(''); raise SystemExit
 ops = sorted((o.get('id') or '') + json.dumps(o.get('payload'), sort_keys=True) for o in log.get('ops') or [])
 print(f\"{len(ops)} {hashlib.sha256(''.join(ops).encode()).hexdigest()[:16]}\")"
+}
+
+# A namespace this daemon owns, read from the constant that DECLARES it rather
+# than typed here — a rename on the writing side then moves this leg with it
+# instead of leaving it probing a namespace nobody owns any more.
+room_daemon_owned_ns() {
+  sed -n 's/^pub const MEASUREMENTS_APP_ID: &str = "\(.*\)";$/\1/p' \
+    "$REPO/sovereign/crates/sovereign-core/src/mesh_measurements.rs" | head -1
 }
 
 # The model the wall will grant, read from the daemon's own dispatchable list
@@ -261,27 +376,38 @@ room_model() {
     | python3 -c "import sys,json; print(((json.load(sys.stdin).get('data') or [{}])[0]).get('id') or '')" 2>/dev/null
 }
 
-# One wall grant and its QR. `--url` is the page the door serves; the bearer
-# rides the FRAGMENT the builder puts it in, and the QR carries that link.
-room_grant() { # label svg-path
-  typed beefy wall "mesh grant --model $MODEL --rail $RING --ttl 2h --label $1 --url $DOOR --qr-svg $2" \
+# A grant and its QR. `--url` is the page the door serves; the bearer rides the
+# FRAGMENT the builder puts it in, and the QR carries that link.
+#
+# The scope is the CALLER's, because the wall has two kinds now and they are
+# two different things: `--wall` is the one code the room scans and it reaches
+# every app the owner registered, and `--rail <ns>` is the narrowing knob —
+# one link, one app. The default is the wall.
+room_grant() { # label svg-path [scope-flag scope-arg]
+  local label=$1 svg=$2; shift 2
+  local scope=(--wall); [ $# -gt 0 ] && scope=("$@")
+  typed beefy wall "mesh grant --model $MODEL ${scope[*]} --ttl 2h --label $label --url $DOOR --qr-svg $svg" \
     "the wall's own grant, minted at the wall by the member standing there"
-  node_exec beefy "$CLI" mesh grant --model "$MODEL" --rail "$RING" --ttl 2h --label "$1" \
-    --url "$DOOR" --qr-svg "$2" > "$D/grant-$1.out" 2>&1
+  node_exec beefy "$CLI" mesh grant --model "$MODEL" "${scope[@]}" --ttl 2h --label "$label" \
+    --url "$DOOR" --qr-svg "$svg" > "$D/grant-$label.out" 2>&1
 }
 
 # A phone, in the phone container: nothing but node and the repo it reads the
 # page's adapter out of. Its whole input is the SVG it scanned.
-room_phone() { # label svg name edits ask collide
-  node_exec phone env REPO="$REPO" QR_SVG="$2" NAME="$3" EDITS="$4" ASK="${5:-}" COLLIDE="${6:-}" LABEL="$1" \
+room_phone() { # label svg name apps edits ask collide liar probes
+  node_exec phone env REPO="$REPO" QR_SVG="$2" NAME="$3" APPS="$4" EDITS="${5:-1}" \
+    ASK="${6:-}" COLLIDE="${7:-}" LIAR="${8:-}" PROBES="${9:-}" LABEL="$1" \
     node "$PHONE_PKG/phone.mjs" > "$D/phone-$1.json" 2> "$D/phone-$1.err"
-  # Everything it typed goes into the ONE census, under its own node label.
+  # Everything it typed goes into the ONE census, under its own node label —
+  # with the ELEMENT that took the string, so "which field asked for the name"
+  # is read off the record rather than assumed.
   python3 - "$D/phone-$1.json" "$1" <<'PY' >> "$TYPED"
 import json, sys
 try: p = json.load(open(sys.argv[1]))
 except Exception: raise SystemExit
 for t in p.get("typed") or []:
-    print("\t".join(["walk", sys.argv[2], t.get("leg", ""), "", t.get("string", ""), t.get("note", ""), sys.argv[1]]))
+    print("\t".join(["walk", sys.argv[2], t.get("leg", ""), "", t.get("string", ""), t.get("note", ""),
+                     sys.argv[1], t.get("element", "")]))
 PY
 }
 
@@ -756,6 +882,24 @@ room_seal_prove() {
   echo "room: seal proven — halo→wall's room address ${from_keeper:-no answer}, phone→wall's room address $from_phone"
 }
 
+# The wall's second screen: `ring dev` for the scaffolded app, on beefy, at
+# the published second port. `start_proxy`'s shape, with the namespace and the
+# bundle it serves as the only difference — a wall with two apps runs one per
+# app because a dev server holds one grant for one namespace.
+room_proxy2() {
+  local deadline
+  [ -f "$D/beefy/dev2.pid" ] && node_kill beefy "$D/beefy/dev2.pid" && sleep 1
+  node_bg beefy "$D/beefy/dev2.pid" "$D/beefy/dev2.out" "$D/beefy/dev2.out" \
+    "$CLI" ring dev "$RING2" --dir "$APP2" --port "$DPORT2"
+  deadline=$(( $(date +%s) + 60 ))
+  while [ "$(date +%s)" -lt "$deadline" ]; do
+    node_curl beefy -s --max-time 2 -o /dev/null -w '%{http_code}' -X POST "$(at "$DPORT2")/__ring/log" -d '{}' 2>/dev/null | grep -q 200 && return 0
+    sleep 1
+  done
+  echo "ring dev for $RING2 never served /__ring/log" >&2
+  return 1
+}
+
 # ── the room's bring-up ─────────────────────────────────────────────────────
 # Three daemons and one daemon-less phone. The library's wizard runs HERE, at
 # install: the walk that follows types no credential, which is what the film
@@ -764,8 +908,15 @@ room_up() {
   need_binaries
   rm -rf "$D"; mkdir -p "$D"
   local n
-  for n in beefy halo little; do mkcfg "$n"; done
+  # The apps BEFORE the configs that register them: the door canonicalizes a
+  # bundle directory when it serves it, and a registry pointing at nothing is
+  # a 404 the run would have to explain.
   mkdir -p "$PAGE"; cp -R "$APP/." "$PAGE/"
+  room_scaffold "$APP2" "House Expenses" || return 3
+  room_scaffold "$APP3" "House Ledger" || return 3
+  room_scaffold_proof "$APP2" "House Expenses" "$D/scaffold.json"
+  room_scaffold_proof "$APP3" "House Ledger" "$D/scaffold-readonly.json"
+  for n in beefy halo little; do mkcfg "$n"; done
   containers_up || return 3
   room_seal || return 3
   for n in beefy halo little; do room_start_daemon "$n"; done
@@ -784,8 +935,11 @@ room_up() {
     "$retries" > "$D/room-up.json"
   sleep 12
   members_from_mesh 3 || return 3
-  # The wall's own screen: the member's page, loopback, exactly as rr-1 runs it.
+  # The wall's own screens: the member's page, loopback, exactly as rr-1 runs
+  # it — and one per app, because a `ring dev` serves ONE namespace and the
+  # wall now holds two. The second is the scaffold's, unmodified.
   start_proxy beefy || return 3
+  room_proxy2 || return 3
   room_seal_prove || return 3
   case ",$ROOM_LEGS," in
     *,film,*)
@@ -805,11 +959,37 @@ room_up() {
 room_topology_down() {
   [ "$BACKEND" = podman ] && "${PODMAN[@]}" rm -f -t 2 "$JELLY" > /dev/null 2>&1
   node_kill beefy "$D/beefy/dev.pid"
+  node_kill beefy "$D/beefy/dev2.pid"
   local n
   for n in beefy halo little; do node_kill "$n" "$D/$n/pid"; done
   sleep 1
   [ "$BACKEND" = podman ] && containers_down
   return 0
+}
+
+# ── the narrowing knob ──────────────────────────────────────────────────────
+# `--rail <ns>` is the other grant an owner can mint: one link, one app. It
+# GATES NOTHING here — the wall is one grant and one QR, and clause (d)'s
+# census was taken before this ran — but two things are worth reading off it.
+#
+# The reach: a link narrowed to one app reaches it and is refused the other BY
+# NAME, so "the wall grant reaches every declared app" is a property of the
+# wall grant rather than of the rail being open.
+#
+# And the collision, per app: under the wall grant the door checks a claimed
+# name against every roster the bearer reaches, so ONE refusal covers the whole
+# wall and "refused on both apps" cannot be read off it. A grant narrowed to
+# each app asks the question one app at a time, which is the only way that
+# clause can be measured at all.
+leg_room_narrowing() { # member
+  local member=$1
+  room_grant narrow-expenses "$D/qr-narrow-expenses.svg" --rail "$RING2"
+  room_grant narrow-doc "$D/qr-narrow-doc.svg" --rail "$RING"
+  room_phone narrow-expenses "$D/qr-narrow-expenses.svg" "$GUEST_NARROW_ONE" \
+    "$RING2:expenses:$APP2" 0 "" "$member" "" "other_app=$RING"
+  room_phone narrow-doc "$D/qr-narrow-doc.svg" "$GUEST_NARROW_TWO" \
+    "$RING:doc" 0 "" "$member" "" "other_app=$RING2"
+  sv beefy mesh grant --list > "$D/wall-grants-after.txt" 2>&1
 }
 
 # ── the wall: one QR, two people, one question ──────────────────────────────
@@ -823,13 +1003,21 @@ leg_room_wall() {
   [ -n "$MODEL" ] || { echo '{"fatal":"beefy lists no dispatchable model — nothing can be granted"}' > "$out"; return; }
   read -r id rc meta < <(share_folder halo wall "$BANK")
   ROOM_CORPUS=$id
-  room_grant wall "$PAGE/wall-qr.svg"
-  room_grant second "$D/wall-qr-2.svg"
-  # The wall watches its own rail while the phones are in the room.
-  : > "$WALL_LOG"
+  # ONE grant, ONE QR, for the whole wall (A55). rr-2 minted one per phone;
+  # under the operator's model the resource declares and the credential
+  # identifies, so the owner widens the wall by REGISTERING an app, not by
+  # minting another link.
+  room_grant wall "$WALL_QR"
+  # The wall watches its own rail while the phones are in the room — one
+  # watcher per app, because the wall shows two screens now.
+  : > "$WALL_LOG"; : > "$WALL2_LOG"
   REPO="$REPO" PA="$(tab_url beefy)" OUT="$WALL_LOG" POLL_MS=250 WATCH_S=1200 \
     node "$PHONE_PKG/wall.mjs" > "$D/wall-watch.out" 2>&1 &
   wallpid=$!
+  REPO="$REPO" PA="http://127.0.0.1:$DPORT2" KIND=expenses APP_DIR="$APP2" \
+    OUT="$WALL2_LOG" POLL_MS=250 WATCH_S=1200 \
+    node "$PHONE_PKG/wall.mjs" > "$D/wall2-watch.out" 2>&1 &
+  wall2pid=$!
   member=$(self_name beefy)
   q=$(BANK="$BANK" python3 -c "import json,os; print(json.loads(os.environ['BANK'])[0][1])")
   # The wall must have heard that halo holds the corpus before the ask, or the
@@ -842,41 +1030,101 @@ leg_room_wall() {
     grep -q '"peer_name"' "$D/wall-fanout.json" && { seen=$(( $(date +%s) - t0 )); break; }
     sleep 3
   done
-  # The person: one scan, one name, one edit, one question.
-  room_phone phone "$PAGE/wall-qr.svg" "$GUEST_ONE" 1 "$q" ""
-  # The second person, who tries the wall's own member name first and is refused.
-  room_phone phone2 "$D/wall-qr-2.svg" "$GUEST_TWO" 1 "" "$member"
-  kill "$wallpid" 2>/dev/null
+  # The person: one scan, one name — typed into the DOOR's prompt, once — an
+  # expense in the app nobody wrote a line of, then the doc, which must not ask
+  # again. Three act kinds in the expenses app: a record, a correction that
+  # restates, and a retraction that carries no replacement at all.
+  room_phone phone "$WALL_QR" "$GUEST_ONE" "$RING2:expenses:$APP2,$RING:doc" 1 "$q" "" 1 \
+    "undeclared=ring-not-granted,daemon_owned=$(room_daemon_owned_ns),read_only=$RING3"
+  # The second person, who tries the wall's own member name first and is
+  # refused, then takes a name of their own — on the SAME code as the first.
+  room_phone phone2 "$WALL_QR" "$GUEST_TWO" "$RING2:expenses:$APP2" 1 "" "$member"
+  kill "$wallpid" "$wall2pid" 2>/dev/null
+  # The grant census for `rg-one-person-across-apps` (d) is taken HERE, while
+  # the only grant that exists is the wall's. The narrowing leg below mints
+  # two more on purpose and its own list is recorded apart.
   sv beefy mesh grant --list > "$D/wall-grants.txt" 2>&1
+  leg_room_narrowing "$member"
   mesh_json beefy > "$D/wall-beefy-after.json"; mesh_json halo > "$D/wall-halo-after.json"
   # The peer path, from the daemon's EXISTING observation — nothing added for
   # the bar (A36): `/v1/mesh/status` already publishes `iroh_transport`.
   node_curl beefy -s --max-time 10 "$(at "${CPORT[beefy]}")/v1/mesh/status" > "$D/wall-transport.json" 2>/dev/null
   grep -E 'routing outcome|routing decision|guest_ask: accepted|turn stage attribution' "$D/beefy/daemon.err" \
     > "$D/wall-decisions.txt" 2>/dev/null
+  # A MEMBER's own loopback append carrying a forged `on_behalf_of`. Nobody
+  # authenticated a guest here, so the door has nothing to stamp: the name must
+  # not reach the signature, and the daemon must say which of the two happened
+  # rather than dropping it quietly (C `rg-guest-stamped-by-the-door` (c)).
+  node_curl beefy -s --max-time 20 -X POST \
+    "$(at "${CPORT[beefy]}")/v1/rail/append?namespace=$RING2" \
+    -H 'content-type: application/json' \
+    -d "{\"op\":\"record\",\"on_behalf_of\":\"Not A Guest\",\"payload\":{\"kind\":\"expense\",\"payer\":\"$member\",\"amount_cents\":100,\"description\":\"a member's own append, carrying a name it was not given\",\"participants\":[\"$member\"]}}" \
+    > "$D/wall-forged.json" 2>/dev/null
+  grep -E 'dropped an on_behalf_of|stamped an act with the name' "$D/beefy/daemon.err" \
+    > "$D/wall-stamp-lines.txt" 2>/dev/null
   # The keeper's replica: the guests' acts, byte for byte, after its next sync.
-  local jb jh="" sync="" t1
+  # BOTH rings — the doc's, which rr-2 reads, and the scaffold's, which is
+  # where this campaign's guest acts are.
+  local jb jh="" sync="" t1 jb2 jh2="" sync2=""
   t1=$(date +%s)
   while [ $(( $(date +%s) - t1 )) -lt 120 ]; do
     jb=$(room_journal beefy); jh=$(room_journal halo)
     [ -n "$jh" ] && [ "$jh" = "$jb" ] && { sync=$(( $(date +%s) - t1 )); break; }
     sleep 3
   done
+  t1=$(date +%s)
+  while [ $(( $(date +%s) - t1 )) -lt 120 ]; do
+    jb2=$(room_journal beefy "$RING2"); jh2=$(room_journal halo "$RING2")
+    [ -n "$jh2" ] && [ "$jh2" = "$jb2" ] && { sync2=$(( $(date +%s) - t1 )); break; }
+    sleep 3
+  done
   printf '%s\n%s\n%s\n' "${jb:-}" "${jh:-}" "${sync:-}" > "$D/wall-replica.txt"
-  python3 - "$D" "$member" "$id" "$rc" "${meta:-}" "${seen:-}" "$MODEL" "$q" "$(self_name halo)" > "$out" <<'PY'
+  printf '%s\n%s\n%s\n' "${jb2:-}" "${jh2:-}" "${sync2:-}" > "$D/wall-replica-2.txt"
+  # Demo step 6: the Halo's own `svrn ring log` after the sync, which is the
+  # one route `op.person` is composed on — so the stamp is read on a replica
+  # the wall did not render.
+  sv halo ring log "$RING2" --json > "$D/wall-halo-expenses.json" 2>/dev/null
+  sv beefy ring log "$RING2" --json > "$D/wall-beefy-expenses.json" 2>/dev/null
+  python3 - "$D" "$member" "$id" "$rc" "${meta:-}" "${seen:-}" "$MODEL" "$q" "$(self_name halo)" \
+    "$RING" "$RING2" "$RING3" > "$out" <<'PY'
 import json, os, sys
-d, member, cid, rc, meta, seen, model, q, keeper = sys.argv[1:10]
+d, member, cid, rc, meta, seen, model, q, keeper, doc_ns, exp_ns, ro_ns = sys.argv[1:13]
 listed = open(os.path.join(d, "wall-beefy-corpora.txt")).read()
 def members(p):
     try: return sorted(m["name"] for m in json.load(open(os.path.join(d, p)))["members"])
     except Exception: return None
+def read(p):
+    try: return open(os.path.join(d, p)).read()
+    except OSError: return ""
+def js(p):
+    try: return json.load(open(os.path.join(d, p)))
+    except Exception: return None
+# The stamp as a REPLICA holds it: every op on the scaffold's ring, with the
+# name the log route composed. Read off `svrn ring log --json`, which is the
+# same route the page reads — never re-derived here.
+def stamped(p):
+    v = js(p) or {}
+    return [{"id": o.get("id"), "person": o.get("person"), "guest": o.get("guest"),
+             "corrects": o.get("corrects"), "voided": o.get("voided"),
+             "has_payload": o.get("payload") is not None}
+            for o in (v.get("ops") or [])]
 json.dump({"member": member, "keeper": keeper, "model": model, "question": q, "corpus": cid,
            "ingest_rc": int(rc), "shared_meta": bool(meta),
            "absent_on_beefy": cid not in listed,
            "beefy_heard_s": int(seen) if seen else None,
+           "namespaces": {"doc": doc_ns, "expenses": exp_ns, "read_only": ro_ns},
            "members_before": {"beefy": members("wall-beefy-before.json"), "halo": members("wall-halo-before.json")},
            "members_after": {"beefy": members("wall-beefy-after.json"), "halo": members("wall-halo-after.json")},
-           "grants": open(os.path.join(d, "wall-grants.txt")).read()}, sys.stdout)
+           "grants": read("wall-grants.txt"),
+           "grants_after_narrowing": read("wall-grants-after.txt"),
+           "scaffold": js("scaffold.json"), "scaffold_read_only": js("scaffold-readonly.json"),
+           # A member's own append carrying a name nobody gave it.
+           "forged": js("wall-forged.json"),
+           "stamp_lines": [l for l in read("wall-stamp-lines.txt").splitlines()][-6:],
+           "on_beefy": stamped("wall-beefy-expenses.json"),
+           "on_halo": stamped("wall-halo-expenses.json"),
+           "replica_2": (read("wall-replica-2.txt").splitlines() + ["", "", ""])[:3]},
+          sys.stdout)
 PY
 }
 
@@ -1181,7 +1429,7 @@ leg_room_offline() {
   status_online=$(cat "$D/room-cut-status.out" 2>/dev/null)
   echo "${survivor:-the cut is a cut: no logged peer address answers an OICP fetch from beefy}${status_online:+ [recorded, not gating: mesh status on beefy still calls $status_online online]}" > "$D/room-cut-assert.out"
   sleep 10
-  room_phone phone-cut "$PAGE/wall-qr.svg" "$GUEST_ONE" 1 "$q" ""
+  room_phone phone-cut "$WALL_QR" "$GUEST_CUT" "$RING:doc" 1 "$q" ""
   kill "$wallpid" 2>/dev/null
   before_beefy=$(room_journal beefy)
   heal_at=$(date +%s)
@@ -1219,9 +1467,16 @@ PY
 # ── the census + the five rows ───────────────────────────────────────────────
 # The bars this topology is judged on, in order. ONE reader, so the verdict
 # loop and the could-not-judge short-circuit cannot disagree about the set.
+# The ROOM topology reports eleven bars: `ring-guest`'s five, which are what
+# this campaign is proving, then `ring-room`'s six, which are the regression
+# it must not move. Read from the two campaign files, in that order.
 room_bar_ids() {
   if [ "$TOPOLOGY" = room ]; then
-    python3 -c "import sys,tomllib; print(' '.join(b['id'] for b in tomllib.load(open(sys.argv[1],'rb'))['bar'] if b.get('rung')=='rr-2'))" "$ROOM_CAMPAIGN"
+    python3 -c "
+import sys, tomllib
+guest = [b['id'] for b in tomllib.load(open(sys.argv[1],'rb'))['bar']]
+room  = [b['id'] for b in tomllib.load(open(sys.argv[2],'rb'))['bar'] if b.get('rung')=='rr-2']
+print(' '.join(guest + room))" "$GUEST_CAMPAIGN" "$ROOM_CAMPAIGN"
   else
     echo "ra-room-answer-names-the-machine ra-room-doc-name-from-membership ra-room-film-from-the-library-rail ra-room-plug-in-live ra-room-nothing-typed"
   fi
@@ -1239,10 +1494,20 @@ for b in (ids if want == 'all' else [want]):
 }
 
 report() { # bar|all
-  python3 - "$D" "$ROOM_CAMPAIGN" "$1" "$TYPED" "$CMDLOG" "$ROOM_SCRIPT" "${CPORT[*]} ${IPORT[*]} ${DPORT[*]}" "${IP[*]}" "$TOPOLOGY" "${IP[phone]:-}" "$(room_bar_ids)" <<'PY'
+  python3 - "$D" "$ROOM_CAMPAIGN" "$1" "$TYPED" "$CMDLOG" "$ROOM_SCRIPT" "${CPORT[*]} ${IPORT[*]} ${DPORT[*]} ${DPORT2:-}" "${IP[*]}" "$TOPOLOGY" "${IP[phone]:-}" "$(room_bar_ids)" "$GUEST_CAMPAIGN" "$GUEST_BASE" <<'PY'
 import json, os, re, subprocess, sys, tomllib
-d, campaign, want, typed_p, cmdlog_p, script_p, ports, ips, topology, phone_ip, bar_ids = sys.argv[1:12]
+d, campaign, want, typed_p, cmdlog_p, script_p, ports, ips, topology, phone_ip, bar_ids, guest_campaign, guest_base = sys.argv[1:14]
+# Two campaigns, one table. Ids are unique across the two files, so one map is
+# the right shape — and a collision would be a bar defined twice, which is the
+# thing that map would hide, so it is refused here.
 bars = {b["id"]: b for b in tomllib.load(open(campaign, "rb"))["bar"]}
+for b in tomllib.load(open(guest_campaign, "rb"))["bar"]:
+    if b["id"] in bars:
+        raise SystemExit(f"{b['id']} is declared in both campaign files; one bar, one home")
+    bars[b["id"]] = b
+REPO = os.path.dirname(script_p) + "/.."
+def git(*args):
+    return subprocess.run(["git", *args], capture_output=True, text=True, cwd=REPO).stdout.strip()
 COUNTED = ("address", "port", "URL", "config-line", "credential")
 
 def classify(s, secret=""):
@@ -1262,12 +1527,12 @@ def load(name):
 
 entries = []
 for line in open(typed_p).read().splitlines() if os.path.exists(typed_p) else []:
-    stage, node, leg, secret, s, note, prov = (line.split("\t") + [""] * 7)[:7]
+    stage, node, leg, secret, s, note, prov, element = (line.split("\t") + [""] * 8)[:8]
     # `opened`: the string came VERBATIM from a tool's stdout line, and that
     # line is re-read here rather than trusted. Assembled, or no such line: counts.
     src = next((l.strip() for l in (open(prov).read().splitlines() if prov and os.path.exists(prov) else [])
                 if s and s in l.split()), "")
-    entries.append(dict(stage=stage, node=node, leg=leg, string=s, note=note,
+    entries.append(dict(stage=stage, node=node, leg=leg, string=s, note=note, element=element,
                         cls="opened" if src else classify(s, secret), src=src and f"{prov}: {src}",
                         excluded=bool(secret) and "Jellyfin" in note))
 # INSTALL: what bring-up wrote where the daemons read it, before the walk.
@@ -1308,6 +1573,9 @@ print("== census: WALK (typed on the person's behalf during the walk) ==")
 for e in walk:
     flag = "EXCLUDED" if e["excluded"] else ("COUNTS" if e["cls"] in COUNTED else "")
     print(f"  walk  {e['leg']:<6} {e['node']}  {e['cls']:<11} {flag:<8} {e['string']}" + (f"   ({e['note']})" if e["note"] else ""))
+    # WHICH element took the string. "the app still asks the name" and "the
+    # door asks it" are the same census line without this.
+    if e.get("element"): print(f"        taken by: {e['element']}")
     if e["src"]: print(f"        from the tool's stdout, verbatim: {e['src']}")
 print(f"  walk count: {walk_count}")
 print(f"== census: this script names {len(hits)} of {len(needles)} member names/ports/addresses/corpus ids: {hits} ==")
@@ -1476,9 +1744,22 @@ if topology == "room":
         # and every one of the phone's strings is listed in the row.
         phone_wall = [e for e in walk if e["node"] == "phone" and e["leg"] == "wall"]
         phone_counted = [e for e in walk if e["node"].startswith("phone") and e["cls"] in COUNTED]
+        # RE-READ 2026-09-20, and the reading is named here so it can be argued
+        # with. Clause (a) says the QR "parses as a guest grant minted by
+        # BeefyMac (`Scope::Rails(ring-doc)` + `Scope::Models`)". That
+        # parenthetical describes the grant rr-2 MINTED — one per app. Under
+        # the operator's A55 model the wall is ONE grant reaching every app the
+        # owner registered, and its summary reads "the wall" rather than
+        # "rail:ring-doc". What clause (a) is about — a real, expiring,
+        # BeefyMac-minted grant that reaches this app, and members unchanged —
+        # is unchanged, so the test is "does the summary name a scope that
+        # reaches ring-doc", spelled either way. ring-room.toml is NOT edited.
+        doc_ns = (w.get("namespaces") or {}).get("doc") or ""
+        reaches_the_doc = f"rail:{doc_ns}" in (p1.get("summary") or "") \
+            or "the wall" in (p1.get("summary") or "")
         legs = {"a_guest_grant_and_members_unchanged":
                     bool(p1.get("link")) and not p1.get("token_in_query")
-                    and "rail:" in (p1.get("summary") or "")
+                    and reaches_the_doc
                     and (w.get("model") or "\0") in (p1.get("summary") or "")
                     and (p1.get("expires_at") or 0) > 0
                     and w.get("members_before") == w.get("members_after"),
@@ -1494,17 +1775,29 @@ if topology == "room":
                 "d_phone_typed_one_string": len(phone_wall) == 1 and not phone_counted}
         row("ra-room-scan-to-name", 1.0 if all(legs.values()) else 0.0, "", legs=legs,
             window_s=name_w, name_seen_s=seen_s, wall_showed=seen_name, summary=p1.get("summary"),
-            quiet_zone=(p1.get("qr") or {}).get("quiet_zone"), page=p1.get("page"),
+            quiet_zone=(p1.get("qr") or {}).get("quiet_zone"), page=p1.get("apps"),
+            clause_a_reading="A55: the wall is ONE grant reaching every registered app, so its "
+                             f"summary reads 'the wall' where rr-2's read 'rail:{doc_ns}'. Clause (a) "
+                             "is read as 'the summary names a scope that reaches this app'; "
+                             "ring-room.toml is unedited.",
             phone_typed=[f"{e['leg']}: {e['string']}" for e in walk if e["node"].startswith("phone")],
             log_mentions_of_the_phone=guest_mentions, members=w.get("members_after"))
 
     # 2 — the guest's edit, and never mistakable for a member
     b = bars["ra-room-guest-edit-attributed"]
     edit_w = num(r"within ([\d.]+) s", b["floor_basis"])
-    rail_diff = subprocess.run(["git", "diff", "--stat", "origin/main", "--",
-                                "commonwealth/crates/commonwealth-rail",
-                                "commonwealth/crates/commonwealth-rail-core"],
-                               capture_output=True, text=True, cwd=os.path.dirname(script_p) + "/..").stdout.strip()
+    # RE-READ 2026-09-20, named here rather than edited into ring-room.toml.
+    # Clause (c) is rr-2's promise that ITS work did not diff the rail. The
+    # operator opened the rail to exactly one row of the NEXT campaign
+    # (`rg-1-on-behalf-of`, D1, ledger A52), so `origin/main..HEAD` is no
+    # longer a reading of rr-2's promise — it is a reading of ring-guest's
+    # authorisation. The clause is therefore evaluated at rr-2's own tip,
+    # `origin/main..<ring-guest base>`, which nothing this campaign does can
+    # move; ring-guest's rail diff is printed beside it, unjudged by this bar.
+    RAIL = ["commonwealth/crates/commonwealth-rail",
+            "commonwealth/crates/commonwealth-rail-core"]
+    rail_diff = git("diff", "--stat", "origin/main", guest_base, "--", *RAIL)
+    rail_diff_ring_guest = git("diff", "--stat", guest_base, "HEAD", "--", *RAIL)
     replica = (open(os.path.join(d, "wall-replica.txt")).read().splitlines() + ["", "", ""])[:3] \
         if os.path.exists(os.path.join(d, "wall-replica.txt")) else ["", "", ""]
     if not p1 or p1.get("fatal"):
@@ -1520,6 +1813,9 @@ if topology == "room":
         row("ra-room-guest-edit-attributed", 1.0 if all(legs.values()) else 0.0, "", legs=legs,
             window_s=edit_w, edit_seen_s=edit_s, wall_showed=line, signer=member,
             rail_diff=rail_diff, replica={"beefy": replica[0], "halo": replica[1], "synced_s": replica[2]},
+            clause_c_reading="rr-2's rail diff, evaluated at rr-2's own tip. The rail diff ring-guest "
+                             "added under operator decision D1 is beside it and is not judged here: "
+                             + (rail_diff_ring_guest.splitlines()[-1] if rail_diff_ring_guest else "empty"),
             collision=p2.get("collision"))
 
     # 3 — the room answered, and named the machine it came from
@@ -1624,9 +1920,16 @@ if topology == "room":
     if len(scans) < 2:
         row("ra-room-member-only-by-vouch", None, f"the negative half needs two scans; {len(scans)} happened")
     else:
+        # RE-READ 2026-09-20. The clause is "BeefyMac's grant list shows the
+        # guests with their expiry"; `>= 2` was how many grants rr-2 minted —
+        # one per phone — not a property the clause names. Under A55 the wall
+        # is one grant however many phones scan it, so the threshold is "at
+        # least one live grant listed with its expiry". The per-phone count is
+        # what `rg-one-person-across-apps` (d) now reads, and it reads it the
+        # other way round: more than one would be the failure.
         legs = {"a_member_sets_unchanged": bool(w.get("members_before")) and w["members_before"] == w["members_after"],
                 "b_the_grants_are_listed_with_their_expiry":
-                    len([l for l in grants.splitlines() if re.search(r"\blive\b.*\d+[hm]", l)]) >= 2,
+                    len([l for l in grants.splitlines() if re.search(r"\blive\b.*\d+[hm]", l)]) >= 1,
                 "c_no_other_door": all(refused(v) for r in refusals.values() for v in r.values())}
         row("ra-room-member-only-by-vouch", 1.0 if all(legs.values()) else 0.0, "", legs=legs,
             scans=len(scans), members=w.get("members_after"), refusals=refusals,
@@ -1635,6 +1938,224 @@ if topology == "room":
             # riding on the half that can.
             affirmative_half="COULD-NOT-JUDGE: the phone runs no node here, so `introduce` cannot be "
                              "observed making one a member (ring-apps ra-11's measurement first)")
+
+# ── ring-guest: the wall's second app ───────────────────────────────────────
+# The falsifier for "did we build the class or the demo": the app a person
+# would make SECOND, `svrn ring new`, UNMODIFIED, on the same wall through the
+# same door with the same phones. Every clause below is a sentence from a
+# `floor_basis` in quality/campaigns/ring-guest.toml.
+if topology == "room":
+    ns = w.get("namespaces") or {}
+    scaffold = w.get("scaffold") or {}
+    wall2_rows = sightings(d + "-wall2.ndjson")
+    guest_one = next((t["string"] for t in (p1.get("typed") or []) if t.get("leg") == "wall"), None)
+    on_beefy = {o["id"]: o for o in (w.get("on_beefy") or []) if o.get("id")}
+    on_halo = {o["id"]: o for o in (w.get("on_halo") or []) if o.get("id")}
+    # The sentence the door composes for a guest's act, built ONCE here from
+    # the two names the run read rather than spelled per clause.
+    stamped_as = f"{guest_one}, guest of {member}" if guest_one and member else None
+
+    def names_the_guest(op):
+        """Does this op, as a replica holds it, name the guest AND the member?"""
+        if not op or not guest_one or not member:
+            return False
+        person = op.get("person") or ""
+        return guest_one in person and "guest" in person and member in person
+
+    def everywhere(op_id):
+        return names_the_guest(on_beefy.get(op_id)) and names_the_guest(on_halo.get(op_id))
+
+    # 1 — an unmodified scaffold names a guest correctly
+    b = bars["rg-second-app-zero-lines"]
+    row_w = num(r"within ([\d.]+) s", b["floor_basis"])
+    tpl_diff = git("diff", "--stat", f"{guest_base}..HEAD", "--",
+                   "sovereign/crates/sovereign-cli-llm/src/ring_cmd/templates")
+    spend = act_at(p1, "expense")
+    spend_s, spend_row = seen_after(wall2_rows, spend)
+    if not scaffold or not p1:
+        row("rg-second-app-zero-lines", None,
+            "the instrument scaffolded no second app" if not scaffold else "no phone reached the wall")
+    else:
+        legs = {"a_served_directory_is_the_templates": bool(scaffold.get("equal_to_templates")),
+                "b_the_word_guest_appears_zero_times": scaffold.get("guest_mentions") == 0,
+                "c_the_wall_row_names_the_guest": spend_s is not None and row_w is not None
+                                                  and spend_s <= row_w and bool(spend_row)
+                                                  and bool(guest_one) and guest_one in spend_row
+                                                  and "guest" in spend_row and bool(member)
+                                                  and member in spend_row,
+                "d_the_templates_are_untouched": tpl_diff == ""}
+        row("rg-second-app-zero-lines", 1.0 if all(legs.values()) else 0.0, "", legs=legs,
+            window_s=row_w, wall_row_seen_s=spend_s, wall_showed=spend_row,
+            scaffold=scaffold, templates_diff=tpl_diff,
+            # `grep -ci guest` counts LINES; this counts OCCURRENCES, which is
+            # the stricter of the two and zero exactly when the other is.
+            guest_mentions_are_occurrences=True)
+
+    # 2 — the door writes whose words an act was
+    liar = p1.get("liar") or {}
+    forged = w.get("forged") or {}
+    forged_id = forged.get("id")
+    stamp_lines = w.get("stamp_lines") or []
+    if not liar or not w.get("on_beefy"):
+        row("rg-guest-stamped-by-the-door", None,
+            "the liar pages did not run" if not liar else "no replica of the scaffold's ring was read")
+    else:
+        silent, claims = liar.get("silent") or {}, liar.get("claims_another") or {}
+        legs = {"a_a_page_that_names_nobody": bool(silent.get("id")) and everywhere(silent["id"]),
+                "b_a_page_that_claims_another_name": bool(claims.get("id")) and everywhere(claims["id"])
+                                                     and "Somebody Else" not in ((on_beefy.get(claims["id"]) or {}).get("person") or ""),
+                # A member's own loopback append carrying a name nobody gave
+                # it: refused, or stripped and SAID so. Silence is the failure.
+                "c_a_members_forged_name_is_dropped_and_said":
+                    (forged_id is None
+                     or ((on_beefy.get(forged_id) or {}).get("person") == member
+                         and not (on_beefy.get(forged_id) or {}).get("guest")))
+                    and any("dropped an on_behalf_of" in l for l in stamp_lines),
+                # The keeper verified the signature or the op would not be in
+                # its journal at all, and the two journals hash the same.
+                "d_it_verifies_on_the_keepers_replica":
+                    bool(silent.get("id")) and names_the_guest(on_halo.get(silent["id"]))
+                    and bool(w.get("replica_2", [""])[1])
+                    and w["replica_2"][0] == w["replica_2"][1]}
+        row("rg-guest-stamped-by-the-door", 1.0 if all(legs.values()) else 0.0, "", legs=legs,
+            stamped_as=stamped_as, liar=liar,
+            what_the_wall_shows_for_each={k: (on_beefy.get((v or {}).get("id")) or {}).get("person")
+                                          for k, v in liar.items()},
+            forged=forged, forged_on_the_log=on_beefy.get(forged_id),
+            stamp_lines=stamp_lines[-3:], replica=w.get("replica_2"))
+
+    # 3 — every act kind names the guest, including the one with no payload
+    kinds = ["record", "correct-with-replacement", "correct-with-none"]
+    made = {k: next((a for a in (p1.get("acts") or []) if a.get("kind") == k and a.get("ns") == ns.get("expenses")), None)
+            for k in kinds}
+    if not any(made.values()):
+        row("rg-every-act-names-the-guest", None, "the guest made none of the three act kinds")
+    else:
+        named = {k: bool(a) and everywhere(a["id"]) for k, a in made.items()}
+        row("rg-every-act-names-the-guest", 1.0 if all(named.values()) else 0.0, "",
+            legs=named, act_kinds_made=len([a for a in made.values() if a]), act_kinds_required=3,
+            stamped_as=stamped_as,
+            # The retraction is the act kind a reserved payload key could never
+            # have stamped: there is no payload to put a name in.
+            on_the_wall={k: {"beefy": (on_beefy.get((a or {}).get("id")) or {}).get("person"),
+                             "halo": (on_halo.get((a or {}).get("id")) or {}).get("person"),
+                             "has_payload": (on_beefy.get((a or {}).get("id")) or {}).get("has_payload")}
+                         for k, a in made.items()})
+
+    # 4 — one person, every app, one code
+    narrow_x, narrow_d = phone("narrow-expenses"), phone("narrow-doc")
+    scans = [x for x in (p1, p2, pc, narrow_x, narrow_d) if x.get("link")]
+    on_the_wall_qr = [x for x in (p1, p2, pc) if x.get("link")]
+    declared = [v for v in (ns.get("doc"), ns.get("expenses"), ns.get("read_only")) if v]
+    # The GUEST-facing grants. `svrn ring dev` mints a rail grant of its own
+    # for the member's screen — one per app the wall shows — and those are the
+    # wall's own page talking to its own daemon on loopback, not a link anybody
+    # scanned. Counting them would read "a grant per app" off the member's
+    # side of the room (measured 2026-09-20, run 2: two `ring dev:` rows).
+    live = [l for l in (w.get("grants") or "").splitlines()
+            if re.search(r"\blive\b", l) and "ring dev:" not in l]
+    probes = p1.get("probes") or {}
+    # Every element that took this phone's name — the goodhart's own question,
+    # answered with the record rather than with an assumption. Exactly one of
+    # them may be asking WHO THIS IS, and it must be the door's own prompt.
+    # The scaffold's `payer` field also takes the string, and that is a money
+    # question ("who paid"), not an identity one: it is listed here so the
+    # reading can be argued with rather than quietly excluded.
+    took_the_name = [{"where": f"{e['node']}/{e['leg']}", "element": e.get("element") or "unrecorded",
+                      "note": e.get("note") or ""}
+                     for e in walk if e["string"] == guest_one]
+    asked_who_this_is = [t for t in took_the_name if "window.prompt" in t["element"]]
+    second_app = (p1.get("apps") or [])[1] if len(p1.get("apps") or []) > 1 else {}
+    doc_act = act_at(p1, "wall")
+    if len(on_the_wall_qr) < 2 or not w.get("grants"):
+        row("rg-one-person-across-apps", None,
+            f"the bar needs two phones on one code; {len(on_the_wall_qr)} scanned it")
+    else:
+        legs = {"a_two_phones_one_code_two_names":
+                    p1.get("link") == p2.get("link")
+                    and bool(p1.get("apps")) and bool(p2.get("apps"))
+                    and (p1["apps"][0].get("guest") or "") != (p2["apps"][0].get("guest") or "")
+                    and bool(p1["apps"][0].get("guest")) and bool(p2["apps"][0].get("guest")),
+                # The doc's act, as the DOOR stamped it — `op.person` off the
+                # log route, which the wall watcher records beside what
+                # ring-doc's own page renders from its payload.
+                "b_the_same_person_on_the_second_app":
+                    second_app.get("asked_a_name") == 0
+                    and bool(doc_act)
+                    and names_the_guest({"person": next((r.get("person") for r in wall_rows
+                                                         if r.get("id") == doc_act["id"]), "")})
+                    and len(asked_who_this_is) == 1
+                    and len({a.get("guest") for a in (p1.get("apps") or [])}) == 1,
+                # 409 is the only status the shim alerts on, so an alert IS the
+                # refusal. Under the wall grant one claim covers every app the
+                # bearer reaches; the two narrowed grants ask it one app at a
+                # time, which is the only way "on both apps" is measurable.
+                "c_a_members_name_is_refused_on_both_apps":
+                    bool((p2.get("collision") or {}).get("refused"))
+                    and bool((narrow_x.get("collision") or {}).get("refused"))
+                    and bool((narrow_d.get("collision") or {}).get("refused")),
+                "d_one_grant_for_the_wall_and_more_phones_than_apps":
+                    len([l for l in live if "the wall" in l]) == 1
+                    and not [l for l in live if "rail:" in l]
+                    and len(scans) > len(declared)
+                    and w.get("members_before") == w.get("members_after"),
+                "e_three_refusals_each_naming_the_namespace":
+                    len(probes) == 3
+                    and all(isinstance(v.get("status"), int) and v["status"] in (401, 403, 404)
+                            and v.get("names_it") for v in probes.values())}
+        row("rg-one-person-across-apps", 1.0 if all(legs.values()) else 0.0, "", legs=legs,
+            phones=len(scans), phones_on_the_wall_code=len(on_the_wall_qr), apps_declared=declared,
+            grants_live=live, grants_after_narrowing=(w.get("grants_after_narrowing") or "").strip().splitlines()[-6:],
+            names={x.get("label"): [a.get("guest") for a in (x.get("apps") or [])] for x in scans},
+            second_app_asked_a_name=second_app.get("asked_a_name"),
+            elements_that_took_the_name=took_the_name,
+            elements_that_asked_who_this_is=asked_who_this_is,
+            doc_act_stamped_as=next((r.get("person") for r in wall_rows
+                                     if doc_act and r.get("id") == doc_act["id"]), None),
+            collisions={"wall": p2.get("collision"), "narrowed_to_the_expenses_app": narrow_x.get("collision"),
+                        "narrowed_to_the_doc": narrow_d.get("collision")},
+            refusals=probes,
+            # The narrowing knob, recorded and gating nothing: a link scoped to
+            # one app reaches it and is refused the other BY NAME.
+            narrowing={"reached": [a.get("namespace") for a in (narrow_x.get("apps") or [])],
+                       "refused_the_other": (narrow_x.get("probes") or {}).get("other_app")},
+            index_the_scan_landed_on=(p1.get("index") or {}).get("apps"))
+
+    # 5 — ring-doc sheds its own guest code
+    #
+    # The work this bar measures is a LATER row. Until that row lands the bar
+    # has nothing to read, and a bar whose work has not happened is not a bar
+    # that failed (ARCH 5) — it says which row it is waiting for, by name, and
+    # judges itself the moment that row's commit is in the range.
+    # By SUBJECT, not by `--grep`: every row's id appears in the bodies of the
+    # rows that cite it, and the inventory commit cites this one (run 2 read
+    # the deletion as landed off `0f2bba316`).
+    ROW = "rg-2-ring-doc-sheds-its-guest-code"
+    shed = [l for l in git("log", "--format=%h %s", f"{guest_base}..HEAD").splitlines()
+            if l.split(" ", 1)[-1].startswith(ROW + ":")]
+    doc_guest_lines = 0
+    for f in ("sovereign/apps/ring-doc/app.js", "sovereign/apps/ring-doc/adapter.js"):
+        try:
+            doc_guest_lines += sum(1 for l in open(os.path.join(REPO, f)) if re.search("guest", l, re.I))
+        except OSError:
+            pass
+    if not shed:
+        row("rg-ring-doc-sheds-its-guest-code", None,
+            f"the deletion is `{ROW}`, which has not landed in "
+            f"{guest_base}..HEAD; ring-doc's app.js and adapter.js still mention a guest on "
+            f"{doc_guest_lines} line(s)",
+            guest_lines_in_ring_doc=doc_guest_lines)
+    else:
+        rr2 = [rows[x]["value"] for x in
+               ("ra-room-scan-to-name", "ra-room-guest-edit-attributed",
+                "ra-room-guest-ask-served-by-the-room", "ra-room-film-from-littlemac",
+                "ra-room-offline-room-says-so", "ra-room-member-only-by-vouch") if x in rows]
+        legs = {"a_no_guest_outside_the_ask_panel": doc_guest_lines == 0,
+                "b_the_six_rr2_bars_are_green": len(rr2) == 6 and all(v == 1.0 for v in rr2),
+                "c_the_deleted_line_count_is_reported": True}
+        row("rg-ring-doc-sheds-its-guest-code", 1.0 if all(legs.values()) else 0.0, "", legs=legs,
+            guest_lines_in_ring_doc=doc_guest_lines, shed_by=shed[:2],
+            rr2_values=rr2)
 
 order = bar_ids.split()
 for bar in (order if want == "all" else [want]):
@@ -1667,8 +2188,14 @@ case "${1:-}" in
   up)   : > "$CMDLOG"; : > "$TYPED"; if [ "$TOPOLOGY" = room ]; then room_up; else cmd_up; fi ;;
   down) if [ "$TOPOLOGY" = room ]; then room_topology_down; else room_down; fi; echo "stopped" ;;
   verdict)
-    python3 -c "import sys,tomllib; ids=[b['id'] for b in tomllib.load(open(sys.argv[1],'rb'))['bar']]; sys.exit(0 if sys.argv[2] in ids+['all'] else 1)" \
-      "$ROOM_CAMPAIGN" "${2:-}" || { echo "verdict: name a bar or all — see quality/campaigns/ring-room.toml" >&2; exit 2; }
+    # A bar id from EITHER campaign: the room's regression six, or the five
+    # this campaign is proving. One run reports both.
+    python3 -c "
+import sys, tomllib
+ids = [b['id'] for f in sys.argv[1:3] for b in tomllib.load(open(f,'rb'))['bar']]
+sys.exit(0 if sys.argv[3] in ids + ['all'] else 1)" \
+      "$ROOM_CAMPAIGN" "$GUEST_CAMPAIGN" "${2:-}" \
+      || { echo "verdict: name a bar or all — see quality/campaigns/ring-room.toml and ring-guest.toml" >&2; exit 2; }
     # The demo builds what it measures, or it says so and judges nothing.
     stale=$(stale_binaries)
     [ -z "$stale" ] || { room_cnj_rows "$stale" "$2"; echo "$stale" >&2; exit 3; }

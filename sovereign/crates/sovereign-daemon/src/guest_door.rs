@@ -566,6 +566,14 @@ const RING_SHIM: &str = r#"(function () {
   // A string: the rail's base, reached with the fragment's bearer.
   const RAIL = {{RAIL_BASE}};
   const bearer = RAIL === null ? null : new URLSearchParams(location.hash.slice(1)).get('token');
+  // WHICH app this page is, as the door served it — never anything the page
+  // chose. A grant scoped to one namespace answers that from the grant, but a
+  // WALL grant names none by design (one code, every app), so the rail routes
+  // refuse a request that does not say which app it means. This is where the
+  // page says it: the namespace the door mounted this shim under.
+  const NS = "{{NAMESPACE}}";
+  const railUrl = (path) =>
+    RAIL + (NS && path.startsWith('/v1/rail/') ? path + '?namespace=' + encodeURIComponent(NS) : path);
   const ROUTES = {
     log: ['GET', '/v1/rail/log'], append: ['POST', '/v1/rail/append'],
     live: ['POST', '/v1/rail/live'], 'live-drain': ['GET', '/v1/rail/live'],
@@ -629,9 +637,9 @@ const RING_SHIM: &str = r#"(function () {
     const [method, path] = ROUTES[op];
     const headers = { authorization: 'Bearer ' + bearer };
     if (SESSION) headers['x-ring-session'] = SESSION.handle;
-    if (method === 'GET') return fetch(RAIL + path, { method, headers });
+    if (method === 'GET') return fetch(railUrl(path), { method, headers });
     headers['content-type'] = ctype;
-    return fetch(RAIL + path, { method, headers, body });
+    return fetch(railUrl(path), { method, headers, body });
   };
   const call = async (op, body) => {
     const r = await send(op, 'application/json', JSON.stringify(body || {}));
@@ -1036,5 +1044,34 @@ mod tests {
         assert!(ring_shim("n", None).contains("const RAIL = null;"));
         assert!(ring_shim("n", Some("")).contains("const RAIL = \"\";"));
         assert!(!ring_shim("n", Some("")).contains("{{"));
+    }
+
+    /// **A page served under a namespace says which app it is on every rail
+    /// call.** A `Scope::Rails` grant answers that from the grant, but a WALL
+    /// grant names no namespace by design — one code, every app — so
+    /// `resolve_wall` refuses a rail request that does not name one. Until
+    /// this landed, every `log`/`record` from a registered page came back
+    /// "this grant is for the whole wall, so it does not say which app you
+    /// mean", which is the whole wall being unreachable.
+    ///
+    /// The un-namespaced page (`guest_page_dir`, the one-app spelling) adds
+    /// nothing: there is no namespace to name, and an empty one would be a
+    /// request for an app called "".
+    #[test]
+    fn a_namespaced_page_names_its_app_on_every_rail_call() {
+        let named = ring_shim("house-expenses", Some(""));
+        assert!(
+            named.contains("const NS = \"house-expenses\";"),
+            "the shim must carry the namespace the door mounted it under"
+        );
+        assert!(
+            named.contains("path + '?namespace=' + encodeURIComponent(NS)"),
+            "the rail routes must carry the namespace"
+        );
+        // The ask and the name claim are the guest DOOR's routes, not the
+        // rail's, and neither is scoped by namespace.
+        assert!(named.contains("path.startsWith('/v1/rail/')"));
+        let bare = ring_shim("", Some(""));
+        assert!(bare.contains("const NS = \"\";"));
     }
 }
