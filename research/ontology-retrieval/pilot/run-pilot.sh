@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# The stage-0 pilot: prove checks I1-I6 have teeth, on the installed
+# The stage-0 pilot: prove checks I1-I7 have teeth, on the installed
 # chaos-secret-agent corpus, before any GPU meter starts.
 #
 #   research/ontology-retrieval/pilot/run-pilot.sh [--dry-run]
 #
 # It builds the eval binaries, runs the four arms this host can build (ONE run
-# each), prints the six-row check table clean, then prints it again with a
-# fault planted for each of the six. Exit 0 only when the clean table reads
+# each), prints the seven-row check table clean, then prints it again with a
+# fault planted for each of the seven. Exit 0 only when the clean table reads
 # what the pilot declared it would and every plant was caught.
 #
 # NO BAR IS READ HERE. The pilot is instrument evidence: it says the checks
@@ -121,7 +121,7 @@ done
 
 # run_arm.py exits 0 for a run it recorded as never-ran — the admissibility is
 # in the manifest, not the exit code. A pilot whose arms did not run cannot
-# claim six verdicts, so that is read here and refused.
+# claim seven verdicts, so that is read here and refused.
 step "arm admissibility"
 python3 - "$RUNS" <<'PY' || exit 3
 import json, sys
@@ -142,7 +142,7 @@ if bad:
     raise SystemExit(1)
 PY
 
-# ── the six checks, clean ────────────────────────────────────────────────────
+# ── the seven checks, clean ──────────────────────────────────────────────────
 
 step "checks — clean"
 python3 "$CHECKS" --runs "$RUNS" --out "$RUNS"
@@ -156,8 +156,8 @@ path, exempt = Path(sys.argv[1]), set(sys.argv[2:])
 rows = [json.loads(x) for x in path.read_text().splitlines()]
 want = {r["check"]: ("never-ran" if r["check"] in exempt else "passed") for r in rows}
 bad = [r for r in rows if r["verdict"] != want[r["check"]]]
-if len(rows) != 6:
-    print(f"run-pilot: {len(rows)} check row(s), expected 6", file=sys.stderr)
+if len(rows) != 7:
+    print(f"run-pilot: {len(rows)} check row(s), expected 7", file=sys.stderr)
     raise SystemExit(1)
 for r in rows:
     if r["check"] in exempt:
@@ -168,10 +168,10 @@ if bad:
         print(f"  {r['check']}: {r['verdict']}, expected {want[r['check']]} — "
               f"{r['reason']}", file=sys.stderr)
     raise SystemExit(1)
-print(f"  clean: {6 - len(exempt)} passed, {len(exempt)} never-ran by design")
+print(f"  clean: {7 - len(exempt)} passed, {len(exempt)} never-ran by design")
 PY
 
-# ── the six checks, each with its own fault planted ──────────────────────────
+# ── the seven checks, each with its own fault planted ────────────────────────
 
 step "checks — planted"
 # Every plant works on a COPY; nothing under $RUNS is written. A plant that
@@ -180,5 +180,5 @@ step "checks — planted"
 python3 "$CHECKS" --runs "$RUNS" --out "$RUNS" --plant all || exit 5
 
 step "verdict"
-say "pilot: 6 checks issued clean ($EXPECT_NEVER_RAN never-ran by design), 6 faults planted and caught"
+say "pilot: 7 checks issued clean ($EXPECT_NEVER_RAN never-ran by design), 7 faults planted and caught"
 exit 0

@@ -40,6 +40,6 @@
 #@ live-state
 cp -R "$HOME/.svrnmesh/enrichment/ei7-recensus-fineprint/runs" "$POD_WINDOW_OUT/runs"
 
-# Instrument evidence, not a bar: checks I1-I6 fire, each against a planted
+# Instrument evidence, not a bar: checks I1-I7 fire, each against a planted
 # fault. --dry-run under --rehearse, per the script's own header.
 research/ontology-retrieval/pilot/run-pilot.sh

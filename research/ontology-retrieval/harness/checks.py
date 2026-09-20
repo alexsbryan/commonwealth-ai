@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Checks I1-I6 of PRE-REG-custom-ontology-and-raptor-2026-09-17, over a runs dir.
+"""Checks I1-I7 of PRE-REG-custom-ontology-and-raptor-2026-09-17, over a runs dir.
 
     checks.py --runs <dir> [--out <dir>]
     checks.py --runs <dir> --plant all        # or --plant I3
     checks.py --self-test
 
 `--runs` is the tree `run_arm.py` writes: `<dir>/<arm>/run-<N>/{eval,manifest}.json`.
-Output is a six-row table and `checks.jsonl` (one JSON object per check) in
+Output is a seven-row table and `checks.jsonl` (one JSON object per check) in
 `--out`, which defaults to the runs dir.
 
 **Four verdicts, never two.** Each check reads `passed`, `failed`,
@@ -54,7 +54,7 @@ COMPARE_PY = REPO / "sovereign" / "bench" / "sep_atlas" / "map-conversion-rung6"
 ATTEST_PY = HARNESS / "attest.py"
 
 PASSED, FAILED, CNJ, NEVER = "passed", "failed", "could-not-judge", "never-ran"
-CHECK_IDS = ("I1", "I2", "I3", "I4", "I5", "I6")
+CHECK_IDS = ("I1", "I2", "I3", "I4", "I5", "I6", "I7")
 
 # Pre-reg instrument thresholds ("Checks"). Fixed before any data; not knobs.
 WALK_FIRED_MIN = 0.5     # I2: full's walk fired on at least half the questions
@@ -448,10 +448,93 @@ def i6_build_census(arms):
                  f"{cen['summary_atoms']} Summary", census=cen)
 
 
-# ── running the six ──────────────────────────────────────────────────────────
+# ── I7: every retrieving arm took a retrieving route ─────────────────────────
+
+def i7_route_census(arms):
+    """Per arm x category, the routes the scored rows took that do not retrieve.
+
+    Grounded is `knowledge_query` or `comparison_query`. `compare.py` owns the
+    set, the reader and the fold over the route's two spellings (ARCH §8) —
+    this check counts, it does not re-derive what counts.
+
+    Closed-book is skipped: a naked turn persists no metadata, so it takes no
+    route by construction (`eval_cmd/runner.rs:1740-1745`), and censusing it
+    would read every pilot as could-not-judge.
+
+    The exclusions this census motivates live in `compare.study`, never here:
+    a census that first dropped the rows it is counting would read `passed` on
+    every runs dir ever written.
+
+    A row on a route that does not retrieve is a definite violation; a row
+    with no route at all is an absent measurement. When both are present the
+    verdict is `failed` and the reason names the unrouted count too — a known
+    violation is not suppressed by someone else's absence (ARCH §5, §6).
+    """
+    retrieving = CMP.retrieving_arms(arms)
+    if not retrieving:
+        return check("I7", NEVER,
+                     f"no arm but `{CMP.CLOSED_BOOK_ARM}` under the runs dir")
+    rows = 0
+    offenders, bad_qids, unrouted = [], set(), []
+    other = {}   # arm -> category -> route -> count
+    for arm, runs in sorted(retrieving.items()):
+        for r in runs:
+            for row in CMP.rows_of(r):
+                if not CMP.measured(row):
+                    continue
+                rows += 1
+                qid = row.get("question_id")
+                route = CMP.route_of(row)
+                if route is None:
+                    unrouted.append(f"{CMP._label(arm, r)}/{qid}")
+                    continue
+                if CMP.is_grounded_route(route):
+                    continue
+                offenders.append(f"{CMP._label(arm, r)}/{qid}={route}")
+                bad_qids.add(qid)
+                bucket = other.setdefault(arm, {}).setdefault(row.get("category"), {})
+                bucket[route] = bucket.get(route, 0) + 1
+    ev = {"scored_rows": rows, "arms": sorted(retrieving),
+          "grounded_routes": list(CMP.GROUNDED_ROUTES),
+          "other_routes": other, "offenders": offenders,
+          "question_ids": sorted(bad_qids), "unrouted": unrouted}
+    if not rows:
+        return check("I7", NEVER,
+                     f"no scored row in {len(retrieving)} retrieving arm(s): "
+                     f"{', '.join(sorted(retrieving))}", **ev)
+    absent = (f"; {len(unrouted)} row(s) carried no route at all "
+              f"({', '.join(unrouted[:4])})" if unrouted else "")
+    if offenders:
+        return check("I7", FAILED,
+                     f"{len(bad_qids)} question(s) off a retrieving route: "
+                     f"{', '.join(sorted(bad_qids)[:6])} — {_census_line(other)}"
+                     + absent, **ev)
+    if unrouted:
+        return check("I7", CNJ,
+                     f"{rows - len(unrouted)}/{rows} scored row(s) grounded, "
+                     f"but {len(unrouted)} carried no route at all "
+                     f"({', '.join(unrouted[:4])}) — the census cannot judge "
+                     f"a route nobody recorded", **ev)
+    return check("I7", PASSED,
+                 f"{rows} scored row(s) over {len(retrieving)} retrieving "
+                 f"arm(s) ({', '.join(sorted(retrieving))}), every one on "
+                 f"{' or '.join(CMP.GROUNDED_ROUTES)}", **ev)
+
+
+def _census_line(other):
+    """`arm/category: route=n, route=n` for every route that does not retrieve."""
+    parts = []
+    for arm in sorted(other):
+        for cat in sorted(other[arm], key=str):
+            counts = ", ".join(f"{r}={n}" for r, n in sorted(other[arm][cat].items()))
+            parts.append(f"{arm}/{cat}: {counts}")
+    return "; ".join(parts)
+
+
+# ── running the seven ────────────────────────────────────────────────────────
 
 def run_checks(runs_root):
-    """The six checks over one runs dir, in order. Raises `Refused` on no runs."""
+    """The seven checks over one runs dir, in order. Raises `Refused` on no runs."""
     arms, incomplete = CMP.load_runs(runs_root)
     if not arms:
         raise Refused(f"no complete run under {runs_root} — "
@@ -465,6 +548,7 @@ def run_checks(runs_root):
         i4_a_band_for_every_category(arms, excluded),
         i5_oracle_scores_its_floor(arms, excluded),
         i6_build_census(arms),
+        i7_route_census(arms),
     ]
     meta = {"runs": str(runs_root), "arms": {a: [r["run"] for r in rs]
                                              for a, rs in arms.items()},
@@ -650,12 +734,31 @@ def plant_i6(root):
             f"`atoms_ann.lance` but no `ontology.json`")
 
 
+def plant_i7(root):
+    """One retrieving row rewritten onto a route that retrieves nothing.
+
+    Written in the snake_case wire spelling while the fixture carries the
+    PascalCase one, so the plant also proves the fold does not let a wrong
+    route through on a spelling mismatch.
+    """
+    note = _materialise(root, CMP.FULL_ARM,
+                        (CMP.BARE_ARM, "deep", CMP.ABLATION_ARM))
+
+    def corrupt(doc):
+        for row in doc.get("results") or []:
+            row.setdefault("synth", {})["intent"] = "generative_query"
+            break
+    _edit_runs(root, CMP.FULL_ARM, corrupt)
+    return _note(f"one `{CMP.FULL_ARM}` row's route rewritten to "
+                 f"`generative_query`", note)
+
+
 def _note(what, materialised):
     return f"{what} ({materialised})" if materialised else what
 
 
 PLANTS = {"I1": plant_i1, "I2": plant_i2, "I3": plant_i3,
-          "I4": plant_i4, "I5": plant_i5, "I6": plant_i6}
+          "I4": plant_i4, "I5": plant_i5, "I6": plant_i6, "I7": plant_i7}
 
 
 def plant_one(runs_root, cid, workdir):
@@ -713,7 +816,9 @@ def self_test():
              "recipe_sha256": "r" * 64, "ontology_sha256": "o" * 64,
              "chunks_listing_sha256": "k" * 64}
 
-    def row(qid, category, judge, retrieved=None, walk=None, nav=None):
+    def row(qid, category, judge, retrieved=None, walk=None, nav=None,
+            intent="KnowledgeQuery"):
+        """`intent=None` writes NO `synth.intent` key — a naked turn's shape."""
         r = {"question_id": qid, "category": category, "question": qid,
              "retrieved": retrieved if retrieved is not None else [],
              "fact_score": {"matched": [], "missing": [], "total_expected": 1,
@@ -722,6 +827,8 @@ def self_test():
                        "judge_fact_score": {"matched": [], "missing": [],
                                             "total_expected": 1, "ratio": judge},
                        "judge_evidence": [{"fact": "f1", "present": True}]}}
+        if intent is not None:
+            r["synth"]["intent"] = intent
         if walk is not None:
             r["atlas_walk"] = walk
         if nav is not None:
@@ -778,8 +885,12 @@ def self_test():
         """closed-book, bare, full — the arms the pilot can build, one run each."""
         index = atlas_at(Path(root).parent / "index")
         cats = [ATT.K0, ATT.K0, ATT.K2, ATT.K2, ATT.K4, ATT.K4]
+        # Closed-book is naked and records no route (`runner.rs:1740-1745`);
+        # every other arm went through the router. The fixture says so rather
+        # than leaving I7's skip resting on a claim.
         fixture(root, CMP.CLOSED_BOOK_ARM, 1,
-                [row(q, c, 0.1) for q, c in zip(QIDS, cats)], index_dir=index)
+                [row(q, c, 0.1, intent=None) for q, c in zip(QIDS, cats)],
+                index_dir=index)
         fixture(root, CMP.BARE_ARM, 1,
                 [row(q, c, 0.4) for q, c in zip(QIDS, cats)], index_dir=index)
         fixture(root, CMP.FULL_ARM, 1,
@@ -796,12 +907,12 @@ def self_test():
 
     # ── the clean set ────────────────────────────────────────────────────────
 
-    def clean_set_reads_four_passed_and_two_never_ran():
+    def clean_set_reads_five_passed_and_two_never_ran():
         """I3 and I5 have no arm here. `never-ran` is NOT a pass, and is said."""
         with tmp() as t:
             rows, meta = run_checks(clean(Path(t) / "runs"))
             got = by_id(rows)
-            ok = (len(rows) == 6
+            ok = (len(rows) == 7
                   and [r["check"] for r in rows] == list(CHECK_IDS)
                   and got["I1"]["verdict"] == PASSED
                   and got["I2"]["verdict"] == PASSED
@@ -809,6 +920,7 @@ def self_test():
                   and got["I4"]["verdict"] == PASSED
                   and got["I5"]["verdict"] == NEVER
                   and got["I6"]["verdict"] == PASSED
+                  and got["I7"]["verdict"] == PASSED
                   and meta["closed_book_exclusions"] == 0
                   and all(r["reason"] for r in rows))
             return ok, " ".join(f"{c}={got[c]['verdict']}" for c in CHECK_IDS)
@@ -818,13 +930,13 @@ def self_test():
             rows, meta = run_checks(clean(Path(t) / "runs"))
             path = write_jsonl(Path(t) / "out", rows, meta)
             lines = [json.loads(x) for x in path.read_text().splitlines()]
-            ok = (len(lines) == 6
+            ok = (len(lines) == 7
                   and [x["check"] for x in lines] == list(CHECK_IDS)
                   and all(x["verdict"] in (PASSED, FAILED, CNJ, NEVER) for x in lines))
             return ok, f"{len(lines)} line(s) in {path.name}"
 
-    def an_empty_runs_dir_refuses_rather_than_passing_six():
-        """PLANT: nothing to check. Six vacuous `passed` rows would be the
+    def an_empty_runs_dir_refuses_rather_than_passing_seven():
+        """PLANT: nothing to check. Seven vacuous `passed` rows would be the
         cheapest possible green, and it is the one this must not print."""
         with tmp() as t:
             empty = Path(t) / "nothing"
@@ -999,9 +1111,76 @@ def self_test():
             ok = got["verdict"] == CNJ and len(got["index_dirs"]) == 2
             return ok, f"{got['verdict']} — {got['reason'][:60]}"
 
-    case("clean-set-four-passed-two-never-ran", clean_set_reads_four_passed_and_two_never_ran)
+    def i7_censuses_only_the_retrieving_arms():
+        """PLANT: closed-book's six rows carry no route, by construction. A
+        census that read them would print could-not-judge on every pilot ever
+        run and never once name a real routing fault."""
+        with tmp() as t:
+            got = by_id(run_checks(clean(Path(t) / "runs"))[0])["I7"]
+            ok = (got["verdict"] == PASSED
+                  and got["scored_rows"] == 12
+                  and CMP.CLOSED_BOOK_ARM not in got["arms"]
+                  and got["unrouted"] == [])
+            return ok, f"{got['verdict']} rows={got['scored_rows']} arms={got['arms']}"
+
+    def i7_fails_and_names_the_question_on_a_generative_route():
+        """A route that retrieves nothing, on an arm whose whole claim is that
+        it retrieved."""
+        with tmp() as t:
+            root = clean(Path(t) / "runs")
+            _edit_runs(root, CMP.FULL_ARM, lambda d: d["results"][0]["synth"].update(
+                {"intent": "GenerativeQuery"}))
+            got = by_id(run_checks(root)[0])["I7"]
+            ok = (got["verdict"] == FAILED
+                  and got["question_ids"] == [QIDS[0]]
+                  and got["other_routes"][CMP.FULL_ARM][ATT.K0] == {"GenerativeQuery": 1}
+                  and ATT.K0 in got["reason"])
+            return ok, f"{got['verdict']} — {got['reason'][:72]}"
+
+    def i7_reads_a_routeless_row_as_could_not_judge():
+        """PLANT: a transcript banked before the handlers stamped the key.
+        Reading an absent field as "not grounded" blames the router for a row
+        nobody recorded a route on (ARCH §6)."""
+        with tmp() as t:
+            root = clean(Path(t) / "runs")
+            _edit_runs(root, CMP.FULL_ARM, lambda d: [r["synth"].pop("intent", None)
+                                                      for r in d["results"]])
+            got = by_id(run_checks(root)[0])["I7"]
+            ok = (got["verdict"] == CNJ and len(got["unrouted"]) == 6
+                  and got["question_ids"] == [])
+            return ok, f"{got['verdict']} — {got['reason'][:72]}"
+
+    def i7_folds_the_two_spellings_of_one_route():
+        """PLANT: the wire slug `comparison_query` where the handlers stamp
+        `ComparisonQuery`. Matching either spelling literally calls six rows
+        that retrieved ungrounded."""
+        with tmp() as t:
+            root = clean(Path(t) / "runs")
+            _edit_runs(root, CMP.FULL_ARM, lambda d: [r["synth"].update(
+                {"intent": "comparison_query"}) for r in d["results"]])
+            got = by_id(run_checks(root)[0])["I7"]
+            ok = got["verdict"] == PASSED and got["scored_rows"] == 12
+            return ok, f"{got['verdict']} rows={got['scored_rows']}"
+
+    def i7_prefers_failed_over_could_not_judge_when_both():
+        """PLANT: one row off-route and another with no route. Reading the
+        absence first would hide a violation the census already proved."""
+        with tmp() as t:
+            root = clean(Path(t) / "runs")
+
+            def corrupt(doc):
+                doc["results"][0]["synth"]["intent"] = "GenerativeQuery"
+                doc["results"][1]["synth"].pop("intent", None)
+            _edit_runs(root, CMP.FULL_ARM, corrupt)
+            got = by_id(run_checks(root)[0])["I7"]
+            ok = (got["verdict"] == FAILED and got["question_ids"] == [QIDS[0]]
+                  and len(got["unrouted"]) == 1
+                  and "carried no route at all" in got["reason"])
+            return ok, f"{got['verdict']} — {got['reason'][:72]}"
+
+    case("clean-set-five-passed-two-never-ran", clean_set_reads_five_passed_and_two_never_ran)
     case("jsonl-one-line-per-check", every_check_writes_one_jsonl_line)
-    case("empty-runs-dir-refuses", an_empty_runs_dir_refuses_rather_than_passing_six)
+    case("empty-runs-dir-refuses", an_empty_runs_dir_refuses_rather_than_passing_seven)
     case("every-plant-flips-its-check", each_plant_flips_its_own_check)
     case("plant-never-touches-the-runs-dir", a_plant_leaves_the_real_runs_dir_untouched)
     case("plant-on-a-red-check-is-cnj", a_plant_on_an_already_red_check_is_could_not_judge)
@@ -1016,6 +1195,11 @@ def self_test():
     case("i6-empty-declared-type-is-zero", i6_counts_a_declared_type_with_no_atom_as_zero)
     case("i6-no-index-dir-is-never-ran", i6_is_never_ran_when_no_manifest_names_an_index)
     case("i6-two-index-dirs-refuse", i6_refuses_two_index_dirs_rather_than_picking_one)
+    case("i7-censuses-retrieving-arms-only", i7_censuses_only_the_retrieving_arms)
+    case("i7-generative-route-fails", i7_fails_and_names_the_question_on_a_generative_route)
+    case("i7-routeless-row-is-cnj", i7_reads_a_routeless_row_as_could_not_judge)
+    case("i7-two-spellings-one-route", i7_folds_the_two_spellings_of_one_route)
+    case("i7-failed-beats-cnj", i7_prefers_failed_over_could_not_judge_when_both)
 
     width = max(len(n) for n, _v, _d in results)
     for name, verdict, detail in results:

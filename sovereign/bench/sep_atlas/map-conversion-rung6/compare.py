@@ -24,8 +24,13 @@ held-out truth" > Freeze / Model and host, and check I3): that refusal is the
 verdict `could-not-judge` and exit 4, never a number computed across two
 different builds, models or hosts.
 
+Two exclusion rules drop a question from EVERY arm, both reported by name on
+the table: closed-book answered it without retrieving, or some retrieving arm
+routed it away from `knowledge_query`/`comparison_query` (check I7 censuses
+the same routes).
+
 No bar is read here. The per-category verdict answers judgeability only
-(pre-reg "Bars": a kind under n = 20 after closed-book exclusions is
+(pre-reg "Bars": a kind under n = 20 after those exclusions is
 could-not-judge); bars 1-5 are the operator's at ratification.
 """
 import argparse, json, os, re, sys, time
@@ -118,6 +123,15 @@ ARM_ORDER = [CLOSED_BOOK_ARM, BARE_ARM, "deep", ABLATION_ARM, FULL_ARM, "oracle"
 CLOSED_BOOK_KNOWN = 0.5   # pre-reg "Arms": judge >= 0.5 on ALL runs is excluded
 BAND_FLOOR = 0.05         # check I4
 MIN_N = 20                # pre-reg "Bars": below this the kind is could-not-judge
+
+# The two routes that retrieve (check I7). Written once, in the wire spelling.
+# `Intent::name()` stamps `routed_intent` in PascalCase while the intent
+# table's `slug` is the same route in snake_case
+# (`sovereign-contracts/src/types/routing.rs:305-332`), and the knowledge
+# handler's DISPLAY label is the slug — so one route reaches this file under
+# two spellings. `route_key` folds them onto one rather than listing each
+# route twice (ARCH §8).
+GROUNDED_ROUTES = ("knowledge_query", "comparison_query")
 
 # Identity fields every arm of one corpus must agree on. `chunks_listing_sha256`
 # is deliberately NOT here: the oracle arm runs against a corpus holding only
@@ -290,6 +304,82 @@ def judge_members(row):
     return [(d.get("fact"), bool(d.get("present"))) for d in ev]
 
 
+def route_key(route):
+    """One key per route, whichever of its two spellings was recorded.
+
+    `KnowledgeQuery` and `knowledge_query` are the PascalCase `name` and the
+    snake_case `slug` of ONE row in the intent table, so they must not count
+    as two routes. Anything that is not a string has no key.
+    """
+    return route.replace("_", "").lower() if isinstance(route, str) else None
+
+
+GROUNDED_ROUTE_KEYS = frozenset(route_key(r) for r in GROUNDED_ROUTES)
+
+
+def route_of(row):
+    """The route this row's turn took, or `None` when it recorded none.
+
+    `synth.intent` is the runner's field for it, and it already prefers the
+    handler-stamped `routed_intent` over the free-form display label
+    (`eval_cmd/runner.rs:202-205`, `eval_cmd/routed_intent.rs`). A naked
+    closed-book turn persists no metadata and carries `None` here — absent,
+    never a route named "none" (ARCH §6).
+    """
+    r = (row.get("synth") or {}).get("intent")
+    return r if isinstance(r, str) and r.strip() else None
+
+
+def is_grounded_route(route):
+    """True when this route retrieves. `None` is not grounded and not a route."""
+    return route_key(route) in GROUNDED_ROUTE_KEYS
+
+
+def retrieving_arms(arms):
+    """Every arm but closed-book, whose naked turns take no route at all."""
+    return {a: rs for a, rs in arms.items() if a != CLOSED_BOOK_ARM}
+
+
+def ungrounded_route_exclusions(arms):
+    """Questions that took a non-retrieving route in ANY retrieving arm.
+
+    Modelled on `closed_book_exclusions` above: a question is in or out of the
+    whole board, never per-arm — an arm that retrieved compared against an arm
+    that answered from the model is not the comparison the pre-reg asks for.
+
+    A row carrying NO route is `unrouted` and is NOT excluded: "recorded no
+    route" is not "took a bad one" (ARCH §6), and check I7 is where that
+    absence is read as could-not-judge.
+    """
+    retrieving = retrieving_arms(arms)
+    if not retrieving:
+        return {"verdict": "never-ran", "count": None, "excluded": [],
+                "routes": {}, "unrouted": [], "per_category": {}, "arms": [],
+                "reason": f"every arm under the runs dir is `{CLOSED_BOOK_ARM}`"}
+    offenders, unrouted, category = {}, set(), {}
+    for arm, runs in sorted(retrieving.items()):
+        for r in runs:
+            for row in rows_of(r):
+                if not measured(row):
+                    continue
+                qid = row.get("question_id")
+                category.setdefault(qid, row.get("category"))
+                route = route_of(row)
+                if route is None:
+                    unrouted.add(qid)
+                elif not is_grounded_route(route):
+                    offenders.setdefault(qid, set()).add(f"{arm}:{route}")
+    per_category = {}
+    for qid in offenders:
+        cat = category.get(qid)
+        per_category[cat] = per_category.get(cat, 0) + 1
+    return {"verdict": "passed", "count": len(offenders),
+            "excluded": sorted(offenders),
+            "routes": {q: sorted(v) for q, v in sorted(offenders.items())},
+            "unrouted": sorted(unrouted), "per_category": per_category,
+            "arms": sorted(retrieving), "reason": None}
+
+
 def closed_book_exclusions(arms):
     """Questions closed-book answered (judge >= 0.5) on EVERY run.
 
@@ -382,7 +472,8 @@ def noise_bands(arms, excluded, categories):
 
 def build_scoreboard(arms, incomplete, identity, i3, runs_root):
     closed = closed_book_exclusions(arms)
-    excluded = set(closed["excluded"])
+    ungrounded = ungrounded_route_exclusions(arms)
+    excluded = set(closed["excluded"]) | set(ungrounded["excluded"])
 
     questions = {}   # category -> set of question ids, after exclusions
     for runs in arms.values():
@@ -405,7 +496,10 @@ def build_scoreboard(arms, incomplete, identity, i3, runs_root):
     cats = {}
     for cat in categories:
         n = len(questions[cat])
-        entry = {"n": n, "band": bands[cat], "arms": {}}
+        # Counted here as well as in the `ungrounded_route` block so a reader
+        # of one category row can see what left it; both read the one map.
+        entry = {"n": n, "band": bands[cat], "arms": {},
+                 "excluded_ungrounded_route": ungrounded["per_category"].get(cat, 0)}
         if n < MIN_N:
             entry["judgeable"] = "could-not-judge"
             entry["reason"] = f"n = {n} < {MIN_N} after closed-book exclusions"
@@ -436,6 +530,7 @@ def build_scoreboard(arms, incomplete, identity, i3, runs_root):
         "incomplete": incomplete,
         "unmeasured_rows": {a: per_arm[a]["unmeasured_rows"] for a in per_arm},
         "closed_book": closed,
+        "ungrounded_route": ungrounded,
         "band_arm": band_arm,
         "min_n": MIN_N,
         "categories": cats,
@@ -477,6 +572,16 @@ def print_table(board, out=sys.stdout):
         extra = f", {len(cb['unmeasured'])} unmeasured" if cb["unmeasured"] else ""
         print(f"closed-book exclusions: {cb['count']} over {cb['runs']} run(s){extra}",
               file=out)
+    ug = board["ungrounded_route"]
+    if ug["count"] is None:
+        print(f"ungrounded-route exclusions: never-ran — {ug['reason']}", file=out)
+    else:
+        per = ", ".join(f"{c}={n}" for c, n in
+                        sorted(ug["per_category"].items(), key=lambda kv: str(kv[0])))
+        unrouted = f", {len(ug['unrouted'])} unrouted" if ug["unrouted"] else ""
+        print(f"ungrounded-route exclusions: {ug['count']} over "
+              f"{len(ug['arms'])} retrieving arm(s)"
+              f"{' (' + per + ')' if per else ''}{unrouted}", file=out)
     ba = board["band_arm"]
     if ba["verdict"] == "never-ran":
         print(f"noise band: never-ran — no `{BARE_ARM}` arm", file=out)
@@ -934,11 +1039,14 @@ def self_test():
              "chunks_listing_sha256": "k" * 64}
 
     def row(qid, category, judge, kw, members=None, error=None, answer="a",
-            retrieved=None, walk=None):
+            retrieved=None, walk=None, intent="KnowledgeQuery"):
         """One eval.json result. `members` is [(fact, present)].
 
         `walk=None` writes NO `atlas_walk` key at all, which is what a bare run
         looks like — distinct from `walk={"nodes": []}`, a walk that ran.
+
+        `intent` defaults to the PascalCase spelling the handlers stamp;
+        `intent=None` writes NO key, which is what a naked turn looks like.
         """
         ev = [{"fact": f, "present": p, "evidence": "q" if p else "(absent)"}
               for f, p in (members or [])]
@@ -954,6 +1062,8 @@ def self_test():
                                             "total_expected": len(ev) or 1,
                                             "ratio": judge},
                        "judge_evidence": ev}}
+        if intent is not None:
+            r["synth"]["intent"] = intent
         if error:
             r["error"] = error
         if walk is not None:
@@ -979,9 +1089,13 @@ def self_test():
         """closed-book, bare, ablation, full; 3 runs; one category, n = 24."""
         for arm, j in ARM_JUDGE.items():
             ident = {"ontology_sha256": "a" * 64} if arm == ABLATION_ARM else {}
+            # Closed-book is naked and records no route; every other arm went
+            # through the router. That is the producer's shape, and it is what
+            # makes "closed-book has no route" a fixture rather than a claim.
+            intent = None if arm == CLOSED_BOOK_ARM else "KnowledgeQuery"
             for r in (1, 2, 3):
                 fixture(root, arm, r,
-                        [row(q, "K1", j + 0.01 * r, j / 2,
+                        [row(q, "K1", j + 0.01 * r, j / 2, intent=intent,
                              members=[("f1", True), ("f2", False)]) for q in qids],
                         ident=ident)
         return root
@@ -994,6 +1108,11 @@ def self_test():
             ok = (code == 0 and b["verdict"] is None and wrote
                   and k1["n"] == 24 and k1["judgeable"] == "passed"
                   and b["closed_book"]["count"] == 0
+                  # closed-book records no route and must not be read as 24
+                  # ungrounded questions — it is the one arm with no router.
+                  and b["ungrounded_route"]["count"] == 0
+                  and b["ungrounded_route"]["unrouted"] == []
+                  and k1["excluded_ungrounded_route"] == 0
                   and b["i3_ablation_vs_full"]["verdict"] == "passed"
                   and abs(k1["arms"][FULL_ARM]["judge"] - 0.72) < 1e-9)
             return ok, (f"exit={code} n={k1['n']} full.judge="
@@ -1388,6 +1507,73 @@ def self_test():
                   and abs(first["judge"] - 0.72) < 1e-9 and other["run"] == 1)
             return ok, f"q00 read run-{first['run']} judge={first['judge']}"
 
+    def ungrounded_route_excludes_the_question_from_every_arm():
+        """PLANT: `full` routed q00 to GenerativeQuery, which retrieves nothing
+        by design. Dropping that row from `full` alone would leave every other
+        arm averaging a question one arm never looked anything up for."""
+        with tempfile.TemporaryDirectory() as t:
+            root = clean(Path(t) / "runs")
+            for r in (1, 2, 3):
+                fixture(root, FULL_ARM, r,
+                        [row(q, "K1", 0.7, 0.35, members=[("f1", True)],
+                             intent=("GenerativeQuery" if q == "q00"
+                                     else "KnowledgeQuery")) for q in QIDS])
+            _code, b = study(root, Path(t) / "out", quiet=True)
+            ug, k1 = b["ungrounded_route"], b["categories"]["K1"]
+            ok = (ug["excluded"] == ["q00"] and ug["per_category"] == {"K1": 1}
+                  and ug["routes"]["q00"] == [f"{FULL_ARM}:GenerativeQuery"]
+                  and k1["excluded_ungrounded_route"] == 1 and k1["n"] == 23
+                  and k1["arms"][BARE_ARM]["runs_scored"] == 3)
+            return ok, (f"excluded={ug['excluded']} n={k1['n']} "
+                        f"per_category={ug['per_category']}")
+
+    def an_unrouted_row_is_not_an_exclusion():
+        """PLANT: `full` recorded NO route on q00 — the shape of a transcript
+        banked before the handlers stamped the key. Excluding on an absent
+        field would shrink the bank over a router that did nothing wrong; the
+        absence is reported instead (ARCH §6), and check I7 reads it."""
+        with tempfile.TemporaryDirectory() as t:
+            root = clean(Path(t) / "runs")
+            for r in (1, 2, 3):
+                fixture(root, FULL_ARM, r,
+                        [row(q, "K1", 0.7, 0.35, members=[("f1", True)],
+                             intent=None if q == "q00" else "KnowledgeQuery")
+                         for q in QIDS])
+            _code, b = study(root, Path(t) / "out", quiet=True)
+            ug, k1 = b["ungrounded_route"], b["categories"]["K1"]
+            ok = (ug["excluded"] == [] and ug["count"] == 0
+                  and ug["unrouted"] == ["q00"] and k1["n"] == 24)
+            return ok, f"unrouted={ug['unrouted']} excluded={ug['excluded']} n={k1['n']}"
+
+    def the_two_spellings_of_one_route_are_one_route():
+        """PLANT: `full` recorded `comparison_query`, the wire slug, where the
+        handlers stamp `ComparisonQuery`. A literal match against either
+        spelling alone excludes 24 questions that all retrieved."""
+        with tempfile.TemporaryDirectory() as t:
+            root = clean(Path(t) / "runs")
+            for r in (1, 2, 3):
+                fixture(root, FULL_ARM, r,
+                        [row(q, "K1", 0.7, 0.35, members=[("f1", True)],
+                             intent="comparison_query") for q in QIDS])
+            _code, b = study(root, Path(t) / "out", quiet=True)
+            ug = b["ungrounded_route"]
+            ok = (ug["count"] == 0 and ug["unrouted"] == []
+                  and b["categories"]["K1"]["n"] == 24)
+            return ok, f"count={ug['count']} n={b['categories']['K1']['n']}"
+
+    def no_retrieving_arm_is_never_ran_not_zero():
+        """PLANT: only closed-book ran. A count of 0 reads exactly like a board
+        on which every question retrieved."""
+        with tempfile.TemporaryDirectory() as t:
+            root = Path(t) / "runs"
+            for r in (1, 2, 3):
+                fixture(root, CLOSED_BOOK_ARM, r,
+                        [row(q, "K1", 0.1, 0.05, intent=None) for q in QIDS])
+            ug = ungrounded_route_exclusions(load_runs(root)[0])
+            ok = (ug["verdict"] == "never-ran" and ug["count"] is None
+                  and ug["arms"] == [])
+            return ok, f"{ug['verdict']} count={ug['count']}"
+
     case("clean-set-passes", clean_set_passes)
     case("band-is-bare-spread-over-its-runs", band_is_bare_spread_over_its_runs)
     case("recipe-hash-mismatch-refuses", recipe_hash_mismatch_refuses)
@@ -1413,6 +1599,10 @@ def self_test():
     case("path-reached-nothing-is-not-no-walk", walk_that_reached_nothing_is_not_no_walk)
     case("query-sharing-false-withholds", query_sharing_false_withholds_snippets)
     case("column-falls-to-next-measured-run", column_falls_to_the_next_run_that_measured)
+    case("ungrounded-route-excludes-every-arm", ungrounded_route_excludes_the_question_from_every_arm)
+    case("unrouted-row-is-not-an-exclusion", an_unrouted_row_is_not_an_exclusion)
+    case("route-spellings-are-one-route", the_two_spellings_of_one_route_are_one_route)
+    case("no-retrieving-arm-is-never-ran", no_retrieving_arm_is_never_ran_not_zero)
 
     for name, verdict, detail in results:
         print(f"  {name:<38} {verdict:<16} {detail}", file=sys.stderr)
