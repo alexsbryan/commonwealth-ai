@@ -216,7 +216,12 @@ start_forwarder() { # node [port]
 # could-not-judge, never a failed bar.
 stale_binaries() {
   local newest src_s src_f bin_s
-  newest=$(git -C "$REPO" ls-files -z -- '*.rs' '*.js' 2>/dev/null \
+  # `sovereign/apps/` is excluded: those pages are SERVED from the repo mount by
+  # `svrn ring dev`, never compiled in (no include_str! names that tree), so a
+  # page-only edit is already what the run reads, and no rebuild can move the
+  # binary's mtime past it. Compiled-in JS (ring_cmd/templates, the door's
+  # shim) stays covered.
+  newest=$(git -C "$REPO" ls-files -z -- '*.rs' '*.js' ':!sovereign/apps/' 2>/dev/null \
     | xargs -0 -r stat -c '%Y %n' 2>/dev/null | sort -rn | head -1)
   [ -n "$newest" ] || return 0
   src_s=${newest%% *}; src_f=${newest#* }

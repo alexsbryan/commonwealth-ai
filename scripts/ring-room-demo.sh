@@ -2133,17 +2133,29 @@ if topology == "room":
     ROW = "rg-2-ring-doc-sheds-its-guest-code"
     shed = [l for l in git("log", "--format=%h %s", f"{guest_base}..HEAD").splitlines()
             if l.split(" ", 1)[-1].startswith(ROW + ":")]
-    doc_guest_lines = 0
-    for f in ("sovereign/apps/ring-doc/app.js", "sovereign/apps/ring-doc/adapter.js"):
-        try:
-            doc_guest_lines += sum(1 for l in open(os.path.join(REPO, f)) if re.search("guest", l, re.I))
-        except OSError:
-            pass
-    if not shed:
+    # Leg (a) as corrected in ledger A57, before any datum: non-comment lines
+    # outside the ask panel. ONE counter, `scripts/ring-doc-guest-lines.py`,
+    # which carries its own self-test; this script does not re-derive it. A
+    # counter that cannot run is could-not-judge, never a 0 (ARCH 6).
+    doc_files = [os.path.join(REPO, f) for f in
+                 ("sovereign/apps/ring-doc/app.js", "sovereign/apps/ring-doc/adapter.js")]
+    try:
+        counted = json.loads(subprocess.run(
+            [sys.executable, os.path.join(REPO, "scripts/ring-doc-guest-lines.py"), *doc_files],
+            capture_output=True, text=True, check=True, timeout=30).stdout)
+        doc_guest_lines, doc_guest_where = counted["count"], counted["lines"][:8]
+        doc_guest_exempt = counted.get("exempt", {})
+    except Exception as exc:
+        doc_guest_lines, doc_guest_where = None, [f"counter failed: {exc}"]
+        doc_guest_exempt = {}
+    if doc_guest_lines is None:
+        row("rg-ring-doc-sheds-its-guest-code", None, "instrument-missing",
+            counter=doc_guest_where)
+    elif not shed:
         row("rg-ring-doc-sheds-its-guest-code", None,
             f"the deletion is `{ROW}`, which has not landed in "
-            f"{guest_base}..HEAD; ring-doc's app.js and adapter.js still mention a guest on "
-            f"{doc_guest_lines} line(s)",
+            f"{guest_base}..HEAD; ring-doc's app.js and adapter.js still handle a guest on "
+            f"{doc_guest_lines} code line(s) outside the ask panel",
             guest_lines_in_ring_doc=doc_guest_lines)
     else:
         rr2 = [rows[x]["value"] for x in
@@ -2154,7 +2166,9 @@ if topology == "room":
                 "b_the_six_rr2_bars_are_green": len(rr2) == 6 and all(v == 1.0 for v in rr2),
                 "c_the_deleted_line_count_is_reported": True}
         row("rg-ring-doc-sheds-its-guest-code", 1.0 if all(legs.values()) else 0.0, "", legs=legs,
-            guest_lines_in_ring_doc=doc_guest_lines, shed_by=shed[:2],
+            guest_lines_in_ring_doc=doc_guest_lines, guest_lines_where=doc_guest_where,
+            ask_panel_exempted=doc_guest_exempt,
+            shed_by=shed[:2],
             rr2_values=rr2)
 
 order = bar_ids.split()
