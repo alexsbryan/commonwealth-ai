@@ -798,6 +798,7 @@ Allowed values:
 | `vocabulary` | `Option<OntologyVocabulary>` | no | type default | Version-0 term overrides, still honoured. In version 1 prefer `label` on a type and `tension.label`; `validate` warns when both are set. |
 | `must_not` | `Vec<String>` | no | type default | Things the corpus must never be used for ("give dosing advice"). Read by the extraction prompt and the answer gate. Block-level. |
 | `types` | `Vec<OntologyTypeDecl>` | no | type default | The declared types (`[[enrichment.ontology.types]]`), each specializing one atom kind. |
+| `max_entities_per_section` | `Option<usize>` | no | type default | How many entities one section may introduce in Phase 1. Absent takes the shipped schema's cap of 15 — raise it for a corpus whose sections enumerate (a data table, a list of recipients). Outside `MIN_ENTITIES_PER_SECTION`..=`MAX_ENTITIES_PER_SECTION` (5..=60) the recipe refuses at load rather than clamping. |
 | `voices` | `VoicesDecl` | no | type default | Who speaks in the corpus, and which speakers are not subject matter. |
 | `change` | `ChangeDecl` | no | type default | What holds when: the clock and which claim types supersede. |
 | `tension` | `TensionDecl` | no | type default | Which claim types can be in tension, and what makes two comparable. |
@@ -1156,7 +1157,7 @@ is refused at load, naming the line to add — never dropped.
 
 ## `version = 1`
 
-Keys: `guidance`, `vocabulary`, `must_not`, `types`, `voices`, `change`, `tension`, `derive`, `patterns`, `navigation`
+Keys: `guidance`, `vocabulary`, `must_not`, `types`, `max_entities_per_section`, `voices`, `change`, `tension`, `derive`, `patterns`, `navigation`
 
 Version 1 declares your own types. `version = 1` under `[enrichment.ontology]`
 selects it; the tables above (`OntologyV1`, `OntologyTypeDecl`, `AttrDecl`,
@@ -1205,6 +1206,12 @@ grades = ["die-link", "hoard-context", "stylistic", "metrological"]
 between = ["attribution"]
 ```
 
+`max_entities_per_section` raises how many entities Phase 1 may introduce in
+one section (5–60; omit it to take the shipped cap of 15). Raise it for a
+corpus whose sections enumerate — a data table, a list of recipients — where
+the shipped cap stops the extraction mid-table; a number outside the range
+refuses at load rather than clamping.
+
 `[enrichment.ontology.navigation]` is the map's third role: how a reader walks
 the atlas for each question kind — `thematic`, `trajectory`, `tension`,
 `enumeration`, `lookup` — as seed kinds, edge kinds, hops and budget (the
@@ -1223,8 +1230,9 @@ hops = 2
 budget = 8
 ```
 
-Keys: `guidance`, `vocabulary`, `must_not`, `types`, `voices`, `change`,
-`tension`, `derive`, `patterns`, `navigation`. `recipe validate` checks that every
+Keys: `guidance`, `vocabulary`, `must_not`, `types`,
+`max_entities_per_section`, `voices`, `change`, `tension`, `derive`,
+`patterns`, `navigation`. `recipe validate` checks that every
 `specializes`, `role_of`, `from`, `to`, `participants`, `of`, `subject` and
 `ref … of` names a declared type or one of the base entity kinds the atlas
 already emits (`person`, `concept`, `institution`, `work`, `place`,

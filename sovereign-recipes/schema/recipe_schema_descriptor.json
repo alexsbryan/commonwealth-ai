@@ -293,6 +293,7 @@
       "vocabulary",
       "must_not",
       "types",
+      "max_entities_per_section",
       "voices",
       "change",
       "tension",

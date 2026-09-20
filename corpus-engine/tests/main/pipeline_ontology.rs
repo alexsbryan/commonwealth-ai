@@ -14,6 +14,7 @@ use corpus_engine::enrichment::atlas::{AtomType, EdgeType};
 use corpus_engine::enrichment::ontology::{NavigationPolicy, OntologyPolicies, TypeKind};
 use corpus_engine::enrichment::pipeline::pipelines::configurable_atlas::CustomAtlasSpec;
 use corpus_engine::enrichment::pipeline::pipelines::literary_atlas::LiteraryAtlasPipeline;
+use corpus_engine::enrichment::pipeline::pipelines::ontology_schema::phase1_schema_for;
 use corpus_engine::enrichment::pipeline::{Pipeline, PipelineRegistry};
 use corpus_engine::recipe::Recipe;
 use understanding_vocab::ontology::{QuestionKind, SummarySource};
@@ -394,4 +395,78 @@ fn builtin_maps_name_only_kinds_their_atoms_carry() {
         }
     }
     assert_eq!(exceptions, vec!["referential_atlas:event".to_string()]);
+}
+
+/// A minimal loadable recipe wrapped around an `[enrichment.ontology]` body,
+/// declaring one entity type so the block has declarations.
+fn recipe_with_ontology(body: &str) -> String {
+    format!(
+        r#"
+[corpus]
+id = "cap-test"
+name = "Entity cap test"
+
+[acquire]
+type = "local_file"
+path = "/tmp/x.md"
+
+[extract]
+type = "markdown"
+
+[chunk]
+type = "paragraph"
+
+[enrichment]
+enabled = true
+type = "atlas"
+
+[enrichment.ontology]
+version = 1
+{body}
+[[enrichment.ontology.types]]
+name = "recipient"
+kind = "entity"
+"#
+    )
+}
+
+/// The Phase-1 `entities_introduced` cap this recipe's declaration produces.
+fn entity_cap(body: &str) -> u64 {
+    let policies = Recipe::from_toml(&recipe_with_ontology(body))
+        .expect("recipe loads")
+        .ontology_block()
+        .expect("block present")
+        .policies()
+        .expect("block parses");
+    phase1_schema_for(&policies)["properties"]["entities_introduced"]["maxItems"]
+        .as_u64()
+        .expect("the array carries a maxItems")
+}
+
+/// The cap is the recipe's when it declares one and the shipped schema's 15
+/// when it does not — a corpus whose sections enumerate (spike 3, 2026-09-19:
+/// Spotify's data table stopped at 15) can raise it without moving the number
+/// every other pipeline's benches were measured at. Out of range refuses at
+/// load rather than clamping, so no corpus runs under a cap nobody wrote.
+/// Failing input: the shipped literal changed, or `set_max_items` applied
+/// unconditionally (the absent case would then read the Rust default, not 15).
+#[test]
+fn entity_cap_follows_the_recipe_and_defaults_to_15() {
+    assert_eq!(entity_cap(""), 15, "absent key takes the shipped cap");
+    assert_eq!(entity_cap("max_entities_per_section = 40\n"), 40);
+    assert_eq!(entity_cap("max_entities_per_section = 5\n"), 5, "floor");
+    assert_eq!(entity_cap("max_entities_per_section = 60\n"), 60, "ceiling");
+
+    for out_of_range in ["4", "61"] {
+        let err = Recipe::from_toml(&recipe_with_ontology(&format!(
+            "max_entities_per_section = {out_of_range}\n"
+        )))
+        .err()
+        .unwrap_or_else(|| panic!("{out_of_range} must be refused"))
+        .to_string();
+        assert!(
+            err.contains("max_entities_per_section") && err.contains("5..=60"),
+            "names the key and the range: {err}"
+        );
+    }
 }

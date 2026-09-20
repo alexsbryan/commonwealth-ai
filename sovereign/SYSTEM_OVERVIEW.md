@@ -1654,8 +1654,12 @@ rule, and the "44 GB boot peak" were all this one corpus.
   order under llguidance and a `subject` asked for after an empty `{}` was
   skipped (note 5c06bc92; `corpus-engine` declares serde_json
   `preserve_order` for the same reason) — requiring
-  `claim_kind`, and dropping `argument_reconstructions` unless
-  `derivation.arguments`) and the reader's `ParsePolicy`
+  `claim_kind`, dropping `argument_reconstructions` unless
+  `derivation.arguments`, and raising `entities_introduced`'s `maxItems` to
+  the recipe's `max_entities_per_section` when one is declared — the shipped
+  15 stands otherwise, since that is the number every other pipeline's benches
+  were measured at, and a section that ENUMERATES is the one case that needs
+  more) and the reader's `ParsePolicy`
   (`pipelines/parse_policy.rs`), enforced by `pipelines/ontology_parse.rs`:
   a declared `EntityType::Other` is kept, attributes validate by family and
   store normalised, a declared voice is neither an entity nor an attribution,
