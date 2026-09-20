@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Extraction census over a built atlas. Read-only on the index; writes
-census.json + census.txt next to this script."""
+census.json + census.txt into --out (default: next to this script)."""
+import argparse
 import collections
 import json
 import os
@@ -8,8 +9,15 @@ import random
 import re
 import sys
 
+import chapter_doc_map
+
 HERE = os.path.dirname(os.path.abspath(__file__))
-CORPUS = "spike-fineprint-census"
+ap = argparse.ArgumentParser(description=__doc__)
+ap.add_argument("--corpus", default="spike-fineprint-census")
+ap.add_argument("--out", default=HERE)
+args = ap.parse_args()
+CORPUS = args.corpus
+OUT = os.path.abspath(args.out)
 ATLAS = os.path.expanduser(f"~/.svrnmesh/indexes/{CORPUS}/atlas")
 DECLARED_ENTITY = ["organization", "party", "service", "agreement", "defined_term",
                    "data_type", "recipient", "purpose"]
@@ -34,7 +42,11 @@ def load(name):
 
 atoms_doc = load("atoms.json")
 atoms = atoms_doc["atoms"] if isinstance(atoms_doc, dict) else atoms_doc
-chmap = json.load(open(os.path.join(HERE, "chapter_doc_map.json")))
+chmap, chmap_source, chmap_services = chapter_doc_map.load(CORPUS, OUT)
+out["corpus"] = CORPUS
+out["chapter_doc_map"] = {"source": chmap_source, "chapters": len(chmap), "services": chmap_services}
+P("corpus", CORPUS)
+P("chapter doc map", len(chmap), "chapters, services", chmap_services, "—", chmap_source)
 out["atoms_total"] = len(atoms)
 by_type = collections.Counter(a["atom_type"] for a in atoms)
 out["by_atom_type"] = dict(by_type)
@@ -189,5 +201,6 @@ for f in ["ontology.json", "schema_validation.json", "resolution_failures.json",
         out[f] = d
         P(f"\n{f}:", json.dumps(d, ensure_ascii=False)[:2500])
 
-json.dump(out, open(os.path.join(HERE, "census.json"), "w"), indent=1, ensure_ascii=False)
-open(os.path.join(HERE, "census.txt"), "w").write("\n".join(lines) + "\n")
+os.makedirs(OUT, exist_ok=True)
+json.dump(out, open(os.path.join(OUT, "census.json"), "w"), indent=1, ensure_ascii=False)
+open(os.path.join(OUT, "census.txt"), "w").write("\n".join(lines) + "\n")

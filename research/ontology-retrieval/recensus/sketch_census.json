@@ -1,0 +1,826 @@
+{
+ "corpus": "ei7-recensus-fineprint",
+ "checkpoint": "/Users/alexsbryan/.svrnmesh/enrichment/ei7-recensus-fineprint/runs/_phase1_checkpoint.jsonl",
+ "chapter_doc_map": {
+  "source": "derived from /Users/alexsbryan/.svrnmesh/indexes/ei7-recensus-fineprint/chapters.json",
+  "chapters": 826,
+  "services": [
+   "Facebook",
+   "X",
+   "YouTube"
+  ]
+ },
+ "selection": "whole checkpoint",
+ "sections_ok": 664,
+ "sections_failed": 162,
+ "failed": [
+  [
+   "sec_00006",
+   "{'chapter_id': 'sec_00006', 'reason': 'skipped: chapter body is too short to analyze (35 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00026",
+   "{'chapter_id': 'sec_00026', 'reason': 'skipped: chapter body is too short to analyze (31 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00033",
+   "{'chapter_id': 'sec_00033', 'reason': 'skipped: chapter body is too short to analyze (37 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00039",
+   "{'chapter_id': 'sec_00039', 'reason': 'skipped: chapter body is too short to analyze (5 words < 40 word minimum) — likely a Part-level heading or front-matter s"
+  ],
+  [
+   "sec_00043",
+   "{'chapter_id': 'sec_00043', 'reason': 'skipped: chapter body is too short to analyze (32 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00057",
+   "{'chapter_id': 'sec_00057', 'reason': 'skipped: chapter body is too short to analyze (15 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00059",
+   "{'chapter_id': 'sec_00059', 'reason': 'skipped: chapter body is too short to analyze (32 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00060",
+   "{'chapter_id': 'sec_00060', 'reason': 'skipped: chapter body is too short to analyze (22 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00061",
+   "{'chapter_id': 'sec_00061', 'reason': 'skipped: chapter body is too short to analyze (35 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00062",
+   "{'chapter_id': 'sec_00062', 'reason': 'skipped: chapter body is too short to analyze (18 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00065",
+   "{'chapter_id': 'sec_00065', 'reason': 'skipped: chapter body is too short to analyze (16 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00070",
+   "{'chapter_id': 'sec_00070', 'reason': 'skipped: chapter body is too short to analyze (27 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00071",
+   "{'chapter_id': 'sec_00071', 'reason': 'skipped: chapter body is too short to analyze (33 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00073",
+   "{'chapter_id': 'sec_00073', 'reason': 'skipped: chapter body is too short to analyze (22 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00075",
+   "{'chapter_id': 'sec_00075', 'reason': 'skipped: chapter body is too short to analyze (33 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00077",
+   "{'chapter_id': 'sec_00077', 'reason': 'skipped: chapter body is too short to analyze (18 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00078",
+   "{'chapter_id': 'sec_00078', 'reason': 'skipped: chapter body is too short to analyze (18 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00081",
+   "{'chapter_id': 'sec_00081', 'reason': 'skipped: chapter body is too short to analyze (15 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00089",
+   "{'chapter_id': 'sec_00089', 'reason': 'skipped: chapter body is too short to analyze (37 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00090",
+   "{'chapter_id': 'sec_00090', 'reason': 'skipped: chapter body is too short to analyze (33 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00093",
+   "{'chapter_id': 'sec_00093', 'reason': 'skipped: chapter body is too short to analyze (32 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00094",
+   "{'chapter_id': 'sec_00094', 'reason': 'skipped: chapter body is too short to analyze (15 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00106",
+   "{'chapter_id': 'sec_00106', 'reason': 'skipped: chapter body is too short to analyze (22 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00109",
+   "{'chapter_id': 'sec_00109', 'reason': 'skipped: chapter body is too short to analyze (38 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00120",
+   "{'chapter_id': 'sec_00120', 'reason': 'skipped: chapter body is too short to analyze (39 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00123",
+   "{'chapter_id': 'sec_00123', 'reason': 'skipped: chapter body is too short to analyze (35 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00124",
+   "{'chapter_id': 'sec_00124', 'reason': 'skipped: chapter body is too short to analyze (22 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00127",
+   "{'chapter_id': 'sec_00127', 'reason': 'skipped: chapter body is too short to analyze (23 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00135",
+   "{'chapter_id': 'sec_00135', 'reason': 'skipped: chapter body is too short to analyze (16 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00141",
+   "{'chapter_id': 'sec_00141', 'reason': 'skipped: chapter body is too short to analyze (25 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00149",
+   "{'chapter_id': 'sec_00149', 'reason': 'skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00157",
+   "{'chapter_id': 'sec_00157', 'reason': 'skipped: chapter body is too short to analyze (32 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00166",
+   "{'chapter_id': 'sec_00166', 'reason': 'skipped: chapter body is too short to analyze (26 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00167",
+   "{'chapter_id': 'sec_00167', 'reason': 'skipped: chapter body is too short to analyze (17 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00168",
+   "{'chapter_id': 'sec_00168', 'reason': 'skipped: chapter body is too short to analyze (28 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00175",
+   "{'chapter_id': 'sec_00175', 'reason': 'skipped: chapter body is too short to analyze (23 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00191",
+   "{'chapter_id': 'sec_00191', 'reason': 'skipped: chapter body is too short to analyze (39 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00195",
+   "{'chapter_id': 'sec_00195', 'reason': 'skipped: chapter body is too short to analyze (14 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00199",
+   "{'chapter_id': 'sec_00199', 'reason': 'skipped: chapter body is too short to analyze (25 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00204",
+   "{'chapter_id': 'sec_00204', 'reason': 'skipped: chapter body is too short to analyze (16 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00213",
+   "{'chapter_id': 'sec_00213', 'reason': 'skipped: chapter body is too short to analyze (36 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00218",
+   "{'chapter_id': 'sec_00218', 'reason': 'skipped: chapter body is too short to analyze (38 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00225",
+   "{'chapter_id': 'sec_00225', 'reason': 'skipped: chapter body is too short to analyze (21 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00226",
+   "{'chapter_id': 'sec_00226', 'reason': 'skipped: chapter body is too short to analyze (26 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00231",
+   "{'chapter_id': 'sec_00231', 'reason': 'skipped: chapter body is too short to analyze (34 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00236",
+   "{'chapter_id': 'sec_00236', 'reason': 'skipped: chapter body is too short to analyze (21 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00246",
+   "{'chapter_id': 'sec_00246', 'reason': 'skipped: chapter body is too short to analyze (14 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00248",
+   "{'chapter_id': 'sec_00248', 'reason': 'skipped: chapter body is too short to analyze (10 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00251",
+   "{'chapter_id': 'sec_00251', 'reason': 'skipped: chapter body is too short to analyze (10 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00252",
+   "{'chapter_id': 'sec_00252', 'reason': 'skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00253",
+   "{'chapter_id': 'sec_00253', 'reason': 'skipped: chapter body is too short to analyze (10 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00259",
+   "{'chapter_id': 'sec_00259', 'reason': 'skipped: chapter body is too short to analyze (16 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00270",
+   "{'chapter_id': 'sec_00270', 'reason': 'skipped: chapter body is too short to analyze (32 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00275",
+   "{'chapter_id': 'sec_00275', 'reason': 'skipped: chapter body is too short to analyze (29 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00278",
+   "{'chapter_id': 'sec_00278', 'reason': 'skipped: chapter body is too short to analyze (14 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00294",
+   "{'chapter_id': 'sec_00294', 'reason': 'skipped: chapter body is too short to analyze (18 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00295",
+   "{'chapter_id': 'sec_00295', 'reason': 'skipped: chapter body is too short to analyze (13 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00333",
+   "{'chapter_id': 'sec_00333', 'reason': 'skipped: chapter body is too short to analyze (39 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00334",
+   "{'chapter_id': 'sec_00334', 'reason': 'skipped: chapter body is too short to analyze (36 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00347",
+   "{'chapter_id': 'sec_00347', 'reason': 'skipped: chapter body is too short to analyze (18 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00355",
+   "{'chapter_id': 'sec_00355', 'reason': 'skipped: chapter body is too short to analyze (22 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00367",
+   "{'chapter_id': 'sec_00367', 'reason': 'skipped: chapter body is too short to analyze (32 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00371",
+   "{'chapter_id': 'sec_00371', 'reason': 'skipped: chapter body is too short to analyze (29 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00375",
+   "{'chapter_id': 'sec_00375', 'reason': 'skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00385",
+   "{'chapter_id': 'sec_00385', 'reason': 'skipped: chapter body is too short to analyze (17 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00401",
+   "{'chapter_id': 'sec_00401', 'reason': 'skipped: chapter body is too short to analyze (27 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00404",
+   "{'chapter_id': 'sec_00404', 'reason': 'skipped: chapter body is too short to analyze (26 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00409",
+   "{'chapter_id': 'sec_00409', 'reason': 'skipped: chapter body is too short to analyze (32 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00418",
+   "{'chapter_id': 'sec_00418', 'reason': 'skipped: chapter body is too short to analyze (39 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00427",
+   "{'chapter_id': 'sec_00427', 'reason': 'skipped: chapter body is too short to analyze (22 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00432",
+   "{'chapter_id': 'sec_00432', 'reason': 'skipped: chapter body is too short to analyze (15 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00436",
+   "{'chapter_id': 'sec_00436', 'reason': 'skipped: chapter body is too short to analyze (22 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00443",
+   "{'chapter_id': 'sec_00443', 'reason': 'skipped: chapter body is too short to analyze (18 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00447",
+   "{'chapter_id': 'sec_00447', 'reason': 'skipped: chapter body is too short to analyze (26 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00448",
+   "{'chapter_id': 'sec_00448', 'reason': 'skipped: chapter body is too short to analyze (25 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00461",
+   "{'chapter_id': 'sec_00461', 'reason': 'skipped: chapter body is too short to analyze (21 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00466",
+   "{'chapter_id': 'sec_00466', 'reason': 'skipped: chapter body is too short to analyze (36 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00469",
+   "{'chapter_id': 'sec_00469', 'reason': 'skipped: chapter body is too short to analyze (13 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00480",
+   "{'chapter_id': 'sec_00480', 'reason': 'skipped: chapter body is too short to analyze (31 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00481",
+   "{'chapter_id': 'sec_00481', 'reason': 'skipped: chapter body is too short to analyze (28 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00484",
+   "{'chapter_id': 'sec_00484', 'reason': 'skipped: chapter body is too short to analyze (19 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00495",
+   "{'chapter_id': 'sec_00495', 'reason': 'skipped: chapter body is too short to analyze (31 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00499",
+   "{'chapter_id': 'sec_00499', 'reason': 'skipped: chapter body is too short to analyze (16 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00504",
+   "{'chapter_id': 'sec_00504', 'reason': 'skipped: chapter body is too short to analyze (34 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00509",
+   "{'chapter_id': 'sec_00509', 'reason': 'skipped: chapter body is too short to analyze (23 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00511",
+   "{'chapter_id': 'sec_00511', 'reason': 'skipped: chapter body is too short to analyze (14 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00513",
+   "{'chapter_id': 'sec_00513', 'reason': 'skipped: chapter body is too short to analyze (30 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00537",
+   "{'chapter_id': 'sec_00537', 'reason': 'skipped: chapter body is too short to analyze (32 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00540",
+   "{'chapter_id': 'sec_00540', 'reason': 'skipped: chapter body is too short to analyze (29 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00544",
+   "{'chapter_id': 'sec_00544', 'reason': 'skipped: chapter body is too short to analyze (36 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00547",
+   "{'chapter_id': 'sec_00547', 'reason': 'skipped: chapter body is too short to analyze (25 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00548",
+   "{'chapter_id': 'sec_00548', 'reason': 'skipped: chapter body is too short to analyze (4 words < 40 word minimum) — likely a Part-level heading or front-matter s"
+  ],
+  [
+   "sec_00549",
+   "{'chapter_id': 'sec_00549', 'reason': 'skipped: chapter body is too short to analyze (25 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00566",
+   "{'chapter_id': 'sec_00566', 'reason': 'skipped: chapter body is too short to analyze (21 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00570",
+   "{'chapter_id': 'sec_00570', 'reason': 'skipped: chapter body is too short to analyze (8 words < 40 word minimum) — likely a Part-level heading or front-matter s"
+  ],
+  [
+   "sec_00581",
+   "{'chapter_id': 'sec_00581', 'reason': 'skipped: chapter body is too short to analyze (16 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00584",
+   "{'chapter_id': 'sec_00584', 'reason': 'skipped: chapter body is too short to analyze (36 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00587",
+   "{'chapter_id': 'sec_00587', 'reason': 'skipped: chapter body is too short to analyze (23 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00588",
+   "{'chapter_id': 'sec_00588', 'reason': 'skipped: chapter body is too short to analyze (25 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00589",
+   "{'chapter_id': 'sec_00589', 'reason': 'skipped: chapter body is too short to analyze (24 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00592",
+   "{'chapter_id': 'sec_00592', 'reason': 'skipped: chapter body is too short to analyze (33 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00593",
+   "{'chapter_id': 'sec_00593', 'reason': 'skipped: chapter body is too short to analyze (37 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00594",
+   "{'chapter_id': 'sec_00594', 'reason': 'skipped: chapter body is too short to analyze (38 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00595",
+   "{'chapter_id': 'sec_00595', 'reason': 'skipped: chapter body is too short to analyze (16 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00598",
+   "{'chapter_id': 'sec_00598', 'reason': 'skipped: chapter body is too short to analyze (21 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00599",
+   "{'chapter_id': 'sec_00599', 'reason': 'skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00601",
+   "{'chapter_id': 'sec_00601', 'reason': 'skipped: chapter body is too short to analyze (29 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00606",
+   "{'chapter_id': 'sec_00606', 'reason': 'skipped: chapter body is too short to analyze (22 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00613",
+   "{'chapter_id': 'sec_00613', 'reason': 'skipped: chapter body is too short to analyze (16 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00621",
+   "{'chapter_id': 'sec_00621', 'reason': 'skipped: chapter body is too short to analyze (22 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00626",
+   "{'chapter_id': 'sec_00626', 'reason': 'skipped: chapter body is too short to analyze (21 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00628",
+   "{'chapter_id': 'sec_00628', 'reason': 'skipped: chapter body is too short to analyze (16 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00631",
+   "{'chapter_id': 'sec_00631', 'reason': 'skipped: chapter body is too short to analyze (26 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00632",
+   "{'chapter_id': 'sec_00632', 'reason': 'skipped: chapter body is too short to analyze (26 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00652",
+   "{'chapter_id': 'sec_00652', 'reason': 'skipped: chapter body is too short to analyze (35 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00663",
+   "{'chapter_id': 'sec_00663', 'reason': 'skipped: chapter body is too short to analyze (30 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00669",
+   "{'chapter_id': 'sec_00669', 'reason': 'skipped: chapter body is too short to analyze (14 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00670",
+   "{'chapter_id': 'sec_00670', 'reason': 'skipped: chapter body is too short to analyze (39 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00673",
+   "{'chapter_id': 'sec_00673', 'reason': 'skipped: chapter body is too short to analyze (13 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00686",
+   "{'chapter_id': 'sec_00686', 'reason': 'skipped: chapter body is too short to analyze (39 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00687",
+   "{'chapter_id': 'sec_00687', 'reason': 'skipped: chapter body is too short to analyze (37 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00690",
+   "{'chapter_id': 'sec_00690', 'reason': 'skipped: chapter body is too short to analyze (35 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00692",
+   "{'chapter_id': 'sec_00692', 'reason': 'skipped: chapter body is too short to analyze (25 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00706",
+   "{'chapter_id': 'sec_00706', 'reason': 'skipped: chapter body is too short to analyze (35 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00712",
+   "{'chapter_id': 'sec_00712', 'reason': 'skipped: chapter body is too short to analyze (22 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00715",
+   "{'chapter_id': 'sec_00715', 'reason': 'skipped: chapter body is too short to analyze (32 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00720",
+   "{'chapter_id': 'sec_00720', 'reason': 'skipped: chapter body is too short to analyze (35 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00739",
+   "{'chapter_id': 'sec_00739', 'reason': 'skipped: chapter body is too short to analyze (25 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00742",
+   "{'chapter_id': 'sec_00742', 'reason': 'skipped: chapter body is too short to analyze (7 words < 40 word minimum) — likely a Part-level heading or front-matter s"
+  ],
+  [
+   "sec_00748",
+   "{'chapter_id': 'sec_00748', 'reason': 'skipped: chapter body is too short to analyze (16 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00749",
+   "{'chapter_id': 'sec_00749', 'reason': 'skipped: chapter body is too short to analyze (10 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00750",
+   "{'chapter_id': 'sec_00750', 'reason': 'skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00751",
+   "{'chapter_id': 'sec_00751', 'reason': 'skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00752",
+   "{'chapter_id': 'sec_00752', 'reason': 'skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00753",
+   "{'chapter_id': 'sec_00753', 'reason': 'skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00754",
+   "{'chapter_id': 'sec_00754', 'reason': 'skipped: chapter body is too short to analyze (10 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00755",
+   "{'chapter_id': 'sec_00755', 'reason': 'skipped: chapter body is too short to analyze (10 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00756",
+   "{'chapter_id': 'sec_00756', 'reason': 'skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00757",
+   "{'chapter_id': 'sec_00757', 'reason': 'skipped: chapter body is too short to analyze (10 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00758",
+   "{'chapter_id': 'sec_00758', 'reason': 'skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00759",
+   "{'chapter_id': 'sec_00759', 'reason': 'skipped: chapter body is too short to analyze (10 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00763",
+   "{'chapter_id': 'sec_00763', 'reason': 'skipped: chapter body is too short to analyze (25 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00766",
+   "{'chapter_id': 'sec_00766', 'reason': 'skipped: chapter body is too short to analyze (13 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00767",
+   "{'chapter_id': 'sec_00767', 'reason': 'skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00769",
+   "{'chapter_id': 'sec_00769', 'reason': 'skipped: chapter body is too short to analyze (10 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00770",
+   "{'chapter_id': 'sec_00770', 'reason': 'skipped: chapter body is too short to analyze (10 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00771",
+   "{'chapter_id': 'sec_00771', 'reason': 'skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00778",
+   "{'chapter_id': 'sec_00778', 'reason': 'skipped: chapter body is too short to analyze (37 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00781",
+   "{'chapter_id': 'sec_00781', 'reason': 'skipped: chapter body is too short to analyze (28 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00784",
+   "{'chapter_id': 'sec_00784', 'reason': 'skipped: chapter body is too short to analyze (30 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00791",
+   "{'chapter_id': 'sec_00791', 'reason': 'skipped: chapter body is too short to analyze (24 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00792",
+   "{'chapter_id': 'sec_00792', 'reason': 'skipped: chapter body is too short to analyze (28 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00794",
+   "{'chapter_id': 'sec_00794', 'reason': 'skipped: chapter body is too short to analyze (26 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00798",
+   "{'chapter_id': 'sec_00798', 'reason': 'skipped: chapter body is too short to analyze (19 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00804",
+   "{'chapter_id': 'sec_00804', 'reason': 'skipped: chapter body is too short to analyze (21 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00806",
+   "{'chapter_id': 'sec_00806', 'reason': 'skipped: chapter body is too short to analyze (35 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00808",
+   "{'chapter_id': 'sec_00808', 'reason': 'skipped: chapter body is too short to analyze (35 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00811",
+   "{'chapter_id': 'sec_00811', 'reason': 'skipped: chapter body is too short to analyze (34 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00814",
+   "{'chapter_id': 'sec_00814', 'reason': 'skipped: chapter body is too short to analyze (23 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00818",
+   "{'chapter_id': 'sec_00818', 'reason': 'skipped: chapter body is too short to analyze (38 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00820",
+   "{'chapter_id': 'sec_00820', 'reason': 'skipped: chapter body is too short to analyze (26 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ],
+  [
+   "sec_00821",
+   "{'chapter_id': 'sec_00821', 'reason': 'skipped: chapter body is too short to analyze (39 words < 40 word minimum) — likely a Part-level heading or front-matter "
+  ]
+ ],
+ "facet_totals": {
+  "entities_introduced": 3264,
+  "relations_introduced": 1044,
+  "claims": 2681,
+  "questions_raised": 1100,
+  "events": 93,
+  "entities_developed": 376,
+  "relations_developed": 3
+ },
+ "entity_type_sketches": {
+  "defined_term": 893,
+  "data_type": 486,
+  "service": 482,
+  "agreement": 339,
+  "party": 316,
+  "organization": 256,
+  "concept": 159,
+  "recipient": 128,
+  "work": 80,
+  "place": 61,
+  "purpose": 59,
+  "institution": 4,
+  "person": 1
+ },
+ "claim_kind_sketches": {
+  "obligation": 2681
+ },
+ "obligation_deontic_sketches": {
+  "permit": 995,
+  "require": 1007,
+  "forbid": 679
+ },
+ "obligation_subject_filled": 2656,
+ "sections_at_entity_cap_15": [
+  [
+   "sec_00016",
+   "12. Glossary",
+   721
+  ],
+  [
+   "sec_00041",
+   "5. Other terms and policies that may apply to you",
+   546
+  ],
+  [
+   "sec_00119",
+   "Branding and Online Sale of Alcohol",
+   900
+  ],
+  [
+   "sec_00142",
+   "Compliance with a legal obligation",
+   872
+  ],
+  [
+   "sec_00178",
+   "Dangerous Organizations and Individuals",
+   2661
+  ],
+  [
+   "sec_00179",
+   "Dangerous or threatening pranks",
+   150
+  ],
+  [
+   "sec_00182",
+   "Data processing summary",
+   2937
+  ],
+  [
+   "sec_00188",
+   "Definitions",
+   728
+  ],
+  [
+   "sec_00222",
+   "Examples",
+   2551
+  ],
+  [
+   "sec_00258",
+   "Financial entities, products and services",
+   1132
+  ],
+  [
+   "sec_00289",
+   "Harmful substances & practices as treatment methods",
+   331
+  ],
+  [
+   "sec_00335",
+   "Human Exploitation",
+   744
+  ],
+  [
+   "sec_00384",
+   "Legal bases of processing",
+   4823
+  ],
+  [
+   "sec_00419",
+   "Misinformation",
+   2103
+  ],
+  [
+   "sec_00468",
+   "Performance of a contract",
+   2310
+  ],
+  [
+   "sec_00482",
+   "Political campaigning ads",
+   330
+  ],
+  [
+   "sec_00485",
+   "Posting Private Information",
+   352
+  ],
+  [
+   "sec_00525",
+   "Restricted Goods and Services",
+   4150
+  ],
+  [
+   "sec_00550",
+   "Shocking content",
+   1228
+  ],
+  [
+   "sec_00562",
+   "Suicide and self-harm support resources",
+   251
+  ],
+  [
+   "sec_00672",
+   "What other X resources relate to this policy?",
+   146
+  ],
+  [
+   "sec_00676",
+   "What products or services are subject to this policy?",
+   354
+  ],
+  [
+   "sec_00785",
+   "Your location information",
+   366
+  ]
+ ],
+ "service_attr_filled": {
+  "data_type": 224,
+  "recipient": 99,
+  "purpose": 44
+ },
+ "service_attr_missing": {
+  "data_type": 262,
+  "recipient": 29,
+  "purpose": 15
+ }
+}

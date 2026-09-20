@@ -635,3 +635,62 @@ Restricted-text corpora set `scope`, `mesh_sharing` and `query_sharing`
 ## Deviations
 
 (Appended as the study runs: date, what changed, why, which arms re-ran.)
+
+### 2026-09-20 — the stage-0 re-census, and what the decision tree reads off it
+
+The window ran 03:43–04:58Z on Vast instance 51687232, destroyed on exit; nothing
+is rented (`scripts/dev-pod.sh status`: "no dev pod running (nothing billing)").
+Pod line 02 extracted all 826 sections of the X / Facebook / YouTube corpus — the
+three services with the most words outside the development set, measured: 145,448
+/ 90,448 / 71,576 — leaving 664 ok and 162 skipped under the 40-word minimum,
+which the CLI counts as failures, so the batch stopped there. `--finalize` (no
+model) and `enrich build --skip extract --skip tensions` then ran against the
+local daemon, exit 0: 7,589 atoms, of which 6,399 are the grounding population,
+33.0% orphan (spike: 56%). Output at `research/ontology-retrieval/pod/20260920T034318Z/`,
+numbers from `research/ontology-retrieval/recensus/decisions.py`.
+
+| # | Decision | Number | Bar | Verdict |
+|---|---|---|---|---|
+| N1 | D5 deontic fill, declared claim kinds | 2,681 / 2,681 = 1.000 | ≥ 0.70 | passed |
+| N2 | `service` on `data_type` atoms | 173 / 343 = 0.504 | ≥ 0.90 | failed |
+| N3 | D3 `data_type` recall vs each service's own table | — | ≥ 0.70 on 2 of 3 | could-not-judge, 3 of 3 |
+| N4 | D4 `recipient` recall by name | 70 / 96 = 0.729 | ≥ 0.50 | passed |
+
+The instrument is validated against the spike corpus before it is read here: the
+same code reads 0.025 deontic fill and Spotify 10 of 10 on the spike atlas, which
+are the two figures the spike itself reported. So the figures above are the
+corpus's, not the instrument's.
+
+- **D5 is go.** 2.5% became 100%. The deontic attribute in the extraction
+  prompt's claim example is the change that did it.
+- **N2 fails, and content-policy sections do not explain it.** The privacy
+  policies read 0.62 (Facebook), 0.67 (X), 0.40 (YouTube); per-document rates are
+  in `recensus/decisions.json`. Attribution on `data_type` was 0.821 on the
+  spike — two corpora, two service sets and an unrecorded model apart, so the
+  direction is not attributable to the fix.
+- **D3 is could-not-judge on all three services and therefore does not reach its
+  go bar.** None of the three publishes a table whose first column lists its data
+  categories: X has exactly one table in any document (Advertising Content
+  Policy, unnamed columns), Facebook's five are the SCC annex forms in its User
+  Consent Policy, and YouTube's only privacy-policy table is `Why and how we
+  process data | What data is processed | Legal grounds`, whose data column is
+  column 2 and repeats one boilerplate paragraph across all seven rows. Every
+  table found is listed per service in `decisions.json`. This is a fact about the
+  corpus rule's output, not a measured failure, and per "Decision tree after the
+  spikes" there is no second fix round.
+- **D4 is attempted.** 0.682 (X), 0.735 (Facebook), 0.760 (YouTube). The truth
+  set is the distinct `recipient` names phase 1 emitted for a service — no
+  service here publishes a recipient list — so it is not cell-for-cell comparable
+  with the spike's Spotify 4 of 13. The same instrument reads 0.450 for Spotify on
+  the spike atlas, the side of 0.5 the spike reported.
+- **D8 is could-not-judge.** The pilot did not run on the pod; it ran locally
+  after the pod was destroyed. There is no pod per-question synth latency, so the
+  "at most half the local figure" test has no pod term. A second rental is the
+  operator's call.
+- **D7 is could-not-judge, and the reason is a recording gap worth fixing.** No
+  artifact of an enrichment run records the RESOLVED model id: the checkpoint rows
+  carry none, `config.json` names the alias `commonwealth/primary`, and the run
+  manifests carry `pipeline_id: custom_atlas` only. The only resolved ids anywhere
+  in the window are the pod preflight's `Qwen3.5-4B-UD-Q6_K_XL` on `:9841` and the
+  local finalize/build banner's `Qwen3.6-35B-A3B-UD-MTP-IQ4_NL`. So the atoms
+  above cannot be attributed to a quantisation, and D7's 2× test has no operand.

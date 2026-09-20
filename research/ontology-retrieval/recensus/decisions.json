@@ -1,0 +1,484 @@
+{
+ "corpus": "ei7-recensus-fineprint",
+ "atlas": "/Users/alexsbryan/.svrnmesh/indexes/ei7-recensus-fineprint/atlas",
+ "checkpoint": "/Users/alexsbryan/.svrnmesh/enrichment/ei7-recensus-fineprint/runs/_phase1_checkpoint.jsonl",
+ "chapter_doc_map": {
+  "source": "derived from /Users/alexsbryan/.svrnmesh/indexes/ei7-recensus-fineprint/chapters.json",
+  "chapters": 826,
+  "services": [
+   "Facebook",
+   "X",
+   "YouTube"
+  ]
+ },
+ "declared": {
+  "claim_kinds": [
+   "obligation"
+  ],
+  "entity_types": [
+   "agreement",
+   "data_type",
+   "defined_term",
+   "organization",
+   "party",
+   "purpose",
+   "recipient",
+   "service"
+  ]
+ },
+ "atoms_total": 7589,
+ "data_type_atoms": 343,
+ "recipient_atoms": 59,
+ "N1_deontic_fill_D5": {
+  "verdict": "passed",
+  "reason": "2681 of 2681 claims of kind(s) ['obligation'] carry a deontic",
+  "filled": 2681,
+  "total": 2681,
+  "rate": 1.0,
+  "bar": 0.7
+ },
+ "N2_service_attribution_on_data_type": {
+  "verdict": "failed",
+  "reason": "173 of 343 data_type atoms carry attributes.service",
+  "filled": 173,
+  "total": 343,
+  "rate": 0.5044,
+  "bar": 0.9,
+  "by_document": {
+   "Facebook — Privacy Policy": {
+    "filled": 61,
+    "total": 98,
+    "rate": 0.6224
+   },
+   "YouTube — Privacy Policy": {
+    "filled": 27,
+    "total": 68,
+    "rate": 0.3971
+   },
+   "X — Community Guidelines": {
+    "filled": 20,
+    "total": 35,
+    "rate": 0.5714
+   },
+   "X — Content Monetisation Policy": {
+    "filled": 1,
+    "total": 22,
+    "rate": 0.0455
+   },
+   "Facebook — Community Guidelines": {
+    "filled": 2,
+    "total": 16,
+    "rate": 0.125
+   },
+   "X — Developer Terms": {
+    "filled": 11,
+    "total": 15,
+    "rate": 0.7333
+   },
+   "X — Privacy Policy": {
+    "filled": 10,
+    "total": 15,
+    "rate": 0.6667
+   },
+   "YouTube — Community Guidelines": {
+    "filled": 9,
+    "total": 15,
+    "rate": 0.6
+   },
+   "X — Data Controller Agreement": {
+    "filled": 3,
+    "total": 14,
+    "rate": 0.2143
+   },
+   "X — Law Enforcement Guidelines": {
+    "filled": 3,
+    "total": 12,
+    "rate": 0.25
+   },
+   "Facebook — Developer Terms": {
+    "filled": 11,
+    "total": 11,
+    "rate": 1.0
+   },
+   "YouTube — Content Monetisation Policy": {
+    "filled": 3,
+    "total": 8,
+    "rate": 0.375
+   },
+   "X — Advertising Content Policy": {
+    "filled": 7,
+    "total": 7,
+    "rate": 1.0
+   },
+   "YouTube — Developer Terms": {
+    "filled": 5,
+    "total": 5,
+    "rate": 1.0
+   },
+   "Facebook — Law Enforcement Guidelines": {
+    "filled": 0,
+    "total": 2,
+    "rate": 0.0
+   }
+  }
+ },
+ "N3_data_type_recall_D3": {
+  "verdict": "could-not-judge",
+  "reason": "0 of 3 services could be judged; the decision needs 2",
+  "bar": 0.7,
+  "per_service": {
+   "Facebook": {
+    "verdict": "could-not-judge",
+    "reason": "no table in this service's documents has a column-1 label naming data",
+    "tables_found": 5,
+    "tables_seen": [
+     {
+      "doc": "User Consent Policy",
+      "header": [
+       "",
+       "",
+       ""
+      ],
+      "label_col_1": "Start Date"
+     },
+     {
+      "doc": "User Consent Policy",
+      "header": [
+       "",
+       "",
+       "",
+       "",
+       "",
+       "",
+       ""
+      ],
+      "label_col_1": "Addendum EU SCCs"
+     },
+     {
+      "doc": "User Consent Policy",
+      "header": [
+       "",
+       ""
+      ],
+      "label_col_1": "Data Exporter:"
+     },
+     {
+      "doc": "User Consent Policy",
+      "header": [
+       "",
+       ""
+      ],
+      "label_col_1": "Data Importer:"
+     },
+     {
+      "doc": "User Consent Policy",
+      "header": [
+       "",
+       ""
+      ],
+      "label_col_1": "Categories of data subjects whose personal data is transferred:"
+     }
+    ],
+    "qualifying": [],
+    "truth_cells": 0,
+    "matched": 0,
+    "recall": null,
+    "aux_not_pre_registered": null
+   },
+   "X": {
+    "verdict": "could-not-judge",
+    "reason": "no table in this service's documents has a column-1 label naming data",
+    "tables_found": 1,
+    "tables_seen": [
+     {
+      "doc": "Advertising Content Policy",
+      "header": [
+       "",
+       "",
+       "",
+       "",
+       ""
+      ],
+      "label_col_1": ""
+     }
+    ],
+    "qualifying": [],
+    "truth_cells": 0,
+    "matched": 0,
+    "recall": null,
+    "aux_not_pre_registered": null
+   },
+   "YouTube": {
+    "verdict": "could-not-judge",
+    "reason": "no table in this service's documents has a column-1 label naming data",
+    "tables_found": 21,
+    "tables_seen": [
+     {
+      "doc": "Community Guidelines",
+      "header": [
+       "",
+       "",
+       ""
+      ],
+      "label_col_1": "Australia"
+     },
+     {
+      "doc": "Community Guidelines",
+      "header": [
+       "",
+       "",
+       ""
+      ],
+      "label_col_1": "Australia"
+     },
+     {
+      "doc": "Content Monetisation Policy",
+      "header": [
+       "",
+       ""
+      ],
+      "label_col_1": "Inappropriate language Violence Adult content Shocking content Harmful acts and unreliable content Hateful & derogatory content Recreational drugs and drug-related content"
+     },
+     {
+      "doc": "Content Monetisation Policy",
+      "header": [
+       "Ads guidance",
+       "Questionnaire options & details"
+      ],
+      "label_col_1": "Ads guidance"
+     },
+     {
+      "doc": "Content Monetisation Policy",
+      "header": [
+       "Ads guidance",
+       "Questionnaire options & details"
+      ],
+      "label_col_1": "Ads guidance"
+     },
+     {
+      "doc": "Content Monetisation Policy",
+      "header": [
+       "Ads guidance",
+       "Questionnaire options & details"
+      ],
+      "label_col_1": "Ads guidance"
+     },
+     {
+      "doc": "Content Monetisation Policy",
+      "header": [
+       "Ads guidance",
+       "Questionnaire options & details"
+      ],
+      "label_col_1": "Ads guidance"
+     },
+     {
+      "doc": "Content Monetisation Policy",
+      "header": [
+       "Ads guidance",
+       "Questionnaire options & details"
+      ],
+      "label_col_1": "Ads guidance"
+     },
+     {
+      "doc": "Content Monetisation Policy",
+      "header": [
+       "Ads guidance",
+       "Questionnaire options & details"
+      ],
+      "label_col_1": "Ads guidance"
+     },
+     {
+      "doc": "Content Monetisation Policy",
+      "header": [
+       "Ads guidance",
+       "Questionnaire options & details"
+      ],
+      "label_col_1": "Ads guidance"
+     },
+     {
+      "doc": "Content Monetisation Policy",
+      "header": [
+       "Ads guidance",
+       "Questionnaire options & details"
+      ],
+      "label_col_1": "Ads guidance"
+     },
+     {
+      "doc": "Content Monetisation Policy",
+      "header": [
+       "Ads guidance",
+       "Questionnaire options & details"
+      ],
+      "label_col_1": "Ads guidance"
+     },
+     {
+      "doc": "Content Monetisation Policy",
+      "header": [
+       "Ads guidance",
+       "Questionnaire options & details"
+      ],
+      "label_col_1": "Ads guidance"
+     },
+     {
+      "doc": "Content Monetisation Policy",
+      "header": [
+       "Ads guidance",
+       "Questionnaire options & details"
+      ],
+      "label_col_1": "Ads guidance"
+     },
+     {
+      "doc": "Content Monetisation Policy",
+      "header": [
+       "Ads guidance",
+       "Questionnaire options & details"
+      ],
+      "label_col_1": "Ads guidance"
+     },
+     {
+      "doc": "Content Monetisation Policy",
+      "header": [
+       "Category",
+       "Limited ad earnings or no ad earnings"
+      ],
+      "label_col_1": "Category"
+     },
+     {
+      "doc": "Content Monetisation Policy",
+      "header": [
+       "Category",
+       "Limited ad earnings or no ad earnings"
+      ],
+      "label_col_1": "Category"
+     },
+     {
+      "doc": "Content Monetisation Policy",
+      "header": [
+       "Category",
+       "Limited ad earnings or no ad earnings"
+      ],
+      "label_col_1": "Category"
+     },
+     {
+      "doc": "Content Monetisation Policy",
+      "header": [
+       "Category",
+       "Limited ad earnings or no ad earnings"
+      ],
+      "label_col_1": "Category"
+     },
+     {
+      "doc": "Content Monetisation Policy",
+      "header": [
+       "Terms",
+       "Definitions"
+      ],
+      "label_col_1": "Terms"
+     },
+     {
+      "doc": "Privacy Policy",
+      "header": [
+       "Why and how we process data",
+       "What data is processed",
+       "Legal grounds"
+      ],
+      "label_col_1": "Why and how we process data"
+     }
+    ],
+    "qualifying": [],
+    "truth_cells": 0,
+    "matched": 0,
+    "recall": null,
+    "aux_not_pre_registered": {
+     "column": 2,
+     "tables": [
+      {
+       "doc": "Privacy Policy",
+       "header": [
+        "Why and how we process data",
+        "What data is processed",
+        "Legal grounds"
+       ],
+       "label": "What data is processed",
+       "label_in_row_1": false
+      }
+     ],
+     "truth_cells": 0,
+     "prose_cells_dropped": 7,
+     "matched": 0,
+     "recall": null,
+     "note": "second column, NOT the pre-registered first-column measurement"
+    }
+   }
+  }
+ },
+ "N4_recipient_recall_by_name_D4": {
+  "verdict": "passed",
+  "reason": "70 of 96 extracted recipient names survive as a named atom",
+  "truth": 96,
+  "by_name": 70,
+  "recall_by_name": 0.7292,
+  "bar": 0.5,
+  "per_service": {
+   "Facebook": {
+    "verdict": "passed",
+    "reason": "36 of 49 extracted recipient names survive as a named atom",
+    "truth": 49,
+    "by_name": 36,
+    "by_alias": 13,
+    "recall_by_name": 0.7347,
+    "lost_entirely": 0,
+    "examples_absorbed": [
+     "Partners who offer goods or services on our Products and commerce services platforms",
+     "Service Provider",
+     "Specially Designated Narcotics Trafficking Kingpins (SDNTKs)",
+     "Trusted Partners",
+     "integrated partners",
+     "law enforcement authorities",
+     "law enforcement officers",
+     "other third parties",
+     "partners",
+     "regulators, law enforcement or others",
+     "search engine",
+     "third parties[62]",
+     "third party"
+    ]
+   },
+   "X": {
+    "verdict": "passed",
+    "reason": "15 of 22 extracted recipient names survive as a named atom",
+    "truth": 22,
+    "by_name": 15,
+    "by_alias": 7,
+    "recall_by_name": 0.6818,
+    "lost_entirely": 0,
+    "examples_absorbed": [
+     "Business partners and service providers",
+     "affiliates",
+     "partners",
+     "partners and other third-parties",
+     "subprocessors",
+     "terrorist organizations",
+     "third-party providers and partners"
+    ]
+   },
+   "YouTube": {
+    "verdict": "passed",
+    "reason": "19 of 25 extracted recipient names survive as a named atom",
+    "truth": 25,
+    "by_name": 19,
+    "by_alias": 6,
+    "recall_by_name": 0.76,
+    "lost_entirely": 0,
+    "examples_absorbed": [
+     "Affiliates",
+     "affiliates",
+     "partner sites and apps",
+     "partners",
+     "third party apps and sites",
+     "trusted partners"
+    ]
+   }
+  }
+ }
+}
