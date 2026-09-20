@@ -898,7 +898,10 @@ for (const p of all) {
   for (const act of A.decodeActs(p.lastLog, fold, A.DOC_ID).acts) {
     for (const para of (ledger.get(act.id) || { paras: [] }).paras) if (para !== null) expect[para] = act.actor;
   }
-  const shown = p.attribution.lines(p.roster, now());
+  // One argument since 491f49c2f: the page no longer resolves a name from a
+  // roster, it renders `op.person`. Passing the roster here made `nowMs` the
+  // roster and every line read "NaNs ago" — a parse failure, not a wrong name.
+  const shown = p.attribution.lines(now());
   shown.forEach((line, i) => {
     lines += 1;
     const name = line && (line.match(/^last edited by (\S+) \d+s ago$/) || [])[1];
