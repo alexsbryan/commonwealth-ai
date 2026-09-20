@@ -8227,9 +8227,13 @@ never treating a halt STOP (non-empty) as the operator's (an empty
 `ralph/STOP`); `watch` notifies on needs-human, stopped-without-DONE, a stale
 `ralph/.heartbeat` and low disk, re-nagging at most once per 30 min. Every
 terminal state is DONE, an operator stop, or an escalation —
-`python3 scripts/tests/ralph.py` proves the FSMs in-process (26 tests). `pool`
+`python3 scripts/tests/ralph.py` proves the FSMs in-process (90 tests). `pool`
 runs waves of ready units in git worktrees with serial merges (a conflict
-halts) and lane markers at `ralph/lanes/<unit>.done`; the shell family it
+halts) and lane markers at `ralph/lanes/<unit>.done`; a lane that ends holding
+`ralph/waiting` naming a marker is WAITING, not a failure (2026-09-19,
+r9-boundary-sweep struck out twice while its detached sweep ran): the tick
+polls the marker, respawns the lane when it lands, and escalates past
+`LANE_MAX_WAIT_SECS` (48h). The shell family it
 replaced (`ralph-*.sh`) is deleted. Reference: `scripts/RALPH_LOOP.md`.
 
 ### 8.1 Where configuration and state live

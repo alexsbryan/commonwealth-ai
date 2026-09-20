@@ -1122,6 +1122,33 @@ class FakeLane:
         return 0
 
 
+class WaitingLane:
+    """A lane session whose detached run outlives it (the r9-boundary-sweep
+    shape, struck out twice for it, 2026-09-19): it banks `ralph/waiting`
+    naming `ralph/field-x.done` and ends. Only once the marker has landed
+    does a respawned session finish the unit."""
+
+    runs = 0
+
+    def __init__(self, cwd):
+        self.cwd = pathlib.Path(cwd)
+
+    def run(self, model_args, prompt, log):
+        WaitingLane.runs += 1
+        unit = self.cwd.name
+        if (self.cwd / "ralph" / "field-x.done").exists():
+            (self.cwd / "ralph" / "lanes").mkdir(parents=True, exist_ok=True)
+            (self.cwd / "ralph" / "lanes" / f"{unit}.done").write_text("")
+            subprocess.run(["git", "-C", str(self.cwd), "add",
+                            f"ralph/lanes/{unit}.done"], check=True)
+        else:
+            (self.cwd / "ralph" / "waiting").write_text(
+                f"waiting on ralph/field-x.done — health check #{WaitingLane.runs}\n")
+            subprocess.run(["git", "-C", str(self.cwd), "add", "-A"], check=True)
+        subprocess.run(["git", "-C", str(self.cwd), "commit", "-q", "-m", unit], check=True)
+        return 0
+
+
 class FakeReview:
     """A main-tree review session: marks its row [x] and commits."""
 
@@ -1260,6 +1287,82 @@ class PoolTests(unittest.TestCase):
             write(tmp, "ralph/STOP", "")
             pool = self.make(root, lambda cwd, env=None: FakeLane(cwd))
             self.assertEqual(pool.run(), 0)
+
+
+class PoolWaitingTests(unittest.TestCase):
+    """A lane that ends on `ralph/waiting` naming a marker is WAITING, not a
+    failure: no strike, the tick polls the marker and respawns the lane when
+    it lands, and waiting past LANE_MAX_WAIT_SECS escalates with a package
+    naming the unit, the marker and the elapsed time."""
+
+    def fixture(self, tmp, rows):
+        subprocess.run(["git", "init", "-q", "-b", "main", tmp], check=True)
+        subprocess.run(["git", "-C", tmp, "config", "user.email", "t@t"], check=True)
+        subprocess.run(["git", "-C", tmp, "config", "user.name", "t"], check=True)
+        write(tmp, "ralph/STATE.md", rows)
+        write(tmp, "ralph/PROMPT.md", "Execute the selected unit.")
+        write(tmp, "seed.txt", "seed")
+        subprocess.run(["git", "-C", tmp, "add", "-A"], check=True)
+        subprocess.run(["git", "-C", tmp, "commit", "-q", "-m", "seed"], check=True)
+        return pathlib.Path(tmp)
+
+    def make(self, root, session_for, **kwargs):
+        paths = ralph.Paths(root)
+        kwargs.setdefault("sleep", lambda s: None)
+        return ralph.Pool(paths, session_for=session_for, notify_enabled=False,
+                          lanes=2, base_branch="main", **kwargs)
+
+    def test_a_waiting_end_does_not_count_as_a_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] dm-wait — depends []\n")
+            pool = self.make(root, lambda cwd, env=None: WaitingLane(cwd))
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertIsNone(pool.run_wave(["dm-wait"]))
+            self.assertNotIn("dm-wait", pool._lane_failures)
+            self.assertTrue((root / ".ralph/wt/dm-wait/ralph/waiting").exists())
+            self.assertIn("waiting on ralph/field-x.done", out.getvalue())
+            self.assertNotIn("(failure 1/", out.getvalue())
+
+    def test_the_marker_appearing_respawns_the_lane(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] dm-wait — depends []\n")
+            ticks = []
+
+            def tick(secs):
+                ticks.append(secs)
+                if len(ticks) == 2:      # the detached run finishes on the 2nd poll
+                    write(root / ".ralph/wt/dm-wait", "ralph/field-x.done", "")
+
+            pool = self.make(root, lambda cwd, env=None: WaitingLane(cwd), sleep=tick)
+            WaitingLane.runs = 0
+            self.assertEqual(pool.run(), 0)
+            self.assertTrue((root / "ralph/DONE").exists())
+            self.assertFalse((root / ".ralph/wt/dm-wait/ralph/waiting").exists())
+            self.assertEqual(WaitingLane.runs, 2)
+            self.assertTrue(ralph.Queue(root / "ralph/STATE.md").all_done())
+            # The lane committed its waiting file, and the finishing session
+            # commits by name — the resume must still end the waiting ON THE
+            # LANE BRANCH, or the merge parks the main tree's loop on a marker
+            # that only ever existed in the worktree.
+            self.assertFalse((root / "ralph/waiting").exists())
+
+    def test_a_lane_waiting_past_max_wait_escalates(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] dm-wait — depends []\n")
+
+            def tick(secs):
+                old = time.time() - 49 * 3600   # past the 48h bound
+                os.utime(root / ".ralph/wt/dm-wait/ralph/waiting", (old, old))
+
+            pool = self.make(root, lambda cwd, env=None: WaitingLane(cwd), sleep=tick)
+            WaitingLane.runs = 0
+            self.assertEqual(pool.run(), 3)
+            pkg = (root / "ralph/NEEDS_HUMAN.md").read_text()
+            self.assertIn("dm-wait", pkg)
+            self.assertIn("field-x.done", pkg)
+            self.assertIn("49h", pkg)
+            self.assertEqual(WaitingLane.runs, 1)
 
 
 class GuardTests(unittest.TestCase):

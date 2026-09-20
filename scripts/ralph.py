@@ -311,17 +311,28 @@ def guarded(fn, paths, *, notifier=notify, notify_enabled=True):
         return 3
 
 
-def wait_for_marker(paths, marker_timeout):
-    """None to proceed, "wait" to yield this tick, or a reason string to halt."""
-    waiting = paths.p(paths.waiting)
+def waiting_marker(root, waiting_rel):
+    """The waiting file under `root` and the marker it names, or None when
+    the file is absent or names no `*.done` marker (ignored and unlinked —
+    the convention wait_for_marker has always enforced). One parse for the
+    main-tree control file and for a lane worktree's `ralph/waiting`."""
+    waiting = pathlib.Path(root) / waiting_rel
     if not waiting.exists():
         return None
     m = re.search(r"[A-Za-z0-9._/-]+\.done", waiting.read_text())
     if not m:
-        say(f"{paths.waiting} names no *.done marker — ignoring it")
+        say(f"{waiting_rel} names no *.done marker — ignoring it")
         waiting.unlink()
         return None
-    marker = paths.p(m.group(0))
+    return waiting, pathlib.Path(root) / m.group(0)
+
+
+def wait_for_marker(paths, marker_timeout):
+    """None to proceed, "wait" to yield this tick, or a reason string to halt."""
+    parsed = waiting_marker(paths.workdir, paths.waiting)
+    if parsed is None:
+        return None
+    waiting, marker = parsed
     if marker.exists():
         say(f"{marker} present — resuming")
         waiting.unlink()
@@ -470,12 +481,14 @@ class Queue:
                 return r
         return None
 
-    def pick_wave(self, lanes, conflicts, heavy=frozenset()):
+    def pick_wave(self, lanes, conflicts, heavy=frozenset(), waiting=frozenset()):
         """Ready non-review units, up to `lanes`, no conflicting pair.
         `[~]` rows are resumable lanes: a killed session leaves one behind.
         At most ONE heavy row (ralph/heavy.txt, loaded by the Pool) per wave —
         the big moves run sequentially (2026-09-17, operator direction: derisk
-        first); the other lane takes non-heavy rows."""
+        first); the other lane takes non-heavy rows. A `waiting` unit's lane
+        sits on `ralph/waiting` for a detached run — the Pool respawns it when
+        the marker lands, not as wave filler."""
         wave = []
         for r in self.rows:
             if len(wave) >= lanes:
@@ -486,6 +499,8 @@ class Queue:
                 continue
             if r.id.startswith("HUMAN-"):
                 continue          # operator-only; the run loop asks for it
+            if r.id in waiting:
+                continue
             if not self.deps_met(r):
                 continue
             if r.id in heavy and any(w in heavy for w in wave):
@@ -808,6 +823,13 @@ def prompt_text(paths):
 # A driver heartbeat younger than this means a loop is live. One number for the
 # watchdog's "stalled" and promote's "still running".
 STALL_SECS = 300
+
+# A pool lane may wait on a detached run's marker for this long from the moment
+# its session first banked `ralph/waiting` (the file's mtime) before the pool
+# escalates with a package. The serial flow's bound is `--marker-timeout`
+# (7200s); a lane's detached run is expected to outlive many sessions
+# (r9-boundary-sweep's full-density sweep ran ~23h), so its bound is its own.
+LANE_MAX_WAIT_SECS = 48 * 3600
 
 
 def job_name(paths, label):
@@ -1235,6 +1257,42 @@ class Pool:
     def _prompt_text(self):
         return self.paths.p(self.prompt).read_text()
 
+    def poll_waiting_lanes(self):
+        """Each tick, every lane worktree whose `ralph/waiting` names a marker:
+        resume the lane whose marker has landed, hold the rest out of the
+        waves, escalate past LANE_MAX_WAIT_SECS. Returns (halt reason or None,
+        the units still waiting). The filesystem is the state — a restart or a
+        previous pool generation loses nothing."""
+        still = set()
+        wt_root = self.paths.workdir / ".ralph" / "wt"
+        if not wt_root.exists():
+            return None, still
+        for wt in sorted(wt_root.iterdir()):
+            parsed = waiting_marker(wt, "ralph/waiting")
+            if parsed is None:
+                continue
+            unit, waiting, marker = wt.name, parsed[0], parsed[1]
+            named = marker.relative_to(wt)
+            age = int(time.time() - waiting.stat().st_mtime)
+            if age >= LANE_MAX_WAIT_SECS:
+                return (f"lane {unit} waited {age // 3600}h on {named} "
+                        f"(limit {LANE_MAX_WAIT_SECS // 3600}h) — the detached run "
+                        "never wrote its marker"), still
+            if marker.exists():
+                say(f"pool: lane {unit} waiting on {named} — marker present, resuming")
+                waiting.unlink()
+                # End the waiting ON THE LANE BRANCH, not just on disk: a
+                # committed waiting file that survives to the merge parks the
+                # main tree's loop on a marker that only ever existed in this
+                # worktree. The commit is a no-op when nothing is staged.
+                self._git("add", "-A", "--", "ralph/waiting", cwd=wt)
+                self._git("commit", "-q", "-m", f"{unit}: waiting ended — marker landed",
+                          cwd=wt)
+            else:
+                say(f"pool: lane {unit} waiting on {named} ({age}s)")
+                still.add(unit)
+        return None, still
+
     def run(self):
         # `ralph/lanes/` not `ralph/done/`: on a case-insensitive filesystem
         # (macOS) the lane-marker directory and `ralph/DONE` are one path, and
@@ -1261,6 +1319,9 @@ class Pool:
             if marker == "wait":
                 self.sleep(self.wait_poll)
                 continue
+            reason, waiting = self.poll_waiting_lanes()
+            if reason is not None:
+                return self._halt(reason)
             unit = queue.current()
             if unit is not None and unit.id.startswith("HUMAN-"):
                 return self._halt(f"operator approval required: {unit.id}")
@@ -1270,7 +1331,7 @@ class Pool:
                 if result is not None:
                     return result
                 continue
-            wave = queue.pick_wave(self.lanes, self._conflict_pairs(), self._heavy())
+            wave = queue.pick_wave(self.lanes, self._conflict_pairs(), self._heavy(), waiting)
             if not wave:
                 say("pool: no ready unit and no ready review — waiting (dependencies unmet?)")
                 self.sleep(60)
@@ -1438,6 +1499,16 @@ class Pool:
                 self.notifier("auto — halt package, director next", first_line(lane_pkg), self.notify_enabled)
                 return 3
             if not (wt / "ralph" / "lanes" / f"{unit}.done").exists():
+                parsed = waiting_marker(wt, "ralph/waiting")
+                if parsed is not None:
+                    # A waiting end is the lane's own protocol for a detached
+                    # run outliving the session (r9-boundary-sweep, struck out
+                    # twice for it and halted ring 9, 2026-09-19): the tick
+                    # polls the named marker and respawns the lane when it
+                    # lands — the failure counter never sees this end.
+                    say(f"pool: lane {unit} waiting on {parsed[1].relative_to(wt)} "
+                        "— no failure count")
+                    continue
                 # A lane that keeps ending without its marker would otherwise be
                 # re-run forever (2026-09-17: ~50 sessions over 2.5h on
                 # dm-daemon-api-edge). Bound it and hand the row to the director.
