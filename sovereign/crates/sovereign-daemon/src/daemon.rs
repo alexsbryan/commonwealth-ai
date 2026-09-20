@@ -939,10 +939,7 @@ impl EmbeddedDaemon {
             self.media_route.set(origin, allow);
             self.media_route
                 .set_viewer_user(fresh.iroh.media_viewer_user.clone());
-            self.media_route
-                .set_declared(commonwealth_media::read_declared_in(
-                    &commonwealth_media::dir_under(&self.data_dir),
-                ));
+            self.media_route.read_credentials_in(&self.data_dir);
             reloaded.extend(diff.media_changed.iter().map(|f| (*f).to_string()));
             info!(changed = ?diff.media_changed, "admin_reload: media route swapped live");
         }

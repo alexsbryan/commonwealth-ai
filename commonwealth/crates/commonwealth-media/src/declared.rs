@@ -85,6 +85,24 @@ pub fn dir_under(state_root: &Path) -> PathBuf {
     state_root.join("secrets").join("media")
 }
 
+/// The directory a daemon keeps its HOUSE credential in — the install-stage
+/// credential `svrn mesh media offer` spends and then replaces, kept so the
+/// holder's own daemon can still ask its origin questions the viewer account
+/// is not allowed to answer (`sovereign-daemon`'s media-presence poll: a
+/// read-only Jellyfin user sees only the sessions it may control, so asking
+/// with the declared token reads the holder's playback as "nothing playing").
+///
+/// A SIBLING directory, not a second file under [`dir_under`], because every
+/// file there becomes a header on every request this node forwards to its own
+/// origin ([`read_declared_in`]) — a house credential parked beside the
+/// viewer's would ride out on viewers' dials, which is the whole thing the
+/// viewer account exists to prevent. Same 0600/0700 hardening, same reader and
+/// writer; only the directory differs, so there is still one implementation of
+/// "a credential on disk".
+pub fn house_dir_under(state_root: &Path) -> PathBuf {
+    state_root.join("secrets").join("media-house")
+}
+
 /// Every declared header, as [`crate::admit_media`] wants them. Empty when the
 /// directory is absent, which is the common case and not an error.
 ///
@@ -196,6 +214,43 @@ mod tests {
         assert_eq!(
             read_declared_in(dir.path()),
             vec![("authorization".to_string(), credential.to_string())]
+        );
+    }
+
+    /// Negative: the house credential must never become a header on a
+    /// viewer's dial. It lives in its own directory, so the set the acceptor
+    /// forwards does not contain it however it is named.
+    #[test]
+    fn the_house_credential_is_not_in_the_declared_set() {
+        let root = tempfile::tempdir().unwrap();
+        let declared = dir_under(root.path());
+        let house = house_dir_under(root.path());
+        assert_ne!(
+            declared, house,
+            "the house store is a sibling, not the same dir"
+        );
+        write_declared_in(&house, "authorization", r#"MediaBrowser Token="admin-key""#).unwrap();
+        write_declared_in(
+            &declared,
+            "authorization",
+            r#"MediaBrowser Token="viewer-key""#,
+        )
+        .unwrap();
+        assert_eq!(
+            read_declared_in(&declared),
+            vec![(
+                "authorization".to_string(),
+                r#"MediaBrowser Token="viewer-key""#.to_string()
+            )],
+            "only the viewer's credential may reach a member-facing dial"
+        );
+        assert_eq!(
+            read_declared_in(&house),
+            vec![(
+                "authorization".to_string(),
+                r#"MediaBrowser Token="admin-key""#.to_string()
+            )],
+            "the house credential is still readable by the holder's own poll"
         );
     }
 

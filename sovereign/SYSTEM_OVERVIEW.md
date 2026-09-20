@@ -6104,7 +6104,12 @@ a `None` is never read as free. It is written by the holder's presence poll
 (`sovereign-daemon/src/media_presence.rs`, every 10 s) through the SAME
 `POST /internal/node/activity` the inference half uses, decided by
 `commonwealth_media::presence` against the origin's sessions and the viewer
-account in `[iroh] media_viewer_user`; the gossip stamp drops it whenever this
+account in `[iroh] media_viewer_user`. The poll asks with the HOUSE credential
+(`<data_dir>/secrets/media-house/`, `commonwealth_media::house_dir_under`) —
+the install-stage credential `offer` spends and then replaces, kept on the
+holder's machine and carried by no dial, because Jellyfin 12 shows a
+read-only user only the sessions it may remote-control and so the DECLARED
+viewer token reads the holder's own playback as "free" (2026-09-19); the gossip stamp drops it whenever this
 node publishes no media origin, so a reading cannot outlive its offer.
 `svrn mesh media withdraw` clears origin, allow list and viewer account
 together and reloads, and the desktop Library rail's `mesh_media_offers` row

@@ -33,7 +33,9 @@ pub mod presence;
 pub mod reach;
 
 pub use apps::{valid_app_name, AppClaim, PublishRefusal, PublishedApp, PublishedApps, Tier};
-pub use declared::{dir_under, read_declared_in, valid_header_name, write_declared_in};
+pub use declared::{
+    dir_under, house_dir_under, read_declared_in, valid_header_name, write_declared_in,
+};
 pub use identity::{
     admit_app, admit_media, admit_offer, admits_no_one, MemberCheck, MemberIdentity,
 };

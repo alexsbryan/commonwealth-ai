@@ -164,3 +164,41 @@ fn the_in_use_line_distinguishes_in_use_free_and_unreported() {
         "absence is printed, never read as free"
     );
 }
+
+/// The house credential is local-only. `offer` keeps it in a 0600 file under
+/// `commonwealth_media::house_dir_under` and writes NOTHING about it into
+/// `[iroh]` — the document the daemon reads and gossip's `NodeCapabilities`
+/// is built from. The failing input is a verb that parks the install
+/// credential in config "so the poll can find it": every peer would then be
+/// one `svrn mesh status` away from the run of this origin.
+#[test]
+fn offer_writes_no_credential_into_the_config_the_mesh_reads() {
+    let mut doc: toml_edit::DocumentMut = "[iroh]\n".parse().unwrap();
+    set_offer(
+        &mut doc,
+        "127.0.0.1:8096".parse().unwrap(),
+        &["LittleMac".into()],
+        Some("viewer-id-1"),
+    )
+    .unwrap();
+    let written = doc.to_string();
+    for forbidden in ["authorization", "MediaBrowser", "Token=", "media-house"] {
+        assert!(
+            !written.contains(forbidden),
+            "offer put {forbidden:?} in the config the mesh reads:\n{written}"
+        );
+    }
+    let iroh: IrohSection = toml::from_str(&doc["iroh"].to_string()).unwrap();
+    assert_eq!(iroh.media_viewer_user.as_deref(), Some("viewer-id-1"));
+}
+
+/// The two stores are different directories, so a house credential cannot be
+/// picked up by the reader whose output becomes headers on a member's dial.
+#[test]
+fn the_house_store_is_not_the_store_the_acceptor_forwards() {
+    let root = std::path::Path::new("/nonexistent/svrnmesh");
+    assert_ne!(
+        commonwealth_media::dir_under(root),
+        commonwealth_media::house_dir_under(root)
+    );
+}

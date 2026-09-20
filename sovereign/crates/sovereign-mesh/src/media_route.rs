@@ -24,6 +24,14 @@ pub struct MediaRoute {
     /// created one, which the poll reads as "cannot tell the holder from the
     /// house" and publishes as no presence at all.
     viewer_user: std::sync::Arc<std::sync::RwLock<Option<String>>>,
+    /// The HOUSE credential, from `<data_dir>/secrets/media-house/`
+    /// (`commonwealth_media::house_dir_under`) — the install-stage credential
+    /// the offer verb spent and replaced. It never leaves this machine: no
+    /// dial carries it, no `NodeCapabilities` field holds it, no guest link
+    /// prints it. The holder's own presence poll is its ONE reader, because a
+    /// read-only viewer account is shown only the sessions it may control and
+    /// so cannot see the holder watching.
+    house: std::sync::Arc<std::sync::RwLock<std::sync::Arc<Vec<(String, String)>>>>,
     hook: std::sync::Arc<std::sync::Mutex<Option<std::sync::Arc<dyn Fn() + Send + Sync>>>>,
 }
 
@@ -120,6 +128,45 @@ impl MediaRoute {
     /// The declared headers the next media dial carries.
     pub fn declared(&self) -> std::sync::Arc<Vec<(String, String)>> {
         self.declared
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
+    /// Re-read BOTH credential stores from a node's data directory — the
+    /// declared one viewers' dials carry and the house one only the presence
+    /// poll asks with. One call site's worth of knowledge about which
+    /// directory is which, so boot and `svrn daemon reload` cannot drift apart
+    /// on it (ARCH principle 8).
+    pub fn read_credentials_in(&self, data_dir: &std::path::Path) {
+        self.set_declared(commonwealth_media::read_declared_in(
+            &commonwealth_media::dir_under(data_dir),
+        ));
+        self.set_house(commonwealth_media::read_declared_in(
+            &commonwealth_media::house_dir_under(data_dir),
+        ));
+    }
+
+    /// Replace the house credential (never logged: it is a credential, and
+    /// the elevated one).
+    pub fn set_house(&self, house: Vec<(String, String)>) {
+        tracing::info!(
+            target: "transport",
+            house = house.len(),
+            "iroh(mesh): house credential read — the presence poll asks the origin with it, \
+             and nothing else does"
+        );
+        *self
+            .house
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = std::sync::Arc::new(house);
+    }
+
+    /// The house credential the next presence poll asks with. Empty means no
+    /// offer has been made on this node yet — which the poll publishes as "no
+    /// reading", never as "free".
+    pub fn house(&self) -> std::sync::Arc<Vec<(String, String)>> {
+        self.house
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone()

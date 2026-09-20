@@ -642,10 +642,32 @@ async fn cmd_media_offer(args: &[String]) -> i32 {
     // (see `viewer`). A failure here is named and does NOT stop the offer: a
     // library served by the old credential is what the holder already had,
     // and refusing to offer at all would be a worse answer than a loud one.
-    let dir = commonwealth_media::dir_under(&sovereign_contracts::rebrand::svrnmesh_root());
-    let viewer = match viewer::provision(origin, &commonwealth_media::read_declared_in(&dir)).await
-    {
+    let root = sovereign_contracts::rebrand::svrnmesh_root();
+    let dir = commonwealth_media::dir_under(&root);
+    let house_dir = commonwealth_media::house_dir_under(&root);
+    let before = commonwealth_media::read_declared_in(&dir);
+    let viewer = match viewer::provision(origin, &before).await {
         Ok(v) => {
+            // The credential being replaced is the HOUSE's — the one account
+            // on this origin that can see the holder's own sessions. Kept
+            // here, on this machine only, so the presence poll still has an
+            // asker after the declaration becomes the viewer's read-only
+            // token. Skipped when there is nothing to keep: on a second offer
+            // `provision` hands back the token already declared, and storing
+            // that as the house credential would lose the elevated one.
+            if let Some((_, install)) = before
+                .iter()
+                .find(|(n, val)| n == "authorization" && *val != v.credential)
+            {
+                if let Err(e) =
+                    commonwealth_media::write_declared_in(&house_dir, "authorization", install)
+                {
+                    eprintln!(
+                        "mesh media offer: the house credential could not be kept — {e}; this \
+                         node will publish no \"in use\" signal"
+                    );
+                }
+            }
             if let Err(e) =
                 commonwealth_media::write_declared_in(&dir, "authorization", &v.credential)
             {

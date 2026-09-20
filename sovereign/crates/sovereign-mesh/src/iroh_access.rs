@@ -697,9 +697,7 @@ impl MeshIrohAccess {
                  will be closed (federated inference from peers is off)"
             ),
         }
-        media.set_declared(commonwealth_media::read_declared_in(
-            &commonwealth_media::dir_under(data_dir),
-        ));
+        media.read_credentials_in(data_dir);
         let routes = AcceptorRoutes {
             internal: internal_addr,
             peer: peer_addr,

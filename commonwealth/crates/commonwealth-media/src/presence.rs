@@ -76,9 +76,19 @@ pub fn media_available_from_sessions(
     let sessions: Vec<Session> =
         serde_json::from_str(body).map_err(|e| PresenceError::NotSessions(e.to_string()))?;
     let holder_playing = sessions.iter().any(|s| s.is_holder_playing(viewer_user_id));
+    // The user ids beside the count, because the count alone cannot tell
+    // "the holder is idle" from "the credential we asked with is only
+    // allowed to see itself" — the defect this line was added to make
+    // readable from one run (ARCH principle 1).
+    let saw: Vec<&str> = sessions
+        .iter()
+        .map(|s| s.user_id.as_deref().unwrap_or("<none>"))
+        .collect();
     tracing::debug!(
         target: "transport",
         sessions = sessions.len(),
+        ?saw,
+        %viewer_user_id,
         holder_playing,
         "media presence: read the origin's sessions"
     );
