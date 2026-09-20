@@ -344,7 +344,7 @@ node.
   pick a document — then ask it. The answer is the passage it came from, or
   "I can't answer that from what you've given me." That is Sovereign's
   sentence reduced to a tab: extractive, cited, and able to decline, carried
-  in the same `Answer`/`Claim`/`Verdict` schema. It is search with an honest
+  in `kernel_types::Answer` with its four-way `Verdict`. It is search with an honest
   verdict, not the full pipeline, and the page says which. A downloaded
   in-browser model is optional and later; it is hundreds of megabytes.
 - **The taste of more is the truth about what is missing**, mounted by the
@@ -357,6 +357,27 @@ node.
   `RingJournal::ingest` already accepts because the signatures verify. The
   browser key, as founder, admits the node's key under the same name. The
   ring of one becomes your first real ring with no migration.
+- **Checked 2026-09-20** (`cargo check --target wasm32-unknown-unknown`, in
+  an isolated copy; no wasm binary was built, run or sized).
+  `commonwealth-rail-core` with `oplog` and `kernel-types` compiles for the
+  browser in 9 s. Two things in the tree stop it today, both manifest-level:
+  every member depends on `workspace-hack`, which carries `tokio = "full"`,
+  and `mio` refuses the target — the in-workspace check fails there; and
+  `kernel-types` takes `getrandom 0.3` unconditionally, which needs the
+  `wasm_js` feature plus `--cfg getrandom_backend="wasm_js"`. `oplog` reads
+  files (`oplog/src/lib.rs:89`); that compiles and cannot work in a tab, so
+  the browser supplies its own log storage and hands ops to `admit`.
+  `ingest`'s contract is as assumed: "No validation and no re-signing … anything
+  wrong with it becomes a gap when `admit` reads it back." The consequence for
+  graduation: the browser key's ops are `UnknownSigner` gaps on the new node
+  until that key is its roster seed, and the amendment forbids a roster route
+  — so adopting a journal is a confirmation the person gives on their own
+  node, not something the phone can write. The answer schema is
+  `kernel_types::Answer` and `Citation` (`kernel-types/src/answer.rs:351`,
+  `:197`) with the four-way `Verdict` (`judgement.rs:91`), and `kernel-types`
+  is already in this wasm tree; there is no `Claim` of the shape
+  `FIVE_PROGRAMS.md` §3 sketches. Not needed by this tier and still
+  unverified: iroh in the browser at the pinned `1.0`.
 - **Together needs a house.** Two browsers cannot reach each other and a
   browser cannot be invited into. The first node is the threshold of having
   anyone else, and the page says so at the moment someone reaches for
