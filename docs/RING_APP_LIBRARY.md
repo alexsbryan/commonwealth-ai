@@ -277,6 +277,68 @@ measurement.
 
 # Part 2 — what composes the library
 
+## The core, and the boundaries it does not cross at first
+
+Operator direction 2026-09-20: express the core on its own terms, be honest
+where its boundaries are, and do not cross them at first, so the core can be
+scaled as far as it goes. Every irreducible limit met while drafting this
+part — a gateway's name being taken over, browser storage siloed by origin
+and evicted, a poster naming a dead domain, a keeper reading plaintext, a
+public inbox on a home machine — came from one move: treating a stranger's
+browser as a citizen. The core does not make that move.
+
+**The core, six sentences.**
+
+1. You are a key you hold, on a device you own.
+2. A ring is its members' machines. Nothing else holds it.
+3. The only way in is a person: an `Admit`, written by a member, in the
+   rail's order.
+4. A guest is a member's responsibility: no identity, in the room, through
+   that member's node, signed by that member, for as long as the grant lasts.
+5. Apps arrive through the ring, by hash, and are folds.
+6. Infrastructure forwards and never holds.
+
+**Two tiers, and only two.** A *guest* is a browser on the room's network,
+served by the host's own node over the LAN door — no install, no key, no
+domain, no gateway, no third party; the guest trusts the page exactly as far
+as they trust the person standing next to them. This is built. A *member*
+runs a node — the desktop app or the phone app — with a key in the device's
+keystore, admitted in person or over a channel the two people already share.
+There is no browser-held identity.
+
+**What invitation-only removes, rather than mitigates.** No public surface,
+so no spam, no moderation queue, no sybil rate limits, and the acceptor
+admits roster keys only. The inviter is present when the invite is made, so
+the minting node is awake at redemption. No gateway origin, so no takeover,
+no origin silo, no eviction, no secure-context problem: a keyless guest needs
+none of what a secure context gates. No keeper, so nothing outside the ring
+reads it.
+
+**The boundaries, stated and not crossed at first.**
+
+| Boundary | What it costs | What crossing it would need |
+|---|---|---|
+| Strangers | No public rings, posters or ads that land in an experience. The way in is someone who would vouch for you | §17's gateway, a public posture, a guest inbox |
+| The browser as an identity | A phone member installs the app | §16's browser key and wasm signer; a gateway origin |
+| Remote guests | A guest is in the room, on its WiFi. Remote means member | the page as an iroh endpoint (§17) |
+| Always there | A ring sleeps when its members' machines do; one that must not leaves a machine on | nothing to cross — this is the design |
+| iOS in the background | A phone-only ring syncs while apps are open | a push sender, which is a hub |
+| Getting the software | App stores and downloads are not decentralised. Running is | — |
+
+**The friendless newcomer** is not a ring problem. Alone, the node is
+Sovereign: it answers from what you already have. A ring is what happens when
+you invite someone. The ring of one needs no landing app because it is not
+the product's first moment.
+
+**What stays in scope from the sections below:** the runtime (§12), the
+sandbox (§13 — a guest's text still renders on members' screens), the bundle
+(§14), reach (§15), `Admit`/`Remove` and the one invite with a use count
+(§16, installed apps only). **Beyond the boundary, kept as the record of what
+crossing costs:** §16's browser key, and all of §17 except the LAN door.
+The phone member surface is `sovereign-mobile`, which already carries an iroh
+bridge (`src-tauri/src/iroh_bridge.rs`) and today speaks to the client
+surface, not to rings.
+
 Part 1's purity rule stops here. Everything below does I/O. It is drawn as
 four layers, each owning one thing about itself (ARCH principle 12), and it
 is scoped to what the first ring apps and the spot in
