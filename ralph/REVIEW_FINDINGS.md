@@ -1699,3 +1699,59 @@ instrument), and no SDK beyond the shim.
 - **PREPUSH advisory `concept-gate`**: could-not-judge — the SCIP graph is at
   `652209be` with 720 indexed source files changed in the gap, so its −1 delta
   is not about this commit.
+
+## mesh-principal — for THREAT_MODEL
+
+Measured by `REVIEW-build-mp-inventory` (2026-09-20). Item (vii) of that row:
+three claims from the external review, each MEASURED AND RECORDED ONLY. No row
+in `ralph/next/mesh-verified-principal/STATE.md` fixes any of them, and none is
+in the order's scope.
+
+### A live-lane cursor CAN be forged — confirmed, and already disclosed in the code
+
+`POST /internal/ring/live` (`sovereign/crates/sovereign-daemon/src/routes_internal/ring_live.rs:49`)
+takes `State` and `Bytes` and nothing else: it extracts no `HeaderMap` and no
+`ConnectInfo`, so the handler cannot name its caller even to log it. The module
+header says so itself at `:9-14` — "any peer that can route to this host can
+make a cursor appear on this daemon's pages" — so this is a disclosed cost, not
+a hidden one. Two things bound it and both hold: the buffer is refused for any
+namespace no live rail grant on this daemon names, and the NAME a cursor renders
+under comes from a rail act's signer through the roster, never from this route
+(`:16-19`, bar `ra-doc-attribution-from-signer`). So the forgeable thing is a
+cursor POSITION, not an identity. Closing condition: the route reads the verified
+principal `mp-1` introduces and refuses a namespace whose roster does not name the
+asker — the same shape `mp-2-ring-sync-by-roster` gives `ring_sync`. Owner: unowned.
+
+### The tensor-split port is authenticated by mesh membership over iroh, and by nothing at all locally
+
+Over iroh, `RPC_ALPN` (`cwth/rpc/0`) is admitted to MEMBERS ONLY: the acceptor
+resolves the dialer's verified key against membership and REFUSES a non-member
+with "the rpc-server authenticates nothing, so there is no safe downgrade"
+(`sovereign/crates/sovereign-mesh/src/iroh_access.rs:507-516`). That is the
+strongest check any ALPN in `forward_for` applies. The port it forwards to is the
+local ggml rpc-server, `127.0.0.1:50052` by the acceptor's own doc
+(`commonwealth/crates/commonwealth-transport/src/iroh.rs:72-78`), and the worker
+binds exactly what the daemon resolved and refuses to guess
+(`sovereign/crates/sovereign-inference/src/rpc_worker_main.rs:63-64`). So the
+review's claim is right about the protocol — raw ggml tensor bytes carry no
+credential — and wrong about the exposure on an encrypted mesh, where membership
+is checked before a byte is forwarded. The residual is a LOCAL process on the
+worker host: nothing between it and `:50052`. Closing condition: the rpc-server
+gains a per-connection credential, or the port is documented as trusting its own
+machine the way the internal router is. Owner: unowned.
+
+### MCP is loopback-only on this host by CONFIG, not by construction, and is off the mesh surface entirely
+
+`/mcp` is merged into the CLIENT router and only that one
+(`sovereign/crates/sovereign-daemon/src/daemon.rs:3734-3741`). The peer router
+that `CLIENT_ALPN` forwards a member's dial to is built separately at `:3746-3749`
+and never receives the merge, so no mesh member reaches `/mcp` over iroh. The
+client listener binds `[daemon] client_bind`, which defaults to `127.0.0.1`
+(`sovereign/crates/sovereign-contracts/src/setup_config.rs:1600-1605`) and reads
+`127.0.0.1` in this host's `~/.svrnmesh/config.toml:22`; `ss -ltnp` confirms
+`127.0.0.1:9741`. An operator who sets `client_bind = "0.0.0.0"` exposes `/mcp` to
+the LAN behind the bearer gate `client_auth` applies to every non-loopback caller
+— which is a real gate, not an absence, but it is the daemon-wide token, so every
+remote MCP caller is one principal. Closing condition: per-caller credentials for
+the client surface, which `client_principal.rs:66-70` already names as an auth
+change rather than a scheduling one. Owner: unowned.
