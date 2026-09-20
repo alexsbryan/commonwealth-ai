@@ -337,8 +337,11 @@ pub struct PipelineState<'ctx> {
     pub corpus_ceiling: Option<&'ctx [String]>,
     /// Query-side embedding of the (follow-up-expanded) retrieval query.
     pub embedding: Vec<f32>,
-    /// Grounding label: `"KnowledgeQuery"` or `"DeepQuery"` — the label
-    /// the atlas/RAPTOR helpers and shared log lines carry.
+    /// Grounding label — the label the atlas/RAPTOR helpers and shared log
+    /// lines carry. The KQ path passes `"KnowledgeQuery"`; the deep path
+    /// passes the turn's intent slug (`intent.row().slug`), so a SimpleQuery
+    /// turn's rows read `simple_query` rather than the deep step list's name.
+    /// Display only — no code branches on it.
     pub label: &'static str,
     /// Main-retrieval label: KQ uses `"KnowledgeQuery"`; the deep path
     /// uses `format!("{intent:?}")` (e.g. `SimpleQuery`).

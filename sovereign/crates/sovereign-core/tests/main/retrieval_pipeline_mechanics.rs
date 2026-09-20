@@ -276,3 +276,74 @@ async fn a_step_that_lies_about_its_kind_is_caught() {
          violation counter did not move, so the invariant is not wired"
     );
 }
+
+// ─── Pipeline labelling (rb-simple-trace-label) ───────────────────────
+
+/// Captures the runner's `retrieval.pipeline` rows so a test can read the
+/// `pipeline` name the turn actually emitted. Same shape as the `WarnCapture`
+/// subscriber in `drb1_r3b_goldens.rs`, narrowed to this one target.
+#[derive(Default, Clone)]
+struct PipelineCapture {
+    rows: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+}
+
+impl tracing::Subscriber for PipelineCapture {
+    fn enabled(&self, meta: &tracing::Metadata<'_>) -> bool {
+        meta.target() == "retrieval.pipeline"
+    }
+    fn new_span(&self, _attrs: &tracing::span::Attributes<'_>) -> tracing::span::Id {
+        tracing::span::Id::from_u64(1)
+    }
+    fn record(&self, _span: &tracing::span::Id, _values: &tracing::span::Record<'_>) {}
+    fn record_follows_from(&self, _span: &tracing::span::Id, _follows: &tracing::span::Id) {}
+    fn event(&self, event: &tracing::Event<'_>) {
+        struct V(Vec<String>);
+        impl tracing::field::Visit for V {
+            fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+                self.0.push(format!("{}={:?}", field.name(), value));
+            }
+            fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
+                self.0.push(format!("{}={}", field.name(), value));
+            }
+        }
+        let mut v = V(Vec::new());
+        event.record(&mut v);
+        self.rows.lock().unwrap().push(v.0.join(" "));
+    }
+    fn enter(&self, _span: &tracing::span::Id) {}
+    fn exit(&self, _span: &tracing::span::Id) {}
+}
+
+/// A SimpleQuery turn runs the DEEP step list — that is the design — but the
+/// trace must name the turn's route, not the step list. Until
+/// rb-simple-trace-label both the pipeline name and `PipelineState::label`
+/// were pinned to the deep path, so every `retrieval.pipeline` row, the
+/// `retrieval.seal` rows and the post-atlas rows on a SimpleQuery turn read
+/// `DeepQuery` / `deep_query`, and an audit could not tell the two intents
+/// apart. The harness's `PassthroughRouter` routes every message to
+/// SimpleQuery, so one `send` is one SimpleQuery turn.
+#[tokio::test]
+async fn simple_query_retrieval_is_labelled_simple_query() {
+    let h = TestHarness::new();
+    let sink = PipelineCapture::default();
+    let rows = std::sync::Arc::clone(&sink.rows);
+    let guard = tracing::subscriber::set_default(sink);
+    h.send("what does the widget do").await;
+    drop(guard);
+
+    let rows = rows.lock().unwrap();
+    assert!(
+        !rows.is_empty(),
+        "the runner emits one row per step — capturing none means this test \
+         watched nothing and cannot fail for the right reason"
+    );
+    let deep: Vec<&String> = rows.iter().filter(|r| r.contains("pipeline=deep_query")).collect();
+    assert!(
+        deep.is_empty(),
+        "a SimpleQuery turn must not label its retrieval rows `deep_query`: {deep:?}"
+    );
+    assert!(
+        rows.iter().all(|r| r.contains("pipeline=simple_query")),
+        "every row of a SimpleQuery turn carries the turn's route: {rows:?}"
+    );
+}

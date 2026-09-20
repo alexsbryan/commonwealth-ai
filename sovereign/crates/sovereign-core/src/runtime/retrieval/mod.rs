@@ -145,13 +145,22 @@ impl Runtime {
         // raptor/store steps (they're routed to ComplexTask and should
         // never reach this path) but keep the historical control flow
         // of running the entity/merge tail on the empty pool.
+
+        // The turn's REAL route, and the only source of the trace/audit label
+        // every row below carries. This path runs the deep step list for
+        // SimpleQuery, DeepQuery, SimpleAction and Continuation alike, so a
+        // pinned "DeepQuery" made every one of those turns read as a Deep one
+        // in `retrieval.pipeline`, `retrieval.seal` and the post-atlas rows.
+        // Nothing branches on it — `audit_step`, `drop_dead_law_chunks` and
+        // `apply_cross_corpus_discipline` all take it as a display `&str`.
+        let route = intent.row().slug;
         let mut pipeline_state = PipelineState::new(
             message,
             context,
             intent,
             scope,
             Vec::new(),
-            "DeepQuery",
+            route,
             format!("{intent:?}"),
             lane.clone(),
         );
@@ -172,9 +181,12 @@ impl Runtime {
                 .await
                 .unwrap_or_default();
         }
-        deep_pipeline(attached_source.is_none())
-            .run(self, &mut pipeline_state)
-            .await;
+        // The step list is the deep one for every intent routed here; the NAME
+        // is the turn's route, so `retrieval.pipeline: step` rows name the
+        // intent whose turn produced them (same string as the state's label).
+        let mut pipeline = deep_pipeline(attached_source.is_none());
+        pipeline.name = route;
+        pipeline.run(self, &mut pipeline_state).await;
         let PipelineState {
             chunks: mut all_chunks,
             peer_attribution,
@@ -482,13 +494,13 @@ impl Runtime {
         if let Some(allow) = context.conversation.enabled_corpora.as_deref() {
             let bleed = corpora_outside_seal(&all_chunks, Some(allow));
             if bleed.is_empty() {
-                tracing::info!(target: "retrieval.seal", allowed = ?allow, "DeepQuery: corpus seal intact");
+                tracing::info!(target: "retrieval.seal", allowed = ?allow, "{route}: corpus seal intact");
             } else {
                 tracing::warn!(
                     target: "retrieval.seal",
                     allowed = ?allow,
                     bleed = ?bleed,
-                    "DeepQuery: cross-corpus bleed — chunks from corpora outside the conversation seal"
+                    "{route}: cross-corpus bleed — chunks from corpora outside the conversation seal"
                 );
             }
         }
