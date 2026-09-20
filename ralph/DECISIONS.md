@@ -241,6 +241,10 @@ exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 - Needed: The cold room run came back 4/6. The package offered two findings and a named suspect for each; reproducing both against the run's own logs falsified one finding outright and struck the other's suspect, and the row also carried a never-run second half and a cold-run count resting on a run that predates every commit since.
 - Chose: No product row for the offline FAILED — the keeper was reachable and the citation was honest, so the defect is the instrument's: `rr-2-the-cut-drops-the-established-path` makes the cut drop established connections and makes the assertion probe the path the bar judges. For the film FAILED, `rr-2-merge-reads-the-triple-every-round` — the merge side gets the always-on reading the holder side already has, then the fix at the one site it names, with an in-process reproduction first and a stop-with-a-package if it stays green. Run 3 no longer counts as a cold run and the count restarts at zero; the rr-1 regression half is ungated and runs first.
 - Because: `beefy/daemon.err` 05:02:06 shows the fan-out SERVED by RuggedFox from inside the cut over an established QUIC path on a loopback bridge port, with `corpora_unavailable={}` — so `room_assert_cut` proved that fresh dials fail and asserted something else, which is ARCH 5's check with no failing input you can name, and `rr-2-cut-is-a-cut` had already reserved that repair for `cut_node`. On the film side the holder published `Some(0.0)` for ~12 rounds with `stamped_from_dial_info=true` and zero `log_sent_snapshot` warnings on all three nodes, and BOTH peers missed it — so `restamp_onto` (the package's suspect) is not reachable as a cause, and the only unread side is the merge, where silence cannot be told from absence (ARCH 1, 2, 6).
+**A48 · 2026-09-20 · rr-2-the-cut-drops-the-established-path · director (seat)** — this commit
+- Needed: The row's (a) named `cut_node` and two mechanisms. The worker measured that neither carries anything, found a third path (the host forwarding the uplink bridge into the room bridge), closed it with `--opt isolate=true` on the strength of a plant, and then watched the real run serve a knowledge fan-out and an HTTP 200 into the cut anyway. The package asked whether to spend a 25-minute run naming the wire, whether the cut may be made at the host or the node image changed, and whether (a) should be re-scoped away from `cut_node`.
+- Chose: No run, no host cut, no image change. The wire is named from the run's own logs and a plant on this host: the host forwards the uplink bridge into the room bridge and masquerades it to the room gateway, and the `isolate` flag never installed a rule because netavark 1.17.2 skips isolation for `--internal` networks (`strict` too — the chains are quoted in the row). Row 54 re-scoped in place, still `[ ]`: (a) becomes a seal the demo installs itself in the rootless netns after every node is attached and proves at `up` (halo cannot reach the wall's door at its room address; the phone can); (b) stands; (c) is added because the recorder dc7c31558 shipped reads `active_direct_addrs: usize` — a count — so it could never have named the wire the package wanted a run to name. `cut_node` and the node image are untouched.
+- Because: ARCH 4 and 5 — the "closed" back door was measured on a plant whose two bridges happened not to leak that run (the flip reproduces here: 5 of 9 runs leak when the wall pings the keeper, 3 of 3 when it does not), and it shipped with a comment asserting the ruleset does what the ruleset never did. ARCH 12 — a venue's WiFi forwarding nothing from outside is the room's to own, not the cut's; `cut_node` was right all along. ARCH 1 — a path reading that cannot name the address is not a reading.
 
 **A44 · 2026-09-19 · rr-2-gossip-claim-one-decider · director (supervisor resolution, attempt 1)** — commit: this one
 - Needed: A43 wrote the row on the premise that a SECOND site builds the claim gossip sends. The worker measured the send path and found one, stopped at the premise check without improvising a target, and asked whether to rewrite or strike the row.
@@ -6511,5 +6515,236 @@ in use" is right but "the holder's 1.0 → 0.0 never reaches the viewer's rail" 
 scoped to one viewer when both missed it; and "during the cut the wall answers grounded
 citing the keeper it cannot reach" is false — beefy reached it, served 5 hits, and said
 so in its own log on the same second.
+
+</details>
+
+## A48 · 2026-09-20 — rr-2: the third path is the host forwarding into the room, and the flag meant to close it never installed a rule
+
+<details>
+
+### The fork
+
+Row 54 left `[~]` at `dc7c31558`. The worker asked three things: whether to spend one
+`demo-bg`/`demo-wait` (~25 min) filling `room-cut-paths.json` so the endpoint names the
+surviving address; whether the cut may be made at the host (or iproute2/nftables added to
+the node image) because the container has no `ip`/`nft`; and whether (a) should be
+re-scoped away from `cut_node`, since the fix that "worked" was a network-creation flag.
+All three are charter-covered: fixing a row whose premise the tree contradicts, the
+smaller reversible step, the existing surface over a new one.
+
+### The wire, from the run's own logs
+
+Cut at 05:48:54.56Z, heal after the phone leg. `target/ring-room-rr2-demo/halo/daemon.err`:
+
+```
+05:48:02.247  watchdog: peer path established peer=ring-room-beefy path="mixed"
+05:49:08.531  gossip: round FAILED … peer=node-32fd67a833d78b42        (beefy)
+05:49:22.254  watchdog: peer path migrated peer=ring-room-beefy from="mixed" to="relayed"
+05:49:24.509  gossip: round FAILED … peer=node-32fd67a833d78b42
+05:49:34.550  gossip: reach ok peer=node-32fd67a833d78b42 … reach_ms=2
+05:49:42.255  watchdog: peer path migrated peer=ring-room-beefy from="relayed" to="mixed"
+05:49:44.566  gossip: reach ok … reach_ms=5
+05:49:44.561  transport: resolved transport="ip" … peer=node-32fd67a833d78b42 candidates=2 first="ip:10.89.60.11:19942"
+```
+
+`beefy/daemon.err` over the same window: `relay_homed=false` on every watchdog line
+(05:49:11, :31, :51), `round FAILED` to halo at 05:49:05 and 05:49:21, `reach ok` to halo
+from 05:49:34 at 9–15 ms. Both ends reach each other over a DIRECT path 40 s into the
+cut, with beefy's relay dead and its uplink interface gone. The only address beefy still
+owns is its room address, `10.89.60.11`, and halo holds it as a candidate.
+
+### Reproduced on this host, the room's exact shape
+
+Scripts in the session scratchpad (`udp-plant2.sh`, `udp-plant3.sh`, `udp-plant4.sh`);
+the shape is: wall `a` on `room:10.89.70.11` + `uplink:10.89.71.11`, phone `ph` on room,
+keeper `b` on `uplink:10.89.71.12`; node:20-bookworm-slim; UDP 9000; `b` sends
+`ping-from-b` to BOTH of `a`'s addresses every 500 ms (iroh pings every candidate), `a`
+replies to whatever it hears; `podman network disconnect <uplink> a` after 6–10 s.
+
+| room flag | uplink flag | wall pings keeper | runs | replies from the ROOM address after the cut |
+|---|---|---|---|---|
+| `--internal --opt isolate=true` | none | yes | 9 | 5 leaked (41–181 replies), 4 heard nothing |
+| `--internal --opt isolate=true` | none | no (passive wall) | 3 | 3 of 3 leaked, 25 replies each in 12 s |
+| `--internal --opt isolate=strict` | none | yes | 1 | 0 (one run; see the chains — not the flag's doing) |
+| `--internal --opt isolate=true` | `isolate=true` | yes | 1 | 0 (one run) |
+| `--internal --opt isolate=strict` | `isolate=strict` | yes | 1 | 0 (one run) |
+
+Conntrack in the rootless netns during a leaking run:
+
+```
+udp 17 119 src=10.89.71.12 dst=10.89.70.11 sport=9000 dport=9000 src=10.89.70.11 dst=10.89.70.1 sport=9000 dport=9000 [ASSURED]
+```
+
+The keeper's packet is forwarded from the uplink bridge into the room bridge and
+masqueraded to the room gateway; the wall answers the gateway on its own connected
+subnet, needing no route. That is the worker's "back door", and it was never closed.
+
+### Why the flag is inert — the chains
+
+`podman unshare --rootless-netns nft list ruleset`, podman 5.8.4, netavark 1.17.2,
+room = `podman1`, uplink = `podman2`:
+
+```
+room isolate=true,   uplink none:    chain NETAVARK-ISOLATION-1 { }        (empty)
+room isolate=strict, uplink none:    chain NETAVARK-ISOLATION-1 { }        (empty)
+room isolate=true,   uplink true:    NETAVARK-ISOLATION-1 { iifname "podman2" oifname != "podman2" jump NETAVARK-ISOLATION-2 }
+                                     NETAVARK-ISOLATION-2 { oifname "podman2" drop }
+room strict,         uplink strict:  NETAVARK-ISOLATION-1 { iifname "podman2" oifname != "podman2" jump NETAVARK-ISOLATION-3 }
+                                     NETAVARK-ISOLATION-2 { oifname "podman2" drop }
+FORWARD (every shape): ct state invalid drop; jump NETAVARK-ISOLATION-1;
+                       ip daddr 10.89.71.0/24 ct state established,related accept; ip saddr 10.89.71.0/24 accept
+```
+
+The room bridge is never named in any isolation chain, in any shape. netavark installs
+isolation for non-internal networks only; `--internal` is route-based (no default route
+in the container, no masquerade) and adds no filter rule. FORWARD is `policy accept`, so
+podman2→podman1 is forwarded whenever nothing drops it, and nothing ever does. (A stale
+`NETAVARK-ISOLATION-3 { oifname "podman2" drop }` persists in the netns across runs with
+nothing jumping to it — inert.)
+
+The worker's plant of 2026-09-20 read "with isolate, uplink → wall's room address NO
+REPLY" and shipped on it. The 4-of-9 no-leak runs above are that reading: the flip
+between a leaking and a silent run, with the wall active, is real and unexplained here
+(neighbour cache ruled out: `10.89.70.11 … REACHABLE` in both; conntrack `[ASSURED]` in
+both). With a passive wall it leaks every time, which is the plant the row now names.
+
+### The recorder could not have named it
+
+`commonwealth/crates/commonwealth-transport/src/iroh_path.rs:79`:
+`pub active_direct_addrs: usize`. `peer_path_snapshot` counts `TransportAddr::Ip(_)`
+at :113 and discards the address. `mesh status --json` (what `room_assert_cut` now dumps
+to `room-cut-paths.json`, `scripts/ring-room-demo.sh:1025`) therefore carries a count.
+Spending the run would have recorded `2`.
+
+### What falsifies this
+
+- A run with the seal installed where `room_assert_cut` still reads `cut-not-a-cut`,
+  and `room-cut-paths.json` names an address that is not `10.89.60.11` — then there is
+  a fourth path and this appendix is wrong about the third being the last.
+- The passive-wall plant failing to leak in three consecutive runs on this host — then
+  the mechanism is not the forwarding, and the conntrack line above was something else.
+- `podman unshare --rootless-netns nft insert rule inet netavark FORWARD …` not surviving
+  a later container setup — then the seal must be re-asserted per setup, not once
+  after `up`; the row already re-asserts after `heal_node`.
+
+### Not decided here
+
+- The 5-of-9 flip with an active wall. Recorded, not chased: the seal makes it moot for
+  the bar, and REVIEW-audit-rr-2 can carry it if the operator wants it named.
+- netavark's behaviour is cited from measured chains, not from its source. If a newer
+  netavark installs isolation for internal networks, the seal is redundant, not wrong.
+
+### The worker's package, inline
+
+> # rr-2-the-cut-drops-the-established-path — a third path survives the cut and I cannot name it
+> 
+> Unit: `rr-2-the-cut-drops-the-established-path`, row 54 of
+> `ralph/next/ring-room-rr2/STATE.md`, left `[~]`. Partial work is committed at
+> `dc7c31558` and is independently justified; the row's own bar is NOT met.
+> 
+> The row's fix, both halves:
+> > (a) `cut_node` also drops beefy's established iroh connections the way a lost
+> > uplink would — name in the commit WHICH mechanism (the bridge port, the relay
+> > path, or both) … (b) `room_assert_cut` additionally probes the path the bar
+> > judges … a surviving established path reads COULD-NOT-JUDGE `cut-not-a-cut`
+> > naming the address
+> 
+> (b) is done. (a) is half done: I found and closed one real back-door, and a
+> second, unidentified path still carries bytes through the cut.
+> 
+> ## What I measured
+> 
+> Neither mechanism the row names is the carrier. The relay is already dead at
+> the cut (`beefy/daemon.err` 05:01:14.222 `Lost connection to relay server:
+> Local IP no longer valid`), and the bridge port is beefy's own loopback mouth,
+> not a wire.
+> 
+> Two podman bridges in the room's exact shape (room `--internal`, uplink
+> plain), a UDP flow every 1 s across `podman network disconnect uplink`, with a
+> control:
+> 
+> ```
+> beefy -> uplink, after the cut ........... ENETUNREACH, route table empty
+> uplink -> beefy's ROOM address, after .... REACHED, established flow kept answering
+> ```
+> 
+> Packets from the uplink arrive SNAT'd from the room gateway `10.89.60.1`,
+> which beefy answers on its own directly-connected subnet with no default
+> route. `--internal` only stops beefy going OUT; the host still forwards the
+> uplink bridge INTO the room bridge. `--opt isolate=true` closes that:
+> 
+> ```
+> with isolate, uplink -> beefy's room address .. NO REPLY
+> with isolate, established flow ................ last reply 52 ms BEFORE the cut
+> with isolate, phone -> wall .................... REACHED   (the goodhart in C holds)
+> published ports on an isolated network ......... reachable from the host
+> ```
+> 
+> That flag is in `dc7c31558`.
+> 
+> ## What still survives, and the commands
+> 
+> Real run, isolate on, `RING_ROOM_TOPOLOGY=room scripts/ralph-check.sh demo-bg`
+> + `demo-wait`, exit=0:
+> 
+> ```
+> PASSED           ra-room-scan-to-name 1.0
+> PASSED           ra-room-guest-edit-attributed 1.0
+> PASSED           ra-room-guest-ask-served-by-the-room 1.0
+> PASSED           ra-room-film-from-littlemac 1.0
+> COULD-NOT-JUDGE  ra-room-offline-room-says-so — cut-not-a-cut:
+>                  http://127.0.0.1:27065/oicp/v1/capabilities still answers an
+>                  OICP capabilities fetch from beefy (HTTP 200)
+> PASSED           ra-room-member-only-by-vouch 1.0
+> ```
+> 
+> Cut at 05:48:54.56. From `target/ring-room-rr2-demo/beefy/daemon.err`:
+> 
+> ```
+> 05:48:54.850  WARN  relay-actor: Lost connection to relay server: Local IP no longer valid
+> 05:49:05.003  WARN  gossip: round FAILED … peer=node-849c7de0…(RuggedFox) outcome="unreachable"
+> 05:49:08.005  WARN  gossip: round FAILED … peer=node-48e3f942…(LittleMac) outcome="unreachable"
+> 05:49:25.814  INFO  knowledge: fan-out plan …            <- probe (3); NO served line: dead
+> 05:49:48.334  INFO  knowledge: fan-out served peer_name=RuggedFox addr=iroh:127.0.0.1:28026→76b0c418 hits=5
+> 05:49:48.432  INFO  mesh-inference: fetched peer manifest peer=RuggedFox url=http://127.0.0.1:27065/… rtt_ms=8
+> ```
+> 
+> Heal is not until after the phone leg. So inside one cut, with the uplink
+> interface gone AND the room bridge isolated: gossip is unreachable on both
+> transports, one fan-out is dead, and thirty seconds later another fan-out
+> serves 5 hits and a capabilities fetch returns 200 in 8 ms. Something carries
+> that and I could not name it from the logs. The two things I ruled out by
+> measurement are the relay (down) and the room-gateway back-door (isolated).
+> 
+> ## What the operator must decide
+> 
+> 1. **Whether to spend a run naming the wire.** `room_assert_cut` now records
+>    beefy's own `peer_paths` inside the cut to
+>    `target/ring-room-rr2-demo/room-cut-paths.json`
+>    (`scripts/ring-room-demo.sh:1025`, gating nothing). The endpoint is the only
+>    thing that can name the surviving address — `mesh status` names the roster
+>    and `room_peer_urls` names the local bridge mouth, and neither is the wire.
+>    One `demo-bg`/`demo-wait` (~25 min) fills it. I did not spend it: three demo
+>    runs were already gone on the plant and the real run.
+> 2. **Whether the cut may be made at the host instead of in podman.** Every
+>    in-container option is closed: the node image
+>    (`docker.io/kyuz0/amd-strix-halo-toolboxes:vulkan-radv`) has no `ip`, no
+>    `nft`, no `iptables`, so a filter inside beefy's netns is not available
+>    without changing the image. `podman exec --privileged` does grant full caps
+>    (`CapEff: 000001ffffffffff`, measured), so the only thing missing is the
+>    tooling. Adding iproute2/nftables to the node image is an instrument change
+>    past what this row authorizes.
+> 3. **Whether the row's (a) should be re-scoped.** It names `cut_node`
+>    (`scripts/ring-doc-demo.sh:483`) as the site. The fix that worked is a
+>    network-creation flag in `scripts/ring-room-demo.sh:195`, not `cut_node` —
+>    `cut_node` is untouched and correct. A re-scoped row should say "the cut is
+>    a cut" and leave the site open.
+> 
+> Note `REVIEW-DEMO-rr-2-run` (row 56) cannot start: its first clause needs the
+> offline leg to read something other than COULD-NOT-JUDGE `cut-not-a-cut`, and
+> a run whose offline leg reads that "is not a cold run and does not count".
+> 
+> Edit or mark the row in `ralph/next/ring-room-rr2/STATE.md`, then
+> `rm ralph/STOP ralph/NEEDS_HUMAN.md`.
 
 </details>
