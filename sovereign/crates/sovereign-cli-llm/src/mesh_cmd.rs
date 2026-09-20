@@ -3357,9 +3357,16 @@ async fn cmd_transport(args: &[String]) -> i32 {
         let name: String = p.name.chars().take(12).collect();
         let (path, detail) = match &p.path {
             Some(tp) => {
+                // The addresses, not just how many: a count cannot say WHICH
+                // wire a path is riding, and that is the whole question when
+                // a peer stays reachable through a cut link.
+                let addrs = match tp.active_direct_socket_addrs.as_slice() {
+                    [] => String::new(),
+                    a => format!(" [{}]", a.join(" ")),
+                };
                 let detail = match &tp.relay {
-                    Some(r) => format!("relay={r}  direct={}", tp.active_direct_addrs),
-                    None => format!("direct={}", tp.active_direct_addrs),
+                    Some(r) => format!("relay={r}  direct={}{addrs}", tp.active_direct_addrs),
+                    None => format!("direct={}{addrs}", tp.active_direct_addrs),
                 };
                 (tp.path.as_str(), detail)
             }

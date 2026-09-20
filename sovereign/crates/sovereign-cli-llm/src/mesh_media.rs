@@ -166,9 +166,14 @@ pub(crate) async fn cmd_media(args: &[String]) -> i32 {
                     line.push_str("  — a RELAYED reading (the bar's kind)");
                 } else if p.path == "mixed" {
                     line.push_str(&format!(
-                        "  — {} direct addr + relay both live; bytes ride the direct leg, so this \
-                         is NOT a relayed reading (pin both ends with SOVEREIGN_IROH_RELAY_ONLY=1)",
-                        p.active_direct_addrs
+                        "  — {} direct addr{} + relay both live; bytes ride the direct leg, so \
+                         this is NOT a relayed reading (pin both ends with \
+                         SOVEREIGN_IROH_RELAY_ONLY=1)",
+                        p.active_direct_addrs,
+                        match p.active_direct_socket_addrs.as_slice() {
+                            [] => String::new(),
+                            a => format!(" [{}]", a.join(" ")),
+                        }
                     ));
                 } else if p.path == "direct" {
                     line.push_str("  — a direct reading, not the bar's");

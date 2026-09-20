@@ -45,7 +45,17 @@ scripts/ring-room-demo.sh down
 Since rr-2 the same two scripts also carry a SECOND topology, chosen with
 `RING_ROOM_TOPOLOGY=room`: four nodes named for the machines they stand in for
 (`ring-room-beefy`, `halo`, `little`, `phone`) on TWO podman networks — `room`
-is the venue's WiFi and is created `--internal`, `uplink` is its internet. The
+is the venue's WiFi and is created `--internal`, `uplink` is its internet.
+What makes `room` a room is one bit netavark sets with `--internal` —
+`net.ipv4.conf.<room bridge>.forwarding = 0` — and not podman's `isolate`
+flag, which installs no rule at all on an internal network. Because a bit
+nobody reads is a poor guarantee, `up` also installs a drop each way between
+the two bridges in the rootless network namespace, and then PROVES the
+result on the wire before any leg runs: the keeper on the uplink must not
+reach the wall's page at its room address, and the phone must. With that bit
+flipped back to 1 and no rules installed, the keeper reaches it (measured
+2026-09-20: HTTP 200, 5 of 5 UDP replies), which is what the proof is
+watching for. The
 wall is the one member in the room and holds the host's render node; the keeper
 and the library holder sit behind the uplink; the phone is on the room's WiFi
 only, runs a stock node image, and has no daemon and no key. Cutting `uplink`

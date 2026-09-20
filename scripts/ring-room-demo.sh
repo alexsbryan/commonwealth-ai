@@ -172,27 +172,29 @@ if [ "$TOPOLOGY" = room ]; then
   # podman bridge NATs to the internet, beefy keeps its relay through the room
   # while "the uplink is cut", and the offline bar measures nothing.
   #
-  # `isolate=true` closes the OTHER half of the same hole, and it is the half
-  # `podman network disconnect` cannot reach. `--internal` only stops beefy
-  # going OUT through the room; the host still forwards the uplink bridge INTO
-  # the room bridge, so a peer that had dialled beefy at its ROOM address kept
-  # that connection alive straight through the cut — beefy's replies go to the
-  # room gateway, which is on its own directly-connected subnet and needs no
-  # default route. Measured on this host 2026-09-20, same two-bridge shape,
-  # UDP flow every 1 s, with a control:
-  #   without isolate, after `network disconnect uplink`: uplink→wall's room
-  #     address REACHED, and an established flow kept answering
-  #   with isolate, after the same disconnect: uplink→wall's room address NO
-  #     REPLY, the established flow's last reply lands 52 ms BEFORE the cut,
-  #     and phone→wall still REACHED
-  # That is what a venue losing its uplink does — the room's WiFi does not
-  # route the outside world onto itself — and it is why run 4 of 2026-09-19
-  # had the keeper serving a knowledge fan-out 52 s into a "cut"
-  # (`beefy/daemon.err` 05:02:06.139 `fan-out served peer_name=RuggedFox`,
-  # `halo/daemon.err` 05:02:06.136 `internal knowledge_search: served`, heal
-  # not until 05:02:16). Published ports still work on an isolated network
-  # (measured the same day), so the wall's page reaches the host unchanged.
-  NET_FLAGS=([$ROOM_NET]="--internal --opt isolate=true")
+  # `--internal` does the whole job here, and NOT by the mechanism its name
+  # suggests. It is usually described as route-based — no default route in the
+  # container, no masquerade — which would leave the host free to forward the
+  # uplink bridge INTO the room bridge. What netavark 1.17.2 also does is set
+  # `net.ipv4.conf.<room bridge>.forwarding = 0` in the rootless netns, and
+  # that single bit is what closes the path. Measured on this host 2026-09-20
+  # in the live topology, keeper (uplink) → the wall's ROOM address, with the
+  # phone (room) → the same address as the control, every reading 5 tries:
+  #   room forwarding=0, no seal ....... UDP 0/5, TCP timeout   (phone 5/5, 200)
+  #   room forwarding=1, no seal ....... UDP 5/5, TCP 200
+  #   room forwarding=1, seal installed  UDP 0/5, TCP no answer
+  # `--opt isolate=true` was carried here until 2026-09-20 for this job and
+  # installs no rule at all: netavark writes isolation chains for non-internal
+  # networks only, so `nft list ruleset` in that netns reads
+  # `chain NETAVARK-ISOLATION-1 { }` — empty — with the room isolated, and
+  # `strict` reads the same. FORWARD is `policy accept` carrying only the
+  # UPLINK's own `ip daddr 10.89.61.0/24 ct state established,related accept` /
+  # `ip saddr 10.89.61.0/24 accept`; the room bridge is never named there. So
+  # the flag went, and `room_seal` below installs the rule pair that the third
+  # row shows is what actually holds if that sysctl is ever 1 — while
+  # `room_seal_prove` reads the wire itself, whichever of the two is carrying
+  # the guarantee.
+  NET_FLAGS=([$ROOM_NET]="--internal")
   IP=([beefy]=10.89.60.11 [phone]=10.89.60.14 [halo]=10.89.61.12 [little]=10.89.61.13)
   PNET=([beefy]=$ROOM_NET [phone]=$ROOM_NET [halo]=$UPLINK [little]=$UPLINK)
   # The wall's second attachment. Its primary is the ROOM, so the forwarder
@@ -661,6 +663,99 @@ room_join_lost_to_the_relay() { # node
          "$D/$n/daemon.err" "$D/beefy/daemon.err"
 }
 
+# ── the seal: neither bridge forwards to the other ──────────────────────────
+# One drop each way between the room's bridge and the uplink's, which is what
+# a venue's WiFi says. It is the SECOND thing holding that guarantee — the
+# room bridge's `forwarding = 0` is the first, and the table at NET_FLAGS
+# above is the run where the rules alone closed the path with that bit set to
+# 1. Kept for the day a podman or netavark stops setting it, which is a bit
+# nobody would notice changing. netavark rewrites the netns ruleset on every
+# container setup, so this runs AFTER every node is attached — and again
+# after a heal, which is a setup like any other.
+room_nft() { "${PODMAN[@]}" unshare --rootless-netns nft "$@"; }
+# Reading the chain is NOT `room_nft list …`: from inside the toolbox podman is
+# reached through `flatpak-spawn --host`, and nft's listing arrives empty there
+# unless it is piped on the far side (measured 2026-09-20: `podman unshare
+# --rootless-netns nft list ruleset | wc -l` → 0, `… sh -c 'nft list ruleset |
+# cat' | wc -l` → 68). An empty read here would make the seal insert twice and
+# then report itself missing, so the pipe lives inside the host command.
+room_forward_chain() { "${PODMAN[@]}" unshare --rootless-netns sh -c 'nft list chain inet netavark FORWARD | cat' 2>/dev/null; }
+# The interface podman gave a network, asked rather than guessed: they are
+# podman1/podman2 here in creation order, which is the kind of fact that holds
+# until something else on this host creates a network first.
+room_net_if() { "${PODMAN[@]}" network inspect "$1" --format '{{.NetworkInterface}}' 2>/dev/null; }
+room_seal() {
+  [ "$BACKEND" = podman ] || return 0
+  local rootless up_if room_if have a b
+  rootless=$("${PODMAN[@]}" info --format '{{.Host.Security.Rootless}}' 2>/dev/null)
+  [ "$rootless" = true ] || {
+    echo "room: podman reports Rootless=${rootless:-<nothing>} — the seal is installed in the ROOTLESS network namespace and this host has none, so the uplink bridge stays forwarded into the room and the offline bar would measure a cut that is not a cut" >&2
+    return 3
+  }
+  up_if=$(room_net_if "$UPLINK"); room_if=$(room_net_if "$ROOM_NET")
+  [ -n "$up_if" ] && [ -n "$room_if" ] || {
+    echo "room: podman names no bridge interface for $UPLINK/$ROOM_NET (got '${up_if:-}'/'${room_if:-}') — nothing to seal between" >&2
+    return 3
+  }
+  a="iifname \"$up_if\" oifname \"$room_if\" drop"
+  b="iifname \"$room_if\" oifname \"$up_if\" drop"
+  have=$(room_forward_chain)
+  case "$have" in *"$a"*) ;; *) room_nft insert rule inet netavark FORWARD \
+      iifname "$up_if" oifname "$room_if" drop || return 3 ;; esac
+  case "$have" in *"$b"*) ;; *) room_nft insert rule inet netavark FORWARD \
+      iifname "$room_if" oifname "$up_if" drop || return 3 ;; esac
+  # Read back, because an `nft insert` that exits 0 having matched nothing is
+  # the shape of a seal nobody would notice was missing.
+  have=$(room_forward_chain)
+  case "$have" in
+    *"$a"*) case "$have" in *"$b"*) ;; *) echo "room: the $room_if→$up_if drop is not in the ruleset after insert" >&2; return 3 ;; esac ;;
+    *) echo "room: the $up_if→$room_if drop is not in the ruleset after insert" >&2; return 3 ;;
+  esac
+  echo "room: sealed $up_if↛$room_if and $room_if↛$up_if"
+}
+
+# The phone has no curl: a handset image carries none of this repo's
+# toolchain, so it reads a status the way its browser would.
+room_fetch_status() { # node url
+  node_exec "$1" node -e \
+    'fetch(process.argv[1], {signal: AbortSignal.timeout(5000)}).then(r => console.log(r.status)).catch(() => console.log("000"))' \
+    "$2" 2>/dev/null
+}
+
+# The seal read on the wire, both ways round, before any leg runs: from the
+# keeper on the uplink the wall's ROOM address must not answer, and from the
+# phone in the room it must. Only the pair separates a sealed room from a
+# broken one — a run where nothing answers anything would pass the first
+# clause alone.
+#
+# Watched RED on 2026-09-20 the only way it can go red on this host: with the
+# room bridge's `forwarding` set to 1 and no rules installed, the keeper read
+# HTTP 200 here and 5 of 5 UDP replies at the wall's room address.
+#
+# The target is the wall's page port at its room address, not the guest door
+# the bar's people use. The door is not listening yet: it binds only while a
+# rail grant is live (`sovereign-daemon/src/guest_door.rs:117`) and the first
+# grant is minted inside the wall leg (`room_grant wall`), so at `up` both
+# ends would read "no answer" and the phone's clause could never pass. The
+# page port is the same uplink→room wire and the wall's only room-address
+# listener at this point in the run.
+room_seal_prove() {
+  local url="http://${IP[beefy]}:${DPORT[beefy]}/" from_keeper from_phone
+  from_keeper=$(node_curl halo -s --max-time 5 -o /dev/null -w '%{http_code}' "$url" 2>/dev/null)
+  from_phone=$(room_fetch_status phone "$url")
+  printf 'halo (uplink) -> %s : %s\nphone (room)  -> %s : %s\n' \
+    "$url" "${from_keeper:-no-answer}" "$url" "${from_phone:-no-answer}" > "$D/room-seal.out"
+  case "${from_keeper:-000}" in
+    000) ;;
+    *) echo "room: the seal does not hold — halo, on the uplink, fetched the wall's page at its ROOM address $url and read HTTP $from_keeper. The uplink bridge is still forwarded into the room, so a cut of beefy's uplink would leave that path up and the offline bar would measure nothing." >&2; return 3 ;;
+  esac
+  case "${from_phone:-000}" in
+    2??) ;;
+    *) echo "room: the seal cuts too much — the phone is on the room's own WiFi and its fetch of $url read '${from_phone:-no answer}'. The room must reach the wall; only the uplink may not." >&2; return 3 ;;
+  esac
+  echo "room: seal proven — halo→wall's room address ${from_keeper:-no answer}, phone→wall's room address $from_phone"
+}
+
 # ── the room's bring-up ─────────────────────────────────────────────────────
 # Three daemons and one daemon-less phone. The library's wizard runs HERE, at
 # install: the walk that follows types no credential, which is what the film
@@ -672,6 +767,7 @@ room_up() {
   for n in beefy halo little; do mkcfg "$n"; done
   mkdir -p "$PAGE"; cp -R "$APP/." "$PAGE/"
   containers_up || return 3
+  room_seal || return 3
   for n in beefy halo little; do room_start_daemon "$n"; done
   wait_all_up beefy halo little || return 3
   wait_homed beefy halo little || return 3
@@ -690,6 +786,7 @@ room_up() {
   members_from_mesh 3 || return 3
   # The wall's own screen: the member's page, loopback, exactly as rr-1 runs it.
   start_proxy beefy || return 3
+  room_seal_prove || return 3
   case ",$ROOM_LEGS," in
     *,film,*)
       rm -rf "$MEDIA_ROOT/config" "$MEDIA_ROOT/cache"
@@ -1000,8 +1097,24 @@ for line in sys.stdin:
         print(m.group(2) + ' still served a knowledge fan-out to ' + want + ' from beefy')
         break" "$1"
 }
+# The addresses beefy's own endpoint calls ACTIVE inside the cut, read from
+# the snapshot `room_assert_cut` just wrote. `mesh status --json` published a
+# COUNT until 2026-09-20 (`PeerPathSnapshot.active_direct_addrs`), which is
+# why the run of that morning could record a surviving path and still not name
+# the wire it rode. Empty when no direct address is active, which is what a
+# sealed room reads.
+room_cut_direct_addrs() {
+  python3 -c "
+import json, sys
+try: peers = json.load(open(sys.argv[1])).get('iroh_transport') or []
+except Exception: raise SystemExit
+print(' '.join(str(p.get('name', '?')) + '@' + a
+                for p in peers
+                for a in ((p.get('path') or {}).get('active_direct_socket_addrs') or [])))" \
+    "$D/room-cut-paths.json" 2>/dev/null
+}
 room_assert_cut() {
-  local deadline=$(( $(date +%s) + 30 )) online="" u survivor="" code=""
+  local deadline=$(( $(date +%s) + 30 )) online="" u survivor="" code="" wire=""
   while :; do
     online=$(mesh_json beefy | python3 -c "
 import json, sys
@@ -1018,16 +1131,23 @@ print(' '.join(m.get('name','') for m in ms
   # endpoint is the only thing that can name the address a surviving path
   # actually uses — `mesh status` names the roster, `room_peer_urls` names the
   # local bridge mouth, and neither is the wire. Run 3 of 2026-09-20 needs
-  # this: with the uplink disconnected AND the room bridge isolated (so the
-  # host cannot forward uplink→room, measured), gossip rounds to both peers
-  # read `unreachable` while an OICP capabilities fetch to the keeper still
-  # returned HTTP 200. Whatever carries that is in here.
+  # this: with the uplink disconnected, gossip rounds to both peers read
+  # `unreachable` while an OICP capabilities fetch to the keeper still
+  # returned HTTP 200. Whatever carries that is in here — and since
+  # 2026-09-20 `active_direct_socket_addrs` makes it an ADDRESS rather than
+  # the count this surface used to publish. (This comment credited the room's
+  # `isolate=true` with stopping the host forwarding uplink→room. It stopped
+  # nothing: the flag installs no rule on an internal network, and the
+  # forwarding was the wire. `room_seal` is what closes it.)
   mesh_json beefy > "$D/room-cut-paths.json" 2>/dev/null
+  wire=$(room_cut_direct_addrs)
   # (3) first, because it is the path the bar judges: a survivor here is the
   # finding, and a survivor (2) alone reports is the same cut read one hop
-  # further from what the bar actually measures.
+  # further from what the bar actually measures. A survivor is reported WITH
+  # the addresses the endpoint calls active, so the next reader is told which
+  # wire carried it rather than being sent to reproduce the run.
   survivor=$(room_cut_fanout_survivor "${MESHNAME[halo]}")
-  [ -n "$survivor" ] && { printf '%s' "$survivor"; return 0; }
+  [ -n "$survivor" ] && { printf '%s' "$survivor${wire:+ [active direct addresses on beefy inside the cut: $wire]}"; return 0; }
   # A STATUS, not merely a response. `curl -s -o /dev/null` exits 0 on any
   # HTTP reply, and the local end of an iroh bridge answers a dead peer with
   # its own 5xx — so the un-statused form reported a survivor in the plant run
@@ -1039,7 +1159,7 @@ print(' '.join(m.get('name','') for m in ms
   for u in $(room_peer_urls "${MESHNAME[halo]}"); do
     code=$(node_curl beefy -s --max-time 5 -o /dev/null -w '%{http_code}' "$u" 2>/dev/null)
     case "$code" in
-      2??) echo "$u still answers an OICP capabilities fetch from beefy (HTTP $code)"; return 0 ;;
+      2??) echo "$u still answers an OICP capabilities fetch from beefy (HTTP $code)${wire:+ [active direct addresses on beefy inside the cut: $wire]}"; return 0 ;;
     esac
   done
   return 0
@@ -1061,6 +1181,11 @@ leg_room_offline() {
   kill "$wallpid" 2>/dev/null
   before_beefy=$(room_journal beefy)
   heal_node beefy "$UPLINK" > "$D/room-heal.out" 2>&1
+  # A `network connect` is a container setup and netavark rewrites the netns
+  # ruleset on each one, so the seal is re-asserted here or the healed room
+  # stops being a room for everything that follows. Reported, never swallowed.
+  room_seal >> "$D/room-heal.out" 2>&1 \
+    || echo "room: the seal did not survive the heal (see $D/room-heal.out)" >&2
   t0=$(date +%s)
   while [ $(( $(date +%s) - t0 )) -lt 120 ]; do
     after_halo=$(room_journal halo); after_beefy=$(room_journal beefy)
