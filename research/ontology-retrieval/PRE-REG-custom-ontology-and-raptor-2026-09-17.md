@@ -694,3 +694,54 @@ corpus's, not the instrument's.
   in the window are the pod preflight's `Qwen3.5-4B-UD-Q6_K_XL` on `:9841` and the
   local finalize/build banner's `Qwen3.6-35B-A3B-UD-MTP-IQ4_NL`. So the atoms
   above cannot be attributed to a quantisation, and D7's 2× test has no operand.
+
+### 2026-09-20 — the K4 reword, check I7, and a pilot the host could not admit
+
+Four records, all pre-dating any delta being read. None of them changes a bar.
+
+**1. The six imperative K4 prompts are now asked as questions** (`040e5a826`,
+operator decision A39). A writing command routes to `GenerativeQuery`, which
+retrieves nothing by design (`sovereign/crates/sovereign-core/src/runtime/handlers/generative.rs:1-14`),
+so the retrieving arms were closed-book on 6 of the 8 `k4_whole_story` rows and
+I2 abstained correctly. The rule applied, once, without running anything first
+and without reading any score or route: each of the 6 imperative rows takes the
+one template `Across the whole of <the novel>, <subject clause>?`. The two rows
+that already opened with a wh-word (`lookup-stevie-relation`,
+`lookup-mother-almshouse`) are untouched, as are `id`, `expected_facts`,
+`answer1` and `notes` on every row. The before/after list of all six is in that
+commit's body. `attest.py` never reads `question` when it computes a category
+(`attest.py:181`, `:229`, `:249`), so the reword cannot move one, and none
+moved: 8 `k4_whole_story` before and after, the same 8 ids.
+
+**2. Check I7 `route census`, and the exclusion rule it feeds** (`be476f697`).
+I2 and its 50% threshold are untouched; I7 is a separate check. In every arm
+except closed-book (a naked turn persists no metadata,
+`eval_cmd/runner.rs:1740-1745`), a scored row is grounded when its route is
+`knowledge_query` or `comparison_query`; the check prints per arm x category
+the count of rows on every other route, by name. Verdicts: `passed` when every
+scored row in every retrieving arm is grounded, `failed` naming the question
+ids otherwise, `could-not-judge` when a row carries no route at all, and
+`failed` beats `could-not-judge` when both are present. The matching exclusion
+in `sovereign/bench/sep_atlas/map-conversion-rung6/compare.py`: a question
+ungrounded in ANY retrieving arm is excluded from EVERY arm and counted per
+category as `excluded_ungrounded_route`, modelled on the closed-book exclusion
+beside it. A row with no route at all is `unrouted` and is NOT excluded —
+recording no route is not taking a bad one.
+
+**3. Proposed scope sentence for K4, for the operator to place at ratification**
+(proposed here, not adopted):
+
+> The K4 claim covers whole-story QUESTIONS. A request phrased as a writing
+> command is out of scope: the product deliberately does not retrieve for it.
+
+**4. D8 is could-not-judge, and the local pilot did not replace the missing pod
+term.** The pilot did not run on the pod, so there is no pod per-question synth
+latency and the "at most half the local figure" test has no pod operand. The
+local rerun on 2026-09-20 did not produce an admissible pilot either: the
+deployed daemon's FAST slot — the judge model `Qwopus3.5-4B-v3-MTP-Q8_0`,
+`run_arm.py:64` — sheds every concurrent request with `host busy`, which
+`REFUSAL_RE` (`run_arm.py:71`) counts as a daemon refusal, so `closed-book`
+recorded `verdict: never-ran` on 7 refusals and `bare` on 16. The primary synth
+slot is healthy (0.85 s for a small completion) and the committed pilot record
+is the earlier one, unchanged. A second rental, and the daemon's state, are the
+operator's call; the measurements are in `ralph/NEEDS_HUMAN.md`.
