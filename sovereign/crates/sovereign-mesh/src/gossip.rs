@@ -534,6 +534,8 @@ pub async fn run_one_round(
             // started (typically empty, since the user hasn't yet
             // run the install).
             me.capabilities = fresh_caps;
+            // The replace above blanks the offer; it is ours, not the transport's.
+            offer_view_before.restamp_onto(&mut me.capabilities);
             // Stamp our identity pubkey every round. This is how a
             // node that upgraded in place (mesh created/joined
             // before identity keys existed) publishes its key

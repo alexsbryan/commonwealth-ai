@@ -39,16 +39,45 @@ impl OfferView {
             media_available: record.capabilities.media_available,
         }
     }
+
+    /// Put this view's offer back onto capabilities a gossip round has just
+    /// replaced wholesale.
+    ///
+    /// The offer is the HOLDER's own state; dial info is transport, and only
+    /// the dial addresses may be absent (ARCH 12). The round's `fresh_caps` is
+    /// built from hardware and corpora and hard-codes `origins`/`media_allow`
+    /// empty (`sovereign-mesh/src/capabilities.rs`), and the live acceptor read
+    /// that fills them runs only when `self_iroh_dialinfo()` answers — so
+    /// without this call the replace withdraws an accepted offer by omission on
+    /// every round with no live dial info, and the peer's LWW keeps the empty
+    /// triple until dial info returns: measured at 22 rounds (little stamped
+    /// 03:27:04, peers flipped 03:30:45 — room run, A45).
+    ///
+    /// Only the two fields the replace blanks are carried. `media_available` is
+    /// not: it rides the claims port, which is not transport and answers every
+    /// round, and carrying it would let a reading outlive the offer it
+    /// described — the case [`log_merged`]'s sibling rule in the stamp site
+    /// clears. Refreshing the offer, including withdrawing it, stays the live
+    /// read's job.
+    pub fn restamp_onto(&self, caps: &mut crate::capabilities::NodeCapabilities) {
+        caps.origins = self.origins.clone();
+        caps.media_allow = self.media_allow.clone();
+    }
 }
 
 /// The HOLDER's line: this node's OWN record now says something different
 /// about the library it offers, so the round about to be sent carries it.
 ///
 /// `stamped_from_dial_info` is the first suspect made visible: `origins` and
-/// `media_allow` are stamped only inside the round's `self_iroh_dialinfo()`
-/// arm, so a node with no live dial info publishes an offer it has accepted
-/// on disk — the absence is named rather than inferred from a missing line.
+/// `media_allow` are REFRESHED only inside the round's `self_iroh_dialinfo()`
+/// arm, so a node with no live dial info publishes the offer it already held
+/// ([`OfferView::restamp_onto`]) rather than a fresh read. `false` also emits
+/// [`log_self_stamp_without_dial_info`] every round — one entry point, so the
+/// stamp site has one call and both lines cannot drift apart.
 pub fn log_self_stamp(before: &OfferView, after: &OfferView, stamped_from_dial_info: bool) {
+    if !stamped_from_dial_info {
+        log_self_stamp_without_dial_info(after);
+    }
     if before == after {
         return;
     }
@@ -61,6 +90,26 @@ pub fn log_self_stamp(before: &OfferView, after: &OfferView, stamped_from_dial_i
         was_media_available = ?before.media_available,
         stamped_from_dial_info,
         "gossip: this node's own offer view changed — this round carries it to peers"
+    );
+}
+
+/// The HOLDER's line for the round that had NO live dial info: every round,
+/// unconditionally, naming the triple it is about to publish.
+///
+/// [`log_self_stamp`] is silent when the triple did not change, and that is
+/// exactly the round A45 could not read: with no dial info the stamp site had
+/// no live acceptor to read the offer off, published the triple `fresh_caps`
+/// left behind, and said nothing either way. This line makes the absence
+/// itself an event, so a run shows how many consecutive rounds went out
+/// without a live read instead of leaving it to be inferred from a gap.
+pub fn log_self_stamp_without_dial_info(publishing: &OfferView) {
+    tracing::info!(
+        target: "transport",
+        stamped_from_dial_info = false,
+        origins = ?publishing.origins,
+        media_allow = ?publishing.media_allow,
+        media_available = ?publishing.media_available,
+        "gossip: no live dial info this round — publishing the offer view this node already held"
     );
 }
 

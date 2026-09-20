@@ -6095,7 +6095,11 @@ carries that as `IrohDialInfo::origins`, and the gossip self-stamp writes it
 into this node's own capabilities each round, after the hardware/corpora
 snapshot replaces them — so the advertisement is a fact about the LIVE acceptor,
 not about config, and a declared origin whose endpoint never bound is not
-offered. `[iroh] media_allow` rides beside it the same way (`IrohDialInfo::media_allow`
+offered. A round with NO live dial info republishes the triple this node already
+held (`OfferView::restamp_onto`, rr-2) instead of the blank the snapshot left:
+the offer is the holder's, only the dial addresses are the transport's, and
+before that the endpoint rebuild after `svrn mesh media offer` withdrew an
+accepted offer by omission for 22 rounds. `[iroh] media_allow` rides beside it the same way (`IrohDialInfo::media_allow`
 → `NodeCapabilities::media_allow`, empty when no media route is live or nothing is
 narrowed) and reads back as `MediaOffer::offered_to`. **`NodeCapabilities::media_available`
 rides the same stamp** (2026-09-19): what the holder's origin can serve right

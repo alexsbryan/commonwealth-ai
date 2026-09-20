@@ -710,6 +710,136 @@ async fn an_offer_and_its_withdrawal_reach_a_peers_media_rail_in_one_round() {
     );
 }
 
+/// An offer already on the holder's record keeps reaching a peer's media rail
+/// across rounds that have NO live dial info.
+///
+/// This is A45's measured failure in miniature. `svrn mesh media offer`
+/// hot-reloads the offer route, the iroh endpoint is rebuilt, and for a while
+/// `self_iroh_dialinfo()` answers `None` — 221 s of it in the room run. Every
+/// round in that window replaced the holder's capabilities with `fresh_caps`,
+/// whose `origins`/`media_allow` are empty by construction, and skipped the
+/// only site that fills them; the holder published `origins=[]` and the peer's
+/// LWW kept `[]` until dial info returned, 22 rounds later (little stamped
+/// 03:27:04, peers flipped 03:30:45). Three rounds is enough: the first one
+/// that blanks the triple loses the offer.
+#[tokio::test]
+async fn an_offer_on_record_survives_rounds_with_no_dial_info() {
+    let mesh_id = MeshId::from_u128(44);
+    let hash = [13u8; 32];
+    let holder = NodeId::from_u128(100);
+    let viewer = NodeId::from_u128(200);
+
+    // The holder's OWN record already carries the offer — what an earlier
+    // round's live read left behind, before the endpoint was rebuilt. Nothing
+    // is published to the dial-info reader, so `self_iroh_dialinfo()` is
+    // `None` for every round below.
+    let mut holder_rec = member_at(holder, "LittleMac", 100, "127.0.0.1:1".parse().unwrap());
+    holder_rec.capabilities.origins = vec![commonwealth_core::capabilities::OriginKind::Media];
+    holder_rec.capabilities.media_allow = vec!["BeefyMac".into()];
+    holder_rec.capabilities.media_available = Some(1.0);
+
+    let mesh_holder = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
+        id: mesh_id,
+        name: "T".into(),
+        invite_key_hash: hash,
+        invite_version: 0,
+        require_encryption: false,
+        members: {
+            let mut m = HashMap::new();
+            m.insert(holder, holder_rec);
+            m
+        },
+        peers: vec![],
+    };
+    let state_holder = AppState::new(holder, mesh_holder);
+    let addr_holder = spawn_internal_router(state_holder.clone()).await;
+
+    let mesh_viewer = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
+        id: mesh_id,
+        name: "T".into(),
+        invite_key_hash: hash,
+        invite_version: 0,
+        require_encryption: false,
+        members: {
+            let mut m = HashMap::new();
+            // The viewer's copy offers nothing yet — it learns the offer from
+            // the rounds below or not at all.
+            m.insert(holder, member_at(holder, "LittleMac", 100, addr_holder));
+            m.insert(
+                viewer,
+                member_at(viewer, "BeefyMac", 150, "127.0.0.1:2".parse().unwrap()),
+            );
+            m
+        },
+        peers: vec![],
+    };
+    let state_viewer = AppState::new(viewer, mesh_viewer);
+    let addr_viewer = spawn_internal_router(state_viewer.clone()).await;
+    {
+        let mut mesh = state_holder.inner.fabric.mesh.write().await;
+        mesh.members
+            .insert(viewer, member_at(viewer, "BeefyMac", 150, addr_viewer));
+    }
+    // The presence poll's answer rides the claims port, which knows nothing
+    // about dial info; without it `fresh_caps` publishes `media_available:
+    // None` and the rail's reading would be the thing that went missing.
+    state_holder.update_local_media_available(Some(1.0)).await;
+
+    for round in 0..3 {
+        if round > 0 {
+            // LWW compares `event_time()` in whole seconds, so two rounds
+            // inside one second are indistinguishable to the peer and the
+            // second is skipped as `LocalRecordNotOlder`.
+            tokio::time::sleep(Duration::from_millis(1_100)).await;
+        }
+        gossip::run_one_round(
+            &*state_holder.inner.fabric,
+            state_holder.inner.node.corpus_engine.as_ref(),
+            &state_holder,
+            Duration::from_secs(60),
+        )
+        .await
+        .expect("gossip round should succeed");
+
+        // The holder's own record first, then the peer's copy — a failure
+        // here names the stamp, a failure below names the merge.
+        {
+            let m = state_holder.inner.fabric.mesh.read().await;
+            assert_eq!(
+                m.members[&holder].capabilities.origins,
+                vec![commonwealth_core::capabilities::OriginKind::Media],
+                "round {round} with no dial info must publish the offer this \
+                 node already held, not blank it: {:?}",
+                m.members[&holder].capabilities
+            );
+        }
+
+        let m = state_viewer.inner.fabric.mesh.read().await;
+        let rows = commonwealth_media::offers(
+            viewer,
+            &commonwealth_media::roster_of(&m),
+            &[],
+            commonwealth_core::capabilities::OriginKind::Media,
+        );
+        assert_eq!(
+            rows.len(),
+            1,
+            "round {round}: the viewer's rail must still list the holder: {rows:?}"
+        );
+        assert_eq!(rows[0].peer, "LittleMac");
+        assert_eq!(rows[0].offered_to, vec!["BeefyMac".to_string()]);
+        assert_eq!(
+            rows[0].media_available,
+            Some(1.0),
+            "round {round}: the reading travels with the offer it describes"
+        );
+    }
+}
+
 /// The same one-round bar as above, with the contention a real node has and
 /// the test above does not.
 ///
