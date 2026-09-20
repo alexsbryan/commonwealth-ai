@@ -269,6 +269,10 @@ exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 - Needed: The instrument row stopped on a contradiction that was the seat's. The order's demo shows two QR codes, one per app; the pre-registered bar `rg-one-person-across-apps` said "ONE grant for the room" and "not asked its name again". A grant names exactly one rail namespace by a deliberate rule (`sovereign-grants/src/guest_grant.rs:80-88`: the namespace lives on the grant and never in the request, so a page has no way to say another app's), so two apps are two grants and two bearers, and the session as landed (bea99f5db) is bound to its grant's token — the second app refuses the first app's handle as `stale_session` and re-asks the name. Three options were put to the operator: A the session belongs to the door; B a grant may name several namespaces; C weaken the bar.
 - Chose (operator: "A sounds right to me"): A. Grants keep one namespace. A session belongs to this daemon's guest door and is recognised under any live grant that door minted; reach stays the presenting bearer's grant alone; the name-collision domain becomes the wall. New row `rg-2-session-belongs-to-the-door` ahead of the instrument. Bar clause (d) CORRECTED before any datum: one grant per APP, none per phone, in a run with more phones than apps; new clause (e): every grant still names exactly one namespace. The per-grant binding that landed is KEPT as the strict setting, `[daemon] guest_sessions = "grant"`, default `"door"`.
 - Because: the operator's standing criterion, stated with this decision and binding on later forks — "make 0 -> 1 elegant, defaults reasonable (and strong-ish security posture, but not one that costs elegant 0 -> 1), then knobs exposed for real control if wanted." A keeps the structural property (a page cannot name a namespace) AND the elegant path (a person is one person on a wall); B buys one QR for the whole wall by turning that property into a check; C gives up what was asked for. Amending a pre-registered bar mid-campaign is recorded as what it is: a correction of the seat's own contradictory pre-registration, made before any datum for that bar exists, with what the clause guards (a grant per phone) unchanged. Cost the operator accepted: one QR for a whole wall stays impossible.
+**A55 · 2026-09-20 · ring-guest · OPERATOR (supersedes A54's "one grant per app")** — this commit
+- Needed: Twenty minutes after A54 the operator proposed a different model: "what if permission, similar to how we handle corpora permissions in recipes, is defined at registration time and … a grant to the mesh grants you access to what on the mesh just allows guest access explicitly?" The seat checked it against the tree. The analogy is exact: a recipe declares `mesh_sharing` per corpus at registration and membership reaches what was declared shared. And the seat's A54 argument was weaker than stated: the rail route ALREADY takes a requested namespace from a guest and refuses it when it differs from the grant (`routes_rail.rs:100-117`), so "a page has no way to say a namespace" was a check all along, not a structural fact.
+- Chose (operator: "Yes, switch — stop at the row boundary"): the resource declares, the credential identifies. An app registered in `[daemon.guest_pages]` has declared it admits guests; ONE wall grant (`svrn mesh grant --wall`) and ONE QR reach every namespace so declared and nothing else on the rail; `--rail <ns>` stays as the narrowing knob; an entry may declare `guests = "read"`; daemon-owned namespaces can never be declared, decided by the ONE decider that already knows them (`DAEMON_OWN_NAMESPACES`, `roster_origin` = `Derived`), at config load AND at the route. New row `rg-2-the-wall-declares-its-guests` ahead of the instrument. The loop was stopped at the row boundary: `rg-2-session-belongs-to-the-door` (36a21f08f) landed first and stays correct — it keeps a person one person when someone DOES mint narrowed grants.
+- Because: the operator's criterion (A54) — one scan for a whole wall is the elegant 0→1, the default reaches only what the owner explicitly registered, and both narrowings are knobs. It also makes ONE permission vocabulary across the system: members read a ring by its roster (queued `mesh-principal`), peers read a corpus by `mesh_sharing`, guests reach an app by its registration, media by its offer. The check's authority moves from a per-mint argument to one declared, enumerable, owner-readable fact. COST, stated: the guest posture genuinely widens — one bearer reaches N namespaces — and `docs/THREAT_MODEL.md` says so in the row's commit. Bar `rg-one-person-across-apps` is corrected a SECOND time before any datum; its own text says that two corrections mean the seat pre-registered it before understanding the design. `sovereign-daemon` is already past 3x the order's prediction and this row adds to it; the audit reports that as falsified, unsoftened.
 
 **A44 · 2026-09-19 · rr-2-gossip-claim-one-decider · director (supervisor resolution, attempt 1)** — commit: this one
 - Needed: A43 wrote the row on the premise that a SECOND site builds the claim gossip sends. The worker measured the send path and found one, stopped at the premise check without improvising a target, and asked whether to rewrite or strike the row.
@@ -7558,5 +7562,41 @@ item 1).
 - A handle presented under grant B reaching grant A's namespace: reach would then be the handle's, not the bearer's. The row's PLANT is that input.
 - A session outliving the last live grant from the door.
 - Under `guest_sessions = "grant"`, a cross-grant handle NOT reading `stale_session`: the strict knob would then not be the posture that landed in bea99f5db.
+
+</details>
+
+## A55 · 2026-09-20 — the resource declares, the credential identifies: one grant for the wall
+
+<details>
+
+### What A54 got wrong
+
+A54 kept "one namespace per grant" as a STRUCTURAL property, quoting
+`sovereign-grants/src/guest_grant.rs:80-88`. `resolve_granted`
+(`sovereign-daemon/src/routes_rail.rs:100-117`) shows it is a check: a guest's request may
+carry `?namespace=`, and `asked != granted` is refused with "this grant is scoped to
+namespace X and cannot act on Y". The doc comment overstated the code; the new row fixes it.
+
+### The model, and where it already lives
+
+| who | reaches | because the RESOURCE declared |
+|---|---|---|
+| a mesh peer | a corpus | `mesh_sharing = true` in its recipe (`corpus-engine/src/recipe.rs:799`) |
+| a ring member | a ring's journal | the ring's roster names their key (queued: `mesh-principal`, sync by roster) |
+| a viewer | a media library | the holder's `offer` (and `admit`) |
+| a guest | a ring app | the owner registered it in `[daemon.guest_pages]` — THIS decision |
+
+### What falsifies the choice
+
+- A wall grant reaching a rail namespace the registry does not declare (the row's first PLANT).
+- A daemon-owned namespace becoming guest-reachable through a config entry, or through the
+  route when the config check is planted out (the second and third PLANTs).
+- The instrument needing one line in the scaffold for a guest to be named under a wall grant.
+
+### Sequence of the day on this bar
+
+pre-registered "ONE grant for the room" → A54 "one grant per app" (seat believed a grant
+must name one namespace) → A55 "ONE grant for the wall" (permission declared by the
+resource). No datum existed at either correction.
 
 </details>
