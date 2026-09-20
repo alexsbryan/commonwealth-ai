@@ -64,6 +64,44 @@ class QueueTests(unittest.TestCase):
                 ralph.Queue(pathlib.Path(tmp) / "ralph/STATE.md")
 
 
+class AuditCountTests(unittest.TestCase):
+    def queue(self, tmp, rows):
+        return ralph.Queue(write(tmp, "ralph/STATE.md", rows))
+
+    def test_counts_done_rows_after_the_last_done_audit_and_skips_human_rows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            q = self.queue(tmp, "- [x] u-1 abcdef1 — depends []\n"
+                                "- [x] REVIEW-audit-u-1 abcdef2 — depends [u-1]\n"
+                                "- [x] u-2 abcdef3 — depends []\n"
+                                "- [x] HUMAN-u-look abcdef4 — depends []\n"
+                                "- [x] REVIEW-build-u-3 abcdef5 — depends []\n"
+                                "- [ ] REVIEW-audit-u-2 — depends []\n"     # not run: resets nothing
+                                "- [~] u-4 — depends []\n")
+            self.assertEqual(q.units_since_audit(), 2)
+
+    def test_counts_from_the_top_when_no_audit_has_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            q = self.queue(tmp, "- [x] u-1 abcdef1 — depends []\n- [x] u-2 abcdef2 — depends []\n"
+                                "- [ ] u-3 — depends []\n")
+            self.assertEqual(q.units_since_audit(), 2)
+
+    def test_the_generated_row_parses_and_lands_above_the_named_row(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            q = self.queue(tmp, "# queue\n- [x] u-1 abcdef1 — depends []\n\n"
+                                "- [ ] u-2 — depends [u-1] — do it\n")
+            line = ralph.audit_row("REVIEW-audit-u-auto-1", "u-1")
+            q.insert_before("u-2", line)
+            self.assertEqual([r.id for r in q.rows], ["u-1", "REVIEW-audit-u-auto-1", "u-2"])
+            row = ralph.Queue(q.path).by_id()["REVIEW-audit-u-auto-1"]      # from the file
+            self.assertEqual((row.status, row.deps, row.hash, row.line),
+                             (ralph.Status.PENDING, ("u-1",), None, line))
+            self.assertTrue(ralph.is_review(row))
+            self.assertIn(ralph.AUDIT_ROW_BODY, line)
+            self.assertRegex(line, r" — read: `sovereign/ARCH_PRINCIPLES.md` — check: LINT$")
+            self.assertEqual(q.path.read_text().splitlines()[0], "# queue")
+            self.assertEqual(q.current().id, "REVIEW-audit-u-auto-1")
+
+
 MANIFEST = """\
 label = "alpha"
 session_timeout = 7200
@@ -118,12 +156,22 @@ class QueueManifestTests(unittest.TestCase):
                "[models]\nworkr = 'x'\n": "workr",
                "[checks]\nhello = 'echo hi'\n": "hello",
                "[checks]\nlint = ['true']\n": "lint",
-               "session_timeout = 'long'\n": "session_timeout"}
+               "session_timeout = 'long'\n": "session_timeout",
+               "audit_every = 1\n": "`audit_every` must be an integer >= 2",
+               "audit_every = 'six'\n": "`audit_every` must be an integer >= 2",
+               "audit_every = true\n": "`audit_every` must be an integer >= 2"}
         for text, key in bad.items():
             with tempfile.TemporaryDirectory() as tmp:
                 write(tmp, "ralph/next/a/queue.toml", text)
                 with self.assertRaisesRegex(ValueError, key):
                     ralph.load_manifest(tmp, "a")
+
+    def test_audit_every_is_optional_and_loads_as_an_integer(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "ralph/next/a/queue.toml", "audit_every = 2\n")
+            write(tmp, "ralph/next/b/queue.toml", "")
+            self.assertEqual(ralph.load_manifest(tmp, "a").audit_every, 2)
+            self.assertIsNone(ralph.load_manifest(tmp, "b").audit_every)
 
     def test_a_name_is_one_path_segment(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -964,6 +1012,161 @@ class TwoQueueDemoTests(unittest.TestCase):
             self.assertIn("usage:", (root / "check-legacy.out").read_text())   # no queue, no `hello`
 
 
+class AuditCadenceTests(unittest.TestCase):
+    """`audit_every` in queue.toml: the run loop owes an audit row, not the queue's author."""
+
+    ROWS = "".join(f"- [ ] u-{n} — depends [] — do it\n" for n in (1, 2, 3))
+    TWO_DONE = ("- [x] u-1 abcdef1 — depends []\n- [x] u-2 abcdef2 — depends []\n"
+                "- [ ] u-3 — depends []\n")
+
+    def run_queue(self, tmp, manifest, rows, *, finish=True, commit_rc=0, files=()):
+        """Runs queue `q` with a session that marks the unit it was handed (or
+        leaves it, `finish=False`). Returns (result, dispatched ids, commit subjects)."""
+        write(tmp, "ralph/next/q/queue.toml", manifest)
+        state = write(tmp, "ralph/next/q/STATE.md", rows)
+        write(tmp, "ralph/next/q/PROMPT.md", "Execute the selected unit.\n")
+        for rel, text in files:
+            write(tmp, rel, text)
+        paths = ralph.paths_for(ralph.build_parser().parse_args(
+            ["run", "--workdir", tmp, "--queue", "q"]))
+        seen, commits, heads = [], [], {"h": 0}
+
+        def session(model_args, prompt, log):
+            unit = prompt.split()[2]                     # "Your unit: <id> — ..."
+            seen.append(unit)
+            if finish:
+                q = ralph.Queue(state)
+                q.set_status(unit, ralph.Status.DONE)
+                heads["h"] += 1
+                if q.all_done():
+                    write(tmp, "ralph/next/q/ctl/DONE", "")
+
+        def commit(p, subject):
+            commits.append((p.state, subject))
+            return subprocess.CompletedProcess([], commit_rc, "", "index.lock exists")
+
+        c = ralph.Campaign(paths, session_run=session, notify_enabled=False,
+                           sleep=lambda s: None, max_stall=2, max_iter=12)
+        with mock.patch.object(ralph, "head_of", side_effect=lambda wd: str(heads["h"])), \
+                mock.patch.object(ralph, "commit_state", side_effect=commit, create=True), \
+                contextlib.redirect_stdout(io.StringIO()):
+            result = c.run()
+        return result, seen, commits
+
+    def test_an_audit_row_is_inserted_and_run_after_two_units_and_not_before(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result, seen, commits = self.run_queue(tmp, "audit_every = 2\n", self.ROWS)
+            self.assertEqual(result.outcome, ralph.Outcome.DONE)
+            self.assertEqual(seen, ["u-1", "u-2", "REVIEW-audit-q-auto-1", "u-3"])
+            self.assertEqual(commits, [("ralph/next/q/STATE.md",
+                                        "ralph: audit due after 2 units — REVIEW-audit-q-auto-1")])
+            rows = ralph.Queue(pathlib.Path(tmp) / "ralph/next/q/STATE.md").rows
+            self.assertEqual([(r.id, r.deps) for r in rows][2:],
+                             [("REVIEW-audit-q-auto-1", ("u-2",)), ("u-3", ())])
+
+    def test_the_id_takes_the_addendums_prefix_var_and_counts_its_own_kind(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rows = "- [x] REVIEW-audit-zz-auto-1 abcdef0 — depends []\n" + self.TWO_DONE
+            _, seen, _ = self.run_queue(tmp, "audit_every = 2\n", rows, files=(
+                ("ralph/PROMPT.base.md", "<!-- section: main -->\nwork on {{prefix}}\n"),
+                ("ralph/next/q/PROMPT.addendum.md", "<!-- section: vars -->\nprefix = zz\n")))
+            self.assertEqual(seen, ["REVIEW-audit-zz-auto-2", "u-3"])
+
+    def test_a_prefix_var_that_cannot_be_an_id_falls_back_to_the_queue_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, seen, _ = self.run_queue(tmp, "audit_every = 2\n", self.TWO_DONE, files=(
+                ("ralph/PROMPT.base.md", "<!-- section: main -->\nwork on {{prefix}}\n"),
+                ("ralph/next/q/PROMPT.addendum.md", "<!-- section: vars -->\nprefix = e7 or rb\n")))
+            self.assertEqual(seen, ["REVIEW-audit-q-auto-1", "u-3"])
+
+    def test_a_queue_without_the_key_never_gets_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result, seen, commits = self.run_queue(tmp, "", self.ROWS)
+            self.assertEqual(result.outcome, ralph.Outcome.DONE)
+            self.assertEqual((seen, commits), (["u-1", "u-2", "u-3"], []))
+            self.assertNotIn("REVIEW-audit",
+                             (pathlib.Path(tmp) / "ralph/next/q/STATE.md").read_text())
+
+    def test_a_next_row_that_is_already_an_audit_is_not_given_a_second(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rows = ("- [x] u-1 abcdef1 — depends []\n- [x] u-2 abcdef2 — depends []\n"
+                    "- [ ] REVIEW-audit-q — depends [u-2] — the author's own\n"
+                    "- [ ] u-3 — depends [REVIEW-audit-q]\n")
+            _, seen, commits = self.run_queue(tmp, "audit_every = 2\n", rows)
+            self.assertEqual((seen, commits), (["REVIEW-audit-q", "u-3"], []))
+
+    def test_an_audit_the_worker_left_open_is_run_again_not_inserted_again(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result, seen, commits = self.run_queue(tmp, "audit_every = 2\n", self.TWO_DONE,
+                                                   finish=False)
+            self.assertEqual(result.outcome, ralph.Outcome.HALT)           # stalled
+            self.assertEqual(seen, ["REVIEW-audit-q-auto-1"] * 2)
+            self.assertEqual(len(commits), 1)
+
+    def test_a_resumed_row_is_finished_first(self):
+        """`current()` hands back the [~] row until it closes, so a row inserted
+        above one would never be dispatched and would be inserted again each pass."""
+        with tempfile.TemporaryDirectory() as tmp:
+            rows = self.TWO_DONE.replace("[ ] u-3", "[~] u-3") + "- [ ] u-4 — depends []\n"
+            _, seen, commits = self.run_queue(tmp, "audit_every = 2\n", rows)
+            self.assertEqual(seen, ["u-3", "REVIEW-audit-q-auto-1", "u-4"])
+            self.assertEqual(len(commits), 1)
+
+    def test_a_refused_commit_halts_with_gits_words(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result, seen, _ = self.run_queue(tmp, "audit_every = 2\n", self.TWO_DONE,
+                                             commit_rc=1)
+            self.assertEqual((result.outcome, seen), (ralph.Outcome.HALT, []))
+            self.assertIn("index.lock exists", result.reason)
+
+
+class AuditCadenceDemoTests(unittest.TestCase):
+    """The same, through `run --queue` with a stub worker and a real git."""
+
+    WORKER = (
+        'set -eu\n'
+        'unit=$(sed -n "s/^- \\[[ ~]\\] \\([^ ]*\\) .*/\\1/p" "$RALPH_STATE" | head -1)\n'
+        'echo work > "$unit.txt"; git add "$unit.txt"; git commit -q -m "$unit: work" -- "$unit.txt"\n'
+        'scripts/ralph-mark.sh "$unit" "$(git rev-parse --short HEAD)"\n'
+        'grep -q "^- \\[[ ~]\\]" "$RALPH_STATE" || '
+        '{ mkdir -p "$RALPH_CONTROL_DIR"; : > "$RALPH_CONTROL_DIR/DONE"; }\n')
+
+    def test_the_audit_row_is_committed_alone_and_worked_between_the_second_and_third_unit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = str(pathlib.Path(tmp).resolve())
+            git_repo(tmp)
+            write(tmp, "ralph/next/q/queue.toml",
+                  'worker_bin = "./stub-worker.sh"\naudit_every = 2\n')
+            write(tmp, "ralph/next/q/STATE.md", AuditCadenceTests.ROWS)
+            write(tmp, "ralph/next/q/PROMPT.md", "prompt of q\n")
+            write(tmp, ".gitignore", "target/\nralph/next/*/ctl/\n")
+            for script in ("ralph-mark.sh", "ralph.py"):
+                install_script(tmp, script)
+            stub_worker(tmp, self.WORKER)
+            commit_all(tmp)
+            write(tmp, "stray.txt", "someone else's staged work\n")
+            subprocess.run(["git", "-C", tmp, "add", "stray.txt"], check=True)
+            out = io.StringIO()
+            with mock.patch.object(ralph, "Session", FastSession), contextlib.redirect_stdout(out):
+                rc = ralph.cmd_run(ralph.build_parser().parse_args(
+                    ["run", "--workdir", tmp, "--queue", "q", "--max-stall", "2"]))
+            self.assertEqual(rc, 0, out.getvalue())
+
+            def git(*args):
+                return subprocess.run(["git", "-C", tmp, *args], capture_output=True,
+                                      text=True, check=True).stdout
+            subjects = git("log", "--reverse", "--format=%s").splitlines()[1:]
+            audit = "REVIEW-audit-q-auto-1"
+            self.assertEqual(subjects, [
+                "u-1: work", "ralph: u-1 done", "u-2: work", "ralph: u-2 done",
+                f"ralph: audit due after 2 units — {audit}",
+                f"{audit}: work", f"ralph: {audit} done", "u-3: work", "ralph: u-3 done"])
+            self.assertEqual(git("show", "--name-only", "--format=", "HEAD~4").split(),
+                             ["ralph/next/q/STATE.md"])
+            self.assertIn("A  stray.txt", git("status", "--porcelain"))      # staged, never swept in
+            self.assertIn(f"unit {audit} — ", out.getvalue())
+
+
 class SupervisorTests(unittest.TestCase):
     def make(self, tmp, *, run_inner, resolver_run, resolve_max=2):
         write(tmp, "ralph/STATE.md", "- [ ] dm-a — depends []\n")
@@ -1456,6 +1659,24 @@ class PathsForTests(unittest.TestCase):
             self.assertIn("unit qb-1", out)
             self.assertIn("queue: ralph/next/b/STATE.md", out)
             self.assertNotIn("legacy-1", out)
+
+    def test_plan_prints_the_units_since_the_last_audit_and_the_cadence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            two_queues(tmp)
+            rows = ("- [x] qb-0 abcdef1 — depends []\n- [x] REVIEW-audit-b abcdef2 — depends []\n"
+                    "- [x] qb-1 abcdef3 — depends []\n- [x] qb-2 abcdef4 — depends []\n"
+                    "- [ ] qb-3 — depends []\n")
+            write(tmp, "ralph/next/b/STATE.md", rows)
+            write(tmp, "ralph/STATE.md", rows)
+            write(tmp, "ralph/PROMPT.md", "legacy prompt\n")
+            _, out, _ = quiet_main(["plan", "--workdir", tmp, "--queue", "b"])
+            self.assertIn("units since audit: 2  head:", out)
+            write(tmp, "ralph/next/b/queue.toml", "audit_every = 6\n")
+            _, out, _ = quiet_main(["plan", "--workdir", tmp, "--queue", "b"])
+            self.assertIn("units since audit: 2 (audit every 6)  head:", out)
+            _, out, _ = quiet_main(["plan", "--workdir", tmp])          # the legacy line
+            self.assertIn("units since audit: 2  head:", out)
+            self.assertNotIn("n/a", out)
 
     def test_queue_wins_over_a_legacy_flag_and_says_so(self):
         with tempfile.TemporaryDirectory() as tmp:

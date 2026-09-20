@@ -10,7 +10,8 @@ quietly stuck.
 `--queue <name>` runs `ralph/next/<name>/` from its `queue.toml` instead: its
 own state, prompt, charter, models, checks and control files (`ctl/` beside
 the manifest), so two loops share a checkout. Without it every flag and
-default is the legacy one.
+default is the legacy one. `audit_every = N` there makes `run` insert and
+dispatch a `REVIEW-audit-` row once N units have landed without one.
 
 Subcommands:
   run        the serial campaign driver: one unit per session
@@ -275,6 +276,15 @@ def head_of(workdir) -> str:
     return r.stdout.strip()
 
 
+def commit_state(paths, subject):
+    """The state file alone, as ralph-mark.sh commits it: whatever else is
+    staged in the checkout belongs to someone's unit."""
+    git = ["git", "-C", str(paths.workdir)]
+    subprocess.run([*git, "add", "--", paths.state], capture_output=True, text=True)
+    return subprocess.run([*git, "commit", "-q", "-m", subject, "--", paths.state],
+                          capture_output=True, text=True)
+
+
 def first_line(path) -> str:
     p = pathlib.Path(path)
     try:
@@ -471,6 +481,25 @@ class Queue:
         self.path.write_text("\n".join(lines) + "\n")
         self.rows = self._parse()
 
+    def insert_before(self, row_id, line):
+        """Add a row above another; the file is rewritten as set_status does it."""
+        row = self.by_id()[row_id]
+        lines = self.path.read_text().splitlines()
+        if lines[row.lineno - 1] != row.line:
+            raise ValueError(f"{self.path}:{row.lineno}: row moved under insert_before")
+        lines.insert(row.lineno - 1, line)
+        self.path.write_text("\n".join(lines) + "\n")
+        self.rows = self._parse()
+
+    def units_since_audit(self):
+        """`[x]` rows below the last `[x]` audit row. An audit still open has
+        reviewed nothing, and a HUMAN- row is the operator's act, not a unit."""
+        n = 0
+        for r in self.rows:
+            if r.status is Status.DONE and not r.id.startswith("HUMAN-"):
+                n = 0 if r.id.startswith(AUDIT_PREFIX) else n + 1
+        return n
+
     def all_done(self):
         return all(r.status is Status.DONE for r in self.rows)
 
@@ -509,6 +538,27 @@ class Queue:
                 continue
             wave.append(r.id)
         return wave
+
+
+AUDIT_PREFIX = "REVIEW-audit-"
+# The one text of a cadence audit (`audit_every` in queue.toml; Campaign inserts
+# the row). A queue's hand-written audit rows stay its author's.
+AUDIT_ROW_BODY = (
+    "audit the commits since the previous `REVIEW-audit-` row's hash (since this queue "
+    "started if there is none) against `sovereign/ARCH_PRINCIPLES.md`; REUSE AND SIZE, WITH "
+    "DATA: (1) paste a per-unit net-line ledger for product code over that range — "
+    "`git log --numstat --format=%s <hash>..HEAD`, summed by the subject's unit id, src "
+    "apart from tests; (2) run `target/debug/sovereign-cli code dry-report --scope <dir>` "
+    "for each crate dir the range touched and paste every exact or near clone with a side "
+    "that is a symbol ADDED in the range; (3) for every new `struct`/`enum`/`trait` in the "
+    "range, `target/debug/sovereign-cli code converge noun <Name>`, and paste any noun "
+    "with more than one definition; fix here what is behaviour-preserving and small, "
+    "record the rest in `ralph/REVIEW_FINDINGS.md` with both file:line sites "
+    "— read: `sovereign/ARCH_PRINCIPLES.md` — check: LINT")
+
+
+def audit_row(row_id, after):
+    return f"- [ ] {row_id} — depends [{after}] — {AUDIT_ROW_BODY}"
 
 
 MODEL_KEYS = ("MODEL", "REVIEW_MODEL", "RESOLVE_MODEL", "VARIANT")
@@ -581,6 +631,7 @@ class QueueManifest:
     worker_bin: str = ""
     settings: str = ""
     prompt_declared: bool = False
+    audit_every: int | None = None        # absent: no cadence, the queue's own audit rows only
 
 
 def manifest_rel(name):
@@ -606,8 +657,8 @@ def load_manifest(workdir, name):
     def bad(key, want):
         return ValueError(f"{rel}: `{key}` must be {want}")
 
-    known = {"label", "session_timeout", "worker_bin", "settings", "models", "checks",
-             *MANIFEST_PATH_KEYS}
+    known = {"label", "session_timeout", "audit_every", "worker_bin", "settings", "models",
+             "checks", *MANIFEST_PATH_KEYS}
     for key in data:
         if key not in known:
             raise ValueError(f"{rel}: unknown key `{key}` (known: {', '.join(sorted(known))})")
@@ -620,6 +671,9 @@ def load_manifest(workdir, name):
     if timeout is not None and (isinstance(timeout, bool) or not isinstance(timeout, int)
                                 or timeout <= 0):
         raise bad("session_timeout", "a positive integer of seconds")
+    every = data.get("audit_every")
+    if every is not None and (isinstance(every, bool) or not isinstance(every, int) or every < 2):
+        raise bad("audit_every", "an integer >= 2 (units between audits)")
     models = {}
     table = data.get("models", {})
     if not isinstance(table, dict):
@@ -648,7 +702,7 @@ def load_manifest(workdir, name):
         name=name, path=rel, label=strings["label"] or name,
         models=models, checks=checks, session_timeout=timeout,
         worker_bin=strings["worker_bin"], settings=strings["settings"],
-        prompt_declared="prompt" in data,
+        prompt_declared="prompt" in data, audit_every=every,
         **{key: strings[key] or f"{base}/{default}"
            for key, default in MANIFEST_PATH_KEYS.items()})
 
@@ -762,6 +816,12 @@ def prompt_sections(text, source):
     return out
 
 
+def section_vars(body):
+    """The `key = value` lines of a `vars` section."""
+    return dict([part.strip() for part in line.split("=", 1)] for line in body.splitlines()
+                if "=" in line and not line.lstrip().startswith("#"))
+
+
 def render_prompt(base, addendum, builtins):
     """The shared prompt once, a queue's differences beside it (until 2026-09-19
     every queue carried a sed-edited copy, and ei7-stage0's copy kept a
@@ -778,12 +838,10 @@ def render_prompt(base, addendum, builtins):
     variables = dict(builtins)
     for name, mode, after, body in prompt_sections(addendum, "addendum"):
         if name == "vars":
-            for line in body.splitlines():
-                if "=" in line and not line.lstrip().startswith("#"):
-                    key, value = (part.strip() for part in line.split("=", 1))
-                    if key in builtins:
-                        raise ValueError(f"addendum: var `{key}` is the loop's own, not the queue's")
-                    variables[key] = value
+            for key, value in section_vars(body).items():
+                if key in builtins:
+                    raise ValueError(f"addendum: var `{key}` is the loop's own, not the queue's")
+                variables[key] = value
         elif mode == "append":
             if name not in bodies:
                 raise ValueError(f"addendum: `{name} append` — the base has no section `{name}`")
@@ -1025,11 +1083,17 @@ class Campaign:
                 iteration -= 1
                 continue
             # Re-read every iteration: the worker mutates the queue as it goes.
-            unit = Queue(self.paths.p(self.paths.state)).current()
+            queue = Queue(self.paths.p(self.paths.state))
+            unit = queue.current()
             if unit is None:
                 return self.halt(f"no ready unit in {self.paths.state}; check dependencies")
             if unit.id.startswith("HUMAN-"):
                 return self.halt(f"operator approval required: {unit.id}")
+            if self._audit_due(queue, unit):
+                unit, refused = self._insert_audit(queue, unit)
+                if refused:
+                    return self.halt(f"audit row {unit.id} is in {self.paths.state} "
+                                     f"but git refused the commit: {refused}")
             model_args = select_model_args(unit, self.model, self.review_model, self.variant)
             say(f"unit {unit.id} — {' '.join(model_args) or 'configured default'}")
             before = head_of(self.paths.workdir)
@@ -1051,6 +1115,39 @@ class Campaign:
                 if stall >= self.max_stall:
                     return self.halt(f"{self.max_stall} iterations without a commit")
         return self.halt(f"MAX_ITER={self.max_iter} reached")
+
+    def _audit_due(self, queue, unit):
+        """`audit_every`, enforced where rows are dispatched: a 22-row queue ran
+        ~60 commits on one closing audit because a cadence was its author's to
+        remember. A [~] row is finished first — `current()` returns it until it
+        closes, so a row inserted above it would be inserted again every pass."""
+        every = self.paths.manifest.audit_every if self.paths.manifest else None
+        return bool(every and unit.status is Status.PENDING
+                    and not unit.id.startswith(AUDIT_PREFIX)
+                    and queue.units_since_audit() >= every)
+
+    def _insert_audit(self, queue, unit):
+        """(the inserted row, git's refusal or ""). The id's <prefix> is the
+        addendum's `prefix` var, else the queue's name."""
+        prefix = self.paths.queue
+        if self.paths.prompt_addendum:
+            for name, _, _, body in prompt_sections(
+                    self.paths.p(self.paths.prompt_addendum).read_text(), "addendum"):
+                if name == "vars":
+                    prefix = section_vars(body).get("prefix", prefix)
+        if not re.fullmatch(r"[A-Za-z0-9._-]+", prefix):
+            say(f"prefix var {prefix!r} cannot be part of a row id; using the queue name")
+            prefix = self.paths.queue
+        stem = f"{AUDIT_PREFIX}{prefix}-auto-"
+        row_id = f"{stem}{1 + sum(r.id.startswith(stem) for r in queue.rows)}"
+        n = queue.units_since_audit()
+        last_done = [r.id for r in queue.rows if r.status is Status.DONE][-1]
+        queue.insert_before(unit.id, audit_row(row_id, last_done))
+        subject = f"ralph: audit due after {n} units — {row_id}"
+        say(subject)
+        r = commit_state(self.paths, subject)
+        refused = "" if r.returncode == 0 else (r.stderr.strip() or f"exit {r.returncode}")
+        return Queue(queue.path).by_id()[row_id], refused
 
     def _beat(self, context):
         try:
@@ -1666,7 +1763,9 @@ def cmd_plan(args):
     models = resolve_models(args, paths)
     unit = queue.current()
     print(f"prompt: {prompt_text(paths)[1]}  queue: {paths.state}")
-    print(f"commits since review: n/a  head: {head_of(paths.workdir)[:9]}")
+    every = paths.manifest.audit_every if paths.manifest else None
+    print(f"units since audit: {queue.units_since_audit()}"
+          f"{f' (audit every {every})' if every else ''}  head: {head_of(paths.workdir)[:9]}")
     print(f"done: {queue.done_count()}/{len(queue.rows)}")
     if unit is None:
         print("no ready unit")
