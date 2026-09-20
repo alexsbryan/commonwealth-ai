@@ -8,10 +8,10 @@
 **Scope: the library and nothing above it.** Every export is a pure function,
 a plain value, or a property test. The library performs no I/O, holds no
 grant, knows no roster, and runs under `node --test` with no daemon present.
-Who may write an act, who may perform an effect, which version of an app a
-ring runs, how code reaches a machine, and how a page is isolated are
-authorization, governance and distribution. They are layers above, they are
-not designed here, and section 9 names the two seams they attach to.
+Who may sign an act is the rail's decision, made beneath the library before
+it sees anything. Who performs an effect, how code reaches a machine, and how
+a page is isolated are above it. None of that is designed here; section 9
+says where each sits and what was already decided elsewhere.
 
 The method is derivation. Start from what the rail guarantees and cannot take
 back, and ask what each guarantee forces on the code above it. Where that
@@ -77,7 +77,8 @@ app = {
 
 `reduce` and `pending` are functions of the log alone, so every node computes
 the same values. `view` also receives `Ctx` — whatever is true only here: who
-is looking, the local roster, completeness, the live lane. The library fixes
+is looking, the names this node knows, completeness, the live lane. The
+library fixes
 the type of `Ctx` as an opaque argument and supplies none of it.
 
 That split is the split between what converges and what does not, and it is
@@ -205,25 +206,36 @@ nothing. `act` stays `act`, because it is signed and correctable and an
 `action` is neither. The judge is deterministic — an app's tests plus the
 five laws — which bounds the search enough for a small local model.
 
-## 9. The two seams
+## 9. What is beneath, what is above, what is already decided
 
-The fold sits in the middle. Everything above attaches at one of two places
-and the library is unaware of both.
+**Beneath: membership.** The rail decides who may sign, in `admit`, before
+the library sees anything. An act from a key the roster does not claim is a
+gap in the rail's answer and never an op, so the fold cannot be handed one.
+Under the 2026-09-18 amendment (`docs/internal/RING_APPLICATIONS.md`)
+membership is computed from a seed plus `Admit` and `Remove` acts, behind the
+one membership function `admit` calls, with the permutation property as its
+contract. That is a fold with a law, one layer down — and deliberately not
+written with this library, because it must be decided before an app's fold
+and identically by every implementation of the rail. The library adds no
+second filter over admitted acts (ARCH principle 8). A reducer receives
+`person` on an admitted op and nothing else about who is in the ring.
 
-**Acts in.** The library folds whatever sequence it is handed. Deciding which
-acts count — beyond the rail's own admission — is a filter applied before the
-fold.
+**Above: effects out.** The library returns descriptions. Performing them is
+the runtime's.
 
-**Effects out.** The library returns descriptions. Deciding which are
-performed, by whom, and under what authority is a policy applied after
-`pending`.
+**Already decided, not reopened here.** The same amendment cut `App`, `Role`
+and `Invite` acts and a policy enum. One rule — any member admits and
+removes — with recovery by `correct`. App versions stay off the journal: the
+host stamps the bundle hash on each record and the fold names acts written
+under a different version; which version a ring runs is a human matter. An
+earlier draft of this document proposed ordering the choice of reducer with
+a deploy act; that contradicted the cut and is withdrawn. What the library
+owes that decision is one wrapper: acts stamped with a different bundle hash
+surface as gaps, never silently folded as if they were this version's.
 
-Deferred to those layers, recorded so they are not lost: who may perform or
-fulfil an effect; reassigning an effect whose performer never returns; who
-may deploy; that two nodes on different reducers diverge, so the choice of
-reducer must itself be ordered; pinning library code by hash; enforcing
-determinism at run time rather than only testing it; origin isolation between
-rings.
+Deferred, recorded so they are not lost: performing an effect and reassigning
+one whose performer never returns; enforcing determinism at run time rather
+than only testing it; origin isolation between rings.
 
 ## 10. Bars, written before any of this is built
 
