@@ -165,6 +165,18 @@ pub fn phase1_schema_for(policies: &OntologyPolicies) -> Value {
             props.remove("argument_reconstructions");
         }
     }
+    // The shipped cap is sized for prose. A section that ENUMERATES — a data
+    // table, a list of recipients — runs into it and the rest of the section
+    // is never extracted (spike 3, 2026-09-19: Spotify's data table). The
+    // author's number when they declared one; absent, the shipped literal is
+    // the default and nothing here restates it.
+    if let Some(n) = policies.shape.max_entities_per_section {
+        tracing::debug!(
+            max_entities_per_section = n,
+            "ontology schema: the recipe raised the Phase-1 entities_introduced cap"
+        );
+        set_max_items(&mut schema, "entities_introduced", n);
+    }
     schema
 }
 
@@ -242,6 +254,19 @@ where
         }
     }
     out
+}
+
+/// Replace the `maxItems` of one TOP-LEVEL array property. A no-op when the
+/// property is absent, so a schema edited out from under this stays valid
+/// rather than gaining a stray key.
+fn set_max_items(schema: &mut Value, property: &str, n: usize) {
+    if let Some(slot) = schema
+        .get_mut("properties")
+        .and_then(|props| props.get_mut(property))
+        .and_then(Value::as_object_mut)
+    {
+        slot.insert("maxItems".to_string(), json!(n));
+    }
 }
 
 // ── `$defs` surgery ─────────────────────────────────────────────────────────
