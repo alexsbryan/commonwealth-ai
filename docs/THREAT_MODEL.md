@@ -121,7 +121,7 @@ Three zones, from most to least trusted:
 | Client API `:9741` — embedded daemon (`/v1/*` OpenAI, `/api/*` Ollama shim, apps, knowledge) | `127.0.0.1` (`sovereign/crates/sovereign-daemon/src/daemon.rs`) | Loopback exempt; any non-loopback caller needs `Authorization: Bearer <token>`, matched full-token-first then guest-grant (`client_auth.rs`); **fail-closed** (403) when no token is configured. Exempt read-only paths: `/status`, `/oicp/v1/capabilities`. | Plain HTTP on the perimeter; on an encrypted mesh the listener is forced loopback and iroh QUIC/TLS is the sole ingress |
 | Client API `:9741` — standalone `commonwealth` binary | `0.0.0.0` (hardcoded; `commonwealth/crates/commonwealth-daemon/src/main.rs`) | Same `client_auth` bearer layer as above | Same |
 | MCP `/mcp` (rides `:9741`) | — | Loopback-only middleware, no token by design (`sovereign/crates/sovereign-daemon/src/mcp_router.rs`); permissive CORS is safe *because* of the loopback gate | — |
-| Internal mesh API `:9742` (gossip, join, scheduling, corpus collaboration) | `0.0.0.0` in trusted-network mode; `127.0.0.1` in encrypted mode | **None blanket** — perimeter-trusted; join itself is key+proof gated; admin routes are per-handler loopback-only | **Encrypted-QUIC-first**; in trusted-network mode it falls back to cleartext HTTP on your perimeter, and encrypted mode (below) makes iroh QUIC/TLS the sole path |
+| Internal mesh API `:9742` (gossip, join, scheduling, corpus collaboration) | `0.0.0.0` in trusted-network mode; `127.0.0.1` in encrypted mode | **None blanket** — perimeter-trusted; join itself is key+proof gated and gossip carries a mesh proof; **the other routes, admin ones included, have no guard of their own** (corrected 2026-09-20: this row said they were per-handler loopback-only, and no handler reads the caller's address) | **Encrypted-QUIC-first**; in trusted-network mode it falls back to cleartext HTTP on your perimeter, and encrypted mode (below) makes iroh QUIC/TLS the sole path |
 | `sovereign-server` `:8080` (multi-tenant REST/WS, mobile-facing) | `127.0.0.1` (`sovereign/crates/sovereign-server/src/config.rs`) | API-key → tenant middleware. **Startup refuses a non-loopback bind with auth disabled** unless `allow_unauthenticated_remote = true` is set explicitly (`validate_exposure`). `/health` + `/status` unauthenticated by design. | Plain HTTP on the perimeter; iroh dial-by-key optional (`[iroh] enabled`) |
 | Worker-pod daemon `:9742` (rented/cloud worker) | `0.0.0.0` | Owner-only routes; client pins the worker's certificate thumbprint from the bootstrap seed | rustls TLS (`sovereign/crates/sovereign-pods/src/worker_daemon.rs`) |
 | Tensor-split RPC `:50051/:50052` (`llama-server` ↔ `rpc-server`) | `127.0.0.1` locally; `0.0.0.0` for multi-host via `SOVEREIGN_RPC_SERVE` | **None** | **None — raw TCP.** See Known gaps |
@@ -200,29 +200,44 @@ it.
    published research — see `commonwealth/ARCHITECTURE.md` §9.)
    *Closes when:* the RPC stream rides an authenticated, encrypted transport
    (the iroh path the rest of the mesh uses) or the port refuses a peer it
-   cannot verify. *Owner:* unowned — the `mesh-verified-principal` order
-   measures the port and names it out of scope.
-2. **The internal API `:9742` has no blanket auth in trusted-network
-   mode.** A hostile device *inside* your tailnet/LAN is inside the trust
-   ring. Until closed: the perimeter is the mitigation, and encrypted mode
-   already closes it — the listener is loopback-only and iroh is the sole
-   ingress. *Closes when:* trusted-network mode requires the same verified
-   peer identity encrypted mode does, or is retired. *Owner:* unowned.
+   cannot verify. *Owner:* order `threat-gaps-close`, drafted 2026-09-20, not yet approved. Measured for that order: the member-only encrypted
+   tunnel for this traffic already exists and is in use; what is open is the
+   `0.0.0.0` default bind.
+2. **The internal API `:9742` has no blanket auth, in either mode.** Join
+   is key-and-proof gated and gossip carries a mesh proof; the remaining
+   routes, including ones that change state (`/internal/mesh/quiesce`,
+   `/internal/models/load`), answer any caller that can reach them. In
+   trusted-network mode that is any device on your tailnet/LAN — a hostile
+   device *inside* the perimeter is inside the trust ring. Encrypted mode
+   narrows it but does not close it: the listener is loopback-only, but the
+   internal iroh ALPN admits any dialer so that a joiner can reach
+   `/internal/join`, and splices it to that listener
+   (`sovereign/crates/sovereign-mesh/src/iroh_access.rs`, `forward_for`).
+   Corrected 2026-09-20: this entry said encrypted mode "already closes it",
+   and the surfaces table said admin routes were loopback-only per handler;
+   neither was true. Until closed: keep `:9742` off any network you do not
+   control. *Closes when:* a non-member reaches only the join route, over
+   iroh and over plain IP, and everything else requires a verified member.
+   *Owner:* order `threat-gaps-close`, drafted 2026-09-20, not yet approved.
 3. **One shared client token, not per-user tenancy, on `:9741`.** Every
    remote holder of the client token has the same authority.
    (`sovereign-server` on `:8080` does have per-key tenants; guest grants are
    per-bearer, scoped and expiring.) *Closes when:* a remote client holds a
    credential of its own that can be revoked without rotating everyone's.
-   *Owner:* unowned.
+   *Owner:* order `threat-gaps-close`, drafted 2026-09-20, not yet approved.
 4. **The standalone `commonwealth` binary hardcodes `0.0.0.0:9741`**
    (bearer-gated, loopback-exempt) rather than following the embedded
    daemon's loopback-first default. *Closes when:* it binds loopback unless
-   configured otherwise, as the embedded daemon does. *Owner:* unowned.
+   configured otherwise, as the embedded daemon does. *Owner:* order `threat-gaps-close`, drafted 2026-09-20, not yet approved.
+   Measured for that order: the binary was deleted on 2026-08-26, so this
+   entry is expected to be struck, not built.
 5. **Tauri v2 does not gate app commands per-window** (tauri#9227): a
    webview with IPC access can invoke any registered command. Relevant only
    if untrusted content ever gets a webview. *Closes when:* upstream lands
    per-window gating, or the desktop gains its own per-window command
-   allowlist. *Owner:* upstream; unowned here.
+   allowlist. *Owner:* order `threat-gaps-close`, drafted 2026-09-20, not yet approved. Measured for that order: the
+   desktop ships no app-command manifest, so a mesh-app window can invoke
+   every host command, not only the bridge's.
 6. **A mesh member can act as any other member on the call plane.** The
    node's Ed25519 key is verified in the iroh handshake and signs every rail
    op, but knowledge search, the capabilities fetch, the admission tally and
