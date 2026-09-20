@@ -211,8 +211,11 @@ it.
    device *inside* the perimeter is inside the trust ring. Encrypted mode
    narrows it but does not close it: the listener is loopback-only, but the
    internal iroh ALPN admits any dialer so that a joiner can reach
-   `/internal/join`, and splices it to that listener
+   `/internal/join`, and forwards it to that listener
    (`sovereign/crates/sovereign-mesh/src/iroh_access.rs`, `forward_for`).
+   Since `e8f7f0520` that hop carries the dialer's verified key, and its
+   member name when the roster has one; no route behind it refuses on that
+   yet, which is the rest of campaign `mesh-principal`.
    Corrected 2026-09-20: this entry said encrypted mode "already closes it",
    and the surfaces table said admin routes were loopback-only per handler;
    neither was true. Until closed: keep `:9742` off any network you do not
