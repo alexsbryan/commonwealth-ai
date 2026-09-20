@@ -858,14 +858,71 @@ sys.exit(0 if not [x for x in json.load(open(sys.argv[1])).get('offering', []) i
 # ── the cut: the venue's internet goes down ─────────────────────────────────
 # Only the uplink. The room's WiFi stays up, so the phones keep reaching the
 # wall — which is exactly what the bar's goodhart demands be true.
+
+# Every address beefy's OWN log says it reached this peer at — the daemon's
+# citation rather than the instrument's guess (ARCH 4). Every internal port
+# binds loopback here, so a peer is reachable only over iroh, and iroh's local
+# mouth is a bridge gateway on beefy's loopback: the `url=` this list collects
+# is `http://127.0.0.1:<bridge-port>/oicp/v1/capabilities`, not a container
+# address. That bridge port is what survived the cut in run 4 of 2026-09-19
+# (`transport: resolved … first=iroh:127.0.0.1:32519→63cc94f6`, then `fetched
+# peer manifest peer=RuggedFox url=http://127.0.0.1:32519/… rtt_ms=3
+# locality=Local`). It is the DAEMON's, not the instrument's forwarder — the
+# forwarder listens on DPORT and only ever carries a node's own page to that
+# node's own loopback, never a peer.
+room_peer_urls() { # peer-mesh-name
+  python3 -c "
+import re, sys
+ansi = re.compile(r'\x1b\[[0-9;]*m')
+want, urls = sys.argv[2], []
+try: f = open(sys.argv[1], errors='replace')
+except OSError: raise SystemExit
+for line in f:
+    m = re.search(r'peer=(\S+) url=(\S+)', ansi.sub('', line))
+    if m and m.group(1) == want and m.group(2) not in urls: urls.append(m.group(2))
+print('\n'.join(urls))" "$D/beefy/daemon.err" "$1" 2>/dev/null
+}
+
+# The cut must BE a cut before the leg may judge what the room lost (ARCH 5):
+# a bar reading "the answer named nobody it could not reach" while the keeper
+# was still reachable measures nothing at all. Two readings on beefy, both
+# inside the cut and before the phone types anything:
+#   (1) `mesh status --json` stops calling the two uplink members online,
+#       within one gossip round;
+#   (2) every address in `room_peer_urls` refuses an OICP capabilities fetch.
+# Echoes the surviving address, or nothing. The leg reads COULD-NOT-JUDGE on a
+# survivor — never FAILED, never PASSED.
+room_assert_cut() {
+  local deadline=$(( $(date +%s) + 30 )) online="" u
+  while :; do
+    online=$(mesh_json beefy | python3 -c "
+import json, sys
+try: ms = json.load(sys.stdin).get('members') or []
+except Exception: raise SystemExit
+print(' '.join(m.get('name','') for m in ms
+                if m.get('status') == 'online' and m.get('name') in ('${MESHNAME[halo]}', '${MESHNAME[little]}')))" 2>/dev/null)
+    [ -z "$online" ] && break
+    [ "$(date +%s)" -ge "$deadline" ] && break
+    sleep 3
+  done
+  [ -n "$online" ] && { echo "mesh status on beefy still calls $online online 30 s after the cut"; return 0; }
+  for u in $(room_peer_urls "${MESHNAME[halo]}"); do
+    node_curl beefy -s --max-time 5 -o /dev/null "$u" 2>/dev/null \
+      && { echo "$u still answers an OICP capabilities fetch from beefy"; return 0; }
+  done
+  return 0
+}
+
 leg_room_offline() {
-  local out="$D/room-offline.json" q wallpid before_beefy after_beefy after_halo t0 conv=""
+  local out="$D/room-offline.json" q wallpid before_beefy after_beefy after_halo t0 conv="" survivor=""
   q=$(BANK="$BANK" python3 -c "import json,os; print(json.loads(os.environ['BANK'])[1][1])")
   : > "$D-wall-cut.ndjson"
   REPO="$REPO" PA="$(tab_url beefy)" OUT="$D-wall-cut.ndjson" POLL_MS=250 WATCH_S=900 \
     node "$PHONE_PKG/wall.mjs" > "$D/wall-watch-cut.out" 2>&1 &
   wallpid=$!
   cut_node beefy "$UPLINK" > "$D/room-cut.out" 2>&1
+  survivor=$(room_assert_cut)
+  echo "${survivor:-the cut is a cut: no uplink member online on beefy, no logged peer address answers}" > "$D/room-cut-assert.out"
   sleep 10
   room_phone phone-cut "$PAGE/wall-qr.svg" "$GUEST_ONE" 1 "$q" ""
   kill "$wallpid" 2>/dev/null
@@ -877,20 +934,42 @@ leg_room_offline() {
     [ -n "$after_halo" ] && [ "$after_halo" = "$after_beefy" ] && { conv=$(( $(date +%s) - t0 )); break; }
     sleep 3
   done
-  python3 - "${before_beefy:-}" "${after_beefy:-}" "${after_halo:-}" "${conv:-}" "$q" > "$out" <<'PY'
+  python3 - "${before_beefy:-}" "${after_beefy:-}" "${after_halo:-}" "${conv:-}" "$q" "$survivor" > "$out" <<'PY'
 import json, sys
-before, after_b, after_h, conv, q = sys.argv[1:6]
+before, after_b, after_h, conv, q, survivor = sys.argv[1:7]
 json.dump({"question": q, "beefy_at_cut": before, "beefy_after": after_b, "halo_after": after_h,
            "converged_s": int(conv) if conv else None,
-           "byte_equal": bool(after_h) and after_h == after_b}, sys.stdout)
+           "byte_equal": bool(after_h) and after_h == after_b,
+           "cut_not_a_cut": survivor or None}, sys.stdout)
 PY
 }
 
 # ── the census + the five rows ───────────────────────────────────────────────
+# The bars this topology is judged on, in order. ONE reader, so the verdict
+# loop and the could-not-judge short-circuit cannot disagree about the set.
+room_bar_ids() {
+  if [ "$TOPOLOGY" = room ]; then
+    python3 -c "import sys,tomllib; print(' '.join(b['id'] for b in tomllib.load(open(sys.argv[1],'rb'))['bar'] if b.get('rung')=='rr-2'))" "$ROOM_CAMPAIGN"
+  else
+    echo "ra-room-answer-names-the-machine ra-room-doc-name-from-membership ra-room-film-from-the-library-rail ra-room-plug-in-live ra-room-nothing-typed"
+  fi
+}
+
+# Every bar reads COULD-NOT-JUDGE for one named reason, without a walk — the
+# shape a refusal takes when the instrument cannot legitimately run at all.
+room_cnj_rows() { # reason bar|all
+  python3 -c "
+import json, sys
+reason, want, ids = sys.argv[1], sys.argv[2], sys.argv[3].split()
+for b in (ids if want == 'all' else [want]):
+    print(json.dumps({'bar': b, 'value': None, 'reason': reason, 'verdict': 'COULD-NOT-JUDGE'}))" \
+    "$1" "$2" "$(room_bar_ids)"
+}
+
 report() { # bar|all
-  python3 - "$D" "$ROOM_CAMPAIGN" "$1" "$TYPED" "$CMDLOG" "$ROOM_SCRIPT" "${CPORT[*]} ${IPORT[*]} ${DPORT[*]}" "${IP[*]}" "$TOPOLOGY" "${IP[phone]:-}" <<'PY'
+  python3 - "$D" "$ROOM_CAMPAIGN" "$1" "$TYPED" "$CMDLOG" "$ROOM_SCRIPT" "${CPORT[*]} ${IPORT[*]} ${DPORT[*]}" "${IP[*]}" "$TOPOLOGY" "${IP[phone]:-}" "$(room_bar_ids)" <<'PY'
 import json, os, re, subprocess, sys, tomllib
-d, campaign, want, typed_p, cmdlog_p, script_p, ports, ips, topology, phone_ip = sys.argv[1:11]
+d, campaign, want, typed_p, cmdlog_p, script_p, ports, ips, topology, phone_ip, bar_ids = sys.argv[1:12]
 bars = {b["id"]: b for b in tomllib.load(open(campaign, "rb"))["bar"]}
 COUNTED = ("address", "port", "URL", "config-line", "credential")
 
@@ -1229,6 +1308,11 @@ if topology == "room":
     cut_es = cut_ask.get("epistemic_state") or {}
     if not o or not pc:
         row("ra-room-offline-room-says-so", None, "the offline leg did not run")
+    elif o.get("cut_not_a_cut"):
+        # ARCH 5: the keeper was still reachable, so neither PASSED nor FAILED
+        # is a reading this leg earned. The surviving address is the finding.
+        row("ra-room-offline-room-says-so", None, f"cut-not-a-cut: {o['cut_not_a_cut']}",
+            cut_not_a_cut=o["cut_not_a_cut"])
     elif pc.get("fatal"):
         row("ra-room-offline-room-says-so", 0.0, f"the phone could not reach the wall during the cut: {pc['fatal']}")
     else:
@@ -1275,10 +1359,7 @@ if topology == "room":
             affirmative_half="COULD-NOT-JUDGE: the phone runs no node here, so `introduce` cannot be "
                              "observed making one a member (ring-apps ra-11's measurement first)")
 
-order = ([b["id"] for b in tomllib.load(open(campaign, "rb"))["bar"] if b.get("rung") == "rr-2"]
-         if topology == "room" else
-         ["ra-room-answer-names-the-machine", "ra-room-doc-name-from-membership",
-          "ra-room-film-from-the-library-rail", "ra-room-plug-in-live", "ra-room-nothing-typed"])
+order = bar_ids.split()
 for bar in (order if want == "all" else [want]):
     r, b = rows[bar], bars[bar]
     v = r["value"]
@@ -1311,6 +1392,9 @@ case "${1:-}" in
   verdict)
     python3 -c "import sys,tomllib; ids=[b['id'] for b in tomllib.load(open(sys.argv[1],'rb'))['bar']]; sys.exit(0 if sys.argv[2] in ids+['all'] else 1)" \
       "$ROOM_CAMPAIGN" "${2:-}" || { echo "verdict: name a bar or all — see quality/campaigns/ring-room.toml" >&2; exit 2; }
+    # The demo builds what it measures, or it says so and judges nothing.
+    stale=$(stale_binaries)
+    [ -z "$stale" ] || { room_cnj_rows "$stale" "$2"; echo "$stale" >&2; exit 3; }
     need_binaries
     : > "$CMDLOG"; : > "$TYPED"
     if [ "$TOPOLOGY" = room ]; then

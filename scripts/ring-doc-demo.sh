@@ -195,12 +195,33 @@ start_forwarder() { # node
     python3 -c "$FWD_PY" "${DPORT[$n]}" "${IP[$n]}" ${second:+"$second"}
 }
 
+# Are the binaries older than the code this run would be judging? Echoes the
+# reason, naming both mtimes; empty when they are fresh.
+#
+# A run measures the binary, never the tree — and on 2026-09-19 runs 1 and 2 of
+# the room topology judged six bars against a daemon built three hours before
+# the commits under test, then reported the readings as if they spoke to them.
+# ARCH 5: a gate that cannot say what it measured makes no claim, so this is
+# could-not-judge, never a failed bar.
+stale_binaries() {
+  local newest src_s src_f bin_s
+  newest=$(git -C "$REPO" ls-files -z -- '*.rs' '*.js' 2>/dev/null \
+    | xargs -0 -r stat -c '%Y %n' 2>/dev/null | sort -rn | head -1)
+  [ -n "$newest" ] || return 0
+  src_s=${newest%% *}; src_f=${newest#* }
+  bin_s=$(stat -c %Y "$DAEMON" 2>/dev/null || echo 0)
+  [ "$src_s" -gt "$bin_s" ] || return 0
+  echo "binaries-stale: $DAEMON mtime $bin_s ($(date -d "@$bin_s" '+%F %T')) is older than $src_f mtime $src_s ($(date -d "@$src_s" '+%F %T')) — rebuild with scripts/dev-build.sh"
+}
+
 need_binaries() {
   # Exit 3 is co-lineage's "artifact-absent": could-not-judge, not a failed bar.
   if ! { [ -x "$DAEMON" ] && [ -x "$CLI" ] && command -v node >/dev/null; }; then
     echo "ring-doc-demo: build first (cargo build --bins --features sovereign-cli/dev-tools) and put node on PATH" >&2
     exit 3
   fi
+  local stale; stale=$(stale_binaries)
+  [ -z "$stale" ] || { echo "ring-doc-demo: $stale" >&2; exit 3; }
   [ "$BACKEND" = podman ] || return 0
   "${PODMAN[@]}" version >/dev/null 2>&1 || { echo "ring-doc-demo: podman is not reachable (${PODMAN[*]})" >&2; exit 3; }
   local img
