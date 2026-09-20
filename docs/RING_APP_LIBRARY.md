@@ -298,13 +298,14 @@ browser as a citizen. The core does not make that move.
 5. Apps arrive through the ring, by hash, and are folds.
 6. Infrastructure forwards and never holds.
 
-**Two tiers, and only two.** A *guest* is a browser on the room's network,
+**Three tiers: alone, guest, member.** *Alone* is described further down. A
+*guest* is a browser on the room's network,
 served by the host's own node over the LAN door — no install, no key, no
 domain, no gateway, no third party; the guest trusts the page exactly as far
 as they trust the person standing next to them. This is built. A *member*
 runs a node — the desktop app or the phone app — with a key in the device's
 keystore, admitted in person or over a channel the two people already share.
-There is no browser-held identity.
+There is no browser-held identity in anyone else's ring.
 
 **What invitation-only removes, rather than mitigates.** No public surface,
 so no spam, no moderation queue, no sybil rate limits, and the acceptor
@@ -325,10 +326,45 @@ reads it.
 | iOS in the background | A phone-only ring syncs while apps are open | a push sender, which is a hub |
 | Getting the software | App stores and downloads are not decentralised. Running is | — |
 
-**The friendless newcomer** is not a ring problem. Alone, the node is
-Sovereign: it answers from what you already have. A ring is what happens when
-you invite someone. The ring of one needs no landing app because it is not
-the product's first moment.
+**Alone — the tier everyone starts in** (operator direction 2026-09-20:
+everyone should be able to start as a friendless newcomer in a Safari tab,
+get real value, and taste how much more a ring would be). This does not cross
+the boundary, because the limits came from a browser acting in *someone
+else's* ring. A ring of one touches nobody's node and nobody relies on its
+key. The boundary is between alone and together, not between browser and
+node.
+
+- **What it is.** The runtime, `commonwealth-rail-core` and the fold as wasm,
+  from the static origin, cached by a service worker. The page generates a
+  key, founds a ring of one, and keeps the journal in the browser's own
+  storage. Sentences 1, 2, 5 and 6 of the core hold as written; 3 and 4 have
+  nobody to apply to. A public link, a poster or an ad may land here, because
+  it lands in the newcomer's own empty ring and on nobody's machine.
+- **The value, in thirty seconds.** Write something, log something, paste or
+  pick a document — then ask it. The answer is the passage it came from, or
+  "I can't answer that from what you've given me." That is Sovereign's
+  sentence reduced to a tab: extractive, cited, and able to decline, carried
+  in the same `Answer`/`Claim`/`Verdict` schema. It is search with an honest
+  verdict, not the full pipeline, and the page says which. A downloaded
+  in-browser model is optional and later; it is hundreds of megabytes.
+- **The taste of more is the truth about what is missing**, mounted by the
+  runtime like the gaps panel, never a nag (ARCH principle 6): *only this
+  browser holds it, and Safari may forget it after a week unused* — a machine
+  of yours would keep it; *answers are passages* — a house with a model would
+  talk; *a roster of one* — people you would vouch for appear here.
+- **Graduation loses nothing.** A journal is signed JSONL. Install a node,
+  scan its LAN code, and the phone is a guest of your own node carrying ops
+  `RingJournal::ingest` already accepts because the signatures verify. The
+  browser key, as founder, admits the node's key under the same name. The
+  ring of one becomes your first real ring with no migration.
+- **Together needs a house.** Two browsers cannot reach each other and a
+  browser cannot be invited into. The first node is the threshold of having
+  anyone else, and the page says so at the moment someone reaches for
+  "invite".
+- **Its limits, said on screen.** Eviction; no sync between your own devices;
+  whoever controls the gateway's name can serve this tier new code, and the
+  harm is bounded to the one person whose data it is. There is no telemetry,
+  so this tier's conversion is measured only at the campaign level.
 
 **What stays in scope from the sections below:** the runtime (§12), the
 sandbox (§13 — a guest's text still renders on members' screens), the bundle
