@@ -7,6 +7,11 @@ traced to its root in a's daemon log, with the fixes ranked by how much of the
 `target/ring-room-demo/` (verdict rows in commit `85eda3e49`, per-call timings
 from `target/ring-room-demo/a/daemon.err` of the bring-up at 04:23Z).
 
+The room as it will be — rr-2's four nodes, two networks and six bars, and the
+walk on real machines — has its own run of show in
+`docs/RING_ROOM_RUN_OF_SHOW.md`. Part one here is rr-1's three-machine sitting,
+which stays the regression gate.
+
 ## Part one: the run of show
 
 A ring is a few machines that share things directly with each other, no server
