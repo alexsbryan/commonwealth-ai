@@ -5620,3 +5620,19 @@ beyond it is not.
 **Falsified if** the install reports a section count far from ~1,370 (then re-derive the meter before renting); or `wc -w` ranks a different top three.
 
 </details>
+
+## A37 · 2026-09-20 — e7-pod-preflight: a rehearsal of a state-chained batch claims argv, and says so
+
+<details>
+
+**Unit:** `e7-pod-preflight`, second §6 halt, with the skip rule and `batch-stage0.txt` landed (`8a584b5cf`). Seat decision, supervisor held with an empty `ralph/STOP`.
+
+**The fork.** `enrich init --dry-run` writes no state (`enrich_cmd/init.rs:555-561`), so `extract`, `--finalize`, `build` and the `cp` have nothing to read and the rehearsal exits 1 on line 02 ("no enrichment config"). (a) a third rehearsal verdict, `needs-live-state`; or (b) run init for real locally, which pins `localhost:9741` and this host's model into `config.json` (`init.rs:576-592`) and makes the metered window `--force` over it.
+
+**Choice: (a).** (b) changes what the metered window does in order to make a rehearsal greener — the instrument bending the run. (a) keeps the live path byte-identical and makes the rehearsal say only what it can: a marked line's argv parses. The marker is data in the batch (`#@ live-state`), not an error-text match; exit 2 on a marked line is still `failed`, and both directions are planted (an unmarked failure fails the rehearsal; a marked bad flag does not hide). Residual risk, accepted: a marked line can still fail live for a reason a dry-run never sees; the batch stops there and the trap destroys the pod, so the exposure is one line's runtime at ~$0.67/h. The same five verbs ran green on a pod in spike 3 on 2026-09-19.
+
+**Meter, corrected by measurement.** 826 sections (rehearsal line 01), not ~1,370: ~1 h 05 m extraction, 1.5-2 h window. HUMAN-e7-pod-up says so now.
+
+**Falsified if** the CLI exits something other than 2 for an unknown flag (the row stops on that), or a marked line fails live on argv.
+
+</details>
