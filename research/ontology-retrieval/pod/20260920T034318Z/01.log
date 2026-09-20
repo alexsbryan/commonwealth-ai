@@ -1,0 +1,14 @@
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+[2m2026-09-20T03:43:19.167693Z[0m [33m WARN[0m Corpus 'ei7-recensus-fineprint' records embedding model 'qwen-embedding-0.6b' but this engine expects ''. The widths agree, so this is most likely the same model under a different file name or quantisation and search is fine. Re-install only if results look wrong.
+streaming chunk rows from `ei7-recensus-fineprint` index ...
+streamed 1870 chunk rows in 147 ms
+manifest: 826 articles, 826 sections — keeping 826 articles
+  ✓ wrote /Users/alexsbryan/.svrnmesh/indexes/ei7-recensus-fineprint/chapters.json (826 chapters)
+  ✓ wrote /Users/alexsbryan/.svrnmesh/enrichment/ei7-recensus-fineprint/config.json
+  ✓ pipeline      = custom_atlas
+  ✓ custom ontology: contracts (version 1, 9 types, 1 claim types)
+  ✓ chat_model    = commonwealth/primary
+  ✓ embed_model   = qwen3-embedding-0.6b
+  ✓ from_corpus   = ei7-recensus-fineprint
+
+  Next: svrn enrich extract ei7-recensus-fineprint --chapters sec_00001,sec_00002,sec_00003

@@ -1,0 +1,7 @@
+line exit     wall   rehearsed command
+01   0        1s     -         "$SVRN" enrich init ei7-recensus-fineprint --from-corpus ei7-recensus-fineprint
+02   1        4476s  -         "$SVRN" enrich extract ei7-recensus-fineprint --full --resume
+03   skip     -      -         "$SVRN" enrich extract ei7-recensus-fineprint --finalize
+04   skip     -      -         "$SVRN" enrich build ei7-recensus-fineprint --skip extract --skip tensions
+05   skip     -      -         cp -R "$HOME/.svrnmesh/enrichment/ei7-recensus-fineprint/runs" "$POD_WINDOW_OUT/runs"
+06   skip     -      -         research/ontology-retrieval/pilot/run-pilot.sh

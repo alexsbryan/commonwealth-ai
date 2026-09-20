@@ -1,0 +1,1027 @@
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+[2m2026-09-20T03:43:19.739380Z[0m [33m WARN[0m Corpus 'ei7-recensus-fineprint' records embedding model 'qwen-embedding-0.6b' but this engine expects ''. The widths agree, so this is most likely the same model under a different file name or quantisation and search is fine. Re-install only if results look wrong.
+  · --resume: checkpoint at /Users/alexsbryan/.svrnmesh/enrichment/ei7-recensus-fineprint/runs/_phase1_checkpoint.jsonl is empty (or missing); proceeding with full selection.
+  running phase 1 (full) over 826 chapter(s) — checkpoint: /Users/alexsbryan/.svrnmesh/enrichment/ei7-recensus-fineprint/runs/_phase1_checkpoint.jsonl
+    · 0 exemplar(s) loaded, 826 chapter(s) to process
+    [1/826] sec_00001…       · waiting on daemon (15s elapsed, phase=phase1, model=commonwealth/primary, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1, model=commonwealth/primary, schema=true)
+10 e [organization, party, service, data_type, defined_term], 2 q
+    [2/826] sec_00002… 10 e [defined_term, data_type, service], 2 q
+    [3/826] sec_00003… 12 e [agreement, data_type], 2 q
+    [4/826] sec_00004…       · waiting on daemon (15s elapsed, phase=phase1, model=commonwealth/primary, schema=true)
+9 e [service, defined_term, data_type, recipient], 2 q
+    [5/826] sec_00005… 5 e [service, agreement, data_type, defined_term], 1 q
+    [6/826] sec_00006… FAILED: skipped: chapter body is too short to analyze (35 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [7/826] sec_00007… 2 e [service, party], 2 q
+    [8/826] sec_00008… 4 e [service], 2 q
+    [9/826] sec_00009… 4 e [service, organization, recipient, party], 2 q
+    [10/826] sec_00010… 3 e [service], 1 q
+    [11/826] sec_00011… 2 e [party], 1 q
+    [12/826] sec_00012… 2 e [organization], 1 q
+    [13/826] sec_00013… 4 e [organization], 2 q
+    [14/826] sec_00014…       · waiting on daemon (15s elapsed, phase=phase1, model=commonwealth/primary, schema=true)
+14 e [organization, defined_term, data_type, agreement], 1 q
+    [15/826] sec_00015…       · waiting on daemon (15s elapsed, phase=phase1, model=commonwealth/primary, schema=true)
+7 e [agreement, defined_term], 2 q
+    [16/826] sec_00016…       · waiting on daemon (15s elapsed, phase=phase1, model=commonwealth/primary, schema=true)
+15 e [defined_term, party, data_type], 2 q
+    [17/826] sec_00017… 7 e [defined_term, data_type], 2 q
+    [18/826] sec_00018…       · waiting on daemon (15s elapsed, phase=phase1, model=commonwealth/primary, schema=true)
+5 e [service, data_type, defined_term, recipient], 2 q
+    [19/826] sec_00019… 3 e [service, party, defined_term], 2 q
+    [20/826] sec_00020…       · waiting on daemon (15s elapsed, phase=phase1, model=commonwealth/primary, schema=true)
+6 e [service, organization, data_type, agreement], 2 q
+    [21/826] sec_00021… 3 e [agreement, service, recipient], 2 q
+    [22/826] sec_00022… 5 e [organization, agreement], 2 q
+    [23/826] sec_00023… 6 e [organization, data_type, party, recipient], 2 q
+    [24/826] sec_00024… 4 e [defined_term], 2 q
+    [25/826] sec_00025… 12 e [service, party, recipient, data_type], 2 q
+    [26/826] sec_00026… FAILED: skipped: chapter body is too short to analyze (31 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [27/826] sec_00027… 2 e [service, party], 2 q
+    [28/826] sec_00028… 4 e [service, recipient, agreement, defined_term], 2 q
+    [29/826] sec_00029… 5 e [service, defined_term, recipient], 2 q
+    [30/826] sec_00030… 4 e [service, agreement, defined_term], 2 q
+    [31/826] sec_00031… 13 e [service, data_type, recipient, party], 2 q
+    [32/826] sec_00032… 3 e [agreement, data_type, defined_term], 2 q
+    [33/826] sec_00033… FAILED: skipped: chapter body is too short to analyze (37 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [34/826] sec_00034… 8 e [service, agreement], 2 q
+    [35/826] sec_00035… 2 e [service, agreement], 2 q
+    [36/826] sec_00036… 2 e [service], 2 q
+    [37/826] sec_00037… 4 e [agreement, defined_term, party], 2 q
+    [38/826] sec_00038… 2 e, 2 q
+    [39/826] sec_00039… FAILED: skipped: chapter body is too short to analyze (5 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [40/826] sec_00040… 2 e [organization, service], 2 q
+    [41/826] sec_00041… 15 e [agreement], 2 q
+    [42/826] sec_00042… 4 e [party], 2 q
+    [43/826] sec_00043… FAILED: skipped: chapter body is too short to analyze (32 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [44/826] sec_00044… 4 e [service, defined_term], 2 q
+    [45/826] sec_00045… 7 e [data_type, defined_term, recipient], 2 q
+    [46/826] sec_00046… 4 e [organization, service], 2 q
+    [47/826] sec_00047… 7 e [service, agreement, defined_term, organization], 2 q
+    [48/826] sec_00048… 5 e [defined_term, recipient, organization], 2 q
+    [49/826] sec_00049… 2 e [service, party], 2 q
+    [50/826] sec_00050… 2 e [service, agreement], 2 q
+    [51/826] sec_00051… 2 e [service, defined_term], 1 q
+    [52/826] sec_00052… 2 e [agreement, defined_term], 1 q
+    [53/826] sec_00053… 3 e [organization, data_type, defined_term], 2 q
+    [54/826] sec_00054… 6 e [defined_term, service, agreement, data_type], 1 q
+    [55/826] sec_00055… 5 e [agreement, defined_term, service], 2 q
+    [56/826] sec_00056… 4 e [service, recipient], 1 q
+    [57/826] sec_00057… FAILED: skipped: chapter body is too short to analyze (15 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [58/826] sec_00058… 6 e [agreement, defined_term, service, party], 1 q
+    [59/826] sec_00059… FAILED: skipped: chapter body is too short to analyze (32 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [60/826] sec_00060… FAILED: skipped: chapter body is too short to analyze (22 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [61/826] sec_00061… FAILED: skipped: chapter body is too short to analyze (35 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [62/826] sec_00062… FAILED: skipped: chapter body is too short to analyze (18 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [63/826] sec_00063… 3 e [service, organization], 2 q
+    [64/826] sec_00064… 12 e [organization, agreement, defined_term, party], 2 q
+    [65/826] sec_00065… FAILED: skipped: chapter body is too short to analyze (16 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [66/826] sec_00066… 7 e [agreement, defined_term, data_type], 2 q
+    [67/826] sec_00067… 3 e [defined_term, party], 2 q
+    [68/826] sec_00068… 2 e [service], 1 q
+    [69/826] sec_00069… 3 e [defined_term, data_type, service], 1 q
+    [70/826] sec_00070… FAILED: skipped: chapter body is too short to analyze (27 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [71/826] sec_00071… FAILED: skipped: chapter body is too short to analyze (33 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [72/826] sec_00072… 4 e [defined_term, service, recipient, purpose], 3 q
+    [73/826] sec_00073… FAILED: skipped: chapter body is too short to analyze (22 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [74/826] sec_00074… 4 e [service, agreement, organization, party], 2 q
+    [75/826] sec_00075… FAILED: skipped: chapter body is too short to analyze (33 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [76/826] sec_00076… 6 e [defined_term, agreement], 2 q
+    [77/826] sec_00077… FAILED: skipped: chapter body is too short to analyze (18 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [78/826] sec_00078… FAILED: skipped: chapter body is too short to analyze (18 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [79/826] sec_00079… 2 e [agreement, party], 1 q
+    [80/826] sec_00080… 4 e [service, agreement, party], 2 q
+    [81/826] sec_00081… FAILED: skipped: chapter body is too short to analyze (15 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [82/826] sec_00082… 7 e [organization, service, data_type, recipient], 2 q
+    [83/826] sec_00083… 10 e [service, agreement, defined_term, organization, party], 2 q
+    [84/826] sec_00084… 11 e [agreement, defined_term, party], 2 q
+    [85/826] sec_00085… 6 e [agreement, defined_term], 2 q
+    [86/826] sec_00086… 3 e [organization, party], 1 q
+    [87/826] sec_00087… 6 e [defined_term, service, party, organization], 2 q
+    [88/826] sec_00088… 5 e [defined_term, organization], 1 q
+    [89/826] sec_00089… FAILED: skipped: chapter body is too short to analyze (37 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [90/826] sec_00090… FAILED: skipped: chapter body is too short to analyze (33 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [91/826] sec_00091… 5 e [service, defined_term, data_type], 2 q
+    [92/826] sec_00092… 4 e [defined_term], 2 q
+    [93/826] sec_00093… FAILED: skipped: chapter body is too short to analyze (32 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [94/826] sec_00094… FAILED: skipped: chapter body is too short to analyze (15 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [95/826] sec_00095… 3 e [organization], 1 q
+    [96/826] sec_00096… 4 e [service, defined_term, organization, party], 1 q
+    [97/826] sec_00097… 3 e [organization, defined_term, service], 2 q
+    [98/826] sec_00098… 11 e [organization, party, data_type], 3 q
+    [99/826] sec_00099… 3 e [agreement], 2 q
+    [100/826] sec_00100… 1 e, 1 q
+    [101/826] sec_00101… 5 e [agreement, defined_term, data_type, party], 2 q
+    [102/826] sec_00102… 4 e [defined_term, data_type], 2 q
+    [103/826] sec_00103… 2 e, 1 q
+    [104/826] sec_00104… 7 e [service, defined_term, agreement], 2 q
+    [105/826] sec_00105… 2 e [party, defined_term], 1 q
+    [106/826] sec_00106… FAILED: skipped: chapter body is too short to analyze (22 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [107/826] sec_00107… 5 e [party, service, defined_term], 2 q
+    [108/826] sec_00108… 3 e [service, party], 2 q
+    [109/826] sec_00109… FAILED: skipped: chapter body is too short to analyze (38 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [110/826] sec_00110… 7 e [organization, service, defined_term, agreement], 2 q
+    [111/826] sec_00111… 6 e [service, data_type], 2 q
+    [112/826] sec_00112… 2 e [organization, service], 2 q
+    [113/826] sec_00113… 6 e [service, defined_term, data_type, party], 2 q
+    [114/826] sec_00114… 2 e [party, service], 2 q
+    [115/826] sec_00115… 4 e [defined_term, service], 2 q
+    [116/826] sec_00116… 3 e [service, agreement, organization], 3 q
+    [117/826] sec_00117… 3 e [party, service], 2 q
+    [118/826] sec_00118… 6 e [organization, agreement], 2 q
+    [119/826] sec_00119… 15 e [organization, agreement], 1 q
+    [120/826] sec_00120… FAILED: skipped: chapter body is too short to analyze (39 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [121/826] sec_00121… 3 e, 1 q
+    [122/826] sec_00122…       · waiting on daemon (15s elapsed, phase=phase1, model=commonwealth/primary, schema=true)
+10 e [service, defined_term, party], 2 q
+    [123/826] sec_00123… FAILED: skipped: chapter body is too short to analyze (35 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [124/826] sec_00124… FAILED: skipped: chapter body is too short to analyze (22 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [125/826] sec_00125… 5 e [defined_term, service], 2 q
+    [126/826] sec_00126… 3 e [agreement, party, organization], 1 q
+    [127/826] sec_00127… FAILED: skipped: chapter body is too short to analyze (23 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [128/826] sec_00128… 2 e [organization], 1 q
+    [129/826] sec_00129… 14 e [service, data_type, recipient], 1 q
+    [130/826] sec_00130… 2 e [agreement], 2 q
+    [131/826] sec_00131… 3 e [agreement, party], 2 q
+    [132/826] sec_00132… 5 e [organization, agreement, party], 2 q
+    [133/826] sec_00133… 5 e [service, party], 1 q
+    [134/826] sec_00134… 7 e [service, defined_term, recipient], 1 q
+    [135/826] sec_00135… FAILED: skipped: chapter body is too short to analyze (16 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [136/826] sec_00136… 2 e [service, data_type], 2 q
+    [137/826] sec_00137… 2 e [defined_term, recipient], 2 q
+    [138/826] sec_00138… 3 e [service], 2 q
+    [139/826] sec_00139… 4 e [service, defined_term, party], 2 q
+    [140/826] sec_00140… 6 e [agreement, service, organization], 2 q
+    [141/826] sec_00141… FAILED: skipped: chapter body is too short to analyze (25 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [142/826] sec_00142… 15 e [organization, defined_term, recipient, data_type], 1 q
+    [143/826] sec_00143… 2 e [service, party], 2 q
+    [144/826] sec_00144… 13 e [service, defined_term, data_type, party, recipient], 2 q
+    [145/826] sec_00145… 6 e [service, data_type, defined_term], 2 q
+    [146/826] sec_00146… 5 e [defined_term, party, agreement], 2 q
+    [147/826] sec_00147… 3 e [organization, service], 2 q
+    [148/826] sec_00148… 3 e [service, party], 2 q
+    [149/826] sec_00149… FAILED: skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [150/826] sec_00150… 2 e [defined_term, party], 2 q
+    [151/826] sec_00151… 3 e [defined_term, service], 1 q
+    [152/826] sec_00152… 8 e [defined_term, data_type], 2 q
+    [153/826] sec_00153… 7 e [agreement, party, organization], 2 q
+    [154/826] sec_00154… 13 e [defined_term, party], 2 q
+    [155/826] sec_00155… 5 e [agreement, defined_term, party], 2 q
+    [156/826] sec_00156… 4 e [organization, agreement, defined_term, service], 2 q
+    [157/826] sec_00157… FAILED: skipped: chapter body is too short to analyze (32 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [158/826] sec_00158… 3 e [defined_term], 2 q
+    [159/826] sec_00159… 13 e [agreement, defined_term], 2 q
+    [160/826] sec_00160… 2 e [defined_term, organization], 2 q
+    [161/826] sec_00161… 6 e [agreement, defined_term, organization], 2 q
+    [162/826] sec_00162…       · waiting on daemon (15s elapsed, phase=phase1, model=commonwealth/primary, schema=true)
+13 e [service, agreement, defined_term, organization], 2 q
+    [163/826] sec_00163… 3 e [service, party], 2 q
+    [164/826] sec_00164… 2 e [service, defined_term], 2 q
+    [165/826] sec_00165… 3 e [agreement, defined_term, party], 2 q
+    [166/826] sec_00166… FAILED: skipped: chapter body is too short to analyze (26 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [167/826] sec_00167… FAILED: skipped: chapter body is too short to analyze (17 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [168/826] sec_00168… FAILED: skipped: chapter body is too short to analyze (28 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [169/826] sec_00169… 2 e [party, defined_term], 2 q
+    [170/826] sec_00170… 7 e [organization, defined_term, service, recipient, agreement], 2 q
+    [171/826] sec_00171… 3 e [agreement, party, defined_term], 2 q
+    [172/826] sec_00172… 7 e [defined_term, service, recipient], 2 q
+    [173/826] sec_00173… 3 e [service, party, organization], 2 q
+    [174/826] sec_00174… 2 e [service, party], 2 q
+    [175/826] sec_00175… FAILED: skipped: chapter body is too short to analyze (23 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [176/826] sec_00176… 8 e [defined_term, organization, party], 2 q
+    [177/826] sec_00177… 5 e [service, defined_term], 2 q
+    [178/826] sec_00178…       · waiting on daemon (15s elapsed, phase=phase1, model=commonwealth/primary, schema=true)
+15 e [organization, defined_term, recipient, purpose, service], 2 q
+    [179/826] sec_00179… 15 e [defined_term], 2 q
+    [180/826] sec_00180… 2 e [organization], 1 q
+    [181/826] sec_00181… 5 e [organization], 2 q
+    [182/826] sec_00182… 15 e [service, organization, agreement, data_type, recipient], 2 q
+    [183/826] sec_00183… 3 e [data_type, organization, agreement], 2 q
+    [184/826] sec_00184… 7 e [service, agreement, data_type, defined_term], 2 q
+    [185/826] sec_00185… 3 e [organization], 2 q
+    [186/826] sec_00186… 3 e [party], 1 q
+    [187/826] sec_00187… 2 e [organization], 2 q
+    [188/826] sec_00188… 15 e [service, defined_term, agreement], 1 q
+    [189/826] sec_00189… 2 e [service], 1 q
+    [190/826] sec_00190… 3 e [defined_term], 2 q
+    [191/826] sec_00191… FAILED: skipped: chapter body is too short to analyze (39 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [192/826] sec_00192… 3 e [service, agreement], 2 q
+    [193/826] sec_00193… 4 e [service, defined_term], 2 q
+    [194/826] sec_00194… 2 e [defined_term, service], 1 q
+    [195/826] sec_00195… FAILED: skipped: chapter body is too short to analyze (14 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [196/826] sec_00196… 6 e [data_type, agreement], 2 q
+    [197/826] sec_00197… 5 e [service, agreement, defined_term], 2 q
+    [198/826] sec_00198… 4 e [service, defined_term], 2 q
+    [199/826] sec_00199… FAILED: skipped: chapter body is too short to analyze (25 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [200/826] sec_00200… 3 e [agreement, defined_term], 2 q
+    [201/826] sec_00201… 8 e [service, data_type, defined_term], 1 q
+    [202/826] sec_00202… 3 e [service], 2 q
+    [203/826] sec_00203… 3 e [defined_term, organization, party], 2 q
+    [204/826] sec_00204… FAILED: skipped: chapter body is too short to analyze (16 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [205/826] sec_00205… 6 e [service, organization, defined_term, agreement], 2 q
+    [206/826] sec_00206… 6 e [defined_term, data_type, party], 2 q
+    [207/826] sec_00207… 12 e [organization], 1 q
+    [208/826] sec_00208… 2 e [service, defined_term], 2 q
+    [209/826] sec_00209… 2 e [agreement, organization], 1 q
+    [210/826] sec_00210… 3 e [service, purpose, defined_term], 2 q
+    [211/826] sec_00211… 3 e [defined_term], 2 q
+    [212/826] sec_00212… 2 e [service], 1 q
+    [213/826] sec_00213… FAILED: skipped: chapter body is too short to analyze (36 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [214/826] sec_00214… 3 e [service, agreement], 2 q
+    [215/826] sec_00215… 7 e [service, party, defined_term, agreement], 2 q
+    [216/826] sec_00216… 3 e [recipient, defined_term, organization], 2 q
+    [217/826] sec_00217… 6 e [defined_term, recipient], 2 q
+    [218/826] sec_00218… FAILED: skipped: chapter body is too short to analyze (38 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [219/826] sec_00219… 4 e [service, agreement, defined_term], 2 q
+    [220/826] sec_00220… 5 e [service, party], 2 q
+    [221/826] sec_00221… 6 e [service, defined_term, party], 2 q
+    [222/826] sec_00222…       · waiting on daemon (15s elapsed, phase=phase1, model=commonwealth/primary, schema=true)
+15 e [service, defined_term], 1 q
+    [223/826] sec_00223… 4 e [defined_term, party], 2 q
+    [224/826] sec_00224… 10 e [defined_term, recipient], 2 q
+    [225/826] sec_00225… FAILED: skipped: chapter body is too short to analyze (21 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [226/826] sec_00226… FAILED: skipped: chapter body is too short to analyze (26 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [227/826] sec_00227… 5 e [defined_term], 2 q
+    [228/826] sec_00228… 2 e [party, service], 2 q
+    [229/826] sec_00229… 6 e [defined_term, data_type], 3 q
+    [230/826] sec_00230… 3 e [service, defined_term, party], 1 q
+    [231/826] sec_00231… FAILED: skipped: chapter body is too short to analyze (34 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [232/826] sec_00232… 6 e [agreement, party, service], 2 q
+    [233/826] sec_00233… 4 e [agreement, party, service], 2 q
+    [234/826] sec_00234… 6 e [agreement, defined_term, service, party, organization], 2 q
+    [235/826] sec_00235… 4 e [agreement, party], 1 q
+    [236/826] sec_00236… FAILED: skipped: chapter body is too short to analyze (21 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [237/826] sec_00237… 3 e [service, defined_term], 1 q
+    [238/826] sec_00238… 5 e [service, defined_term, data_type], 2 q
+    [239/826] sec_00239… 3 e [service, agreement, defined_term], 2 q
+    [240/826] sec_00240… 2 e [party, organization], 2 q
+    [241/826] sec_00241… 6 e [defined_term], 1 q
+    [242/826] sec_00242… 5 e [defined_term, party], 2 q
+    [243/826] sec_00243… 8 e [service, agreement], 1 q
+    [244/826] sec_00244… 7 e [service, organization, defined_term], 2 q
+    [245/826] sec_00245… 4 e [agreement, organization], 2 q
+    [246/826] sec_00246… FAILED: skipped: chapter body is too short to analyze (14 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [247/826] sec_00247… 9 e [agreement, organization, recipient], 2 q
+    [248/826] sec_00248… FAILED: skipped: chapter body is too short to analyze (10 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [249/826] sec_00249… 7 e [organization, agreement, data_type, recipient], 2 q
+    [250/826] sec_00250… 5 e [agreement, defined_term], 2 q
+    [251/826] sec_00251… FAILED: skipped: chapter body is too short to analyze (10 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [252/826] sec_00252… FAILED: skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [253/826] sec_00253… FAILED: skipped: chapter body is too short to analyze (10 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [254/826] sec_00254… 5 e [organization, agreement], 2 q
+    [255/826] sec_00255… 3 e, 2 q
+    [256/826] sec_00256… 8 e [service, agreement, defined_term, data_type], 2 q
+    [257/826] sec_00257… 4 e [defined_term, party], 2 q
+    [258/826] sec_00258…       · waiting on daemon (15s elapsed, phase=phase1, model=commonwealth/primary, schema=true)
+15 e [data_type, recipient, organization], 2 q
+    [259/826] sec_00259… FAILED: skipped: chapter body is too short to analyze (16 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [260/826] sec_00260… 4 e [service, agreement, defined_term], 2 q
+    [261/826] sec_00261… 8 e [defined_term, purpose, data_type], 2 q
+    [262/826] sec_00262… 8 e [agreement, service, party], 2 q
+    [263/826] sec_00263… 3 e [recipient], 2 q
+    [264/826] sec_00264… 6 e [organization, party, recipient, data_type, agreement], 2 q
+    [265/826] sec_00265… 2 e [party, data_type], 1 q
+    [266/826] sec_00266… 2 e [party], 2 q
+    [267/826] sec_00267… 4 e [organization, service], 2 q
+    [268/826] sec_00268… 7 e [defined_term, data_type], 2 q
+    [269/826] sec_00269… 4 e [agreement, organization, data_type], 1 q
+    [270/826] sec_00270… FAILED: skipped: chapter body is too short to analyze (32 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [271/826] sec_00271… 6 e [party, service, defined_term, data_type], 2 q
+    [272/826] sec_00272… 5 e [service, agreement, data_type, defined_term], 1 q
+    [273/826] sec_00273… 5 e [organization, defined_term, service, party], 2 q
+    [274/826] sec_00274… 3 e [defined_term, service], 2 q
+    [275/826] sec_00275… FAILED: skipped: chapter body is too short to analyze (29 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [276/826] sec_00276… 4 e [service, data_type], 2 q
+    [277/826] sec_00277… 3 e [defined_term, service, party], 3 q
+    [278/826] sec_00278… FAILED: skipped: chapter body is too short to analyze (14 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [279/826] sec_00279… 3 e [agreement, defined_term, service], 2 q
+    [280/826] sec_00280… 3 e [service, organization, agreement], 2 q
+    [281/826] sec_00281… 5 e [party, service, agreement], 1 q
+    [282/826] sec_00282… 5 e [defined_term, organization, party], 2 q
+    [283/826] sec_00283… 5 e [service, defined_term], 2 q
+    [284/826] sec_00284… 0 e, 2 q
+    [285/826] sec_00285… 5 e [agreement, purpose, defined_term], 2 q
+    [286/826] sec_00286… 3 e [party], 2 q
+    [287/826] sec_00287… 5 e [defined_term], 2 q
+    [288/826] sec_00288… 6 e [service, defined_term, data_type], 2 q
+    [289/826] sec_00289…       · waiting on daemon (15s elapsed, phase=phase1, model=commonwealth/primary, schema=true)
+15 e [defined_term], 2 q
+    [290/826] sec_00290… 5 e [service, defined_term], 2 q
+    [291/826] sec_00291… 4 e [agreement, defined_term], 2 q
+    [292/826] sec_00292… 11 e [service, defined_term, organization, party], 2 q
+    [293/826] sec_00293… 4 e [agreement, party], 2 q
+    [294/826] sec_00294… FAILED: skipped: chapter body is too short to analyze (18 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [295/826] sec_00295… FAILED: skipped: chapter body is too short to analyze (13 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [296/826] sec_00296… 2 e [data_type, purpose], 1 q
+    [297/826] sec_00297… 10 e [service, organization, defined_term], 2 q
+    [298/826] sec_00298… 3 e [service, party, defined_term], 1 q
+    [299/826] sec_00299… 3 e [defined_term, data_type], 2 q
+    [300/826] sec_00300… 5 e [defined_term, service], 1 q
+    [301/826] sec_00301… 2 e [defined_term, party], 1 q
+    [302/826] sec_00302… 6 e [service, defined_term, organization], 4 q
+    [303/826] sec_00303… 4 e [service, defined_term, party], 2 q
+    [304/826] sec_00304… 2 e [organization, defined_term], 1 q
+    [305/826] sec_00305… 2 e [agreement, service], 1 q
+    [306/826] sec_00306… 3 e [party, defined_term, service], 1 q
+    [307/826] sec_00307… 2 e [defined_term, data_type], 2 q
+    [308/826] sec_00308… 2 e [service, agreement], 1 q
+    [309/826] sec_00309… 4 e [organization, defined_term], 3 q
+    [310/826] sec_00310… 2 e [service], 1 q
+    [311/826] sec_00311… 3 e [service, defined_term, data_type], 2 q
+    [312/826] sec_00312… 3 e [party, recipient, service], 1 q
+    [313/826] sec_00313… 2 e [party, organization], 1 q
+    [314/826] sec_00314… 2 e [agreement], 1 q
+    [315/826] sec_00315… 2 e [service], 1 q
+    [316/826] sec_00316… 2 e [party, service], 1 q
+    [317/826] sec_00317… 2 e [organization, defined_term], 1 q
+    [318/826] sec_00318… 6 e [service, data_type, defined_term], 1 q
+    [319/826] sec_00319… 3 e [service, defined_term], 1 q
+    [320/826] sec_00320… 2 e [organization], 1 q
+    [321/826] sec_00321… 7 e [service, party, agreement], 2 q
+    [322/826] sec_00322… 4 e [organization, party], 1 q
+    [323/826] sec_00323… 4 e [agreement, organization, defined_term, purpose], 2 q
+    [324/826] sec_00324… 4 e [service, defined_term, party], 2 q
+    [325/826] sec_00325… 3 e [service, defined_term], 2 q
+    [326/826] sec_00326… 5 e [agreement, party], 2 q
+    [327/826] sec_00327… 6 e [defined_term], 2 q
+    [328/826] sec_00328… 4 e [recipient, purpose], 2 q
+    [329/826] sec_00329… 6 e [service, defined_term], 2 q
+    [330/826] sec_00330… 1 e [service], 1 q
+    [331/826] sec_00331… 2 e [service, party], 1 q
+    [332/826] sec_00332… 6 e [defined_term, data_type], 2 q
+    [333/826] sec_00333… FAILED: skipped: chapter body is too short to analyze (39 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [334/826] sec_00334… FAILED: skipped: chapter body is too short to analyze (36 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [335/826] sec_00335…       · waiting on daemon (15s elapsed, phase=phase1, model=commonwealth/primary, schema=true)
+15 e [service, defined_term, organization, recipient], 2 q
+    [336/826] sec_00336… 6 e [party, service, data_type], 2 q
+    [337/826] sec_00337… 10 e [defined_term, organization], 1 q
+    [338/826] sec_00338… 4 e [defined_term], 2 q
+    [339/826] sec_00339… 2 e [data_type, defined_term], 1 q
+    [340/826] sec_00340… 13 e [defined_term, service], 2 q
+    [341/826] sec_00341… 4 e [data_type, organization], 2 q
+    [342/826] sec_00342… 7 e [service, defined_term, data_type], 2 q
+    [343/826] sec_00343… 6 e [organization, defined_term], 1 q
+    [344/826] sec_00344… 7 e [organization, agreement, defined_term], 2 q
+    [345/826] sec_00345… 8 e [service, agreement, defined_term, data_type], 2 q
+    [346/826] sec_00346… 4 e [service, organization], 2 q
+    [347/826] sec_00347… FAILED: skipped: chapter body is too short to analyze (18 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [348/826] sec_00348… 5 e [service, defined_term], 2 q
+    [349/826] sec_00349… 3 e [service], 2 q
+    [350/826] sec_00350… 2 e [organization, party], 1 q
+    [351/826] sec_00351… 2 e [service, agreement], 2 q
+    [352/826] sec_00352… 5 e [agreement, defined_term], 2 q
+    [353/826] sec_00353… 8 e [defined_term, organization, service], 2 q
+    [354/826] sec_00354… 3 e [service, agreement], 1 q
+    [355/826] sec_00355… FAILED: skipped: chapter body is too short to analyze (22 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [356/826] sec_00356… 0 e, 2 q
+    [357/826] sec_00357… 4 e [data_type, defined_term], 1 q
+    [358/826] sec_00358… 11 e [data_type, defined_term], 1 q
+    [359/826] sec_00359… 3 e [service, data_type], 1 q
+    [360/826] sec_00360… 7 e [data_type, service], 1 q
+    [361/826] sec_00361… 5 e [party, data_type], 1 q
+    [362/826] sec_00362… 4 e [party, service], 2 q
+    [363/826] sec_00363… 9 e [data_type, defined_term, service], 2 q
+    [364/826] sec_00364… 6 e [service, data_type], 2 q
+    [365/826] sec_00365… 5 e [service, data_type, defined_term], 2 q
+    [366/826] sec_00366… 2 e [service], 1 q
+    [367/826] sec_00367… FAILED: skipped: chapter body is too short to analyze (32 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [368/826] sec_00368… 7 e [data_type], 1 q
+    [369/826] sec_00369… 9 e [service, data_type, defined_term], 1 q
+    [370/826] sec_00370… 8 e [defined_term], 2 q
+    [371/826] sec_00371… FAILED: skipped: chapter body is too short to analyze (29 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [372/826] sec_00372… 3 e [party, defined_term], 1 q
+    [373/826] sec_00373… 6 e [service, data_type, purpose], 2 q
+    [374/826] sec_00374… 3 e [service], 2 q
+    [375/826] sec_00375… FAILED: skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [376/826] sec_00376… 11 e [defined_term, service, agreement, organization, party], 1 q
+    [377/826] sec_00377… 2 e [party], 1 q
+    [378/826] sec_00378… 3 e [party, defined_term], 1 q
+    [379/826] sec_00379… 4 e [service, defined_term, party], 2 q
+    [380/826] sec_00380… 3 e [service, organization], 2 q
+    [381/826] sec_00381… 3 e [defined_term, service], 1 q
+    [382/826] sec_00382… 8 e [service, defined_term, data_type], 2 q
+    [383/826] sec_00383… 3 e [party, purpose, defined_term], 1 q
+    [384/826] sec_00384…       · waiting on daemon (15s elapsed, phase=phase1, model=commonwealth/primary, schema=true)
+15 e [organization, party, recipient, purpose, data_type], 2 q
+    [385/826] sec_00385… FAILED: skipped: chapter body is too short to analyze (17 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [386/826] sec_00386…       · waiting on daemon (15s elapsed, phase=phase1, model=commonwealth/primary, schema=true)
+7 e [service, defined_term, party, recipient], 2 q
+    [387/826] sec_00387… 5 e [organization, party, recipient], 2 q
+    [388/826] sec_00388… 3 e [service, defined_term, party], 1 q
+    [389/826] sec_00389… 2 e [organization, service], 2 q
+    [390/826] sec_00390… 2 e [organization, service], 2 q
+    [391/826] sec_00391… 4 e [service, agreement, party, defined_term], 2 q
+    [392/826] sec_00392… 6 e [organization, data_type], 2 q
+    [393/826] sec_00393… 2 e [party, defined_term], 2 q
+    [394/826] sec_00394… 3 e [organization], 1 q
+    [395/826] sec_00395… 6 e [agreement, defined_term, organization], 1 q
+    [396/826] sec_00396… 3 e [organization, service, agreement], 2 q
+    [397/826] sec_00397… 3 e [service, organization], 2 q
+    [398/826] sec_00398… 2 e [party, service], 1 q
+    [399/826] sec_00399… 3 e [defined_term, party], 2 q
+    [400/826] sec_00400… 2 e [party], 2 q
+    [401/826] sec_00401… FAILED: skipped: chapter body is too short to analyze (27 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [402/826] sec_00402… 3 e [service], 1 q
+    [403/826] sec_00403… 6 e [service, defined_term, data_type, party], 4 q
+    [404/826] sec_00404… FAILED: skipped: chapter body is too short to analyze (26 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [405/826] sec_00405… 2 e [recipient, data_type], 2 q
+    [406/826] sec_00406… 4 e [defined_term, purpose], 2 q
+    [407/826] sec_00407… 6 e [service, defined_term], 1 q
+    [408/826] sec_00408… 3 e [purpose, recipient], 1 q
+    [409/826] sec_00409… FAILED: skipped: chapter body is too short to analyze (32 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [410/826] sec_00410… 2 e [recipient, party], 1 q
+    [411/826] sec_00411… 2 e [service, agreement], 2 q
+    [412/826] sec_00412… 5 e [organization, agreement], 2 q
+    [413/826] sec_00413… 5 e [organization, agreement, recipient, defined_term], 2 q
+    [414/826] sec_00414… 3 e [purpose, party], 2 q
+    [415/826] sec_00415… 3 e [defined_term, party, service], 2 q
+    [416/826] sec_00416… 2 e [service, party], 2 q
+    [417/826] sec_00417… 4 e [service, defined_term, party], 2 q
+    [418/826] sec_00418… FAILED: skipped: chapter body is too short to analyze (39 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [419/826] sec_00419…       · waiting on daemon (15s elapsed, phase=phase1, model=commonwealth/primary, schema=true)
+15 e [organization, service, agreement, defined_term, recipient], 2 q
+    [420/826] sec_00420… 3 e [service, agreement], 2 q
+    [421/826] sec_00421… 5 e [service, agreement], 2 q
+    [422/826] sec_00422… 3 e [party, organization], 2 q
+    [423/826] sec_00423… 2 e [organization], 2 q
+    [424/826] sec_00424… 5 e [service, party, defined_term], 2 q
+    [425/826] sec_00425… 5 e [agreement, recipient], 3 q
+    [426/826] sec_00426… 10 e [organization], 2 q
+    [427/826] sec_00427… FAILED: skipped: chapter body is too short to analyze (22 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [428/826] sec_00428… 4 e [agreement, defined_term, service], 2 q
+    [429/826] sec_00429… 3 e [agreement, defined_term, party], 2 q
+    [430/826] sec_00430… 4 e [service, organization, data_type], 1 q
+    [431/826] sec_00431… 4 e [defined_term, service], 1 q
+    [432/826] sec_00432… FAILED: skipped: chapter body is too short to analyze (15 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [433/826] sec_00433… 2 e [agreement, party], 1 q
+    [434/826] sec_00434… 5 e [service, data_type, defined_term, party], 2 q
+    [435/826] sec_00435… 6 e [service], 2 q
+    [436/826] sec_00436… FAILED: skipped: chapter body is too short to analyze (22 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [437/826] sec_00437… 2 e [party], 2 q
+    [438/826] sec_00438… 2 e [service, recipient], 2 q
+    [439/826] sec_00439… 2 e [agreement, defined_term], 2 q
+    [440/826] sec_00440… 2 e [service, organization], 2 q
+    [441/826] sec_00441… 3 e [purpose, recipient], 1 q
+    [442/826] sec_00442… 9 e [data_type], 2 q
+    [443/826] sec_00443… FAILED: skipped: chapter body is too short to analyze (18 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [444/826] sec_00444… 3 e [service, organization], 1 q
+    [445/826] sec_00445… 4 e [service, defined_term], 1 q
+    [446/826] sec_00446… 1 e [agreement], 2 q
+    [447/826] sec_00447… FAILED: skipped: chapter body is too short to analyze (26 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [448/826] sec_00448… FAILED: skipped: chapter body is too short to analyze (25 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [449/826] sec_00449… 2 e [recipient, party], 2 q
+    [450/826] sec_00450… 9 e [organization, recipient, data_type], 1 q
+    [451/826] sec_00451… 3 e [service, defined_term], 3 q
+    [452/826] sec_00452… 3 e, 1 q
+    [453/826] sec_00453… 9 e [service, defined_term, agreement], 1 q
+    [454/826] sec_00454… 6 e [service, agreement, defined_term], 1 q
+    [455/826] sec_00455… 2 e [agreement], 1 q
+    [456/826] sec_00456… 2 e [service, party], 5 q
+    [457/826] sec_00457… 2 e [organization, party], 1 q
+    [458/826] sec_00458… 3 e [agreement, defined_term], 2 q
+    [459/826] sec_00459… 11 e [agreement, service, defined_term, organization], 2 q
+    [460/826] sec_00460… 3 e [service, defined_term], 1 q
+    [461/826] sec_00461… FAILED: skipped: chapter body is too short to analyze (21 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [462/826] sec_00462… 3 e [party, defined_term], 1 q
+    [463/826] sec_00463… 5 e [recipient, organization, data_type], 2 q
+    [464/826] sec_00464… 6 e [service, defined_term, data_type, party, recipient], 1 q
+    [465/826] sec_00465… 12 e [service, defined_term], 2 q
+    [466/826] sec_00466… FAILED: skipped: chapter body is too short to analyze (36 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [467/826] sec_00467… 3 e [service, data_type, purpose], 1 q
+    [468/826] sec_00468…       · waiting on daemon (15s elapsed, phase=phase1, model=commonwealth/primary, schema=true)
+15 e [agreement, organization, defined_term, service, purpose, data_type], 2 q
+    [469/826] sec_00469… FAILED: skipped: chapter body is too short to analyze (13 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [470/826] sec_00470… 4 e [party, service, defined_term], 2 q
+    [471/826] sec_00471… 7 e [service, defined_term], 2 q
+    [472/826] sec_00472… 3 e [agreement, party], 2 q
+    [473/826] sec_00473… 4 e [service, defined_term, agreement], 2 q
+    [474/826] sec_00474… 5 e [defined_term, service, data_type], 1 q
+    [475/826] sec_00475… 6 e [party, service, defined_term, data_type], 1 q
+    [476/826] sec_00476… 2 e [defined_term, data_type], 2 q
+    [477/826] sec_00477… 3 e [service, data_type], 1 q
+    [478/826] sec_00478… 4 e [service, defined_term, agreement], 2 q
+    [479/826] sec_00479… 4 e [agreement, defined_term, purpose], 1 q
+    [480/826] sec_00480… FAILED: skipped: chapter body is too short to analyze (31 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [481/826] sec_00481… FAILED: skipped: chapter body is too short to analyze (28 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [482/826] sec_00482… 15 e [service], 1 q
+    [483/826] sec_00483… 2 e [service, party], 1 q
+    [484/826] sec_00484… FAILED: skipped: chapter body is too short to analyze (19 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [485/826] sec_00485…       · waiting on daemon (15s elapsed, phase=phase1, model=commonwealth/primary, schema=true)
+15 e [data_type, defined_term, party], 2 q
+    [486/826] sec_00486… 3 e [defined_term, party], 2 q
+    [487/826] sec_00487… 5 e [party, defined_term, data_type, service], 2 q
+    [488/826] sec_00488… 10 e [defined_term, organization], 2 q
+    [489/826] sec_00489… 3 e [defined_term], 2 q
+    [490/826] sec_00490… 9 e [service, data_type, organization, agreement], 1 q
+    [491/826] sec_00491… 4 e [defined_term, service], 2 q
+    [492/826] sec_00492… 5 e [party, recipient, defined_term], 2 q
+    [493/826] sec_00493… 2 e [party], 2 q
+    [494/826] sec_00494… 2 e [agreement, service], 1 q
+    [495/826] sec_00495… FAILED: skipped: chapter body is too short to analyze (31 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [496/826] sec_00496… 10 e [agreement, defined_term, party], 2 q
+    [497/826] sec_00497… 12 e [defined_term, data_type], 2 q
+    [498/826] sec_00498… 14 e [data_type], 2 q
+    [499/826] sec_00499… FAILED: skipped: chapter body is too short to analyze (16 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [500/826] sec_00500… 3 e [organization, defined_term], 2 q
+    [501/826] sec_00501… 2 e [organization, service], 2 q
+    [502/826] sec_00502… 4 e [organization, party], 2 q
+    [503/826] sec_00503… 7 e [organization, recipient, purpose, data_type, defined_term], 1 q
+    [504/826] sec_00504… FAILED: skipped: chapter body is too short to analyze (34 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [505/826] sec_00505… 2 e [service], 1 q
+    [506/826] sec_00506… 4 e [purpose, recipient, organization], 1 q
+    [507/826] sec_00507… 5 e [service, data_type, defined_term], 2 q
+    [508/826] sec_00508… 6 e [defined_term, service], 2 q
+    [509/826] sec_00509… FAILED: skipped: chapter body is too short to analyze (23 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [510/826] sec_00510… 4 e [service, defined_term], 1 q
+    [511/826] sec_00511… FAILED: skipped: chapter body is too short to analyze (14 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [512/826] sec_00512… 3 e [defined_term, data_type], 1 q
+    [513/826] sec_00513… FAILED: skipped: chapter body is too short to analyze (30 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [514/826] sec_00514… 4 e [agreement, defined_term, party], 2 q
+    [515/826] sec_00515… 13 e [data_type, defined_term, agreement, party], 1 q
+    [516/826] sec_00516… 3 e [defined_term], 1 q
+    [517/826] sec_00517… 2 e [data_type], 1 q
+    [518/826] sec_00518… 6 e [agreement], 1 q
+    [519/826] sec_00519… 2 e [service, party], 2 q
+    [520/826] sec_00520… 2 e [defined_term, service], 1 q
+    [521/826] sec_00521… 2 e [organization], 1 q
+    [522/826] sec_00522… 4 e [organization, party], 2 q
+    [523/826] sec_00523… 2 e [organization, party], 1 q
+    [524/826] sec_00524… 12 e [service, party, defined_term, organization], 2 q
+    [525/826] sec_00525…       · waiting on daemon (15s elapsed, phase=phase1, model=commonwealth/primary, schema=true)
+15 e [service, data_type], 2 q
+    [526/826] sec_00526… 5 e [service, agreement, party], 2 q
+    [527/826] sec_00527… 5 e [service, data_type], 1 q
+    [528/826] sec_00528… 5 e [defined_term, party], 2 q
+    [529/826] sec_00529… 7 e [agreement, defined_term, data_type, party], 2 q
+    [530/826] sec_00530… 3 e [service, defined_term], 1 q
+    [531/826] sec_00531… 9 e [defined_term], 2 q
+    [532/826] sec_00532… 3 e [service, agreement, recipient], 1 q
+    [533/826] sec_00533… 4 e [defined_term, recipient], 2 q
+    [534/826] sec_00534… 2 e [service, defined_term], 2 q
+    [535/826] sec_00535… 2 e [service, party], 2 q
+    [536/826] sec_00536… 2 e [service, organization], 2 q
+    [537/826] sec_00537… FAILED: skipped: chapter body is too short to analyze (32 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [538/826] sec_00538… 2 e [defined_term], 2 q
+    [539/826] sec_00539… 2 e [service, agreement], 2 q
+    [540/826] sec_00540… FAILED: skipped: chapter body is too short to analyze (29 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [541/826] sec_00541… 3 e [data_type, purpose], 1 q
+    [542/826] sec_00542… 8 e [data_type, defined_term, recipient], 2 q
+    [543/826] sec_00543… 2 e [organization, party], 1 q
+    [544/826] sec_00544… FAILED: skipped: chapter body is too short to analyze (36 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [545/826] sec_00545… 10 e [recipient, purpose], 2 q
+    [546/826] sec_00546… 13 e [service, data_type, agreement], 2 q
+    [547/826] sec_00547… FAILED: skipped: chapter body is too short to analyze (25 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [548/826] sec_00548… FAILED: skipped: chapter body is too short to analyze (4 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [549/826] sec_00549… FAILED: skipped: chapter body is too short to analyze (25 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [550/826] sec_00550…       · waiting on daemon (15s elapsed, phase=phase1, model=commonwealth/primary, schema=true)
+15 e [agreement, defined_term, data_type], 2 q
+    [551/826] sec_00551… 6 e [defined_term, purpose, data_type], 2 q
+    [552/826] sec_00552… 2 e [service, party], 1 q
+    [553/826] sec_00553… 8 e [defined_term, party], 2 q
+    [554/826] sec_00554… 2 e [party, service], 2 q
+    [555/826] sec_00555… 11 e [service, data_type, recipient], 1 q
+    [556/826] sec_00556… 4 e [service, agreement, party], 2 q
+    [557/826] sec_00557… 5 e [service, agreement, defined_term, party], 2 q
+    [558/826] sec_00558… 9 e [service, defined_term, party], 2 q
+    [559/826] sec_00559… 11 e [service, agreement], 2 q
+    [560/826] sec_00560… 5 e [service, defined_term, data_type], 2 q
+    [561/826] sec_00561… 4 e [organization, defined_term, agreement], 2 q
+    [562/826] sec_00562… 15 e [service, organization], 1 q
+    [563/826] sec_00563… 2 e [party], 2 q
+    [564/826] sec_00564… 2 e [service, defined_term], 1 q
+    [565/826] sec_00565… 12 e [organization, agreement, defined_term, purpose, recipient], 2 q
+    [566/826] sec_00566… FAILED: skipped: chapter body is too short to analyze (21 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [567/826] sec_00567… 3 e [service, agreement, organization], 2 q
+    [568/826] sec_00568… 2 e [service, organization], 1 q
+    [569/826] sec_00569… 8 e [organization, service, defined_term, data_type], 2 q
+    [570/826] sec_00570… FAILED: skipped: chapter body is too short to analyze (8 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [571/826] sec_00571… 8 e [organization, service, defined_term], 1 q
+    [572/826] sec_00572… 2 e [organization, service], 2 q
+    [573/826] sec_00573… 3 e [service, organization, defined_term], 1 q
+    [574/826] sec_00574… 2 e [agreement], 1 q
+    [575/826] sec_00575… 4 e [organization], 1 q
+    [576/826] sec_00576… 5 e [organization, service, defined_term, party], 1 q
+    [577/826] sec_00577… 2 e [organization, service], 2 q
+    [578/826] sec_00578… 2 e [service], 2 q
+    [579/826] sec_00579… 4 e [service, party], 1 q
+    [580/826] sec_00580… 11 e [service, data_type], 1 q
+    [581/826] sec_00581… FAILED: skipped: chapter body is too short to analyze (16 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [582/826] sec_00582… 4 e [organization, service], 1 q
+    [583/826] sec_00583… 2 e [service, recipient], 1 q
+    [584/826] sec_00584… FAILED: skipped: chapter body is too short to analyze (36 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [585/826] sec_00585… 2 e [data_type], 2 q
+    [586/826] sec_00586… 4 e [service, agreement, defined_term], 1 q
+    [587/826] sec_00587… FAILED: skipped: chapter body is too short to analyze (23 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [588/826] sec_00588… FAILED: skipped: chapter body is too short to analyze (25 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [589/826] sec_00589… FAILED: skipped: chapter body is too short to analyze (24 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [590/826] sec_00590… 2 e [purpose, defined_term], 1 q
+    [591/826] sec_00591… 6 e [service, defined_term, data_type], 1 q
+    [592/826] sec_00592… FAILED: skipped: chapter body is too short to analyze (33 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [593/826] sec_00593… FAILED: skipped: chapter body is too short to analyze (37 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [594/826] sec_00594… FAILED: skipped: chapter body is too short to analyze (38 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [595/826] sec_00595… FAILED: skipped: chapter body is too short to analyze (16 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [596/826] sec_00596… 3 e [service, defined_term], 1 q
+    [597/826] sec_00597… 2 e [party, defined_term], 2 q
+    [598/826] sec_00598… FAILED: skipped: chapter body is too short to analyze (21 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [599/826] sec_00599… FAILED: skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [600/826] sec_00600… 2 e [party], 2 q
+    [601/826] sec_00601… FAILED: skipped: chapter body is too short to analyze (29 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [602/826] sec_00602… 3 e [data_type], 1 q
+    [603/826] sec_00603… 5 e [defined_term, data_type], 2 q
+    [604/826] sec_00604… 4 e [defined_term, organization, party], 2 q
+    [605/826] sec_00605… 2 e [defined_term, service], 1 q
+    [606/826] sec_00606… FAILED: skipped: chapter body is too short to analyze (22 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [607/826] sec_00607… 3 e [defined_term, service], 1 q
+    [608/826] sec_00608… 5 e [organization, service, agreement, party], 2 q
+    [609/826] sec_00609… 3 e [party, defined_term, data_type], 1 q
+    [610/826] sec_00610… 3 e [agreement, defined_term], 1 q
+    [611/826] sec_00611… 8 e [agreement, data_type, defined_term], 2 q
+    [612/826] sec_00612… 4 e [service, defined_term, agreement], 2 q
+    [613/826] sec_00613… FAILED: skipped: chapter body is too short to analyze (16 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [614/826] sec_00614… 3 e [party, data_type], 2 q
+    [615/826] sec_00615… 2 e [organization, party], 2 q
+    [616/826] sec_00616… 8 e [agreement, party, recipient, defined_term], 2 q
+    [617/826] sec_00617… 7 e [service, agreement, party, recipient], 2 q
+    [618/826] sec_00618… 6 e [service, agreement, party, organization, recipient], 2 q
+    [619/826] sec_00619… 4 e [service, recipient, party], 2 q
+    [620/826] sec_00620… 2 e [service, agreement], 2 q
+    [621/826] sec_00621… FAILED: skipped: chapter body is too short to analyze (22 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [622/826] sec_00622… 3 e [service, defined_term, data_type], 1 q
+    [623/826] sec_00623… 4 e [service, agreement], 2 q
+    [624/826] sec_00624… 2 e [service, recipient], 1 q
+    [625/826] sec_00625… 5 e [service, defined_term, party], 1 q
+    [626/826] sec_00626… FAILED: skipped: chapter body is too short to analyze (21 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [627/826] sec_00627… 3 e [service, data_type, defined_term], 1 q
+    [628/826] sec_00628… FAILED: skipped: chapter body is too short to analyze (16 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [629/826] sec_00629… 3 e [defined_term], 2 q
+    [630/826] sec_00630… 2 e [service, party], 1 q
+    [631/826] sec_00631… FAILED: skipped: chapter body is too short to analyze (26 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [632/826] sec_00632… FAILED: skipped: chapter body is too short to analyze (26 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [633/826] sec_00633… 9 e [service, data_type, agreement], 1 q
+    [634/826] sec_00634… 3 e [defined_term, party], 2 q
+    [635/826] sec_00635… 9 e [service, defined_term, purpose, recipient], 1 q
+    [636/826] sec_00636… 8 e [data_type], 1 q
+    [637/826] sec_00637… 4 e [agreement, defined_term, service], 2 q
+    [638/826] sec_00638… 11 e [data_type, defined_term], 1 q
+    [639/826] sec_00639… 2 e [service, party], 2 q
+    [640/826] sec_00640… 3 e [defined_term, party], 1 q
+    [641/826] sec_00641… 4 e [defined_term, data_type], 1 q
+    [642/826] sec_00642… 5 e [service, agreement, defined_term], 2 q
+    [643/826] sec_00643… 5 e [organization, agreement, defined_term], 1 q
+    [644/826] sec_00644… 7 e [data_type, defined_term, service], 1 q
+    [645/826] sec_00645… 5 e [service, agreement], 2 q
+    [646/826] sec_00646… 2 e [party], 2 q
+    [647/826] sec_00647… 5 e [organization, data_type, defined_term], 1 q
+    [648/826] sec_00648… 2 e [party], 1 q
+    [649/826] sec_00649… 5 e [service, defined_term, party], 2 q
+    [650/826] sec_00650… 3 e [defined_term, service], 1 q
+    [651/826] sec_00651… 2 e [party, data_type], 1 q
+    [652/826] sec_00652… FAILED: skipped: chapter body is too short to analyze (35 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [653/826] sec_00653… 2 e [service, agreement], 1 q
+    [654/826] sec_00654… 4 e [agreement, service, defined_term], 1 q
+    [655/826] sec_00655… 2 e [agreement], 1 q
+    [656/826] sec_00656… 4 e [service, agreement], 1 q
+    [657/826] sec_00657… 3 e [service], 1 q
+    [658/826] sec_00658… 4 e [agreement, defined_term, party], 1 q
+    [659/826] sec_00659… 6 e [defined_term], 1 q
+    [660/826] sec_00660… 3 e [organization, service], 1 q
+    [661/826] sec_00661… 4 e [agreement, service], 2 q
+    [662/826] sec_00662… 8 e [party, defined_term], 2 q
+    [663/826] sec_00663… FAILED: skipped: chapter body is too short to analyze (30 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [664/826] sec_00664… 2 e [agreement], 2 q
+    [665/826] sec_00665… 5 e [defined_term, service], 2 q
+    [666/826] sec_00666… 2 e [agreement], 3 q
+    [667/826] sec_00667… 2 e [party], 1 q
+    [668/826] sec_00668… 2 e [defined_term], 2 q
+    [669/826] sec_00669… FAILED: skipped: chapter body is too short to analyze (14 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [670/826] sec_00670… FAILED: skipped: chapter body is too short to analyze (39 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [671/826] sec_00671… 9 e [recipient, data_type, defined_term], 1 q
+    [672/826] sec_00672… 15 e [agreement], 1 q
+    [673/826] sec_00673… FAILED: skipped: chapter body is too short to analyze (13 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [674/826] sec_00674… 5 e [service, organization], 2 q
+    [675/826] sec_00675… 10 e [defined_term], 1 q
+    [676/826] sec_00676… 15 e [defined_term, service], 2 q
+    [677/826] sec_00677… 3 e [party, service], 2 q
+    [678/826] sec_00678… 4 e [service, defined_term, party], 2 q
+    [679/826] sec_00679… 3 e [organization, party], 1 q
+    [680/826] sec_00680… 1 e [party], 1 q
+    [681/826] sec_00681… 6 e [organization, agreement, defined_term], 2 q
+    [682/826] sec_00682… 2 e [service, party], 2 q
+    [683/826] sec_00683… 2 e [service, defined_term], 2 q
+    [684/826] sec_00684… 9 e [service, data_type], 1 q
+    [685/826] sec_00685… 4 e [party, service, data_type], 1 q
+    [686/826] sec_00686… FAILED: skipped: chapter body is too short to analyze (39 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [687/826] sec_00687… FAILED: skipped: chapter body is too short to analyze (37 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [688/826] sec_00688… 14 e [defined_term], 2 q
+    [689/826] sec_00689… 2 e [service, party], 2 q
+    [690/826] sec_00690… FAILED: skipped: chapter body is too short to analyze (35 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [691/826] sec_00691… 2 e [organization, party], 2 q
+    [692/826] sec_00692… FAILED: skipped: chapter body is too short to analyze (25 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [693/826] sec_00693… 3 e [party], 2 q
+    [694/826] sec_00694… 3 e [defined_term], 2 q
+    [695/826] sec_00695… 3 e [agreement, defined_term], 1 q
+    [696/826] sec_00696… 6 e [organization, recipient, service, purpose, party], 2 q
+    [697/826] sec_00697… 2 e [service, defined_term], 1 q
+    [698/826] sec_00698… 3 e [defined_term], 2 q
+    [699/826] sec_00699… 5 e [service, recipient, defined_term], 2 q
+    [700/826] sec_00700… 4 e [agreement, organization], 2 q
+    [701/826] sec_00701… 2 e [party], 1 q
+    [702/826] sec_00702… 2 e [party], 1 q
+    [703/826] sec_00703… 3 e [service, party, data_type], 2 q
+    [704/826] sec_00704… 4 e [service, party, data_type], 1 q
+    [705/826] sec_00705… 3 e [service], 1 q
+    [706/826] sec_00706… FAILED: skipped: chapter body is too short to analyze (35 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [707/826] sec_00707… 3 e [service], 1 q
+    [708/826] sec_00708… 2 e [service], 1 q
+    [709/826] sec_00709… 6 e [data_type, recipient], 1 q
+    [710/826] sec_00710… 5 e [organization], 1 q
+    [711/826] sec_00711… 3 e [service, agreement], 1 q
+    [712/826] sec_00712… FAILED: skipped: chapter body is too short to analyze (22 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [713/826] sec_00713… 8 e [party], 1 q
+    [714/826] sec_00714… 9 e [service, defined_term, data_type, party], 2 q
+    [715/826] sec_00715… FAILED: skipped: chapter body is too short to analyze (32 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [716/826] sec_00716… 2 e [service, party], 2 q
+    [717/826] sec_00717… 7 e [defined_term, service, data_type], 1 q
+    [718/826] sec_00718… 3 e [organization, recipient, defined_term], 1 q
+    [719/826] sec_00719… 3 e [defined_term, service], 2 q
+    [720/826] sec_00720… FAILED: skipped: chapter body is too short to analyze (35 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [721/826] sec_00721… 6 e [organization, recipient, defined_term], 1 q
+    [722/826] sec_00722… 2 e [party], 1 q
+    [723/826] sec_00723… 6 e [organization, data_type, purpose], 1 q
+    [724/826] sec_00724… 2 e [service, organization], 1 q
+    [725/826] sec_00725… 2 e [data_type, purpose], 1 q
+    [726/826] sec_00726… 4 e [organization, service, defined_term, agreement], 2 q
+    [727/826] sec_00727… 2 e [party], 2 q
+    [728/826] sec_00728… 2 e [recipient, service], 2 q
+    [729/826] sec_00729… 3 e [service, defined_term, recipient], 1 q
+    [730/826] sec_00730… 2 e [service], 1 q
+    [731/826] sec_00731… 7 e [service, agreement, party, defined_term], 2 q
+    [732/826] sec_00732… 3 e [agreement, party], 2 q
+    [733/826] sec_00733… 3 e [service, defined_term, party], 1 q
+    [734/826] sec_00734… 7 e [agreement, party, organization, defined_term], 2 q
+    [735/826] sec_00735… 3 e [agreement, party, organization], 1 q
+    [736/826] sec_00736… 3 e [service, defined_term], 2 q
+    [737/826] sec_00737…       · waiting on daemon (15s elapsed, phase=phase1, model=commonwealth/primary, schema=true)
+10 e [agreement, party, organization, defined_term], 2 q
+    [738/826] sec_00738…       · waiting on daemon (15s elapsed, phase=phase1, model=commonwealth/primary, schema=true)
+11 e [agreement, defined_term, organization], 2 q
+    [739/826] sec_00739… FAILED: skipped: chapter body is too short to analyze (25 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [740/826] sec_00740… 4 e [service, defined_term], 2 q
+    [741/826] sec_00741… 2 e [service, party], 1 q
+    [742/826] sec_00742… FAILED: skipped: chapter body is too short to analyze (7 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [743/826] sec_00743… 4 e [agreement, party], 3 q
+    [744/826] sec_00744… 4 e [defined_term], 2 q
+    [745/826] sec_00745… 3 e [defined_term, service], 1 q
+    [746/826] sec_00746… 4 e [service, defined_term, party], 1 q
+    [747/826] sec_00747… 3 e [organization, data_type, defined_term], 1 q
+    [748/826] sec_00748… FAILED: skipped: chapter body is too short to analyze (16 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [749/826] sec_00749… FAILED: skipped: chapter body is too short to analyze (10 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [750/826] sec_00750… FAILED: skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [751/826] sec_00751… FAILED: skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [752/826] sec_00752… FAILED: skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [753/826] sec_00753… FAILED: skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [754/826] sec_00754… FAILED: skipped: chapter body is too short to analyze (10 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [755/826] sec_00755… FAILED: skipped: chapter body is too short to analyze (10 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [756/826] sec_00756… FAILED: skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [757/826] sec_00757… FAILED: skipped: chapter body is too short to analyze (10 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [758/826] sec_00758… FAILED: skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [759/826] sec_00759… FAILED: skipped: chapter body is too short to analyze (10 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [760/826] sec_00760… 7 e [agreement, defined_term], 2 q
+    [761/826] sec_00761… 4 e [service, agreement], 2 q
+    [762/826] sec_00762… 2 e [service], 1 q
+    [763/826] sec_00763… FAILED: skipped: chapter body is too short to analyze (25 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [764/826] sec_00764… 6 e [agreement, defined_term, party, organization], 2 q
+    [765/826] sec_00765… 12 e [agreement, defined_term, service], 2 q
+    [766/826] sec_00766… FAILED: skipped: chapter body is too short to analyze (13 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [767/826] sec_00767… FAILED: skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [768/826] sec_00768… 3 e [service, party], 1 q
+    [769/826] sec_00769… FAILED: skipped: chapter body is too short to analyze (10 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [770/826] sec_00770… FAILED: skipped: chapter body is too short to analyze (10 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [771/826] sec_00771… FAILED: skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [772/826] sec_00772… 7 e [service, party, defined_term, data_type], 2 q
+    [773/826] sec_00773… 4 e [defined_term, service, party], 2 q
+    [774/826] sec_00774… 3 e [agreement], 1 q
+    [775/826] sec_00775… 2 e [service, organization], 2 q
+    [776/826] sec_00776… 4 e [defined_term, service, party, organization], 2 q
+    [777/826] sec_00777… 4 e [organization, service, defined_term], 1 q
+    [778/826] sec_00778… FAILED: skipped: chapter body is too short to analyze (37 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [779/826] sec_00779… 11 e [service, purpose, data_type], 1 q
+    [780/826] sec_00780… 3 e [defined_term, organization, party], 2 q
+    [781/826] sec_00781… FAILED: skipped: chapter body is too short to analyze (28 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [782/826] sec_00782… 5 e [party, recipient, defined_term], 1 q
+    [783/826] sec_00783… 13 e [service, data_type], 1 q
+    [784/826] sec_00784… FAILED: skipped: chapter body is too short to analyze (30 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [785/826] sec_00785… 15 e [organization, data_type, service, defined_term, recipient, party], 2 q
+    [786/826] sec_00786… 6 e [data_type, purpose, recipient], 2 q
+    [787/826] sec_00787… 4 e [agreement, party], 2 q
+    [788/826] sec_00788… 3 e [service, party, defined_term], 1 q
+    [789/826] sec_00789… 3 e [service, data_type], 1 q
+    [790/826] sec_00790… 4 e [party, recipient, data_type, defined_term], 1 q
+    [791/826] sec_00791… FAILED: skipped: chapter body is too short to analyze (24 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [792/826] sec_00792… FAILED: skipped: chapter body is too short to analyze (28 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [793/826] sec_00793… 3 e [service, defined_term, purpose], 1 q
+    [794/826] sec_00794… FAILED: skipped: chapter body is too short to analyze (26 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [795/826] sec_00795… 7 e [data_type, party], 1 q
+    [796/826] sec_00796… 5 e [defined_term, data_type, recipient], 2 q
+    [797/826] sec_00797… 2 e [data_type, service], 2 q
+    [798/826] sec_00798… FAILED: skipped: chapter body is too short to analyze (19 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [799/826] sec_00799… 2 e [party, service], 1 q
+    [800/826] sec_00800… 3 e [organization, party], 1 q
+    [801/826] sec_00801… 3 e [data_type, party], 1 q
+    [802/826] sec_00802… 2 e [party, data_type], 1 q
+    [803/826] sec_00803… 3 e [organization, recipient, data_type], 1 q
+    [804/826] sec_00804… FAILED: skipped: chapter body is too short to analyze (21 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [805/826] sec_00805… 5 e [data_type, defined_term], 2 q
+    [806/826] sec_00806… FAILED: skipped: chapter body is too short to analyze (35 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [807/826] sec_00807… 2 e [data_type], 2 q
+    [808/826] sec_00808… FAILED: skipped: chapter body is too short to analyze (35 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [809/826] sec_00809… 4 e [service], 2 q
+    [810/826] sec_00810… 2 e [defined_term, service], 1 q
+    [811/826] sec_00811… FAILED: skipped: chapter body is too short to analyze (34 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [812/826] sec_00812… 8 e [service, data_type, defined_term], 1 q
+    [813/826] sec_00813… 3 e [defined_term, party], 1 q
+    [814/826] sec_00814… FAILED: skipped: chapter body is too short to analyze (23 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [815/826] sec_00815… 6 e [service], 1 q
+    [816/826] sec_00816… 2 e [service, data_type], 1 q
+    [817/826] sec_00817… 10 e [service, data_type], 1 q
+    [818/826] sec_00818… FAILED: skipped: chapter body is too short to analyze (38 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [819/826] sec_00819… 4 e [recipient, party], 2 q
+    [820/826] sec_00820… FAILED: skipped: chapter body is too short to analyze (26 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [821/826] sec_00821… FAILED: skipped: chapter body is too short to analyze (39 words < 40 word minimum) — likely a Part-level heading or front-matter section
+    [822/826] sec_00822… 2 e [agreement, defined_term], 2 q
+    [823/826] sec_00823… 2 e [party, data_type], 2 q
+    [824/826] sec_00824… 6 e [service, data_type], 2 q
+    [825/826] sec_00825… 7 e [service, recipient, defined_term, data_type], 1 q
+    [826/826] sec_00826… 3 e [service, party], 1 q
+  ✓ 664 ok, 162 failed — /Users/alexsbryan/.svrnmesh/enrichment/ei7-recensus-fineprint/runs/questions-full-001.json
+  · token spend: 664 call(s), 2218438 prompt + 800634 completion = 3019072 total
+  ✓ cache updated (cache/questions.json)
+
+  ! 162 chapter(s) failed — run file: /Users/alexsbryan/.svrnmesh/enrichment/ei7-recensus-fineprint/runs/questions-full-001.json
+      · sec_00006    skipped: chapter body is too short to analyze (35 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00026    skipped: chapter body is too short to analyze (31 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00033    skipped: chapter body is too short to analyze (37 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00039    skipped: chapter body is too short to analyze (5 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00043    skipped: chapter body is too short to analyze (32 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00057    skipped: chapter body is too short to analyze (15 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00059    skipped: chapter body is too short to analyze (32 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00060    skipped: chapter body is too short to analyze (22 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00061    skipped: chapter body is too short to analyze (35 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00062    skipped: chapter body is too short to analyze (18 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00065    skipped: chapter body is too short to analyze (16 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00070    skipped: chapter body is too short to analyze (27 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00071    skipped: chapter body is too short to analyze (33 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00073    skipped: chapter body is too short to analyze (22 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00075    skipped: chapter body is too short to analyze (33 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00077    skipped: chapter body is too short to analyze (18 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00078    skipped: chapter body is too short to analyze (18 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00081    skipped: chapter body is too short to analyze (15 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00089    skipped: chapter body is too short to analyze (37 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00090    skipped: chapter body is too short to analyze (33 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00093    skipped: chapter body is too short to analyze (32 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00094    skipped: chapter body is too short to analyze (15 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00106    skipped: chapter body is too short to analyze (22 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00109    skipped: chapter body is too short to analyze (38 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00120    skipped: chapter body is too short to analyze (39 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00123    skipped: chapter body is too short to analyze (35 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00124    skipped: chapter body is too short to analyze (22 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00127    skipped: chapter body is too short to analyze (23 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00135    skipped: chapter body is too short to analyze (16 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00141    skipped: chapter body is too short to analyze (25 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00149    skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00157    skipped: chapter body is too short to analyze (32 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00166    skipped: chapter body is too short to analyze (26 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00167    skipped: chapter body is too short to analyze (17 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00168    skipped: chapter body is too short to analyze (28 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00175    skipped: chapter body is too short to analyze (23 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00191    skipped: chapter body is too short to analyze (39 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00195    skipped: chapter body is too short to analyze (14 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00199    skipped: chapter body is too short to analyze (25 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00204    skipped: chapter body is too short to analyze (16 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00213    skipped: chapter body is too short to analyze (36 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00218    skipped: chapter body is too short to analyze (38 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00225    skipped: chapter body is too short to analyze (21 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00226    skipped: chapter body is too short to analyze (26 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00231    skipped: chapter body is too short to analyze (34 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00236    skipped: chapter body is too short to analyze (21 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00246    skipped: chapter body is too short to analyze (14 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00248    skipped: chapter body is too short to analyze (10 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00251    skipped: chapter body is too short to analyze (10 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00252    skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00253    skipped: chapter body is too short to analyze (10 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00259    skipped: chapter body is too short to analyze (16 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00270    skipped: chapter body is too short to analyze (32 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00275    skipped: chapter body is too short to analyze (29 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00278    skipped: chapter body is too short to analyze (14 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00294    skipped: chapter body is too short to analyze (18 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00295    skipped: chapter body is too short to analyze (13 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00333    skipped: chapter body is too short to analyze (39 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00334    skipped: chapter body is too short to analyze (36 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00347    skipped: chapter body is too short to analyze (18 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00355    skipped: chapter body is too short to analyze (22 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00367    skipped: chapter body is too short to analyze (32 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00371    skipped: chapter body is too short to analyze (29 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00375    skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00385    skipped: chapter body is too short to analyze (17 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00401    skipped: chapter body is too short to analyze (27 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00404    skipped: chapter body is too short to analyze (26 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00409    skipped: chapter body is too short to analyze (32 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00418    skipped: chapter body is too short to analyze (39 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00427    skipped: chapter body is too short to analyze (22 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00432    skipped: chapter body is too short to analyze (15 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00436    skipped: chapter body is too short to analyze (22 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00443    skipped: chapter body is too short to analyze (18 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00447    skipped: chapter body is too short to analyze (26 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00448    skipped: chapter body is too short to analyze (25 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00461    skipped: chapter body is too short to analyze (21 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00466    skipped: chapter body is too short to analyze (36 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00469    skipped: chapter body is too short to analyze (13 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00480    skipped: chapter body is too short to analyze (31 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00481    skipped: chapter body is too short to analyze (28 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00484    skipped: chapter body is too short to analyze (19 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00495    skipped: chapter body is too short to analyze (31 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00499    skipped: chapter body is too short to analyze (16 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00504    skipped: chapter body is too short to analyze (34 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00509    skipped: chapter body is too short to analyze (23 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00511    skipped: chapter body is too short to analyze (14 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00513    skipped: chapter body is too short to analyze (30 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00537    skipped: chapter body is too short to analyze (32 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00540    skipped: chapter body is too short to analyze (29 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00544    skipped: chapter body is too short to analyze (36 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00547    skipped: chapter body is too short to analyze (25 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00548    skipped: chapter body is too short to analyze (4 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00549    skipped: chapter body is too short to analyze (25 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00566    skipped: chapter body is too short to analyze (21 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00570    skipped: chapter body is too short to analyze (8 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00581    skipped: chapter body is too short to analyze (16 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00584    skipped: chapter body is too short to analyze (36 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00587    skipped: chapter body is too short to analyze (23 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00588    skipped: chapter body is too short to analyze (25 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00589    skipped: chapter body is too short to analyze (24 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00592    skipped: chapter body is too short to analyze (33 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00593    skipped: chapter body is too short to analyze (37 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00594    skipped: chapter body is too short to analyze (38 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00595    skipped: chapter body is too short to analyze (16 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00598    skipped: chapter body is too short to analyze (21 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00599    skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00601    skipped: chapter body is too short to analyze (29 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00606    skipped: chapter body is too short to analyze (22 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00613    skipped: chapter body is too short to analyze (16 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00621    skipped: chapter body is too short to analyze (22 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00626    skipped: chapter body is too short to analyze (21 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00628    skipped: chapter body is too short to analyze (16 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00631    skipped: chapter body is too short to analyze (26 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00632    skipped: chapter body is too short to analyze (26 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00652    skipped: chapter body is too short to analyze (35 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00663    skipped: chapter body is too short to analyze (30 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00669    skipped: chapter body is too short to analyze (14 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00670    skipped: chapter body is too short to analyze (39 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00673    skipped: chapter body is too short to analyze (13 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00686    skipped: chapter body is too short to analyze (39 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00687    skipped: chapter body is too short to analyze (37 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00690    skipped: chapter body is too short to analyze (35 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00692    skipped: chapter body is too short to analyze (25 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00706    skipped: chapter body is too short to analyze (35 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00712    skipped: chapter body is too short to analyze (22 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00715    skipped: chapter body is too short to analyze (32 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00720    skipped: chapter body is too short to analyze (35 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00739    skipped: chapter body is too short to analyze (25 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00742    skipped: chapter body is too short to analyze (7 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00748    skipped: chapter body is too short to analyze (16 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00749    skipped: chapter body is too short to analyze (10 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00750    skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00751    skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00752    skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00753    skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00754    skipped: chapter body is too short to analyze (10 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00755    skipped: chapter body is too short to analyze (10 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00756    skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00757    skipped: chapter body is too short to analyze (10 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00758    skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00759    skipped: chapter body is too short to analyze (10 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00763    skipped: chapter body is too short to analyze (25 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00766    skipped: chapter body is too short to analyze (13 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00767    skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00769    skipped: chapter body is too short to analyze (10 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00770    skipped: chapter body is too short to analyze (10 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00771    skipped: chapter body is too short to analyze (12 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00778    skipped: chapter body is too short to analyze (37 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00781    skipped: chapter body is too short to analyze (28 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00784    skipped: chapter body is too short to analyze (30 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00791    skipped: chapter body is too short to analyze (24 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00792    skipped: chapter body is too short to analyze (28 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00794    skipped: chapter body is too short to analyze (26 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00798    skipped: chapter body is too short to analyze (19 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00804    skipped: chapter body is too short to analyze (21 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00806    skipped: chapter body is too short to analyze (35 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00808    skipped: chapter body is too short to analyze (35 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00811    skipped: chapter body is too short to analyze (34 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00814    skipped: chapter body is too short to analyze (23 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00818    skipped: chapter body is too short to analyze (38 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00820    skipped: chapter body is too short to analyze (26 words < 40 word minimum) — likely a Part-level heading or front-matter section
+      · sec_00821    skipped: chapter body is too short to analyze (39 words < 40 word minimum) — likely a Part-level heading or front-matter section
+
+    Retry just these chapters:
+      svrn enrich extract ei7-recensus-fineprint --chapters sec_00006,sec_00026,sec_00033,sec_00039,sec_00043,sec_00057,sec_00059,sec_00060,sec_00061,sec_00062,sec_00065,sec_00070,sec_00071,sec_00073,sec_00075,sec_00077,sec_00078,sec_00081,sec_00089,sec_00090,sec_00093,sec_00094,sec_00106,sec_00109,sec_00120,sec_00123,sec_00124,sec_00127,sec_00135,sec_00141,sec_00149,sec_00157,sec_00166,sec_00167,sec_00168,sec_00175,sec_00191,sec_00195,sec_00199,sec_00204,sec_00213,sec_00218,sec_00225,sec_00226,sec_00231,sec_00236,sec_00246,sec_00248,sec_00251,sec_00252,sec_00253,sec_00259,sec_00270,sec_00275,sec_00278,sec_00294,sec_00295,sec_00333,sec_00334,sec_00347,sec_00355,sec_00367,sec_00371,sec_00375,sec_00385,sec_00401,sec_00404,sec_00409,sec_00418,sec_00427,sec_00432,sec_00436,sec_00443,sec_00447,sec_00448,sec_00461,sec_00466,sec_00469,sec_00480,sec_00481,sec_00484,sec_00495,sec_00499,sec_00504,sec_00509,sec_00511,sec_00513,sec_00537,sec_00540,sec_00544,sec_00547,sec_00548,sec_00549,sec_00566,sec_00570,sec_00581,sec_00584,sec_00587,sec_00588,sec_00589,sec_00592,sec_00593,sec_00594,sec_00595,sec_00598,sec_00599,sec_00601,sec_00606,sec_00613,sec_00621,sec_00626,sec_00628,sec_00631,sec_00632,sec_00652,sec_00663,sec_00669,sec_00670,sec_00673,sec_00686,sec_00687,sec_00690,sec_00692,sec_00706,sec_00712,sec_00715,sec_00720,sec_00739,sec_00742,sec_00748,sec_00749,sec_00750,sec_00751,sec_00752,sec_00753,sec_00754,sec_00755,sec_00756,sec_00757,sec_00758,sec_00759,sec_00763,sec_00766,sec_00767,sec_00769,sec_00770,sec_00771,sec_00778,sec_00781,sec_00784,sec_00791,sec_00792,sec_00794,sec_00798,sec_00804,sec_00806,sec_00808,sec_00811,sec_00814,sec_00818,sec_00820,sec_00821
+    Or, from the latest run file:
+      svrn enrich extract ei7-recensus-fineprint --retry-failed

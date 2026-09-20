@@ -5636,3 +5636,17 @@ beyond it is not.
 **Falsified if** the CLI exits something other than 2 for an unknown flag (the row stops on that), or a marked line fails live on argv.
 
 </details>
+
+## A38 · 2026-09-20 — the pod window: extraction complete on the pod, the batch stopped on a skip counted as a failure
+
+<details>
+
+**What happened.** Instance 51687232 (RTX 6000 Ada, $0.670/h) rented 03:35Z, destroyed 04:58Z, ~$0.93; `dev-pod.sh status` read back "nothing billing". The seat ran `pod_window.sh` itself, detached in its own session: the loop's worker has a 7,200 s session timeout against a ~2 h window, and a killed session would have fired the trap mid-batch. Line 02 `enrich extract --full --resume` did all 826 sections in 4,476 s (5.4 s a section; 664 extractions, 3.02M tokens) and exited 1 because 162 sections under the 40-word minimum are reported as failures. `pod_window.sh` stopped and destroyed the pod, as written. Lines 03-06 did not run there.
+
+**The seat's miss.** The first too-short `FAILED` printed two minutes in; the link to stop-on-non-zero was not made. A37's rehearsal could not show it: a `needs-live-state` line claims argv only.
+
+**Recovered without a second rental.** `--finalize` exit 0 locally; sketches copied to `<window>/runs/`; build ran on the local daemon (same model id, `base_url` re-pointed, named here), exit 0 in 1,268 s, 6,399 atoms. D3/D4/D5 and attribution measure EXTRACTION, which ran on the pod under lane X, so they stand. D8 (pod vs local pilot latency) is could-not-judge; re-renting is the operator's call — the one-window rule was spent.
+
+**For the operator.** Should a too-short skip make `enrich extract` exit non-zero? "Skipped" reported as "failed" is what turned a complete extraction into a failed batch line (ARCH 6). And the ralph library needs a row-level session timeout: inventory item 12 for `ralph-lib`.
+
+</details>

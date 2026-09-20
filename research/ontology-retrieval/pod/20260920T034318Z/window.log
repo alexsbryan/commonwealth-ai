@@ -1,0 +1,57 @@
+== pod window
+mode     live (rented pod, destroyed on exit)
+batch    research/ontology-retrieval/harness/batch-stage0.txt (6 lines)
+daemon   http://127.0.0.1:9841 serving Qwen3.5-4B-UD-Q6_K_XL
+cli      /Users/alexsbryan/.local/bin/sovereign
+logs     research/ontology-retrieval/pod/20260920T034318Z
+env      export SOVEREIGN_DAEMON_URL=http://127.0.0.1:9841 export SVRNMESH_DAEMON_URL=http://127.0.0.1:9841 export SOVEREIGN_DISABLE_PEER_INFERENCE=1
+
+-- 01 "$SVRN" enrich init ei7-recensus-fineprint --from-corpus ei7-recensus-fineprint
+   exit=0  wall=1s  log=research/ontology-retrieval/pod/20260920T034318Z/01.log
+
+-- 02 "$SVRN" enrich extract ei7-recensus-fineprint --full --resume
+   exit=1  wall=4476s  log=research/ontology-retrieval/pod/20260920T034318Z/02.log
+   last 20 lines:
+   |       · sec_00778    skipped: chapter body is too short to analyze (37 words < 40 word minimum) — likely a Part-level heading or front-matter section
+   |       · sec_00781    skipped: chapter body is too short to analyze (28 words < 40 word minimum) — likely a Part-level heading or front-matter section
+   |       · sec_00784    skipped: chapter body is too short to analyze (30 words < 40 word minimum) — likely a Part-level heading or front-matter section
+   |       · sec_00791    skipped: chapter body is too short to analyze (24 words < 40 word minimum) — likely a Part-level heading or front-matter section
+   |       · sec_00792    skipped: chapter body is too short to analyze (28 words < 40 word minimum) — likely a Part-level heading or front-matter section
+   |       · sec_00794    skipped: chapter body is too short to analyze (26 words < 40 word minimum) — likely a Part-level heading or front-matter section
+   |       · sec_00798    skipped: chapter body is too short to analyze (19 words < 40 word minimum) — likely a Part-level heading or front-matter section
+   |       · sec_00804    skipped: chapter body is too short to analyze (21 words < 40 word minimum) — likely a Part-level heading or front-matter section
+   |       · sec_00806    skipped: chapter body is too short to analyze (35 words < 40 word minimum) — likely a Part-level heading or front-matter section
+   |       · sec_00808    skipped: chapter body is too short to analyze (35 words < 40 word minimum) — likely a Part-level heading or front-matter section
+   |       · sec_00811    skipped: chapter body is too short to analyze (34 words < 40 word minimum) — likely a Part-level heading or front-matter section
+   |       · sec_00814    skipped: chapter body is too short to analyze (23 words < 40 word minimum) — likely a Part-level heading or front-matter section
+   |       · sec_00818    skipped: chapter body is too short to analyze (38 words < 40 word minimum) — likely a Part-level heading or front-matter section
+   |       · sec_00820    skipped: chapter body is too short to analyze (26 words < 40 word minimum) — likely a Part-level heading or front-matter section
+   |       · sec_00821    skipped: chapter body is too short to analyze (39 words < 40 word minimum) — likely a Part-level heading or front-matter section
+   | 
+   |     Retry just these chapters:
+   |       svrn enrich extract ei7-recensus-fineprint --chapters sec_00006,sec_00026,sec_00033,sec_00039,sec_00043,sec_00057,sec_00059,sec_00060,sec_00061,sec_00062,sec_00065,sec_00070,sec_00071,sec_00073,sec_00075,sec_00077,sec_00078,sec_00081,sec_00089,sec_00090,sec_00093,sec_00094,sec_00106,sec_00109,sec_00120,sec_00123,sec_00124,sec_00127,sec_00135,sec_00141,sec_00149,sec_00157,sec_00166,sec_00167,sec_00168,sec_00175,sec_00191,sec_00195,sec_00199,sec_00204,sec_00213,sec_00218,sec_00225,sec_00226,sec_00231,sec_00236,sec_00246,sec_00248,sec_00251,sec_00252,sec_00253,sec_00259,sec_00270,sec_00275,sec_00278,sec_00294,sec_00295,sec_00333,sec_00334,sec_00347,sec_00355,sec_00367,sec_00371,sec_00375,sec_00385,sec_00401,sec_00404,sec_00409,sec_00418,sec_00427,sec_00432,sec_00436,sec_00443,sec_00447,sec_00448,sec_00461,sec_00466,sec_00469,sec_00480,sec_00481,sec_00484,sec_00495,sec_00499,sec_00504,sec_00509,sec_00511,sec_00513,sec_00537,sec_00540,sec_00544,sec_00547,sec_00548,sec_00549,sec_00566,sec_00570,sec_00581,sec_00584,sec_00587,sec_00588,sec_00589,sec_00592,sec_00593,sec_00594,sec_00595,sec_00598,sec_00599,sec_00601,sec_00606,sec_00613,sec_00621,sec_00626,sec_00628,sec_00631,sec_00632,sec_00652,sec_00663,sec_00669,sec_00670,sec_00673,sec_00686,sec_00687,sec_00690,sec_00692,sec_00706,sec_00712,sec_00715,sec_00720,sec_00739,sec_00742,sec_00748,sec_00749,sec_00750,sec_00751,sec_00752,sec_00753,sec_00754,sec_00755,sec_00756,sec_00757,sec_00758,sec_00759,sec_00763,sec_00766,sec_00767,sec_00769,sec_00770,sec_00771,sec_00778,sec_00781,sec_00784,sec_00791,sec_00792,sec_00794,sec_00798,sec_00804,sec_00806,sec_00808,sec_00811,sec_00814,sec_00818,sec_00820,sec_00821
+   |     Or, from the latest run file:
+   |       svrn enrich extract ei7-recensus-fineprint --retry-failed
+
+-- 03 skipped (an earlier line failed): "$SVRN" enrich extract ei7-recensus-fineprint --finalize
+
+-- 04 skipped (an earlier line failed): "$SVRN" enrich build ei7-recensus-fineprint --skip extract --skip tensions
+
+-- 05 skipped (an earlier line failed): cp -R "$HOME/.svrnmesh/enrichment/ei7-recensus-fineprint/runs" "$POD_WINDOW_OUT/runs"
+
+-- 06 skipped (an earlier line failed): research/ontology-retrieval/pilot/run-pilot.sh
+line exit     wall   rehearsed command
+01   0        1s     -         "$SVRN" enrich init ei7-recensus-fineprint --from-corpus ei7-recensus-fineprint
+02   1        4476s  -         "$SVRN" enrich extract ei7-recensus-fineprint --full --resume
+03   skip     -      -         "$SVRN" enrich extract ei7-recensus-fineprint --finalize
+04   skip     -      -         "$SVRN" enrich build ei7-recensus-fineprint --skip extract --skip tensions
+05   skip     -      -         cp -R "$HOME/.svrnmesh/enrichment/ei7-recensus-fineprint/runs" "$POD_WINDOW_OUT/runs"
+06   skip     -      -         research/ontology-retrieval/pilot/run-pilot.sh
+
+pod_window: batch FAILED — see the table and research/ontology-retrieval/pod/20260920T034318Z/*.log
+
+[pod_window] window over (exit 1) — destroying the pod
+destroying instance 51687232.
+[dev-pod] 51687232 destroyed; no instance labelled sovereign-dev-daemon* remains (billing stopped)
+no dev pod running (nothing billing)
+[pod_window] billing stopped
