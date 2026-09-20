@@ -183,32 +183,59 @@ deliberate; neither is a placeholder.
   leaves a node does so as attributed retrieval results, not anonymous
   bulk export.
 
-## Known gaps
+## Known gaps — open work
 
-These are real, current, and deliberate to disclose:
+These are real and current. Disclosing one is the first step, not the last:
+each entry says what closes it and which campaign or order owns that.
+`unowned` means nobody is assigned yet, and it is said so rather than left to
+read as acceptance. "By design" appears only where the maintainer has decided
+the gap stays. An entry is struck, with the commit, by the change that closes
+it.
 
 1. **Tensor-split RPC is plaintext and unauthenticated.** Anyone who can
    reach `SOVEREIGN_RPC_SERVE`'s port can read activations and submit
-   work. Run it only inside the perimeter; never claim end-to-end
-   encryption while it is in use. (Activations are float tensors, not
-   text, but activation-inversion attacks recovering input fragments are
+   work. Until closed: run it only inside the perimeter; never claim
+   end-to-end encryption while it is in use. (Activations are float tensors,
+   not text, but activation-inversion attacks recovering input fragments are
    published research — see `commonwealth/ARCHITECTURE.md` §9.)
+   *Closes when:* the RPC stream rides an authenticated, encrypted transport
+   (the iroh path the rest of the mesh uses) or the port refuses a peer it
+   cannot verify. *Owner:* unowned — the `mesh-verified-principal` order
+   measures the port and names it out of scope.
 2. **The internal API `:9742` has no blanket auth in trusted-network
-   mode.** The perimeter is the mitigation. A hostile device *inside* your
-   tailnet/LAN is inside the trust ring. Encrypted mode closes this — the
-   listener is loopback-only and iroh is the sole ingress.
+   mode.** A hostile device *inside* your tailnet/LAN is inside the trust
+   ring. Until closed: the perimeter is the mitigation, and encrypted mode
+   already closes it — the listener is loopback-only and iroh is the sole
+   ingress. *Closes when:* trusted-network mode requires the same verified
+   peer identity encrypted mode does, or is retired. *Owner:* unowned.
 3. **One shared client token, not per-user tenancy, on `:9741`.** Every
    remote holder of the client token has the same authority.
-   (`sovereign-server` on `:8080` does have per-key tenants.)
+   (`sovereign-server` on `:8080` does have per-key tenants; guest grants are
+   per-bearer, scoped and expiring.) *Closes when:* a remote client holds a
+   credential of its own that can be revoked without rotating everyone's.
+   *Owner:* unowned.
 4. **The standalone `commonwealth` binary hardcodes `0.0.0.0:9741`**
    (bearer-gated, loopback-exempt) rather than following the embedded
-   daemon's loopback-first default.
+   daemon's loopback-first default. *Closes when:* it binds loopback unless
+   configured otherwise, as the embedded daemon does. *Owner:* unowned.
 5. **Tauri v2 does not gate app commands per-window** (tauri#9227): a
-   webview with IPC access can invoke any registered command. Tracked
-   upstream; relevant only if untrusted content ever gets a webview.
-6. **A compromised node can serve bad inference.** Not defended —
-   social trust model, by design, documented since the first
-   architecture draft.
+   webview with IPC access can invoke any registered command. Relevant only
+   if untrusted content ever gets a webview. *Closes when:* upstream lands
+   per-window gating, or the desktop gains its own per-window command
+   allowlist. *Owner:* upstream; unowned here.
+6. **A mesh member can act as any other member on the call plane.** The
+   node's Ed25519 key is verified in the iroh handshake and signs every rail
+   op, but knowledge search, the capabilities fetch, the admission tally and
+   the reciprocity ledger decide on `x-node-id`, a header the caller
+   supplies. *Closes when:* those deciders read the verified key and an
+   unverified principal is refused. *Owner:* campaign `mesh-principal`
+   (`.sovereign/features/mesh-verified-principal/order.md`), queued.
+7. **Ring sync ships every namespace to every online member**, whatever the
+   ring's roster says, so a ring shared among a few machines is readable by
+   the whole mesh. *Closes when:* ring sync reads by roster. *Owner:* campaign `mesh-principal`, queued.
+8. **A compromised node can serve bad inference.** Not defended. *By design:*
+   the social trust model, documented since the first architecture draft —
+   you mesh with machines whose owners you trust.
 
 ## Reporting
 
