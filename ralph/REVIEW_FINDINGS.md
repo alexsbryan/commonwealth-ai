@@ -1474,3 +1474,64 @@ Recorded, not changed:
   its only peer was indistinguishable in the log from a round with nothing to
   send (room run 2, 85 s). Deleting it to satisfy a gating convention would
   return the log to the state that cost that measurement.
+
+## ring-guest — REVIEW-DEMO-rg-run (2026-09-20, binaries at `f9669ced6`)
+
+One finding, and the three runs the row asked for.
+
+**ARCH 7, validate the instrument before the result** ·
+`scripts/ring-doc-demo.sh:901` · fixed in `f9669ced6`. The first rr-1
+regression run read `ra-room-doc-name-from-membership` 0.0 FAILED against the
+1.0 A38 baseline, with `a_names_from_mesh` false and `right 0` over three
+lines — every one of which named the RIGHT person and read `NaNs ago`:
+
+```
+{node a, para 0, line "last edited by Bo NaNs ago",         want "Bo"}
+{node a, para 1, line "last edited by ring-doc-a NaNs ago", want "ring-doc-a"}
+{node a, para 2, line "last edited by Cy NaNs ago",         want "Cy"}
+```
+
+`createAttribution().lines()` lost its `members` argument in `491f49c2f`
+(rg-2-ring-doc-sheds-its-guest-code); the driver kept the two-argument call
+from `e8d847115`, so `nowMs` was bound to the roster. The app's own tests
+already assert the one-argument form, which is why `node --test` stayed green
+while the demo did not. A bar cannot be read off an instrument that does not
+call the surface under test — no bar, floor or app line was touched, and the
+re-run reproduced the baseline exactly. Archived:
+`target/ralph/rg-rr1-regression-stale-instrument.log`.
+
+rr-1 regression, `RING_ROOM_TOPOLOGY=three`, once after the fix
+(`target/ralph/rg-rr1-regression.log`), exit=1 — the A38 baseline exactly:
+
+```
+ra-room-answer-names-the-machine   0.8  FAILED
+ra-room-doc-name-from-membership   1.0  PASSED  all four legs true
+ra-room-film-from-the-library-rail 1.0  PASSED  listed_s 8.39
+ra-room-plug-in-live               0.0  FAILED  c_answer_names=false, other three true
+ra-room-nothing-typed              0    PASSED
+```
+
+Room runs, `RING_ROOM_TOPOLOGY=room`, each from cold after `scripts/dev-build.sh`
+(exit=0 both times). **Eleven PASSED each — the five `rg-*` bars and the six
+rr-2 bars** (`target/ralph/rg-room-run1.log`, `…-run2.log`), exit=0 each:
+
+```
+run 1                                run 2
+rg-second-app-zero-lines           1.0 PASSED   1.0 PASSED
+rg-guest-stamped-by-the-door       1.0 PASSED   1.0 PASSED
+rg-every-act-names-the-guest       1.0 PASSED   1.0 PASSED
+rg-one-person-across-apps          1.0 PASSED   1.0 PASSED
+rg-ring-doc-sheds-its-guest-code   1.0 PASSED   1.0 PASSED
+ra-room-scan-to-name               1.0 PASSED   1.0 PASSED
+ra-room-guest-edit-attributed      1.0 PASSED   1.0 PASSED
+ra-room-guest-ask-served-by-room   1.0 PASSED   1.0 PASSED   answered_s 13.61 / 12.46
+ra-room-film-from-littlemac        1.0 PASSED   1.0 PASSED   listed_s 2.15 / 6.31
+ra-room-offline-room-says-so       1.0 PASSED   1.0 PASSED   converged_s 16 / 55
+ra-room-member-only-by-vouch       1.0 PASSED   1.0 PASSED
+```
+
+Recorded, not changed: `converged_s` was 16 s and 55 s against a 60 s window,
+and the same leg failed at 85 s on 2026-09-20 (A50's room run 2, before the
+sync nudge). Two greens one of which sits 5 s inside the window is a margin,
+not a result — the A50 reading that the verdict is decided by which pump tick
+the heal lands between still stands.
