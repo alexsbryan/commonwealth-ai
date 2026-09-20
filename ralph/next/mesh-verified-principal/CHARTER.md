@@ -1,4 +1,4 @@
-# ralph director charter — ring-guest
+# ralph director charter — mesh-principal
 
 Standing authorization for the supervisor's resolution session, so the loop
 decides its own forks instead of stalling on a sleeping human.
@@ -15,7 +15,7 @@ wrong resolution.
 ## Decide these
 
 - Splitting or folding rows; fixing a row whose premise the tree contradicts,
-  when the order (`.sovereign/features/ring-guest-substrate/order.md`) already implies
+  when the order (`.sovereign/features/mesh-verified-principal/order.md`) already implies
   the fix. Cite the order step.
 - Which of two options an order names; the smaller reversible step over the
   larger; the existing type or decider over a new one (principles 8, 11).
@@ -23,12 +23,12 @@ wrong resolution.
 
 ## Leave these for the operator (write the package and stop)
 
-- Any `HUMAN-rg-` row, and anything that changes behaviour a user or peer can
+- Any `HUMAN-mp-` row, and anything that changes behaviour a user or peer can
   observe beyond what the row states (the roster default for a ring a person already uses, an offer admitted to someone the holder did not name,
   a wire field a client reads).
-- A `REVIEW-mint-rg-` that needs more rows than its cap.
+- A `REVIEW-mint-mp-` that needs more rows than its cap.
 - Weakening a PLANT, adding an `[[exception]]`, or widening an `except` list.
-- The order's own "Not worth continuing if" firing (`.sovereign/features/ring-guest-substrate/order.md` §Objective), or any diff under `commonwealth/crates/commonwealth-rail*` outside the one row the additions below name.
+- The order's own "Not worth continuing if" firing (`.sovereign/features/mesh-verified-principal/order.md` §Objective), or any diff under `commonwealth/crates/commonwealth-rail*`.
 - Pushing, rewriting history, `--no-verify`.
 
 ## Always
@@ -42,22 +42,19 @@ wrong resolution.
 - One decision, one commit, so `git revert <sha>` undoes exactly it.
 - Tag `REVIEW-AFTER:` anything this charter did not clearly cover.
 
-## ring-guest additions (operator 2026-09-20)
+## mesh-principal additions (operator 2026-09-20)
 
-- DECIDED by the operator, not yours to reopen: D1 a guest's identity rides a
-  signed `on_behalf_of` beside the payload in rail-core (ledger A52); D2 the
-  name binds to a door-issued guest SESSION under the grant, asked once by the
-  door's shim. A resolution that moves either back into the app, or into a
-  reserved payload key, is the wrong resolution.
-- The rail is open to ONE row, `rg-1-on-behalf-of`, for that one field. A
-  second rail diff, a guest ROLE on any roster, or a new act kind is the
-  operator's.
-- The scaffold (`sovereign-cli-llm/src/ring_cmd/templates/`) is never edited.
-  A row that seems to need it has found the campaign's answer: stop and say so.
-- The guest posture in `docs/THREAT_MODEL.md` is not widened: bearer, TTL-clamped,
-  `Scope` paths only, never in `Mesh.members`. The session is a NAME under a
-  grant, never a second credential with its own scope.
-- The six rr-2 bars and the rr-1 baseline are regression gates. A clause of
-  `quality/campaigns/ring-room.toml` is never edited from this queue.
-- What a guest's act MEANS to an app's arithmetic is the app's. Report what the
-  unmodified reducer does; do not decide it.
+- The door exists: `commonwealth-transport/src/iroh_identity_forward.rs` already
+  strips client-supplied `x-mesh-*` and appends the verified identity. A
+  resolution that mints a second header scheme, a second principal type beside
+  `Principal`, or a per-namespace ACL beside the roster is the wrong resolution.
+- A request with NO verified key is `unverified`: served what needs no identity,
+  refused by every decider that needs one. `mesh_proof` proves the group, never
+  the member, and is never promoted to a caller identity. If a row finds that a
+  DEPLOYED mesh's internal traffic arrives without a verified key, so that
+  refusing it would break that mesh, that is the operator's: write the package.
+- The rail crates and the scheduler's scoring are closed to this campaign.
+- The six rr-2 bars, the five `rg-*` bars and the rr-1 baseline are regression
+  gates; their campaign files are never edited from this queue.
+- What row 1 measures about live-lane cursors, the tensor-split port and MCP's
+  bind is RECORDED for `docs/THREAT_MODEL.md` and fixed by no row here.

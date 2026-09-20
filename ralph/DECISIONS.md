@@ -261,6 +261,10 @@ exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 - Needed: After rr-2's machine work closed, the operator asked whether the system generalizes to the class or was built to the demo. Measured: the substrate is general (4 `ring-doc` literals in product source, all examples; the three product bugs rr-2 found were substrate bugs), but everything the room learned about guests lives in ring-doc, and the scaffold from `svrn ring new` mentions guest zero times — so a second app shows a guest's act under the member's name alone. Operator: "Guest should be part of the substrate not something applications need to think about — separate concerns", and media "should be photos, audio … very extensible / pluggable". Four forks were put to the operator with a recommendation each.
 - Chose (operator: "go with your recommendations on all four, start the guest order"): D1 a guest's identity rides a signed `on_behalf_of` beside the payload in rail-core, not a door-owned reserved payload key; D2 the name binds to a door-issued guest session under the grant, asked once by the door's shim, so one QR serves a room; media-D1 discovery and presence are profile DATA and the least-privilege credential is a closed enum of strategies with parameters as data; media-D2 the rail row gains `kind` and `source` so the ring-native library (umbrella primitive `play`, ra-18) arrives as one more source. The guest order starts now as campaign `ring-guest` (five bars pre-registered in `quality/campaigns/ring-guest.toml` before any row ran; queue `ralph/next/ring-guest-substrate/`); the media order is decided and not started.
 - Because: a reserved payload key cannot stamp a payload-less correction (`RailAct::Correct { replacement: None }`, `commonwealth-rail-core/src/lib.rs:252-264`) and is a convention an app can collide with, while rr-2's "no rail diff" clause guarded against a guest ROLE on the roster, which provenance on an act is not. This REVISES the ring-room charter's standing rule for exactly one row, `rg-1-on-behalf-of`, and the new queue's prompt and charter say so. New campaign files rather than rungs on `ring-room.toml`, which holds 11 bars against the cap of 9.
+**A53 · 2026-09-20 · mesh-principal (new campaign, QUEUED) · OPERATOR** — this commit (+ 1c11b5e85, the rename)
+- Needed: The operator brought an external architecture review of the mesh layer ahead of presenting the code for peer review, and asked what to prioritize. The seat spot-checked it against the tree: its central finding holds (the call plane and ring reads decide on a caller-supplied `x-node-id`; ring sync ships every namespace to every online member), and two of its claims do not (gossip carries a `mesh_proof`; the node key IS already used for calls on the media and app ALPNs, where the acceptor strips client `x-mesh-*` and appends the verified identity). Five items were proposed in order.
+- Chose (operator: "Let's queue up 1, 2, 4, and 5"): 1 the verified key becomes the peer principal on the internal plane; 2 ring sync offers and serves by roster; 4 manifest fields with no production writer are deleted; 5 "rail" names the signed log only. Item 5 was documentation alone and landed as 1c11b5e85. Items 1, 2, 4 are campaign `mesh-principal` (four bars in `quality/campaigns/mesh-principal.toml`, pre-registered before any row; queue `ralph/next/mesh-verified-principal/`, eight machine rows, no walk), QUEUED behind `ring-guest` and not launched. Item 3, telling the truth in `docs/THREAT_MODEL.md`, was not chosen; the inventory and audit rows RECORD what they measure for it and fix nothing.
+- Because: convergence, not invention (ARCH 11) — the door exists and one ALPN does not ask for it. Item 2 depends on item 1: the serving side cannot refuse a non-roster asker until it knows who is asking. One assumption is the seat's and the operator may overrule it before row 2: a request with no verified key is `unverified` and refused by any decider that needs an identity, because `mesh_proof` proves the group and never the member. Also in this commit: two wrong paths in the RUNNING guest queue's charter, the seat's own `sed` error from A52 (it named an order file that does not exist); no resolution session had read it.
 
 **A44 · 2026-09-19 · rr-2-gossip-claim-one-decider · director (supervisor resolution, attempt 1)** — commit: this one
 - Needed: A43 wrote the row on the premise that a SECOND site builds the claim gossip sends. The worker measured the send path and found one, stopped at the premise check without improvising a target, and asked whether to rewrite or strike the row.
@@ -7387,5 +7391,38 @@ The ring-room charter's "any diff under `commonwealth/crates/commonwealth-rail*`
 operator's — still true, and the operator has now made that call for ONE field in ONE row.
 rr-2's bar clause `ra-room-guest-edit-attributed` (c) (`git diff` over the rail crates is
 empty "for rr-2") stands for rr-2 and is not edited.
+
+</details>
+
+## A53 · 2026-09-20 — the verified key becomes the principal; the review's claims as checked
+
+<details>
+
+### The review's claims against the tree (seat, 2026-09-20)
+
+| claim | reading | evidence |
+|---|---|---|
+| calls identify the caller by a self-asserted `X-Node-Id` | TRUE | `routes_internal/knowledge.rs:109`, `routes_oicp.rs:233`, `admission.rs:303`, `sovereign-server/src/reciprocity.rs:71` all read `headers::parse_x_node_id` |
+| `client_auth.rs` calls peer auth "a later milestone" | TRUE | `client_auth.rs:12` |
+| ring sync ships every namespace to every online member | TRUE | `sovereign-mesh/src/ring_sync.rs:222-245`; the file's only roster read is pruning after a seal, `:412-432` |
+| "nothing uses the node key for calls or reads" | FALSE | `commonwealth-transport/src/iroh_identity_forward.rs`: client `x-mesh-*` stripped, verified identity appended, test `a_forged_identity_header_is_replaced_by_the_verified_one` (:703), used by `MEDIA_ALPN` and `APP_ALPN` |
+| gossip is unauthenticated HTTP | OVERSTATED | `mesh_proof` is sent and checked (`routes_internal/gossip.rs:42-151`; a refusal was logged in the rr-2 run of 08:31Z); it is GROUP auth with a legacy path beside it, and rides iroh when it can |
+| manifest latency estimates always `None` | NOT CHECKED beyond locating them | `oicp-types/src/manifest.rs:221-225`; row `mp-4-dead-wire` measures writers first |
+| live-lane cursors forgeable; tensor port unauthenticated; MCP loopback-only | NOT CHECKED | recorded by the inventory row for THREAT_MODEL, fixed by no row |
+
+### The hazard the seat added
+
+The acceptor forwards the verified identity as headers to a LOCAL port. A caller reaching
+that port without the acceptor in front could present `x-mesh-node` and forge the VERIFIED
+identity. Row `mp-1-daemon-believes-only-the-acceptor` exists for that input, and bar
+`mp-principal-is-the-verified-key` clause (c) is that caller.
+
+### Not chosen, presented as roadmap
+
+Payloads encrypted to the roster (needs an eviction act and rekey); slow facts moved from
+gossip onto the rail (rr-2's three product bugs were all in gossip's last-writer-wins and
+liveness; the rail had none); two-choice routing on a per-peer latency average (scheduler
+changes here have a recorded regression history); MCP verbs across the mesh (depends on
+item 1).
 
 </details>
