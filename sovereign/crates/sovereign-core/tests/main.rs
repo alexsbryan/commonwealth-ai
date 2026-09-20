@@ -28,6 +28,8 @@ mod chunk_provenance_census;
 mod core_tests;
 #[path = "main/custody_reds.rs"]
 mod custody_reds;
+#[path = "main/deep_stream_gate_trace.rs"]
+mod deep_stream_gate_trace;
 #[path = "main/drb1_r1_reds.rs"]
 mod drb1_r1_reds;
 #[path = "main/drb1_r2b_reds.rs"]

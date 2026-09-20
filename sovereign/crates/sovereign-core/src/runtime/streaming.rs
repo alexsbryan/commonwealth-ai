@@ -3138,6 +3138,35 @@ impl Runtime {
             Vec::new()
         };
         let deep_seal_trace = !deep_trace_labels.is_empty();
+        // This arm's gate decision, in the shape its KnowledgeQuery twin
+        // emits (same target, same field names — search `target:
+        // "grounding_gate"` above). The deep arm computed `deep_gate_on` and
+        // `deep_hold` and said nothing. Two fields the twin has no need of:
+        // `route`, because this arm serves four intents and the twin serves
+        // one, and `chunks`, because `deep_gate_on` turns on that count.
+        tracing::info!(
+            target: "grounding_gate",
+            gate_on = deep_gate_on,
+            route = intent.row().slug,
+            chunks = kc.chunks.len(),
+            trace_chars = kc.code_trace.len(),
+            trace_labels = deep_trace_labels.len(),
+            seal_trace = deep_seal_trace,
+            "streaming gate: call-graph trace sealing decision"
+        );
+        if kc.chunks.is_empty() {
+            // The `!kc.chunks.is_empty()` half of `deep_gate_on`, said out
+            // loud: an empty pool turns the gate off whatever the surface
+            // returns, which the info row above cannot distinguish from an
+            // env-disabled surface.
+            tracing::debug!(
+                target: "grounding_gate",
+                route = intent.row().slug,
+                surface_enabled = deep_gate_surface.enabled(),
+                "deep gate off: retrieval returned no chunks, so the turn has \
+                 no evidence universe to audit an answer against"
+            );
+        }
         // Built ahead of the literal so the conversation's own recalled
         // turns join the universe too — see the KnowledgeQuery sibling
         // above and `seal_conversation_evidence`.
