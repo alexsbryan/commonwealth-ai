@@ -253,6 +253,10 @@ exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 - Needed: On the fixed binaries the rr-1 baseline held and room run 1 read six PASSED, but run 2 failed the offline bar on convergence: the cut was a cut and the journals ended byte-equal, 85 s after the return against a 60 s window. The package asked whether the window is the right bar given the sync's 60 s cadence, whether the jump from ≤4 s to 49/85 s is a regression of d6d12b0e4, what to do about `demo-wait`'s inverted exit code, and whether run 1 still counts.
 - Chose: The window stays. One product row, `rr-2-the-return-syncs-the-ring`: the ring sync wakes on the Offline→Online edge through the wake-up it already has for local writes, plus the two instruments the run lacked (which peers a sync round skipped and why; the cut's length recorded). Not a regression: the mechanism is the sync's interval-or-local-write wake and its Online-only exchange, hit whenever a cut outlasts the 60 s offline threshold — run 2's did, the seven fast runs' did not. `demo-wait` fixed by me (dd23950b5): the wrapper records the demo's own exit code. The count restarts at zero on binaries carrying the row; run 1 stands as evidence.
 - Because: `ring_sync.rs:191-193` wakes on the interval or a local write and `:231` exchanges only with `Online` members; halo decayed beefy at 63 s staleness one second before the heal, its :14 round found beefy Offline, and the next round at 08:33:14 carried the ops — read from the logs, not inferred from the pump count (ARCH 4). A window one interval wide is meetable once the return is the trigger, and widening it or shortening the interval would hide the edge instead of handling it (ARCH 10, whole-game). The ask inside the cut doubled to 30.76 s in run 2 and is what pushed the cut past the threshold — recorded for the audit, not decided.
+**A51 · 2026-09-20 · REVIEW-audit-rr-2 · director (seat)** — this commit
+- Needed: The audit landed its five findings (f2e497d71) and its guest-door re-read; TESTALL is green apart from one foreign pre-existing citation of a gitignored doc; PREPUSH is red on one blocking ratchet, arch-gate's approach band (+1 file, +1475 lines), which no ralph worker may re-baseline. The package asked accept / trim / absorb, and whether to row the advisory hakari one-liner.
+- Chose: The row is done at f2e497d71 with PREPUSH recorded red on arch-gate only, the growth itemised, and the acceptance left to the operator at push: `cargo xtask arch-gate --update-baseline` (or the AGENTS.md re-pin recipe) plus a `SYSTEM_OVERVIEW.md §10` line naming what the lines bought — the room seal, the offer view and its merge instrument, the offer-clock and return-sync tests, the wall grant and QR. No split row: taking `mesh_media.rs` back under 800 removes one file from the band and leaves the line count red. hakari-verify's stale `corpus-engine-vocab` line is flagged, not rowed — outside the campaign and advisory.
+- Because: Every line of the growth is rr-2's by measurement, so absorbing it here would absorb nothing foreign, but the acceptance is the gate `git push` runs and the push is the operator's (charter; AGENTS.md "commit freely, never push"). Recording the attribution is the half the seat owns; the ledger line at push is the half the operator owns, and it costs one command.
 
 **A44 · 2026-09-19 · rr-2-gossip-claim-one-decider · director (supervisor resolution, attempt 1)** — commit: this one
 - Needed: A43 wrote the row on the premise that a SECOND site builds the claim gossip sends. The worker measured the send path and found one, stopped at the premise check without improvising a target, and asked whether to rewrite or strike the row.
@@ -7177,5 +7181,159 @@ own exit code to `demo.rc`. Frame 2e7f855c owed this.
 > 
 > Edit or mark the row in `ralph/next/ring-room-rr2/STATE.md` (it is `[~]`), then
 > `rm ralph/STOP ralph/NEEDS_HUMAN.md`.
+
+</details>
+
+## A51 · 2026-09-20 — rr-2: the audit is done and the size acceptance is the operator's at push
+
+<details>
+
+### The fork
+
+`REVIEW-audit-rr-2` finished everything but PREPUSH: findings and fixes at f2e497d71,
+TESTALL 13504 pass / 1 fail (foreign: `docs/internal/RING_APPLICATIONS.md` is gitignored
+on this host and cited at `sovereign/docs/cli-contract.toml:3571` since a3bd715f5, an
+ancestor of the campaign start), LINT and DOCS green, PREPUSH red on arch-gate's
+approach band. The worker may not touch a baseline.
+
+### What the +1 file / +1475 lines are
+
+By `wc -l` over the range 4b8fe1a16..HEAD (the worker's measurement):
+
+| file | before → after | commits |
+|---|---|---|
+| `sovereign-cli-llm/src/mesh_media.rs` | 686 → 842 (entered the band) | ee1c6b388, 042a74806, c24fe521a |
+| `sovereign-mesh/tests/main/gossip_integration.rs` | 557 → 1157 (entered) | fc4adede2, 4cf55202b, a15380d80 |
+| `sovereign-scheduler/src/oicp_select.rs` | 664 → 369 (left) | 52a1bdc57 |
+| `sovereign-cli-llm/src/mesh_guest.rs` | 1048 → 1179 | the wall grant and its QR |
+| `sovereign-mesh/src/gossip.rs` | 1494 → 1543 | the offer view, the edge nudge |
+| `commonwealth-core/src/mesh/mod.rs` | 980 → 1018 | the offer view, the merge arm |
+| `sovereign-core/tests/main/f26_egress_census.rs` | 1140 → 1176 | the audit's census comments |
+
+Nothing foreign is in the delta, so an acceptance absorbs only rr-2.
+
+### For the operator, at push
+
+```
+cargo xtask arch-gate --update-baseline      # from corpus-engine/, or the AGENTS.md re-pin recipe
+```
+
+and one `SYSTEM_OVERVIEW.md §10` line: rr-2 bought the room seal (9cb6b12ce), the offer
+view and its merge-arm instrument (fc4adede2 and predecessors), the offer-clock and
+return-sync tests (d6d12b0e4, 58d754d2d), the wall grant and QR, at +1 file / +1475 lines
+in the approach band.
+
+Advisory, outside the campaign: `hakari-verify` has been red across three audits on
+`.config/hakari.toml:54` naming `corpus-engine-vocab`, removed by e9db0b96c. One line.
+
+### The worker's package, inline
+
+> # REVIEW-audit-rr-2 — PREPUSH is red on arch-gate, and the fix is a baseline decision
+> 
+> ## (a) The unit and its row
+> 
+> `ralph/next/ring-room-rr2/STATE.md:59`, left `[~]`:
+> 
+> ```
+> - [~] REVIEW-audit-rr-2 — depends [REVIEW-DEMO-rr-2-run] — TESTALL and PREPUSH;
+>   read `git log` since 4b8fe1a16 against ARCH's twelve; every guest-door commit
+>   re-read against T (what can a guest reach that the grant did not name? — grep
+>   the Guest router's routes against `Scope::paths`); record findings in
+>   `ralph/REVIEW_FINDINGS.md` under a `ring-room rr-2` heading — read:
+>   `sovereign/ARCH_PRINCIPLES.md`; T — check: TESTALL; PREPUSH
+> ```
+> 
+> Everything the row asks for except PREPUSH is done and committed at `f2e497d71`
+> (five findings fixed, the guest-door re-read recorded, the range read against the
+> twelve). PREPUSH cannot be made green by this unit.
+> 
+> ## (b) The commands and what they actually printed
+> 
+> ```
+> $ scripts/ralph-check.sh testall      # before the fixes
+> exit=100
+> {"t":"summary","pass":13502,"fail":3,"warn":0,"ms":230351,"empty":false,"doctests":false}
+>   cli_contract_journeys::every_journey_cites_a_doc_that_exists
+>   f26_egress_census::f26_egress_boundary_census
+>   conformance_tags_are_fresh
+> 
+> $ scripts/ralph-check.sh testall      # after f2e497d71
+> exit=100
+> {"t":"summary","pass":13504,"fail":1,"warn":0,"ms":148974,"empty":false,"doctests":false}
+>   cli_contract_journeys::every_journey_cites_a_doc_that_exists
+>     journeys citing docs that are gone (rename the citation or restore the doc):
+>       mesh-offers-catalogue cites `docs/internal/RING_APPLICATIONS.md`, which does not exist
+> 
+> $ scripts/ralph-check.sh lint
+> exit=0
+> $ scripts/ralph-check.sh docs
+> exit=0   docs-gate: 1134 cited paths ... ✓ every cited path resolves
+> 
+> $ scripts/ralph-check.sh prepush
+> exit=1
+>   1 blocking: arch-gate
+>   arch-gate: 173 oversized files tracked vs baseline; 208 file(s) / 204178 lines
+>              in the 800-1200 approach band
+>     ✗ size: approach band GREW: files 207 -> 208 (+1)
+>     ✗ size: approach band GREW: lines 202703 -> 204178 (+1475)
+>   advisory, all three foreign and all three seen by the rd-1 and rd-2 audits:
+>     size-gate       failed  (75 keys; mostly crates unbaselined since the pack split)
+>     hakari-verify   failed  (.config/hakari.toml:54 names `corpus-engine-vocab`,
+>                              removed by e9db0b96c)
+>     concept-gate    could-not-judge (stale graph)
+> ```
+> 
+> The remaining TESTALL red is foreign and pre-existing: `.gitignore:67` excludes
+> `docs/internal/`, so the doc is absent on this host, and the citation at
+> `sovereign/docs/cli-contract.toml:3571` came in at `a3bd715f5`, which
+> `git merge-base --is-ancestor` confirms is an ancestor of the campaign start
+> `4b8fe1a16`. Both prior audits recorded it identically.
+> 
+> ## (c) What the operator must decide
+> 
+> 1. **The approach band's +1 file and +1475 lines — accept, or trim?** Measured
+>    by `wc -l` over every file this range touched, two files crossed INTO the
+>    800-1200 band and one left it, which is exactly the gate's net +1:
+>    - `sovereign/crates/sovereign-cli-llm/src/mesh_media.rs` 686 → 842
+>      (rr-2-media-posture, `ee1c6b388`/`042a74806`/`c24fe521a`)
+>    - `sovereign/crates/sovereign-mesh/tests/main/gossip_integration.rs`
+>      557 → 1157 (the offer-clock and merge instruments, `fc4adede2` /
+>      `4cf55202b` / `a15380d80`)
+>    - `sovereign/crates/sovereign-scheduler/src/oicp_select.rs` 664 → 369, left
+>      the band (`52a1bdc57`, the scorer render + its `oicp_select/tests.rs` split)
+> 
+>    The rest of the +1475 is growth inside files already in the band, the largest
+>    being `sovereign-cli-llm/src/mesh_guest.rs` 1048 → 1179 (the wall grant and
+>    its QR), `sovereign-mesh/src/gossip.rs` 1494 → 1543 and
+>    `commonwealth-core/src/mesh/mod.rs` 980 → 1018 (the offer view), plus 28
+>    lines this audit itself added as census comments in
+>    `sovereign-core/tests/main/f26_egress_census.rs` 1140 → 1176.
+> 
+>    Three ways forward, and the choice is yours:
+>    - **Re-pin at `origin/main` and ledger it** — the AGENTS.md recipe (worktree
+>      at `origin/main`, copy `quality/baselines/` back, `SYSTEM_OVERVIEW.md §10`
+>      entry saying what the lines bought). This separates what is already public
+>      from what rr-2 adds. Every step is forbidden to a ralph worker
+>      (`--update-baseline` on any ratchet), which is why it is here.
+>    - **Split one file back under 800** — `mesh_media.rs` at 842 is the cheapest
+>      (the verb file now carries `declare`, `viewer` and the offer path in three
+>      modules already; the offer path is the obvious extraction). That is a
+>      design change and needs its own row, not an audit commit.
+>    - **Accept the band as-is with `arch-gate --update-baseline`**, which absorbs
+>      the foreign growth in the same stroke — the trap AGENTS.md names.
+> 
+> 2. **`hakari-verify` has been red across three audits** (`.config/hakari.toml:54`
+>    still names `corpus-engine-vocab`, removed by `e9db0b96c` in the domains
+>    pack split). One line deleted from that file fixes it. It is advisory, so
+>    nothing forces it, and it is outside this campaign — say the word and it
+>    lands in a one-line row.
+> 
+> ## (d) To continue
+> 
+> Edit or mark the row in `ralph/next/ring-room-rr2/STATE.md`, then
+> `rm ralph/STOP ralph/NEEDS_HUMAN.md`.
+> 
+> The tree compiles (LINT exit=0) and is clean apart from the `[~]` mark on the
+> row; nothing is half-applied.
 
 </details>
