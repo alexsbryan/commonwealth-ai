@@ -205,6 +205,12 @@ exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 - Chose: Record the cause; no code, no row. Attempt 2 (`target/ralph/rr1-run2.log`) is the reading.
 - Because: An unexplained kill in the ledger reads as a daemon defect (ARCH 6: absence reported, never defaulted). The rule it minted: two sessions on one host never share demo container names — rr-2's `ring-room-<n>` set was distinct by design; the rr-1 regression run reused rr-1's names, which the worker also held.
 
+**A40 · 2026-09-20 · REVIEW-DEMO-rr-2-run · director (seat; the row's pre-registered stop fired)** — this commit
+- Needed: The row stopped on its own pre-registration: the offer's `listed_s` exceeded 30 s a third time in four runs (A38 run 2 165.81 s; room run 1 never listed, URL at ~135 s; rr-1 run listed null), and `withdrawn_s` 98.02 s once. Clause (f) failed both runs for a new cause: since A38 the presence poll reads `/Sessions` with the read-only viewer's credential, which sees only its own sessions (~25 polls `holder_playing=false` while the holder's token saw the playing session). Plus: a's `mesh status --json` printed nothing once (A27 said a row on recurrence), one iroh join timeout at bring-up with a duplicate-endpoint relay warning, one gossip authorization rejection during d's join.
+- Chose: Two rows ahead of the demo re-run, no window moved, no knob touched. (1) `rr-2-offer-publish-latency`: instrument first (holder republish line, peer merge line), then the one decider; suspect named: the republish stamps origins only under `self_iroh_dialinfo()` (`gossip.rs:544-554`) and the offer verb's hot-reload may land before it. (2) `rr-2-presence-with-the-house-session`: two credentials, two purposes — the read-only viewer stays the declared/gossiped one; the holder's own local session (the install credential, local-only, never in capabilities or links) is what the presence poll reads; the presence event logs the user ids it saw. The three smaller events are recorded here for REVIEW-audit-rr-2 (the empty `mesh status` now recurred twice and is owed a row after the walk if it recurs a third time).
+- Because: The stop condition exists so a publish that takes 135 s is owned, not polled around (principle 5/7). Reading the house's sessions with the house's own credential on the house's own machine widens nothing on the wire — A37 removed an admin-equivalent key from what viewers RECEIVE, not from what the holder holds (ARCH 12: the holder owns its Jellyfin). Option (iii), changing clause (f), would drop the operator's in-use posture.
+
+
 
 
 ## Flags for the operator
@@ -6095,5 +6101,19 @@ there.
 Its readings are reproduced above where they are relied on and corrected where
 they are not. Its (c)1 root cause is the one correction that changes the fix;
 the rest of its measurements stand.
+
+</details>
+
+## A40 · 2026-09-20 — rr-2: the offer's publish latency is owned, and presence reads with the house's own session
+
+<details>
+
+**Fork.** Decision 1: own the publish latency as a defect (instrument, then fix) vs re-price the 30 s window against a measured distribution. Decision 2: (i) a credential that can see the house's sessions — scoped LOCAL, never declared; (ii) a signal a read-only account can see; (iii) change clause (f). Decision 3: the presence event's missing user ids. Decision 4: two unreproduced events, record or investigate.
+
+**Evidence.** The worker's package (ralph/NEEDS_HUMAN.md, removed by this commit): `target/ralph/rr2-room-run1.log`, `rr2-room-run2.log`, `rr1-three-run.log`; `target/ring-room-rr2-demo/room-offer.out` (hot-reload line), `little/daemon.err` (`sessions=1 holder_playing=false` ×~25), `room-sessions.json` (the playing session under the holder's token). `gossip.rs:124` interval 10 s; `:422-435` every peer per round at N≤3; `:544-554` the republish under `self_iroh_dialinfo()`. `media_presence.rs:38-90` polls with `route.declared()`; `mesh_media.rs:650-652` (A38) replaces the install credential with the viewer's.
+
+**Decision.** 1: own it (row). 2: (i) scoped local (row) — the house session never enters `NodeCapabilities` or a link; the row's test asserts that. 3: one field on the presence event (same row). 4: recorded for the audit; no row until a third recurrence.
+
+**Falsified if** the instrument lines show the publish is late on the PEER's merge rather than the holder's republish (then the decider is elsewhere and the row says so); or the house session appears in any gossiped capability or printed link (the row's negative test).
 
 </details>
