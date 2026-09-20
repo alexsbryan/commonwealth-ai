@@ -25,7 +25,7 @@ use std::time::Duration;
 
 use commonwealth_core::ids::{NodeId, NodePubkey};
 use commonwealth_transport::iroh::{
-    Endpoint, EndpointAddr, EndpointBuilder, HttpBridge, IrohAcceptor, SecretKey, APP_ALPN,
+    Endpoint, EndpointAddr, EndpointBuilder, HttpBridge, IrohAcceptor, SecretKey, ALPN, APP_ALPN,
     CLIENT_ALPN, MEDIA_ALPN, OFFER_ALPN, RPC_ALPN,
 };
 use sovereign_daemon::server::{client_router, client_router_for, ClientSurface};
@@ -922,5 +922,111 @@ async fn a_member_dialing_a_node_with_no_offer_origin_is_closed_not_misrouted() 
         outcome.is_err(),
         "no offer origin means no route, got {:?}",
         outcome.map(|r| r.status())
+    );
+}
+
+// ---------------------------------------------------------------------------
+// `cwth/http/0` — the internal router is told who crossed the tunnel
+// ---------------------------------------------------------------------------
+//
+// Until 2026-09-20 this ALPN was a bare `Forward::Splice`: the internal router
+// learned nothing about the dialer, so every route behind it had to believe an
+// `x-node-id` header the CLIENT typed. These two drive the identity forward end
+// to end over a real iroh handshake — the same shape as the media pair above,
+// against the listener the mesh's own control plane lives behind.
+
+/// A lender whose internal forward is an origin that echoes the `x-mesh-*` it
+/// was handed, standing in for the daemon's internal router.
+async fn lender_with_internal_echo() -> (Endpoint, IrohAcceptor) {
+    use axum::http::HeaderMap;
+    use axum::routing::get;
+    let whoami = |headers: HeaderMap| async move {
+        let h = |n: &str| {
+            headers
+                .get(n)
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("<absent>")
+                .to_string()
+        };
+        format!(
+            "{} {} {}",
+            h("x-mesh-member"),
+            h("x-mesh-node"),
+            h("x-mesh-pubkey")
+        )
+    };
+    let internal = spawn_router(axum::Router::new().route("/whoami", get(whoami))).await;
+
+    let state = client_app_state(NodeId::from_u128(0xA11CE), Some(TOKEN), true);
+    let routes = AcceptorRoutes {
+        apps: Default::default(),
+        internal,
+        rpc: None,
+        peer: Some(spawn_router(client_router_for(state.clone(), ClientSurface::Peer)).await),
+        guest: Some(spawn_router(client_router_for(state, ClientSurface::Guest)).await),
+        media: MediaRoute::fixed(None, Vec::new()),
+        offer: Default::default(),
+    };
+    let endpoint = lender_endpoint(vec![ALPN.to_vec()]).await;
+    let check = only_the_member();
+    let acceptor = IrohAcceptor::spawn_admitting_forward(endpoint.clone(), move |alpn, dialer| {
+        let check = check.clone();
+        let routes = routes.clone();
+        async move { routes.forward_for(&alpn, dialer, &check).await }
+    });
+    (endpoint, acceptor)
+}
+
+/// GET `/whoami` over the internal ALPN as `seed`, typing forged `x-mesh-*`.
+async fn internal_whoami_as(lender: &Endpoint, seed: u8) -> String {
+    let dialer = dialer_endpoint(seed).await;
+    let bridge = HttpBridge::spawn(dialer, dialable(lender), ALPN)
+        .await
+        .expect("bridge binds");
+    let resp = reqwest::Client::new()
+        .get(format!("http://{}/whoami", bridge.local_addr()))
+        .header("X-Mesh-Member", "forged")
+        .header("X-Mesh-Node", "node-forged")
+        .header("X-Mesh-Pubkey", "ff".repeat(32))
+        .timeout(Duration::from_secs(10))
+        .send()
+        .await
+        .expect("the dial is forwarded");
+    assert_eq!(resp.status(), reqwest::StatusCode::OK);
+    let body = resp.text().await.unwrap();
+    drop(bridge);
+    body
+}
+
+/// The internal router learns who crossed the tunnel from the ACCEPTOR, which
+/// verified the key in the handshake — never from the client. The failing
+/// input is a forged `x-mesh-node` surviving the hop, which is exactly what a
+/// splice let through.
+#[tokio::test]
+async fn the_internal_router_is_told_the_verified_dialer_and_not_what_the_client_typed() {
+    let (lender, _acceptor) = lender_with_internal_echo().await;
+    let body = internal_whoami_as(&lender, MEMBER_SEED).await;
+    let expected = format!(
+        "LittleMac {} {}",
+        member_identity().node_id,
+        hex::encode(member_pubkey().0)
+    );
+    assert_eq!(body, expected, "the acceptor's word, not the client's");
+}
+
+/// A joiner is not a member yet and still reaches this ALPN — that is
+/// deliberate and unchanged. What it gets named by is the one thing the
+/// handshake proved: its key. The roster's silence is an ABSENT member header,
+/// not a placeholder one, so a route that needs a member can see that it has
+/// none (ARCH principle 6).
+#[tokio::test]
+async fn a_joiner_is_named_by_its_verified_key_and_by_no_membership_it_lacks() {
+    let (lender, _acceptor) = lender_with_internal_echo().await;
+    let body = internal_whoami_as(&lender, STRANGER_SEED).await;
+    let stranger = NodePubkey(*key(STRANGER_SEED).public().as_bytes());
+    assert_eq!(
+        body,
+        format!("<absent> <absent> {}", hex::encode(stranger.0)),
+        "a non-member is keyed, never named — and never the forged name"
     );
 }

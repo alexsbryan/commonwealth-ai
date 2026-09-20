@@ -37,7 +37,8 @@ pub use declared::{
     dir_under, house_dir_under, read_declared_in, valid_header_name, write_declared_in,
 };
 pub use identity::{
-    admit_app, admit_media, admit_offer, admits_no_one, MemberCheck, MemberIdentity,
+    admit_app, admit_media, admit_offer, admits_no_one, verified_headers, MemberCheck,
+    MemberIdentity,
 };
 pub use presence::{media_available_from_sessions, PresenceError, FREE, IN_USE};
 pub use reach::{

@@ -8,7 +8,8 @@
 //! accepted bi-streams to the daemon's two existing local listeners,
 //! chosen by the connection's negotiated ALPN:
 //!
-//! - `cwth/http/0`  → internal router (gossip / control / knowledge)
+//! - `cwth/http/0`  → internal router (gossip / control / knowledge),
+//!   carrying the verified dialer as `X-Mesh-*` headers
 //! - `cwth/client/0` → client router (`/v1` inference, `/status`)
 //!
 //! This is the **server half**: it makes this daemon DIALABLE by key,
@@ -426,6 +427,12 @@ impl AcceptorRoutes {
     ///   that gap outlives this function: closing it needs a join-only
     ///   listener for non-members, the same shape as the guest split above.
     ///   Named here so it is a known open edge and not an oversight.
+    ///   The dialer is still NAMED to the listener behind it: this arm
+    ///   forwards with the verified identity (`Forward::Http`) rather than
+    ///   splicing bytes, so an internal route can tell one member from
+    ///   another without the acceptor deciding for it. The roster consult
+    ///   here names the dialer and never refuses it — admission on this ALPN
+    ///   is unchanged, which is what keeps a joiner able to join.
     pub async fn forward_for(
         &self,
         alpn: &[u8],
@@ -433,7 +440,20 @@ impl AcceptorRoutes {
         is_member: &MemberCheck,
     ) -> Option<Forward> {
         if alpn == ALPN {
-            return Some(Forward::Splice(self.internal));
+            let who = is_member(dialer).await;
+            tracing::debug!(
+                target: "transport",
+                dialer = %hex::encode(dialer.0),
+                member = who.as_ref().map(|w| w.name.as_str()),
+                "iroh(mesh): internal dial forwarded WITH the verified identity \
+                 (no member named means the roster does not know this key — \
+                 admitted anyway, as a joiner must be)"
+            );
+            let headers = commonwealth_media::verified_headers(who.as_ref(), dialer);
+            return Some(Forward::Http {
+                origin: self.internal,
+                headers,
+            });
         }
         if alpn == GUEST_ALPN {
             return self.guest.map(Forward::Splice);
