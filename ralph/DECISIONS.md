@@ -5594,7 +5594,7 @@ guard was reachable all along and the row was sufficient); or if a recipe in the
 `identity` on a fine-print type, in which case option 3 was already taken and the fix is not inert
 for it.
 
-**Commits.** `b76400ab5` (the decision), `7a30e2018` (the prior session's spike run logs, no
+**Commits.** `54900d8f3` (the decision), `7a30e2018` (the prior session's spike run logs, no
 code).
 
 **REVIEW-AFTER:** landing a partial whose own row calls the remainder an operator fork is not a case
