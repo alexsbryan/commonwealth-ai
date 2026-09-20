@@ -1,0 +1,146 @@
+diff --git a/corpus-engine/src/enrichment/atlas/resolution.rs b/corpus-engine/src/enrichment/atlas/resolution.rs
+index 7ed5cd5f3..76ba95d5f 100644
+--- a/corpus-engine/src/enrichment/atlas/resolution.rs
++++ b/corpus-engine/src/enrichment/atlas/resolution.rs
+@@ -811,7 +811,7 @@ fn find_merge_target(
+     // signal — rule 1 is the only other unbounded rule, and an
+     // alias-less follow-up sketch deserves the same courtesy.
+     if let Some(idx) = find_substring_match(&folded_name, entities) {
+-        if permit(idx, MergeEvidence::Exact) {
++        if permit(idx, MergeEvidence::Fuzzy) {
+             return Some(idx);
+         }
+     }
+@@ -3344,6 +3344,132 @@ mod tests {
+         assert_eq!(out.entities.len(), 1);
+     }
+ 
++    /// The spike-3 declaration, reduced: `recipient` is a declared entity
++    /// type with NO `identity` key — the shape
++    /// `research/ontology-retrieval/spikes/extraction-census/recipe.toml:98`
++    /// actually carries.
++    fn recipient_only_policies() -> crate::enrichment::ontology::OntologyPolicies {
++        use crate::enrichment::ontology::{
++            OntologyPolicies, OntologyTypeDecl, ShapePolicy, TypeKind,
++        };
++        OntologyPolicies {
++            shape: ShapePolicy {
++                types: vec![OntologyTypeDecl {
++                    name: "recipient".into(),
++                    kind: TypeKind::Entity,
++                    ..Default::default()
++                }],
++                ..Default::default()
++            },
++            ..Default::default()
++        }
++    }
++
++    fn recipient(name: &str, description: &str) -> EntitySketch {
++        let mut s = entity(name, &[], description);
++        s.entity_type = EntityType::Other("recipient".into());
++        s
++    }
++
++    /// PROBE (not to be committed): the same declaration with an `identity`
++    /// key, to show the Exact->Fuzzy change is reachable and that the
++    /// keyless case is what makes it inert.
++    fn keyed_recipient_policies() -> crate::enrichment::ontology::OntologyPolicies {
++        use crate::enrichment::ontology::{
++            OntologyPolicies, OntologyTypeDecl, ShapePolicy, TypeKind,
++        };
++        OntologyPolicies {
++            shape: ShapePolicy {
++                types: vec![OntologyTypeDecl {
++                    name: "recipient".into(),
++                    kind: TypeKind::Entity,
++                    identity: vec!["find_id".into()],
++                    ..Default::default()
++                }],
++                ..Default::default()
++            },
++            ..Default::default()
++        }
++    }
++
++    #[tokio::test]
++    async fn probe_keyed_type_does_refuse_the_head_noun_merge() {
++        let sections = vec![
++            section(
++                "sec_0001",
++                vec![recipient(
++                    "partners",
++                    "Third parties Spotify shares data with.",
++                )],
++                vec![],
++            ),
++            section(
++                "sec_0002",
++                vec![
++                    recipient("Authentication partners", "Verify a user's identity."),
++                    recipient("Payment partners", "Process subscription payments."),
++                    recipient("Advertising partners", "Serve and measure ads."),
++                ],
++                vec![],
++            ),
++        ];
++        let p = keyed_recipient_policies();
++        let out =
++            resolve_entities_and_events_with(&sections, &fake_embed(), &ResolutionPolicy::new(&p))
++                .await
++                .unwrap();
++        let names: Vec<&str> = out
++            .entities
++            .iter()
++            .map(|e| e.canonical_name.as_str())
++            .collect();
++        assert_eq!(out.entities.len(), 4, "probe: got {names:?}");
++    }
++
++    #[tokio::test]
++    async fn a_bare_head_noun_does_not_absorb_its_qualified_forms() {
++        // Spike 3 (2026-09-19, the 108-section fine-print census): the
++        // recipient "partners" swallowed Authentication / Payment /
++        // Advertising partners as aliases, and Spotify's recipient recall
++        // by canonical name fell to 4 of 13. Rule 4 fires on whole-word
++        // containment in EITHER direction, so a bare head noun absorbs
++        // every qualified form of itself.
++        let sections = vec![
++            section(
++                "sec_0001",
++                vec![recipient(
++                    "partners",
++                    "Third parties Spotify shares data with.",
++                )],
++                vec![],
++            ),
++            section(
++                "sec_0002",
++                vec![
++                    recipient("Authentication partners", "Verify a user's identity."),
++                    recipient("Payment partners", "Process subscription payments."),
++                    recipient("Advertising partners", "Serve and measure ads."),
++                ],
++                vec![],
++            ),
++        ];
++        let p = recipient_only_policies();
++        let out =
++            resolve_entities_and_events_with(&sections, &fake_embed(), &ResolutionPolicy::new(&p))
++                .await
++                .unwrap();
++        let names: Vec<&str> = out
++            .entities
++            .iter()
++            .map(|e| e.canonical_name.as_str())
++            .collect();
++        assert_eq!(
++            out.entities.len(),
++            4,
++            "a bare head noun must not absorb its qualified forms; got {names:?}"
++        );
++    }
++
+     #[tokio::test]
+     async fn rule_3_5_merges_fyodor_drift_variants_via_single_long_token_and_high_cosine() {
+         // The Landing 4 smoke-test residual: "Fyodor Pavlovich
