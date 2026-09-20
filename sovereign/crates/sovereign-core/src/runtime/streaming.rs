@@ -3,11 +3,9 @@
 //! classification-bearing body, plus the session-continuation
 //! (`resume_session_stream`) and cancel-and-redirect
 //! (`redirect_turn_stream`) entry points. The KnowledgeQuery and
-//! Deep/Simple streaming synthesis loops are still INLINE here,
-//! including their two near-duplicate refusal-retry state machines —
-//! a known duplication whose unification is deliberately deferred
-//! (the blocks differ in error-frame and finish-reason handling, so
-//! merging them is a measured behavior change, not a move).
+//! Deep/Simple streaming synthesis loops both run through the shared
+//! `run_synthesis_stream`, whose ONE refusal-retry is `refusal_retry_stream`,
+//! called from that loop's two triggers (see its doc).
 //! Extracted verbatim from `runtime.rs` in the 2026-06-10
 //! decomposition; same `impl Runtime`-across-files pattern as
 //! `handlers/`.
@@ -190,37 +188,20 @@ async fn run_synthesis_stream(
                             if !retried && had_retrieved_chunks && looks_like_refusal_opener(&head)
                             {
                                 retried = true;
-                                tracing::info!(
-                                    target: "synth.refusal_retry",
-                                    head = %head.chars().take(80).collect::<String>(),
-                                    "{}: refusal opener detected with evidence present — retrying with answer prefill",
-                                    log_tag
-                                );
-                                full_text.clear();
-                                full_text.push_str(REFUSAL_RETRY_PREFIX);
-                                if tx.send(Ok(REFUSAL_RETRY_PREFIX.to_string())).await.is_err() {
-                                    return None;
-                                }
                                 head_flushed = true;
-                                let mut retry_req = request.clone();
-                                retry_req.assistant_prefix = Some(REFUSAL_RETRY_PREFIX.to_string());
-                                retry_req.system_message = Some(REFUSAL_RETRY_SYSTEM.to_string());
-                                match inference
-                                    .complete_stream_with_id_and_finish(&retry_req)
-                                    .await
-                                {
-                                    Ok((s2, mid2)) => {
-                                        s = s2;
-                                        model_id = mid2;
-                                        observed_finish = None;
-                                        observed_completion_tokens = None;
-                                        continue 'synth;
-                                    }
-                                    Err(e) => {
-                                        let _ = tx.send(Err(e)).await;
-                                        return None;
-                                    }
-                                }
+                                (s, model_id) = refusal_retry_stream(
+                                    inference,
+                                    request,
+                                    tx,
+                                    full_text,
+                                    &head,
+                                    "refusal opener",
+                                    log_tag,
+                                )
+                                .await?;
+                                observed_finish = None;
+                                observed_completion_tokens = None;
+                                continue 'synth;
                             } else if tx.send(Ok(std::mem::take(&mut head))).await.is_err() {
                                 return None;
                             } else {
@@ -264,37 +245,20 @@ async fn run_synthesis_stream(
         if !head_flushed && !gate_on {
             if !retried && had_retrieved_chunks && looks_like_refusal_opener(&head) {
                 retried = true;
-                tracing::info!(
-                    target: "synth.refusal_retry",
-                    head = %head.chars().take(80).collect::<String>(),
-                    "{}: short refusal detected with evidence present — retrying with answer prefill",
-                    log_tag
-                );
-                full_text.clear();
-                full_text.push_str(REFUSAL_RETRY_PREFIX);
-                if tx.send(Ok(REFUSAL_RETRY_PREFIX.to_string())).await.is_err() {
-                    return None;
-                }
                 head_flushed = true;
-                let mut retry_req = request.clone();
-                retry_req.assistant_prefix = Some(REFUSAL_RETRY_PREFIX.to_string());
-                retry_req.system_message = Some(REFUSAL_RETRY_SYSTEM.to_string());
-                match inference
-                    .complete_stream_with_id_and_finish(&retry_req)
-                    .await
-                {
-                    Ok((s2, mid2)) => {
-                        s = s2;
-                        model_id = mid2;
-                        observed_finish = None;
-                        observed_completion_tokens = None;
-                        continue 'synth;
-                    }
-                    Err(e) => {
-                        let _ = tx.send(Err(e)).await;
-                        return None;
-                    }
-                }
+                (s, model_id) = refusal_retry_stream(
+                    inference,
+                    request,
+                    tx,
+                    full_text,
+                    &head,
+                    "short refusal",
+                    log_tag,
+                )
+                .await?;
+                observed_finish = None;
+                observed_completion_tokens = None;
+                continue 'synth;
             } else {
                 let _ = tx.send(Ok(std::mem::take(&mut head))).await;
                 head_flushed = true;
@@ -368,6 +332,43 @@ async fn run_synthesis_stream(
         observed_finish,
         observed_completion_tokens,
     })
+}
+
+/// The ONE refusal-retry of [`run_synthesis_stream`], reached from both of its
+/// triggers — the head crossing `REFUSAL_HEAD_CHARS`, and a stream that ended
+/// still buffering the head — which differ only in the `trigger` word logged.
+/// `None` => caller must `return None`: `tx` gone, or the re-open sent its Err.
+async fn refusal_retry_stream(
+    inference: &Arc<dyn InferenceProvider>,
+    request: &CompletionRequest,
+    tx: &tokio::sync::mpsc::Sender<Result<String>>,
+    full_text: &mut String,
+    head: &str,
+    trigger: &'static str,
+    log_tag: &'static str,
+) -> Option<(
+    Pin<Box<dyn Stream<Item = crate::types::StreamFrame> + Send>>,
+    String,
+)> {
+    tracing::info!(
+        target: "synth.refusal_retry",
+        head = %head.chars().take(80).collect::<String>(),
+        "{}: {} detected with evidence present — retrying with answer prefill",
+        log_tag, trigger
+    );
+    full_text.clear();
+    full_text.push_str(REFUSAL_RETRY_PREFIX);
+    tx.send(Ok(REFUSAL_RETRY_PREFIX.to_string())).await.ok()?;
+    let mut req = request.clone();
+    req.assistant_prefix = Some(REFUSAL_RETRY_PREFIX.to_string());
+    req.system_message = Some(REFUSAL_RETRY_SYSTEM.to_string());
+    match inference.complete_stream_with_id_and_finish(&req).await {
+        Ok(reopened) => Some(reopened),
+        Err(e) => {
+            let _ = tx.send(Err(e)).await;
+            None
+        }
+    }
 }
 
 /// Stream-door twin of `runtime::turn`'s `runtime: dispatching` line. A streamed
