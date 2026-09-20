@@ -398,12 +398,17 @@ async fn the_door_claims_a_name_once_and_refuses_the_three_collisions() {
     assert!(body.contains("stale_session"), "{body}");
 }
 
-/// **A guest cannot write under a member's name.** The door signs with its
-/// member's key, so the name a guest types is the only thing telling the two
-/// apart on the wall; one that IS a member's name (any case) is refused, and
-/// nothing reaches the journal. The control: a name of their own is admitted.
+/// **The door writes whose words an act was, and a lying page gets nowhere.**
+/// The page here sends a `guest` of its own in the payload — the field the
+/// rail used to believe — and the act is still attributed to the name the
+/// session holds. The log hands the finished name back, so an app renders
+/// `person` and is right without knowing guests exist.
+///
+/// This replaces the append-time member-name refusal: that check read a field
+/// the page supplied, and its subject now lives where the name is CLAIMED
+/// (`the_door_claims_a_name_once_and_refuses_the_three_collisions`).
 #[tokio::test]
-async fn a_guest_name_that_is_a_members_is_refused_at_the_door() {
+async fn the_door_stamps_the_guest_and_the_page_cannot() {
     let dir = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let a = with_guest(
@@ -411,53 +416,66 @@ async fn a_guest_name_that_is_a_members_is_refused_at_the_door() {
         vec![Scope::Rails(NS.into())],
     );
     let (_root, page) = page_dir();
-    let act = |guest: &str| {
-        serde_json::json!({
-            "op": "record",
-            "payload": { "kind": "doc-change", "doc": "ring-doc", "update": "AA==", "guest": guest },
-        })
-    };
-    for member in ["bo", "Alex"] {
-        let (status, body) = door(
-            a.clone(),
-            &page,
-            request(
-                "POST",
-                "/v1/rail/append",
-                LAN_PEER,
-                Some(GUEST_TOKEN),
-                Some(act(member)),
-            ),
-        )
-        .await;
-        assert_eq!(
-            status,
-            StatusCode::CONFLICT,
-            "a guest wrote as member {member}: {body}"
-        );
-    }
-    let (_, log) = door(
-        a.clone(),
-        &page,
-        request("GET", "/v1/rail/log", LAN_PEER, Some(GUEST_TOKEN), None),
-    )
-    .await;
-    assert!(
-        !log.contains("\"guest\""),
-        "a refused act reached the journal: {log}"
-    );
 
     let (status, body) = door(
-        a,
+        a.clone(),
         &page,
         request(
             "POST",
-            "/v1/rail/append",
+            "/v1/guest/session",
             LAN_PEER,
             Some(GUEST_TOKEN),
-            Some(act("ana")),
+            Some(serde_json::json!({ "name": "ana" })),
         ),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
+    let handle = serde_json::from_str::<serde_json::Value>(&body).unwrap()["session"]
+        .as_str()
+        .expect("a handle")
+        .to_string();
+
+    let with_handle = |method: &str, path: &str, body: Option<serde_json::Value>| {
+        let mut req = request(method, path, LAN_PEER, Some(GUEST_TOKEN), body);
+        req.headers_mut().insert(
+            axum::http::HeaderName::from_static("x-ring-session"),
+            axum::http::HeaderValue::from_str(&handle).unwrap(),
+        );
+        req
+    };
+
+    // The page names somebody else, in the payload and beside it. Neither is
+    // read: the door already knows who is holding this phone.
+    let (status, body) = door(
+        a.clone(),
+        &page,
+        with_handle(
+            "POST",
+            "/v1/rail/append",
+            Some(serde_json::json!({
+                "op": "record",
+                "on_behalf_of": "zoe",
+                "payload": {
+                    "kind": "doc-change", "doc": "ring-doc", "update": "AA==", "guest": "zoe",
+                },
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+
+    let (_, log) = door(a, &page, with_handle("GET", "/v1/rail/log", None)).await;
+    let log: serde_json::Value = serde_json::from_str(&log).unwrap();
+    let op = &log["ops"][0];
+    let person = op["person"].as_str().expect("a person");
+    assert!(
+        person.starts_with("ana, guest of "),
+        "the door's name did not reach the log: {person}"
+    );
+    assert_eq!(op["guest"]["name"], "ana");
+    assert_eq!(
+        op["on_behalf_of"], "ana",
+        "the name must be what was SIGNED"
+    );
+    assert!(!person.contains("zoe"), "the page's claim won: {person}");
 }

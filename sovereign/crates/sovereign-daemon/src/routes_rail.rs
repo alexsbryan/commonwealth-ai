@@ -24,15 +24,13 @@ use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use commonwealth_rail::{Compaction, RailAct, RailError, RingJournal, RingRail, RosterOrigin};
+use commonwealth_rail::{
+    AdmittedOp, Compaction, RailAct, RailError, RingJournal, RingRail, RosterOrigin,
+};
 use serde::Deserialize;
 use sovereign_grants::GuestGrant;
 
 use crate::client_auth::Guest;
-// The member-name comparison lives beside the route where a name is now
-// CLAIMED; this route's remaining check calls it rather than keeping a second
-// spelling of it (ARCH 8).
-use crate::routes_guest_session::names_a_member;
 use crate::state::AppState;
 
 /// Query parameters common to every rail route.
@@ -173,13 +171,74 @@ fn retire(retired: &Result<Compaction, RailError>) -> serde_json::Value {
     }
 }
 
-/// The `guest` a ring page put in an act's payload (or a correction's
-/// replacement), if any. The one field of an app payload this route reads.
-fn guest_name_in(body: &serde_json::Value) -> Option<String> {
-    ["payload", "replacement"]
-        .iter()
-        .find_map(|k| body.get(*k)?.get("guest")?.as_str())
-        .map(str::to_string)
+/// Whose words this act is — decided by the DOOR, from the session
+/// `client_auth` authenticated, and from nothing the caller wrote.
+///
+/// This is the whole difference between the stamp and the payload `guest`
+/// field it replaces. That field was supplied by the page, so the check on it
+/// asserted on what the subject authored (ARCH 5): a page that sent no name
+/// had its guest's act shown under the member's, and a page that sent someone
+/// else's was believed. Here a page that sends no name, a page that lies in
+/// one, and a page that sends the right one all reach the same answer, because
+/// the body is not consulted.
+///
+/// `None` is every caller with no guest session — a member on their own
+/// loopback listener, `svrn ring dev`. An `on_behalf_of` such a caller put on
+/// the wire is dropped HERE, before anything is signed, and the drop is
+/// warned rather than silent: a name that did not reach the signature is not
+/// a name this node is claiming, and the operator reading the log is the one
+/// who needs to know which of the two happened.
+fn stamp_from(guest: Option<&Guest>, body: &serde_json::Value) -> Option<String> {
+    let claimed = body.get("on_behalf_of").and_then(|v| v.as_str());
+    let stamped = guest
+        .and_then(|g| g.session.as_ref())
+        .map(|s| s.name.clone());
+    match (stamped.as_deref(), claimed) {
+        (Some(name), _) => tracing::debug!(
+            guest = name,
+            claimed_on_the_wire = ?claimed,
+            "rail: stamped an act with the name the door's session holds"
+        ),
+        (None, Some(claimed)) => tracing::warn!(
+            claimed,
+            "rail: dropped an on_behalf_of from a caller with no guest session — \
+             the door stamps this, a caller cannot"
+        ),
+        (None, None) => {}
+    }
+    stamped
+}
+
+/// One admitted op as the log ships it, with a guest act's attribution already
+/// resolved.
+///
+/// `person` names the SIGNER's roster entry, and a guest writes through a
+/// member's door — so shipping it alone puts the member's name on the guest's
+/// words, and every app behind this route has to compose the sentence itself.
+/// ring-doc did, which is one rendering with two spellings waiting to happen
+/// (ARCH 8). `admit` refuses every key the roster does not name, so the signer
+/// half is always present here and the sentence never has a missing side.
+///
+/// `guest` sits beside it, structured, for an app that wants to treat a guest
+/// differently. An app that does not — the scaffold does not — renders
+/// `person` and is correct without knowing guests exist.
+fn shipped(op: &AdmittedOp) -> serde_json::Value {
+    // `to_value` on a derived `Serialize` over strings, integers and options
+    // has no failing input — the same reason the `gaps` map below does this.
+    let mut v = serde_json::to_value(op).unwrap_or_default();
+    let (Some(name), Some(obj)) = (op.on_behalf_of.as_deref(), v.as_object_mut()) else {
+        return v;
+    };
+    let of = op.person.as_str();
+    obj.insert(
+        "person".into(),
+        serde_json::Value::String(format!("{name}, guest of {of}")),
+    );
+    obj.insert(
+        "guest".into(),
+        serde_json::json!({ "name": name, "of": of }),
+    );
+    v
 }
 
 /// POST /v1/rail/append — sign and append one act to this caller's namespace.
@@ -189,10 +248,12 @@ fn guest_name_in(body: &serde_json::Value) -> Option<String> {
 /// number or actor could write as somebody else, and the whole point of the
 /// grant is that it cannot.
 ///
-/// The act's payload is the app's, and this route reads exactly one field of
-/// it — `guest`, refused when it is a roster member's name ([`names_a_member`])
-/// so a guest's words are never shown under a member's.
-/// What it also checks is that the payload has a canonical form — see
+/// The act's payload is the app's and this route reads no field of it. Whose
+/// words the act is comes from the guest session the door authenticated
+/// ([`stamp_from`]) — so an app cannot write as somebody else by naming them
+/// either, which is the same guarantee the paragraph above states about `seq`
+/// and the actor.
+/// What it does check is that the payload has a canonical form — see
 /// [`Payload`](commonwealth_rail::Payload) — because a body whose bytes
 /// two nodes would spell differently cannot be signed once and verified
 /// everywhere.
@@ -207,8 +268,9 @@ pub async fn append(
         Ok(pair) => pair,
         Err(refusal) => return refusal,
     };
-    // Read before the body becomes an act: the payload is otherwise opaque here.
-    let claimed_guest = guest_name_in(&body);
+    // Read before the body becomes an act, because `RailAct` does not carry
+    // this field and serde drops it on the way in.
+    let on_behalf_of = stamp_from(guest, &body);
     // Taken as a `Value` and converted here rather than as `Json<RailAct>`,
     // so a refusal is the rail's own sentence instead of axum's rejection
     // prose wrapped around serde's prose wrapped around it (ARCH §10.6).
@@ -223,17 +285,6 @@ pub async fn append(
         Ok(r) => r,
         Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     };
-    if let Some(name) = claimed_guest.filter(|n| names_a_member(&roster, n)) {
-        tracing::warn!(
-            namespace = journal.namespace(),
-            guest = name,
-            "rail: refused a guest name that is a roster member's"
-        );
-        return err(
-            StatusCode::CONFLICT,
-            format!("'{name}' is a member of this ring; a guest writes under a name of their own"),
-        );
-    }
     // Sealing is the one act with a second half, and the pair lives on the
     // journal (`RingJournal::seal`) rather than here — the daemon's own KV
     // pump seals too, and two spellings of "seal, then compact, and a refused
@@ -241,12 +292,17 @@ pub async fn append(
     // (ARCH §10.6).
     let sealed = matches!(act, RailAct::Seal);
     let appended = if sealed {
+        // A seal takes no stamp: it is delivery, not words. `applies()` is
+        // false for it, no reducer sees it, and there is nothing it could be
+        // said on behalf of. Named here rather than left to be noticed,
+        // because "every act carries the guest's name" is otherwise read as
+        // covering this one too.
         journal
             .seal(rail.signer(), &roster, &commonwealth_rail::Ed25519Verifier)
             .map(|done| (done.op, Some(retire(&done.retired))))
     } else {
         journal
-            .append(act, rail.signer(), &roster, None)
+            .append(act, rail.signer(), &roster, on_behalf_of.as_deref())
             .map(|op| (op, None))
     };
     match appended {
@@ -338,7 +394,10 @@ pub async fn log(
         .collect();
     Json(serde_json::json!({
         "namespace": journal.namespace(),
-        "ops": admission.ops,
+        // Not `admission.ops` verbatim: a guest act's attribution is finished
+        // HERE, once, for the wall's page, the scaffold's page and
+        // `svrn ring log` alike — see [`shipped`].
+        "ops": admission.ops.iter().map(shipped).collect::<Vec<_>>(),
         "gaps": gaps,
         "held": admission.held,
         "complete": admission.is_complete(),
@@ -431,6 +490,93 @@ mod tests {
             }),
             session: None,
         }
+    }
+
+    /// A guest behind the door who has claimed `name` through their session.
+    fn guest_named(name: &str) -> Guest {
+        let mut g = grant_with(vec![Scope::Rails("house-expenses".into())]);
+        g.session = Some(sovereign_grants::GuestSession {
+            handle: "h".into(),
+            grant_token: "t".into(),
+            name: name.into(),
+            issued_at_ms: 0,
+            expires_at_ms: u64::MAX,
+        });
+        g
+    }
+
+    /// Clause (a) of `rg-guest-stamped-by-the-door`: the page that sends
+    /// nothing at all is the common case — the scaffold does not know guests
+    /// exist — and its guest is still named.
+    #[test]
+    fn a_page_that_names_nobody_still_has_its_guest_named() {
+        let body = serde_json::json!({ "op": "record", "payload": { "amount": 12 } });
+        assert_eq!(
+            stamp_from(Some(&guest_named("Ada")), &body).as_deref(),
+            Some("Ada")
+        );
+    }
+
+    /// Clause (b): the page that LIES gets the same answer as the page that
+    /// says nothing. This is the test the old payload-`guest` check could not
+    /// pass — it believed the field and only compared it to the roster.
+    #[test]
+    fn a_page_claiming_another_name_does_not_get_it() {
+        let body = serde_json::json!({
+            "op": "record",
+            "payload": { "amount": 12, "guest": "Zoe" },
+        });
+        assert_eq!(
+            stamp_from(Some(&guest_named("Ada")), &body).as_deref(),
+            Some("Ada")
+        );
+    }
+
+    /// Clause (c): a caller with no guest session — a member on their own
+    /// loopback listener — cannot put a name on the wire and have it signed.
+    /// Stripped here, before `append` ever sees it.
+    #[test]
+    fn a_caller_without_a_session_cannot_name_somebody() {
+        let body = serde_json::json!({ "op": "record", "on_behalf_of": "Ada" });
+        assert_eq!(stamp_from(None, &body), None);
+        // A guest who has not claimed a name yet is the same answer: absent,
+        // never the name the body offered.
+        let unclaimed = grant_with(vec![Scope::Rails("house-expenses".into())]);
+        assert_eq!(stamp_from(Some(&unclaimed), &body), None);
+    }
+
+    fn admitted(on_behalf_of: Option<&str>) -> AdmittedOp {
+        AdmittedOp {
+            id: commonwealth_rail::OpId::from_raw("abc"),
+            actor: "ab".repeat(32),
+            person: "BeefyMac".into(),
+            seq: 0,
+            ts_unix: 0,
+            corrects: None,
+            voided: false,
+            payload: None,
+            on_behalf_of: on_behalf_of.map(str::to_string),
+        }
+    }
+
+    /// The name an app reads is finished before it leaves the daemon: one
+    /// composition for the wall's page, the scaffold's page and
+    /// `svrn ring log`, all of which render `person`.
+    #[test]
+    fn the_log_hands_apps_a_finished_name() {
+        let v = shipped(&admitted(Some("Ada")));
+        assert_eq!(v["person"], "Ada, guest of BeefyMac");
+        assert_eq!(v["guest"]["name"], "Ada");
+        assert_eq!(v["guest"]["of"], "BeefyMac");
+    }
+
+    /// The negative control: without it the test above passes for a renderer
+    /// that appends "guest of" to everything.
+    #[test]
+    fn a_members_own_act_is_shipped_untouched() {
+        let v = shipped(&admitted(None));
+        assert_eq!(v["person"], "BeefyMac");
+        assert!(v.get("guest").is_none(), "{v}");
     }
 
     #[test]
