@@ -349,7 +349,8 @@ Two requirements are taken verbatim from the webxdc messenger specification
 safe: the host "MUST deny all forms of internet access" and "MUST isolate all
 storage and state of one … app from any other." The second needs one origin
 per ring bundle. Paths cannot give that; a port per ring can on the LAN door,
-a subdomain per ring can on an HTTPS door. Undecided.
+a subdomain per ring can on an HTTPS door. Decided in §17: neither — a
+sandboxed frame with an opaque origin.
 
 Bar: a payload carrying `<img onerror>` renders as text in both apps, watched
 failing first.
@@ -415,7 +416,51 @@ camera. Neither store has a use count.
   and two hand-edited config keys, and `--model` is required for a rail-only
   grant.
 
-## 17. The HTTPS door
+## 17. Reaching a node from a phone — no hubs
+
+Operator direction 2026-09-20: no load-bearing nodes, and no TLS or public
+domain to operate. Dumb, interchangeable relays that ship out of the box, as
+iroh's do, are fine. That withdraws the HTTPS door and the keeper node
+proposed in the first draft of this section (kept below, marked, because the
+reasoning about secure contexts still holds).
+
+**The page is an iroh endpoint.** iroh builds for the browser relay-only. The
+runtime — iroh, `commonwealth-rail-core` and the fold, compiled to wasm —
+dials the inviter's node by public key through a relay, on the `GUEST_ALPN`
+the acceptor already serves, and speaks the rail over that stream. This is the
+bridge `mesh_guest.rs` runs as a local proxy, moved into the page. Traffic is
+end-to-end encrypted between the phone and the node; the relay forwards
+ciphertext. Nothing terminates TLS for anyone and nothing proxies HTTP.
+Unverified against the pinned iroh, and the wasm size is unmeasured.
+
+**One static origin serves the runtime and nothing else.** It is a file on
+commodity static hosting: no server, no certificate to manage, no data, no
+traffic after first load (a service worker caches it). It exists because a
+browser needs a secure context for `crypto.subtle`, service workers and
+passkeys. It is load-bearing the way a name is, not the way a hub is — but it
+IS sticky: browser storage and passkeys are per origin, so a mirror is a
+different identity silo. Installed nodes never touch it.
+
+**Apps arrive through the ring, not over HTTP.** The bundle (§14) comes from
+a member's node over iroh, is checked against its hash, and runs in an
+`<iframe sandbox="allow-scripts">` with no `allow-same-origin`. The browser
+gives that frame an opaque origin: no storage, no cookies, no reach into the
+runtime, and with a frame CSP no network. The runtime in the top frame holds
+the key, the endpoint and the journal, and talks to the app by `postMessage`.
+This meets both webxdc MUSTs with no DNS and no per-ring origin, and it
+replaces Compartments as the isolation boundary in §13; the deterministic
+`Date` and `Math.random` are injected by the frame's bootstrap.
+
+**Availability is the members'.** No keeper. A ring is as available as its
+most available member. Two phones in browsers sync through a relay while
+both tabs are open; the first member to run a node makes the ring durable. A
+ring of one in a browser lives in that browser's storage and is as durable as
+that storage, and the page says so.
+
+**The LAN door stays** as the no-internet path: plain HTTP, guests only, the
+host signs. It is built.
+
+### Superseded: the HTTPS door (first draft)
 
 `crypto.subtle` exists only in a secure context, and a phone off the WiFi
 cannot reach a LAN bind at all, so both identity and reach need one public
