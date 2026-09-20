@@ -5522,3 +5522,83 @@ observation from `Hardware.tg_tok_s`) is the honest next step and is not done he
 **Worker's package (ralph/NEEDS_HUMAN.md, removed by this commit).** Options (A)/(B)/(C) as above, with the measured facts; question 2 (one bearer via `--rail` or a separate flag) answered: the wall grant minted by `rr-2-grant-for-the-room` carries the ask route with its rail scope — one bearer for the wall.
 
 </details>
+
+## A35 · 2026-09-19 — REVIEW-build-e7x-head-noun-merge: land the row, leave the criterion to the operator
+
+<details>
+
+**Fork.** The row's fix (`MergeEvidence::Exact` -> `Fuzzy` on resolution rule 4) compiles, breaks
+nothing, and does not fix the defect it names. Four options were on the table: (1) widen
+`merge_permitted` rule 3 to keyless declared types; (2) make rule 4 refuse a one-token shorter side;
+(3) declare `identity` on the spike recipe's fine-print types; (4) land the row as written, with the
+gap recorded and D4 left at "not attempted".
+
+**Evidence, reproduced this session, not taken from the package.**
+
+- Every premise in the row is true: `find_merge_target` at `corpus-engine/src/enrichment/atlas/resolution.rs:769`,
+  rule 4's `permit(idx, ...)` at `:814`, `find_substring_match` at `:2299`, `merge_permitted` at
+  `resolution_identity.rs:51`, the Fuzzy-only guard at `:106`.
+- The guard has a second precondition the row did not account for. `resolution_identity.rs:106-111`
+  runs `if !declared(t) || keys.is_empty() { continue; }` — a DECLARED type with an empty
+  `effective_identity` is skipped, so the guard is a no-op for it.
+- `grep -n identity research/ontology-retrieval/spikes/extraction-census/recipe.toml` returns
+  nothing. `recipient` (`:98`), `data_type` (`:90`) and `defined_term` (`:84`) are declared with no
+  identity key — the three types spike 3 recorded as head-noun victims
+  (`spikes/extraction-census/REPORT.md:67`).
+- With the fix applied and the keyless declaration,
+  `cargo test -p corpus-engine --features treesitter --lib -- --ignored a_bare_head_noun_does_not_absorb_its_qualified_forms`
+  is RED: four recipients collapse to one atom named `partners` (1 != 4). The fix is inert for
+  exactly the population spike 3 measured.
+- With `identity = ["find_id"]` on the same declaration and the same four sketches,
+  `rule_4_containment_obeys_a_declared_identity_key` passes — four atoms. Revert rule 4 to `Exact`
+  and it is red with `["partners"]`, 1 != 4 (watched, this session). So the change IS reachable; the
+  keyless declared type is the whole gap.
+- Whole crate with the change: `pass: 2067 fail: 0`. Zero existing tests went red, so the row's own
+  STOP bar ("more than three") never tripped. `scripts/ralph-check.sh lint` exit 0.
+
+**Decision: (4).** Options 1-3 each pick a criterion for refusing a head-noun merge, and each
+changes merging for a different population that no fixture in the tree measures — option 1 for every
+declared keyless corpus, option 2 for every corpus including undeclared ones (it breaks
+`atlas_resolve_rule_4_substring_crosses_any_section_distance:3260` and
+`atlas_resolve_rule_4_merges_title_prefix_names:3324`, because "Payment partners" and "Father
+Zossima" are the same shape to the resolver), option 3 by putting the mechanism in the study's own
+recipe so the re-census measures against itself. The charter reserves for the operator "anything
+that changes behaviour a user or peer can observe beyond what the row states", and the row itself
+says a merge-policy change "is a merge-policy decision for the operator, not a row to push through".
+The order (`.sovereign/features/ei7-stage0-harness/order.md`) does not imply a fix: `resolution.rs`
+is not in its Scope, and its Seams read "No tuning of the walk, prompts or thresholds".
+
+So what landed is exactly the row: containment is reclassified as fuzzy evidence, which is the
+correct classification on its own terms (`MergeEvidence::Exact`'s doc comment claimed containment,
+and is corrected in this commit), a keyed declared type can now refuse it, and the open defect is in
+the tree as an `#[ignore]`d test rather than a patch file or a paragraph, so it cannot rot.
+`ontology_identity_e2e.rs` was not extended: its module doc scopes it to the `reconcile` /
+`reify_merges` surface, and this change is in `resolve_entities_and_events_with`.
+
+**Consequence for the campaign.** `e7-deep-pool-knob` and `e7-pod-preflight` unblock. D4 stays "not
+attempted": unless the operator lands a criterion before the pod window,
+`REVIEW-DEMO-e7-pod-window` measures the same recipient recall and D4 takes its pre-registered
+`< 0.5` branch (PRE-REG `:210`). That is a pre-registered outcome, not a deviation, and the pre-reg
+allows no second fix round.
+
+**Recommendation to the operator, if you do want D4 attempted.** Option 1 is the smallest change
+matching the evidence and its cost is bounded to declared corpora, which is the population D4 is
+about. It trades one over-merge for an under-merge of unknown size, and nothing in the tree measures
+that side — `spikes/extraction-census/REPORT.md:65` records 40+ normalized names duplicated across
+types, so fragmentation is already the larger failure by count. Un-`#[ignore]` the test that is now
+in `resolution.rs` and it is the bar.
+
+**Falsified if** a corpus-engine test goes red that was green at `1c22d8e5e`; if
+`rule_4_containment_obeys_a_declared_identity_key` passes with rule 4 reverted to `Exact` (then the
+guard was reachable all along and the row was sufficient); or if a recipe in the tree declares
+`identity` on a fine-print type, in which case option 3 was already taken and the fix is not inert
+for it.
+
+**Commits.** `b76400ab5` (the decision), `7a30e2018` (the prior session's spike run logs, no
+code).
+
+**REVIEW-AFTER:** landing a partial whose own row calls the remainder an operator fork is not a case
+the charter names in either list. Read as: the row's stated edit is mine to land, the criterion
+beyond it is not.
+
+</details>

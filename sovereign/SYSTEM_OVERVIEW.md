@@ -1823,7 +1823,12 @@ rule, and the "44 GB boot peak" were all this one corpus.
   (`atlas/resolution_identity.rs`): a declared type never folds across
   types, two mentions carrying different declared identity keys are two
   things, and a type identified by an external key merges on fuzzy name
-  shape only when a key agrees (`MergeEvidence`); and declared
+  shape only when a key agrees (`MergeEvidence` — since 2026-09-19 that
+  includes rule 4's whole-word CONTAINMENT, so "Payment partners" no longer
+  folds into "partners" for a KEYED type; a declared type with no identity
+  key is skipped by that guard and still folds, which is the open head-noun
+  defect the `#[ignore]`d
+  `a_bare_head_noun_does_not_absorb_its_qualified_forms` reproduces); and declared
   `ref` attributes snap to atom ids, an unresolvable one keeping the name
   plus an `UnresolvedAttributeRef` record. `resolve_step_3b` /
   `resolve_entities_and_events` stay as shims over the `_with` forms, so
