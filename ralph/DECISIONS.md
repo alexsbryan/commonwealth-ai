@@ -231,6 +231,12 @@ exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 
 
 
+**A44 · 2026-09-19 · rr-2-gossip-claim-one-decider · director (supervisor resolution, attempt 1)** — commit: this one
+- Needed: A43 wrote the row on the premise that a SECOND site builds the claim gossip sends. The worker measured the send path and found one, stopped at the premise check without improvising a target, and asked whether to rewrite or strike the row.
+- Chose: Rewrite the row in place, no new row, and demote it from a product fix to an instrument-first row. The premise is struck and the measurement is written into the row so it is not re-derived; the row now adds ONE line at the send site (`gossip.rs:710`) reading the offer view of the snapshot actually sent — a third function in `offer_view.rs`, no product change — and reproduces the failure in process first by adding the mesh-lock contention the green two-daemon test lacks. It carries a fix only if that turns red; otherwise it stops with two readings. Row marked `[ ]` (not `[~]`), which is also what structurally keeps `rr-2-instrument-honest-again` from being worked ahead of it.
+- Because: The row's stated fix had no target and its "watched failing" test is green in the tree, so it could not be executed as written (ARCH 5 — a check with no failing input you can name). Reading the code closes two more doors the package left open: `reconcile_dial_info` never touches `capabilities`, and `event_time()` advances every round, so the merge arm fires every round and cannot be what held the offer. What is left is that little's record said `[Media]` and its wire said `[]`, with one builder between them — and the only instrument that discriminates does not exist. Instrument, then fix (ARCH 2), and one read of the offer view per site (ARCH 8).
+
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -6147,5 +6153,203 @@ the rest of its measurements stand.
 **Decision.** (i), with the proof step first so the leg can say `cut-not-a-cut` instead of guessing either way; run 3 stands; refusal added; rr-1 leg kept in the demo row.
 
 **Falsified if** the assertion passes (no address of the keeper reachable) and the wall STILL answers grounded during the cut — then it is the product's second path and clause (b) is re-examined as a product finding (§6 in the demo row).
+
+</details>
+
+
+## A44 · 2026-09-19 — rr-2: the claim is read where it is sent, because the second decider the row named does not exist
+
+<details>
+
+**Fork.** (i) Rewrite `rr-2-gossip-claim-one-decider`, or strike it? (ii) Does the instrument the evidence demands belong to this row, a new row, or `rr-2-instrument-honest-again`? (iii) The green in-process test vs. the red room run — model the concurrency first, or change product?
+
+**Evidence (reproduced this session, not taken from the package).**
+- One builder of the sent payload: `sovereign/crates/sovereign-mesh/src/gossip.rs:710` `let my_snapshot = { fabric.mesh.read().await.clone() };` → `MeshWire::for_peer` (`commonwealth/crates/commonwealth-core/src/mesh/mod.rs:496`), `members: m.members.values().cloned().collect()` (:508). No projection, no filter.
+- Every writer of the offer triple in the workspace, non-test: `gossip.rs:532` (`me.capabilities = fresh_caps`), `:560` `origins`, `:561` `media_allow`, `:571` `media_available = None`; and `commonwealth/crates/commonwealth-rails/src/gossip.rs:339`. The second is the rails daemon's own loop and `grep -rn commonwealth_rails --include=*.rs sovereign/crates` returns nothing, so these nodes never run it. The package's finding, re-run here.
+- NEW, and the reason the merge side is now closed rather than argued from timestamps: `Mesh::reconcile_dial_info` (`mesh/mod.rs:928-979`) writes only `relay_url`, `iroh_direct_addrs`, `dial_info_version`, `dial_info_sig`. It never touches `capabilities`, so no anti-downgrade path can strip `origins` off an incoming record.
+- NEW: `MemberRecord::event_time()` is `last_seen.max(removed_at.unwrap_or(0))` (`mesh/mod.rs:330`) and `me.last_seen = now` is restamped every round (`gossip.rs:520`). So `incoming.event_time() > existing.event_time()` (`mesh/mod.rs:679`) is true on every round, the `lww-update` arm runs every round, and `offer_view::log_merged` is silent only when the triple genuinely did not change (`offer_view.rs:74-79`). Beefy's 22 silent rounds are therefore a statement about the BYTES, not about the merge.
+- The row's "red today" test is green in the tree: `sovereign/crates/sovereign-mesh/tests/main/gossip_integration.rs:572`, `an_offer_and_its_withdrawal_reach_a_peers_media_rail_in_one_round`, two `AppState` daemons over a real `/internal/gossip` router, asserting exactly this bar. NEVER-RAN this session — cited as tree state, not as a run.
+- The one window no reading covers: `gossip.rs:606` (write lock released) → `:710` (snapshot taken). `log_self_stamp` (`:601`) reads `me` inside the lock; nothing reads what is sent.
+- The second `gossip::run_one_round` call site, `sovereign-daemon/src/daemon.rs:2178`, is the rotate confirmation round and does not run during the demo — so two overlapping rounds are not the explanation here, though the row's clause (b) contention still models the handler that does.
+
+**Decision.** (i) Rewrite, not strike — the bar is the order's and the evidence is sound; only the causal claim was wrong. (ii) This row, rewritten: the instrument is four lines at the send site and splitting it off would put a reading in one row and the fix it decides in another. `rr-2-instrument-honest-again` is untouched and stays a script-only row. (iii) Model the concurrency first: it is minutes in process against about an hour for a room run, and a red there names the site directly.
+
+**Falsified if** the contention added in clause (b) leaves `gossip_integration.rs:572` green AND the new send-site line in a room run reports the snapshot agreeing with the stamp — then the loss is below `MeshWire`, in serialization or transport, and the next instrument is on the received bytes at `routes_internal/gossip.rs:45`, not on the mesh.
+
+**The worker's package, inline** (removed from the tree by this commit; its §(c) items 1, 2 and 4 are answered above, item 3 becomes clause (b) of the row):
+
+> # NEEDS_HUMAN — rr-2-gossip-claim-one-decider
+>
+> ## (a) The unit and its row
+>
+> `ralph/next/ring-room-rr2/STATE.md`, marked `[~]`:
+>
+> > - [~] rr-2-gossip-claim-one-decider — depends [rr-2-cut-is-a-cut] — **One
+> >   decider builds the claim gossip carries; the offer view is what it reads**
+> >   (director A43, 2026-09-20 …). So the payload a round sends is built
+> >   somewhere other than the stamping site `gossip.rs:544-554` (a cached claim
+> >   / member record / capabilities snapshot refreshed on its own clock).
+> >   `callers` and `blast` on the payload builder FIRST; name the second site
+> >   with file:line in the commit; collapse to ONE read of the offer view (ARCH
+> >   8) … Test WATCHED FAILING (two daemons): an offer on A is in B's
+> >   `/v1/mesh/media` within 2 gossip intervals (≤20 s); red today, green after;
+> >   PLANT the second site back → red
+>
+> **Stopped on the premise check (§3 step 2).** The row states as fact that a
+> second site builds the gossip payload. I measured the send path end to end and
+> there is one. The row's fix — name the second site, collapse two reads into one
+> — has no target, so I did not improvise one (§1, §7).
+>
+> The row's *evidence* is sound and I reproduced and sharpened it. What the
+> evidence actually indicts is NOT named by the row, and the instrument that
+> would name it does not exist yet. Details below.
+>
+> ## (b) Commands run, and their actual output
+>
+> CLEAN (the row's first check):
+>
+> ```
+> $ scripts/ralph-check.sh clean
+> exit=0
+> dev-build: debug target is 114G (under 256G) — keeping the cache
+> ```
+>
+> ### b1. The send path has ONE builder of the payload
+>
+> `sovereign-mesh/src/gossip.rs::run_one_round` stamps the self record under the
+> mesh write lock (`me.capabilities = fresh_caps` :532; `me.capabilities.origins
+> = info.origins` :560; `media_available` cleared :566-572; `log_self_stamp`
+> :601-605), releases the lock at :606, and then builds the payload from that
+> same mesh:
+>
+> ```
+> $ sed -n '710p' sovereign/crates/sovereign-mesh/src/gossip.rs
+>     let my_snapshot = { fabric.mesh.read().await.clone() };
+> ```
+>
+> which `gossip_with_peer` (:1023) hands to `MeshWire::for_peer`. That projection
+> copies members verbatim — `members: m.members.values().cloned().collect()`
+> (`commonwealth-core/src/mesh/mod.rs:508`) — and `MemberRecord` /
+> `NodeCapabilities` serialize the offer triple faithfully (`origins` has
+> `skip_serializing_if = "Vec::is_empty"`, so a non-empty list always rides;
+> `capabilities` itself carries no serde attribute,
+> `commonwealth-core/src/mesh/mod.rs:210`).
+>
+> Every writer of a self record's capabilities in the workspace:
+>
+> ```
+> $ grep -rn "\.capabilities = " --include=*.rs sovereign/crates commonwealth/crates | grep -v tests
+> sovereign/crates/sovereign-mesh/src/gossip.rs:532:            me.capabilities = fresh_caps;
+> commonwealth/crates/commonwealth-rails/src/gossip.rs:339:    me.capabilities = minimal_capabilities(now, origins);
+> ```
+>
+> The second one IS a genuine second decider for the offer triple — but it is the
+> **rails** daemon's own gossip loop, and these nodes do not run it:
+>
+> ```
+> $ grep -rn "commonwealth_rails" --include=*.rs sovereign/crates
+>   (no output)
+> ```
+>
+> `commonwealth_rails::gossip::run_forever` has exactly one caller,
+> `commonwealth-rails/src/lib.rs:259`, inside that crate's own daemon.
+>
+> `callers("for_peer")` returned one site, `sovereign-mesh/src/ring_sync.rs:494`
+> — a **false positive**: that is a local `let (for_peer, more_for_peer) = …`
+> binding in the ring-journal exchange, not `MeshWire::for_peer`. The tool also
+> warned `Symbol graph is 59 hours old`, so the call-graph half of the row's
+> "`callers` and `blast` FIRST" instruction could not be trusted and I fell back
+> to grep, which is exact for this question.
+>
+> ### b2. The bar the row wants red is already asserted GREEN in the tree
+>
+> `sovereign/crates/sovereign-mesh/tests/main/gossip_integration.rs:572`,
+> `an_offer_and_its_withdrawal_reach_a_peers_media_rail_in_one_round` — two
+> `AppState` daemons, a real `/internal/gossip` router, offer → one round →
+> `commonwealth_media::offers` on the viewer lists the holder; withdraw → one
+> round → gone. It was written by rr-2-offer-publish-latency for exactly this
+> invariant.
+>
+> **Verdict on that test: NEVER-RAN this session** (I did not build it — I stopped
+> on the premise before spending the cargo lock). It is cited as tree state, not
+> as a run.
+>
+> ### b3. What the run evidence actually indicts — the sharpened reading
+>
+> Offer, from `target/ring-room-rr2-demo/*/daemon.err` (ANSI stripped):
+>
+> | when | node | line |
+> |---|---|---|
+> | 03:27:04.617230 | little | `own offer view changed … origins=[Media] media_available=Some(1.0) stamped_from_dial_info=true` |
+> | 03:27:04.621659 | little | `gossip: reach ok peer=node-1cecbd74…` (beefy) — 4.4 ms after the stamp, same round |
+> | 03:30:45.020410 | **beefy** | `offer view changed on merge … origins=[Media] was_origins=Some([])` |
+> | 03:30:45.033207 | **halo** | `offer view changed on merge … origins=[Media] was_origins=Some([])` |
+>
+> Withdraw: little 03:32:35.267471 → beefy 03:33:25.362069, halo 03:33:25.367192.
+>
+> Three things this fixes about the row's reading:
+>
+> 1. **Both peers flip within 13 ms of each other**, immediately before little's
+>    own `reach ok` lines for that round (03:30:45.0255 / .0355). That is ONE
+>    push from little landing on two independent peers. The merge side, the peer
+>    clocks and the relay are therefore excluded: the lag is entirely on little's
+>    send path.
+> 2. **The lag is not constant**: 221 s (22 rounds) for the offer, 50 s (5
+>    rounds) for the withdrawal. A cache "refreshed on its own clock" — the row's
+>    hypothesis — would give a constant. A race would give a variable.
+> 3. **Little's own record was stable at `[Media]` throughout.** `log_self_stamp`
+>    fires on any change of the triple and there are exactly two lines in
+>    little's whole log (offer, withdraw). A round that had reverted to `[]`
+>    would have logged it.
+>
+> Also excluded by direct reading of the run: little's gossip loop never stalled
+> (rounds at 03:26:14 … 03:32:45, every 10 s, `reach ok` to beefy throughout —
+> 53 consecutive rounds, no gap); no `peer marked Offline`, no alias refusal and
+> no `gossip: rejected` on beefy; the merge arm when it finally fired was
+> `lww-update`, so `last_seen` was advancing and the record was NOT being skipped
+> as `LocalRecordNotOlder`.
+>
+> So: little's record says `[Media]` at 03:27:04, the bytes it sends say `[]` for
+> 22 rounds, and there is one builder between them. I cannot close that gap by
+> reading, and the existing instrument cannot either — **`log_self_stamp` reads
+> `me` inside the write lock, not the snapshot that is actually sent.** The one
+> window a concurrent writer could use is `gossip.rs:606` (lock released) →
+> `gossip.rs:710` (snapshot taken), and I could not name a writer that takes it:
+> `update_local_availability` / `update_local_media_available`
+> (`sovereign-daemon/src/state.rs:1301,1323`) write `serving.*` cells, not the
+> member record.
+>
+> ## (c) What the operator must decide
+>
+> 1. **The row's premise is false as written** — one payload builder, not two
+>    (`sovereign-mesh/src/gossip.rs:710` is the only read, `MeshWire::for_peer`
+>    at `commonwealth-core/src/mesh/mod.rs:496` the only projection). Rewrite the
+>    row, or strike it? It cannot be executed as written.
+> 2. **The instrument the evidence now demands** is one line that names the offer
+>    view OF THE SNAPSHOT SENT, at `sovereign-mesh/src/gossip.rs:710`, beside the
+>    existing `log_self_stamp` at `:601`. That is the only reading that
+>    discriminates "the record is stale" from "the record is fresh and the wire
+>    is not", and it is ~4 lines with no product change. Is that this row
+>    (rewritten), a new row before it, or does it belong to
+>    `rr-2-instrument-honest-again`?
+> 3. **The green in-process test vs. the red room run.**
+>    `gossip_integration.rs:572` asserts the row's exact bar and passes in
+>    process; the room run misses it by 22 rounds. Either the test is missing
+>    the condition that breaks the real node (concurrency: in the test the round
+>    is awaited alone, on the node the presence poll, the activity reporter and
+>    two inbound handlers share the mesh lock), or the wire loses the field for a
+>    reason neither surface shows. Should the next step be to run that test with
+>    the concurrent writers modelled, before any product change?
+> 4. **Do NOT let `rr-2-instrument-honest-again` be reordered ahead of this as a
+>    substitute.** It is a pure instrument row for the demo script and speaks to
+>    none of the above.
+>
+> ## (d) To resume
+>
+> Edit or mark the row in `ralph/next/ring-room-rr2/STATE.md`, then
+> `rm ralph/STOP ralph/NEEDS_HUMAN.md`.
+>
+> Tree state: no source file was changed. The only edit is the `[~]` mark on the
+> row. CLEAN exit=0.
 
 </details>
