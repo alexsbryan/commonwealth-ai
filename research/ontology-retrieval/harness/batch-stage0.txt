@@ -4,6 +4,13 @@
 # stops at the first non-zero exit. `$SVRN` is this host's CLI and
 # `$POD_WINDOW_OUT` this window's log directory; both are exported there.
 #
+# `#@ live-state` marks a line that consumes state only a live run of an earlier
+# line produces. Every line below the init is one: the rehearsal does not run a
+# real init (it would pin this host's daemon and model into the config the
+# metered window then has to `--force` over), so under `--rehearse` those lines
+# can prove their argv parses and no more, and read `needs-live-state` rather
+# than a pass nobody earned. The live run reads no directive.
+#
 # The corpus is ALREADY INSTALLED (`e7-recensus-corpus`, de2762e67): embedding
 # 300k words needs no GPU and must not run while one bills, so there is no
 # `corpus install` line here. The CLI runs on this machine against the pod's
@@ -15,18 +22,22 @@
 
 # --resume only matters if the window is re-entered after a kill; on a fresh id
 # the checkpoint starts empty. It costs nothing and buys the re-entry.
+#@ live-state
 "$SVRN" enrich extract ei7-recensus-fineprint --full --resume
 
 # Turns the checkpoint into a canonical run-file and updates cache/questions.json
 # — the pass without which the phases below read nothing from a resumed
 # extraction. No model calls. Refuses --dry-run, so the rehearsal skips it.
+#@ live-state
 "$SVRN" enrich extract ei7-recensus-fineprint --finalize
 
 # extract already ran above; tensions is not read by anything stage 0 measures.
+#@ live-state
 "$SVRN" enrich build ei7-recensus-fineprint --skip extract --skip tensions
 
 # D4: the phase-1 sketches come home with the window. A later head-noun merge
 # fix re-censuses them locally, off this copy, without renting a second pod.
+#@ live-state
 cp -R "$HOME/.svrnmesh/enrichment/ei7-recensus-fineprint/runs" "$POD_WINDOW_OUT/runs"
 
 # Instrument evidence, not a bar: checks I1-I6 fire, each against a planted

@@ -16,8 +16,8 @@
 #
 # EVERY BATCH LINE IS A PLAIN FOREGROUND CHILD. Never `nohup` one: spike 3 lost
 # a build to a detached child whose output went nowhere and whose exit code
-# nobody read. One log per line, one wall clock per line, and the run stops at
-# the first non-zero exit — on a meter, running the steps that depended on a
+# nobody read. One log per line, one wall clock per line, and a LIVE run stops
+# at the first non-zero exit — on a meter, running the steps that depended on a
 # failed one just spends money to fail again.
 #
 # `--rehearse` is the preflight, and it is why this script exists before the
@@ -28,9 +28,30 @@
 # other than what the batch says would be the one failure a preflight cannot
 # have (ARCH §6).
 #
+# THE BATCH IS STATE-CHAINED, so a rehearsal cannot claim as much as a live run
+# and must not pretend it can. `enrich init --dry-run` returns before writing
+# `chapters.json` (`sovereign-cli-llm/src/enrich_cmd/init.rs:555-561`), so every
+# later line finds no config to read — and a REAL local init would pin this
+# host's daemon and model into the config the metered window then has to
+# `--force` over, so the rehearsal does not run one. A line preceded by the
+# directive comment `#@ live-state` declares that it consumes state only a live
+# run of an earlier line produces. Under `--rehearse` ONLY, such a line is still
+# run with its transform, and its verdict reads:
+#
+#   pass              exit 0
+#   failed            exit 2 — the CLI's argument refusal, so a bad argv cannot
+#                     hide behind the marker
+#   needs-live-state  any other non-zero: the argv parses, and that is the whole
+#                     of what the rehearsal verified about it
+#
+# A rehearsal also runs every line rather than stopping at the first non-zero,
+# because it spends nothing to keep going. An UNMARKED line must still exit 0.
+# The live path reads no directive at all.
+#
 # The batch file is DATA: one shell command per line, `#` comments and blank
-# lines skipped, `$SVRN` expanded to this host's CLI and `$POD_WINDOW_OUT` to
-# this window's own log directory.
+# lines skipped, `#@ …` directives read (an unknown one is refused, never
+# ignored), `$SVRN` expanded to this host's CLI and `$POD_WINDOW_OUT` to this
+# window's own log directory.
 
 set -uo pipefail
 
@@ -49,7 +70,7 @@ HOME_URL="http://127.0.0.1:9741"
 
 say() { printf '%s\n' "$*"; }
 die() { printf 'pod_window: %s\n' "$*" >&2; exit 2; }
-usage() { sed -n '2,33p' "$0"; }
+usage() { sed -n '2,54p' "$0"; }
 
 # ── arguments ────────────────────────────────────────────────────────────────
 
@@ -70,10 +91,34 @@ BATCH="${BATCH:-$DEFAULT_BATCH}"
 # ── the batch ────────────────────────────────────────────────────────────────
 
 LINES=()
+# MARKS[i] is 1 when LINES[i] carried a `#@ live-state` directive. Parsed on
+# both paths so an unknown directive is refused wherever it is written; only
+# `--rehearse` branches on it (the live run's rules do not change).
+MARKS=()
+pending_mark=0
 while IFS= read -r ln || [ -n "$ln" ]; do
-    case "${ln#"${ln%%[![:space:]]*}"}" in ''|'#'*) continue ;; esac
+    trimmed="${ln#"${ln%%[![:space:]]*}"}"
+    case "$trimmed" in
+        '#@'*)
+            d="${trimmed#'#@'}"
+            d="${d#"${d%%[![:space:]]*}"}"
+            d="${d%"${d##*[![:space:]]}"}"
+            # Refused, not ignored: a typo'd directive that silently reverted a
+            # line to "must exit 0" would fail the rehearsal for the wrong
+            # reason, and one that silently marked a line would excuse a real
+            # break (ARCH §6).
+            [ "$d" = "live-state" ] \
+                || die "$BATCH: unknown directive \`#@ $d\` — the only one is \`#@ live-state\`"
+            pending_mark=1
+            continue ;;
+        ''|'#'*) continue ;;
+    esac
     LINES+=("$ln")
+    MARKS+=("$pending_mark")
+    pending_mark=0
 done < "$BATCH"
+[ "$pending_mark" = 0 ] \
+    || die "$BATCH ends with a \`#@ live-state\` directive and no command line under it"
 # A window that runs nothing is not a clean window, the same way a zero-test
 # run is never green (`sovereign-test.sh` exit 4).
 [ "${#LINES[@]}" -gt 0 ] || die "$BATCH holds no command lines"
@@ -217,6 +262,21 @@ rehearse_line() {
     esac
 }
 
+# rehearse_verdict <exit-code> <marked>  — one decider for the four words the
+# rehearsal may say about a line it actually ran (ARCH §8).
+rehearse_verdict() {
+    if [ "$1" = 0 ]; then printf 'pass'; return; fi
+    # Unmarked: the line consumes nothing an earlier LIVE line has to produce,
+    # so a non-zero exit is a real break in the batch and reads as one.
+    if [ "$2" != 1 ]; then printf 'failed'; return; fi
+    # Marked and non-zero. Exit 2 is the CLI's argument refusal — measured
+    # 2026-09-20: `sovereign enrich extract <id> --no-such-flag` exits 2 with
+    # `error: unknown flag`. A bad argv must not hide behind the marker, which
+    # is the whole risk of having one (ARCH §5).
+    if [ "$1" = 2 ]; then printf 'failed'; return; fi
+    printf 'needs-live-state'
+}
+
 # ── the run ──────────────────────────────────────────────────────────────────
 
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -238,11 +298,12 @@ say "logs     $OUT"
 
 NN=(); EXITS=(); WALLS=(); CMDS=(); VIAS=()
 failed=0
-skipped=0
+n_pass=0; n_failed=0; n_needs=0; n_skipped=0
 i=0
 for raw in "${LINES[@]}"; do
     i=$((i + 1))
     nn="$(printf '%02d' "$i")"
+    mark="${MARKS[$((i - 1))]}"
     cmd="$raw"; via="-"
     if [ "$REHEARSE" = 1 ]; then rehearse_line "$raw"; cmd="$REH_CMD"; via="$REH_VIA"; fi
 
@@ -251,12 +312,15 @@ for raw in "${LINES[@]}"; do
         # Neither pass nor fail: the tally below counts it apart, so a rehearsal
         # cannot report a line as green that it never ran (ARCH §5).
         EXITS+=("skipped"); WALLS+=("-")
-        skipped=$((skipped + 1))
+        n_skipped=$((n_skipped + 1))
         say ""
         say "-- $nn $via: $cmd"
         continue
     fi
-    if [ "$failed" = 1 ]; then
+    # Live only. On a meter the lines after a failure just spend money to fail
+    # again; a rehearsal spends nothing, and stopping there would hide every
+    # later line's argv behind the first one's missing state.
+    if [ "$REHEARSE" = 0 ] && [ "$failed" = 1 ]; then
         EXITS+=("skip"); WALLS+=("-")
         say ""
         say "-- $nn skipped (an earlier line failed): $cmd"
@@ -269,10 +333,22 @@ for raw in "${LINES[@]}"; do
     bash -c "$cmd" > "$OUT/$nn.log" 2>&1
     code=$?
     wall=$(( $(date +%s) - start ))
-    EXITS+=("$code"); WALLS+=("${wall}s")
-    say "   exit=$code  wall=${wall}s  log=$OUT/$nn.log"
+    WALLS+=("${wall}s")
+    if [ "$REHEARSE" = 1 ]; then
+        verdict="$(rehearse_verdict "$code" "$mark")"
+        EXITS+=("$verdict")
+        say "   exit=$code  $verdict  wall=${wall}s  log=$OUT/$nn.log"
+        case "$verdict" in
+            pass)             n_pass=$((n_pass + 1)) ;;
+            needs-live-state) n_needs=$((n_needs + 1)) ;;
+            failed)           n_failed=$((n_failed + 1)); failed=1 ;;
+        esac
+    else
+        EXITS+=("$code")
+        say "   exit=$code  wall=${wall}s  log=$OUT/$nn.log"
+        [ "$code" != 0 ] && failed=1
+    fi
     if [ "$code" != 0 ]; then
-        failed=1
         say "   last 20 lines:" >&2
         tail -20 "$OUT/$nn.log" | sed 's/^/   | /' >&2
     fi
@@ -280,23 +356,35 @@ done
 
 # ── the table ────────────────────────────────────────────────────────────────
 
+# A live run's second column is the raw exit code; a rehearsal's is the verdict
+# word, which is wider and is not an exit code — so the header says which.
+FMT='%-4s %-8s %-6s %-9s %s\n'
+COL2="exit"
+if [ "$REHEARSE" = 1 ]; then FMT='%-4s %-16s %-6s %-9s %s\n'; COL2="verdict"; fi
 {
-    printf '%-4s %-8s %-6s %-9s %s\n' "line" "exit" "wall" "rehearsed" "command"
+    # shellcheck disable=SC2059
+    printf "$FMT" "line" "$COL2" "wall" "rehearsed" "command"
     for j in "${!NN[@]}"; do
-        printf '%-4s %-8s %-6s %-9s %s\n' \
+        # shellcheck disable=SC2059
+        printf "$FMT" \
             "${NN[$j]}" "${EXITS[$j]}" "${WALLS[$j]}" "${VIAS[$j]}" "${CMDS[$j]}"
     done
 } | tee "$OUT/table.txt"
 
 say ""
-if [ "$failed" = 1 ]; then
-    say "pod_window: batch FAILED — see the table and $OUT/*.log"
-    exit 1
-fi
-ran=$(( ${#LINES[@]} - skipped ))
-if [ "$skipped" -gt 0 ]; then
-    say "pod_window: $ran/$ran run lines exit 0; $skipped skipped, claiming nothing"
-else
+if [ "$REHEARSE" = 0 ]; then
+    if [ "$failed" = 1 ]; then
+        say "pod_window: batch FAILED — see the table and $OUT/*.log"
+        exit 1
+    fi
     say "pod_window: ${#LINES[@]}/${#LINES[@]} lines exit 0"
+    exit 0
+fi
+
+say "pod_window: rehearsal — $n_pass pass, $n_failed failed, $n_needs needs-live-state, $n_skipped skipped"
+say "pod_window: a needs-live-state line claims that its argv parses, and nothing else — the state it reads exists only after an earlier line has really run, so the rehearsal did not exercise what it does."
+if [ "$n_failed" -gt 0 ]; then
+    say "pod_window: rehearsal FAILED — see the table and $OUT/*.log"
+    exit 1
 fi
 exit 0
