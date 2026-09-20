@@ -43,8 +43,14 @@ impl super::Runtime {
         );
         if overridden {
             let hash = crate::router::message_hash(message);
-            let label = format!("{effective:?}");
-            if let Err(e) = self.store.log_routing_policy_intent(&hash, &label).await {
+            // `Intent::name()`, not `{effective:?}` — `policy_intent` is a
+            // RECORDED route, and `name()` is documented at
+            // `types/routing.rs` as the one rendering for that. Debug would
+            // write `Continuation { task_id: "…" }`: a different string every
+            // turn for the same route, ungroupable and unjoinable against
+            // `routed_intent` on the turn's own metadata.
+            let label = effective.name();
+            if let Err(e) = self.store.log_routing_policy_intent(&hash, label).await {
                 tracing::warn!(error = %e, "routing:policy_intent write failed");
             }
         }

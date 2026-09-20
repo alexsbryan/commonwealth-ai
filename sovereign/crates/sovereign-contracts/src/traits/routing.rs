@@ -42,10 +42,16 @@ pub trait RoutingStore: Send + Sync {
     /// so a NULL `policy_intent` reads as "the policy left the router's
     /// intent standing" — not "unknown". Default no-op so existing
     /// implementations compile without changes.
+    ///
+    /// `&'static str` is the invariant, not a lifetime convenience: a
+    /// recorded route is a closed set of labels, so the only values that
+    /// belong here are [`crate::types::Intent::name`]'s. `&format!("{i:?}")`
+    /// — the rendering that leaks `Continuation { task_id: … }` into the
+    /// column and makes routes ungroupable — does not compile against it.
     async fn log_routing_policy_intent(
         &self,
         message_hash: &str,
-        policy_intent: &str,
+        policy_intent: &'static str,
     ) -> Result<()> {
         let _ = (message_hash, policy_intent);
         Ok(())

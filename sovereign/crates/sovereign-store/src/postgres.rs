@@ -1178,7 +1178,7 @@ impl RoutingStore for PostgresStateStore {
     async fn log_routing_policy_intent(
         &self,
         message_hash: &str,
-        policy_intent: &str,
+        policy_intent: &'static str,
     ) -> Result<()> {
         let client = self
             .pool

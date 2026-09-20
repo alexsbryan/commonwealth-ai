@@ -35,7 +35,7 @@ impl RoutingStore for SqliteStateStore {
     async fn log_routing_policy_intent(
         &self,
         message_hash: &str,
-        policy_intent: &str,
+        policy_intent: &'static str,
     ) -> Result<()> {
         let conn = self.conn.lock().await;
         conn.execute(
