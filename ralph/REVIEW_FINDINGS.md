@@ -1535,3 +1535,167 @@ and the same leg failed at 85 s on 2026-09-20 (A50's room run 2, before the
 sync nudge). Two greens one of which sits 5 s inside the window is a margin,
 not a result — the A50 reading that the verdict is decided by which pump tick
 the heal lands between still stands.
+
+## ring-guest — REVIEW-audit-rg (2026-09-20, range `f51b66112..d1f436ab5`)
+
+Gates: **TESTALL 13548 pass / 1 fail** (the one fail is foreign, below; the
+daemon conformance stale-tag failure was this campaign's and is fixed in this
+commit). **PREPUSH exit=1, one blocking lane: `arch-gate`**, red on the
+approach band exactly as the row predicted.
+
+### The falsifier's reading — the diff against O §Predictions
+
+Per crate, `git diff --numstat f51b66112..HEAD`, tests / fixtures / examples
+counted apart. "net" is added minus deleted, code only.
+
+```
+crate                                    code+  code-    net |  test+  test-
+commonwealth-rail                           12      2     10 |     34     31
+commonwealth-rail-core                      48      5     43 |    127      2
+commonwealth-work                           11      2      9 |      1      1
+sovereign-cli-llm                          139     67     72 |      0      0
+sovereign-contracts                        183      3    180 |      0      0
+sovereign-core                               2      2      0 |      0      0
+sovereign-daemon                          1522    128   1394 |    548     68
+sovereign-grants                           653      8    645 |      0      0
+sovereign-mesh                              24      5     19 |     31      7
+sovereign/apps/ring-doc                     27     62    -35 |     28     21
+ring_cmd/templates (the scaffold)            0      0      0 |      0      0
+```
+
+**F1 — `sovereign-daemon` cost 1394 net non-test lines against a registered
+prediction of "under ~250", and against the order's own overbuild line of
+~500. The honest answer to "did we overbuild to the demo" is YES for this
+crate, 2.8× past the line the order itself drew.** Where it went:
+`guest_door.rs` +614 (`sovereign/crates/sovereign-daemon/src/guest_door.rs`,
+463 → 1077 lines), `routes_rail.rs` +372 (483 → 855), `routes_guest_session.rs`
++222 (new file), `state/node.rs` +61, `client_auth.rs` +59,
+`routes_internal/guest_grant.rs` +25, `state.rs` +20, the rest under 15 each.
+The system was shaped to the demo most visibly in `guest_door.rs`, which now
+carries the page registry, the shim, the per-namespace rendering AND the
+second app's serving path in one 1077-line file.
+
+**F2 — four crates the Predictions did not name were changed; by the
+prediction's own rule each is a finding.** `sovereign-grants` +645
+(`guest_session.rs` +530 new, `guest_grant.rs` +111), `sovereign-contracts`
++180 (`guest_pages.rs` +162 new, `setup_config.rs` +17), `sovereign-cli-llm`
++72 (`mesh_guest_link.rs` +113 new against `mesh_guest.rs` −43),
+`commonwealth-work` +9 (call-site fallout of D1's new field). The reading:
+the prediction mis-LOCATED the substrate rather than only mis-pricing it — the
+session store and the page registry belong in `sovereign-grants` and
+`sovereign-contracts`, and putting them there is right. But the two numbers
+must be read together: **substrate total outside tests = 2291 net lines
+(daemon + grants + contracts + cli-llm) against ~250 predicted, 9.2×.**
+
+**F3 — `sovereign-mesh` was predicted 0 and is +19**, all of it
+`ring_roster::is_daemon_owned` (`sovereign/crates/sovereign-mesh/src/ring_roster.rs`).
+Smallest miss on the board and defensible: it collapses two lists the crate
+already owned into one accessor with one caller (ARCH 8, one decider one name),
+rather than teaching the door to know there were two.
+
+**F4 — `commonwealth-rail*` HELD its D1(b) budget: 53 net (60 added) against
+"under ~60".** And the rail rule held structurally: `git log f51b66112..HEAD --
+commonwealth/crates/commonwealth-rail commonwealth-rail-core` returns three
+commits, all of them `rg-1-on-behalf-of` (`ec81de7f7`, `b94936862`,
+`12fccb51b`). No other row reached the rail.
+
+**F5 — THE FALSIFIER HOLDS: the scaffold's diff is EMPTY.**
+`git diff --stat f51b66112..HEAD -- sovereign/crates/sovereign-cli-llm/src/ring_cmd/templates/`
+prints nothing. The second app on the wall cost zero template lines.
+
+**F6 — `ring-doc` was predicted NEGATIVE and is −35 net non-test**
+(`app.js` −20, `adapter.js` −14, `index.html` −1), with `adapter.test.mjs` +7.
+The app volunteers no name and composes no sentence; the substrate does both.
+
+**F7 — this campaign's OWN arch-gate approach-band delta is +4 files /
++3602 lines, reported apart from rr-2's and absorbed into neither.** The gate
+measures `origin/main..HEAD` and reports files 207 → 212 (+5) and lines
+202703 → 207780 (+5077); the remainder (+1 file / +1475 lines) is rr-2's
+unaccepted growth, recorded at `ralph/DECISIONS.md` under A51. This
+campaign's four entrants, computed by counting each changed file at both ends
+of the range:
+
+```
+commonwealth-rail-core/src/tests.rs             765 -> 871
+sovereign-daemon/src/guest_door.rs              463 -> 1077
+sovereign-daemon/src/routes_rail.rs             483 -> 855
+sovereign-daemon/tests/rail_e2e/main.rs         759 -> 818
+```
+
+Two of the four are the F1 files. No baseline was touched — accepting or
+trimming this is the operator's call at push.
+
+**F8 — FIXED: `quality/conformance/sovereign-daemon.toml` was stale.** The
+UI-22 claim cited `daemon.rs:5401`; this campaign's +12/−8 in that file moved
+the test to 5405 (`grep -n the_client_api_binds_loopback_by_default…`
+confirms). Corrected in place, `scripts/ralph-check.sh test xtask` green
+(118 pass). Fixed in this commit.
+
+### Threat model re-read — the two questions the row asks
+
+**What can a session reach that its grant did not name? Nothing.**
+`GuestSessionStore::live` (`sovereign/crates/sovereign-grants/src/guest_session.rs:266-279`)
+takes the grant PRESENTED ON THIS REQUEST and returns `None` unless that grant
+is live; the session it returns carries a name and no scope, and
+`GuestGrant::permits_path` on the presented bearer stays the sole decider.
+`client_auth.rs` refuses a handle the store does not know under this grant with
+409 rather than dropping it to `None` — "lapsed" and "never claimed" stay
+distinguishable (ARCH 6).
+
+**What outlives the grant? Nothing.** `expires_at_ms` is COPIED from a grant,
+never computed from a TTL of its own, and is re-evaluated against the presented
+grant on every read. Under the `Door` binding the expiry EXTENDS
+(`guest_session.rs:275-277`) — but only ever to another live grant this same
+door minted, so `MAX_GUEST_TTL_SECS` bounds it without the store knowing the
+number (ARCH 10). `docs/THREAT_MODEL.md:86-103` states both answers, including
+the `Door`/`grant` setting and the "neither setting changes reach" clause. No
+finding: the doc and the code agree and both are checkable.
+
+### ARCH twelve — what the diff was read against
+
+No new principal class: `client_auth::Guest` widened from `Guest(Arc<GuestGrant>)`
+to `{ grant, session }`, no variant added to any principal enum. Glassbox holds
+on the decision paths — `guest_door.rs` 10 tracing events, `routes_guest_session.rs`
+4, `client_auth.rs`'s refusal branch one; `guest_pages.rs` has none and needs
+none (pure config parse, no runtime branch). No large const string literal
+outside the shim, which is JS-in-Rust by the convention the row inherited. The
+one new decider (`is_daemon_owned`, F3) has one caller and a doc naming why the
+two questions meet there.
+
+### §Less — what each row reported having reused
+
+`rg-1-on-behalf-of`: the op's existing canonical form and signature path; the
+rail interprets the field not at all (no roster lookup, no collision check).
+`rg-2-guest-session`: the grant as scope and TTL, `GuestGrantStore`'s store
+shape, the roster reader, the shim and its bearer transport, `Scope::Rails`.
+`rg-1-door-stamps-the-guest`: RR's existing append and the collision refusal.
+`rg-2-door-serves-each-app`: `serve_under`'s canonicalize-both-sides guard,
+`ring_shim`, the `App` kind's registry argument.
+`rg-2-session-belongs-to-the-door`: `GuestSessionStore` and its claim/live/expiry
+model whole; the binding decided in ONE place (`in_domain`).
+`rg-2-the-wall-declares-its-guests`: `Scope::paths`' existing rail arm shared
+with the new `Scope::Wall`, `resolve_granted`, `names_a_member`, the shim's
+per-page namespace rendering.
+`REVIEW-build-rg-instrument`: the room topology as legs — no new demo script.
+`rg-2-ring-doc-sheds-its-guest-code`: `op.person` in the gutter, `phone.mjs`.
+The negatives held too: no new principal class, no guest role on any roster,
+no second demo script (`scripts/ring-room-demo.sh` +541 net carries the legs;
+the only new script is the 82-line `scripts/ring-doc-guest-lines.py`
+instrument), and no SDK beyond the shim.
+
+### Foreign reds carried, not this campaign's
+
+- **TESTALL's one fail**: `cli_contract_journeys::every_journey_cites_a_doc_that_exists`
+  — `mesh-offers-catalogue` cites `docs/internal/RING_APPLICATIONS.md`, which
+  is gitignored (`.gitignore:67`) and per-host, absent on this Halo. The
+  citation at `sovereign/docs/cli-contract.toml:3571` landed in `a3bd715f5`,
+  an ancestor of `f51b66112`. Identically recorded by `REVIEW-audit-rr-2`
+  (`ralph/DECISIONS.md:7222`).
+- **PREPUSH advisory `size-gate`**: 76 keys, with whole crates reading
+  `0 → 38890 … is new and unbaselined` — the baseline does not know the
+  current key set, which is a baseline problem and a worker may not touch one.
+- **PREPUSH advisory `hakari-verify`**: fails with a panic backtrace, no
+  attributable finding.
+- **PREPUSH advisory `concept-gate`**: could-not-judge — the SCIP graph is at
+  `652209be` with 720 indexed source files changed in the gap, so its −1 delta
+  is not about this commit.
