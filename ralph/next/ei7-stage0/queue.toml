@@ -11,6 +11,7 @@
 # while the legacy line's loop is still running this queue: both would work STATE.md.
 label = "ei7-stage0"
 session_timeout = 7200
+audit_every = 6          # units; `run` inserts a REVIEW-audit- row when it comes due
 worker_bin = "scripts/ralph-claude-shim.sh"
 settings = "ralph/claude-settings.json"
 
