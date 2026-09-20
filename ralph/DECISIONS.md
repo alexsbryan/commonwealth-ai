@@ -249,6 +249,10 @@ exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 - Needed: The second cold room run failed the film bar (`listed_s: null` against 30 s) on the same binaries that listed it in 6.3 s one run earlier. Row 55's new merge-arm line named the cause on the first run that hit it: the holder's offer arrived on the wall every round for 60 s and was refused as `local-record-not-older` with equal `event_time`s, then adopted the one round the incoming second was strictly later. The package asked whether this is a row, which of two deciders changes, and whether the cold-run count restarts.
 - Chose: One product row, `rr-2-liveness-does-not-write-the-offer-clock`, ahead of the demo row: delete the write at `gossip.rs:891` where a PEER stamps another member's self-stamped `last_seen` on every successful reach, keep the `Online` flip and its log, add the failing-input test (reach and stamp in the same second, the offer must ride the next round), and fix the two comments that still describe the old liveness. The comparison at `mod.rs:713` stays a strict `>`; `last_seen` stays whole seconds; no version field. The demo row is re-gated on the new row and its count restarts at zero; the rr-1 regression and run A stand as evidence only.
 - Because: `event_time()`'s own doc says `last_seen` is self-stamped (`mod.rs:322`) and the merge is documented as the ONE ordering rule — a second writer of that field is the defect, not the `>` (ARCH 8, 10). The bump is vestigial: the offline decay compares a local contact clock, not the gossiped `last_seen` (`gossip.rs:619-627`, the clock-skew flap fix), so removing it cannot flap liveness, and everything else that would make ties impossible (milliseconds, a version) is a wire semantics change every node must agree on — the operator's. Both nodes tick 10 s rounds on one host clock, so ties were the common case before the offer too (`beefy/daemon.err:176,215,308,439,551`).
+**A50 · 2026-09-20 · REVIEW-DEMO-rr-2-run · director (seat)** — this commit (+ dd23950b5, the harness fix)
+- Needed: On the fixed binaries the rr-1 baseline held and room run 1 read six PASSED, but run 2 failed the offline bar on convergence: the cut was a cut and the journals ended byte-equal, 85 s after the return against a 60 s window. The package asked whether the window is the right bar given the sync's 60 s cadence, whether the jump from ≤4 s to 49/85 s is a regression of d6d12b0e4, what to do about `demo-wait`'s inverted exit code, and whether run 1 still counts.
+- Chose: The window stays. One product row, `rr-2-the-return-syncs-the-ring`: the ring sync wakes on the Offline→Online edge through the wake-up it already has for local writes, plus the two instruments the run lacked (which peers a sync round skipped and why; the cut's length recorded). Not a regression: the mechanism is the sync's interval-or-local-write wake and its Online-only exchange, hit whenever a cut outlasts the 60 s offline threshold — run 2's did, the seven fast runs' did not. `demo-wait` fixed by me (dd23950b5): the wrapper records the demo's own exit code. The count restarts at zero on binaries carrying the row; run 1 stands as evidence.
+- Because: `ring_sync.rs:191-193` wakes on the interval or a local write and `:231` exchanges only with `Online` members; halo decayed beefy at 63 s staleness one second before the heal, its :14 round found beefy Offline, and the next round at 08:33:14 carried the ops — read from the logs, not inferred from the pump count (ARCH 4). A window one interval wide is meetable once the return is the trigger, and widening it or shortening the interval would hide the edge instead of handling it (ARCH 10, whole-game). The ask inside the cut doubled to 30.76 s in run 2 and is what pushed the cut past the threshold — recorded for the audit, not decided.
 
 **A44 · 2026-09-19 · rr-2-gossip-claim-one-decider · director (supervisor resolution, attempt 1)** — commit: this one
 - Needed: A43 wrote the row on the premise that a SECOND site builds the claim gossip sends. The worker measured the send path and found one, stopped at the premise check without improvising a target, and asked whether to rewrite or strike the row.
@@ -6971,5 +6975,207 @@ change. Not done here.
 > Edit or mark the row in `ralph/next/ring-room-rr2/STATE.md`, then
 > `rm ralph/STOP ralph/NEEDS_HUMAN.md` (no `ralph/STOP` exists in this tree —
 > this session ran without the supervisor).
+
+</details>
+
+## A50 · 2026-09-20 — rr-2: the ring sync waits for its interval after a return, and a cut past the offline threshold makes that visible
+
+<details>
+
+### The fork
+
+REVIEW-DEMO-rr-2-run on 8251f8b61: rr-1 five bars at the A38 baseline; room run 1 six
+PASSED (`converged_s 49`); room run 2 five PASSED and `ra-room-offline-room-says-so` FAILED
+on `c_byte_equal_after_the_return` with `byte_equal: true`, `cut_not_a_cut: null`,
+`converged_s: 85` against 60. Four questions: the window, regression or not, `demo-wait`,
+the count.
+
+### The mechanism, from code and the run
+
+- `ring_sync.rs:87` `DEFAULT_RING_SYNC_INTERVAL = 60 s`. The loop (`:191-193`) wakes on
+  that interval or on `nudge.notified()`; the only sender of that nudge is the rail kv
+  pump after a LOCAL append (`rail_kv_pump.rs:199-209`, `fabric.rs:277-286`).
+- Each round exchanges with `m.status == NodeStatus::Online` only (`ring_sync.rs:231`).
+- Decay is on the local contact clock, threshold 60 s (`gossip.rs:118-120,619-627`).
+
+Run 2 timeline (`target/ring-room-rr2-demo/{halo,beefy}/daemon.err`, heal 08:31:49):
+
+```
+halo  08:29:14  ring sync: loop started interval_secs=60        (rounds at :14)
+halo  08:31:48  peer marked Offline … ring-room-beefy staleness_secs=63 last_contact_unix=1789893045
+beefy 08:31:58  peer marked Offline … LittleMac staleness_secs=73; RuggedFox staleness_secs=73
+halo  08:32:13  rail kv pump … unreadable=4      (the :14 round: beefy Offline, skipped)
+beefy 08:32:14  reach ok RuggedFox, LittleMac    (beefy's first post-heal reach)
+halo  08:32:20  reach ok ring-room-beefy         (beefy flips Online on halo)
+halo  08:33:13  rail kv pump … unreadable=6      (the next :14 round carried ops 5 and 6)
+demo            converged_s 85
+```
+
+The pump line is the count found at the tick, not the arrival; the arrival is bracketed
+by the poll (`converged_s` 85 = 08:33:14) and the :14 round.
+
+### Not a regression of d6d12b0e4
+
+The liveness fix touched one write of `last_seen`; nothing above reads it. What differs
+between the fast runs and today's is the cut's length against the 60 s threshold. The ask
+inside the cut, which the heal waits on:
+
+| run | binaries | ask answered_s | converged_s |
+|---|---|---|---|
+| 07:06Z A | b20bacb00 | 13.09 | 3 |
+| 07:06Z B | b20bacb00 | 14.11 | 3 |
+| 08:01Z 1 | 8251f8b61 | 15.14 | 49 |
+| 08:01Z 2 | 8251f8b61 | 30.76 | 85 |
+
+Run 2's cut ran ~64 s (last contact 08:30:45 → heal 08:31:49) and both sides decayed.
+Run 1's 49 s with a 15 s ask says the interval alone can cost most of a minute even without
+decay when no local write nudges the writer's side after the heal — the earlier runs
+converged inside 4 s because the writer's own nudged rounds found the peers still Online.
+n=2 on the new binaries against n=7 before; the row's instrument (which peers a round
+skipped, and the recorded cut length) is what turns this table into a measurement.
+
+### What falsifies this
+
+- The new test GREEN on 8251f8b61 (B returns, A's write reaches it within one gossip round
+  without the nudge) — then the interval is not what the return waits on.
+- A cold run with the nudge in place where `converged_s` still exceeds a gossip round with
+  the sync-round line showing the peer Online — then a second wait sits behind this one.
+- A run where the cut is under 60 s and `converged_s` is still tens of seconds — then the
+  Offline filter is not the gate and the interval alone is.
+
+### Harness: `demo-wait`
+
+`scripts/ralph-check.sh` — `wait "$pid"` on a setsid'd process always returned 127 and
+the fallback counted PASSED rows against 5. Today: run 1 (six PASSED) printed `exit=1`,
+run 2 (one FAILED) printed `exit=0`. Fixed in dd23950b5: the wrapper writes the demo's
+own exit code to `demo.rc`. Frame 2e7f855c owed this.
+
+### Recorded, not decided
+
+- The ask inside the cut doubled (30.76 s). Whether the sealed room turns a refused dial
+  into a timed-out one is REVIEW-audit-rr-2's; `c_answered_in_time` passed.
+- The 60 s ring sync interval and the 60 s offline threshold are equal, and the bar's
+  window is the same number. Three deciders with one value is a smell (ARCH 8) — flagged
+  for the operator, not touched.
+
+### The worker's package, inline
+
+> # REVIEW-DEMO-rr-2-run — room run 2 FAILED on `ra-room-offline-room-says-so`
+> 
+> The row (`ralph/next/ring-room-rr2/STATE.md`, REVIEW-DEMO-rr-2-run):
+> 
+> > FIRST, and NOT gated on anything below: the rr-1 regression,
+> > `RING_ROOM_TOPOLOGY=three scripts/ralph-check.sh demo` ONCE (the five rr-1 bars as
+> > A38 left them). THEN run `verdict all` TWICE from cold under
+> > `RING_ROOM_TOPOLOGY=room` in the MAIN workdir, each after `scripts/dev-build.sh`.
+> > Expected each time: all six PASSED, film listed within 20 s.
+> > **A FAILED on any clause is §6 with the glassbox lines pasted — no tuning.**
+> 
+> ## (b) What I ran, and what it printed
+> 
+> All on HEAD `8251f8b61` (carries `d6d12b0e4`, the liveness/offer-clock commit), inside
+> the `sovereign-vulkan` toolbox, main workdir.
+> 
+> 1. `./scripts/with-cargo-lock.sh ./scripts/dev-build.sh` → `exit=0`, `Finished dev profile in 16.50s`
+>    (`target/ralph/rr2-build-1.log`).
+> 2. rr-1 regression, `RING_ROOM_TOPOLOGY=three RALPH_DEMO_SCRIPT=scripts/ring-room-demo.sh` via
+>    `demo-bg` + `demo-wait` (log archived at `target/ralph/rr2-A49-rr1-regression.log`).
+>    The A38 baseline held exactly:
+> 
+>    ```
+>    ra-room-answer-names-the-machine   0.8  FAILED
+>    ra-room-doc-name-from-membership   1.0  PASSED
+>    ra-room-film-from-the-library-rail 1.0  PASSED   listed_s 6.32
+>    ra-room-plug-in-live               0.0  FAILED   c_answer_names=false, d_n_from_mesh_only=true
+>    ra-room-nothing-typed              0    PASSED
+>    ```
+> 
+> 3. rebuild (`exit=0`), room run 1 (`target/ralph/rr2-A49-room-run1.log`): **all six PASSED**,
+>    film `listed_s 4.23`, `in_use_s 10.48`, `withdrawn_s 8.4`; offline leg
+>    `converged_s 49` (window 60 s).
+> 4. rebuild (`exit=0`), room run 2 (`target/ralph/rr2-A49-room-run2.log`): **five PASSED, one FAILED**:
+> 
+>    ```
+>    ra-room-scan-to-name                1.0 PASSED
+>    ra-room-guest-edit-attributed       1.0 PASSED
+>    ra-room-guest-ask-served-by-the-room 1.0 PASSED  answered_s 30.76
+>    ra-room-film-from-littlemac         1.0 PASSED  listed_s 8.42, in_use_s 10.52, withdrawn_s 8.4
+>    ra-room-offline-room-says-so        0.0 FAILED  legs a=true b=true c_byte_equal_after_the_return=false
+>    ra-room-member-only-by-vouch        1.0 PASSED
+>    ```
+> 
+>    The offline leg's own artifact (`target/ring-room-rr2-demo/room-offline.json`, run 2):
+> 
+>    ```json
+>    {"beefy_at_cut": "6 6d5e941148cce94d", "beefy_after": "6 6d5e941148cce94d",
+>     "halo_after": "6 6d5e941148cce94d", "converged_s": 85, "byte_equal": true,
+>     "status_online_at_cut": "LittleMac RuggedFox", "cut_not_a_cut": null}
+>    ```
+> 
+>    `byte_equal` is TRUE and `cut_not_a_cut` is null — the cut was a cut and the journals
+>    ended byte-equal. The leg is false only on the 60 s window
+>    (`scripts/ring-room-demo.sh:1596-1598`: `byte_equal and converged_s <= off_w`), because
+>    convergence was measured at 85 s.
+> 
+> ## Glassbox lines — what the 85 s is
+> 
+> Heal at 08:31:49Z (`target/ring-room-rr2-demo/room-heal.out`, `room: sealed podman1↛podman2 and podman2↛podman1`).
+> Halo re-reached beefy 31 s later and every 10 s after that:
+> 
+> ```
+> 2026-09-20T08:32:20.371731Z  INFO gossip: reach ok peer=node-abcea92711213857 reach_ms=21
+> 2026-09-20T08:32:30.414689Z  INFO gossip: reach ok peer=node-abcea92711213857 reach_ms=9
+> ```
+> 
+> The two cut-era ops appear on each side at that side's rail-kv-pump tick, and halo's ticks
+> are ~60 s apart:
+> 
+> ```
+> beefy: 08:31:34 unreadable=4 · 08:31:53 unreadable=6   (4 s after the heal)
+> halo:  08:31:13 unreadable=4 · 08:32:13 unreadable=4 · 08:33:13 unreadable=6   (84 s after the heal)
+>        WARN rail kv pump: acts on a store namespace that this build cannot read as store writes namespace=ring-doc
+> ```
+> 
+> `room_journal` (`scripts/ring-room-demo.sh:247-255`) hashes `ring log --json`, so the poll
+> loop (`:1190-1194`) cannot return equal until halo's replica carries op 5 and 6 — which it
+> gains on that ~60 s cadence, not on the gossip round. Measured `converged_s` across the
+> room runs: 0, 0, 3, 3, 3, 4, 4 (all on binaries at or before `b20bacb00`), then **49** (run 1)
+> and **85** (run 2) today. The bar's window is 60 s, so on these two runs the leg's verdict is
+> decided by which pump tick the heal lands between.
+> 
+> I did not change anything and did not re-run to "get a green" (the row forbids tuning).
+> 
+> ## A second reading the operator needs: `demo-wait`'s exit code is wrong for this topology
+> 
+> `scripts/ralph-check.sh:62-65` — `demo-bg` detaches with `setsid nohup`, so `wait "$pid"` in
+> `demo-wait` always returns 127, and the fallback counts PASSED rows against **5**
+> (`awk '{print ($1==5)?0:1}'`). The room topology writes SIX rows
+> (`scripts/ring-room-demo.sh:1642` is the script's own four-verdict exit). So today:
+> 
+> - room run 1, six PASSED → `demo-wait` printed `exit=1`
+> - room run 2, five PASSED + one FAILED → `demo-wait` printed `exit=0`
+> 
+> Both are inverted. I gated on the verdict rows, not the exit code, and
+> `scripts/ralph*` is in the never-edit list — this is the operator's fix.
+> 
+> ## (c) What to decide
+> 
+> 1. **Is the offline bar's 60 s window the right bar, given the rail kv pump's ~60 s
+>    cadence?** `scripts/ring-room-demo.sh:1596-1598` (window) vs the pump ticks above. A
+>    window that is one pump period wide cannot separate "converged" from "tick phase".
+>    This is a bar question, not a tuning knob, which is why I stopped.
+> 2. **Is the 0–4 s → 49/85 s shift in post-heal replica convergence a regression of
+>    `d6d12b0e4`, or environment?** Both of today's runs are on it; all seven earlier runs
+>    (≤ `b20bacb00`) were ≤4 s. Naming it needs an instrument the demo does not have (halo's
+>    `ring log` is polled, never recorded), so it is a product investigation, not a re-run.
+> 3. **`demo-wait`'s six-bar exit code** (`scripts/ralph-check.sh:64`) — fix the macro, or
+>    record that room verdicts are read from the rows only.
+> 4. **Does the two-cold-run count stand at 1 (run 1 green) or restart?** Run 2's FAILED is
+>    on the clause above; if (1) resolves the window, run 1 still counts.
+> 
+> ## (d) Then
+> 
+> Edit or mark the row in `ralph/next/ring-room-rr2/STATE.md` (it is `[~]`), then
+> `rm ralph/STOP ralph/NEEDS_HUMAN.md`.
 
 </details>
