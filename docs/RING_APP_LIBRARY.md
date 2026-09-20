@@ -5,7 +5,10 @@
 > lives in `docs/internal/RING_APPLICATIONS.md` (per-host, untracked); the
 > primitive inventory lives in `quality/campaigns/ring-apps.toml`.
 
-**Scope: the library and nothing above it.** Every export is a pure function,
+Two parts. Part 1 is the library. Part 2 is what composes it — the runtime,
+the door, reach and joining — and is the only part that does I/O.
+
+**Part 1 scope: the library and nothing above it.** Every export is a pure function,
 a plain value, or a property test. The library performs no I/O, holds no
 grant, knows no roster, and runs under `node --test` with no daemon present.
 Who may sign an act is the rail's decision, made beneath the library before
@@ -269,3 +272,196 @@ measurement.
    and a log digest is a cost-only optimisation and is pure. Not measured.
 3. Whether `view` belongs here at all, or the library should stop at
    `reduce` and `pending` and leave the third function to whoever renders.
+
+---
+
+# Part 2 — what composes the library
+
+Part 1's purity rule stops here. Everything below does I/O. It is drawn as
+four layers, each owning one thing about itself (ARCH principle 12), and it
+is scoped to what the first ring apps and the spot in
+`docs/internal/RING_SPOT.md` demand — nothing is here because it might be
+wanted.
+
+| Layer | Owns | Does not own | Lives |
+|---|---|---|---|
+| runtime | timers, `fetch`, the DOM, `Ctx`, the sandbox | grants, roster, versions | `packages/ring/runtime`, served by the daemon |
+| door | serving a bundle, response headers, the session grant | identity | `sovereign-daemon/src/guest_door.rs` |
+| rail | admission, membership, order | reach | `commonwealth-rail`, `commonwealth-rail-core` |
+| reach | whom to dial for a ring | who is a member | `sovereign-mesh/src/ring_sync.rs` |
+
+## 12. The runtime
+
+`ring.run(app, root)`. Each item replaces code both apps write by hand today
+(`templates/app.js`, 135 lines; `ring-doc/app.js`, 315).
+
+- **The loop.** Fetch the log, fold, render, patch. Polling stays — the wire
+  has no tail op and `log` takes no cursor — but a refold happens only when
+  the log changed.
+- **`Ctx`.** `me`, names, `complete`, `gaps`, `namespace`, `live`, unwrapped
+  once. The `.members` trap `initial()` throws on disappears.
+- **Gaps are the runtime's.** It mounts rail gaps, app gaps and the
+  incompleteness banner outside the app's root. "Never hide either panel" is
+  a comment in the template today; here the app cannot.
+- **The write door.** `dispatch(act)` runs the same `validated` schema the
+  reducer uses, refuses fatal gaps, records, refolds. No optimistic state:
+  the rail assigns `seq` and `ts_unix`, so a local guess at order is wrong.
+- **The live lane.** Drain on an interval, throttle sends, surface as
+  `Ctx.live`.
+- **Limits are values.** `ring.limits = { actBytes, liveBytes }`, so an app
+  adapts to the 64 KiB and 4096-byte caps instead of meeting a refusal.
+- **Served modules.** Library and runtime ship as ES modules beside the shim
+  from real `.js` files; `RING_SHIM` stops being a string in a `.rs` file.
+- **The test entry.** `node --test`, the five laws, `diffFold` against
+  `svrn ring log <ns> --json`.
+
+Out, by demand: the effect performer (no app asks for one — ring-room reaches
+the house AI through `chat ask` in its demo script), so `pending` is rendered
+as wanted and unperformed, never dropped; and the debounced writer, which has
+one caller and stays in the `doc` adapter.
+
+## 13. The sandbox — two layers, neither remembered
+
+Checked 2026-09-20: `templates/app.js:42,57,89` and `ring-doc/app.js:275`
+write peer-authored strings through `innerHTML`, and no response on the ring
+page path carries a Content-Security-Policy. Any roster member can run script
+in every other member's page, where the guest bearer sits in `location.hash`
+(note `1f0b0fce`). An `escape()` helper in the template would be a remembered
+rule the next generated app forgets.
+
+**The browser's layer.** `serve_file` — the one function both the door and
+`ring dev` serve through — sends `default-src 'self'` with no inline script.
+
+**The language's layer.** Hardened JavaScript: `lockdown()` once, then
+`reduce` and `pending` evaluated in a Compartment whose only endowments are a
+`Date` that answers `op.ts_unix` for the act being reduced and a
+`Math.random` seeded from `op.id`. Replaced, not removed — Temporal's lesson —
+so model-written code that reaches for a clock still converges, and law 2
+still checks it. `view` runs in a second Compartment holding a structure
+builder and no `document`; text enters as text nodes. No `fetch` exists in
+either. Risk: `lockdown()` breaks libraries that touch primordials, and the
+vendored Yjs bundle is a candidate, so the `doc` adapter runs outside as
+trusted library code; if that is not enough the fallback is a worker.
+Licence, size and maintenance of SES are unverified.
+
+Two requirements are taken verbatim from the webxdc messenger specification
+(read 2026-09-20), because they are what makes running someone else's app
+safe: the host "MUST deny all forms of internet access" and "MUST isolate all
+storage and state of one … app from any other." The second needs one origin
+per ring bundle. Paths cannot give that; a port per ring can on the LAN door,
+a subdomain per ring can on an HTTPS door. Undecided.
+
+Bar: a payload carrying `<img onerror>` renders as text in both apps, watched
+failing first.
+
+## 14. The bundle
+
+A zip with `index.html` at its root: one artefact, one hash. The 2026-09-18
+amendment has the host stamp that hash on each record; Part 1 section 9 owes
+it the wrapper that surfaces acts stamped otherwise as gaps.
+
+## 15. Reach — every ring live at once
+
+As built, a node has one active mesh and parks the rest, and `ring_sync`
+dials only that mesh's `Online` members (`ring_sync.rs:227-234`). A key on a
+ring's roster with no member row in the active mesh is never dialled. The
+limit is the sender's address book; rings carry no mesh id on disk or in a
+signed op, and one iroh endpoint is bound per node from one key.
+
+How to reach a key is already a statement the key makes about itself.
+`commonwealth-core/src/dial_sig.rs` signs `DOMAIN || pubkey || version ||
+relay || addrs` under the node's own key, with no mesh id, a monotonic version
+and three pinned attack tests. iroh's pkarr lookup is already wired
+(`commonwealth-transport/src/iroh.rs:152`).
+
+1. Measure: dial a roster key that has no member row. Untested.
+2. `ring_sync` fans out to (the ring's roster) ∩ (reachable keys). This also
+   closes the recorded defect that sync ignores the roster
+   (`ra-ring-reaches-only-members`).
+3. The iroh acceptor's `member_check` (`daemon.rs:4238`) widens from "member
+   of the active mesh" to "a key on any roster this node holds". A behaviour
+   change; its own test, watched red.
+
+Multi-mesh is not built. A mesh shrinks toward what it owns — lending — until
+the `fabric.mesh` singleton stops mattering. Switching rings is then not a
+node operation; it is which page is open.
+
+Decision owed: publish relay URL only or direct addresses too, and n0's DNS or
+a self-hosted one.
+
+## 16. Joining — one invite, one link
+
+As built there are two links. The guest link works in a phone browser and
+grants no identity: the host's key signs every guest act and the guest is a
+name in the payload. The member link grants identity and is inert to a phone
+camera. Neither store has a use count.
+
+- **One invite.** A secret on the node that minted it, with an expiry and a
+  use count, as the amendment specified. The QR carries the inviter's key
+  fingerprint, the secret and the ring (SecureJoin's shape). Redeeming writes
+  one `Admit{person, key}`.
+- **In a browser** the page generates the key. It signs its own acts with
+  `commonwealth-rail-core` compiled to wasm — the crate does no I/O, and a
+  hand-written canonicaliser in JavaScript would be a second decider. The
+  client-signed append reuses `RingJournal::ingest`, which already takes ops
+  signed elsewhere.
+- **In the installed app** the same link deep-links and admits the node's
+  key. Installing later admits a second key under the same person, which the
+  roster already models.
+- **The bearer is a session; the key is the identity.** A returning guest
+  signs a challenge for a fresh bearer.
+- **One verb for the host.** `svrn ring invite <ns>` and a desktop button;
+  the door configures itself while an invite is live. Today it is five flags
+  and two hand-edited config keys, and `--model` is required for a rail-only
+  grant.
+
+## 17. The HTTPS door
+
+`crypto.subtle` exists only in a secure context, and a phone off the WiFi
+cannot reach a LAN bind at all, so both identity and reach need one public
+HTTPS name that tunnels to the host over `GUEST_ALPN` — the bridge
+`mesh_guest.rs` already runs client-side. It is stateless and holds no
+journal. With client-side signing it cannot forge an act. It can read
+traffic and it serves the JavaScript, so a guest trusts it as they would any
+website, and installing removes that trust. It is infrastructure, not a
+member: the trust class of the iroh relay already depended on. Anyone may run
+one; the link names which.
+
+For a stranger arriving from an ad there is no friend's node. They found their
+own ring from the browser key, a keeper node is admitted as an ordinary
+member to hold the journal, and after installing they `Remove` it. Same ring,
+same identity, exit in one act. The keeper reads plaintext; the amendment
+deferred encryption "for a real third-party relay", and this is that relay.
+
+Operator decision: whether to run one.
+
+## 18. Prior art — verdicts in the shelf's vocabulary
+
+`quality/campaigns/ring-apps-shelf.md` holds the dependency verdicts per
+primitive. These are the ones it has no row for.
+
+| Source | Verdict | What is taken |
+|---|---|---|
+| webxdc (spec and catalog read 2026-09-20) | **avoid** as the native contract; **spike** as an import path | It has no order, no void, no completeness, no signed authorship: native apps written to `sendUpdate` would discard what the rail guarantees. Taken regardless: the two MUSTs in §13, limits as values, a zip as the bundle. Spike bar: a shim under 200 lines, zero changes to `window.ring` or the rail, at least 4 of 5 chosen collaborative apps converge on two nodes. The catalog is 217 entries, a handful collaborative, none with licence metadata. Off the critical path. |
+| Hardened JavaScript (SES) | adopt, behind §13's bar | Compartments. Unverified. |
+| Temporal | adapt | deterministic replacements; replay tests, which are `diffFold`; recorded results, which are the fulfilment act |
+| Syncthing | adapt the model | folder = ring, device list = roster, one address book per node |
+| iroh pkarr | adopt | already wired |
+| Delta Chat SecureJoin | adapt the shape | §16 |
+| RFC 8785 (JCS) | adapt | a dev-only oracle in a property test of the rail's canonicaliser |
+| Keyhive, Byzantine eventual consistency | read | behind the one membership function |
+| MLS (RFC 9420) | defer | trigger: the keeper node in §17 |
+
+## 19. Order of work
+
+1. CSP from `serve_file`; views as structure.
+2. The dial-by-key measurement; sync by roster; `member_check`.
+3. `Admit` and `Remove`.
+4. wasm signing against golden vectors; client-signed append; the one invite
+   with a use count; `ring invite` and the desktop button.
+5. Compartments and the deterministic clock.
+6. The HTTPS door.
+7. Reads gated by roster, then encryption.
+
+The library extraction from `ring-doc` (Part 1 section 10) runs beside 1 to 3;
+it touches no file they touch.
