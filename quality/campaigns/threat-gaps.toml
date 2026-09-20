@@ -1,0 +1,82 @@
+# Flight rules — read raw. Verdicts come from measurement rows, never prose here.
+#
+# Declared 2026-09-20 by operator decision (ralph/DECISIONS.md A58). The five
+# gaps `docs/THREAT_MODEL.md` §"Known gaps — open work" disclosed with no owner
+# (ledger A56 made a disclosed gap open work). Measured the same day: one is
+# already closed, two are smaller than worded, one is WORSE than worded.
+# Order: `.sovereign/features/threat-gaps-close/order.md` (gitignored), which
+# carries premises, predictions and the twelve rows. QUEUED behind ring-guest
+# and mesh-principal. No bar has an instrument yet: the order's first row
+# builds `scripts/threat-gaps-demo.sh` and watches each bar FAIL before any
+# product row runs; until then every bar is unmeasured, never assumed.
+id        = "threat-gaps"
+objective = "A stranger is refused everywhere a member is served: on the internal API, on the tensor-split port and on the mesh-app bridge; a client token can be revoked alone; and the threat model names nothing that no longer exists."
+spec      = ".sovereign/features/threat-gaps-close/order.md (Demo, Assumptions, Premises, Predictions); docs/THREAT_MODEL.md §Known gaps entries 1-5; ralph/DECISIONS.md A56, A58"
+declared  = "2026-09-20"
+status    = "active"
+
+[predicate]
+statement = "On the room stand-in, `scripts/threat-gaps-demo.sh verdict all` reads PASSED on all five tg-* bars twice from cold, the ring-guest and rr-2 bars still read PASSED, and entries 1-5 of docs/THREAT_MODEL.md §Known gaps are each struck citing a commit or re-worded to what is still true."
+check     = "scripts/threat-gaps-demo.sh verdict all"
+# The instrument does not exist yet, so `check` exits non-zero today and the
+# predicate reads FALSE — which is the truth.
+
+[[bar]]
+id           = "tg-stranger-refused-9742"
+demo         = "From a second LAN machine, POST /internal/mesh/quiesce to a node's :9742 with no credential. Today it answers 200 and the node logs the flip. After, 401 naming what is missing; `svrn mesh join` from that machine still works."
+one_line     = "CLAIM: a non-member reaches only the join route on the internal API, over plain IP and over iroh; everything else requires a verified member"
+derives_from = "measured 2026-09-20: no handler under sovereign-daemon/src/routes_internal/ reads a peer address (grep ConnectInfo|is_loopback: 0 files); the internal service is the one listener built without connect-info (daemon.rs:3820-3853); default bind 0.0.0.0 (setup_config.rs:1728-1732); the internal iroh ALPN splices ANY dialer to it (sovereign-mesh/src/iroh_access.rs:421-437, which calls it a known open edge)"
+floor        = 1.0
+floor_basis  = "structural: 1.0 iff (a) an uncredentialed non-loopback POST to a state-changing internal route is refused 401 and the node's state did not change, (b) the same request from a non-member over the internal iroh ALPN is refused, (c) a member's gossip round and ring sync complete unchanged in the same run, (d) a fresh node joins over the same listener, (e) the set of routes exempt from the gate is exactly join and gossip, pinned by a test. Any false is 0.0."
+target       = 1.0
+direction    = "higher_is_better"
+goodhart     = "reads 1.0 by breaking the mesh if members are refused too (clause c); reads 1.0 on one path only if the gate covers plain IP and not the iroh splice (clause b); reads 1.0 with the gate defaulted off if the instrument sets the strict knob itself - the run uses the shipped default"
+status       = "open"
+
+[[bar]]
+id           = "tg-rpc-port-not-on-lan"
+demo         = "On an anchor with no env set, `ss -ltn` shows the tensor-split port on 127.0.0.1; `nc <lan-ip> 50052` from a second box is refused; tokens still flow and the host log says via=iroh-bridge."
+one_line     = "CLAIM: the tensor-split port is not reachable from the LAN by default, and distributed inference still works through the member-only tunnel"
+derives_from = "measured 2026-09-20: DEFAULT_RPC_BIND = 0.0.0.0:50052 (sovereign-daemon/src/bootstrap.rs:327); the member-only encrypted tunnel already exists (RPC_ALPN, commonwealth-transport/src/iroh.rs:78; test the_rpc_alpn_admits_members_only_and_has_no_downgrade, iroh_access.rs:1470); tunnel vs direct measured on a 4B only (docs/DISTRIBUTED_PILOT_READINESS.md:533-536)"
+floor        = 1.0
+floor_basis  = "structural: 1.0 iff (a) with no env and no config the worker binds loopback, (b) a non-loopback bind without the acknowledgement knob is refused with a sentence and is not silently Off, (c) a two-node split completes tokens over the bridge on a direct path, not relay, (d) big-model tok/s over the bridge is reported beside direct-ip in the verdict row. Any false is 0.0."
+target       = 1.0
+direction    = "higher_is_better"
+goodhart     = "reads 1.0 while the 0-to-1 path got slower if clause (d) is reported and nobody reads it - a material drop against direct-ip stops the order for the operator; reads 1.0 for nothing if the run sets the bind explicitly"
+status       = "open"
+
+[[bar]]
+id           = "tg-token-revoked-alone"
+demo         = "Mint client tokens `laptop` and `tablet`; both get 200 from another machine; revoke `laptop`: it gets 401, `tablet` stays 200, no restart. The shared token still works."
+one_line     = "CLAIM: a remote client holds a credential of its own that can be revoked without rotating everyone's"
+derives_from = "measured 2026-09-20 by a subworker, not re-opened by the seat: the client token is one Option<Arc<str>> fixed at construction (sovereign-daemon/src/state/node.rs:29); Principal::RemoteClient { credential } already exists (sovereign-contracts/src/principal.rs:77-83); GuestGrant is in-memory and capped at 24 h so it cannot be a durable device credential"
+floor        = 1.0
+floor_basis  = "structural: 1.0 iff (a) two named tokens each admit a non-loopback caller, (b) revoking one refuses it within the same daemon lifetime while the other still admits, (c) the admitting label appears in the log line, (d) the shared token admits by default and is refused under client_tokens = named-only. Any false is 0.0. DROPPED, and entry 3 re-worded instead, if the order's first row finds at most one distinct RemoteClient fingerprint over a week."
+target       = 1.0
+direction    = "higher_is_better"
+goodhart     = "reads 1.0 on a restart if revocation only takes effect at load (clause b is same-lifetime); reads 1.0 while breaking 0-to-1 if the shared token stopped working by default (clause d)"
+status       = "open"
+
+[[bar]]
+id           = "tg-meshapp-window-bridge-only"
+demo         = "In a mesh-app window's devtools, invoking a host command such as mcp_set_token rejects; the app's own bridge calls still work."
+one_line     = "CLAIM: a mesh-app window can invoke the bridge's commands and no other"
+derives_from = "measured 2026-09-20: the desktop's build.rs is a bare tauri_build::build() with no app-command manifest and no permissions/ directory; meshapp_shim.js names 18 distinct meshapp_* commands; one closure wraps every invoke (src-tauri/src/main.rs:~875); Tauri locked at 2.11.1"
+floor        = 1.0
+floor_basis  = "structural: 1.0 iff (a) a meshapp-* window invoking a command outside the bridge list is rejected and traced, (b) every command the shim names still resolves from that window, (c) a test asserts the allowlist equals the names parsed from meshapp_shim.js, (d) the main window's commands are unchanged. Any false is 0.0."
+target       = 1.0
+direction    = "higher_is_better"
+goodhart     = "reads 1.0 with a stale list if the allowlist is hand-kept beside the shim (clause c); reads 1.0 by breaking a first-party app if one calls outside the 18 - the order's first row greps the bundles, and a hit stops the row rather than widening the list"
+status       = "open"
+
+[[bar]]
+id           = "tg-doc-names-nothing-dead"
+demo         = "docs/THREAT_MODEL.md cites no path that does not exist and no binary that was deleted."
+one_line     = "CLAIM: every path and binary the threat model names exists, and every gap it lists is either open with an owner or struck with a commit"
+derives_from = "measured 2026-09-20: commonwealth/crates/commonwealth-daemon does not exist (removed 27c0fe031) while entry 4 still describes its bind; the doc cited commonwealth-api/src/client_auth.rs, which moved to sovereign-daemon; the surfaces table claimed a per-handler loopback gate that no handler implements (corrected 64c6b55b5)"
+floor        = 1.0
+floor_basis  = "structural: 1.0 iff (a) `cargo xtask docs-gate` passes, (b) no entry under Known gaps names a crate or binary absent from the tree, (c) every entry carries `Closes when` and `Owner`, or is struck citing a commit, or says By design. Any false is 0.0."
+target       = 1.0
+direction    = "higher_is_better"
+goodhart     = "reads 1.0 by deleting disclosures if an entry is removed rather than struck with its commit (clause c counts struck entries, and the audit diffs the section)"
+status       = "open"
