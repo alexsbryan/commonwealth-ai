@@ -1,0 +1,119 @@
+# Consumer fine print — adapted from the ontology-v1 `contracts` template
+# (sovereign-recipes/_templates/ontology-v1/contracts/recipe.toml).
+#
+# Terms of service, privacy policies and adjacent platform policies. The
+# questions it is built to answer: what kinds of data does a service collect;
+# who does it share data with and for what purpose; what a defined term means
+# in this policy; what the user / the service must, must not, or may do.
+#
+#   svrn recipe validate recipe.toml
+#   svrn corpus install ei7-recensus-fineprint
+#   svrn enrich init ei7-recensus-fineprint --from-corpus ei7-recensus-fineprint
+#   svrn enrich build ei7-recensus-fineprint --full
+
+[corpus]
+id = "ei7-recensus-fineprint"
+name = "Fine print re-census (X, Facebook, YouTube)"
+description = "Consumer terms of service and privacy policies, extracted as services, data types, recipients, purposes, defined terms and obligations."
+license = "private"
+mesh_sharing = false
+schema_version = 1
+
+# One markdown file: each policy document as a `# <Service> — <Document>`
+# section, its own headings demoted beneath it (build_corpus.py).
+[acquire]
+type = "local_file"
+path = "/Users/alexsbryan/dev/commonwealth-ai/research/ontology-retrieval/recensus/fineprint.md"
+
+[extract]
+type = "markdown"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "contracts"
+
+[enrichment.ontology]
+version = 1
+guidance = """
+This corpus is consumer fine print: the terms of service, privacy policies and
+platform policies of online services. Each document belongs to one service, named in
+its top heading. The parties are the service (the company: "we", "us") and the user
+("you"); advertisers and developers are parties where a policy addresses them. A
+defined term means what its policy says it means, nothing more. A data type is a kind
+of personal data the service collects or receives (location data, contacts, payment
+information, device identifiers) — name the kind, not the section heading. A recipient
+is who the service discloses data to (advertisers, affiliates, service providers, law
+enforcement). A purpose is why data is collected, used or shared (personalization,
+advertising, security, legal compliance). An obligation requires, forbids or permits
+something of a party: what you must not do, what the service may do with your content
+or data, what it commits to do. A later version of a policy supersedes an earlier one.
+"""
+
+[[enrichment.ontology.types]]
+name = "organization"
+kind = "entity"
+description = "A company, agency or other legal person."
+
+[[enrichment.ontology.types]]
+name = "party"
+kind = "entity"
+role_of = "organization"
+description = "Who an obligation binds: the service, the user, an advertiser, a developer."
+
+[[enrichment.ontology.types]]
+name = "service"
+kind = "entity"
+description = "An online service or platform whose policy this is: Reddit, Spotify, LinkedIn."
+
+[[enrichment.ontology.types]]
+name = "agreement"
+kind = "entity"
+description = "A policy document: title (Privacy Policy, Terms of Service), service, effective date."
+attributes = [{ name = "service", type = "ref", of = "service" }]
+
+[[enrichment.ontology.types]]
+name = "defined_term"
+kind = "entity"
+attributes = [{ name = "definition", type = "text" }, { name = "agreement", type = "ref", of = "agreement" }]
+
+[[enrichment.ontology.types]]
+name = "data_type"
+kind = "entity"
+description = "A kind of personal data a service collects or receives: location data, contacts, payment information, usage data."
+attributes = [
+  { name = "service", type = "ref", of = "service" },
+  { name = "source", type = "text", values = ["provided_by_user", "collected_automatically", "from_third_parties"] },
+]
+
+[[enrichment.ontology.types]]
+name = "recipient"
+kind = "entity"
+description = "Who a service shares or discloses data to: advertisers, affiliates, service providers, law enforcement."
+attributes = [{ name = "service", type = "ref", of = "service" }]
+
+[[enrichment.ontology.types]]
+name = "purpose"
+kind = "entity"
+description = "Why data is collected, used or shared: personalization, advertising, security, legal compliance."
+attributes = [{ name = "service", type = "ref", of = "service" }]
+
+[[enrichment.ontology.types]]
+name = "obligation"
+kind = "claim"
+force = "directive"
+deontic = ["require", "forbid", "permit"]
+subject = "party"
+attributes = [{ name = "valid", type = "time", range = true }, { name = "deadline", type = "time" }]
+
+[enrichment.ontology.change]
+supersedes = { obligation = "valid" }
