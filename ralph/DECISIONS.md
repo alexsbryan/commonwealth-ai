@@ -245,6 +245,10 @@ exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 - Needed: The row's (a) named `cut_node` and two mechanisms. The worker measured that neither carries anything, found a third path (the host forwarding the uplink bridge into the room bridge), closed it with `--opt isolate=true` on the strength of a plant, and then watched the real run serve a knowledge fan-out and an HTTP 200 into the cut anyway. The package asked whether to spend a 25-minute run naming the wire, whether the cut may be made at the host or the node image changed, and whether (a) should be re-scoped away from `cut_node`.
 - Chose: No run, no host cut, no image change. The wire is named from the run's own logs and a plant on this host: the host forwards the uplink bridge into the room bridge and masquerades it to the room gateway, and the `isolate` flag never installed a rule because netavark 1.17.2 skips isolation for `--internal` networks (`strict` too — the chains are quoted in the row). Row 54 re-scoped in place, still `[ ]`: (a) becomes a seal the demo installs itself in the rootless netns after every node is attached and proves at `up` (halo cannot reach the wall's door at its room address; the phone can); (b) stands; (c) is added because the recorder dc7c31558 shipped reads `active_direct_addrs: usize` — a count — so it could never have named the wire the package wanted a run to name. `cut_node` and the node image are untouched.
 - Because: ARCH 4 and 5 — the "closed" back door was measured on a plant whose two bridges happened not to leak that run (the flip reproduces here: 5 of 9 runs leak when the wall pings the keeper, 3 of 3 when it does not), and it shipped with a comment asserting the ruleset does what the ruleset never did. ARCH 12 — a venue's WiFi forwarding nothing from outside is the room's to own, not the cut's; `cut_node` was right all along. ARCH 1 — a path reading that cannot name the address is not a reading.
+**A49 · 2026-09-20 · REVIEW-DEMO-rr-2-run · director (seat)** — this commit
+- Needed: The second cold room run failed the film bar (`listed_s: null` against 30 s) on the same binaries that listed it in 6.3 s one run earlier. Row 55's new merge-arm line named the cause on the first run that hit it: the holder's offer arrived on the wall every round for 60 s and was refused as `local-record-not-older` with equal `event_time`s, then adopted the one round the incoming second was strictly later. The package asked whether this is a row, which of two deciders changes, and whether the cold-run count restarts.
+- Chose: One product row, `rr-2-liveness-does-not-write-the-offer-clock`, ahead of the demo row: delete the write at `gossip.rs:891` where a PEER stamps another member's self-stamped `last_seen` on every successful reach, keep the `Online` flip and its log, add the failing-input test (reach and stamp in the same second, the offer must ride the next round), and fix the two comments that still describe the old liveness. The comparison at `mod.rs:713` stays a strict `>`; `last_seen` stays whole seconds; no version field. The demo row is re-gated on the new row and its count restarts at zero; the rr-1 regression and run A stand as evidence only.
+- Because: `event_time()`'s own doc says `last_seen` is self-stamped (`mod.rs:322`) and the merge is documented as the ONE ordering rule — a second writer of that field is the defect, not the `>` (ARCH 8, 10). The bump is vestigial: the offline decay compares a local contact clock, not the gossiped `last_seen` (`gossip.rs:619-627`, the clock-skew flap fix), so removing it cannot flap liveness, and everything else that would make ties impossible (milliseconds, a version) is a wire semantics change every node must agree on — the operator's. Both nodes tick 10 s rounds on one host clock, so ties were the common case before the offer too (`beefy/daemon.err:176,215,308,439,551`).
 
 **A44 · 2026-09-19 · rr-2-gossip-claim-one-decider · director (supervisor resolution, attempt 1)** — commit: this one
 - Needed: A43 wrote the row on the premise that a SECOND site builds the claim gossip sends. The worker measured the send path and found one, stopped at the premise check without improvising a target, and asked whether to rewrite or strike the row.
@@ -6746,5 +6750,226 @@ Spending the run would have recorded `2`.
 > 
 > Edit or mark the row in `ralph/next/ring-room-rr2/STATE.md`, then
 > `rm ralph/STOP ralph/NEEDS_HUMAN.md`.
+
+</details>
+
+## A49 · 2026-09-20 — rr-2: a peer's reach bump wrote the holder's clock, so the offer lost a one-second tie
+
+<details>
+
+### The fork
+
+REVIEW-DEMO-rr-2-run ran the rr-1 regression (five bars at the A38 baseline) and two cold
+room runs on b20bacb00. Run A: six PASSED, film listed in 6.3 s. Run B: five PASSED, film
+FAILED on `a_listed_with_offered_to`, `listed_s: null`, window 30 s. The row forbids tuning
+and the worker touched nothing. Three questions: row or not, which decider, does the count
+restart.
+
+### The evidence, from row 55's line
+
+`little/daemon.err:284` — the holder stamped `origins=[Media] media_available=Some(1.0)`
+at 07:41:01.913, `stamped_from_dial_info=true`; `log_sent_snapshot` fired zero times on
+all three nodes, so the wire carried the stamp. `beefy/daemon.err:565…701`:
+
+```
+07:41:01.922  merge read … peer=LittleMac arm="local-record-not-older"
+              in_origins=[Media] in_media_available=Some(1.0) in_event_time=1789890061
+              have_origins=Some([]) have_media_available=None have_event_time=1789890061
+07:41:11.120  … arm="local-record-not-older" in_event_time=1789890061 have_event_time=1789890061
+  (same at :21.951, :31.181, :41.205, :51.247, 07:42:01.281)
+07:42:02.033  … arm="lww-update" in_event_time=1789890122 have_event_time=1789890121
+```
+
+And before the offer existed, the same tie: `beefy/daemon.err:176,215,308,439,551` —
+07:40:11, :30, :41, :51, 07:41:01 all `local-record-not-older` with equal seconds; the one
+`lww-update` at 07:40:21 is the round the seconds drifted apart.
+
+### The mechanism
+
+- `MemberRecord::event_time()` = `last_seen.max(removed_at)`, whole seconds
+  (`commonwealth-core/src/mesh/mod.rs:330-332`); the doc at :322 calls `last_seen`
+  "self-stamped" and names this the ONE ordering rule.
+- The LWW arm is `incoming.event_time() > existing.event_time()` (`mod.rs:713`).
+- The holder stamps `me.last_seen = now` every round (`sovereign-mesh/src/gossip.rs:522`).
+- A peer ALSO writes `peer.last_seen = fabric.clock().now_unix_secs()` on every successful
+  reach (`gossip.rs:891`, blame 16838feca 2026-04-14, "in case their view of themselves
+  lagged").
+- Both nodes run 10 s rounds on one host clock; the stamp and the bump land in the same
+  second most rounds. The offer is adopted only when the holder's second is strictly later
+  than the peer's last bump. Run A won that in 6.3 s; run B lost it for 60 s.
+
+### Why the bump, not the comparison
+
+The bump is vestigial. The decay pass reads a LOCAL contact clock:
+
+```
+gossip.rs:619-627  // Decay measures LOCAL-observation staleness … NOT the peer's own
+                   // gossiped `last_seen`. Comparing a remote clock against ours is what
+                   // caused the "~9 min flap" (todo f152dfe7 #4)
+                   let last_contact = fabric.peer_contact_or_init(*id, now);
+```
+
+So nothing that decides Online/Offline reads the write at :891; its only remaining effect
+is the LWW key it corrupts. Two comments still describe the old world (`gossip.rs:881-884`,
+`:914`) and the row fixes them. Changing `>` to `>=` would adopt equal-second copies
+relayed by third parties (halo's copy of little at 07:40:51.04 carried
+`in_event_time=…041` while little's own at :51.89 carried `…051` — two sources, one
+second apart). Milliseconds or a version field are wire semantics every node must agree
+on — flagged for the operator below.
+
+### What falsifies this
+
+- The new test staying GREEN on b20bacb00 (reach and stamp in the same second, offer not on
+  the rail one round later) — then the tie is not the mechanism.
+- A reader of a third party's `last_seen` in a status or decay path the worker finds — the
+  row says stop with a package.
+- A cold run on the fixed binaries where the film bar still reads `listed_s` past 20 s
+  with the merge line reading `lww-update` on the first round — then there is a second
+  delay behind this one.
+
+### Flag for the operator (REVIEW-AFTER)
+
+`last_seen` is a whole-second `u64` doing duty as a Lamport clock. With one writer it is
+enough for 10 s rounds; it is not enough for two stamps in one second by the holder
+itself (an offer written and withdrawn inside a second would tie with itself). A version
+on the offer triple or a sub-second clock is the structural answer, and it is a wire
+change. Not done here.
+
+### The worker's package, inline
+
+> # REVIEW-DEMO-rr-2-run — the film bar FAILED on the second cold room run
+> 
+> ## (a) The unit and its row
+> 
+> `ralph/next/ring-room-rr2/STATE.md`, row `REVIEW-DEMO-rr-2-run`
+> (depends `rr-2-the-cut-drops-the-established-path`, `rr-2-merge-reads-the-triple-every-round`,
+> both `[x]`): the rr-1 regression once on `RING_ROOM_TOPOLOGY=three`, then
+> `verdict all` TWICE from cold on `RING_ROOM_TOPOLOGY=room`, each after
+> `scripts/dev-build.sh`. Expected each time: all six PASSED, film listed within
+> 20 s. The row says: **"A FAILED on any clause is §6 with the glassbox lines
+> pasted — no tuning."** That is why this file exists and why nothing was fixed.
+> 
+> ## (b) What was run, and what it printed
+> 
+> All four runs are on the binaries built at HEAD `b20bacb00`
+> (`scripts/with-cargo-lock.sh scripts/dev-build.sh`, exit=0, before each run;
+> the staleness refusal fired on the first attempt and was cleared by the build,
+> so every run below reads fresh binaries).
+> 
+> **rr-1 regression** — `RING_ROOM_TOPOLOGY=three scripts/ralph-check.sh demo-bg
+> scripts/ring-room-demo.sh` + `demo-wait`
+> (log: `target/ralph/rr2-rr1-regression.log`). The five bars, exactly the A38
+> baseline, no regression:
+> 
+> ```
+> ra-room-answer-names-the-machine     0.8  FAILED
+> ra-room-doc-name-from-membership     1.0  PASSED
+> ra-room-film-from-the-library-rail   1.0  PASSED
+> ra-room-plug-in-live                 0.0  FAILED  (c_answer_names false, d_n_from_mesh_only true)
+> ra-room-nothing-typed                0    PASSED
+> ```
+> 
+> **Room run A** — `RING_ROOM_TOPOLOGY=room`, log `target/ralph/rr2-room-run-A.log`.
+> All six PASSED; `ra-room-film-from-littlemac` `listed_s: 6.3`, every leg true.
+> No `cut-not-a-cut`; the offline leg reads PASSED with all three legs true, so it
+> is a real cold run.
+> 
+> **Room run B** — same command, log `target/ralph/rr2-room-run-B.log`.
+> Five PASSED and one FAILED:
+> 
+> ```
+> {"bar": "ra-room-film-from-littlemac", "value": 0.0, "legs": {"a_listed_with_offered_to": false,
+>  "b_first_byte": false, "c_no_credential_in_the_walk": true, "d_holder_config_untouched": true,
+>  "e_the_declared_account_is_read_only": true, "f_in_use_and_nothing_started": true,
+>  "g_withdrawn_within_a_round": true}, "windows": {"listed_s": 30.0, "first_byte_s": 5.0},
+>  "holder": "LittleMac", "listed_s": null, "pick_to_first_byte_s": 34.08,
+>  "stream_first_byte_s": 0.066185, "http": "206", ... "verdict": "FAILED"}
+> ```
+> 
+> The offer itself was fine on the holder's side. `target/ring-room-rr2-demo/room-offer.out`:
+> 
+> ```
+> 2026-09-20T07:40:57.344562Z  INFO media offer written origin=127.0.0.1:8096 admit=[] config=.../little/config.toml
+>   offered to: everyone here
+> ✓ hot-reloaded: iroh.media_origin, iroh.media_viewer_user
+> ```
+> 
+> and LittleMac stamped it onto its own record 4.6 s later
+> (`target/ring-room-rr2-demo/little/daemon.err:284`):
+> 
+> ```
+> 07:41:01.913914Z  INFO gossip: this node's own offer view changed — this round carries it to peers
+>   origins=[Media] media_allow=[] media_available=Some(1.0) was_origins=[] was_media_available=None
+>   stamped_from_dial_info=true
+> ```
+> 
+> `log_sent_snapshot` fired zero times on all three nodes, so the wire carried
+> what the stamp wrote. **The new merge-arm line from
+> `rr-2-merge-reads-the-triple-every-round` names the side that dropped it.**
+> The wall (beefy) saw `origins=[Media]` arriving for a full minute and refused
+> it every round (`target/ring-room-rr2-demo/beefy/daemon.err:565,580,…`):
+> 
+> ```
+> 07:41:01.922487Z DEBUG gossip: merge read this member's offer triple peer=LittleMac
+>   arm="local-record-not-older"
+>   in_origins=[Media] in_media_available=Some(1.0) in_event_time=1789890061
+>   have_origins=Some([]) have_media_available=None have_event_time=1789890061
+> 
+> 07:41:11.120088Z DEBUG … arm="local-record-not-older"
+>   in_origins=[Media] in_event_time=1789890061  have_origins=Some([]) have_event_time=1789890061
+> ```
+> 
+> (the same refusal repeats at 07:41:21.951, 07:41:31.181, 07:41:41.205,
+> 07:41:51.247, 07:42:01.281), and it was adopted only at
+> `beefy/daemon.err:701`, 60 s after the stamp and 30 s past the bar's window:
+> 
+> ```
+> 07:42:02.033007Z DEBUG … arm="lww-update"
+>   in_origins=[Media] in_media_available=Some(1.0) in_event_time=1789890122
+>   have_origins=Some([]) have_event_time=1789890121
+> ```
+> 
+> **The refusal is a one-second tie, and the tie is manufactured locally.**
+> `MemberRecord::event_time()` is `last_seen.max(removed_at)`
+> (`commonwealth/crates/commonwealth-core/src/mesh/mod.rs:330-332`), whole
+> seconds; the LWW arm is a strict `>`
+> (`mesh/mod.rs:713`, `Some(existing) if incoming.event_time() > existing.event_time()`),
+> so equal seconds fall through to `LocalRecordNotOlder` and the incoming
+> capabilities are discarded. And the peer writes that clock itself: after
+> reaching LittleMac, beefy bumps **LittleMac's** `last_seen` to now —
+> `sovereign/crates/sovereign-mesh/src/gossip.rs:891`,
+> `peer.last_seen = fabric.clock().now_unix_secs();` — which never touches
+> `capabilities` but does raise `have_event_time` to the current second. So a
+> peer's own liveness probe competes, in the same comparison, with the holder's
+> offer update, and the offer lands only when an incoming stamp happens to fall
+> in a strictly later second than the peer's last local bump. That is a race,
+> not a threshold: run A won it in 6.3 s, run B lost it for 60 s, same binaries,
+> same topology, back to back.
+> 
+> ## (c) What the operator must decide
+> 
+> 1. **Is this the row's `rr-2` work, or a new row?** The finding is one the two
+>    instrument rows were built to produce and did produce on the first cold
+>    run that hit it. Fixing it is a product change to the merge's ordering key,
+>    which no row in `ralph/next/ring-room-rr2/STATE.md` authorises and which
+>    the demo row explicitly forbids ("no tuning").
+> 2. **Which decider changes** — `commonwealth-core/src/mesh/mod.rs:713` (the
+>    strict `>` against a whole-second clock) or
+>    `sovereign-mesh/src/gossip.rs:891` (a peer restamping another member's
+>    `last_seen` into the same field the LWW compares). Principle 8 says one
+>    decider, and ordering taken from an essence rather than a second-granularity
+>    counter; a liveness bump and an offer version are two different facts riding
+>    one `u64`.
+> 3. **Whether the two-cold-run count restarts.** Run A is a clean six-PASSED
+>    cold run; run B is the FAILED one. Under the row's text the pair does not
+>    stand, and after a fix both must be re-run on the fixed binaries.
+> 4. **Nothing was tuned, nothing was fixed, no product file was touched.** The
+>    only tree change in this session is the `[~]` mark on the row and this file.
+> 
+> ## (d) To resume
+> 
+> Edit or mark the row in `ralph/next/ring-room-rr2/STATE.md`, then
+> `rm ralph/STOP ralph/NEEDS_HUMAN.md` (no `ralph/STOP` exists in this tree —
+> this session ran without the supervisor).
 
 </details>
