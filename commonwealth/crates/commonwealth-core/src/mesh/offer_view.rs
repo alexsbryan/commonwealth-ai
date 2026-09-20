@@ -140,6 +140,49 @@ pub fn log_merged(existing: Option<&MemberRecord>, incoming: &MemberRecord, arm:
     );
 }
 
+/// The PEER's OTHER line: what the merge did with this member's record this
+/// round, said for EVERY member on EVERY merge whether anything changed or
+/// not.
+///
+/// [`log_merged`] is the event line and it returns early on an unchanged
+/// triple; the refusal and not-older arms return before it is even called. So
+/// a run where a peer never listed a change cannot say which of three things
+/// happened — the triple never arrived in the bytes, it arrived and was equal
+/// to what we already held, or the LWW arm never fired
+/// (`Mesh::merge_one_member`'s `LocalRecordNotOlder`). Room run 3 hit exactly
+/// that: little stamped `media_available=Some(0.0)` for ~12 consecutive
+/// rounds, `log_sent_snapshot` never fired on any of the three nodes, and
+/// both peers held two merge lines each for little in the whole run. This is
+/// the line that separates the three, so it carries BOTH triples and BOTH
+/// `event_time`s rather than a diff.
+///
+/// `debug` and not `info`: one line per member per round is the volume
+/// `transport: resolved` already carries, and the room run captures
+/// `transport` at debug.
+pub fn log_merge_arm(
+    existing: Option<&(OfferView, u64)>,
+    incoming: &MemberRecord,
+    arm: &'static str,
+) {
+    let incoming_view = OfferView::of(incoming);
+    let existing_view = existing.map(|(view, _)| view);
+    tracing::debug!(
+        target: "transport",
+        peer = %incoming.name,
+        node_id = %incoming.node_id,
+        arm,
+        in_origins = ?incoming_view.origins,
+        in_media_allow = ?incoming_view.media_allow,
+        in_media_available = ?incoming_view.media_available,
+        in_event_time = incoming.event_time(),
+        have_origins = ?existing_view.map(|v| v.origins.clone()),
+        have_media_allow = ?existing_view.map(|v| v.media_allow.clone()),
+        have_media_available = ?existing_view.and_then(|v| v.media_available),
+        have_event_time = existing.map(|(_, at)| *at),
+        "gossip: merge read this member's offer triple"
+    );
+}
+
 /// The WIRE's line: the snapshot this round is about to POST to every picked
 /// peer does not say what the round stamped on our own record a moment ago.
 ///

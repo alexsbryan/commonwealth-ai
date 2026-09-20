@@ -1002,3 +1002,152 @@ async fn an_offer_survives_the_writers_that_contend_with_its_round() {
     assert_eq!(rows[0].peer, "LittleMac");
     assert_eq!(rows[0].media_available, Some(1.0));
 }
+
+/// A reading that changes with the offer UNTOUCHED reaches the peer's media
+/// rail in one round.
+///
+/// Every test above moves `origins` and watches the reading ride along. Room
+/// run 3 moved only the reading: little stamped `media_available=Some(0.0)`
+/// at 04:58:23.354 with `origins=[Media]` unchanged, logged `reach ok` to
+/// both peers on every one of the ~12 rounds that followed, and
+/// `log_sent_snapshot` fired zero times on all three nodes — yet neither peer
+/// ever showed the 0.0. `origins` is what `commonwealth_media::offers` keys
+/// the ROW on, so a rail that lists the holder throughout hides a stale
+/// reading inside a row that never appears or disappears. This is the case
+/// neither the suite nor the demo had.
+#[tokio::test]
+async fn a_reading_that_changes_alone_reaches_a_peers_media_rail_in_one_round() {
+    let mesh_id = MeshId::from_u128(45);
+    let hash = [14u8; 32];
+    let holder = NodeId::from_u128(100);
+    let viewer = NodeId::from_u128(200);
+
+    let mesh_holder = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
+        id: mesh_id,
+        name: "T".into(),
+        invite_key_hash: hash,
+        invite_version: 0,
+        require_encryption: false,
+        members: {
+            let mut m = HashMap::new();
+            m.insert(
+                holder,
+                member_at(holder, "LittleMac", 100, "127.0.0.1:1".parse().unwrap()),
+            );
+            m
+        },
+        peers: vec![],
+    };
+    let state_holder = AppState::new(holder, mesh_holder);
+    let addr_holder = spawn_internal_router(state_holder.clone()).await;
+
+    let mesh_viewer = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
+        id: mesh_id,
+        name: "T".into(),
+        invite_key_hash: hash,
+        invite_version: 0,
+        require_encryption: false,
+        members: {
+            let mut m = HashMap::new();
+            m.insert(holder, member_at(holder, "LittleMac", 100, addr_holder));
+            m.insert(
+                viewer,
+                member_at(viewer, "BeefyMac", 150, "127.0.0.1:2".parse().unwrap()),
+            );
+            m
+        },
+        peers: vec![],
+    };
+    let state_viewer = AppState::new(viewer, mesh_viewer);
+    let addr_viewer = spawn_internal_router(state_viewer.clone()).await;
+    {
+        let mut mesh = state_holder.inner.fabric.mesh.write().await;
+        mesh.members
+            .insert(viewer, member_at(viewer, "BeefyMac", 150, addr_viewer));
+    }
+
+    // The offer, and the dial info that carries it. Neither moves again for
+    // the rest of this test — the reading is the only thing that changes.
+    state_holder.inner.fabric.dial_info.publish(Arc::new(|| {
+        commonwealth_core::mesh::IrohDialInfo {
+            relay_url: None,
+            direct_addrs: Vec::new(),
+            origins: vec![commonwealth_core::capabilities::OriginKind::Media],
+            media_allow: vec!["BeefyMac".into()],
+        }
+    }));
+    state_holder.update_local_media_available(Some(1.0)).await;
+
+    let round = |state: &AppState| {
+        let state = state.clone();
+        async move {
+            gossip::run_one_round(
+                &*state.inner.fabric,
+                state.inner.node.corpus_engine.as_ref(),
+                &state,
+                Duration::from_secs(60),
+            )
+            .await
+            .expect("gossip round should succeed")
+        }
+    };
+    let rail = || async {
+        let m = state_viewer.inner.fabric.mesh.read().await;
+        commonwealth_media::offers(
+            viewer,
+            &commonwealth_media::roster_of(&m),
+            &[],
+            commonwealth_core::capabilities::OriginKind::Media,
+        )
+    };
+
+    round(&state_holder).await;
+    let rows = rail().await;
+    assert_eq!(rows.len(), 1, "the offer must be on the rail first: {rows:?}");
+    assert_eq!(rows[0].media_available, Some(1.0));
+
+    // The origin is being watched now. `origins` and `media_allow` are
+    // untouched, so the row stays — only the reading inside it moves.
+    //
+    // LWW compares `event_time()` in whole SECONDS, so two rounds inside one
+    // second are indistinguishable to the peer and the second is skipped as
+    // `LocalRecordNotOlder`.
+    tokio::time::sleep(Duration::from_millis(1_100)).await;
+    state_holder.update_local_media_available(Some(0.0)).await;
+    round(&state_holder).await;
+
+    // The holder's own record first, then the peer's copy — a failure here
+    // names the stamp, a failure below names the merge.
+    {
+        let m = state_holder.inner.fabric.mesh.read().await;
+        assert_eq!(
+            m.members[&holder].capabilities.media_available,
+            Some(0.0),
+            "the holder must stamp the new reading: {:?}",
+            m.members[&holder].capabilities
+        );
+        assert_eq!(
+            m.members[&holder].capabilities.origins,
+            vec![commonwealth_core::capabilities::OriginKind::Media],
+            "the offer itself must not move"
+        );
+    }
+
+    let rows = rail().await;
+    assert_eq!(
+        rows.len(),
+        1,
+        "the row must still be there — only the reading changed: {rows:?}"
+    );
+    assert_eq!(rows[0].peer, "LittleMac");
+    assert_eq!(
+        rows[0].media_available,
+        Some(0.0),
+        "one round after the reading changed alone, the viewer's rail must \
+         read 0.0 — the case room run 3 could not attribute to a side"
+    );
+}
