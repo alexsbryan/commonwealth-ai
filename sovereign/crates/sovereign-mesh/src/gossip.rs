@@ -40,8 +40,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use commonwealth_core::ids::{MeshId, NodeId};
-use commonwealth_core::mesh::{MemberRecord, Mesh, MeshPeering, NodeStatus};
 use commonwealth_core::mesh::offer_view;
+use commonwealth_core::mesh::{MemberRecord, Mesh, MeshPeering, NodeStatus};
 use commonwealth_transport::{peer_contact, PeerContact, TrafficClass};
 use corpus_engine::CorpusEngine;
 use serde::{Deserialize, Serialize};
