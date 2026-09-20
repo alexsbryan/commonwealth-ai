@@ -5602,3 +5602,21 @@ the charter names in either list. Read as: the row's stated edit is mine to land
 beyond it is not.
 
 </details>
+
+## A36 · 2026-09-20 — e7-pod-preflight: the re-census corpus gets its own row; `--finalize` is skipped in rehearsal
+
+<details>
+
+**Unit:** `e7-pod-preflight`, halted §6 with `pod_window.sh` landed (`473d5dbcc`). Decided by the seat, not a resolution session: the operator's standing word for this window (2026-09-19, rent allowed, 4 h cap) is what prices the fork, and a resolver does not hold it. The supervisor was stopped with an empty `ralph/STOP` before it dispatched one.
+
+**Fork 1 — which corpus the batch re-censuses.** Not open: PRE-REG `:233` ("three services that were not in the spike, chosen by the corpus rule") and the REVIEW-DEMO row both name it. Measured by the worker: X 145,448 · Facebook 90,447 · YouTube 71,576 words. The gap was that no row built it. New row `e7-recensus-corpus`: parametrize the spike's `build_corpus.py` (no-arg output `cmp`-identical), a recipe byte-identical to the spike's from `[extract]` down under a FRESH id `ei7-recensus-fineprint` (both spike corpora carry a pre-lane-X `_phase1_checkpoint.jsonl`; `--resume` would skip every chapter lane X changed and D3-D5 would read the old numbers back), and `corpus install` moved OUT of the pod batch because it needs no GPU.
+
+**Fork 2 — rehearsal vs `--finalize`.** `extract/args.rs:120-127` refuses `--finalize` with `--dry-run`. Rehearsal skips that line and prints `skipped` with the reason; running it for real would rewrite `cache/questions.json` on a real corpus, and dropping it loses the resumed-extraction read.
+
+**Cost.** ~1,370 sections at the measured 4.7 s is ~1 h 47 m of extraction, ~2.5-3 h with build and pilot, against the 1.5 h the HUMAN row said. Inside the 4 h cap on an Ada-class card (~$0.67/h, max ~$2.70); the HUMAN row now says so and names the 4 h watchdog.
+
+**Added, beyond the halt:** the batch copies the corpus's `runs/` into the window's committed directory, so a later head-noun-merge criterion (A35) can be re-censused locally from the saved sketches instead of a second rental.
+
+**Falsified if** the install reports a section count far from ~1,370 (then re-derive the meter before renting); or `wc -w` ranks a different top three.
+
+</details>
