@@ -370,6 +370,12 @@ async fn run_synthesis_stream(
     })
 }
 
+/// Stream-door twin of `runtime::turn`'s `runtime: dispatching` line. A streamed
+/// CodeQuery reaches `stream_deep_query_turn`, not the row's `handle_code_query`.
+fn trace_stream_dispatch(dispatch: &'static str) {
+    tracing::info!(dispatch, door = "stream", "runtime: dispatching");
+}
+
 /// Last `n` chars of `s`, char-safe — for glassbox answer tails (truncation trace).
 fn tail_chars(s: &str, n: usize) -> String {
     let mut v: Vec<char> = s.chars().rev().take(n).collect();
@@ -4456,6 +4462,7 @@ impl Runtime {
                 register = ?context.turn_register(),
                 "runtime: dispatching ExpressiveQuery to streaming witness"
             );
+            trace_stream_dispatch("handle_expressive_query_stream");
             return self
                 .handle_expressive_query_stream(message, conversation_id, &context)
                 .await;
@@ -4468,6 +4475,7 @@ impl Runtime {
         // (a 1.5-3.5min blank screen then a dump — 2026-06-26 breaker finding).
         if matches!(intent, Intent::GenerativeQuery) {
             tracing::info!(intent = ?intent, "runtime: dispatching GenerativeQuery to streaming");
+            trace_stream_dispatch("handle_generative_query_stream");
             return self
                 .handle_generative_query_stream(message, conversation_id, &context, cancel_token)
                 .await;
@@ -4503,6 +4511,7 @@ impl Runtime {
             );
             let response = match intent {
                 Intent::MetalingualQuery => {
+                    trace_stream_dispatch("handle_metalingual_query");
                     self.handle_metalingual_query(
                         message,
                         conversation_id,
@@ -4512,14 +4521,17 @@ impl Runtime {
                     .await?
                 }
                 Intent::ConationQuery => {
+                    trace_stream_dispatch("handle_conation_query");
                     self.handle_conation_query(message, conversation_id, &context)
                         .await?
                 }
                 Intent::CommissiveQuery => {
+                    trace_stream_dispatch("handle_commissive_query");
                     self.handle_commissive_query(message, conversation_id, &context)
                         .await?
                 }
                 Intent::ComplexTask => {
+                    trace_stream_dispatch("handle_complex_task");
                     self.handle_complex_task(message, conversation_id, &context, &tool_descriptors)
                         .await?
                 }
@@ -4566,6 +4578,7 @@ impl Runtime {
         // which made the desktop chat window sit inert for ~35s while
         // the full response was assembled server-side.
         if matches!(intent, Intent::KnowledgeQuery | Intent::ComparisonQuery) {
+            trace_stream_dispatch("stream_knowledge_query_turn");
             return self
                 .stream_knowledge_query_turn(
                     message,
@@ -4584,6 +4597,7 @@ impl Runtime {
         }
 
         // DeepQuery / SimpleQuery streaming path.
+        trace_stream_dispatch("stream_deep_query_turn");
         self.stream_deep_query_turn(
             message,
             conversation_id,

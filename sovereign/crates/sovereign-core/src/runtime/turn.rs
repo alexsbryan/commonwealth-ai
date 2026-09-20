@@ -847,7 +847,7 @@ impl Runtime {
         // names by `dispatch_column_names_a_runtime_handler`; that a given row
         // names the arm actually taken below is still a reading, not a test.
         let dispatch = intent.row().dispatch;
-        tracing::info!(dispatch, "runtime: dispatching");
+        tracing::info!(dispatch, door = "turn", "runtime: dispatching");
 
         let result = match intent {
             Intent::ComplexTask => {
