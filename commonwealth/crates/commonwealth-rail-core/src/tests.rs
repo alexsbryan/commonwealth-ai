@@ -862,7 +862,9 @@ fn a_correction_with_no_replacement_still_names_the_guest() {
     let f = admitted(&[first, retraction]);
     assert!(f.gaps.is_empty(), "{:?}", f.gaps);
     assert!(
-        f.ops.iter().all(|o| o.on_behalf_of.as_deref() == Some("dee")),
+        f.ops
+            .iter()
+            .all(|o| o.on_behalf_of.as_deref() == Some("dee")),
         "a payload-less act names its guest too"
     );
     assert!(applied(&f).is_empty(), "the retraction voided the record");

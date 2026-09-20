@@ -158,7 +158,16 @@ fn seed(j: &RingJournal, k: &SigningKey, actor: &str, n: usize, mk: &dyn Fn(usiz
         };
         let body = commonwealth_rail::body_json(&act, None);
         let sig = sign_ring_op(k, j.namespace(), ts, seq, &body);
-        ops.push(Op::new(SignedOp { seq, sig, act, on_behalf_of: None }, ts, actor.to_string()));
+        ops.push(Op::new(
+            SignedOp {
+                seq,
+                sig,
+                act,
+                on_behalf_of: None,
+            },
+            ts,
+            actor.to_string(),
+        ));
     }
     assert_eq!(j.ingest_all(&ops).expect("seed"), n, "seed short");
 }

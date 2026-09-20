@@ -74,7 +74,16 @@ pub fn signed(key: &SigningKey, seq: u64, act: RailAct) -> Op<SignedOp> {
 pub fn signed_in(ns: &str, key: &SigningKey, seq: u64, act: RailAct) -> Op<SignedOp> {
     let ts = 1_700_000_000i64 + seq as i64;
     let sig = sign_ring_op(key, ns, ts, seq, &body_json(&act, None));
-    Op::new(SignedOp { seq, sig, act, on_behalf_of: None }, ts, actor_of(key))
+    Op::new(
+        SignedOp {
+            seq,
+            sig,
+            act,
+            on_behalf_of: None,
+        },
+        ts,
+        actor_of(key),
+    )
 }
 
 pub fn ops(key: &SigningKey, n: usize) -> Vec<Op<SignedOp>> {

@@ -92,7 +92,16 @@ fn signed(key: &SigningKey, namespace: &str, seq: u64, act: RailAct) -> Op<Signe
         seq,
         &commonwealth_rail::body_json(&act, None),
     );
-    Op::new(SignedOp { seq, sig, act, on_behalf_of: None }, ts, key.actor())
+    Op::new(
+        SignedOp {
+            seq,
+            sig,
+            act,
+            on_behalf_of: None,
+        },
+        ts,
+        key.actor(),
+    )
 }
 
 fn solo_roster(key: &SigningKey) -> Roster {
