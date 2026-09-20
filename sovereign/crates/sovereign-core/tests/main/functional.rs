@@ -2192,7 +2192,10 @@ async fn document_op_abstention_carries_a_record() {
         .await;
 
     assert!(
-        response.message.content.contains("No document chunks found"),
+        response
+            .message
+            .content
+            .contains("No document chunks found"),
         "this test must land on the abstention branch, not another handler: {}",
         response.message.content
     );
