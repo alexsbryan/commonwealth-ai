@@ -92,6 +92,7 @@ fn node(
         Default::default(),
         sovereign_daemon::state::node::NodeSeed {
             client_token: Some(Arc::<str>::from(TOKEN)),
+            ..Default::default()
         },
     );
     (state, rail)

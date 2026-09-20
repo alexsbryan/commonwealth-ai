@@ -191,6 +191,7 @@ pub fn client_app_state(
         mesh,
         sovereign_daemon::state::NodeSeed {
             client_token: token.map(std::sync::Arc::<str>::from),
+            ..Default::default()
         },
     )
 }

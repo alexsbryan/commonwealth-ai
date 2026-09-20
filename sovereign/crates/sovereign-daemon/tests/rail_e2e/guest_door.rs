@@ -488,3 +488,184 @@ async fn the_door_stamps_the_guest_and_the_page_cannot() {
     );
     assert!(!person.contains("zoe"), "the page's claim won: {person}");
 }
+
+/// The second app on this wall: its own grant, its own bearer, its own QR —
+/// because a grant names exactly one rail namespace.
+const DOC_TOKEN: &str = "1a2b3c4d5e6f70819a2b3c4d5e6f70819a2b3c4d5e6f70819a2b3c4d5e6f7081";
+const DOC_NS: &str = "ring-doc";
+
+/// Put a second app's namespace on the same wall: a roster it can admit
+/// against, and a live grant of its own.
+fn second_app(state: &AppState, key: &SigningKey) {
+    let mut members = std::collections::BTreeMap::new();
+    members.insert(Person::from("alex"), vec![key.actor()]);
+    members.insert(
+        Person::from("bo"),
+        vec!["bo-has-not-joined-yet".to_string()],
+    );
+    state
+        .ring_rail()
+        .expect("a rail")
+        .journal(DOC_NS)
+        .unwrap()
+        .set_roster(&Roster::new(members))
+        .unwrap();
+    state.inner.node.guest_grants.issue(
+        DOC_TOKEN,
+        vec![Scope::Rails(DOC_NS.into())],
+        Some("doc".into()),
+        3_600,
+        commonwealth_core::clock::unix_now_millis(),
+    );
+}
+
+/// Present `handle` with `bearer` — a phone that named itself on one app,
+/// walking to the other one on the same wall.
+fn as_guest(
+    method: &str,
+    path: &str,
+    bearer: &str,
+    handle: &str,
+    body: Option<serde_json::Value>,
+) -> Request<Body> {
+    let mut req = request(method, path, LAN_PEER, Some(bearer), body);
+    req.headers_mut().insert(
+        axum::http::HeaderName::from_static("x-ring-session"),
+        axum::http::HeaderValue::from_str(handle).unwrap(),
+    );
+    req
+}
+
+/// Claim `name` under `bearer` and return the handle.
+async fn claimed(state: AppState, page: &std::path::Path, bearer: &str, name: &str) -> String {
+    let (status, body) = door(
+        state,
+        page,
+        request(
+            "POST",
+            "/v1/guest/session",
+            LAN_PEER,
+            Some(bearer),
+            Some(serde_json::json!({ "name": name })),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    serde_json::from_str::<serde_json::Value>(&body).unwrap()["session"]
+        .as_str()
+        .expect("a handle")
+        .to_string()
+}
+
+/// **The grant is the scope; the session is the person.** A wall's second app
+/// is a second grant with a second bearer, and the phone that already typed
+/// its name is the same person there — it is not asked again.
+///
+/// **And the handle decides nothing about reach.** The act written while
+/// presenting the doc's bearer lands in the DOC's namespace, not in the one
+/// the name was claimed under: `permits_path` on the bearer presented is the
+/// sole decider, and a handle only ever names.
+#[tokio::test]
+async fn a_name_claimed_on_one_app_is_the_same_person_on_the_next() {
+    let dir = tempfile::tempdir().unwrap();
+    let key = SigningKey::from_bytes(&[1u8; 32]);
+    let a = with_guest(
+        state_with_rail(dir.path(), &key),
+        vec![Scope::Rails(NS.into())],
+    );
+    second_app(&a, &key);
+    let (_root, page) = page_dir();
+
+    let handle = claimed(a.clone(), &page, GUEST_TOKEN, "ana").await;
+
+    // The doc, on the same wall, under its own bearer: no second prompt, and
+    // the door names the writer from the handle it already knows.
+    let (status, body) = door(
+        a.clone(),
+        &page,
+        as_guest(
+            "POST",
+            "/v1/rail/append",
+            DOC_TOKEN,
+            &handle,
+            Some(serde_json::json!({
+                "op": "record",
+                "payload": { "kind": "doc-change", "doc": "ring-doc", "update": "AA==" },
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+
+    let (_, log) = door(
+        a.clone(),
+        &page,
+        as_guest("GET", "/v1/rail/log", DOC_TOKEN, &handle, None),
+    )
+    .await;
+    let log: serde_json::Value = serde_json::from_str(&log).unwrap();
+    assert_eq!(
+        log["namespace"], DOC_NS,
+        "reach followed the handle instead of the bearer presented"
+    );
+    let person = log["ops"][0]["person"].as_str().expect("a person");
+    assert!(
+        person.starts_with("ana, guest of "),
+        "the name did not walk to the second app: {person}"
+    );
+
+    // And nothing of it reached the app the name was claimed on.
+    let (_, other) = door(
+        a,
+        &page,
+        as_guest("GET", "/v1/rail/log", GUEST_TOKEN, &handle, None),
+    )
+    .await;
+    let other: serde_json::Value = serde_json::from_str(&other).unwrap();
+    assert_eq!(other["namespace"], NS);
+    assert_eq!(
+        other["ops"].as_array().map(Vec::len),
+        Some(0),
+        "an act written under the doc's bearer landed on the other app"
+    );
+}
+
+/// **The knob, watched working.** Under `[daemon] guest_sessions = "grant"` —
+/// the strict setting — the same walk is refused by name: the handle is not
+/// live under the second app's bearer, and the shim's answer is to ask for a
+/// name again rather than to present a handle this link does not know.
+#[tokio::test]
+async fn under_the_strict_binding_the_second_app_asks_again() {
+    let dir = tempfile::tempdir().unwrap();
+    let key = SigningKey::from_bytes(&[1u8; 32]);
+    let a = with_guest(
+        state_with_rail_sessions(
+            dir.path(),
+            &key,
+            sovereign_grants::GuestSessionBinding::Grant,
+        ),
+        vec![Scope::Rails(NS.into())],
+    );
+    second_app(&a, &key);
+    let (_root, page) = page_dir();
+
+    let handle = claimed(a.clone(), &page, GUEST_TOKEN, "ana").await;
+
+    // Still the same person on the app it was claimed on.
+    let (status, body) = door(
+        a.clone(),
+        &page,
+        as_guest("GET", "/v1/rail/log", GUEST_TOKEN, &handle, None),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+
+    let (status, body) = door(
+        a,
+        &page,
+        as_guest("GET", "/v1/rail/log", DOC_TOKEN, &handle, None),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert!(body.contains("stale_session"), "{body}");
+}

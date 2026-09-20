@@ -124,10 +124,13 @@ fn node(
         journal.set_roster(&solo_roster(key)).unwrap();
         assert_eq!(seed(&journal, key, n), n, "the fixture must land in full");
     }
-    let state = bare_state_with_seed(sovereign_daemon::state::FabricSeed {
-        ring_rail: Some(rail),
-        ..Default::default()
-    });
+    let state = bare_state_with_seed(
+        sovereign_daemon::state::FabricSeed {
+            ring_rail: Some(rail),
+            ..Default::default()
+        },
+        sovereign_grants::GuestSessionBinding::Door,
+    );
     (state, journal)
 }
 

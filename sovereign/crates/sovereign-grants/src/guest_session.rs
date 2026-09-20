@@ -19,12 +19,29 @@
 //!
 //! It names no scope and decides nothing. `GuestGrant::permits_path` remains
 //! the sole decider of what may be reached, and a session reaches exactly what
-//! its grant reaches, for exactly as long: [`GuestSession::expires_at_ms`] is
-//! COPIED from the grant by [`GuestSessionStore::claim`] rather than computed
-//! from a TTL of its own, so "a session cannot outlive its grant" is
-//! arithmetic rather than a rule somebody has to remember (ARCH 10). A handle
-//! presented under a different grant is not live — [`GuestSessionStore::live`]
-//! takes the grant and checks the binding.
+//! the bearer PRESENTED ON THIS REQUEST reaches — never what the grant the
+//! handle was claimed under reaches. A handle only ever NAMES.
+//!
+//! # The session belongs to the door, not to one grant
+//!
+//! A grant names exactly one rail namespace ([`crate::guest_grant::Scope`]),
+//! so a wall holding two apps hands out two grants and two QR codes. The
+//! person does not change because the scope did: under
+//! [`GuestSessionBinding::Door`] — the default — a handle is recognised under
+//! ANY live grant this door minted, so the phone that typed its name on the
+//! expenses app is not asked again on the doc. The strict setting,
+//! [`GuestSessionBinding::Grant`], is the original binding: a handle is live
+//! only under the grant it was claimed on.
+//!
+//! Either way a session cannot outlive its grants:
+//! [`GuestSession::expires_at_ms`] is COPIED from a grant rather than computed
+//! from a TTL of its own, [`GuestSessionStore::live`] evaluates the presented
+//! grant's liveness on every read, and the auth layer has already refused a
+//! dead bearer before any handle is read. Under `Door` the expiry is EXTENDED
+//! to a later grant's when the handle is presented under one — which is still
+//! a grant's own expiry, so the 24 h cap
+//! ([`crate::guest_grant::MAX_GUEST_TTL_SECS`]) bounds it without this store
+//! knowing the number (ARCH 10).
 //!
 //! # In memory, keyed by handle, never gossiped
 //!
@@ -39,13 +56,83 @@ use std::sync::Mutex;
 
 use crate::guest_grant::GuestGrant;
 
+/// What a session handle is recognised under. **CLOSED SET**, and the one
+/// decider for both of the questions the binding changes: whose names collide
+/// ([`GuestSessionStore::claim`]) and whose handle is live
+/// ([`GuestSessionStore::live`]).
+///
+/// Configured once as `[daemon] guest_sessions` and carried as a construction
+/// argument, never re-read per request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum GuestSessionBinding {
+    /// **The default.** A handle belongs to this daemon's guest door and is
+    /// recognised under any live grant the door minted; a name is held across
+    /// the whole wall. One person walking between two apps on one wall types
+    /// their name once — the 0→1 path, which is what a wall is for.
+    #[default]
+    Door,
+    /// The strict setting: a handle is live only under the grant it was
+    /// claimed on, and names collide only within that grant. A wall whose
+    /// apps are handed to different rooms wants this — the second app asks
+    /// the name again, which is the cost, and it is the operator's to choose.
+    Grant,
+}
+
+impl GuestSessionBinding {
+    /// Parse the configured value. Refuses an unknown one rather than falling
+    /// back to a default — an operator who typed `guest_sessions = "grants"`
+    /// asked for strict and would otherwise silently get the opposite
+    /// (ARCH 6).
+    pub fn parse(raw: &str) -> Result<Self, UnknownBinding> {
+        match raw.trim() {
+            "door" => Ok(Self::Door),
+            "grant" => Ok(Self::Grant),
+            other => Err(UnknownBinding {
+                value: other.to_string(),
+            }),
+        }
+    }
+
+    /// The configured spelling, for a trace that says which setting is live.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Door => "door",
+            Self::Grant => "grant",
+        }
+    }
+}
+
+/// `[daemon] guest_sessions` named something that is not a binding.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnknownBinding {
+    /// What was configured, so the refusal can show it back.
+    pub value: String,
+}
+
+impl std::fmt::Display for UnknownBinding {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "[daemon] guest_sessions = '{}' is not a session binding — it is \
+             \"door\" (a name holds across this wall) or \"grant\" (a name \
+             holds under one link)",
+            self.value
+        )
+    }
+}
+
+impl std::error::Error for UnknownBinding {}
+
 /// One person behind one grant, for as long as that grant lives.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GuestSession {
     /// The opaque string the phone presents. This session's primary key.
     pub handle: String,
-    /// The grant this session was claimed under. A handle presented with any
-    /// other bearer is not this session — see the module docs.
+    /// The grant this session was claimed under. Under
+    /// [`GuestSessionBinding::Grant`] a handle presented with any other bearer
+    /// is not this session; under the default `Door` binding it still records
+    /// where the name was first typed, and [`GuestSessionStore::under`] reads
+    /// it. Never a statement about reach — see the module docs.
     pub grant_token: String,
     /// What the guest typed, as they typed it. Rendered; never parsed.
     pub name: String,
@@ -87,15 +174,31 @@ pub struct NameHeld {
 #[derive(Default)]
 pub struct GuestSessionStore {
     inner: Mutex<HashMap<String, GuestSession>>,
+    /// What a handle is recognised under. A construction argument, resolved
+    /// from `[daemon] guest_sessions` before the store exists — so no request
+    /// path reads config, and the two questions it changes cannot disagree.
+    binding: GuestSessionBinding,
 }
 
 impl GuestSessionStore {
-    pub fn new() -> Self {
-        Self::default()
+    /// An empty store under `binding`. [`GuestSessionBinding::Door`] is the
+    /// default a `Default` store takes.
+    pub fn new(binding: GuestSessionBinding) -> Self {
+        Self {
+            inner: Mutex::new(HashMap::new()),
+            binding,
+        }
+    }
+
+    /// Which binding this store was built with, for the trace that says so.
+    pub fn binding(&self) -> GuestSessionBinding {
+        self.binding
     }
 
     /// Bind `name` to `handle` under `grant`, or refuse because a live session
-    /// on the same grant already holds that name.
+    /// already holds that name in this store's collision domain — the whole
+    /// door under [`GuestSessionBinding::Door`], this grant alone under
+    /// [`GuestSessionBinding::Grant`].
     ///
     /// The handle is a parameter, not minted here: entropy is injected for the
     /// same reason `now_ms` is. Mint with
@@ -115,7 +218,7 @@ impl GuestSessionStore {
         let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         let taken = guard
             .values()
-            .any(|s| s.grant_token == grant.token && s.is_live(now_ms) && s.is_named(&name));
+            .any(|s| self.in_domain(s, grant) && s.is_live(now_ms) && s.is_named(&name));
         if taken {
             return Err(NameHeld { name });
         }
@@ -132,21 +235,47 @@ impl GuestSessionStore {
         Ok(session)
     }
 
-    /// The live session for `handle` under `grant`, or `None`.
+    /// Whether `session` is in the collision-and-recognition domain of
+    /// `grant`. **The ONE place the binding is interpreted** — `claim` and
+    /// `live` both ask it, so "whose name collides" and "whose handle is
+    /// live" can never answer from two different rules (ARCH 8).
+    fn in_domain(&self, session: &GuestSession, grant: &GuestGrant) -> bool {
+        match self.binding {
+            // Every grant in this store was minted by this door, so being in
+            // the store IS being under the door.
+            GuestSessionBinding::Door => true,
+            GuestSessionBinding::Grant => session.grant_token == grant.token,
+        }
+    }
+
+    /// The live session for `handle` on a request presenting `grant`, or
+    /// `None`.
     ///
     /// **THE decider for "is this handle usable on this request".** Three
     /// things must hold and all three are evaluated here, lazily, so no sweep
-    /// has to have run: the grant is live, the handle was claimed under THAT
-    /// grant, and the session itself has not lapsed.
+    /// has to have run: the grant is live, the handle is in that grant's
+    /// domain ([`Self::in_domain`]), and the session itself has not lapsed.
+    ///
+    /// It decides WHO, never WHAT: the caller's reach is
+    /// `GuestGrant::permits_path` on the grant presented here, and this
+    /// function returns a name. Under [`GuestSessionBinding::Door`] a handle
+    /// presented under a grant that outlives it takes THAT grant's expiry —
+    /// the person does not lapse mid-room because the link they first scanned
+    /// was the shorter one, and the new expiry is still a grant's own, so no
+    /// TTL is invented here.
     pub fn live(&self, handle: &str, grant: &GuestGrant, now_ms: u64) -> Option<GuestSession> {
         if !grant.is_live(now_ms) {
             return None;
         }
-        let guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        guard
-            .get(handle)
-            .filter(|s| s.grant_token == grant.token && s.is_live(now_ms))
-            .cloned()
+        let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let session = guard.get_mut(handle)?;
+        if !self.in_domain(session, grant) || !session.is_live(now_ms) {
+            return None;
+        }
+        if session.expires_at_ms < grant.expires_at_ms {
+            session.expires_at_ms = grant.expires_at_ms;
+        }
+        Some(session.clone())
     }
 
     /// Every session held under `grant`, live or not, for a refusal that wants
@@ -227,7 +356,7 @@ mod tests {
     fn two_phones_on_one_grant_hold_two_names() {
         let grants = GuestGrantStore::new();
         let grant = wall_grant(&grants, "tok", 60);
-        let sessions = GuestSessionStore::new();
+        let sessions = GuestSessionStore::new(GuestSessionBinding::Door);
 
         let a = sessions.claim("h1", &grant, "Wren", T0).expect("first");
         let b = sessions.claim("h2", &grant, "Ash", T0).expect("second");
@@ -252,7 +381,7 @@ mod tests {
     fn a_name_already_held_under_the_grant_is_refused() {
         let grants = GuestGrantStore::new();
         let grant = wall_grant(&grants, "tok", 60);
-        let sessions = GuestSessionStore::new();
+        let sessions = GuestSessionStore::new(GuestSessionBinding::Door);
         sessions.claim("h1", &grant, "Wren", T0).expect("first");
 
         let refused = sessions
@@ -264,15 +393,26 @@ mod tests {
         assert!(sessions.live("h2", &grant, T0).is_none());
     }
 
-    /// The same name under a DIFFERENT grant is a different room, and is fine.
+    /// **The collision domain follows the binding.** On one wall (`Door`) two
+    /// people called the same thing is the confusion the refusal exists to
+    /// prevent, whichever app they scanned; under `Grant` the two links are
+    /// two rooms and the same name in each is fine.
     #[test]
-    fn the_same_name_under_another_grant_is_a_different_room() {
+    fn the_collision_domain_is_the_door_by_default_and_the_grant_when_strict() {
         let grants = GuestGrantStore::new();
         let one = wall_grant(&grants, "tok1", 60);
         let two = wall_grant(&grants, "tok2", 60);
-        let sessions = GuestSessionStore::new();
-        sessions.claim("h1", &one, "Wren", T0).expect("first room");
-        sessions
+
+        let door = GuestSessionStore::new(GuestSessionBinding::Door);
+        door.claim("h1", &one, "Wren", T0).expect("first app");
+        let refused = door
+            .claim("h2", &two, "wren", T0)
+            .expect_err("one wall, one Wren");
+        assert_eq!(refused.name, "wren");
+
+        let strict = GuestSessionStore::new(GuestSessionBinding::Grant);
+        strict.claim("h1", &one, "Wren", T0).expect("first room");
+        strict
             .claim("h2", &two, "Wren", T0)
             .expect("another room's Wren is not this room's");
     }
@@ -284,7 +424,7 @@ mod tests {
     fn a_session_dies_with_its_grant() {
         let grants = GuestGrantStore::new();
         let grant = wall_grant(&grants, "tok", 60);
-        let sessions = GuestSessionStore::new();
+        let sessions = GuestSessionStore::new(GuestSessionBinding::Door);
         let s = sessions.claim("h1", &grant, "Wren", T0).expect("claim");
 
         assert_eq!(s.expires_at_ms, grant.expires_at_ms);
@@ -301,19 +441,75 @@ mod tests {
         assert!(sessions.live("h1", &revoked, T0).is_none());
     }
 
-    /// A handle is only a handle under the grant it was claimed on. Otherwise
-    /// a second link handed to somebody else would inherit the first room's
-    /// names.
+    /// **The person does not change because the scope did.** Two apps on one
+    /// wall are two grants; by default the handle claimed on one is the same
+    /// person on the other, so nobody is asked their name twice. Under the
+    /// strict binding it is not live there — the setting a wall whose links
+    /// went to different rooms chooses.
     #[test]
-    fn a_handle_is_not_live_under_another_grant() {
+    fn a_handle_is_the_doors_by_default_and_the_grants_when_strict() {
         let grants = GuestGrantStore::new();
         let one = wall_grant(&grants, "tok1", 60);
         let two = wall_grant(&grants, "tok2", 60);
-        let sessions = GuestSessionStore::new();
-        sessions.claim("h1", &one, "Wren", T0).expect("claim");
 
-        assert!(sessions.live("h1", &one, T0).is_some());
-        assert!(sessions.live("h1", &two, T0).is_none());
+        let door = GuestSessionStore::new(GuestSessionBinding::Door);
+        door.claim("h1", &one, "Wren", T0).expect("claim");
+        assert!(door.live("h1", &one, T0).is_some());
+        assert_eq!(
+            door.live("h1", &two, T0).map(|s| s.name).as_deref(),
+            Some("Wren"),
+            "the second app on the same wall asked the name again"
+        );
+
+        let strict = GuestSessionStore::new(GuestSessionBinding::Grant);
+        strict.claim("h1", &one, "Wren", T0).expect("claim");
+        assert!(strict.live("h1", &one, T0).is_some());
+        assert!(strict.live("h1", &two, T0).is_none());
+    }
+
+    /// **A handle presented under a longer-lived grant takes that grant's
+    /// expiry, and never a TTL of this store's.** The person should not lapse
+    /// mid-room because the first link they scanned was the shorter one; the
+    /// new expiry is still a grant's own, so the 24 h cap bounds it.
+    #[test]
+    fn a_door_session_takes_the_expiry_of_a_grant_that_outlives_it() {
+        let grants = GuestGrantStore::new();
+        let short = wall_grant(&grants, "tok1", 60);
+        let long = wall_grant(&grants, "tok2", 600);
+        let sessions = GuestSessionStore::new(GuestSessionBinding::Door);
+        let s = sessions.claim("h1", &short, "Wren", T0).expect("claim");
+        assert_eq!(s.expires_at_ms, short.expires_at_ms);
+
+        let seen = sessions.live("h1", &long, T0).expect("live on the wall");
+        assert_eq!(seen.expires_at_ms, long.expires_at_ms);
+        // And it is remembered, so the short grant lapsing does not un-name
+        // somebody still holding the long one.
+        assert!(sessions
+            .live("h1", &long, short.expires_at_ms + 1)
+            .is_some());
+        // The shorter grant is dead by then, so the handle is not live under
+        // IT — the presented grant is always the one that decides.
+        assert!(sessions
+            .live("h1", &short, short.expires_at_ms + 1)
+            .is_none());
+    }
+
+    /// The knob is parsed in one place and refuses what it does not know,
+    /// rather than reading a typo as the opposite setting.
+    #[test]
+    fn the_binding_parses_two_values_and_refuses_the_rest() {
+        assert_eq!(
+            GuestSessionBinding::parse("door"),
+            Ok(GuestSessionBinding::Door)
+        );
+        assert_eq!(
+            GuestSessionBinding::parse(" grant "),
+            Ok(GuestSessionBinding::Grant)
+        );
+        assert_eq!(GuestSessionBinding::default(), GuestSessionBinding::Door);
+        let e = GuestSessionBinding::parse("grants").expect_err("a typo is not a setting");
+        assert_eq!(e.value, "grants");
+        assert!(e.to_string().contains("guest_sessions"));
     }
 
     /// The sweep removes what `live` already refuses, and nothing else.
@@ -322,7 +518,7 @@ mod tests {
         let grants = GuestGrantStore::new();
         let short = wall_grant(&grants, "tok1", 1);
         let long = wall_grant(&grants, "tok2", 600);
-        let sessions = GuestSessionStore::new();
+        let sessions = GuestSessionStore::new(GuestSessionBinding::Door);
         sessions.claim("h1", &short, "Wren", T0).expect("claim");
         sessions.claim("h2", &long, "Ash", T0).expect("claim");
 

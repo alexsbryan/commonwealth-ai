@@ -1144,7 +1144,7 @@ impl AppState {
                     corpus_engine,
                     started_at: std::time::Instant::now(),
                     guest_grants: Arc::new(GuestGrantStore::new()),
-                    guest_sessions: Arc::new(GuestSessionStore::new()),
+                    guest_sessions: Arc::new(GuestSessionStore::new(node_seed.guest_sessions)),
                     // 0 sentinel = no foreground activity observed yet.
                     // The yield hook treats 0 as "never active", regardless
                     // of the window — so a fresh boot doesn't accidentally
@@ -2059,6 +2059,7 @@ pub fn test_app_state_with_token(token: Option<Arc<str>>) -> AppState {
         mesh,
         node::NodeSeed {
             client_token: token,
+            ..Default::default()
         },
     )
 }

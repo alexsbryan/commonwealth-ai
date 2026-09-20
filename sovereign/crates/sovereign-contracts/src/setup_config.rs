@@ -1390,6 +1390,11 @@ pub struct DaemonSection {
     /// one app names them in `[daemon.guest_pages]` instead.
     #[serde(default)]
     pub guest_page_dir: Option<PathBuf>,
+    /// What a guest's claimed NAME is recognised under — `"door"` (default,
+    /// `None`) or `"grant"`; reach is unaffected by either. Parsed and
+    /// explained by `sovereign_grants::GuestSessionBinding`, its one reader.
+    #[serde(default)]
+    pub guest_sessions: Option<String>,
 
     /// **Local-only profile: no discovery, no transport, no mesh loops.**
     ///
@@ -1466,6 +1471,7 @@ impl Default for DaemonSection {
             client_token: None,
             guest_bind: None,
             guest_page_dir: None,
+            guest_sessions: None,
             guest_pages: std::collections::BTreeMap::new(),
             internal_bind: default_internal_bind(),
             local_only: default_local_only(),

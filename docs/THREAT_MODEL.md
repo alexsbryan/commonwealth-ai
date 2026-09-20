@@ -75,7 +75,13 @@ Three zones, from most to least trusted:
   (namespace → bundle), each served at `/ring/<namespace>/` and only while
   a live grant names that namespace;
   the page reads the bearer from the URL fragment, which the browser never
-  sends. The door also answers `/status` and `/oicp/v1/capabilities` to
+  sends. A guest's door-issued session carries a NAME and no scope, and
+  `[daemon] guest_sessions` says what it is recognised under — `"door"`
+  (default: any live grant this door minted, so one person walking between
+  this wall's apps is named once) or `"grant"` (the link it was claimed on
+  alone). Neither setting changes reach: `permits_path` on the bearer
+  presented is still the only decider, and a session cannot outlive the
+  grants it is recognised under. The door also answers `/status` and `/oicp/v1/capabilities` to
   anyone on that network, as every non-loopback bind does.
   A rail scope also carries `POST /v1/guest/ask`
   (`sovereign/crates/sovereign-daemon/src/routes_guest_ask.rs`), which is how

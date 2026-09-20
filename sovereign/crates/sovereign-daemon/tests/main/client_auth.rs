@@ -97,6 +97,7 @@ fn state_with_token(token: Option<&str>) -> AppState {
         mesh,
         NodeSeed {
             client_token: token.map(Arc::<str>::from),
+            ..Default::default()
         },
     )
 }

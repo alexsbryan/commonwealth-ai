@@ -10,7 +10,9 @@ pub mod work_queue;
 pub use auto_recover::{FoldRecovery, RecoveryOutcome};
 
 pub use guest_grant::{GuestGrant, GuestGrantStore, Scope};
-pub use guest_session::{GuestSession, GuestSessionStore, NameHeld};
+pub use guest_session::{
+    GuestSession, GuestSessionBinding, GuestSessionStore, NameHeld, UnknownBinding,
+};
 pub use ingest_grant::{EphemeralGrantStore, EphemeralIngestGrant};
 pub use shard_manager::{verify_merge_sample, MergePlan, ShardManager, VerifyReport};
 pub use work_queue::{

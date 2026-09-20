@@ -435,16 +435,20 @@ const RING_SHIM: &str = r#"(function () {
   // The NAME, asked by the door's shim and never by the app.
   //
   // One QR serves a room, so every phone holds the same bearer and the grant
-  // cannot say who is writing. The door binds the name to a session handle
-  // under that grant; this asks for it once per link per device and presents
-  // the handle from then on. Remembered against the bearer, so the same phone
-  // opening a SECOND app on the same wall is not asked again.
+  // cannot say who is writing. The door binds the name to a session handle;
+  // this asks for it once per device and presents the handle from then on.
+  //
+  // Remembered per ORIGIN — which is this door — and NOT against the bearer.
+  // A wall's second app is a second grant with its own QR (a grant names one
+  // rail namespace), and the person does not change because the scope did.
+  // The door decides whether the handle is still good: a handle it does not
+  // recognise comes back 409 `stale_session` and is forgotten below.
   const SESSION_KEY = 'ring.session';
   let SESSION = null;
   const remembered = () => {
     try {
       const v = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
-      return v && v.handle && v.token === bearer ? v : null;
+      return v && v.handle ? v : null;
     } catch (_) { return null; }
   };
   const forget = () => { SESSION = null; try { localStorage.removeItem(SESSION_KEY); } catch (_) {} };
@@ -460,7 +464,7 @@ const RING_SHIM: &str = r#"(function () {
       let v = null;
       try { v = await r.json(); } catch (_) { v = null; }
       if (r.ok && v && v.session) {
-        SESSION = { token: bearer, handle: v.session, name: v.name };
+        SESSION = { handle: v.session, name: v.name };
         try { localStorage.setItem(SESSION_KEY, JSON.stringify(SESSION)); } catch (_) {}
         return SESSION;
       }
@@ -770,9 +774,18 @@ mod tests {
             "the shim stopped presenting the session handle — the door would \
              have nothing to name the guest from"
         );
-        // Remembered against the bearer, which is what makes the second app on
-        // the same wall not ask again.
-        assert!(RING_SHIM.contains("v.token === bearer"));
+        // Remembered per ORIGIN — this door — and never against the bearer,
+        // which is what makes the second app on the same wall not ask again:
+        // it is a second grant with a second bearer, and the same person.
+        assert!(
+            RING_SHIM.contains("return v && v.handle ? v : null;"),
+            "the shim stopped remembering the handle for this origin"
+        );
+        assert!(
+            !RING_SHIM.contains("v.token === bearer"),
+            "the handle is bound to one bearer again — the second app on this \
+             wall will ask the name a second time"
+        );
     }
 
     /// **A page may greet a guest; it may not choose one.** A settable name

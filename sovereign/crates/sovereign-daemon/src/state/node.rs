@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use commonwealth_state::ActivityEmitter;
 use corpus_engine::CorpusEngine;
-use sovereign_grants::{GuestGrantStore, GuestSessionStore};
+use sovereign_grants::{GuestGrantStore, GuestSessionBinding, GuestSessionStore};
 
 /// Everything the node's part is constructed with (DC §4.2 "Construction is
 /// staged, and parts are total"): the values that exist before the part is
@@ -27,6 +27,38 @@ pub struct NodeSeed {
     /// loopback-only bind, or a non-loopback bind whose token could not be
     /// resolved, which the [`crate::client_auth`] layer treats as fail-closed.
     pub client_token: Option<Arc<str>>,
+    /// What a guest's claimed name is recognised under, resolved from
+    /// `[daemon] guest_sessions` before the guest-session store exists. The
+    /// default ([`GuestSessionBinding::Door`]) is a name that holds across
+    /// this wall — see `sovereign_grants::guest_session`.
+    pub guest_sessions: GuestSessionBinding,
+}
+
+impl NodeSeed {
+    /// The seed as this daemon's configuration declares it.
+    ///
+    /// **THE one reader of `[daemon] guest_sessions`.** The store is built
+    /// with the binding already decided, so no request path reads config. An
+    /// unparseable value is refused rather than quietly read as the default —
+    /// an operator who asked for the strict binding and silently got the
+    /// permissive one would never find out (ARCH 6).
+    pub async fn resolved(
+        client_token: Option<String>,
+        config: &tokio::sync::RwLock<sovereign_core::setup_config::SetupConfig>,
+    ) -> Result<Self, sovereign_grants::UnknownBinding> {
+        let guest_sessions = match config.read().await.daemon.guest_sessions.as_deref() {
+            None => GuestSessionBinding::default(),
+            Some(raw) => GuestSessionBinding::parse(raw)?,
+        };
+        tracing::debug!(
+            guest_sessions = guest_sessions.as_str(),
+            "node seed: guest session binding resolved"
+        );
+        Ok(Self {
+            client_token: client_token.map(Into::into),
+            guest_sessions,
+        })
+    }
 }
 
 /// The node's ten fields, held as `AppStateInner::node`.
@@ -55,11 +87,12 @@ pub struct NodePart {
     /// touches `Mesh` — a guest is not a member and cannot become one.
     /// See `commonwealth-knowledge::guest_grant`.
     pub guest_grants: Arc<GuestGrantStore>,
-    /// The NAMES claimed under those grants — one QR serves a room, so the
-    /// grant cannot say which phone is asking and the session does. A session
-    /// is not a second credential: it names no scope, `GuestGrant::permits_path`
-    /// stays the only decider, and it dies with the grant it was claimed under.
-    /// See `sovereign_grants::guest_session`.
+    /// The NAMES claimed at this door — one QR serves a room, so the grant
+    /// cannot say which phone is asking and the session does. A session is not
+    /// a second credential: it names no scope, `GuestGrant::permits_path` on
+    /// the bearer presented stays the only decider, and it cannot outlive the
+    /// grants it is recognised under. Which grants those are is
+    /// [`NodeSeed::guest_sessions`]. See `sovereign_grants::guest_session`.
     pub guest_sessions: Arc<GuestSessionStore>,
     /// Unix-seconds timestamp of the last foreground inference request
     /// observed at `chat_completions`. `0` means "never touched" — the

@@ -226,7 +226,10 @@ takes the room-facing `host:port` and `[daemon] guest_page_dir` takes a copy of
 `sovereign/apps/ring-doc`; the door serves that page under `/ring/`. A second
 app on the same wall goes in `[daemon.guest_pages]` instead — one line per rail
 namespace, `ring-doc = "/path/to/bundle"` — and each is served at
-`/ring/<namespace>/`, only while a live grant names that namespace. The wall's
+`/ring/<namespace>/`, only while a live grant names that namespace. Each app
+is its own grant and its own QR, and a phone that typed its name on one of
+them is the same person on the next — set `[daemon] guest_sessions = "grant"`
+if you want each link to ask again. The wall's
 own screen is the member page, which `svrn ring dev ring-doc --dir
 sovereign/apps/ring-doc` serves on loopback. The QR comes from the grant verb, with `--url` set to the door:
 

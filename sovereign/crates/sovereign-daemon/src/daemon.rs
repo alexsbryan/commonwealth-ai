@@ -3205,9 +3205,9 @@ impl EmbeddedDaemon {
         client_bind = posture.bind;
         // The node's part exists before it is built, token and all (DC §4.2
         // "Construction is staged, and parts are total").
-        let node_seed = crate::state::NodeSeed {
-            client_token: posture.token.map(Into::into),
-        };
+        let node_seed = crate::state::NodeSeed::resolved(posture.token, &self.setup_config)
+            .await
+            .map_err(|e| MeshError::Config(e.to_string()))?;
         // Fabric's part is constructed before `AppState` and held on the
         // daemon, so it survives `stop_inner` (DC §4.1; DC §4.2 "Construction
         // is staged, and parts are total"). The membership operations that

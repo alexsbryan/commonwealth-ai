@@ -70,6 +70,7 @@ fn node(dir: &std::path::Path, key: &SigningKey, self_id: NodeId) -> AppState {
         Default::default(),
         sovereign_daemon::state::node::NodeSeed {
             client_token: Some(Arc::<str>::from(TOKEN)),
+            ..Default::default()
         },
     );
     // `/internal/ring/live` refuses a namespace no live rail grant names.
