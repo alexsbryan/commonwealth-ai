@@ -41,6 +41,19 @@ case "$check" in
              run node 8 node --test "$1" ;;
     demo)    run demo 12 "${1:-${RALPH_DEMO_SCRIPT:-scripts/ring-doc-demo.sh}}" verdict all ;;   # demo [script]; the queue's launch line sets RALPH_DEMO_SCRIPT
     demo-bg) # the full ring-room demo (~25 min) outlives a worker's 10-minute foreground call: start it detached, then poll with demo-wait
+             # REFUSE a second demo while one is running. Every demo script
+             # tears the node set down on its way up, so a second launch kills
+             # the first's nodes MID-WALK -- and overwriting demo.pid orphans
+             # the first, so demo-wait then watches the wrong process. That is
+             # what happened to the rr-1 regression run on 2026-09-19
+             # (target/ralph/rr1-run1.log: every daemon SIGTERMed 3.5 min in,
+             # `walk a kill 6` in target/ring-room-demo-commands.log, the
+             # podman network gone). A stale pid whose process is dead is not
+             # a conflict and is reclaimed.
+             if [ -f target/ralph/demo.pid ] && kill -0 "$(cat target/ralph/demo.pid)" 2>/dev/null; then
+               echo "a demo is already running (pid=$(cat target/ralph/demo.pid)) -- demo-wait for it, or kill it first; a second demo tears down the first's nodes mid-walk" >&2
+               exit 2
+             fi
              s="${1:-${RALPH_DEMO_SCRIPT:-scripts/ring-doc-demo.sh}}"; rm -f target/ralph/demo.log
              setsid nohup "$s" verdict all > target/ralph/demo.log 2>&1 < /dev/null &
              echo $! > target/ralph/demo.pid; echo "started pid=$(cat target/ralph/demo.pid) log=target/ralph/demo.log"; exit 0 ;;

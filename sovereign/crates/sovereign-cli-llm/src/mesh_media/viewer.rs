@@ -194,6 +194,72 @@ fn policy_is_read_only(user: &serde_json::Value) -> Result<(), String> {
     Ok(())
 }
 
+/// The viewer as it already stands, when `declared` IS this account's own
+/// token — the case on every offer after the first.
+///
+/// `offer` REPLACES the install credential with the viewer's
+/// (`mesh_media.rs:650-652`), so a second offer reaches here holding a
+/// read-only token and no elevation at all. Everything the mint path does
+/// next needs an administrator: measured 2026-09-19 against Jellyfin 12.0.0,
+/// `POST /Users/Password` answered `403 "Invalid user or password entered."`
+/// — that string is the non-admin branch of `UpdateUserPassword`, which
+/// verifies `CurrentPw` only when the caller is NOT an administrator. So the
+/// reuse path could never complete, and clause (f) of the room's film bar
+/// could never pass (`target/ring-room-rr2-demo/room-offer.out`).
+///
+/// Nothing needs minting in that case. `GET /Users/Me` answers both questions
+/// this verb has — who the declared credential is, and what that account may
+/// do — in one request, so the account is proven rather than rebuilt.
+/// Returns `None` when the credential is not this viewer's, which sends the
+/// caller down the mint path where a missing elevation fails loudly.
+async fn already_provisioned(
+    client: &reqwest::Client,
+    declared: &[(String, String)],
+    origin: SocketAddr,
+    found: &str,
+) -> Option<Result<Viewer, String>> {
+    // The single header the caller re-declares. A set with no `authorization`,
+    // or more than one credential in it, is not one this verb can hand back.
+    let credential = match declared {
+        [(name, value)] if name == "authorization" => value.clone(),
+        _ => return None,
+    };
+    let me = call(
+        client,
+        declared,
+        reqwest::Method::GET,
+        origin,
+        "/Users/Me",
+        None,
+    )
+    .await
+    .ok()?;
+    let me: serde_json::Value = serde_json::from_str(&me).ok()?;
+    if me.get("Id").and_then(serde_json::Value::as_str)? != found {
+        return None;
+    }
+    // From here it IS the viewer's token, so this verb holds no elevation and
+    // cannot repair anything. A policy that does not read back as asked is a
+    // refusal, not a fall-through to a write that would only 403.
+    if let Err(e) = policy_is_read_only(&me) {
+        return Some(Err(format!(
+            "{e} — and the credential declared here is the viewer's own, which cannot \
+             change a policy; re-declare an administrator's with `svrn mesh media declare \
+             authorization` and offer again"
+        )));
+    }
+    tracing::info!(
+        %origin,
+        viewer_user = %found,
+        "media offer: the declared credential is already this viewer's own and its policy \
+         reads back read-only — nothing to mint"
+    );
+    Some(Ok(Viewer {
+        id: found.to_string(),
+        credential,
+    }))
+}
+
 /// Create (or find) the read-only viewer on `origin`, prove its policy, and
 /// return the credential viewers' requests will carry.
 ///
@@ -237,6 +303,9 @@ pub(crate) async fn provision(
 
     let id = match &found {
         Some(id) => {
+            if let Some(done) = already_provisioned(&client, elevated, origin, id).await {
+                return done;
+            }
             tracing::debug!(
                 viewer_user = %id,
                 name = VIEWER_NAME,
@@ -361,6 +430,147 @@ pub(crate) async fn provision(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A stand-in origin that routes by path and records what was asked of
+    /// it. A raw listener rather than a test-server dependency: the contract
+    /// under test is which requests this verb makes, which is exactly what
+    /// the recording answers.
+    struct Origin {
+        addr: SocketAddr,
+        asked: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+    }
+
+    /// `routes` maps an EXACT path to the document it answers with. Anything
+    /// else answers `403 "Invalid user or password entered."` — which is what
+    /// the live origin answers a non-admin caller, so a verb that reaches for
+    /// something a viewer's own token cannot have fails here exactly as it
+    /// failed there. Exact, not prefix: `/Users` as a prefix would quietly
+    /// serve `/Users/Password` too, and the mint path would walk right past
+    /// the request that is the whole defect.
+    async fn origin(routes: Vec<(&'static str, serde_json::Value)>) -> Origin {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let asked = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let recorder = asked.clone();
+        tokio::spawn(async move {
+            use tokio::io::{AsyncReadExt, AsyncWriteExt};
+            loop {
+                let Ok((mut sock, _)) = listener.accept().await else {
+                    return;
+                };
+                let routes = routes.clone();
+                let recorder = recorder.clone();
+                tokio::spawn(async move {
+                    let mut buf = vec![0u8; 8192];
+                    let n = sock.read(&mut buf).await.unwrap_or(0);
+                    let head = String::from_utf8_lossy(&buf[..n]).to_string();
+                    let line = head.lines().next().unwrap_or_default().to_string();
+                    recorder.lock().unwrap().push(line.clone());
+                    let path = line.split_whitespace().nth(1).unwrap_or("").to_string();
+                    let (status, body) = match routes.iter().find(|(p, _)| &path == p) {
+                        Some((_, body)) => ("200 OK", body.to_string()),
+                        None => (
+                            "403 Forbidden",
+                            "\"Invalid user or password entered.\"".to_string(),
+                        ),
+                    };
+                    let resp = format!(
+                        "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: \
+                         {}\r\nConnection: close\r\n\r\n{body}",
+                        body.len()
+                    );
+                    let _ = sock.write_all(resp.as_bytes()).await;
+                    let _ = sock.shutdown().await;
+                });
+            }
+        });
+        Origin { addr, asked }
+    }
+
+    fn declared(value: &str) -> Vec<(String, String)> {
+        vec![("authorization".to_string(), value.to_string())]
+    }
+
+    fn viewer_user(id: &str, policy: serde_json::Value) -> serde_json::Value {
+        serde_json::json!({ "Id": id, "Name": VIEWER_NAME, "Policy": policy })
+    }
+
+    /// THE DEFECT THIS CLOSES. `offer` replaces the install credential with
+    /// the viewer's own (`mesh_media.rs:650-652`), so every offer after the
+    /// first reaches `provision` holding a read-only token. The mint path
+    /// needs an administrator at every step, and the first of them —
+    /// `POST /Users/Password` — answered `403 "Invalid user or password
+    /// entered."` on the live origin, which is the non-admin branch of
+    /// Jellyfin 12's `UpdateUserPassword` (an administrator skips the
+    /// `CurrentPw` check). So `offer` declared no viewer and the room's film
+    /// bar could not read "in use" (clause (f), three runs of three:
+    /// `target/ring-room-rr2-demo/room-offer.out`).
+    ///
+    /// The account is proven, not rebuilt: this asserts the credential comes
+    /// back unchanged AND that nothing on the mint path was ever requested.
+    #[tokio::test]
+    async fn a_second_offer_proves_the_viewer_instead_of_re_minting_it() {
+        let o = origin(vec![
+            ("/Users/Me", viewer_user("abc123", read_only_policy())),
+            (
+                "/Users",
+                serde_json::json!([viewer_user("abc123", read_only_policy())]),
+            ),
+        ])
+        .await;
+        let viewer = provision(o.addr, &declared("tok"))
+            .await
+            .expect("a declared viewer token with a read-only policy provisions");
+        assert_eq!(viewer.id, "abc123");
+        assert_eq!(viewer.credential, "tok");
+        let asked = o.asked.lock().unwrap().clone();
+        assert!(
+            !asked.iter().any(|l| l.contains("/Users/Password")),
+            "the mint path was walked with a non-admin credential: {asked:?}"
+        );
+        assert!(
+            !asked.iter().any(|l| l.contains("/Policy")),
+            "a policy write was attempted with a credential that cannot make one: {asked:?}"
+        );
+    }
+
+    /// The credential belongs to somebody else on the origin, so this verb
+    /// has learned nothing about the viewer: `None` sends the caller down the
+    /// mint path, where a missing elevation fails loudly rather than here.
+    #[tokio::test]
+    async fn a_credential_for_another_account_does_not_shortcut() {
+        let o = origin(vec![(
+            "/Users/Me",
+            viewer_user("someone-else", read_only_policy()),
+        )])
+        .await;
+        assert!(
+            already_provisioned(&client().unwrap(), &declared("tok"), o.addr, "abc123")
+                .await
+                .is_none()
+        );
+    }
+
+    /// It is the viewer's token, so this verb holds no elevation and cannot
+    /// repair the policy. Principle 6: refuse and name it, never fall through
+    /// to a write that can only 403.
+    #[tokio::test]
+    async fn a_viewer_whose_policy_is_not_read_only_is_refused_not_repaired() {
+        let mut policy = read_only_policy();
+        policy["IsAdministrator"] = serde_json::Value::Bool(true);
+        let o = origin(vec![("/Users/Me", viewer_user("abc123", policy))]).await;
+        let err = match already_provisioned(&client().unwrap(), &declared("tok"), o.addr, "abc123")
+            .await
+        {
+            // `Viewer` has no `Debug` on purpose — it holds the credential —
+            // so the Err is taken by match rather than `expect_err`.
+            Some(Err(e)) => e,
+            Some(Ok(_)) => panic!("an administrator policy was accepted as read-only"),
+            None => panic!("the shortcut did not apply"),
+        };
+        assert!(err.contains("IsAdministrator"), "{err}");
+        assert!(err.contains("svrn mesh media declare"), "{err}");
+    }
 
     /// Positive: the policy this verb writes says false to every key the
     /// read-back checks, so the two cannot drift apart.

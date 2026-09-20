@@ -1004,7 +1004,15 @@ if topology != "room":
     if not f or f.get("skipped") or f.get("fatal"):
         row("ra-room-film-from-the-library-rail", None, f.get("skipped") or f.get("fatal") or "the film leg did not run")
     else:
-        verb_keys = re.compile(r'^[+-]\s*media_(origin|allow)\s*=')
+        # Every key `svrn mesh media offer` writes, and nothing else. This
+        # clause asks whether the HOLDER'S config moved under ONE VERB rather
+        # than under a person's editor — so it tracks the verb's key set, and
+        # the verb gained `media_viewer_user` in rr-2-media-posture
+        # (ee1c6b388: the read-only account's id, which the presence poll
+        # needs to tell the holder's own sessions from the house's). What the
+        # clause discriminates is unchanged: any other key, and node c's
+        # config moving at all (`c_config_diff`), still fail.
+        verb_keys = re.compile(r'^[+-]\s*media_(origin|allow|viewer_user)\s*=')
         c_urls = [e for e in walk if e["leg"] == "film" and e["node"] == "c" and e["cls"] == "URL"]
         legs = {"a_one_verb_no_config_edit": all(verb_keys.match(l) for l in f["b_config_diff"]) and not f["c_config_diff"],
                 "b_listed_and_narrowed": f["listed_s"] is not None and f["listed_s"] <= list_w

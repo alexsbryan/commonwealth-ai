@@ -195,6 +195,11 @@ exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 - Because: The instrument did its job — it measured a real defect in another row and named the clause and the cause, which is what its check asks of it. The charter gives the director a row whose premise the tree contradicts when the order already implies the fix, and order (vi) measured the premise this code fails to meet. The smaller move (ARCH 11): no new row, no new type, no bar weakened; the seven-clause expectation is left for the demo row to judge rather than lowered to match today's tree.
 
 
+**A38 · 2026-09-19 · REVIEW-DEMO-rr-2-run · director (worker package from REVIEW-DEMO-rr-2-run)** — this commit
+- Needed: The room read five of six and rr-1's film bar regressed. `ra-room-film-from-littlemac` clause (f) FAILED all three runs — `POST /Users/Password` answered `403 "Invalid user or password entered."`, so `offer` declared no viewer and no "in use" signal was published. rr-1's `ra-room-film-from-the-library-rail` clause (a) went PASSED → FAILED because rr-2-media-posture (ee1c6b388) made the offer verb write a third config key, `media_viewer_user`, which rr-1's bar does not admit. A third run was lost entirely to a teardown that killed every node 3.5 minutes into the walk.
+- Chose: Three fixes, one per cause. (1) `viewer::provision` now PROVES a viewer it finds instead of re-minting it — `offer` replaces the install credential with the viewer's own (`mesh_media.rs:650-652`), so every offer after the first holds a read-only token and cannot walk the mint path at all; `GET /Users/Me` answers who the credential is and what it may do in one request, and a policy that does not read back read-only is refused by name rather than written over. (2) rr-1's `verb_keys` admits `media_viewer_user`, matching what rr-2's own copy of the same clause already admitted. (3) `ralph-check.sh demo-bg` refuses to launch while a demo is running. The row returns to `[ ]` with the topology trap spelled out and a pre-registered bar for the slow offer listing.
+- Because: The package's root cause was wrong and all three of its candidates would have failed the same way. `"Invalid user or password entered."` is the NON-ADMIN branch of Jellyfin 12's `UpdateUserPassword` — an administrator skips the `CurrentPw` check — so the defect is a lost elevation, not an unsettable password, and a caller that cannot reset a password cannot delete or create a user either. Proving the account is also the smaller move (ARCH 11): no second credential slot, no new noun, nothing minted that already exists. Widening rr-1's clause restores parity rather than loosening a bar — what it discriminates, a person editing config by hand, is untouched.
+
 
 ## Flags for the operator
 
@@ -5789,5 +5794,300 @@ the internet, so the `room` network is `--internal` now and the offline bar
 went FAILED → PASSED). Neither check correction was a loosening to green a red
 row, and both are argued in the code — reviewed and accepted as measured, not
 re-litigated here.
+
+</details>
+
+
+## A38 · 2026-09-19 — rr-2: a second offer proves the viewer it finds, because it no longer holds the credential that could mint one
+
+<details>
+
+**The fork.** Three of the four questions the package raised were the
+director's; one was not, and the first of them had a false premise.
+
+**(1) The film bar's clause (f) — what the package said, and what is true.**
+The package reported that `viewer::provision` "cannot set the password of an
+account it reuses" because "Jellyfin 12's `UpdateUserPassword` authenticates
+`CurrentPw` even for an elevated caller", and offered three candidates: reset
+then set, delete and recreate, or keep the password.
+
+Reproduced and contradicted. The body the origin returned is
+`"Invalid user or password entered."`
+(`target/ring-room-rr2-demo/room-offer.out`), and that string is not the
+elevation refusal — the 403 declared on `POST /Users/Password` in the origin's
+own OpenAPI (`target/ralph/jf-inventory/openapi.json`) is described "User is
+not allowed to update the password." Jellyfin 12 returns
+`"Invalid user or password entered."` from a different branch: the one that
+verifies `CurrentPw`, which runs ONLY when the caller is not an administrator.
+
+The caller is not an administrator, and the reason is in this repo.
+`cmd_media_offer` spends the install credential and REPLACES it with the
+viewer's own token
+(`sovereign-cli-llm/src/mesh_media.rs:650-652`, `write_declared_in(&dir,
+"authorization", &v.credential)`), which is the whole point of the row that
+landed it — members must not carry an admin-equivalent key. So the FIRST offer
+runs elevated and succeeds; every offer after it calls
+`provision(origin, read_declared_in(&dir))` with a read-only token. The room
+walk offers twice (install stage, then the film leg after a `withdraw`), so
+the reuse path ran on every run, and clause (f) could not pass.
+
+All three of the package's candidates fail on this: a caller that may not
+reset a password may not delete or create a user either. So does a fourth that
+suggests itself — keeping the admin credential in a second slot — and that one
+is also larger: `read_declared_in` returns EVERY file in the media secrets
+directory and `admit_media` attaches all of them to member requests
+(`iroh_access.rs:700`, `commonwealth-rails/src/lib.rs:227`), so an admin
+credential parked there is the defect rr-2-media-posture closed, and parking it
+elsewhere is a new noun for a case the row does not ask for.
+
+**The chosen fix.** Nothing needs minting when the account already exists and
+the credential in hand is already its own. `already_provisioned` asks the one
+question that settles it — `GET /Users/Me` returns the account the credential
+belongs to AND its policy — and returns the declared credential unchanged when
+the id matches the account found and the policy reads back read-only. When the
+policy does NOT read back read-only this verb holds no elevation to repair it,
+so it refuses and names `svrn mesh media declare authorization` (ARCH 6: a
+write that could only 403 is not a fallback). When the credential is somebody
+else's, it returns `None` and the mint path runs as before — where a missing
+elevation fails loudly at the origin rather than silently here.
+
+**The evidence.** `a_second_offer_proves_the_viewer_instead_of_re_minting_it`
+drives `provision` against a stand-in origin that answers only `/Users` and
+`/Users/Me` and refuses everything else with the live origin's own 403 body.
+It asserts the credential comes back unchanged and that neither
+`/Users/Password` nor `/Policy` was ever requested. PLANTED by deleting the
+four-line shortcut from `provision`: the test goes red with
+
+```
+a declared viewer token with a read-only policy provisions: "POST /Users/Password?userId=abc123
+  answered 403 Forbidden: \"Invalid user or password entered.\""
+```
+
+— production's failure string, character for character. An earlier version of
+the test called the helper directly and stayed GREEN under that same plant; it
+was rewritten to drive `provision` because a test that does not fail when the
+wiring is removed is not testing the wiring (ARCH 5). Two more tests cover the
+refusal and the not-mine cases. 12 pass in `mesh_media::viewer`.
+
+NOT verified: the fix against a live Jellyfin. `podman` is not reachable from
+inside the toolbox this session runs in, so the origin here is a stand-in built
+from the run's recorded requests and the origin's own OpenAPI. The live verdict
+is `REVIEW-DEMO-rr-2-run`'s two room runs, which is the row's job.
+
+**(2) rr-1's `ra-room-film-from-the-library-rail` clause (a).** The package put
+this as a fork — widen the clause, or stop writing the key. The tree answers
+it: `media_viewer_user` is the read-only account's id and the presence poll
+needs it to tell the holder's own sessions from the house's
+(`viewer.rs`, `Viewer::id`'s doc), so it is clause (b) of rr-2-media-posture
+and cannot be withdrawn. And the widening is not a loosening: rr-2's own copy
+of the same clause at `scripts/ring-room-demo.sh:1206` already reads
+`media_(origin|allow|viewer\w*)`, so rr-1's list at :1007 was simply not
+carried forward when the key was minted. What the clause discriminates — a
+person editing the holder's config by hand, and node c's config moving at all
+(`c_config_diff`) — is unchanged.
+
+**(3) rr-1 attempt 1's mid-walk teardown.** The package recorded this as
+unreproduced with no cause. There is one, and it is structural.
+`scripts/ralph-check.sh demo-bg` wrote `target/ralph/demo.pid`
+unconditionally. Every demo script tears its node set down on the way up, so a
+second `demo-bg` launched while one is running kills the first's nodes
+mid-walk — and the overwritten pid orphans the first, leaving `demo-wait`
+watching the wrong process. That is precisely the recorded signature: every
+daemon SIGTERMed at 00:15:22Z 3.5 minutes in, `walk a kill 6` in
+`target/ring-room-demo-commands.log`, the `ring-doc` podman network gone
+afterwards. `demo-bg` now refuses when a live demo holds the pid, and reclaims
+a stale one (both exercised: refused rc=2, reclaimed rc=0). This is ARCH 10 —
+the row asks for three sequential demo runs and the harness could not enforce
+"one at a time", so it is enforced rather than remembered.
+
+**(4) The two readings left as measurements, not fixes.** Run 1's offline
+clause (b) failed once in three with the cut answer still citing `RuggedFox`;
+runs 2 and 3 read it as designed. Run 2's offer took 165.81 s to be listed
+against a 30 s window where runs 1 and 3 read 4.23 s and 2.16 s. Neither has an
+established cause and one run is not a measurement (ARCH 7), so both are
+PRE-REGISTERED on the row rather than guessed at: if either recurs in the two
+required runs, the row STOPS and names it — a gossip-propagation defect and an
+offline-grounding defect respectively — and if neither does, the five readings
+stand as recorded flake. The package's note that `offers_poll_s` is the desktop
+rail's poll and not the demo's `poll_offer` is correct and was not touched;
+nothing the row permits would have moved the 165.81 s.
+
+**What would falsify this.** (1) A room run where clause (f) still fails with
+a 403 on a path other than `/Users/Password`, or where `GET /Users/Me` does not
+identify the viewer — either would mean the credential is not what this reads
+it to be. Or a run where the FIRST offer fails, which this change does not
+touch. (2) An rr-1 run where clause (a) fails on a key the offer verb does not
+write. (3) A mid-walk teardown with only one demo pid live.
+
+**Not this row's to fix, and not this director's.** `pre-push` is BLOCKED at
+HEAD, before this diff: `arch-gate` (approach band 202703 -> 202920), 75
+`size-gate` keys, and `hakari-verify`. Verified by stashing this diff and
+re-running — the numbers are identical, so this change moves none of them.
+`--update-baseline` on a working tree is the absorb-everyone trap AGENTS.md
+names, and `REVIEW-audit-rr-2` already carries PREPUSH as its check. Left
+there.
+
+**The worker's package, inline.**
+
+> # REVIEW-DEMO-rr-2-run — the room reads five of six, and rr-1's film bar regressed
+>
+> ## (a) The unit and its row
+>
+> `ralph/next/ring-room-rr2/STATE.md`, still `[~]`:
+>
+> > - [~] REVIEW-DEMO-rr-2-run — depends [REVIEW-build-rr-2-room-topology] — RUN
+> >   `verdict all` TWICE from cold under `RING_ROOM_TOPOLOGY=room` in the MAIN
+> >   workdir; paste both. Expected on the second: scan-to-name,
+> >   guest-edit-attributed, film-from-littlemac (all seven clauses),
+> >   offline-room-says-so, member-only-by-vouch (negative half) PASSED;
+> >   guest-ask-served-by-the-room PASSED with beefy on the GPU, else FAILED
+> >   naming clause (c) … ALSO run rr-1's `scripts/ring-room-demo.sh verdict all`
+> >   (three-node) ONCE: the five rr-1 bars must read as A33 left them
+> >   (regression gate) — check: DEMO-BG; DEMO-WAIT; DEMO-BG; DEMO-WAIT; DEMO (rr-1)
+>
+> Nothing was edited. No code, no bar, no floor, no poll knob, no row (see (c)3
+> for why the knob the row permits does not apply). The tree is as
+> `46ca2ce7d` left it.
+>
+> ## (b) What was run and what it said
+>
+> Three room runs (the third was unintended and is reported because it is
+> evidence — see the env note at the end), then two rr-1 three-node runs.
+>
+> ### Room, `RING_ROOM_TOPOLOGY=room`, `verdict all`, cold each time
+>
+> | bar | run 1 | run 2 | run 3 |
+> |---|---|---|---|
+> | `ra-room-scan-to-name` | PASSED 1.0 (0.141 s) | PASSED 1.0 (0.203 s) | PASSED 1.0 (0.214 s) |
+> | `ra-room-guest-edit-attributed` | PASSED 1.0 (0.136 s) | PASSED 1.0 (0.197 s) | PASSED 1.0 (0.207 s) |
+> | `ra-room-guest-ask-served-by-the-room` | PASSED 1.0 (13.04 s) | PASSED 1.0 (13.48 s) | PASSED 1.0 (16.54 s) |
+> | `ra-room-film-from-littlemac` | **FAILED 0.0** — (f) | **FAILED 0.0** — (a),(b),(f) | **FAILED 0.0** — (f) |
+> | `ra-room-offline-room-says-so` | **FAILED 0.0** — (b) | PASSED 1.0 | PASSED 1.0 |
+> | `ra-room-member-only-by-vouch` | PASSED 1.0 | PASSED 1.0 | PASSED 1.0 |
+>
+> Full rows: `target/ralph/room-run1.log`, `room-run2.log`, `room-run3.log`;
+> run 1's artifacts preserved whole at `target/ralph/room-run1-artifacts/`.
+>
+> The guest-ask bar the row singled out passed all three times, on `beefy`, in
+> 13.0 / 13.5 / 16.5 s of a 60 s window, citing the keeper `RuggedFox`, with
+> `served_by` on every routing outcome and both peers' iroh path read from the
+> daemon's existing observation. Clause (c) is not at issue.
+>
+> The two failing readings:
+>
+> **film, clause (f) — every run.** `viewer_declared: false`,
+> `in_use_lines: 0`, while `holder_playing: true` (the instrument's half works:
+> Jellyfin does report the holder's own session). The daemon says why, verbatim
+> (`target/ring-room-rr2-demo/room-offer.out`, run 2):
+>
+> ```
+> WARN media offer: no read-only viewer account
+>   error=POST /Users/Password?userId=a002b42316ec4245aa1aea494d2d05c4
+>         answered 403 Forbidden: "Invalid user or password entered."
+> mesh media offer: no read-only viewer account — …
+>   The offer stands with whatever credential is declared, and this node
+>   will publish no "in use" signal until a viewer account exists.
+> ```
+>
+> This is NOT A37's two defects returning. A37 fixed the policy REPLACE and the
+> unconditional create, and both fixes hold: the account is found rather than
+> recreated, and its policy now reads back read-only —
+> `viewer_policies: [{"name": "commonwealth-mesh", "admin": false, "manages": []}]`,
+> so clause (e) passes. The next step in the same function is what fails.
+>
+> **offline, clause (b) — run 1 only.** During the uplink cut the answer still
+> cited `RuggedFox` (`turn_verdict: grounded`, `gaps: 0`, answered in 16.44 s —
+> `target/ralph/room-run1-artifacts/phone-phone-cut.json`). Runs 2 and 3 read the
+> bar as designed: `cited_during_the_cut: []`, `gaps: 2`, verdict `unverified`,
+> "I'm unable to access the room-… knowledge base …". One failure in three, not
+> reproduced, cause not established. Reported, not acted on.
+>
+> ### rr-1, `RING_ROOM_TOPOLOGY=three`, `verdict all`
+>
+> Attempt 1 (`target/ralph/rr1-run1.log`) judged nothing: every node daemon was
+> stopped 3.5 minutes into the walk — `b/daemon.err` ends
+> `daemon: shutdown signal received signal="SIGTERM" … rss_mb=5382` at 00:15:22Z,
+> the same second the five answer `.err` files were written, and
+> `target/ring-room-demo-commands.log` records `walk a kill 6 / walk b kill 6 /
+> walk c kill 6`; afterwards `ring-doc-b` and the `ring-doc` network were gone
+> (`Error: unable to find network with name or ID ring-doc`). A teardown ran
+> during the walk. Not reproduced on attempt 2, no cause established, no stray
+> demo process was on the host before either run.
+>
+> Attempt 2 is the reading (`target/ralph/rr1-run2.log`), against A33:
+>
+> | bar | A33 left it | this run |
+> |---|---|---|
+> | `ra-room-answer-names-the-machine` | FAILED 0.6 | FAILED 0.8 |
+> | `ra-room-doc-name-from-membership` | PASSED 1.0 | PASSED 1.0 (p99 1.557 s, 9/9) |
+> | `ra-room-film-from-the-library-rail` | **PASSED 1.0** | **FAILED 0.0 — clause (a)** |
+> | `ra-room-plug-in-live` | FAILED 0.0 (`c_answer_names`) | FAILED 0.0 (`c_answer_names`) |
+> | `ra-room-nothing-typed` | PASSED 0 | PASSED 0 |
+>
+> The regression is one clause and its cause is in the diff, not in the weather:
+>
+> ```
+> "legs": {"a_one_verb_no_config_edit": false, "b_listed_and_narrowed": true,
+>          "c_first_byte": true, "d_viewer_typed_no_url": true},
+> "b_config_diff": ["+media_origin = \"127.0.0.1:8096\"",
+>                   "+media_viewer_user = \"9d386d7ff02d4bb6bef16e2ec70abbc4\"",
+>                   "+media_allow = [\"ring-doc-a\", \"Cy\"]"],
+> ```
+>
+> `scripts/ring-room-demo.sh:1007` admits exactly two keys —
+> `verb_keys = re.compile(r'^[+-]\s*media_(origin|allow)\s*=')` — and
+> rr-2-media-posture (`ee1c6b388`) now has the offer verb write a third,
+> `media_viewer_user`. rr-1's bar predates the key. The other three clauses of
+> that bar are unchanged and green (listed 2.15 s, narrowed 10.47 s, first byte
+> 0.056 s, HTTP 206).
+>
+> ## (c) What the operator must decide
+>
+> 1. **`viewer::provision` cannot set the password of an account it reuses**
+>    (`sovereign/crates/sovereign-cli-llm/src/mesh_media/viewer.rs:274-291`).
+>    Jellyfin 12's `UpdateUserPassword` authenticates `CurrentPw` even for an
+>    elevated caller — `403` is a declared response on `POST /Users/Password`
+>    and its body schema is `{CurrentPassword, CurrentPw, NewPw, ResetPassword}`
+>    (the origin's own OpenAPI, `target/ralph/jf-inventory/openapi.json`). The
+>    module deliberately keeps no password (`viewer.rs:216-218`), so a reuse can
+>    never present `CurrentPw`. The room walk offers TWICE — install stage at
+>    bring-up, then the film leg after a `withdraw` — so the reuse path runs on
+>    every run, and clause (f) can never pass as the code stands. Candidates,
+>    none of them this row's to pick: (i) two calls — `{"ResetPassword": true}`
+>    to clear, then `{"NewPw": …, "CurrentPw": ""}`; (ii) delete the account and
+>    create it fresh each offer; (iii) keep the password, which the module's
+>    header rejects by design. This is inside the already-landed
+>    rr-2-media-posture, whose clause (d) states the behaviour; it wants a row.
+> 2. **rr-1's `ra-room-film-from-the-library-rail` clause (a) vs. the new config
+>    key** (`scripts/ring-room-demo.sh:1007`). Either the rr-1 clause widens to
+>    admit `media_viewer_user` — an instrument edit no row names, and the
+>    campaign predicate is that rr-1 reads as A33 left it — or the verb stops
+>    writing the viewer id into the holder's config. A decision about what the
+>    rr-1 bar means, not a tuning knob.
+> 3. **Run 2's film (a)/(b): the offer took 165.81 s to be listed on beefy**
+>    against a 30 s window, where runs 1 and 3 read 4.23 s and 2.16 s
+>    (`listed_s`). The row permits editing `offers_poll_s` (5–30) when a 30 s
+>    leg reads over — but `offers_poll_s` is the desktop LibraryView's poll
+>    (`ralph/next/ring-room/STATE.md`, row `rr-1-library-rail`), and the demo's
+>    `poll_offer` does not read it. Nothing the row permits would move this, so
+>    nothing was moved. Decide whether 1-in-3 at 5.5× the window is flake to
+>    re-measure or a gossip-propagation defect to own.
+> 4. **Run 1's offline clause (b) and rr-1 attempt 1's mid-walk teardown**, both
+>    above, both unreproduced: record or investigate, your call.
+>
+> Environment note for whoever runs this next: the supervisor's launch line
+> exports `RING_ROOM_TOPOLOGY=room` into the worker session, so a bare
+> `scripts/ralph-check.sh demo-bg scripts/ring-room-demo.sh` runs the ROOM
+> topology, not rr-1's. The three-node regression gate needs
+> `RING_ROOM_TOPOLOGY=three` spelled out. Room run 3 above is what that costs.
+>
+> ## (d) To resume
+>
+> Edit or mark the row in `ralph/next/ring-room-rr2/STATE.md`, then
+> `rm ralph/STOP ralph/NEEDS_HUMAN.md`.
+
+Its readings are reproduced above where they are relied on and corrected where
+they are not. Its (c)1 root cause is the one correction that changes the fix;
+the rest of its measurements stand.
 
 </details>
