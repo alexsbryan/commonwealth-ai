@@ -1107,7 +1107,11 @@ async fn a_reading_that_changes_alone_reaches_a_peers_media_rail_in_one_round() 
 
     round(&state_holder).await;
     let rows = rail().await;
-    assert_eq!(rows.len(), 1, "the offer must be on the rail first: {rows:?}");
+    assert_eq!(
+        rows.len(),
+        1,
+        "the offer must be on the rail first: {rows:?}"
+    );
     assert_eq!(rows[0].media_available, Some(1.0));
 
     // The origin is being watched now. `origins` and `media_allow` are
