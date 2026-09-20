@@ -671,7 +671,7 @@ async fn a_guest_ask_is_answered_by_the_room_and_names_the_member_who_held_it() 
     // `guest_door::door_router` builds it.
     let addr_door = spawn_router(sovereign_daemon::guest_door::door_router(
         state_ask,
-        None,
+        sovereign_daemon::guest_door::GuestPages::default(),
         Some(daemon),
     ))
     .await;

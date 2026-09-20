@@ -70,7 +70,10 @@ Three zones, from most to least trusted:
   while such a grant is live and closed at the last expiry
   (`sovereign/crates/sovereign-daemon/src/guest_door.rs`), even on an
   encrypted mesh. It adds one unauthenticated route, the ring page at
-  `/ring/` served from `[daemon] guest_page_dir` and never from outside it;
+  `/ring/` served from `[daemon] guest_page_dir` and never from outside it —
+  a wall holding several apps names them in `[daemon.guest_pages]` instead
+  (namespace → bundle), each served at `/ring/<namespace>/` and only while
+  a live grant names that namespace;
   the page reads the bearer from the URL fragment, which the browser never
   sends. The door also answers `/status` and `/oicp/v1/capabilities` to
   anyone on that network, as every non-loopback bind does.

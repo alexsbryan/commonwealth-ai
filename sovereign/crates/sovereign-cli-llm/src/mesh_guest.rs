@@ -319,7 +319,7 @@ pub(crate) const HELP_MESH_GRANT: Help = Help {
             ("--label <text>", "Your own note, shown by --list. Never sent to the guest."),
             (
                 "--url <base>",
-                "Base URL the guest should reach you at. Default: this node's published address.",
+                "Base URL the guest should reach you at. Default: this node's published address.\n                    With --rail, the QR link adds that app's page path at the door.",
             ),
             (
                 "--qr-svg <path>",
@@ -595,7 +595,7 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
     if let (Some(path), Some(base)) = (&qr_svg, &url_override) {
         let https = build_https_guest_link(
             token,
-            base,
+            &wall_page_base(base, rail.as_deref()),
             expires_at_secs,
             (!summary.is_empty()).then_some(summary),
         );
@@ -621,6 +621,17 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
     println!("  svrn mesh grant --revoke {token}");
     println!();
     0
+}
+
+/// The address a phone opens: the door `--url` names plus the page path of the
+/// app `--rail` names, so the namespace is typed once rather than twice. A base
+/// already spelling a `/ring/` page is returned as typed, never rewritten.
+fn wall_page_base(base: &str, rail: Option<&str>) -> String {
+    let prefix = sovereign_daemon::guest_door::PAGE_PREFIX;
+    match rail.filter(|_| !base.contains(prefix)) {
+        Some(ns) => format!("{}{prefix}{ns}/", base.trim_end_matches('/')),
+        None => base.to_string(),
+    }
 }
 
 /// The QR module margin, in modules. Four is the quiet zone the QR standard
@@ -1021,6 +1032,15 @@ async fn verify_link(link: &GuestLink) -> Result<Vec<String>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The QR carries the door's page path for the app `--rail` names.
+    #[test]
+    fn the_wall_link_composes_the_page_path_from_the_rail() {
+        let (b, pinned) = ("http://h:9", "http://h:9/ring/");
+        assert_eq!(wall_page_base(b, Some("wall")), "http://h:9/ring/wall/");
+        assert_eq!(wall_page_base(pinned, Some("w")), pinned);
+        assert_eq!(wall_page_base(b, None), b);
+    }
 
     /// Rasterise the SVG `wall_qr_svg` writes — its `viewBox` and one
     /// `M{x},{y}h1v1h-1` per dark module — onto a DARK surround, and decode

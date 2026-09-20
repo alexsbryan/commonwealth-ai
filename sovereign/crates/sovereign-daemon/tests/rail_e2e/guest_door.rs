@@ -10,7 +10,7 @@
 use std::time::Duration;
 
 use axum::http::StatusCode;
-use sovereign_daemon::guest_door::{door_router, serve, PAGE_PREFIX};
+use sovereign_daemon::guest_door::{door_router, serve, GuestPages, PAGE_PREFIX};
 use tower::ServiceExt;
 
 use super::*;
@@ -34,10 +34,14 @@ async fn door(state: AppState, page: &std::path::Path, req: Request<Body>) -> (S
     // `None`: this suite drives the door's route topology, not a turn. The
     // ask route answers 503 naming the missing host, which is what the
     // "a guest reaches nothing else" assertions below expect from it.
-    let resp = door_router(state, Some(page.to_path_buf()), None)
-        .oneshot(req)
-        .await
-        .unwrap();
+    let resp = door_router(
+        state,
+        GuestPages::new(Some(page.to_path_buf()), Default::default()),
+        None,
+    )
+    .oneshot(req)
+    .await
+    .unwrap();
     let status = resp.status();
     let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
         .await
@@ -262,7 +266,12 @@ async fn the_door_opens_at_the_first_rail_grant_and_closes_at_the_last_expiry() 
         let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         l.local_addr().unwrap()
     };
-    tokio::spawn(serve(state.clone(), Some(addr.to_string()), None, None));
+    tokio::spawn(serve(
+        state.clone(),
+        Some(addr.to_string()),
+        GuestPages::default(),
+        None,
+    ));
     let http = reqwest::Client::builder()
         .pool_max_idle_per_host(0)
         .build()

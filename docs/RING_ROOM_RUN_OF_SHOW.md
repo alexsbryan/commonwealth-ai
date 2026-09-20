@@ -223,7 +223,10 @@ goodhart clause says a run over a VPN proves nothing about the room's WiFi.
 
 The guest door is off unless configured. On BeefyMac, `[daemon] guest_bind`
 takes the room-facing `host:port` and `[daemon] guest_page_dir` takes a copy of
-`sovereign/apps/ring-doc`; the door serves that page under `/ring/`. The wall's
+`sovereign/apps/ring-doc`; the door serves that page under `/ring/`. A second
+app on the same wall goes in `[daemon.guest_pages]` instead — one line per rail
+namespace, `ring-doc = "/path/to/bundle"` — and each is served at
+`/ring/<namespace>/`, only while a live grant names that namespace. The wall's
 own screen is the member page, which `svrn ring dev ring-doc --dir
 sovereign/apps/ring-doc` serves on loopback. The QR comes from the grant verb, with `--url` set to the door:
 

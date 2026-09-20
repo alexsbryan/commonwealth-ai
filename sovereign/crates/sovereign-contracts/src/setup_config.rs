@@ -1384,9 +1384,10 @@ pub struct DaemonSection {
     #[serde(default)]
     pub guest_bind: Option<String>,
 
-    /// The ring page the guest door serves at `/ring/` (a bundle directory
-    /// such as `sovereign/apps/ring-doc`). `None` serves no page; the door's
-    /// rail routes are unaffected.
+    /// The ring page the guest door serves at the bare `/ring/` (a bundle
+    /// directory such as `sovereign/apps/ring-doc`). `None` serves no page
+    /// there; the door's rail routes are unaffected. A wall with more than
+    /// one app names them in `[daemon.guest_pages]` instead.
     #[serde(default)]
     pub guest_page_dir: Option<PathBuf>,
 
@@ -1421,6 +1422,19 @@ pub struct DaemonSection {
     /// loopback-only (the iroh acceptor is then the sole network ingress).
     #[serde(default = "default_internal_bind")]
     pub internal_bind: String,
+
+    /// `[daemon.guest_pages]` — one wall, more than one app: rail namespace
+    /// → bundle directory, served at `/ring/<namespace>/`. Which apps a wall
+    /// holds is data, not a code change (ARCH §9). Declared LAST because a
+    /// TOML table must follow this section's scalars.
+    ///
+    /// ```toml
+    /// [daemon.guest_pages]
+    /// ring-doc = "/srv/ring-doc"
+    /// house-expenses = "/srv/house"
+    /// ```
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub guest_pages: std::collections::BTreeMap<String, PathBuf>,
 }
 
 /// Filesystem paths for mutable state.
@@ -1452,6 +1466,7 @@ impl Default for DaemonSection {
             client_token: None,
             guest_bind: None,
             guest_page_dir: None,
+            guest_pages: std::collections::BTreeMap::new(),
             internal_bind: default_internal_bind(),
             local_only: default_local_only(),
         }

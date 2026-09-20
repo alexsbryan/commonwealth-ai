@@ -3706,9 +3706,10 @@ impl EmbeddedDaemon {
         // dressed as a 404.
         let turn_host = self.self_weak.upgrade();
         let door_turn_host = turn_host.clone();
-        let (guest_bind, guest_page_dir) = {
+        let (guest_bind, guest_pages) = {
             let c = self.setup_config.read().await;
-            (c.daemon.guest_bind.clone(), c.daemon.guest_page_dir.clone())
+            let pages = crate::guest_door::GuestPages::from_config(&c.daemon);
+            (c.daemon.guest_bind.clone(), pages)
         };
         // Each start (including an in-process re-create) answers the bind
         // question afresh; the serve task publishes the outcome below.
@@ -3864,7 +3865,7 @@ impl EmbeddedDaemon {
                 _ = guest_serve => {}
                 _ = peer_serve => {}
                 _ = rail_serve => {}
-                _ = crate::guest_door::serve(door_state, guest_bind, guest_page_dir, door_turn_host) => {}
+                _ = crate::guest_door::serve(door_state, guest_bind, guest_pages, door_turn_host) => {}
                 _ = shutdown_rx => {
                     info!("Commonwealth daemon shutting down");
                 }
