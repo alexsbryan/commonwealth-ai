@@ -1051,7 +1051,7 @@ pub(crate) fn place_ppr_admitted(
 ) -> Vec<corpus_engine::ScoredChunk> {
     let present: std::collections::HashSet<&str> =
         pool.iter().filter_map(|c| c.title.as_deref()).collect();
-    let boundary = pool.len().min(KQ_MERGED_LIMIT);
+    let boundary = pool.len().min(kq_merged_limit());
     let anchor = pool[..boundary.div_euclid(2).max(1)]
         .iter()
         .rev()

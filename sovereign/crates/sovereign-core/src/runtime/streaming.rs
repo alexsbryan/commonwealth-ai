@@ -3000,7 +3000,7 @@ impl Runtime {
         // Format the corpus evidence now so the post-stream epistemic-
         // humility hook can feed it to the gap checker. Moved into the
         // streaming spawn; not used before the synthesis completes.
-        let evidence = format_scored_chunks(&kc.chunks, MAX_KNOWLEDGE_CHARS);
+        let evidence = format_scored_chunks(&kc.chunks, max_knowledge_chars());
         let question = message.to_string();
 
         let intent_label = format!("{intent:?}");

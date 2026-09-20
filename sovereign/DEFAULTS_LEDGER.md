@@ -30,6 +30,43 @@ store (ids cited per row).
 
 ## DARK — proven or plausible, awaiting a named condition
 
+### `SOVEREIGN_KQ_POOL_SCALE` — the deep-pool arm's knob, shipped at 1 and **never a default** (ei7-stage0, 2026-09-19)
+
+**What changed.** One decider, `runtime::prompts::kq_pool_scale`, reads
+`SOVEREIGN_KQ_POOL_SCALE` once (1..=8; unset, unparsable, 0 and > 8 all mean
+1) and multiplies BOTH retrieval pool limits by it. The pair is computed in
+one expression, `pool_limits_at(scale) -> (KQ_MERGED_LIMIT * scale,
+MAX_KNOWLEDGE_CHARS * scale)`, so neither limit can move without the other.
+Every live use site of the two constants now reads an accessor
+(`kq_merged_limit`, `max_knowledge_chars`) rather than the constant. At
+scale 1 — the default, and the only value any shipped path uses — every call
+site is byte-identical to the constants, so this is inert in the product.
+
+**Why it exists.** `PRE-REG-custom-ontology-and-raptor-2026-09-17` "Arms"
+pre-registers a deep-pool arm and records that it has no knob: `--limit 80`
+is dead under `--synth` (the dispatcher takes the synth branch first and
+never reads `prod_pipeline`), so what reaches synthesis is fixed by
+`KQ_MERGED_LIMIT` = 20 and `MAX_KNOWLEDGE_CHARS` = 24000. The arm that
+answers "just retrieve more" cannot be run at all without one declared knob.
+
+**Why both limits, never one.** Raising the chunk cap alone hands the
+formatter more chunks than the char budget can seat, so it evicts the tail it
+just admitted — the same trade
+`text_utils::the_prompt_budget_triple_moves_together_or_not_at_all` was
+written to record. Raising the char budget alone widens a window the cap
+never fills. `pool_scale_moves_both_limits_together` asserts the two move by
+one factor at every scale 2..=8, cross-multiplied so it is exact.
+
+**Flip condition — none. This is never a default.** It is instrument
+machinery for a pre-registered arm, not a capability awaiting promotion. The
+multiplier the arm uses is fixed at ratification together with the synth
+model, whose context is its ceiling; the arm is `never-ran` until then, not a
+null. The row closes when the study reports, either by retiring the knob or
+by recording which scale the ratified arm ran at — not by flipping a default.
+
+**Review-by 2026-10-31.** If the study has not run by then, the question for
+the operator is whether to retire the knob rather than whether to ship it.
+
 ### ONNX CPU memory arena — flipped OFF for both GLiNER backends (enrich-bounded-1, 2026-09-12)
 
 **What changed.** Neither backend registered a CPU execution provider, so

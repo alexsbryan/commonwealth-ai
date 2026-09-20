@@ -938,12 +938,12 @@ impl Runtime {
                     (expanded, EXPANDED_KNOWLEDGE_CHARS, true)
                 } else {
                     expansion_kind = "top_sources_noop";
-                    (expanded, MAX_KNOWLEDGE_CHARS, false)
+                    (expanded, max_knowledge_chars(), false)
                 }
             }
             ExpansionStrategy::NoExpansion => {
                 expansion_kind = "none";
-                (chunks, MAX_KNOWLEDGE_CHARS, false)
+                (chunks, max_knowledge_chars(), false)
             }
         };
 

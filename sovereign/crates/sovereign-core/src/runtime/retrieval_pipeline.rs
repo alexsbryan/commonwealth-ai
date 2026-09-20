@@ -1986,7 +1986,7 @@ fn step_cap_and_reserve<'a, 'ctx>(
         // legacy path is byte-identical when the flag is off. See
         // merge_select.rs for the objective and the bucket-1 receipts.
         if merge_select_enabled() {
-            st.chunks = merge_demand_select(take(&mut st.chunks), &st.entities, KQ_MERGED_LIMIT);
+            st.chunks = merge_demand_select(take(&mut st.chunks), &st.entities, kq_merged_limit());
             audit_pipeline_stage(&st.chunks, "after_cap_and_reserve", st.message);
             return StepOutcome {
                 note: Some("merge_demand_select".to_string()),
@@ -2062,7 +2062,8 @@ fn kq_truncate_merged<'a, 'ctx>(
                     .unwrap_or(false)
             })
             .count();
-        st.chunks.truncate(KQ_MERGED_LIMIT + raptor_n + admitted_n);
+        st.chunks
+            .truncate(kq_merged_limit() + raptor_n + admitted_n);
         audit_pipeline_stage(&st.chunks, "after_truncate", st.message);
 
         // Naturalistic audit — post-merge composition. Answers "after
@@ -2298,7 +2299,7 @@ fn step_main_retrieval_mesh<'a, 'ctx>(
                     .collect::<std::collections::BTreeSet<_>>()
                     .len(),
                 local_hits = local_scored.len(),
-                merge_budget = KQ_MERGED_LIMIT,
+                merge_budget = kq_merged_limit(),
                 // An empty set is NOT applied — expansions fall back to the
                 // conversation allow-list. Logged so a run can tell "scoped
                 // to 3 corpora" from "found nothing, scoping skipped".
@@ -2495,7 +2496,7 @@ fn deep_truncate_merged<'a, 'ctx>(
                     .unwrap_or(false)
             })
             .count();
-        st.chunks.truncate(KQ_MERGED_LIMIT + raptor_n);
+        st.chunks.truncate(kq_merged_limit() + raptor_n);
         StepOutcome::default()
     })
 }
