@@ -90,3 +90,34 @@ pub fn log_merged(existing: Option<&MemberRecord>, incoming: &MemberRecord, arm:
         "gossip: a member's offer view changed on merge — this node's media rail reads it now"
     );
 }
+
+/// The WIRE's line: the snapshot this round is about to POST to every picked
+/// peer does not say what the round stamped on our own record a moment ago.
+///
+/// The two lines above cover the holder's write and the peer's merge, and
+/// between them sat an unread gap: the round stamps under the mesh write lock
+/// and then, after releasing it and awaiting the peer selection, takes a
+/// FRESH read of `fabric.mesh` and sends that clone. Beefy's 22 rounds were
+/// silent on both existing lines while a peer listed no offer, which can only
+/// mean the bytes disagreed with the stamp — and no site read the bytes. This
+/// is that read, and it is the only one: a run where this line never appears
+/// has proved the wire carries what the stamp wrote, which is what makes the
+/// remaining suspect the merge.
+///
+/// `stamped` is `None` when this node holds no record of itself (the round
+/// stamped nothing); `sent` is `None` when the snapshot has no self record.
+pub fn log_sent_snapshot(stamped: Option<&OfferView>, sent: Option<&OfferView>) {
+    if stamped == sent {
+        return;
+    }
+    tracing::warn!(
+        target: "transport",
+        stamped_origins = ?stamped.map(|s| s.origins.clone()),
+        stamped_media_allow = ?stamped.map(|s| s.media_allow.clone()),
+        stamped_media_available = ?stamped.and_then(|s| s.media_available),
+        sent_origins = ?sent.map(|s| s.origins.clone()),
+        sent_media_allow = ?sent.map(|s| s.media_allow.clone()),
+        sent_media_available = ?sent.and_then(|s| s.media_available),
+        "gossip: the snapshot this round sends disagrees with what it stamped — a writer ran between the stamp and the snapshot"
+    );
+}

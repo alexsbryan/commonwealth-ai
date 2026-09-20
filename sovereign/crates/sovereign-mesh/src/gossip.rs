@@ -41,6 +41,7 @@ use std::time::{Duration, Instant};
 
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, MeshPeering, NodeStatus};
+use commonwealth_core::mesh::offer_view;
 use commonwealth_transport::{peer_contact, PeerContact, TrafficClass};
 use corpus_engine::CorpusEngine;
 use serde::{Deserialize, Serialize};
@@ -484,6 +485,9 @@ pub async fn run_one_round(
     // info only when the advertised set changed (new corpus
     // installed, one removed) — the every-10s heartbeat otherwise
     // logs at debug. Same gating policy as `mesh_state: rebuilt`.
+    // What this round STAMPED on our own record, carried past the lock so the
+    // snapshot actually sent (step 3) can be read against it.
+    let mut stamped_offer_view: Option<offer_view::OfferView> = None;
     let candidates: Vec<(PeerContact, bool, u64)> = {
         let mut mesh = fabric.mesh.write().await;
         let prior_corpora: std::collections::BTreeSet<String> = mesh
@@ -598,11 +602,13 @@ pub async fn run_one_round(
             // (`offer_view::log_merged`), so one run says which side held a
             // change: a holder line with no peer line is the merge, a peer
             // line long after the holder's is the round.
+            let offer_view_after = offer_view::OfferView::of(me);
             commonwealth_core::mesh::offer_view::log_self_stamp(
                 &offer_view_before,
-                &commonwealth_core::mesh::offer_view::OfferView::of(me),
+                &offer_view_after,
                 stamped_from_dial_info,
             );
+            stamped_offer_view = Some(offer_view_after);
         }
         for (id, m) in mesh.members.iter_mut() {
             if *id == self_id {
@@ -708,6 +714,18 @@ pub async fn run_one_round(
     // peer. Using the same snapshot across the fan-out keeps rounds
     // cheap and means every peer sees the same view of us.
     let my_snapshot = { fabric.mesh.read().await.clone() };
+    // GLASSBOX: the bytes, read where they are sent. The stamp above wrote
+    // under the write lock; this clone is taken after it was released and
+    // after the selection's `.await`s, so a writer in between shows up here
+    // and nowhere else.
+    offer_view::log_sent_snapshot(
+        stamped_offer_view.as_ref(),
+        my_snapshot
+            .members
+            .get(&self_id)
+            .map(offer_view::OfferView::of)
+            .as_ref(),
+    );
     let http = gossip_client().map_err(|e| GossipError::ClientBuild(e.to_string()))?;
 
     let transport = fabric.peer_transport();
