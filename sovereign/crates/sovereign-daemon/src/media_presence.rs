@@ -31,9 +31,10 @@ use sovereign_mesh::iroh_access::MediaRoute;
 /// wall show "free" after the holder pressed play.
 pub const POLL_INTERVAL: Duration = Duration::from_secs(10);
 
-/// How long the origin is given to answer. Short on purpose — it is on
-/// loopback, and a hung origin must read as "did not answer" this round
-/// rather than stall the next one.
+/// How long the origin is given to answer. Short on purpose — the origin is
+/// whatever `[iroh] media_origin` names (`MediaRoute::parse` requires a
+/// host:port and nothing more), normally a server on this machine, and a hung
+/// origin must read as "did not answer" this round rather than stall the next.
 const ASK_TIMEOUT: Duration = Duration::from_secs(3);
 
 /// Ask the origin once and turn its answer into what this node publishes.

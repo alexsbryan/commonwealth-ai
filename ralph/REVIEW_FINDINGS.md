@@ -1365,3 +1365,112 @@ Findings, fixed (commits `b606f9587`, `7cf49fc9d`):
   scan source text, so a file move is not behaviour-preserving for them. No
   code fix — recorded so a split row names the source-scanning tests in its
   checks.
+
+---
+
+# ring-room rr-2 — review findings
+
+## REVIEW-audit-rr-2 (2026-09-20, range `4b8fe1a16..9e7351b50`)
+
+Checks. TESTALL exit=100 before the fixes below (13502 pass / 3 fail), exit=100
+after with ONE red left (13504 pass / 1 fail), and that one is foreign:
+`cli_contract_journeys::every_journey_cites_a_doc_that_exists` — the
+`mesh-offers-catalogue` journey cites `docs/internal/RING_APPLICATIONS.md`,
+which `.gitignore:67` excludes and which is absent on this host. The citation
+came in at `a3bd715f5` (`sovereign/docs/cli-contract.toml:3571`), an ancestor of
+this campaign's start `4b8fe1a16` (`git merge-base --is-ancestor`), and both
+prior audits recorded it the same way.
+
+PREPUSH exit=1, one blocking gate: **arch-gate**, approach-band growth, carried
+to `ralph/NEEDS_HUMAN.md` as the operator's call (the re-pin + §10 ledger is
+theirs; `--update-baseline` on a working tree is the absorb-everyone trap).
+`size-gate` (75 keys, mostly crates unbaselined since the pack split),
+`hakari-verify` (`.config/hakari.toml:54` still names `corpus-engine-vocab`,
+removed by `e9db0b96c`) and `concept-gate` (could-not-judge, stale graph) are
+advisory and all three are the same foreign reds the rd-1 and rd-2 audits saw.
+
+Rail predicate holds: `git diff 4b8fe1a16..HEAD -- commonwealth/crates/commonwealth-rail/
+commonwealth/crates/commonwealth-rail-core/` is empty — this campaign touched
+neither ring-rail crate, not even the roster door the operator permitted. The
+one hit under the wider `commonwealth-rail*` glob is
+`commonwealth-rails/src/gossip.rs` (+1: `media_available: None` in
+`minimal_capabilities`), and `commonwealth-rails` is the rails DAEMON, which the
+protocol names as outside that rule.
+
+Findings, fixed (this commit):
+
+- **ARCH 5 (a gate that stopped seeing its subject)** ·
+  `sovereign/crates/sovereign-core/tests/main/f26_egress_census.rs:521,886` ·
+  `rr-2-media-posture` added two files with HTTP client constructions the F26
+  census did not know, and TESTALL went red on both: `mesh_media/viewer.rs` (1
+  site) and `media_presence.rs` (4). Registered. `viewer.rs` is `LocalDaemon`
+  because every request goes to an origin `publish_cmd::resolve_target` REFUSES
+  unless it is loopback (`publish_cmd.rs:423-429`). `media_presence.rs` is
+  `OperatorSurface`, not `LocalDaemon`: its production client asks
+  `[iroh] media_origin`, and `MediaRoute::parse` requires a host:port and
+  constrains nothing else (`sovereign-mesh/src/media_route.rs:58-72`).
+- **ARCH 3/4 (a comment asserting what the code does not enforce)** ·
+  `sovereign/crates/sovereign-daemon/src/media_presence.rs:34` · `ASK_TIMEOUT`'s
+  doc read "it is on loopback". Nothing makes that true — see `MediaRoute::parse`
+  above. Reworded to name the config key and what it does check.
+- **ARCH 1 (a branch of production code with no tracing event)** ·
+  `sovereign/crates/sovereign-cli-llm/src/mesh_media/viewer.rs:215-256` ·
+  `already_provisioned` had four silent `None` returns — a declaration that is
+  not one `authorization` header, a refused `GET /Users/Me`, a non-JSON answer,
+  and an Id that is not this viewer's. All four send the caller down the MINT
+  path, which is the expensive branch, and none of them said so at
+  `tracing=debug`. Each now logs the reason it took. Behaviour unchanged (the
+  Id arm reads `!= Some(found)`, which covers the absent-Id case the `?` used
+  to).
+- **ARCH 3 (a generated record not landed with the code)** ·
+  `quality/conformance/{commonwealth-core,sovereign-daemon,sovereign-mesh}.toml`
+  · five tags stale on lines this campaign moved. Regenerated
+  (`UPDATE_CONFORMANCE_TAGS=1`); the diff is line numbers only.
+- **ARCH 4 (a doc claim with a citation nobody checked)** ·
+  `docs/THREAT_MODEL.md:50,55` · the guest paragraph cited
+  `commonwealth/crates/commonwealth-knowledge/src/guest_grant.rs`, which does
+  not exist (the crate is `sovereign-grants`), and said a guest reaches "only
+  the models it lists" — true of `/v1/chat/completions` under a `Scope::Models`,
+  false of `/v1/guest/ask`, whose `collect_turn` call takes no model at all
+  (`routes_guest_ask.rs`, `sovereign-core/src/runtime/serve.rs:607-614`): the
+  router picks the slot and the bound is the handler, which the paragraph
+  already explains two sentences later. Both corrected, and the exact-match
+  rule of `permits_path` named.
+
+The guest-door re-read against `docs/THREAT_MODEL.md`, recorded not changed —
+what can a guest reach that the grant did not name?
+
+- Nothing by path. `GuestGrant::permits_path` is
+  `scopes.iter().any(|s| s.paths().contains(&path))` — EXACT match, no prefix
+  arm (`guest_grant.rs:166-168`), and `client_auth.rs:253` gates every guest
+  request on it.
+- The Guest surface mounts the whole general client router
+  (`serves_general_client_routes` is true for `Guest`), so the mount is not the
+  bound there — the auth layer is. The probe that proves it is
+  `rail_e2e::guest_door::the_wall_bearer_reaches_the_page_and_the_rail_on_a_and_nothing_else`,
+  which drives nine off-scope paths with the bearer AND without it and asserts
+  a refusal for each, then pins `AUTH_EXEMPT_PATHS` so it cannot grow silently.
+  `the_door_mounts_no_operator_route` covers the operator half with the
+  daemon-wide token, so a 404 there is the route set and not a credential.
+- `/mcp` is NOT on the door. It is merged into `client_router` only
+  (`daemon.rs:3730`); neither `client_router_for(.., Guest)` nor
+  `guest_door::door_router` merges it — which matters because the MCP mount's
+  gate is loopback and guest traffic arrives wearing a loopback peer address
+  it did not earn (`client_auth.rs:50-56`).
+- Unauthenticated on the door's LAN bind: `/status`, `/oicp/v1/capabilities`
+  (pinned by the test above and named in T), and the page under `/ring/`. The
+  page's only file read is `serve_under`, which canonicalizes both sides and
+  refuses anything not under the root (`guest_door.rs:188-203`); the door test
+  probes `/ring/..%2Fsecret.txt` against a real sibling file outside the dir
+  and asserts 404 with none of its content.
+
+Recorded, not changed:
+
+- **ARCH 1, the other direction** · `sovereign-mesh/src/ring_sync.rs:243-252` ·
+  `ring sync: round membership` logs at INFO unconditionally, once per round,
+  where `gossip.rs` logs its heartbeat at debug and reserves INFO for a change.
+  Left as minted: the sync interval is 60 s, not 10, and this is the instrument
+  `rr-2-the-return-syncs-the-ring` added precisely because a round that skipped
+  its only peer was indistinguishable in the log from a round with nothing to
+  send (room run 2, 85 s). Deleting it to satisfy a gating convention would
+  return the log to the state that cost that measurement.

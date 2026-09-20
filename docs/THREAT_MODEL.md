@@ -47,12 +47,18 @@ Three zones, from most to least trusted:
   with the check in
   `commonwealth/crates/commonwealth-transport/src/identity.rs`).
 - **Guests.** A holder of an ephemeral guest grant
-  (`commonwealth/crates/commonwealth-knowledge/src/guest_grant.rs`,
-  2026-08-27) is strictly weaker than a member and strictly weaker than a
+  (`sovereign/crates/sovereign-grants/src/guest_grant.rs`, 2026-08-27; the
+  crate was `commonwealth-knowledge` until the pack split) is strictly
+  weaker than a member and strictly weaker than a
   `client_token` holder. They present a short-lived, revocable bearer,
-  may call only the exact paths their `Scope` set names (today
+  and may call only the exact paths their `Scope` set names — matched
+  EXACTLY, never by prefix (`GuestGrant::permits_path`) — today
   `/v1/models` + `/v1/chat/completions` for a model scope; the three rail
-  routes + `/v1/guest/ask` for a rail scope) and only the models it lists.
+  routes + `/v1/guest/ask` for a rail scope. On `/v1/chat/completions` they
+  reach only the models the scope lists; `/v1/guest/ask` carries no model
+  list, because the turn it runs is the daemon's own and the router picks
+  the slot (`routes_guest_ask.rs`, `collect_turn`) — the bound there is the
+  handler, below.
   They never enter `Mesh.members`, never receive `mesh_secret`, and never
   learn the invite key — so "a guest cannot invite people" is structural:
   `Scope` has no variant that could express it. The grant lives only in

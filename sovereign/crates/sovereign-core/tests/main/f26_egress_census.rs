@@ -518,6 +518,22 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // POST the daemon's `/v1/mesh/media/fanout` on loopback; the daemon does
     // the reaching. Same class, same reason.
     ("sovereign/crates/sovereign-cli-llm/src/mesh_media.rs", Class::Mesh, 2),
+    // NEW ROW (2026-09-19, ring-room rr-2-media-posture 042a74806): the HOLDER
+    // half of `mesh media offer` — the read-only viewer account it provisions
+    // on the origin before it declares a credential. One client (`viewer.rs`'s
+    // `client()`), and every request it makes goes to `http://{origin}` where
+    // `origin` came through `publish_cmd::resolve_target`, which REFUSES a
+    // non-loopback address (`publish_cmd.rs:423-429`); with no origin given the
+    // candidates are `WELL_KNOWN_ORIGINS`, both `127.0.0.1`
+    // (`mesh_media.rs:542`). So this dials a media server on this machine and
+    // nothing else — `LocalDaemon`, not `mesh_media.rs`'s `Mesh`: no byte of
+    // this exchange rides the estate's transport, the credential it writes is
+    // what LATER dials do carry.
+    (
+        "sovereign/crates/sovereign-cli-llm/src/mesh_media/viewer.rs",
+        Class::LocalDaemon,
+        1,
+    ),
     // mesh_app.rs (2026-09-12): the viewer half of published apps — asks the
     // local daemon who publishes, then probes ONE app through the loopback
     // bridge the daemon minted. Same shape and same class as mesh_media's
@@ -868,6 +884,26 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // `push_ephemeral` POSTs a namespaced envelope to `/internal/ring/live` on each
     // Online mesh member through the `PeerTransport` seam — ring peers, never a third party.
     ("sovereign/crates/sovereign-daemon/src/routes_rail_live.rs", Class::Mesh, 1),
+    // NEW ROW (2026-09-19, ring-room rr-2-media-posture c24fe521a): the
+    // holder's media-presence poll. Four sites, one of them production —
+    // `run`'s client (`media_presence.rs:158`) — with two destinations. One is
+    // `{internal_url}/internal/node/activity`, this process reporting to
+    // itself, loopback whatever `internal_bind` says (`daemon.rs:3383-3385`).
+    // The other is `[iroh] media_origin`, and `OperatorSurface` rather than
+    // `LocalDaemon` is the honest class for it: `MediaRoute::parse` refuses a
+    // string that is not a host:port and constrains nothing else
+    // (`sovereign-mesh/src/media_route.rs:58-72`), so the address the operator
+    // put in the config is the address asked — usually the Jellyfin on this
+    // machine, not necessarily. It carries the HOUSE credential and asks
+    // `GET /Sessions`; no estate content goes out and no third-party host is
+    // reachable from here. The other three sites are the inline `#[cfg(test)]`
+    // module's fixtures against an origin it spawns itself, the same shape as
+    // `mesh_skew.rs`'s.
+    (
+        "sovereign/crates/sovereign-daemon/src/media_presence.rs",
+        Class::OperatorSurface,
+        4,
+    ),
     ("oicp-conformance/src/checks.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-meshapp-registry/src/proxy.rs", Class::LocalDaemon, 1),
     // Federated media's catalogue half. The row was

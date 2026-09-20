@@ -222,9 +222,16 @@ async fn already_provisioned(
     // or more than one credential in it, is not one this verb can hand back.
     let credential = match declared {
         [(name, value)] if name == "authorization" => value.clone(),
-        _ => return None,
+        _ => {
+            tracing::debug!(
+                %origin,
+                declared_headers = declared.len(),
+                "media offer: the declaration is not one `authorization` header — taking the mint path"
+            );
+            return None;
+        }
     };
-    let me = call(
+    let me = match call(
         client,
         declared,
         reqwest::Method::GET,
@@ -233,9 +240,36 @@ async fn already_provisioned(
         None,
     )
     .await
-    .ok()?;
-    let me: serde_json::Value = serde_json::from_str(&me).ok()?;
-    if me.get("Id").and_then(serde_json::Value::as_str)? != found {
+    {
+        Ok(body) => body,
+        Err(e) => {
+            tracing::debug!(
+                %origin,
+                error = %e,
+                "media offer: `GET /Users/Me` did not answer for the declared credential — taking the mint path"
+            );
+            return None;
+        }
+    };
+    let me: serde_json::Value = match serde_json::from_str(&me) {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::debug!(
+                %origin,
+                error = %e,
+                "media offer: `/Users/Me` did not answer JSON — taking the mint path"
+            );
+            return None;
+        }
+    };
+    let declared_user = me.get("Id").and_then(serde_json::Value::as_str);
+    if declared_user != Some(found) {
+        tracing::debug!(
+            %origin,
+            ?declared_user,
+            viewer_user = %found,
+            "media offer: the declared credential is not this viewer's — taking the mint path"
+        );
         return None;
     }
     // From here it IS the viewer's token, so this verb holds no elevation and
