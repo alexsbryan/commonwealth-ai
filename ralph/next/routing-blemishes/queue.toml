@@ -1,0 +1,18 @@
+# routing-blemishes — tier A of .sovereign/features/routing-blemishes-1/order.md.
+#
+#   nohup python3 scripts/ralph.py supervise --workdir . --queue routing-blemishes \
+#     -- python3 scripts/ralph.py run --workdir . --queue routing-blemishes --max-stall 3 \
+#     >> ralph/log-routing-blemishes.txt 2>&1 &
+#
+# Control files: ralph/next/routing-blemishes/ctl/{STOP,DONE,NEEDS_HUMAN.md}. The parked
+# ei7-stage0 loop owns ralph/STOP and ralph/NEEDS_HUMAN.md — this queue never touches them.
+label = "routing-blemishes"
+session_timeout = 7200
+worker_bin = "scripts/ralph-claude-shim.sh"
+settings = "ralph/claude-settings.json"
+
+[models]
+worker = "claude-opus-5"
+review = "claude-opus-5"
+resolve = "claude-opus-5"
+variant = "high"
