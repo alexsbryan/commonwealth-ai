@@ -237,6 +237,11 @@ exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 
 
 
+**A47 · 2026-09-20 · REVIEW-DEMO-rr-2-run · director (supervisor resolution, attempt 1)** — this commit
+- Needed: The cold room run came back 4/6. The package offered two findings and a named suspect for each; reproducing both against the run's own logs falsified one finding outright and struck the other's suspect, and the row also carried a never-run second half and a cold-run count resting on a run that predates every commit since.
+- Chose: No product row for the offline FAILED — the keeper was reachable and the citation was honest, so the defect is the instrument's: `rr-2-the-cut-drops-the-established-path` makes the cut drop established connections and makes the assertion probe the path the bar judges. For the film FAILED, `rr-2-merge-reads-the-triple-every-round` — the merge side gets the always-on reading the holder side already has, then the fix at the one site it names, with an in-process reproduction first and a stop-with-a-package if it stays green. Run 3 no longer counts as a cold run and the count restarts at zero; the rr-1 regression half is ungated and runs first.
+- Because: `beefy/daemon.err` 05:02:06 shows the fan-out SERVED by RuggedFox from inside the cut over an established QUIC path on a loopback bridge port, with `corpora_unavailable={}` — so `room_assert_cut` proved that fresh dials fail and asserted something else, which is ARCH 5's check with no failing input you can name, and `rr-2-cut-is-a-cut` had already reserved that repair for `cut_node`. On the film side the holder published `Some(0.0)` for ~12 rounds with `stamped_from_dial_info=true` and zero `log_sent_snapshot` warnings on all three nodes, and BOTH peers missed it — so `restamp_onto` (the package's suspect) is not reachable as a cause, and the only unread side is the merge, where silence cannot be told from absence (ARCH 1, 2, 6).
+
 **A44 · 2026-09-19 · rr-2-gossip-claim-one-decider · director (supervisor resolution, attempt 1)** — commit: this one
 - Needed: A43 wrote the row on the premise that a SECOND site builds the claim gossip sends. The worker measured the send path and found one, stopped at the premise check without improvising a target, and asked whether to rewrite or strike the row.
 - Chose: Rewrite the row in place, no new row, and demote it from a product fix to an instrument-first row. The premise is struck and the measurement is written into the row so it is not re-derived; the row now adds ONE line at the send site (`gossip.rs:710`) reading the offer view of the snapshot actually sent — a third function in `offer_view.rs`, no product change — and reproduces the failure in process first by adding the mesh-lock contention the green two-daemon test lacks. It carries a fix only if that turns red; otherwise it stops with two readings. Row marked `[ ]` (not `[~]`), which is also what structurally keeps `rr-2-instrument-honest-again` from being worked ahead of it.
@@ -6357,5 +6362,154 @@ the rest of its measurements stand.
 >
 > Tree state: no source file was changed. The only edit is the `[~]` mark on the
 > row. CLEAN exit=0.
+
+</details>
+
+## A47 · 2026-09-20 — rr-2: the offline FAILED is the instrument's, the film FAILED is the merge's unread side
+
+<details>
+
+### The fork
+
+The room run returned 4/6 with two FAILED clauses. The package asked four things:
+whether the film FAILED is a regression from `4cf55202b` and who fixes it; which row
+owns the offline FAILED (twice recorded, twice deferred); whether run 3 still stands as
+the first of two cold runs; and whether the never-run rr-1 regression half should run
+independently. All four are charter-covered — splitting or folding rows, fixing a row
+whose premise the tree contradicts, and fixing the code a red gate names.
+
+### Finding 2 is FALSIFIED — the keeper was reachable and the answer was honest
+
+The package reported that during the cut the wall released a `grounded`, zero-gap
+holding whose provenance member was `RuggedFox`, a keeper it could not reach, and
+called it a product finding owed a row.
+
+It was reachable. `target/ring-room-rr2-demo/beefy/daemon.err`, 05:02:06, inside the
+cut window and for the very question the bar asks:
+
+```
+05:02:06.100  knowledge: fan-out plan — peer roster & local view
+              local_corpora={} peer_roster=[("LittleMac","Online",[]),
+              ("RuggedFox","Online",["room-88vQRM"])] offerings=1
+05:02:06.139  knowledge: fan-out served peer=node-bfb8b1c5ee940c9f peer_name=RuggedFox
+              addr=iroh:127.0.0.1:23462→71375db3 corpora=["room-88vQRM"] hits=5
+05:02:06.139  fan-out complete served=1 failed=0 never_asked=0
+05:02:06.140  knowledge: fan-out complete corpora_unavailable={}
+```
+
+Five hits came back from the Halo's corpus. `holdings[0].provenance.corpus.member =
+"RuggedFox"` in `phone-phone-cut.json` is therefore a true statement about where the
+evidence came from, and `verdict: "grounded"` with `gaps: []` is the correct release
+for a turn whose evidence it actually holds. There is no product defect here and no
+product row is minted.
+
+The defect is in the guard. `room_assert_cut` (`scripts/ring-room-demo.sh:895-914`)
+collects every address beefy's own log recorded as `peer= url=` and fetches
+`/oicp/v1/capabilities` at each; when all fail it writes "the cut is a cut". That
+proves NEW dials fail. The fan-out did not dial — it rode a QUIC connection already
+established before `network disconnect`, whose local mouth is beefy's own loopback
+bridge port (`127.0.0.1:23462`), which removing a veth does not touch. So the leg
+asserted one path and judged another, which is ARCH 5's "a check with no failing input
+you can name" and the reason a FAILED here carries no information.
+
+`rr-2-cut-is-a-cut` (A41/A42) anticipated exactly this and wrote its own falsifier into
+the row: "nothing further to tear down until the assertion fails on certified-fresh
+binaries, which is the falsifier — and tear THAT down with the cut in `cut_node` only
+then (the instrument's side; if it is the bridge, the cut also drops beefy's
+established iroh connections the way a lost uplink would, and the row says how)." The
+binaries were certified fresh (`need_binaries` passed after `dev-build.sh` exit 0), and
+the assertion did not fail — it passed wrongly, which is the same falsifier from the
+other side. The repair was reserved for `cut_node`, so the new row is that reservation
+being spent, not new scope.
+
+### Finding 1: the package's suspect is STRUCK, and the unread side is the merge
+
+The package named `OfferView::restamp_onto` (`4cf55202b`) carrying `origins` and
+`media_allow` but not `media_available` as the first place to look. That path is
+unreachable as a cause on this run: `restamp_onto` matters only on a round where
+`self_iroh_dialinfo()` is `None`, and EVERY `log_self_stamp` line little emitted reads
+`stamped_from_dial_info=true`. With dial info live the arm at `gossip.rs:544-580`
+re-derives `origins` from the acceptor anyway, and `media_available` was never blanked
+because `fresh_caps` carries it straight from the claims port
+(`sovereign-mesh/src/capabilities.rs:194` ← `state.local_media_available()` ←
+`POST /internal/node/activity`). The holder is correct, and the log shows it publishing
+the change and holding it:
+
+```
+little/daemon.err:265  04:58:19.576  node_activity: media_available updated
+                                     reason=media-presence media_available=Some(0.0)
+little/daemon.err:270  04:58:23.354  gossip: this node's own offer view changed
+                                     media_available=Some(0.0) was_media_available=Some(1.0)
+                                     stamped_from_dial_info=true
+little/daemon.err:405  05:00:23.570  … origins=[] media_available=None was=Some(0.0)
+```
+
+`log_self_stamp` is silent on an unchanged triple, so the two minutes of silence between
+those lines are ~12 consecutive rounds publishing `Some(0.0)`, and little logged
+`reach ok` to BOTH peers on every one of them (53 `reach ok` lines in the run).
+
+The wire agreed with the stamp. `grep -c "disagrees with what it stamped"` returns 0 on
+little, beefy and halo — `log_sent_snapshot`, minted by `rr-2-gossip-claim-one-decider`
+precisely to read the bytes at the send site, never fired.
+
+And BOTH peers missed it, which the package did not check. Beefy holds exactly two
+merge lines for LittleMac in the whole run (`:519` 1.0 at 04:58:13, `:759` None at
+05:01:13) and halo exactly two (`:434` 1.0 at 04:58:03, `:600` None at 05:01:39). All
+four coincide with an `origins` change; the `media_available`-only change produced no
+line on either. Nothing overwrote the value after a merge either: `grep` for writers of
+`.capabilities` in the workspace returns exactly one production site for a mesh member
+(`gossip.rs:536`, the self record) plus `commonwealth-rails/src/gossip.rs:339`, which
+these nodes do not run.
+
+What cannot be read from this run is which of three things happened on the peer:
+
+1. the bytes did not carry `Some(0.0)`;
+2. they did, and `log_merged` found the triple equal to what it already held;
+3. the LWW arm never fired and `merge_one_member` took
+   `Some(_) => LocalRecordNotOlder` (`commonwealth-core/src/mesh/mod.rs:707-709`),
+   which logs nothing at all.
+
+`log_merged` returns early on an unchanged triple by design, so silence is the same
+observation for all three. This is the identical gap that
+`log_self_stamp_without_dial_info` closed on the holder in
+`rr-2-stamp-carries-the-offer-without-dial-info`, still open on the peer — one line, one
+file, one call site, and the row carries the fix only if the in-process reproduction
+goes red.
+
+### The other two questions
+
+**Run 3 no longer stands as cold run 1.** A41 carried it forward; A47 strikes that. It
+predates `4cf55202b`, `31a335925`, and both rows above. Two cold runs that are evidence
+of the same system must be on the same binaries and the same instrument, so the count
+restarts at zero. The run is still cited as the reading it was.
+
+**The rr-1 regression half is ungated.** Under the old text it sat behind a green room
+verdict and was therefore NEVER-RUN for a second session. It is a regression gate on a
+different topology and nothing about it depends on the rr-2 room verdict, so it runs
+first.
+
+### What would falsify this
+
+- Finding 2: a run in which the strengthened `cut_node` genuinely drops every path and
+  the wall STILL releases a grounded holding citing RuggedFox. Then there is a product
+  defect and it needs its own row.
+- Finding 1: the new merge-side line showing the incoming triple carrying `Some(0.0)`
+  while the rail does not list it — that moves the site from the merge to the rail read
+  (`commonwealth-media/src/reach.rs`). Or the in-process test staying green with the
+  line silent on arrival, which would put the loss back on the wire and make the
+  serialization the next suspect.
+- The strike of `restamp_onto`: a room run whose `log_self_stamp` lines read
+  `stamped_from_dial_info=false` during the window. Then that path is live again and the
+  suspect returns.
+
+### The worker's package, inline
+
+The package is `ralph/NEEDS_HUMAN.md` as of this commit's parent; it is removed here.
+Its section (b) verdict table, its two findings, and its four questions are quoted and
+answered above. Two of its claims are corrected: "the rail the viewer reads never said
+in use" is right but "the holder's 1.0 → 0.0 never reaches the viewer's rail" was
+scoped to one viewer when both missed it; and "during the cut the wall answers grounded
+citing the keeper it cannot reach" is false — beefy reached it, served 5 hits, and said
+so in its own log on the same second.
 
 </details>
