@@ -265,6 +265,10 @@ exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 - Needed: The operator brought an external architecture review of the mesh layer ahead of presenting the code for peer review, and asked what to prioritize. The seat spot-checked it against the tree: its central finding holds (the call plane and ring reads decide on a caller-supplied `x-node-id`; ring sync ships every namespace to every online member), and two of its claims do not (gossip carries a `mesh_proof`; the node key IS already used for calls on the media and app ALPNs, where the acceptor strips client `x-mesh-*` and appends the verified identity). Five items were proposed in order.
 - Chose (operator: "Let's queue up 1, 2, 4, and 5"): 1 the verified key becomes the peer principal on the internal plane; 2 ring sync offers and serves by roster; 4 manifest fields with no production writer are deleted; 5 "rail" names the signed log only. Item 5 was documentation alone and landed as 1c11b5e85. Items 1, 2, 4 are campaign `mesh-principal` (four bars in `quality/campaigns/mesh-principal.toml`, pre-registered before any row; queue `ralph/next/mesh-verified-principal/`, eight machine rows, no walk), QUEUED behind `ring-guest` and not launched. Item 3, telling the truth in `docs/THREAT_MODEL.md`, was not chosen; the inventory and audit rows RECORD what they measure for it and fix nothing.
 - Because: convergence, not invention (ARCH 11) — the door exists and one ALPN does not ask for it. Item 2 depends on item 1: the serving side cannot refuse a non-roster asker until it knows who is asking. One assumption is the seat's and the operator may overrule it before row 2: a request with no verified key is `unverified` and refused by any decider that needs an identity, because `mesh_proof` proves the group and never the member. Also in this commit: two wrong paths in the RUNNING guest queue's charter, the seat's own `sed` error from A52 (it named an order file that does not exist); no resolution session had read it.
+**A54 · 2026-09-20 · REVIEW-build-rg-instrument · OPERATOR** — this commit
+- Needed: The instrument row stopped on a contradiction that was the seat's. The order's demo shows two QR codes, one per app; the pre-registered bar `rg-one-person-across-apps` said "ONE grant for the room" and "not asked its name again". A grant names exactly one rail namespace by a deliberate rule (`sovereign-grants/src/guest_grant.rs:80-88`: the namespace lives on the grant and never in the request, so a page has no way to say another app's), so two apps are two grants and two bearers, and the session as landed (bea99f5db) is bound to its grant's token — the second app refuses the first app's handle as `stale_session` and re-asks the name. Three options were put to the operator: A the session belongs to the door; B a grant may name several namespaces; C weaken the bar.
+- Chose (operator: "A sounds right to me"): A. Grants keep one namespace. A session belongs to this daemon's guest door and is recognised under any live grant that door minted; reach stays the presenting bearer's grant alone; the name-collision domain becomes the wall. New row `rg-2-session-belongs-to-the-door` ahead of the instrument. Bar clause (d) CORRECTED before any datum: one grant per APP, none per phone, in a run with more phones than apps; new clause (e): every grant still names exactly one namespace. The per-grant binding that landed is KEPT as the strict setting, `[daemon] guest_sessions = "grant"`, default `"door"`.
+- Because: the operator's standing criterion, stated with this decision and binding on later forks — "make 0 -> 1 elegant, defaults reasonable (and strong-ish security posture, but not one that costs elegant 0 -> 1), then knobs exposed for real control if wanted." A keeps the structural property (a page cannot name a namespace) AND the elegant path (a person is one person on a wall); B buys one QR for the whole wall by turning that property into a check; C gives up what was asked for. Amending a pre-registered bar mid-campaign is recorded as what it is: a correction of the seat's own contradictory pre-registration, made before any datum for that bar exists, with what the clause guards (a grant per phone) unchanged. Cost the operator accepted: one QR for a whole wall stays impossible.
 
 **A44 · 2026-09-19 · rr-2-gossip-claim-one-decider · director (supervisor resolution, attempt 1)** — commit: this one
 - Needed: A43 wrote the row on the premise that a SECOND site builds the claim gossip sends. The worker measured the send path and found one, stopped at the premise check without improvising a target, and asked whether to rewrite or strike the row.
@@ -7424,5 +7428,135 @@ gossip onto the rail (rr-2's three product bugs were all in gossip's last-writer
 liveness; the rail had none); two-choice routing on a per-peer latency average (scheduler
 changes here have a recorded regression history); MCP verbs across the mesh (depends on
 item 1).
+
+</details>
+
+## A54 · 2026-09-20 — the session belongs to the door; a grant still names one namespace
+
+<details>
+
+### The worker's package, inline
+
+> # REVIEW-build-rg-instrument — BLOCKED on a false premise: one grant cannot serve two apps
+>
+> ## (a) The unit
+>
+> `ralph/next/ring-guest-substrate/STATE.md`, the `[~]` row:
+>
+> > REVIEW-build-rg-instrument — depends [rg-1-door-stamps-the-guest, rg-2-door-serves-each-app]
+> > — **The second app on the wall, as legs of M under the room topology — no new script.**
+> > … **ONE wall grant and ONE QR for the room** (clause (d) of `rg-one-person-across-apps`
+> > counts the grants — rr-2 mints TWO at M:826-827, `room_grant wall` and `room_grant second`,
+> > one per phone; `second` goes away and `phone2` (M:848) takes the wall QR …). … legs for O's
+> > Demo steps 1-6: … **the same phone on the doc with no second name asked** (the census names
+> > WHICH element took each string — it must be the shim's) …
+>
+> No product edits were made. The tree is clean apart from the `[~]` mark and this file.
+>
+> ## (b) What I ran, and what it actually says
+>
+> Every M-side premise the row states is TRUE (`sed -n '136p;217,218p;768p;826,827p;848p'`
+> returns exactly the five sites the inventory named, plus `room_phone phone2 "$D/wall-qr-2.svg"`).
+> The blocker is elsewhere. Four greps, verbatim:
+>
+> ```
+> $ grep -n 'Rails(String)' sovereign/crates/sovereign-grants/src/guest_grant.rs
+> 88:    Rails(String),
+>
+> $ grep -n 'rail_namespace() == Some(ns)' sovereign/crates/sovereign-daemon/src/guest_door.rs
+> 172:        .any(|g| g.is_live(now_ms) && g.rail_namespace() == Some(ns))
+>
+> $ grep -n 'let mut rail: Option<String>' sovereign/crates/sovereign-cli-llm/src/mesh_guest.rs
+> 354:    let mut rail: Option<String> = None;
+>
+> $ grep -n 'v.token === bearer' sovereign/crates/sovereign-daemon/src/guest_door.rs
+> 447:      return v && v.handle && v.token === bearer ? v : null;
+> ```
+>
+> The chain, each link cited:
+>
+> 1. Two apps on one wall are two rail namespaces. `guest_door::route_page`
+>    (`sovereign/crates/sovereign-daemon/src/guest_door.rs:120-163`) keys the registry by
+>    namespace and serves `/ring/<ns>/` only when `granted(ns)` — landed by
+>    `rg-2-door-serves-each-app` (954d0f9b0).
+> 2. A grant names exactly ONE namespace. `Scope::Rails(String)`
+>    (`sovereign-grants/src/guest_grant.rs:88`), whose own doc at `:80-88` says so on purpose:
+>    *"One namespace per grant — a grant that could name two would make its own blast radius an
+>    argument rather than a fact."* `rail_namespace()` (`:198-203`) returns the FIRST `Rails`
+>    scope, so even a grant carrying two would serve only one page
+>    (`guest_door.rs:172`) and reach only one journal
+>    (`routes_rail::resolve_granted`, `routes_rail.rs:100-117`, 403s any other namespace).
+>    `svrn mesh grant --rail` takes one value (`mesh_guest.rs:354`).
+> 3. So two apps ⇒ two grants ⇒ two bearers. `svrn mesh grant --list` then shows TWO grants
+>    for the room, which is what clause (d) of `rg-one-person-across-apps` counts.
+> 4. And the phone IS asked its name again in the second app. The shim remembers a session
+>    against the bearer (`guest_door.rs:447`), the store binds the handle to the grant token
+>    (`guest_session.rs:49,124`), and `GuestSessionStore::live` (`guest_session.rs:141-150`)
+>    requires `s.grant_token == grant.token` — a handle from grant A presented with bearer B is
+>    refused `stale_session` (`client_auth.rs:277-286`) and the shim forgets it and re-prompts
+>    (`guest_door.rs` shim, the `409 stale_session` arm).
+>
+> Therefore, with the substrate exactly as `rg-2-guest-session` (bea99f5db) and
+> `rg-2-door-serves-each-app` (954d0f9b0) landed it, `rg-one-person-across-apps` clauses
+> (b) *"a phone named in app one is attributed under that name in app two with a typed-string
+> census of ONE name across both"* and (d) *"`svrn mesh grant --list` shows ONE grant for the
+> room"* cannot both be reached by any instrument, however written. This is a gap in the
+> substrate, not in `scripts/ring-room-demo.sh`, and the grants/rail surface is not open to
+> this row.
+>
+> Note the order and the bar already disagree with each other on this point:
+> `.sovereign/features/ring-guest-substrate/order.md` Demo step 1 says *"The wall shows two QR
+> codes, one per app, minted by the same verb with a different `--rail`"*, while step 3 says the
+> same phone *"is not asked its name again"*. Those two sentences are only compatible under
+> option 1 below.
+>
+> ## (c) What the operator must decide
+>
+> 1. **Let one grant name more than one rail namespace — the "wall grant".** Smallest measured
+>    shape: `scopes: Vec<Scope>` (`guest_grant.rs:151`) already permits two `Rails` entries, so
+>    no type changes; what moves is the four readers of `rail_namespace`
+>    (`routes_rail.rs:101`, `guest_door.rs:172`, `guest_door.rs:193`,
+>    `routes_internal/ring_live.rs:87`) becoming "does this grant name `ns`" / "the namespaces
+>    it names", `resolve_granted` (`routes_rail.rs:100-117`) taking the REQUESTED namespace when
+>    the grant names it, the shim sending it (it already knows: `ring_shim(&namespace, …)`
+>    renders `namespace: "{{NAMESPACE}}"` per page, `guest_door.rs:318-323`), and `--rail`
+>    becoming repeatable (`mesh_guest.rs:354,410-419`). The session then spans both apps for
+>    free — same grant token, same bearer — and clauses (b) and (d) both become true.
+>    54 `Scope::Rails` sites exist across 16 files, but 12 of those files are tests and the
+>    variant's shape does not change. This REVERSES the deliberate decision quoted at
+>    `guest_grant.rs:80-88`, which is why it is yours and not mine. It also needs a new row
+>    before this one, and it spends against O §Predictions' `sovereign-daemon` under ~250.
+>
+> 2. **Keep one grant per app (two QRs, as Demo step 1 literally reads) and amend the bar.**
+>    Zero code. Requires editing pre-registered `rg-one-person-across-apps` clauses (b) and (d)
+>    mid-campaign, and striking "is not asked its name again" from Demo step 3 — which is the
+>    goodhart the campaign was pre-registered to prevent, so it should be recorded as such if
+>    chosen.
+>
+> 3. **One grant, one namespace, both apps sharing a journal.** NOT recommended, priced only so
+>    it is not re-derived later: `route_page` would serve the scaffold at the bare `/ring/`
+>    (`guest_page_dir`) and ring-doc at `/ring/<ns>/` under one grant, but both apps would then
+>    fold the same journal and each would report the other's acts as gaps
+>    (`templates/expenses.js` validate → `templates/app.js:82-89`), and
+>    `guest_door.rs:54-60` states that each app is its own rail namespace.
+>
+> Everything else in the row is unblocked and unaffected: the `svrn ring new`-at-`up` hash
+> against TP with `{{NAME}}` substituted, the five `$PAGE`-bound sites, the three-act-kind
+> retraction leg, the two liar pages, the Halo's `ring log`, and the eleven-row `verdict all`
+> over C + C2. I stopped rather than build half of it against a shape that may change, because
+> under option 1 the QR/grant/census legs are written once and under option 2 they are written
+> differently.
+>
+> ## (d) To unblock
+>
+> Edit or mark the row in `ralph/next/ring-guest-substrate/STATE.md` — naming which option, and
+> under option 1 inserting the substrate row ahead of this one — then
+> `rm ralph/STOP ralph/NEEDS_HUMAN.md`.
+
+### What falsifies the choice
+
+- A handle presented under grant B reaching grant A's namespace: reach would then be the handle's, not the bearer's. The row's PLANT is that input.
+- A session outliving the last live grant from the door.
+- Under `guest_sessions = "grant"`, a cross-grant handle NOT reading `stale_session`: the strict knob would then not be the posture that landed in bea99f5db.
 
 </details>

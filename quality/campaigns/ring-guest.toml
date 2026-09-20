@@ -65,15 +65,15 @@ status       = "open"
 
 [[bar]]
 id           = "rg-one-person-across-apps"
-demo         = "One QR serves the room. The same phone opens the doc after the expenses app and is not asked its name again; a second phone on the same code has its own name; a phone claiming the wall's member name is refused on either app."
+demo         = "One QR per app serves the room, however many phones scan it. The same phone opens the doc after the expenses app and is not asked its name again; a second phone on the same code has its own name; a phone claiming the wall's member name is refused on either app."
 rung         = "rg-2"
-one_line     = "CLAIM: the name binds to a door-issued guest session under the grant, asked once by the door's shim, and the door serves each app's page for its own rail namespace"
+one_line     = "CLAIM: the name binds to a guest session that belongs to the DOOR, asked once by the door's shim and recognised under every live grant that door minted, while each grant still names exactly one rail namespace"
 derives_from = "rr-2 minted one grant per phone (`scripts/ring-room-demo.sh:266-274`) and the door serves ONE directory at ONE prefix (`guest_door.rs:41,82-83`); the `App` origin kind already argues a registry behind one route (`oicp-types/src/origin.rs`); the collision refusal and its sentence exist (`routes_rail.rs:234-244`)"
 floor        = 1.0
-floor_basis  = "structural: 1.0 iff (a) two phones scanning the SAME QR hold two distinct names on the wall, (b) a phone named in app one is attributed under that name in app two with a typed-string census of ONE name across both, (c) a claim of the member's name is refused with HTTP 409 on both apps, (d) `svrn mesh status` members are unchanged and `svrn mesh grant --list` shows ONE grant for the room. Any false is 0.0."
+floor_basis  = "structural: 1.0 iff (a) two phones scanning the SAME QR hold two distinct names on the wall, (b) a phone named in app one is attributed under that name in app two with a typed-string census of ONE name across both, (c) a claim of the member's name is refused with HTTP 409 on both apps, (d) `svrn mesh status` members are unchanged and `svrn mesh grant --list` shows ONE grant PER APP on the wall and none per phone, in a run that uses MORE PHONES THAN APPS so the two counts cannot coincide, (e) every grant in that list still names exactly one rail namespace. Any false is 0.0. CORRECTED 2026-09-20 before any datum for this bar (ledger A54): (d) read 'ONE grant for the room', which contradicted the order's own demo (two QR codes, one per app) and cannot hold while a grant names one namespace (`sovereign-grants/src/guest_grant.rs:80-88`, a deliberate rule the operator kept). What (d) guards — a grant per PHONE — is unchanged."
 target       = 1.0
 direction    = "higher_is_better"
-goodhart     = "reads 1.0 with one grant per phone as today if the instrument mints two QRs (clause (d) counts the grants); reads 1.0 while the app still asks the name if the page has a name field (the census names WHICH element took the string, and it must be the shim's)"
+goodhart     = "reads 1.0 with one grant per phone if phones and apps are equal in number (clause (d) requires more phones than apps); reads 1.0 by widening the grant if one bearer reaches two namespaces (clause (e)); reads 1.0 while the app still asks the name if the page has a name field (the census names WHICH element took the string, and it must be the shim's)"
 status       = "open"
 
 [[bar]]
