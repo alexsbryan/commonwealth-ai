@@ -441,6 +441,35 @@ passkeys. It is load-bearing the way a name is, not the way a hub is — but it
 IS sticky: browser storage and passkeys are per origin, so a mirror is a
 different identity silo. Installed nodes never touch it.
 
+**Defaults, not dependencies** (operator direction 2026-09-20: a domain may
+exist, as an implementation of a protocol and never a toll booth; if it goes
+down everything is still fine). Three pieces of shared infrastructure exist —
+the gateway origin, the relay, the discovery DNS — and each obeys four rules:
+it holds no state that members' nodes cannot reconstruct; it sees no
+plaintext and, for the gateway, not even which ring (everything identifying a
+ring rides the URL fragment, which a browser never sends — matrix.to's
+pattern); it is named in the link or the config, so it is swapped without
+coordination; and its claim to be non-load-bearing is a gate, so it is proven
+by turning it off (ARCH principle 5).
+
+The link is the protocol: `<any-gateway>/#ring=<key>&via=<member keys>&relay=<url>`,
+with a `ring:` scheme form for installed apps and for print beside a QR. The
+gateway is a reproducible static bundle with a published hash; anyone hosts
+one, a node already serves one on its LAN door, and the poster generator
+prints whichever the host chose. The project's domain is only the default.
+
+What survives the default gateway going down: every installed node; every LAN
+room; every phone that loaded once, because the service worker answers the
+navigation; every link opened at another gateway. What does not: a stranger
+with a stock camera scanning a poster that names the dead gateway. A printed
+URL's first contact depends on its name resolving, and nothing on a stock
+phone avoids that — so the name does no work and holds nothing, and a
+community that cares prints its own. Two limits stated plainly: a web origin
+cannot be defended from its own server, so whoever controls a gateway's name
+can serve its browser-only users new code (installing removes that trust);
+and switching gateways is a new browser key, joined to the same person by an
+ordinary `Admit`.
+
 **Apps arrive through the ring, not over HTTP.** The bundle (§14) comes from
 a member's node over iroh, is checked against its hash, and runs in an
 `<iframe sandbox="allow-scripts">` with no `allow-same-origin`. The browser
