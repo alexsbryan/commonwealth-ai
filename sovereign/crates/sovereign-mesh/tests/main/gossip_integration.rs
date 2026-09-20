@@ -709,3 +709,166 @@ async fn an_offer_and_its_withdrawal_reach_a_peers_media_rail_in_one_round() {
         "one round after the withdrawal the viewer's rail must list nothing: {rows:?}"
     );
 }
+
+/// The same one-round bar as above, with the contention a real node has and
+/// the test above does not.
+///
+/// The test above awaits `run_one_round` alone: nothing else touches
+/// `fabric.mesh` between the round's self-stamp (under the write lock) and
+/// the snapshot it clones and sends (after the lock is released and after the
+/// peer selection's `.await`s). A daemon has three writers in that gap — the
+/// media-presence poll, the activity reporter, and an inbound
+/// `/internal/gossip` from a peer whose copy of US still says we offer
+/// nothing. Beefy's 22 silent rounds (room runs 5-6) are only explicable if
+/// the bytes said `origins=[]` while the stamp said `[Media]`, so this is
+/// that gap put under load. `offer_view::log_sent_snapshot` is the line that
+/// speaks if it ever happens.
+#[tokio::test]
+async fn an_offer_survives_the_writers_that_contend_with_its_round() {
+    let mesh_id = MeshId::from_u128(43);
+    let hash = [12u8; 32];
+    let holder = NodeId::from_u128(100);
+    let viewer = NodeId::from_u128(200);
+
+    let mesh_holder = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
+        id: mesh_id,
+        name: "T".into(),
+        invite_key_hash: hash,
+        invite_version: 0,
+        require_encryption: false,
+        members: {
+            let mut m = HashMap::new();
+            m.insert(
+                holder,
+                member_at(holder, "LittleMac", 100, "127.0.0.1:1".parse().unwrap()),
+            );
+            m
+        },
+        peers: vec![],
+    };
+    let state_holder = AppState::new(holder, mesh_holder);
+    let addr_holder = spawn_internal_router(state_holder.clone()).await;
+
+    let mesh_viewer = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
+        id: mesh_id,
+        name: "T".into(),
+        invite_key_hash: hash,
+        invite_version: 0,
+        require_encryption: false,
+        members: {
+            let mut m = HashMap::new();
+            // The viewer's copy of the holder offers NOTHING — this is the
+            // record an inbound round pushes back at the holder while the
+            // holder's own round is mid-flight.
+            m.insert(holder, member_at(holder, "LittleMac", 100, addr_holder));
+            m.insert(
+                viewer,
+                member_at(viewer, "BeefyMac", 150, "127.0.0.1:2".parse().unwrap()),
+            );
+            m
+        },
+        peers: vec![],
+    };
+    let state_viewer = AppState::new(viewer, mesh_viewer);
+    let addr_viewer = spawn_internal_router(state_viewer.clone()).await;
+    {
+        let mut mesh = state_holder.inner.fabric.mesh.write().await;
+        mesh.members
+            .insert(viewer, member_at(viewer, "BeefyMac", 150, addr_viewer));
+    }
+
+    // `svrn mesh media offer`.
+    state_holder.update_local_media_available(Some(1.0)).await;
+    state_holder.inner.fabric.dial_info.publish(Arc::new(|| {
+        commonwealth_core::mesh::IrohDialInfo {
+            relay_url: None,
+            direct_addrs: Vec::new(),
+            origins: vec![commonwealth_core::capabilities::OriginKind::Media],
+            media_allow: vec!["BeefyMac".into()],
+        }
+    }));
+
+    // Writer 1 + 2: the media-presence poll and the activity reporter, both
+    // hammering the holder's own claims for the duration of its round.
+    let claims_writer = {
+        let state = state_holder.clone();
+        tokio::spawn(async move {
+            for _ in 0..200 {
+                state.update_local_media_available(Some(1.0)).await;
+                state.update_local_availability(1.0).await;
+                tokio::task::yield_now().await;
+            }
+        })
+    };
+    // Writer 3: a peer gossiping AT the holder — its round takes the holder's
+    // mesh write lock inside `/internal/gossip` and pushes a record of the
+    // holder that carries no offer.
+    let inbound_writer = {
+        let state = state_viewer.clone();
+        tokio::spawn(async move {
+            for _ in 0..3 {
+                // Discarded deliberately (ARCH 6 named, not silent): this
+                // round's own outcome is not the subject. It dials the
+                // viewer's placeholder address and is EXPECTED to report the
+                // peer unreachable; what it contributes is the mesh write
+                // lock it takes on the holder through `/internal/gossip`,
+                // which happens whether its own fan-out succeeds or not. A
+                // failure here that mattered would show up as the holder's
+                // assertion below going red.
+                let _ = gossip::run_one_round(
+                    &*state.inner.fabric,
+                    state.inner.node.corpus_engine.as_ref(),
+                    &state,
+                    Duration::from_secs(60),
+                )
+                .await;
+            }
+        })
+    };
+
+    gossip::run_one_round(
+        &*state_holder.inner.fabric,
+        state_holder.inner.node.corpus_engine.as_ref(),
+        &state_holder,
+        Duration::from_secs(60),
+    )
+    .await
+    .expect("gossip round should succeed");
+
+    claims_writer.await.expect("claims writer must not panic");
+    inbound_writer.await.expect("inbound writer must not panic");
+
+    // The holder's own record is the first reading — a failure here names the
+    // stamp or a writer that undid it, never the merge.
+    {
+        let m = state_holder.inner.fabric.mesh.read().await;
+        assert_eq!(
+            m.members[&holder].capabilities.origins,
+            vec![commonwealth_core::capabilities::OriginKind::Media],
+            "the holder's own record must still carry the offer after its round \
+             raced the presence poll, the activity reporter and an inbound gossip"
+        );
+    }
+
+    let rows = {
+        let m = state_viewer.inner.fabric.mesh.read().await;
+        commonwealth_media::offers(
+            viewer,
+            &commonwealth_media::roster_of(&m),
+            &[],
+            commonwealth_core::capabilities::OriginKind::Media,
+        )
+    };
+    assert_eq!(
+        rows.len(),
+        1,
+        "one round after the offer, a contended round must still put the \
+         holder on the viewer's rail: {rows:?}"
+    );
+    assert_eq!(rows[0].peer, "LittleMac");
+    assert_eq!(rows[0].media_available, Some(1.0));
+}
