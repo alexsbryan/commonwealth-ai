@@ -4184,10 +4184,9 @@ impl Runtime {
             declared_register,
             active_mode.as_deref(),
         );
-        let mut intent = intent_policy
-            .effective_intent
-            .clone()
-            .unwrap_or_else(|| raw_intent.clone());
+        let mut intent = self
+            .resolve_policy_intent(message, &raw_intent, &intent_policy)
+            .await;
         context.intent_policy = Some(intent_policy);
 
         // Evidence escalation. A query routed to a non-retrieval type but that

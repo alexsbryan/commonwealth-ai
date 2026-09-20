@@ -118,6 +118,8 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Searched sources migration failed: {e}")))?;
         migrations::run_conversation_frame_migration(&conn)
             .map_err(|e| Error::Storage(format!("Conversation frame migration failed: {e}")))?;
+        migrations::run_routing_join_migration(&conn)
+            .map_err(|e| Error::Storage(format!("Routing join migration failed: {e}")))?;
 
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
@@ -179,6 +181,26 @@ impl SqliteStateStore {
                 let redirect_to: Option<String> = row.get(1)?;
                 Ok((was_redirected != 0, redirect_to))
             },
+        )
+        .ok()
+    }
+
+    /// Read the (conversation_id, policy_intent) join keys for the
+    /// most recent `routing_log` row matching `message_hash`. Returns
+    /// `None` if no row is found; a row with no override reads as
+    /// `(Some(conv), None)`. Same purpose as
+    /// [`SqliteStateStore::read_redirect_signal`] — the schema columns
+    /// are otherwise private to the SQLite impl.
+    pub async fn read_routing_join(
+        &self,
+        message_hash: &str,
+    ) -> Option<(Option<String>, Option<String>)> {
+        let conn = self.conn.lock().await;
+        conn.query_row(
+            "SELECT conversation_id, policy_intent FROM routing_log \
+             WHERE message_hash = ?1 ORDER BY created_at DESC LIMIT 1",
+            rusqlite::params![message_hash],
+            |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .ok()
     }
@@ -313,6 +335,8 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Searched sources migration failed: {e}")))?;
         migrations::run_conversation_frame_migration(&conn)
             .map_err(|e| Error::Storage(format!("Conversation frame migration failed: {e}")))?;
+        migrations::run_routing_join_migration(&conn)
+            .map_err(|e| Error::Storage(format!("Routing join migration failed: {e}")))?;
 
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),

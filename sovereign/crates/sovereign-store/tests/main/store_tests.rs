@@ -360,8 +360,14 @@ async fn test_memory_confidence_update(store: &dyn StateStore) {
 }
 
 async fn test_routing_log(store: &dyn StateStore) {
-    store.log_routing("hash1", "SimpleQuery", 50).await.unwrap();
-    store.log_routing("hash2", "DeepQuery", 100).await.unwrap();
+    store
+        .log_routing("hash1", "SimpleQuery", 50, Some("conv-a"))
+        .await
+        .unwrap();
+    store
+        .log_routing("hash2", "DeepQuery", 100, None)
+        .await
+        .unwrap();
 
     // No corrections yet (all are unknown).
     let corrections = store.get_routing_corrections(10).await.unwrap();

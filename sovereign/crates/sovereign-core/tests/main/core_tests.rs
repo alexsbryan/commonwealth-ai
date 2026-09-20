@@ -197,7 +197,13 @@ impl MemoryStore for MockStore {
 
 #[async_trait]
 impl RoutingStore for MockStore {
-    async fn log_routing(&self, _hash: &str, _classified: &str, _latency: i64) -> Result<()> {
+    async fn log_routing(
+        &self,
+        _hash: &str,
+        _classified: &str,
+        _latency: i64,
+        _conversation_id: Option<&str>,
+    ) -> Result<()> {
         Ok(())
     }
     async fn get_routing_corrections(&self, _limit: usize) -> Result<Vec<RoutingCorrection>> {

@@ -384,7 +384,7 @@ async fn redirect_turn_stream_writes_structural_signal() {
     // matching row.
     let seed_hash = sovereign_core::router::message_hash(user_message);
     store
-        .log_routing(&seed_hash, "SimpleQuery", 10)
+        .log_routing(&seed_hash, "SimpleQuery", 10, Some(&conv))
         .await
         .expect("seed row");
 

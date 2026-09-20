@@ -83,6 +83,8 @@ mod retrieval_pipeline_mechanics;
 mod router_bootstrap_parity;
 #[path = "main/router_cache_fresh.rs"]
 mod router_cache_fresh;
+#[path = "main/routing_log_join.rs"]
+mod routing_log_join;
 #[path = "main/routing_moves.rs"]
 mod routing_moves;
 #[path = "main/runtime_commission_census.rs"]

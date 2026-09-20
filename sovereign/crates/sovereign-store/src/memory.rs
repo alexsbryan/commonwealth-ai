@@ -452,8 +452,11 @@ impl RoutingStore for InMemoryStateStore {
         message_hash: &str,
         classified_as: &str,
         latency_ms: i64,
+        conversation_id: Option<&str>,
     ) -> Result<()> {
-        let _ = latency_ms;
+        // `RoutingLogEntry` carries neither field — this store backs the
+        // correction/redirect reads only, same as it already drops latency.
+        let _ = (latency_ms, conversation_id);
         self.routing_log.write().await.push(RoutingLogEntry {
             message_hash: message_hash.to_string(),
             classified_as: classified_as.to_string(),

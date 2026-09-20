@@ -217,6 +217,7 @@ pub mod retrieval_ledger;
 /// (two `sovereign_core` identities). Not a supported external API.
 #[doc(hidden)]
 pub mod retrieval_pipeline;
+mod routing_record;
 /// Serving one turn — drive the stream, forward the narration, emit the
 /// terminal metadata frame (`TOPOLOGY.md §10` phase 5c). The one place
 /// that turns a `Runtime` into `TurnFrame`s, so a host does not have to be

@@ -434,6 +434,29 @@ impl LlmRouter {
         }
     }
 
+    /// One door for every `routing_log` INSERT in [`Router::classify`].
+    /// The conversation id is threaded here, once, instead of at the nine
+    /// early-return sites that each write a row — that is what makes a
+    /// routing decision joinable to the turn it routed. Best-effort: a
+    /// routing-log failure has never blocked a classification.
+    async fn log_route(
+        &self,
+        hash: &str,
+        classified_as: &str,
+        latency_ms: i64,
+        context: &ConversationContext,
+    ) {
+        let _ = self
+            .store
+            .log_routing(
+                hash,
+                classified_as,
+                latency_ms,
+                Some(&context.conversation.id),
+            )
+            .await;
+    }
+
     /// Install the authority probe — the tool registry whose
     /// [`crate::registry::ToolRegistry::authority_claims`] the router
     /// consults before intent classification (FINANCIAL_CORPORA §7.3).
@@ -1779,10 +1802,7 @@ impl Router for LlmRouter {
         ) {
             let latency_ms = start.elapsed().as_millis() as i64;
             let hash = message_hash(message);
-            let _ = self
-                .store
-                .log_routing(&hash, "MetalingualQuery", latency_ms)
-                .await;
+            self.log_route(&hash, "MetalingualQuery", latency_ms, context).await;
             let _ = self
                 .store
                 .log_routing_meta(
@@ -1850,10 +1870,7 @@ impl Router for LlmRouter {
                         if v.locator == "conversation" {
                             let latency_ms = start.elapsed().as_millis() as i64;
                             let hash = message_hash(message);
-                            let _ = self
-                                .store
-                                .log_routing(&hash, "MetalingualQuery", latency_ms)
-                                .await;
+                            self.log_route(&hash, "MetalingualQuery", latency_ms, context).await;
                             let _ = self
                                 .store
                                 .log_routing_meta(
@@ -1975,10 +1992,7 @@ impl Router for LlmRouter {
             if let Some(v) = archive_cls.classify_from_embedding(q) {
                 let latency_ms = start.elapsed().as_millis() as i64;
                 let hash = message_hash(message);
-                let _ = self
-                    .store
-                    .log_routing(&hash, "KnowledgeQuery", latency_ms)
-                    .await;
+                self.log_route(&hash, "KnowledgeQuery", latency_ms, context).await;
                 let _ = self
                     .store
                     .log_routing_meta(
@@ -2030,7 +2044,7 @@ impl Router for LlmRouter {
             let latency_ms = start.elapsed().as_millis() as i64;
             let hash = message_hash(message);
             let intent_str = format!("{inherited:?}");
-            let _ = self.store.log_routing(&hash, &intent_str, latency_ms).await;
+            self.log_route(&hash, &intent_str, latency_ms, context).await;
             let _ = self
                 .store
                 .log_routing_meta(&hash, "KNOWLEDGE_THREAD_INHERIT", None)
@@ -2082,10 +2096,7 @@ impl Router for LlmRouter {
             if let Some(first) = claims.first() {
                 let latency_ms = start.elapsed().as_millis() as i64;
                 let hash = message_hash(message);
-                let _ = self
-                    .store
-                    .log_routing(&hash, "ComplexTask", latency_ms)
-                    .await;
+                self.log_route(&hash, "ComplexTask", latency_ms, context).await;
                 let _ = self
                     .store
                     .log_routing_meta(&hash, "AUTHORITY_CLAIM", None)
@@ -2263,10 +2274,7 @@ impl Router for LlmRouter {
                         if let Some((tool_id, tool_sim)) = tool_match {
                             let latency_ms = start.elapsed().as_millis() as i64;
                             let hash = message_hash(message);
-                            let _ = self
-                                .store
-                                .log_routing(&hash, "ComplexTask", latency_ms)
-                                .await;
+                            self.log_route(&hash, "ComplexTask", latency_ms, context).await;
                             let _ = self
                                 .store
                                 .log_routing_meta(&hash, "TOOL_RELEVANCE", None)
@@ -2302,7 +2310,7 @@ impl Router for LlmRouter {
                         let latency_ms = start.elapsed().as_millis() as i64;
                         let hash = message_hash(message);
                         let intent_str = format!("{routed:?}");
-                        let _ = self.store.log_routing(&hash, &intent_str, latency_ms).await;
+                        self.log_route(&hash, &intent_str, latency_ms, context).await;
                         let _ = self
                             .store
                             .log_routing_meta(&hash, "EMBED_ROUTER", None)
@@ -2365,7 +2373,7 @@ impl Router for LlmRouter {
             let latency_ms = start.elapsed().as_millis() as i64;
             let hash = message_hash(message);
             let intent_str = format!("{override_intent:?}");
-            let _ = self.store.log_routing(&hash, &intent_str, latency_ms).await;
+            self.log_route(&hash, &intent_str, latency_ms, context).await;
             let _ = self
                 .store
                 .log_routing_meta(&hash, "TOPIC_CONTINUITY", None)
@@ -2629,7 +2637,7 @@ impl Router for LlmRouter {
         // Log routing decision.
         let hash = message_hash(message);
         let intent_str = format!("{intent:?}");
-        let _ = self.store.log_routing(&hash, &intent_str, latency_ms).await;
+        self.log_route(&hash, &intent_str, latency_ms, context).await;
         let _ = self
             .store
             .log_routing_meta(&hash, &coarse.intent, self_assessment_outcome.as_deref())

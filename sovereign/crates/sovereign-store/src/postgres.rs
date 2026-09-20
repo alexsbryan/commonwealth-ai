@@ -255,6 +255,13 @@ impl PostgresStateStore {
             -- per conversation (mirror of run_searched_sources_migration
             -- on SQLite). NULL means "no searches have run yet."
             ALTER TABLE conversations ADD COLUMN IF NOT EXISTS searched_sources JSONB;
+
+            -- routing_log join keys (mirror of
+            -- migrations::run_routing_join_migration on SQLite).
+            -- conversation_id is written at INSERT; policy_intent only
+            -- when the turn's IntentPolicy overrode the router.
+            ALTER TABLE routing_log ADD COLUMN IF NOT EXISTS conversation_id TEXT;
+            ALTER TABLE routing_log ADD COLUMN IF NOT EXISTS policy_intent TEXT;
             "#,
             )
             .await
@@ -1148,6 +1155,7 @@ impl RoutingStore for PostgresStateStore {
         message_hash: &str,
         classified_as: &str,
         latency_ms: i64,
+        conversation_id: Option<&str>,
     ) -> Result<()> {
         let client = self
             .pool
@@ -1157,8 +1165,31 @@ impl RoutingStore for PostgresStateStore {
         let now = Self::now();
         client
             .execute(
-                "INSERT INTO routing_log (message_hash, classified_as, latency_ms, created_at) VALUES ($1, $2, $3, $4)",
-                &[&message_hash, &classified_as, &latency_ms, &now],
+                "INSERT INTO routing_log (message_hash, classified_as, latency_ms, created_at, conversation_id) VALUES ($1, $2, $3, $4, $5)",
+                &[&message_hash, &classified_as, &latency_ms, &now, &conversation_id],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Names the most recent row for this hash, like the SQLite twin:
+    /// `message_hash` is not unique.
+    async fn log_routing_policy_intent(
+        &self,
+        message_hash: &str,
+        policy_intent: &str,
+    ) -> Result<()> {
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        client
+            .execute(
+                "UPDATE routing_log SET policy_intent = $1 WHERE id = (SELECT id FROM routing_log \
+                 WHERE message_hash = $2 ORDER BY created_at DESC LIMIT 1)",
+                &[&policy_intent, &message_hash],
             )
             .await
             .map_err(|e| Error::Storage(e.to_string()))?;

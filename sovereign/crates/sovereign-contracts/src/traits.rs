@@ -11,6 +11,9 @@ use futures::Stream;
 use crate::error::{Error, Result};
 use crate::types::*;
 
+mod routing;
+pub use routing::RoutingStore;
+
 // Re-export observer types so `sovereign_core::StateStoreObserver`
 // works alongside `sovereign_core::StateStore`.
 pub use crate::observer::{
@@ -1434,44 +1437,6 @@ fn filter_memories_for_scope(
         .filter(|m| matches_scope(m, scope))
         .take(limit)
         .collect()
-}
-
-/// Persistence for the routing log: per-message classifications, correctness
-/// feedback, and redirect signals that feed threshold calibration.
-#[async_trait]
-pub trait RoutingStore: Send + Sync {
-    /// Record one classification: the message's hash, the chosen intent label, and classification latency.
-    async fn log_routing(
-        &self,
-        message_hash: &str,
-        classified_as: &str,
-        latency_ms: i64,
-    ) -> Result<()>;
-    /// Attach metacognition fields to a routing_log row written by `log_routing`.
-    /// Default no-op so existing implementations compile without changes.
-    async fn log_routing_meta(
-        &self,
-        message_hash: &str,
-        coarse_intent: &str,
-        self_assessment: Option<&str>,
-    ) -> Result<()> {
-        let _ = (message_hash, coarse_intent, self_assessment);
-        Ok(())
-    }
-    /// Most recent user-flagged misclassifications (rows with `was_correct = false`) — the router's avoid-list.
-    async fn get_routing_corrections(&self, limit: usize) -> Result<Vec<RoutingCorrection>>;
-    /// Record the user's verdict on the classification previously logged for `message_hash`.
-    async fn mark_routing_correct(&self, message_hash: &str, was_correct: bool) -> Result<()>;
-    /// PR4 — record an explicit user redirect away from a
-    /// Propose-tier commit. Sets `routing_log.was_redirected = 1`
-    /// and `routing_log.redirect_to = <intent_hint>` for the row
-    /// previously written by `log_routing`. A future calibration
-    /// job tunes confidence thresholds from the aggregate of these
-    /// signals. Default no-op so legacy implementations compile.
-    async fn mark_routing_redirected(&self, message_hash: &str, redirect_to: &str) -> Result<()> {
-        let _ = (message_hash, redirect_to);
-        Ok(())
-    }
 }
 
 /// Persistence and hybrid retrieval for `DocumentChunk`s.
