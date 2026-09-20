@@ -446,14 +446,10 @@ impl LlmRouter {
         latency_ms: i64,
         context: &ConversationContext,
     ) {
+        let conv = Some(context.conversation.id.as_str());
         let _ = self
             .store
-            .log_routing(
-                hash,
-                classified_as,
-                latency_ms,
-                Some(&context.conversation.id),
-            )
+            .log_routing(hash, classified_as, latency_ms, conv)
             .await;
     }
 
@@ -1802,7 +1798,8 @@ impl Router for LlmRouter {
         ) {
             let latency_ms = start.elapsed().as_millis() as i64;
             let hash = message_hash(message);
-            self.log_route(&hash, "MetalingualQuery", latency_ms, context).await;
+            self.log_route(&hash, "MetalingualQuery", latency_ms, context)
+                .await;
             let _ = self
                 .store
                 .log_routing_meta(
@@ -1870,7 +1867,8 @@ impl Router for LlmRouter {
                         if v.locator == "conversation" {
                             let latency_ms = start.elapsed().as_millis() as i64;
                             let hash = message_hash(message);
-                            self.log_route(&hash, "MetalingualQuery", latency_ms, context).await;
+                            self.log_route(&hash, "MetalingualQuery", latency_ms, context)
+                                .await;
                             let _ = self
                                 .store
                                 .log_routing_meta(
@@ -1992,7 +1990,8 @@ impl Router for LlmRouter {
             if let Some(v) = archive_cls.classify_from_embedding(q) {
                 let latency_ms = start.elapsed().as_millis() as i64;
                 let hash = message_hash(message);
-                self.log_route(&hash, "KnowledgeQuery", latency_ms, context).await;
+                self.log_route(&hash, "KnowledgeQuery", latency_ms, context)
+                    .await;
                 let _ = self
                     .store
                     .log_routing_meta(
@@ -2044,7 +2043,8 @@ impl Router for LlmRouter {
             let latency_ms = start.elapsed().as_millis() as i64;
             let hash = message_hash(message);
             let intent_str = format!("{inherited:?}");
-            self.log_route(&hash, &intent_str, latency_ms, context).await;
+            self.log_route(&hash, &intent_str, latency_ms, context)
+                .await;
             let _ = self
                 .store
                 .log_routing_meta(&hash, "KNOWLEDGE_THREAD_INHERIT", None)
@@ -2096,7 +2096,8 @@ impl Router for LlmRouter {
             if let Some(first) = claims.first() {
                 let latency_ms = start.elapsed().as_millis() as i64;
                 let hash = message_hash(message);
-                self.log_route(&hash, "ComplexTask", latency_ms, context).await;
+                self.log_route(&hash, "ComplexTask", latency_ms, context)
+                    .await;
                 let _ = self
                     .store
                     .log_routing_meta(&hash, "AUTHORITY_CLAIM", None)
@@ -2274,7 +2275,8 @@ impl Router for LlmRouter {
                         if let Some((tool_id, tool_sim)) = tool_match {
                             let latency_ms = start.elapsed().as_millis() as i64;
                             let hash = message_hash(message);
-                            self.log_route(&hash, "ComplexTask", latency_ms, context).await;
+                            self.log_route(&hash, "ComplexTask", latency_ms, context)
+                                .await;
                             let _ = self
                                 .store
                                 .log_routing_meta(&hash, "TOOL_RELEVANCE", None)
@@ -2310,7 +2312,8 @@ impl Router for LlmRouter {
                         let latency_ms = start.elapsed().as_millis() as i64;
                         let hash = message_hash(message);
                         let intent_str = format!("{routed:?}");
-                        self.log_route(&hash, &intent_str, latency_ms, context).await;
+                        self.log_route(&hash, &intent_str, latency_ms, context)
+                            .await;
                         let _ = self
                             .store
                             .log_routing_meta(&hash, "EMBED_ROUTER", None)
@@ -2373,7 +2376,8 @@ impl Router for LlmRouter {
             let latency_ms = start.elapsed().as_millis() as i64;
             let hash = message_hash(message);
             let intent_str = format!("{override_intent:?}");
-            self.log_route(&hash, &intent_str, latency_ms, context).await;
+            self.log_route(&hash, &intent_str, latency_ms, context)
+                .await;
             let _ = self
                 .store
                 .log_routing_meta(&hash, "TOPIC_CONTINUITY", None)
@@ -2637,7 +2641,8 @@ impl Router for LlmRouter {
         // Log routing decision.
         let hash = message_hash(message);
         let intent_str = format!("{intent:?}");
-        self.log_route(&hash, &intent_str, latency_ms, context).await;
+        self.log_route(&hash, &intent_str, latency_ms, context)
+            .await;
         let _ = self
             .store
             .log_routing_meta(&hash, &coarse.intent, self_assessment_outcome.as_deref())

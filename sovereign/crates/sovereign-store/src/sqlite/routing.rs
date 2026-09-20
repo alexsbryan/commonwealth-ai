@@ -17,7 +17,13 @@ impl RoutingStore for SqliteStateStore {
             "INSERT INTO routing_log
                  (message_hash, classified_as, latency_ms, created_at, conversation_id)
              VALUES (?1, ?2, ?3, ?4, ?5)",
-            rusqlite::params![message_hash, classified_as, latency_ms, now(), conversation_id],
+            rusqlite::params![
+                message_hash,
+                classified_as,
+                latency_ms,
+                now(),
+                conversation_id
+            ],
         )
         .map_err(map_db)?;
         Ok(())
