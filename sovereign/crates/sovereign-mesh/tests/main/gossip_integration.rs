@@ -556,3 +556,156 @@ async fn departure_tombstones_self_on_peers() {
     );
     assert!(!b_rec.is_active(), "B should be inactive (tombstoned) on A");
 }
+
+/// An offer the holder accepts is listed on a PEER's media rail one gossip
+/// round later, and a withdrawal is gone one round after that.
+///
+/// The bar is the round, not the clock: `GET /v1/mesh/media` reads a peer's
+/// merged capabilities, so the holder's self-stamp and the peer's merge are
+/// the only two steps between `svrn mesh media offer` and a viewer seeing the
+/// library. Room run 2 (2026-09-20) listed an offer in 8.39 s and then kept
+/// listing it for 98.02 s after the withdrawal, with `gossip: reach ok` on
+/// both sides every 10 s throughout — a delay neither side could be charged
+/// with, because neither side said anything. This test holds the invariant
+/// the two glassbox lines were added to measure.
+#[tokio::test]
+async fn an_offer_and_its_withdrawal_reach_a_peers_media_rail_in_one_round() {
+    let mesh_id = MeshId::from_u128(42);
+    let hash = [11u8; 32];
+    let holder = NodeId::from_u128(100);
+    let viewer = NodeId::from_u128(200);
+
+    let mesh_holder = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
+        id: mesh_id,
+        name: "T".into(),
+        invite_key_hash: hash,
+        invite_version: 0,
+        require_encryption: false,
+        members: {
+            let mut m = HashMap::new();
+            m.insert(
+                holder,
+                member_at(holder, "LittleMac", 100, "127.0.0.1:1".parse().unwrap()),
+            );
+            m
+        },
+        peers: vec![],
+    };
+    let state_holder = AppState::new(holder, mesh_holder);
+    let addr_holder = spawn_internal_router(state_holder.clone()).await;
+
+    let mesh_viewer = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
+        id: mesh_id,
+        name: "T".into(),
+        invite_key_hash: hash,
+        invite_version: 0,
+        require_encryption: false,
+        members: {
+            let mut m = HashMap::new();
+            m.insert(holder, member_at(holder, "LittleMac", 100, addr_holder));
+            m.insert(
+                viewer,
+                member_at(viewer, "BeefyMac", 150, "127.0.0.1:2".parse().unwrap()),
+            );
+            m
+        },
+        peers: vec![],
+    };
+    let state_viewer = AppState::new(viewer, mesh_viewer);
+    let addr_viewer = spawn_internal_router(state_viewer.clone()).await;
+    {
+        let mut mesh = state_holder.inner.fabric.mesh.write().await;
+        mesh.members
+            .insert(viewer, member_at(viewer, "BeefyMac", 150, addr_viewer));
+    }
+
+    // `svrn mesh media offer`: the live route now serves a media origin, and
+    // the holder's own presence poll says the library is free.
+    state_holder.update_local_media_available(Some(1.0)).await;
+    state_holder.inner.fabric.dial_info.publish(Arc::new(|| {
+        commonwealth_core::mesh::IrohDialInfo {
+            relay_url: None,
+            direct_addrs: Vec::new(),
+            origins: vec![commonwealth_core::capabilities::OriginKind::Media],
+            media_allow: vec!["BeefyMac".into()],
+        }
+    }));
+
+    let round = |state: &AppState| {
+        let state = state.clone();
+        async move {
+            gossip::run_one_round(
+                &*state.inner.fabric,
+                state.inner.node.corpus_engine.as_ref(),
+                &state,
+                Duration::from_secs(60),
+            )
+            .await
+            .expect("gossip round should succeed")
+        }
+    };
+    round(&state_holder).await;
+
+    let rail = || async {
+        let m = state_viewer.inner.fabric.mesh.read().await;
+        commonwealth_media::offers(
+            viewer,
+            &commonwealth_media::roster_of(&m),
+            &[],
+            commonwealth_core::capabilities::OriginKind::Media,
+        )
+    };
+
+    let rows = rail().await;
+    assert_eq!(
+        rows.len(),
+        1,
+        "one round after the offer, the viewer's rail must list the holder: {rows:?}"
+    );
+    assert_eq!(rows[0].peer, "LittleMac");
+    assert_eq!(rows[0].offered_to, vec!["BeefyMac".to_string()]);
+    assert_eq!(
+        rows[0].media_available,
+        Some(1.0),
+        "the holder's reading travels with the offer it describes"
+    );
+
+    // `svrn mesh media withdraw`: the route stops serving the origin. The
+    // wait is the gossip interval in miniature and it is load-bearing: LWW
+    // compares `event_time()`, which is `last_seen` in whole SECONDS, so two
+    // rounds inside one second are indistinguishable to a peer and the
+    // second one is skipped as `LocalRecordNotOlder`. A real round is 10 s
+    // (`DEFAULT_GOSSIP_INTERVAL`); this test only needs the second to turn.
+    tokio::time::sleep(Duration::from_millis(1_100)).await;
+    state_holder.inner.fabric.dial_info.publish(Arc::new(|| {
+        commonwealth_core::mesh::IrohDialInfo {
+            relay_url: None,
+            direct_addrs: Vec::new(),
+            origins: Vec::new(),
+            media_allow: Vec::new(),
+        }
+    }));
+    round(&state_holder).await;
+
+    // Which side is being measured, said in the test as the two glassbox
+    // lines say it in a run: the holder's own record first, then the peer's
+    // copy. A failure here names the stamp; a failure below names the merge.
+    {
+        let m = state_holder.inner.fabric.mesh.read().await;
+        assert!(
+            m.members[&holder].capabilities.origins.is_empty(),
+            "the holder's own record must stop offering in the round after the withdrawal: {:?}",
+            m.members[&holder].capabilities.origins
+        );
+    }
+
+    let rows = rail().await;
+    assert!(
+        rows.is_empty(),
+        "one round after the withdrawal the viewer's rail must list nothing: {rows:?}"
+    );
+}

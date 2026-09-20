@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 pub use crate::mesh_identity::{aliased_endpoint_keys, AliasedEndpointKey, EndpointClaim};
 
+pub mod offer_view;
 pub mod wire;
 
 use crate::capabilities::NodeCapabilities;
@@ -668,6 +669,7 @@ impl Mesh {
                         arm: MergeArm::FirstSight,
                     });
                 }
+                offer_view::log_merged(None, &record, "first-sight");
                 self.members.insert(id, record);
                 // A tombstone we have never seen is still added (so it
                 // converges mesh-wide), but it is not "observed alive".
@@ -699,6 +701,7 @@ impl Mesh {
                         arm: MergeArm::LwwUpdate,
                     });
                 }
+                offer_view::log_merged(Some(existing), &record, "lww-update");
                 self.members.insert(id, record);
                 MemberOutcome::Updated { observed: active }
             }

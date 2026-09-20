@@ -517,6 +517,11 @@ pub async fn run_one_round(
         if let Some(me) = mesh.members.get_mut(&self_id) {
             me.last_seen = now;
             me.status = NodeStatus::Online;
+            // What our own record said about the library we offer BEFORE this
+            // round restamped it, compared after the stamp below so one line
+            // names the moment our own view first carries an offer — or first
+            // stops carrying one.
+            let offer_view_before = commonwealth_core::mesh::offer_view::OfferView::of(me);
             // Replace capabilities with the freshly-sampled version
             // every round. This is the mechanism by which a newly-
             // installed SEP corpus becomes visible to peers within
@@ -541,7 +546,9 @@ pub async fn run_one_round(
             // pubkey, "known member" == "dialable by key". A `None`
             // provider (iroh disabled) leaves these fields at their
             // default empty, so a non-iroh node publishes nothing here.
-            if let Some(info) = fabric.self_iroh_dialinfo() {
+            let dial_info = fabric.self_iroh_dialinfo();
+            let stamped_from_dial_info = dial_info.is_some();
+            if let Some(info) = dial_info {
                 let changed =
                     me.relay_url != info.relay_url || me.iroh_direct_addrs != info.direct_addrs;
                 me.relay_url = info.relay_url;
@@ -586,6 +593,16 @@ pub async fn run_one_round(
                     }
                 }
             }
+            // GLASSBOX: the moment our own record starts (or stops) offering
+            // a library. The peer half of the pair is logged on merge
+            // (`offer_view::log_merged`), so one run says which side held a
+            // change: a holder line with no peer line is the merge, a peer
+            // line long after the holder's is the round.
+            commonwealth_core::mesh::offer_view::log_self_stamp(
+                &offer_view_before,
+                &commonwealth_core::mesh::offer_view::OfferView::of(me),
+                stamped_from_dial_info,
+            );
         }
         for (id, m) in mesh.members.iter_mut() {
             if *id == self_id {
