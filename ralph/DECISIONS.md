@@ -210,6 +210,12 @@ exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 - Chose: Two rows ahead of the demo re-run, no window moved, no knob touched. (1) `rr-2-offer-publish-latency`: instrument first (holder republish line, peer merge line), then the one decider; suspect named: the republish stamps origins only under `self_iroh_dialinfo()` (`gossip.rs:544-554`) and the offer verb's hot-reload may land before it. (2) `rr-2-presence-with-the-house-session`: two credentials, two purposes — the read-only viewer stays the declared/gossiped one; the holder's own local session (the install credential, local-only, never in capabilities or links) is what the presence poll reads; the presence event logs the user ids it saw. The three smaller events are recorded here for REVIEW-audit-rr-2 (the empty `mesh status` now recurred twice and is owed a row after the walk if it recurs a third time).
 - Because: The stop condition exists so a publish that takes 135 s is owned, not polled around (principle 5/7). Reading the house's sessions with the house's own credential on the house's own machine widens nothing on the wire — A37 removed an admin-equivalent key from what viewers RECEIVE, not from what the holder holds (ARCH 12: the holder owns its Jellyfin). Option (iii), changing clause (f), would drop the operator's in-use posture.
 
+**A41 · 2026-09-20 · REVIEW-DEMO-rr-2-run · director (seat; the row's pre-registered stop fired a second time)** — commit 3164bd729 (the worker's stop) + this commit
+- Needed: With rebuilt binaries run 3 read six of six PASSED (film all seven clauses: listed 2.15 s, in-use 10.48 s, withdrawn 8.45 s); run 4 read five of six — the offline bar's clause (b): during the cut the wall still fetched RuggedFox's manifest over `http://127.0.0.1:32519` at `locality=Local` while gossip read the peer unreachable, and answered grounded. The publish latency did not recur (2.15 / 6.3 s). Runs 1–2 of the session were void: the demo never builds and judged binaries three hours older than the commits under test.
+- Chose: The surviving path is the INSTRUMENT's to settle, not the bar's: a new row `rr-2-cut-is-a-cut` makes the offline leg PROVE the cut (mesh status + a capabilities fetch to every logged address) and read COULD-NOT-JUDGE `cut-not-a-cut` when it cannot, names the surviving path (host forwarder or the daemon's iroh bridge over an established QUIC connection) and tears it down with the cut, and adds a staleness refusal to `need_binaries`. Run 3 stands as the first cold run; the demo row re-runs once more plus the rr-1 regression it owes. Bar wording unchanged; no knob.
+- Because: A real room's lost uplink drops everything; the podman cut removes one veth and leaves host-side forwarders and possibly an established QUIC path — that is the instrument lying about the world, and a bar must not be re-worded to fit an instrument (ARCH 5, 7). A stale binary judged as FAILED is absence defaulted (ARCH 6); the refusal makes it a named could-not-judge.
+
+
 
 
 
@@ -6115,5 +6121,19 @@ the rest of its measurements stand.
 **Decision.** 1: own it (row). 2: (i) scoped local (row) — the house session never enters `NodeCapabilities` or a link; the row's test asserts that. 3: one field on the presence event (same row). 4: recorded for the audit; no row until a third recurrence.
 
 **Falsified if** the instrument lines show the publish is late on the PEER's merge rather than the holder's republish (then the decider is elsewhere and the row says so); or the house session appears in any gossiped capability or printed link (the row's negative test).
+
+</details>
+
+## A41 · 2026-09-20 — rr-2: the cut proves itself before the offline bar judges; the demo builds what it measures
+
+<details>
+
+**Fork.** (i) the instrument's cut is incomplete (host forwarder / iroh bridge survive) → fix the cut; (ii) the product genuinely reaches the keeper by a second path → re-word clause (b). Also: run 3 as verdict; a staleness refusal; the rr-1 leg still owed.
+
+**Evidence.** The worker's package (ralph/NEEDS_HUMAN.md, removed by this commit): `target/ralph/rr2-room-run3.log` (six PASSED), `rr2-room-run4.log` (beefy 02:52:16 `fetched peer manifest peer=RuggedFox url=http://127.0.0.1:32519 … rtt_ms=2 locality=Local`, then `gossip: round FAILED … unreachable`, then `epistemic state assembled verdict=Grounded`); `cut_node beefy "$UPLINK"` at `scripts/ring-room-demo.sh:868`; `start_forwarder` `scripts/ring-doc-demo.sh:190-196`; `need_binaries` :198-203 checks existence only; presence line without `saw=` in runs 1–2 proving the stale binary.
+
+**Decision.** (i), with the proof step first so the leg can say `cut-not-a-cut` instead of guessing either way; run 3 stands; refusal added; rr-1 leg kept in the demo row.
+
+**Falsified if** the assertion passes (no address of the keeper reachable) and the wall STILL answers grounded during the cut — then it is the product's second path and clause (b) is re-examined as a product finding (§6 in the demo row).
 
 </details>
