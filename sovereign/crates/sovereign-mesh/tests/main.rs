@@ -165,6 +165,8 @@ mod responses_adapter_e2e;
 mod ring_append_nudges_sync;
 #[path = "main/ring_live_non_durable.rs"]
 mod ring_live_non_durable;
+#[path = "main/ring_return_syncs.rs"]
+mod ring_return_syncs;
 #[path = "main/ring_sync_loop_tests.rs"]
 mod ring_sync_loop_tests;
 #[path = "main/ring_sync_projection_tests.rs"]

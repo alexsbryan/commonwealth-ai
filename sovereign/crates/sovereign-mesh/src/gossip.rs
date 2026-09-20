@@ -886,7 +886,7 @@ pub async fn run_one_round(
                     // round (room run B: an offer held 60 s). Liveness does not
                     // need it: decay reads the LOCAL contact clock stamped at
                     // `observe_peer_contact` above. The INFO line names the
-                    // offline→online edge, symmetric to the decay pass.
+                    // edge, which (never every reach) wakes the ring sync.
                     if let Some(peer) = mesh.members.get_mut(&peer_id) {
                         let was_offline = peer.status == NodeStatus::Offline;
                         peer.status = NodeStatus::Online;
@@ -897,6 +897,7 @@ pub async fn run_one_round(
                                 name = %peer.name,
                                 "gossip: peer back Online"
                             );
+                            fabric.ring_write_nudge().notify_one();
                         }
                     }
                     break; // one working address is enough

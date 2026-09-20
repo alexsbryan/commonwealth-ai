@@ -224,14 +224,33 @@ pub async fn run_one_round(fabric: &FabricPart) -> RoundOutcome {
     };
 
     let self_id = fabric.identity.current();
-    let peers: Vec<commonwealth_transport::PeerContact> = {
+    let (peers, exchanged_with, skipped_offline) = {
         let mesh = fabric.mesh.read().await;
-        mesh.members
-            .values()
-            .filter(|m| m.node_id != self_id && m.status == NodeStatus::Online)
-            .map(peer_contact)
-            .collect()
+        let mut peers: Vec<commonwealth_transport::PeerContact> = Vec::new();
+        let (mut online, mut offline): (Vec<String>, Vec<String>) = (Vec::new(), Vec::new());
+        for m in mesh.members.values() {
+            if m.node_id == self_id {
+                continue;
+            }
+            if m.status == NodeStatus::Online {
+                peers.push(peer_contact(m));
+                online.push(m.name.clone());
+            } else {
+                offline.push(m.name.clone());
+            }
+        }
+        (peers, online, offline)
     };
+    // GLASSBOX: which members this round carried and which it passed over. A
+    // round that skips the only peer looks exactly like a round that had
+    // nothing to send, and room run 2 (2026-09-20) cost 85 s to a difference
+    // that was invisible in the log. Logged BEFORE the empty-peer return, so
+    // the skipped-everyone round is the one that says so.
+    info!(
+        exchanged_with = ?exchanged_with,
+        skipped_offline = ?skipped_offline,
+        "ring sync: round membership"
+    );
     if peers.is_empty() {
         return outcome;
     }

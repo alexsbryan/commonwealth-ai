@@ -1166,12 +1166,16 @@ print(' '.join(m.get('name','') for m in ms
 }
 
 leg_room_offline() {
-  local out="$D/room-offline.json" q wallpid before_beefy after_beefy after_halo t0 conv="" survivor="" status_online=""
+  local out="$D/room-offline.json" q wallpid before_beefy after_beefy after_halo t0 conv="" survivor="" status_online="" cut_at heal_at
   q=$(BANK="$BANK" python3 -c "import json,os; print(json.loads(os.environ['BANK'])[1][1])")
   : > "$D-wall-cut.ndjson"
   REPO="$REPO" PA="$(tab_url beefy)" OUT="$D-wall-cut.ndjson" POLL_MS=250 WATCH_S=900 \
     node "$PHONE_PKG/wall.mjs" > "$D/wall-watch-cut.out" 2>&1 &
   wallpid=$!
+  # The cut's own length, recorded rather than inferred from the logs: a cut
+  # longer than the offline threshold decays the roster, and then convergence
+  # waits on the peer coming back rather than on the write (room run 2).
+  cut_at=$(date +%s)
   cut_node beefy "$UPLINK" > "$D/room-cut.out" 2>&1
   survivor=$(room_assert_cut)
   status_online=$(cat "$D/room-cut-status.out" 2>/dev/null)
@@ -1180,6 +1184,7 @@ leg_room_offline() {
   room_phone phone-cut "$PAGE/wall-qr.svg" "$GUEST_ONE" 1 "$q" ""
   kill "$wallpid" 2>/dev/null
   before_beefy=$(room_journal beefy)
+  heal_at=$(date +%s)
   heal_node beefy "$UPLINK" > "$D/room-heal.out" 2>&1
   # A `network connect` is a container setup and netavark rewrites the netns
   # ruleset on each one, so the seal is re-asserted here or the healed room
@@ -1192,11 +1197,16 @@ leg_room_offline() {
     [ -n "$after_halo" ] && [ "$after_halo" = "$after_beefy" ] && { conv=$(( $(date +%s) - t0 )); break; }
     sleep 3
   done
-  python3 - "${before_beefy:-}" "${after_beefy:-}" "${after_halo:-}" "${conv:-}" "$q" "$survivor" "$status_online" > "$out" <<'PY'
+  python3 - "${before_beefy:-}" "${after_beefy:-}" "${after_halo:-}" "${conv:-}" "$q" "$survivor" "$status_online" "${cut_at:-}" "${heal_at:-}" > "$out" <<'PY'
 import json, sys
-before, after_b, after_h, conv, q, survivor, status_online = sys.argv[1:8]
+before, after_b, after_h, conv, q, survivor, status_online, cut_at, heal_at = sys.argv[1:10]
 json.dump({"question": q, "beefy_at_cut": before, "beefy_after": after_b, "halo_after": after_h,
            "converged_s": int(conv) if conv else None,
+           # The cut's wall-clock bounds. Read with the offline threshold (60 s):
+           # a cut longer than it decays the roster on both sides, and the return
+           # is what has to carry the catch-up.
+           "cut_at": int(cut_at) if cut_at else None,
+           "heal_at": int(heal_at) if heal_at else None,
            "byte_equal": bool(after_h) and after_h == after_b,
            # The roster reading, kept because it is worth seeing and gating on
            # nothing: only `cut_not_a_cut` — a peer address that still answers

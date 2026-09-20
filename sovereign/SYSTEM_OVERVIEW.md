@@ -6916,7 +6916,12 @@ directory per namespace — and this store is the fold of it:
   `tokio::sync::Notify` is held by both halves: the pump raises it after any
   successful append and `spawn_ring_sync_loop` selects on it beside its
   interval sleep. Same wire, same sender — the pump never talks to a peer, it
-  asks the one replication path to run.
+  asks the one replication path to run. **Nor does a peer's return:** a round
+  exchanges only with `Online` members, so `gossip.rs` raises the same
+  `Notify` on the offline→online EDGE (never on every reach) and the writes
+  made while that peer was gone go now rather than at the next tick — room
+  run 2 of 2026-09-20 converged at 85 s against a 60 s bar without it
+  (`sovereign-mesh/tests/main/ring_return_syncs.rs`).
 - **Which namespaces replicate is DECLARED**, in
   `ring_roster::DAEMON_OWN_NAMESPACES`, and every entry is the constant its
   owning subsystem exports (`INFERENCE_APP_ID`, `CONTRIBUTIONS_APP_ID`,
