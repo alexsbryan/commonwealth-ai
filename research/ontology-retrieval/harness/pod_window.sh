@@ -29,7 +29,8 @@
 # have (ARCH §6).
 #
 # The batch file is DATA: one shell command per line, `#` comments and blank
-# lines skipped, `$SVRN` expanded to this host's CLI.
+# lines skipped, `$SVRN` expanded to this host's CLI and `$POD_WINDOW_OUT` to
+# this window's own log directory.
 
 set -uo pipefail
 
@@ -48,7 +49,7 @@ HOME_URL="http://127.0.0.1:9741"
 
 say() { printf '%s\n' "$*"; }
 die() { printf 'pod_window: %s\n' "$*" >&2; exit 2; }
-usage() { sed -n '2,32p' "$0"; }
+usage() { sed -n '2,33p' "$0"; }
 
 # ── arguments ────────────────────────────────────────────────────────────────
 
@@ -197,10 +198,19 @@ trap on_exit EXIT INT TERM
 # have, so the coupling is structural (ARCH §6, §10).
 REH_CMD=""
 REH_VIA="-"
+REH_SKIP=0
 rehearse_line() {
     REH_CMD="$1"
     REH_VIA="-"
+    REH_SKIP=0
     case "$1" in
+        # First arm, and it has to be: the extract parser REFUSES the pair
+        # (`sovereign-enrichment-build/src/extract/args.rs:116-127`), so the
+        # `enrich` arm below would rehearse this line into a guaranteed exit 2.
+        # Dropping the flag instead would rehearse a DIFFERENT command than the
+        # batch says, which is the one thing a preflight must never do — so the
+        # line is not run at all and the table says so (ARCH §6).
+        *--finalize*)   REH_CMD="$1"; REH_VIA="skipped — --finalize refuses --dry-run"; REH_SKIP=1 ;;
         *run-pilot.sh*) REH_CMD="$1 --dry-run"; REH_VIA="dry-run" ;;
         *" enrich "*)   REH_CMD="$1 --dry-run"; REH_VIA="dry-run" ;;
         *" eval "*)     REH_CMD="$1 --limit 1"; REH_VIA="limit-1" ;;
@@ -213,6 +223,10 @@ STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 [ "$REHEARSE" = 1 ] && STAMP="rehearse-$STAMP"
 OUT="research/ontology-retrieval/pod/$STAMP"
 mkdir -p "$OUT" || die "cannot create $OUT"
+# Exported for the same reason `$SVRN` is: a batch line that has to write into
+# THIS window's directory cannot name it, and an unexported `$OUT` would expand
+# to nothing in the child and land the copy at `/runs`.
+export POD_WINDOW_OUT="$OUT"
 
 say "== pod window"
 say "mode     $([ "$REHEARSE" = 1 ] && echo 'rehearse (local daemon, no rental, no teardown)' || echo 'live (rented pod, destroyed on exit)')"
@@ -224,6 +238,7 @@ say "logs     $OUT"
 
 NN=(); EXITS=(); WALLS=(); CMDS=(); VIAS=()
 failed=0
+skipped=0
 i=0
 for raw in "${LINES[@]}"; do
     i=$((i + 1))
@@ -232,6 +247,15 @@ for raw in "${LINES[@]}"; do
     if [ "$REHEARSE" = 1 ]; then rehearse_line "$raw"; cmd="$REH_CMD"; via="$REH_VIA"; fi
 
     NN+=("$nn"); CMDS+=("$cmd"); VIAS+=("$via")
+    if [ "$REHEARSE" = 1 ] && [ "$REH_SKIP" = 1 ]; then
+        # Neither pass nor fail: the tally below counts it apart, so a rehearsal
+        # cannot report a line as green that it never ran (ARCH §5).
+        EXITS+=("skipped"); WALLS+=("-")
+        skipped=$((skipped + 1))
+        say ""
+        say "-- $nn $via: $cmd"
+        continue
+    fi
     if [ "$failed" = 1 ]; then
         EXITS+=("skip"); WALLS+=("-")
         say ""
@@ -257,9 +281,9 @@ done
 # ── the table ────────────────────────────────────────────────────────────────
 
 {
-    printf '%-4s %-6s %-8s %-9s %s\n' "line" "exit" "wall" "rehearsed" "command"
+    printf '%-4s %-8s %-6s %-9s %s\n' "line" "exit" "wall" "rehearsed" "command"
     for j in "${!NN[@]}"; do
-        printf '%-4s %-6s %-8s %-9s %s\n' \
+        printf '%-4s %-8s %-6s %-9s %s\n' \
             "${NN[$j]}" "${EXITS[$j]}" "${WALLS[$j]}" "${VIAS[$j]}" "${CMDS[$j]}"
     done
 } | tee "$OUT/table.txt"
@@ -269,5 +293,10 @@ if [ "$failed" = 1 ]; then
     say "pod_window: batch FAILED — see the table and $OUT/*.log"
     exit 1
 fi
-say "pod_window: ${#LINES[@]}/${#LINES[@]} lines exit 0"
+ran=$(( ${#LINES[@]} - skipped ))
+if [ "$skipped" -gt 0 ]; then
+    say "pod_window: $ran/$ran run lines exit 0; $skipped skipped, claiming nothing"
+else
+    say "pod_window: ${#LINES[@]}/${#LINES[@]} lines exit 0"
+fi
 exit 0

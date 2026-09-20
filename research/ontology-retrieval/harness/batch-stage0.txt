@@ -1,0 +1,34 @@
+# batch-stage0.txt — the stage-0 GPU window, one command per line.
+#
+# Read by `pod_window.sh`, which runs each line as a plain foreground child and
+# stops at the first non-zero exit. `$SVRN` is this host's CLI and
+# `$POD_WINDOW_OUT` this window's log directory; both are exported there.
+#
+# The corpus is ALREADY INSTALLED (`e7-recensus-corpus`, de2762e67): embedding
+# 300k words needs no GPU and must not run while one bills, so there is no
+# `corpus install` line here. The CLI runs on this machine against the pod's
+# daemon over the tunnel, so the enrichment tree it writes is the LOCAL
+# `~/.svrnmesh/enrichment/` — `dev-pod.sh env` exports the three daemon vars
+# and no data root (scripts/dev-pod.sh:739-741).
+
+"$SVRN" enrich init ei7-recensus-fineprint --from-corpus ei7-recensus-fineprint
+
+# --resume only matters if the window is re-entered after a kill; on a fresh id
+# the checkpoint starts empty. It costs nothing and buys the re-entry.
+"$SVRN" enrich extract ei7-recensus-fineprint --full --resume
+
+# Turns the checkpoint into a canonical run-file and updates cache/questions.json
+# — the pass without which the phases below read nothing from a resumed
+# extraction. No model calls. Refuses --dry-run, so the rehearsal skips it.
+"$SVRN" enrich extract ei7-recensus-fineprint --finalize
+
+# extract already ran above; tensions is not read by anything stage 0 measures.
+"$SVRN" enrich build ei7-recensus-fineprint --skip extract --skip tensions
+
+# D4: the phase-1 sketches come home with the window. A later head-noun merge
+# fix re-censuses them locally, off this copy, without renting a second pod.
+cp -R "$HOME/.svrnmesh/enrichment/ei7-recensus-fineprint/runs" "$POD_WINDOW_OUT/runs"
+
+# Instrument evidence, not a bar: checks I1-I6 fire, each against a planted
+# fault. --dry-run under --rehearse, per the script's own header.
+research/ontology-retrieval/pilot/run-pilot.sh
