@@ -25,6 +25,14 @@ check     = "./scripts/sovereign-test.sh --human --package sovereign-api --packa
 # OWED by rr-1-instrument; until it exists every bar below reads
 # could-not-judge, never a fabricated verdict (ARCH 5, ARCH 6).
 
+# ── THE CAP ──────────────────────────────────────────────────────────────────
+# Default is 9 (co-lineage.py MAX_BARS). The operator accepted 11 here; the
+# loader refuses this table unless `ledger` names an OPERATOR entry.
+[cap]
+accepted = 11
+ledger   = "A56"
+why      = "rr-1's five demo bars and rr-2's six room bars are one sitting on one wall; splitting them would make two campaigns share one instrument and one run."
+
 # ── BARS ─────────────────────────────────────────────────────────────────────
 
 [[bar]]

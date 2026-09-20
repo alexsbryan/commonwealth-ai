@@ -11,7 +11,9 @@ measurement row stamping ref + ref_source + dirty catches that mechanically.
 
 The substrate now:
   quality/campaigns/<id>.toml    flight rules — ONE screen, <=9 bars (load
-                                 error over), numeric thresholds, executable
+                                 error over; an operator `[cap]` table citing
+                                 the ledger raises it for ONE campaign),
+                                 numeric thresholds, executable
                                  `instrument`. NO transition rows, ever.
   ~/.sovereign/comaintainer/bar-measurements.jsonl
                                  append-only machine-stamped rows; verdict =
@@ -89,6 +91,11 @@ REASON_RE = re.compile(
     r"|^exit \d+$|^timeout \d+s$|^import-failure: ")
 
 MAX_BARS = 9                       # over-cap is a LOAD ERROR — altitude is forced
+# The cap is the default; the knob is a `[cap]` table on ONE campaign, and only
+# the operator turns it. `ledger` must name an entry in LEDGER whose own
+# heading says OPERATOR, so the acceptance is two files and readable in a diff,
+# not a field the campaign supplies about itself.
+LEDGER = REPO / "ralph" / "DECISIONS.md"
 READ_TIER_TIMEOUT_S = 10           # absent timeout_s = read-tier, hard cap
 STALE_HOURS = 48
 TREND_N = 7                        # §18.5: trend judged over n rows, never one
@@ -141,6 +148,8 @@ class Campaign:
     # objective. A campaign closes on this and on nothing else.
     predicate: str = ""
     predicate_check: str = ""       # shell; exit 0 = TRUE
+    bar_cap: int = MAX_BARS         # raised only by an operator `[cap]` table
+    bar_cap_ledger: str = ""        # the ledger entry that raised it
 
 
 @dataclass
@@ -175,6 +184,28 @@ def _num(value, key: str, where: str) -> float:
         raise DataError(f"{where}: {key} = {value!r} is not numeric — thresholds "
                         "are numbers the decider can compare, never prose")
     return float(value)
+
+
+def accepted_bar_cap(raw: dict, where: str, ledger_text: str | None = None) -> tuple[int, str]:
+    """The bar cap for one campaign: MAX_BARS, or an operator-accepted raise."""
+    cap = raw.get("cap")
+    if cap is None:
+        return MAX_BARS, ""
+    accepted, ledger = cap.get("accepted"), str(cap.get("ledger", ""))
+    if not isinstance(accepted, int) or isinstance(accepted, bool) or accepted <= MAX_BARS:
+        raise DataError(f"{where}: [cap] accepted = {accepted!r} must be an integer "
+                        f"above the default cap of {MAX_BARS}, or the table is noise")
+    if not str(cap.get("why", "")).strip():
+        raise DataError(f"{where}: [cap] has no `why` — say what the extra bars bought")
+    if ledger_text is None:
+        ledger_text = LEDGER.read_text(encoding="utf-8") if LEDGER.exists() else ""
+    heading = next((ln for ln in ledger_text.splitlines()
+                    if ln.startswith(f"**{ledger} ")), "") if ledger else ""
+    if "OPERATOR" not in heading:
+        raise DataError(f"{where}: [cap] ledger = {ledger!r} names no OPERATOR entry in "
+                        f"{LEDGER.relative_to(REPO)}. Raising the cap is the operator's "
+                        "call; a campaign cannot accept its own growth.")
+    return accepted, ledger
 
 
 def load_campaign_file(path: Path) -> Campaign:
@@ -212,9 +243,10 @@ def load_campaign_file(path: Path) -> Campaign:
         raise DataError(f"{where}: [predicate] has a `check` and no `statement` "
                         "— a command nobody can read is not an objective")
     bars_raw = raw.get("bar", [])
-    if len(bars_raw) > MAX_BARS:
+    camp.bar_cap, camp.bar_cap_ledger = accepted_bar_cap(raw, where)
+    if len(bars_raw) > camp.bar_cap:
         raise DataError(
-            f"{where}: {len(bars_raw)} bars exceeds the cap of {MAX_BARS}. The cap "
+            f"{where}: {len(bars_raw)} bars exceeds the cap of {camp.bar_cap}. The cap "
             "IS the anti-accretion structure — a campaign that needs more bars "
             "needs a smaller campaign. Escalate; do not widen.")
     seen: set[str] = set()
@@ -927,7 +959,10 @@ def render_coverage(camp: Campaign, orders: list[Order], rows: list[dict],
     p(f"campaign: {camp.id} — {camp.objective}")
     p(f"spec:     {camp.spec or '(none declared)'}")
     p(f"declared: {camp.declared}   status: {camp.status}   bars: {len(camp.bars)}"
-      f"/{MAX_BARS}   orders serving it: {len(mine)}")
+      f"/{camp.bar_cap}   orders serving it: {len(mine)}")
+    if camp.bar_cap_ledger:
+        p(f"cap:      {camp.bar_cap} over the default {MAX_BARS}, "
+          f"operator-accepted in ledger {camp.bar_cap_ledger}")
     p()
 
     uncovered = [b for b in camp.bars if not covering_orders(b, camp, orders)]
@@ -1172,6 +1207,30 @@ def self_test() -> int:  # noqa: C901 — a flat checklist reads better than a f
     nine = FIXTURE_CAMPAIGN + "".join(_bar_toml(f"B{i}") for i in range(9))
     check("9 bars load clean (the cap binds at 10, not 9)",
           len(load_text(nine).bars) == 9)
+
+    # ---- the cap's one knob: an operator entry in the ledger raises it ------
+    led = "**A1 · 2026-01-01 · x · OPERATOR** — y\n**A2 · 2026-01-01 · x · director** — y\n"
+    def cap_of(table: dict, ledger_text: str = led):
+        return accepted_bar_cap({"cap": table}, "t.toml", ledger_text)
+    def cap_refused(name: str, table: dict, needle: str) -> None:
+        try:
+            cap_of(table)
+            check(name, False, "accepted it")
+        except DataError as exc:
+            check(name, needle in str(exc), str(exc))
+    check("no [cap] table is the default cap", accepted_bar_cap({}, "t", led) == (MAX_BARS, ""))
+    check("an OPERATOR ledger entry raises the cap",
+          cap_of({"accepted": 11, "ledger": "A1", "why": "w"}) == (11, "A1"))
+    cap_refused("a director's entry cannot raise the cap",
+                {"accepted": 11, "ledger": "A2", "why": "w"}, "OPERATOR")
+    cap_refused("an entry the ledger does not hold cannot raise the cap",
+                {"accepted": 11, "ledger": "A9", "why": "w"}, "OPERATOR")
+    cap_refused("a [cap] with no ledger is refused",
+                {"accepted": 11, "why": "w"}, "OPERATOR")
+    cap_refused("a [cap] with no why is refused",
+                {"accepted": 11, "ledger": "A1"}, "why")
+    cap_refused("a [cap] at or under the default is refused",
+                {"accepted": 9, "ledger": "A1", "why": "w"}, "above")
 
     # ---- the decider: truth table, one implementation ---------------------
     hi = load_text(FIXTURE_CAMPAIGN + _bar_toml()).bars[0]          # floor 4 target 10
