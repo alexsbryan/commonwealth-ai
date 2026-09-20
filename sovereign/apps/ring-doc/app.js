@@ -26,23 +26,21 @@ import {
   createAttribution,
   decodeActs,
   decodePresence,
-  displayName,
   encodeSelf,
+  personFor,
   presenceEnvelope,
 } from "./adapter.js";
 
 const el = (id) => document.getElementById(id);
 
 // Guest mode: the page was opened from the wall grant's link, whose bearer
-// rides the fragment (`guest_door::ring_shim`). The name is asked once and
-// kept on this phone; it goes into every act and nothing is written until
-// there is one. Wall mode (`?wall`) is the member's screen: the roster and
-// the grant's QR, which `svrn mesh grant --qr-svg` writes as `wall-qr.svg`
-// beside this page.
+// rides the fragment (`guest_door::ring_shim`). The name is the DOOR's to ask
+// and to carry, not this page's — the shim holds it and the rail stamps it
+// into `op.person`, so nothing here knows a guest from a member. Wall mode
+// (`?wall`) is the member's screen: the roster and the grant's QR, which
+// `svrn mesh grant --qr-svg` writes as `wall-qr.svg` beside this page.
 const GUEST = new URLSearchParams(location.hash.slice(1)).has("token");
 const WALL = new URLSearchParams(location.search).has("wall");
-const GUEST_NAME_KEY = "ring-doc-guest-name";
-const guestName = () => (GUEST ? el("guest-name").value.trim() : null);
 
 // One act per window, not one per keystroke. A keystroke is 18–19 bytes of
 // Yjs update and a journal line is signed, so the debounce is the difference
@@ -100,16 +98,8 @@ async function flush() {
   const batch = pending;
   pending = [];
   if (batch.length === 0) return;
-  if (GUEST && !guestName()) {
-    // Held, not dropped: the text is written the moment there is a name.
-    pending = batch.concat(pending);
-    el("err").textContent = "not recorded yet: type your name above";
-    return;
-  }
   try {
-    const written = await window.ring.record(
-      changeAct(Y.mergeUpdates(batch), DOC_ID, guestName()),
-    );
+    const written = await window.ring.record(changeAct(Y.mergeUpdates(batch), DOC_ID));
     // The one place the rail says which key THIS daemon signs with. Keep it
     // and name the cursor from it.
     if (written && written.actor && written.actor !== myActor) {
@@ -143,7 +133,7 @@ ydoc.on("update", (update, origin) => {
 /// checkable by the peer that receives it — awareness is unauthenticated, and
 /// the attribution a reader can verify is the act-level one under the text.
 function nameSelf() {
-  const name = displayName(rosterMembers, myActor, guestName());
+  const name = personFor(rosterMembers, myActor);
   if (name === null) return;
   awareness.setLocalStateField("user", { name, color: colorFor(name) });
 }
@@ -246,7 +236,7 @@ async function poll() {
   const read = decodeActs(log, window.ring.fold, DOC_ID);
   applyNew(ydoc, read.acts, applied);
   attribution.absorb(read.acts);
-  renderAttribution(attribution.lines(rosterMembers, Date.now()));
+  renderAttribution(attribution.lines(Date.now()));
 
   el("scope").textContent =
     `${window.ring.namespace} — ${applied.size} change${applied.size === 1 ? "" : "s"}`;
@@ -291,16 +281,6 @@ new Editor({
   ],
 });
 
-if (GUEST) {
-  const input = el("guest-name");
-  input.value = localStorage.getItem(GUEST_NAME_KEY) || "";
-  input.addEventListener("change", () => {
-    localStorage.setItem(GUEST_NAME_KEY, input.value.trim());
-    nameSelf();
-    flush();
-  });
-  el("guest").hidden = false;
-}
 // The ask. A guest has a bearer in the fragment, so the shim can reach the
 // door's route; a member reading this page under `ring dev` has no grant and
 // the shim refuses by name, which is why the box is guest-only.

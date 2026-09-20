@@ -58,14 +58,13 @@ export function b64ToBytes(b64) {
 /// The act this app writes. One act per debounce window, never one per
 /// keystroke.
 ///
-/// `guest` is the name a guest typed on the door's page, or absent for a
-/// member. The rail does not read it; the door refuses one that is a roster
-/// member's name (`routes_rail::append`), and [`displayName`] renders it.
-export const changeAct = (update, doc = DOC_ID, guest = null) => ({
+/// Nothing about a guest rides in here. A guest writes through the door, which
+/// signs on their behalf and resolves the attribution once, on the log route
+/// (`routes_rail::shipped`) — so this app names nobody and reads `op.person`.
+export const changeAct = (update, doc = DOC_ID) => ({
   kind: DOC_CHANGE,
   doc,
   update: bytesToB64(update),
-  ...(guest ? { guest } : {}),
 });
 
 /// The reducer half of the read path, over ONE act at a time.
@@ -90,7 +89,6 @@ export function docReducer(acc, payload, op) {
     person: op.person,
     seq: op.seq,
     ts: op.ts_unix,
-    guest: typeof payload.guest === "string" ? payload.guest : null,
     update: payload.update,
   });
   return acc;
@@ -196,7 +194,7 @@ export function createAttribution() {
     by = m;
   };
   const replay = (act) => {
-    current = { actor: act.actor, ts: act.ts, guest: act.guest || null };
+    current = { actor: act.actor, ts: act.ts, person: act.person || null };
     Y.applyUpdate(frag.doc, b64ToBytes(act.update));
   };
   reset();
@@ -223,8 +221,8 @@ export function createAttribution() {
     /// One line per top-level block, in document order; `null` where no act
     /// has touched that block yet (a paragraph the typist has made and not
     /// yet had read back).
-    lines(members, nowMs) {
-      return frag.toArray().map((block) => attributionLine(by.get(block), members, nowMs));
+    lines(nowMs) {
+      return frag.toArray().map((block) => attributionLine(by.get(block), nowMs));
     },
   };
 }
@@ -256,16 +254,20 @@ function touchedBlocks(event, frag) {
 /// "last edited by alex 4s ago", from the act, or `null` when no act has
 /// touched this paragraph.
 ///
-/// A key the roster does not know is SAID to be unknown rather than rendered
+/// The name is `op.person` — the rail's own stamp, composed once on the log
+/// route for members and guests alike — not a lookup this page does. A page
+/// that resolved the signer itself would be a second spelling of one sentence
+/// (ARCH §8), and for a guest's act it would read the door's member.
+///
+/// An op that arrives without one is SAID to be unnamed rather than rendered
 /// as the key or as "someone" — an absence reported, never defaulted
-/// (ARCH §6). It can happen honestly: a member admitted after this node's last
-/// log read signs acts this node cannot yet name.
-export function attributionLine(entry, members, nowMs) {
+/// (ARCH §6).
+export function attributionLine(entry, nowMs) {
   if (!entry) return null;
-  const name = displayName(members, entry.actor, entry.guest);
+  const name = entry.person;
   const ago = Math.max(0, Math.round(nowMs / 1000 - entry.ts));
-  return name === null
-    ? `last edited by a key this node's roster does not name, ${ago}s ago`
+  return name === null || name === undefined
+    ? `last edited by a key the rail's roster does not name, ${ago}s ago`
     : `last edited by ${name} ${ago}s ago`;
 }
 
@@ -341,22 +343,6 @@ export function personFor(members, key) {
     if ((keys || []).includes(key)) return person;
   }
   return null;
-}
-
-/// The name an act or a cursor is shown under: the signer's roster name for a
-/// member, `<guest>, guest of <signer>` when the act names a guest, `null`
-/// when the roster does not name the signer.
-///
-/// A guest writes through a member's door, so the rail's signer is that
-/// member. Showing the signer alone would put the member's name on the
-/// guest's words; the guest's name alone would be a name nothing checked.
-/// Both, always together, is the one rendering, for the gutter and the caret.
-export function displayName(members, key, guest = null) {
-  const signer = personFor(members, key);
-  if (!guest) return signer;
-  return signer === null
-    ? `${guest}, guest of a key this node's roster does not name`
-    : `${guest}, guest of ${signer}`;
 }
 
 /// A stable colour for a name, so one person is the same colour on all three

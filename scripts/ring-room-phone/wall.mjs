@@ -4,9 +4,9 @@
 // It is a reader, not a writer. It polls the page's log through BeefyMac's own
 // `svrn ring dev` proxy — the member's page, unchanged, loopback as it has
 // always been — and writes one NDJSON line the first time each act appears,
-// carrying the name the page renders for it. That name comes from the ring's
-// own `displayName`, so what is recorded is what a person in the room reads,
-// not a re-derivation of it.
+// carrying the name the page renders for it. That name is `op.person`, which
+// is what ring-doc's attribution gutter renders verbatim, so what is recorded
+// is what a person in the room reads, not a re-derivation of it.
 //
 // A wall holding two apps runs one of these per app. The SCAFFOLD's screen is
 // the same reader against a different page: `templates/app.js` renders
@@ -86,12 +86,11 @@ while (Date.now() < deadline) {
         `${JSON.stringify({
           id: act.id,
           actor: act.actor,
-          guest: act.guest || null,
-          // What the wall shows under the paragraph, verbatim.
-          name: A.displayName(members, act.actor, act.guest || null),
-          // What the LOG route handed the page, beside what the page rendered.
-          // ring-doc still composes its own line from the payload's guest
-          // field; `person` is the door's stamp, and the two must agree.
+          // What the wall shows under the paragraph, verbatim: the door's
+          // stamp off the log route, which the page renders and does not
+          // compose. `person` is the same field under the key both readers
+          // of this file already use.
+          name: act.person,
           person: act.person,
           roster: Object.keys(members),
           at,

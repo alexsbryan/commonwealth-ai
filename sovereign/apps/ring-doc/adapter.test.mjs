@@ -26,7 +26,6 @@ import {
   createAttribution,
   decodeActs,
   decodePresence,
-  displayName,
   encodeSelf,
   personFor,
   presenceEnvelope,
@@ -303,14 +302,14 @@ test("each paragraph says who last edited it, and how long ago", () => {
       {
         ops: [
           op("ring-a", changeAct(first), { actor: ALEX_KEY, ts_unix: NOW_SEC - 12 }),
-          op("ring-b", changeAct(second), { actor: BO_KEY, ts_unix: NOW_SEC - 4 }),
+          op("ring-b", changeAct(second), { actor: BO_KEY, person: "bo", ts_unix: NOW_SEC - 4 }),
         ],
       },
       fold,
     ).acts,
   );
 
-  assert.deepEqual(attribution.lines(MEMBERS, NOW_SEC * 1000), [
+  assert.deepEqual(attribution.lines(NOW_SEC * 1000), [
     "last edited by alex 12s ago",
     "last edited by bo 4s ago",
   ]);
@@ -347,38 +346,40 @@ test("an update whose clientID is another node's still attributes to the signer"
       {
         ops: [
           op("ring-a", changeAct(honest), { actor: ALEX_KEY, ts_unix: NOW_SEC - 30 }),
-          op("ring-b", changeAct(forged), { actor: BO_KEY, ts_unix: NOW_SEC - 1 }),
+          op("ring-b", changeAct(forged), { actor: BO_KEY, person: "bo", ts_unix: NOW_SEC - 1 }),
         ],
       },
       fold,
     ).acts,
   );
 
-  assert.deepEqual(attribution.lines(MEMBERS, NOW_SEC * 1000), [
+  assert.deepEqual(attribution.lines(NOW_SEC * 1000), [
     "last edited by bo 1s ago",
   ]);
 });
 
 test("a key the roster does not name is said to be unnamed, never invented", () => {
-  // A member admitted since this node's last log read signs acts it cannot yet
-  // name. The honest line says so; a fallback to the key, or to "someone",
-  // would be a page substituting for an absence (ARCH §6).
+  // An op the log route shipped without a `person` — the rail's roster did not
+  // name the signer. The honest line says so; a fallback to the key, or to
+  // "someone", would be a page substituting for an absence (ARCH §6).
   const attribution = createAttribution();
   attribution.absorb(
     decodeActs(
-      { ops: [op("ring-a", changeAct(typedParagraphs(["hello"])), { actor: "dd".repeat(32) })] },
+      { ops: [op("ring-a", changeAct(typedParagraphs(["hello"])), { actor: "dd".repeat(32), person: null })] },
       fold,
     ).acts,
   );
 
-  const [line] = attribution.lines(MEMBERS, NOW_SEC * 1000);
+  const [line] = attribution.lines(NOW_SEC * 1000);
   assert.match(line, /does not name/);
   assert.doesNotMatch(line, /alex|bo|dddd/);
 });
 
 test("a guest's paragraph names the guest and the member whose door signed it", () => {
   // The door signs with its member's key, so the signer alone would put the
-  // member's name on the guest's words. A member's act, beside it, renders
+  // member's name on the guest's words. This page composes neither sentence:
+  // the log route resolved both into `person` (`routes_rail::shipped`) and the
+  // gutter renders what it was handed. A member's act, beside it, renders
   // exactly as it did before guests existed.
   const first = typedParagraphs(["one", "two"]);
   const second = edit(first, undefined, (frag) => frag.get(1).get(0).insert(3, " more"));
@@ -387,25 +388,30 @@ test("a guest's paragraph names the guest and the member whose door signed it", 
     decodeActs(
       {
         ops: [
-          op("ring-a", changeAct(first), { actor: BO_KEY, ts_unix: NOW_SEC - 12 }),
-          op("ring-b", changeAct(second, DOC_ID, "ana"), { actor: ALEX_KEY, ts_unix: NOW_SEC - 4 }),
+          op("ring-a", changeAct(first), { actor: BO_KEY, person: "bo", ts_unix: NOW_SEC - 12 }),
+          op("ring-b", changeAct(second), {
+            actor: ALEX_KEY,
+            person: "ana, guest of alex",
+            ts_unix: NOW_SEC - 4,
+          }),
         ],
       },
       fold,
     ).acts,
   );
 
-  assert.deepEqual(attribution.lines(MEMBERS, NOW_SEC * 1000), [
+  assert.deepEqual(attribution.lines(NOW_SEC * 1000), [
     "last edited by bo 12s ago",
     "last edited by ana, guest of alex 4s ago",
   ]);
 });
 
-test("a member's act carries no guest field, and a guest's caret names both", () => {
-  assert.equal("guest" in changeAct(new Uint8Array([1])), false);
-  assert.equal(displayName(MEMBERS, ALEX_KEY), "alex");
-  assert.equal(displayName(MEMBERS, ALEX_KEY, "ana"), "ana, guest of alex");
-  assert.match(displayName(MEMBERS, "dd".repeat(32), "ana"), /^ana, guest of a key .* does not name$/);
+test("no act this app writes names anybody", () => {
+  // The whole of what ring-doc knows about a guest, pinned as an absence: the
+  // act is `kind`, `doc` and `update`, and nothing else. A name volunteered by
+  // the page would be a name nothing checked, which is the door's job and not
+  // this one's.
+  assert.deepEqual(Object.keys(changeAct(new Uint8Array([1]))).sort(), ["doc", "kind", "update"]);
 });
 
 test("two pages that absorbed the same acts in different orders name the same author", () => {
@@ -425,6 +431,7 @@ test("two pages that absorbed the same acts in different orders name the same au
         }),
         op("ring-y", changeAct(edit(base, undefined, (f) => f.get(0).get(0).insert(6, " B"))), {
           actor: BO_KEY,
+          person: "bo",
           ts_unix: NOW_SEC - 3,
         }),
       ],
@@ -440,8 +447,8 @@ test("two pages that absorbed the same acts in different orders name the same au
   boFirst.absorb(acts);
 
   const expected = ["last edited by bo 3s ago"];
-  assert.deepEqual(alexFirst.lines(MEMBERS, NOW_SEC * 1000), expected);
-  assert.deepEqual(boFirst.lines(MEMBERS, NOW_SEC * 1000), expected);
+  assert.deepEqual(alexFirst.lines(NOW_SEC * 1000), expected);
+  assert.deepEqual(boFirst.lines(NOW_SEC * 1000), expected);
 });
 
 // ── the ask: which house held the evidence ────────────────────────────────

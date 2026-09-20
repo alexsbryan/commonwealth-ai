@@ -211,11 +211,6 @@ try {
     ydoc.on("update", (u) => {
       update = u;
     });
-    // ring-doc STILL carries its own guest handling — the name it volunteers
-    // into the payload, which `rg-2-ring-doc-sheds-its-guest-code` deletes.
-    // The page reuses the name it already holds; nothing asks for it again,
-    // which is why this is reported as SUPPLIED and never as typed.
-    record.doc_guest_supplied = record.guest;
     /// One edit, recorded through the shim. Returns the act.
     ///
     /// The paragraph is created here when the doc is empty, which is what the
@@ -236,7 +231,8 @@ try {
         text.insert(text.length, ` ${word}`);
       });
       if (!update) throw new Error("the edit produced no update to record");
-      return ring.record(A.changeAct(Y.mergeUpdates([update]), A.DOC_ID, record.guest));
+      // No name goes in: the page volunteers nothing and the door stamps it.
+      return ring.record(A.changeAct(Y.mergeUpdates([update]), A.DOC_ID));
     };
 
     // The first word is the `wall` leg: the act the wall shows this person
