@@ -39,6 +39,7 @@ use serde::{Deserialize, Serialize};
 use oicp_types::EmbedModelInfo;
 
 mod atlas_status;
+mod client_token;
 mod corpus_collaborate;
 mod corpus_grant;
 mod corpus_ingest;
@@ -58,6 +59,7 @@ mod ring_sync;
 mod rpc_warm;
 
 pub use atlas_status::{atlas_status, AtlasStatusResponse};
+pub use client_token::routes as client_token_routes;
 pub use corpus_collaborate::{corpus_collaborate, corpus_eligible_peers, CollaborateRequest};
 pub use corpus_grant::{corpus_grant_issue, corpus_grant_revoke};
 pub use corpus_ingest::{

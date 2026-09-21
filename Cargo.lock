@@ -12600,6 +12600,7 @@ dependencies = [
  "tower",
  "tower-http",
  "tracing",
+ "tracing-subscriber",
  "tree-sitter",
  "uuid",
  "workspace-hack",

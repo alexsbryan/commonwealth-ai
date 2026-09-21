@@ -105,7 +105,7 @@ pub const PRINCIPAL_HEADER: &str = "x-principal";
 /// a bucket, and that the token itself never appears in a log or a map key.
 /// `DefaultHasher` is SipHash-1-3 with fixed keys, so the value is stable for
 /// the life of a process — which is all a live fairness bucket needs.
-fn fingerprint(secret: &str) -> String {
+pub(crate) fn fingerprint(secret: &str) -> String {
     let mut h = std::collections::hash_map::DefaultHasher::new();
     secret.hash(&mut h);
     format!("{:016x}", h.finish())

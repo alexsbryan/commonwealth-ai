@@ -46,6 +46,23 @@ from `<data_dir>/client-token`. `GET /status` and `GET
 /oicp/v1/capabilities` are exempt so a peer can probe before
 authenticating. No token configured plus a remote caller fails closed.
 
+**Lending the API to one machine.** `client_token` is one secret every
+caller shares, so taking it back from a laptop takes it back from the
+desktop and the editor too. Give the machine its own instead:
+
+```bash
+svrn mesh token --new laptop     # prints the bearer once
+svrn mesh token --list           # labels, never tokens
+svrn mesh token --revoke laptop  # that one stops working on its next request
+```
+
+A named token is the whole client API, for a machine you own — for
+lending a model to someone else, `svrn mesh grant` is the scoped,
+expiring version. Revoking takes effect immediately; no restart, and no
+other token is disturbed. The shared token keeps working alongside
+these until you set `[daemon] client_tokens = "named-only"`, after
+which it is refused with a sentence saying so.
+
 **Some routes are loopback-only regardless of token.** `/mcp`,
 `/v1/mesh/*`, `/v1/admin/*`, `/v1/solve/*` and everything under
 `/internal/*` 403 a non-loopback caller even with a valid bearer. They

@@ -88,6 +88,7 @@ pub async fn run_mesh(args: &[String]) -> i32 {
         "rotate" => cmd_rotate(&args[1..]).await,
         "grant" => crate::mesh_guest::cmd_grant(&args[1..]).await,
         "use" => crate::mesh_guest::cmd_use(&args[1..]).await,
+        "token" => crate::mesh_token::cmd_token(&args[1..]).await,
         "status" => cmd_status(&args[1..]).await,
         "transport" => cmd_transport(&args[1..]).await,
         "balance" => cmd_balance().await,

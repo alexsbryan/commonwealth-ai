@@ -44,7 +44,7 @@ use crate::mesh_guest_link::{wall_page_base, wall_qr_svg};
 /// Read the daemon's client port from `SetupConfig` rather than hardcoding
 /// 9741 — a sandbox pointed at its own daemon must not mint against the
 /// operator's.
-fn daemon_client_port() -> u16 {
+pub(crate) fn daemon_client_port() -> u16 {
     sovereign_core::setup_config::SetupConfig::load()
         .map(|c| c.daemon.client_port)
         .unwrap_or(9741)
@@ -267,7 +267,7 @@ async fn resolve_guest_path(url_override: Option<&str>, port: u16) -> Result<Gue
         .unwrap_or_else(|| "this node published no address a guest could use".to_string()))
 }
 
-fn http_client(timeout_secs: u64) -> Result<reqwest::Client, String> {
+pub(crate) fn http_client(timeout_secs: u64) -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(timeout_secs))
         .build()
@@ -275,7 +275,7 @@ fn http_client(timeout_secs: u64) -> Result<reqwest::Client, String> {
 }
 
 /// Pull `error` out of an `ErrorBody` response, falling back to the raw text.
-async fn error_text(resp: reqwest::Response) -> String {
+pub(crate) async fn error_text(resp: reqwest::Response) -> String {
     let status = resp.status();
     match resp.text().await {
         Ok(body) => serde_json::from_str::<serde_json::Value>(&body)

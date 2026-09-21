@@ -20,6 +20,8 @@
 
 #[path = "main/client_auth.rs"]
 mod client_auth;
+#[path = "main/client_tokens_e2e.rs"]
+mod client_tokens_e2e;
 #[path = "main/control_plane_not_shed.rs"]
 mod control_plane_not_shed;
 #[path = "main/corpus_lifecycle.rs"]

@@ -325,6 +325,23 @@ flags = [{ name = "--peers" }, { name = "--method" }, { name = "--timeout-ms" },
 args = ["mesh", "app", "fanout", "--help"]
 expect_exit = 0
 [[command]]
+# One client-API bearer per machine, so lending the API to a laptop no longer
+# means rotating the credential the desktop and the editor also hold
+# (`docs/THREAT_MODEL.md` gap 3). Mint/list/revoke all reach the daemon's
+# OPERATOR listener on 127.0.0.1 — a peer may not ask for a credential.
+path = "mesh token"
+binary = "llm"
+visibility = "public"
+classification = "daemon"
+flags = [
+  { name = "--new", takes_value = true },
+  { name = "--list" },
+  { name = "--revoke", takes_value = true },
+]
+[command.smoke]
+args = ["mesh", "token", "--help"]
+expect_exit = 0
+[[command]]
 path = "mesh balance"
 binary = "llm"
 visibility = "public"
@@ -2519,6 +2536,45 @@ run = "mesh list"
 [journey.step.expect]
 exit = 0
 stdout_non_empty = true
+[[journey]]
+id = "client-token-per-machine"
+title = "Lend the API to one machine, then take it back without disturbing the others"
+persona = "operator"
+experience = "tool-interop"
+tier = 2
+visibility = "public"
+doc = "docs/INTEROP.md#four-facts-before-you-start"
+[[journey.step]]
+run = "mesh token --new contract-probe"
+mutates = true
+note = """exit code only: the bearer is the one thing printed and asserting any \
+part of it would put a credential in the lane's own output. That it LANDED is \
+proven by [1], which is the assertion an exit-code-only gate cannot make."""
+[journey.step.expect]
+exit = 0
+[[journey.step]]
+run = "mesh token --list"
+[journey.step.expect]
+exit = 0
+stdout_contains = "contract-probe"
+[[journey.step]]
+run = "mesh token --revoke contract-probe"
+mutates = true
+note = """prove the mutation reverses — and that revoking is reported rather \
+than assumed: revoking a label that was never there exits 1 and says so, so a \
+0 here is the daemon confirming it found one."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "Revoked"
+[[journey.step]]
+run = "mesh token --list"
+note = """the absence half. Asserted against --list rather than an exit code \
+because a revoke that deleted the file and left the in-memory set admitting \
+would exit 0 here and still be serving the device."""
+[journey.step.expect]
+exit = 0
+stdout_absent = "contract-probe"
+
 [[journey]]
 id = "mesh-bigger-model"
 title = "Run a model larger than one machine across the mesh"

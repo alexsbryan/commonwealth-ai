@@ -33,7 +33,10 @@
 //!   spoofable `X-Node-Id` header, which meant "omit the header" was a
 //!   full-trust bypass. That footgun dies here.)
 //! - **Remote caller** → must present `Authorization: Bearer <token>`
-//!   matching the daemon's configured token (constant-time compare).
+//!   matching a NAMED token ([`crate::client_tokens`], one per device and
+//!   revocable alone) or the daemon's configured token (constant-time compare
+//!   either way). `[daemon] client_tokens = "named-only"` refuses the second
+//!   with a sentence.
 //!   - No token configured (`AppState::client_token` is `None`) →
 //!     **fail closed** (403): a remote request reached a daemon that
 //!     never set up a secret; refuse rather than admit.
@@ -325,11 +328,32 @@ pub async fn client_auth_layer(
                 }
             }
         }
-        // A bearer that is not a grant: the daemon-wide token admits it.
+        // A bearer that is not a grant. TWO credentials admit here and they
+        // are independent: a NAMED token (one device, revocable alone) and
+        // the daemon-wide one. The named set is read first because it is the
+        // one that can be withdrawn without disturbing anything else, and
+        // because its admit line can name WHO — see `crate::client_tokens`.
         Principal::RemoteClient { .. } => {
-            if let (Some(expected), Some(p)) = (configured.as_ref(), presented) {
-                if constant_time_eq(p.as_bytes(), expected.as_bytes()) {
+            if let Some(p) = presented {
+                if let Some(label) = state.inner.node.named_client_tokens.label_for(p) {
+                    // The LABEL, never the token: a credential in a log is a
+                    // credential in every scrollback, bug report and log
+                    // shipper downstream of it.
+                    tracing::debug!(
+                        peer = %peer,
+                        path = %request.uri().path(),
+                        label = %label,
+                        "client_auth: named client token admitted"
+                    );
                     return next.run(request).await;
+                }
+                if let Some(expected) = configured.as_ref() {
+                    if constant_time_eq(p.as_bytes(), expected.as_bytes()) {
+                        if state.inner.node.client_tokens.admits_shared_token() {
+                            return next.run(request).await;
+                        }
+                        return shared_token_refused(&peer, request.uri().path());
+                    }
                 }
             }
         }
@@ -399,6 +423,35 @@ fn stale_session() -> Response {
         Json(serde_json::json!({
             "error": "this ring session is no longer live under this link — claim a name again",
             "code": "stale_session",
+        })),
+    )
+        .into_response()
+}
+
+/// 401 for a VALID daemon-wide token on a node that has stopped accepting it
+/// (`[daemon] client_tokens = "named-only"`).
+///
+/// Named rather than folded into [`unauthorized`], for the same reason
+/// [`guest_out_of_scope`] is: the audience is not a prober guessing
+/// credentials — it is somebody holding a credential this node used to honour,
+/// and "authentication required" would send them checking the token they are
+/// already sending correctly. Naming the posture leaks nothing they could not
+/// infer from being refused while the desktop on the same machine still works.
+fn shared_token_refused(peer: &SocketAddr, path: &str) -> Response {
+    tracing::warn!(
+        peer = %peer,
+        path = %path,
+        "client_auth: the shared client token is refused under \
+         [daemon] client_tokens = \"named-only\""
+    );
+    (
+        StatusCode::UNAUTHORIZED,
+        [("WWW-Authenticate", "Bearer")],
+        Json(serde_json::json!({
+            "error": "this node no longer admits the shared client token \
+                      ([daemon] client_tokens = \"named-only\") — ask its operator \
+                      for a token of your own (`svrn mesh token --new <label>`)",
+            "code": "named_token_required",
         })),
     )
         .into_response()

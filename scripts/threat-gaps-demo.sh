@@ -330,12 +330,25 @@ for root, _dirs, files in os.walk(os.path.join(REPO, "sovereign/crates")):
     for f in files:
         if f.endswith(".rs") and "mesh token" in (src(os.path.relpath(os.path.join(root, f), REPO)) or ""):
             token_verb.append(os.path.relpath(os.path.join(root, f), REPO))
-clauses = {"a": bool(token_verb), "b": bool(token_verb), "c": bool(token_verb), "d": None}
+# Each clause is read from the test that PROVES it, not from the presence of
+# the code it tests: a mint/revoke path with no test asserting the same-lifetime
+# refusal is exactly the shape the goodhart line calls out (reads 1.0 on a
+# restart if revocation only takes effect at load).
+clause_tests = {
+    "a": r"two_named_tokens_each_admit_a_remote_caller",
+    "b": r"revoking_one_refuses_it_in_the_same_lifetime_and_leaves_the_other",
+    "c": r"the_admitting_label_appears_in_the_log_line_and_the_token_does_not",
+    "d": r"the_shared_token_admits_by_default_and_is_refused_under_named_only",
+}
+e2e_rel = "sovereign/crates/sovereign-daemon/tests/main/client_tokens_e2e.rs"
+e2e = src(e2e_rel) or ""
+clauses = {k: (bool(token_verb) and re.search(rf"async fn {name}\b", e2e) is not None)
+           for k, name in clause_tests.items()}
 row(BAR, score(clauses),
-    "no `svrn mesh token` verb exists — `mesh token` appears in no .rs under sovereign/crates, and "
-    f"the client token is still one `client_token: Option<Arc<str>>` in state/node.rs ({one_token}). "
-    "There is nothing to mint, name or revoke, so (a), (b) and (c) are false rather than unmeasured; "
-    "(d) cannot be read until a named-token posture exists.",
+    f"`mesh token` appears in {len(token_verb)} .rs file(s) under sovereign/crates "
+    f"({token_verb}); the shared `client_token: Option<Arc<str>>` is still in state/node.rs "
+    f"({one_token}) and is the default posture, beside the named set. {said(clauses)} — each "
+    f"read from the test in {e2e_rel} that proves it.",
     clauses=clauses, one_shared_token=one_token, token_verb_sites=token_verb)
 
 # ── tg-meshapp-window-bridge-only ───────────────────────────────────────────

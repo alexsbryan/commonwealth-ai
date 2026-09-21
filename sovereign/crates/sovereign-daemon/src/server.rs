@@ -98,7 +98,7 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
     // the iroh acceptor is admitted by the loopback arm before any
     // credential is read.
     let operator_routes: Router<AppState> = if surface.serves_operator_routes() {
-        Router::new()
+        routes_internal::client_token_routes()
             .route(
                 "/internal/inference/warmup",
                 post(routes_internal::inference_warmup),

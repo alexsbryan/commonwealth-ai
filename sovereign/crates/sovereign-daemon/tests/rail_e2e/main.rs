@@ -93,6 +93,7 @@ fn bare_state_with_seed(
             guest_sessions: sessions,
             guest_pages: pages,
             internal_auth: Default::default(),
+            ..Default::default()
         },
     )
 }

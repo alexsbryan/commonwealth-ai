@@ -11,7 +11,7 @@ use std::sync::{Arc, Weak};
 use tokio::sync::RwLock;
 use tracing::{info, warn};
 
-use crate::state::{AppState, LocalInferenceService};
+use crate::state::{AppState, LocalInferenceService, NodeSeed};
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::Mesh;
 use commonwealth_discovery::mdns::{BrowseHandle, DiscoveredPeer, MdnsDiscovery};
@@ -3223,7 +3223,7 @@ impl EmbeddedDaemon {
         client_bind = posture.bind;
         // The node's part exists before it is built, token and all (DC §4.2
         // "Construction is staged, and parts are total").
-        let node_seed = crate::state::NodeSeed::resolved(posture.token, &self.setup_config)
+        let node_seed = NodeSeed::resolved(posture.token, &self.data_dir, &self.setup_config)
             .await
             .map_err(|e| MeshError::Config(e.to_string()))?;
         // Fabric's part is constructed before `AppState` and held on the

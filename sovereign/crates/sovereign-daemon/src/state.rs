@@ -1153,6 +1153,8 @@ impl AppState {
                     started_at: std::time::Instant::now(),
                     guest_grants: Arc::new(GuestGrantStore::new()),
                     internal_auth: node_seed.internal_auth,
+                    client_tokens: node_seed.client_tokens,
+                    named_client_tokens: node_seed.named_client_tokens,
                     guest_sessions: Arc::new(GuestSessionStore::new(node_seed.guest_sessions)),
                     guest_pages: Arc::new(node_seed.guest_pages),
                     // 0 sentinel = no foreground activity observed yet.

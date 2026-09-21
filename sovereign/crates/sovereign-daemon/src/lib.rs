@@ -162,6 +162,8 @@ pub mod client_auth;
 /// design's one resolver (`REVIEW-mint-principal`) collapses them.
 pub mod client_principal;
 pub mod client_surface;
+/// Named client tokens — one credential per device, revocable alone.
+pub mod client_tokens;
 pub mod frontdoor;
 /// Whether a caller may reach `:9742` at all — the refusal
 /// [`internal_principal`] deliberately does not make.

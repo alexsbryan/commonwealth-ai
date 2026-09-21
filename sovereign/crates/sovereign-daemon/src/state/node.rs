@@ -15,6 +15,7 @@ use commonwealth_state::ActivityEmitter;
 use corpus_engine::CorpusEngine;
 use sovereign_grants::{GuestGrantStore, GuestSessionBinding, GuestSessionStore};
 
+use crate::client_tokens::{ClientTokenStore, ClientTokens};
 use crate::internal_gate::InternalAuth;
 
 /// Everything the node's part is constructed with (DC §4.2 "Construction is
@@ -45,6 +46,15 @@ pub struct NodeSeed {
     /// ([`InternalAuth::Member`]) refuses a caller that is neither a member of
     /// this mesh nor a local process — see `crate::internal_gate`.
     pub internal_auth: InternalAuth,
+    /// What the CLIENT port (`:9741`) accepts as a remote credential, resolved
+    /// from `[daemon] client_tokens` before the listeners bind. The default
+    /// ([`ClientTokens::Shared`]) is the posture every build before named
+    /// tokens had — see `crate::client_tokens`.
+    pub client_tokens: ClientTokens,
+    /// The per-device credentials this node admits beside the shared token,
+    /// read off disk once here so no request path touches the filesystem.
+    /// Empty on a daemon with no data directory.
+    pub named_client_tokens: Arc<ClientTokenStore>,
 }
 
 impl NodeSeed {
@@ -62,8 +72,12 @@ impl NodeSeed {
     /// honour. Either refusal reaches the caller as a config error and the
     /// daemon declines to start; `Box<dyn Error>` is what lets the two keep
     /// their own types rather than being flattened into a shared one.
+    /// The named per-device credentials are read from
+    /// `<data_dir>/client-tokens` — one directory derived HERE, so no other
+    /// caller has to know the layout.
     pub async fn resolved(
         client_token: Option<String>,
+        data_dir: &std::path::Path,
         config: &tokio::sync::RwLock<sovereign_core::setup_config::SetupConfig>,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let daemon = config.read().await.daemon.clone();
@@ -76,6 +90,26 @@ impl NodeSeed {
             None => InternalAuth::default(),
             Some(raw) => InternalAuth::parse(raw)?,
         };
+        // THE one reader of `[daemon] client_tokens`, for the same reason and
+        // with the same refusal: an unknown spelling declines to start rather
+        // than silently taking the permissive posture.
+        let client_tokens = match daemon.client_tokens.as_deref() {
+            None => ClientTokens::default(),
+            Some(raw) => ClientTokens::parse(raw)?,
+        };
+        let named_client_tokens =
+            Arc::new(ClientTokenStore::load(Some(data_dir.join("client-tokens"))));
+        if client_tokens == ClientTokens::NamedOnly && named_client_tokens.list().is_empty() {
+            // Said at the moment it is chosen, not discovered by a device that
+            // stopped being admitted: under this posture the shared token no
+            // longer admits, so a node with no named tokens serves no remote
+            // caller at all.
+            tracing::warn!(
+                "node seed: [daemon] client_tokens = \"named-only\" and this node has \
+                 no named tokens — no remote client can be admitted until one is \
+                 minted (`svrn mesh token --new <label>`)"
+            );
+        }
         if internal_auth == InternalAuth::Perimeter {
             // ONCE, here, and never per request: the weaker posture is
             // disclosed at the moment it is chosen. Under it the internal port
@@ -93,13 +127,17 @@ impl NodeSeed {
             guest_sessions = guest_sessions.as_str(),
             guest_pages = ?guest_pages,
             internal_auth = internal_auth.as_str(),
-            "node seed: guest session binding, page registry and internal-port posture resolved"
+            client_tokens = client_tokens.as_str(),
+            named_client_tokens = named_client_tokens.list().len(),
+            "node seed: guest session binding, page registry and the two port postures resolved"
         );
         Ok(Self {
             client_token: client_token.map(Into::into),
             guest_sessions,
             guest_pages,
             internal_auth,
+            client_tokens,
+            named_client_tokens,
         })
     }
 }
@@ -135,6 +173,15 @@ pub struct NodePart {
     /// ([`NodeSeed::internal_auth`]), not an install: the posture is decided
     /// before the listeners bind, so no request path reads config.
     pub internal_auth: InternalAuth,
+    /// What the CLIENT port accepts as a remote credential — the ONE reader is
+    /// `crate::client_auth::client_auth_layer`. A construction argument
+    /// ([`NodeSeed::client_tokens`]) for the same reason `internal_auth` is.
+    pub client_tokens: ClientTokens,
+    /// The per-device credentials minted with `svrn mesh token`, each
+    /// revocable without disturbing the others or the shared token. Consulted
+    /// at exactly one point, `client_auth_layer`, beside the shared compare.
+    /// See [`crate::client_tokens`].
+    pub named_client_tokens: Arc<ClientTokenStore>,
     /// The NAMES claimed at this door — one QR serves a room, so the grant
     /// cannot say which phone is asking and the session does. A session is not
     /// a second credential: it names no scope, `GuestGrant::permits_path` on

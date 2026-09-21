@@ -5561,8 +5561,20 @@ callers pass free; the layer has exempt paths for federation/health.
 Added with the SaaS hardening, 2026-07; extracted out of `start_daemon`
 and given a test 2026-09-02 (UI-22).
 
-A non-loopback caller can now present one of **two** bearers, matched in
+A non-loopback caller can now present one of **three** bearers, matched in
 that order. `client_token` is the daemon-wide one and unlocks everything.
+A **named client token** (`sovereign-daemon/src/client_tokens.rs`,
+`tg-3-tokens-have-names`, 2026-09-21) unlocks the same surface but belongs
+to ONE machine: minted by `svrn mesh token --new <label>`, kept at
+`<data_dir>/client-tokens/<label>.token` (0600 in a 0700 dir, the shape of
+the MCP secret store), admitted through the same constant-time compare
+after a fingerprint bucket lookup, and revoked by label in the SAME daemon
+lifetime — the store drops it from memory before deleting the file, so
+there is no restart and no other credential is disturbed. The admit line
+carries the label, never the token. `[daemon] client_tokens` is the
+posture (`"shared"` by default, `"named-only"` refuses the daemon-wide one
+with a sentence) — a closed set whose unknown spelling declines to start,
+exactly as `internal_auth` does on the other port.
 An **ephemeral guest grant** (`commonwealth-knowledge::guest_grant`,
 2026-08-27) is the narrow one: short-lived, revocable, and bound to a
 closed `Scope` enum whose `paths()` is the only route allowlist there is.

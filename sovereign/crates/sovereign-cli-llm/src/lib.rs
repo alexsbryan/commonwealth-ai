@@ -85,6 +85,7 @@ mod mesh_member_cmd;
 mod mesh_offers;
 mod mesh_skew;
 mod mesh_soak;
+mod mesh_token;
 mod mesh_travel;
 mod meshapp_cmd;
 mod meshapp_registry;

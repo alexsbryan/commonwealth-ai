@@ -1444,6 +1444,15 @@ pub struct DaemonSection {
     #[serde(default)]
     pub internal_auth: Option<String>,
 
+    /// What the CLIENT API (`:9741`) accepts as a remote credential: `None`
+    /// (default) is `"shared"` — the daemon-wide `client_token` admits, and so
+    /// does any token minted with `svrn mesh token --new <label>`. `"named-only"`
+    /// refuses the shared token and admits only the named ones. A CLOSED SET —
+    /// `sovereign_daemon::client_tokens::ClientTokens` is its one reader and
+    /// carries the whole contract.
+    #[serde(default)]
+    pub client_tokens: Option<String>,
+
     /// `[daemon.guest_pages]` — one wall, more than one app: rail namespace
     /// → bundle directory, served at `/ring/<namespace>/`. Registering an app
     /// here is how its owner DECLARES that it admits guests; a wall grant
@@ -1487,6 +1496,7 @@ impl Default for DaemonSection {
             guest_pages: std::collections::BTreeMap::new(),
             internal_bind: default_internal_bind(),
             internal_auth: None,
+            client_tokens: None,
             local_only: default_local_only(),
         }
     }

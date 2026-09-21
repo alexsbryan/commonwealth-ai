@@ -129,6 +129,9 @@ ed25519-dalek = { workspace = true }
 tokio = { workspace = true, features = ["test-util", "macros"] }
 http-body-util = "0.1"
 sovereign-contracts = { workspace = true, features = ["test-fixtures"] }
+# `client_tokens_e2e` captures the admit line to prove it names the LABEL and
+# not the token (bar `tg-token-revoked-alone`, clause c).
+tracing-subscriber = { workspace = true }
 
 [lints]
 workspace = true
