@@ -236,9 +236,15 @@ fn include_escapes(dir: &Path, crate_name: &str, scope: &str, fails: &mut Vec<St
             .unwrap_or_default()
             .to_string_lossy()
             .to_string();
-        for e in scan_include_escapes(&text) {
+        let rel_dir = path
+            .parent()
+            .and_then(|p| p.strip_prefix(dir).ok())
+            .unwrap_or(Path::new("src"))
+            .to_path_buf();
+        for e in scan_include_escapes(&text, &rel_dir) {
             fails.push(format!(
-                "[{scope}] {crate_name}: src/{name}:{} {}",
+                "[{scope}] {crate_name}: {}:{} {}",
+                path.strip_prefix(dir).unwrap_or(&path).display(),
                 e.line,
                 e.describe()
             ));
@@ -284,7 +290,56 @@ impl IncludeEscape {
 ///
 /// The window is the STATEMENT rather than a fixed lookahead, so one embed
 /// cannot hide the next.
-fn scan_include_escapes(text: &str) -> Vec<IncludeEscape> {
+/// Lexically normalise `base/rel`, returning None when it climbs past the root.
+fn resolves_inside(base: &Path, rel: &str) -> bool {
+    let mut depth: i32 = base
+        .components()
+        .filter(|c| !c.as_os_str().is_empty())
+        .count() as i32;
+    for part in rel.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                depth -= 1;
+                if depth < 0 {
+                    return false;
+                }
+            }
+            _ => depth += 1,
+        }
+    }
+    true
+}
+
+/// The `"..."` literals in one window, in order.
+fn string_literals(window: &[&str]) -> Vec<String> {
+    let joined = window.join("\n");
+    let mut out = Vec::new();
+    let b: Vec<char> = joined.chars().collect();
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == '"' {
+            let mut j = i + 1;
+            let mut lit = String::new();
+            while j < b.len() && b[j] != '"' {
+                if b[j] == '\\' {
+                    j += 1;
+                }
+                if j < b.len() {
+                    lit.push(b[j]);
+                }
+                j += 1;
+            }
+            out.push(lit);
+            i = j + 1;
+        } else {
+            i += 1;
+        }
+    }
+    out
+}
+
+fn scan_include_escapes(text: &str, rel_dir: &Path) -> Vec<IncludeEscape> {
     /// How far a macro invocation may run before this rule stops looking for
     /// the `;` that ends it. The shipped shapes use four lines.
     const FWD: usize = 8;
@@ -310,11 +365,28 @@ fn scan_include_escapes(text: &str) -> Vec<IncludeEscape> {
         let window = &lines[i..hi];
         examined_through = Some(hi.saturating_sub(1));
 
+        // RESOLVE, do not pattern-match. `../..` in the text is not an escape:
+        // `corpus-engine/src/extractors/code/mod.rs` embeds
+        // `../../../queries/rust/symbols.scm`, which lands on
+        // `corpus-engine/queries/` — INSIDE the crate root. That false positive
+        // stood as six red lines and as burn-down item (2) on the
+        // `corpus-mcp -> corpus-engine` exception, for work already done.
+        let base: &Path = if window.iter().any(|l| l.contains("CARGO_MANIFEST_DIR")) {
+            Path::new("")
+        } else {
+            rel_dir
+        };
         if let Some(hop) = window.iter().find(|l| l.contains("../..")) {
-            out.push(IncludeEscape {
-                line: i + 1,
-                evidence: hop.trim().to_string(),
-            });
+            let escapes = string_literals(window)
+                .iter()
+                .filter(|l| l.contains("../.."))
+                .any(|l| !resolves_inside(base, l.trim_start_matches('/')));
+            if escapes {
+                out.push(IncludeEscape {
+                    line: i + 1,
+                    evidence: hop.trim().to_string(),
+                });
+            }
         }
     }
     out
@@ -656,7 +728,7 @@ pub const OTHER_TOML: &str = include_str!(concat!(
     "/../../../elsewhere/registry.toml"
 ));
 "#;
-        let hits = scan_include_escapes(wrapped);
+        let hits = scan_include_escapes(wrapped, Path::new("src"));
         assert_eq!(hits.len(), 1, "the three-line embed must be seen");
         assert!(hits[0].evidence.contains("elsewhere/registry.toml"));
     }
@@ -673,7 +745,7 @@ pub const RECIPE_REGISTRY_TOML: &str = include_str!(concat!(
     "/../../../sovereign-recipes/registry.toml"
 ));
 "#;
-        let hits = scan_include_escapes(recipe_embed);
+        let hits = scan_include_escapes(recipe_embed, Path::new("src"));
         assert_eq!(hits.len(), 1, "a sovereign-recipes embed must now be seen");
         assert!(hits[0].evidence.contains("sovereign-recipes/registry.toml"));
     }
@@ -681,9 +753,9 @@ pub const RECIPE_REGISTRY_TOML: &str = include_str!(concat!(
     #[test]
     fn include_scan_still_sees_a_single_line_embed() {
         let inline = r#"const X: &str = include_str!("../../elsewhere/x.json");"#;
-        assert_eq!(scan_include_escapes(inline).len(), 1);
+        assert_eq!(scan_include_escapes(inline, Path::new("src")).len(), 1);
         let bytes = r#"const X: &[u8] = include_bytes!("../../elsewhere/x.bin");"#;
-        assert_eq!(scan_include_escapes(bytes).len(), 1);
+        assert_eq!(scan_include_escapes(bytes, Path::new("src")).len(), 1);
     }
 
     /// Rule 3b's negative controls — the embeds that lift fine because they
@@ -693,9 +765,23 @@ pub const RECIPE_REGISTRY_TOML: &str = include_str!(concat!(
         // Inside the crate, and one level up from a file in `src/` is still
         // the crate root — only a two+ level climb leaves.
         let local = r#"const X: &str = include_str!("fixtures/x.json");"#;
-        assert!(scan_include_escapes(local).is_empty());
+        assert!(scan_include_escapes(local, Path::new("src")).is_empty());
         let crate_root = r#"const X: &[u8] = include_bytes!("../README.md");"#;
-        assert!(scan_include_escapes(crate_root).is_empty());
+        assert!(scan_include_escapes(crate_root, Path::new("src")).is_empty());
+    }
+
+    /// The false positive this rule carried until 2026-09-21: a climb that
+    /// LANDS inside the crate root. corpus-engine's tree-sitter queries live
+    /// at `corpus-engine/queries/` and are embedded from
+    /// `src/extractors/code/mod.rs`, so the literal reads `../../../queries/…`
+    /// and resolves to the crate root — six red lines, and a burn-down item on
+    /// the `corpus-mcp -> corpus-engine` exception, for work already done.
+    #[test]
+    fn include_scan_resolves_a_climb_that_lands_inside_the_crate() {
+        let inside = r#"const Q: &str = include_str!("../../../queries/rust/symbols.scm");"#;
+        assert!(scan_include_escapes(inside, Path::new("src/extractors/code")).is_empty());
+        // Same literal from a shallower file DOES leave.
+        assert_eq!(scan_include_escapes(inside, Path::new("src")).len(), 1);
     }
 
     /// The window is a statement and not a fixed lookahead, so the embed above
@@ -713,7 +799,7 @@ pub const SECOND: &str = include_str!(concat!(
     "/../../../sovereign-recipes/b.toml"
 ));
 "#;
-        let hits = scan_include_escapes(two);
+        let hits = scan_include_escapes(two, Path::new("src"));
         assert_eq!(hits.len(), 2, "both embeds escape");
         assert!(hits[0].evidence.contains("elsewhere/a.toml"));
         assert!(hits[1].evidence.contains("sovereign-recipes/b.toml"));
