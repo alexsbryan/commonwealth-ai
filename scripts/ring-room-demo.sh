@@ -1484,13 +1484,16 @@ print(' '.join(guest + room))" "$GUEST_CAMPAIGN" "$ROOM_CAMPAIGN"
 
 # Every bar reads COULD-NOT-JUDGE for one named reason, without a walk — the
 # shape a refusal takes when the instrument cannot legitimately run at all.
-room_cnj_rows() { # reason bar|all
+# The third argument is the id set, defaulting to this script's own: a second
+# instrument sourcing this one (threat-gaps-demo.sh) refuses with the same
+# sentence over its own campaign's bars rather than copying the shape.
+room_cnj_rows() { # reason bar|all [bar-ids]
   python3 -c "
 import json, sys
 reason, want, ids = sys.argv[1], sys.argv[2], sys.argv[3].split()
 for b in (ids if want == 'all' else [want]):
     print(json.dumps({'bar': b, 'value': None, 'reason': reason, 'verdict': 'COULD-NOT-JUDGE'}))" \
-    "$1" "$2" "$(room_bar_ids)"
+    "$1" "$2" "${3:-$(room_bar_ids)}"
 }
 
 report() { # bar|all
@@ -1580,8 +1583,9 @@ for e in walk:
 print(f"  walk count: {walk_count}")
 print(f"== census: this script names {len(hits)} of {len(needles)} member names/ports/addresses/corpus ids: {hits} ==")
 
-rows = {}
-def row(bar, value, reason="", **extra): rows[bar] = dict(bar=bar, value=value, reason=reason, **extra)
+sys.path.insert(0, os.path.join(os.path.dirname(script_p), "lib"))
+import demo_verdicts
+rows, row = demo_verdicts.new_rows()
 num = lambda pat, s: float(re.search(pat, s).group(1)) if re.search(pat, s) else None
 
 # rr-1's five. They read artifacts the ROOM topology does not write (and
@@ -2172,21 +2176,15 @@ if topology == "room":
             rr2_values=rr2)
 
 order = bar_ids.split()
-for bar in (order if want == "all" else [want]):
-    r, b = rows[bar], bars[bar]
-    v = r["value"]
-    verdict = "COULD-NOT-JUDGE" if v is None else (
-        ("PASSED" if v <= b["floor"] else "FAILED") if b["direction"] == "lower_is_better" else
-        ("PASSED" if v >= b["floor"] else "FAILED"))
-    r.update(floor=b["floor"], verdict=verdict, artifact=d,
-             topology=("four podman nodes on two networks, one host: the wall in the room, "
-                       "the keeper and the holder behind an uplink, the phone on the room's WiFi only"
-                       if topology == "room" else
-                       f"three {os.environ.get('RING_DOC_BACKEND')} nodes, one host"))
-    print(json.dumps(r))
-# Four verdicts, as ring-doc's: 1 any FAILED, 4 some COULD-NOT-JUDGE, 0 all PASSED.
-vs = [rows[b]["verdict"] for b in (order if want == "all" else [want])]
-sys.exit(1 if "FAILED" in vs else (4 if "COULD-NOT-JUDGE" in vs else 0))
+# The table, the floor comparison and the exit rule are scripts/lib/demo_verdicts.py:
+# threat-gaps-demo.sh prints the same table, and two copies of one threshold
+# rule is the thing ARCH §8 forbids.
+sys.exit(demo_verdicts.emit(
+    rows, bars, order if want == "all" else [want], artifact=d,
+    topology=("four podman nodes on two networks, one host: the wall in the room, "
+              "the keeper and the holder behind an uplink, the phone on the room's WiFi only"
+              if topology == "room" else
+              f"three {os.environ.get('RING_DOC_BACKEND')} nodes, one host")))
 PY
 }
 
@@ -2198,6 +2196,9 @@ room_down() { # Jellyfin first: podman will not remove b while a container share
   cmd_down
 }
 
+# Sourced (threat-gaps-demo.sh reuses the node door, room_start_daemon,
+# mesh_json and room_cnj_rows): define only, exactly as ring-doc-demo.sh does.
+[[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
 case "${1:-}" in
   up)   : > "$CMDLOG"; : > "$TYPED"; if [ "$TOPOLOGY" = room ]; then room_up; else cmd_up; fi ;;
   down) if [ "$TOPOLOGY" = room ]; then room_topology_down; else room_down; fi; echo "stopped" ;;
