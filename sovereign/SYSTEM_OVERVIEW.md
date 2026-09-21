@@ -8149,11 +8149,6 @@ target/release/sovereign-cli-daemon daemon run # the long-running host
 # Sovereign HTTP server
 cargo build --release -p sovereign-server
 target/release/sovereign-server --config sovereign/sovereign-server.toml
-
-# cmnwlth daemon
-cargo build --release -p commonwealth-daemon
-target/release/commonwealth-daemon init --name "Co-op"
-target/release/commonwealth-daemon daemon start
 ```
 
 Default ports:

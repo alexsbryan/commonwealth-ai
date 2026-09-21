@@ -35,7 +35,7 @@ Three zones, from most to least trusted:
   local CLI, and in-process callers reach the client API without a token.
   This is decided from the real socket peer address
   (`ConnectInfo<SocketAddr>`), never from a spoofable header
-  (`commonwealth/crates/commonwealth-api/src/client_auth.rs`).
+  (`sovereign/crates/sovereign-daemon/src/client_auth.rs`).
 - **The mesh perimeter.** In trusted-network mode a Commonwealth mesh runs
   on a network you control — a tailnet, WireGuard, or a LAN behind a
   firewall. Inside that perimeter, nodes that hold the join key are peers.
@@ -43,7 +43,7 @@ Three zones, from most to least trusted:
   time (`commonwealth/crates/commonwealth-discovery/src/membership.rs`);
   when a joiner presents a node identity it must also carry an Ed25519
   proof-of-possession, and a bad or missing proof is rejected with 401
-  (`commonwealth/crates/commonwealth-api/src/routes_internal/mesh_admin.rs`
+  (`sovereign/crates/sovereign-daemon/src/routes_internal/mesh_admin.rs`
   with the check in
   `commonwealth/crates/commonwealth-transport/src/identity.rs`).
 - **Guests.** A holder of an ephemeral guest grant
@@ -119,7 +119,7 @@ Three zones, from most to least trusted:
 | Surface | Default bind | Auth | Encryption |
 |---|---|---|---|
 | Client API `:9741` — embedded daemon (`/v1/*` OpenAI, `/api/*` Ollama shim, apps, knowledge) | `127.0.0.1` (`sovereign/crates/sovereign-daemon/src/daemon.rs`) | Loopback exempt; any non-loopback caller needs `Authorization: Bearer <token>`, matched full-token-first then guest-grant (`client_auth.rs`); **fail-closed** (403) when no token is configured. Exempt read-only paths: `/status`, `/oicp/v1/capabilities`. | Plain HTTP on the perimeter; on an encrypted mesh the listener is forced loopback and iroh QUIC/TLS is the sole ingress |
-| Client API `:9741` — standalone `commonwealth` binary | `0.0.0.0` (hardcoded; `commonwealth/crates/commonwealth-daemon/src/main.rs`) | Same `client_auth` bearer layer as above | Same |
+| ~~Client API `:9741` — standalone `commonwealth` binary~~ | ~~`0.0.0.0` (hardcoded)~~ | ~~Same `client_auth` bearer layer as above~~ | Struck 2026-09-20: the binary was deleted by `27c0fe031` (2026-08-26) and no crate of that name is in the tree, so this surface does not ship. See Known gaps entry 4. |
 | MCP `/mcp` (rides `:9741`) | — | Loopback-only middleware, no token by design (`sovereign/crates/sovereign-daemon/src/mcp_router.rs`); permissive CORS is safe *because* of the loopback gate | — |
 | Internal mesh API `:9742` (gossip, join, scheduling, corpus collaboration) | `0.0.0.0` in trusted-network mode; `127.0.0.1` in encrypted mode | **None blanket** — perimeter-trusted; join itself is key+proof gated and gossip carries a mesh proof; **the other routes, admin ones included, have no guard of their own** (corrected 2026-09-20: this row said they were per-handler loopback-only, and no handler reads the caller's address) | **Encrypted-QUIC-first**; in trusted-network mode it falls back to cleartext HTTP on your perimeter, and encrypted mode (below) makes iroh QUIC/TLS the sole path |
 | `sovereign-server` `:8080` (multi-tenant REST/WS, mobile-facing) | `127.0.0.1` (`sovereign/crates/sovereign-server/src/config.rs`) | API-key → tenant middleware. **Startup refuses a non-loopback bind with auth disabled** unless `allow_unauthenticated_remote = true` is set explicitly (`validate_exposure`). `/health` + `/status` unauthenticated by design. | Plain HTTP on the perimeter; iroh dial-by-key optional (`[iroh] enabled`) |
@@ -177,7 +177,7 @@ deliberate; neither is a placeholder.
 - **Work-atlas privacy is structural.** Private claims/observations are
   written to a separate store that never gossips, enforced at the store,
   gossip, and read layers (`~/.svrnmesh/work-atlas.toml`,
-  `docs/WORK_ATLAS.md`).
+  `sovereign/docs/WORK_ATLAS.md`).
 - **Answers cite sources.** Retrieval provenance is recorded and surfaced
   (`[Source: …]` citations, message provenance metadata), so data that
   leaves a node does so as attributed retrieval results, not anonymous
@@ -229,12 +229,13 @@ it.
    per-bearer, scoped and expiring.) *Closes when:* a remote client holds a
    credential of its own that can be revoked without rotating everyone's.
    *Owner:* campaign `threat-gaps` (order `threat-gaps-close`), approved 2026-09-20, next in the queue (`mesh-principal` finished 2026-09-21).
-4. **The standalone `commonwealth` binary hardcodes `0.0.0.0:9741`**
+4. ~~**The standalone `commonwealth` binary hardcodes `0.0.0.0:9741`**
    (bearer-gated, loopback-exempt) rather than following the embedded
-   daemon's loopback-first default. *Closes when:* it binds loopback unless
-   configured otherwise, as the embedded daemon does. *Owner:* campaign `threat-gaps` (order `threat-gaps-close`), approved 2026-09-20, next in the queue (`mesh-principal` finished 2026-09-21).
-   Measured for that order: the binary was deleted on 2026-08-26, so this
-   entry is expected to be struck, not built.
+   daemon's loopback-first default.~~ Struck 2026-09-20 by `27c0fe031`
+   (2026-08-26), which deleted the binary: `commonwealth/crates/` holds nine
+   crates and none of them is `commonwealth-daemon`, so the surface this entry
+   described no longer ships. The embedded daemon's loopback-first default
+   (first row of the surfaces table) is the only `:9741` there is.
 5. **Tauri v2 does not gate app commands per-window** (tauri#9227): a
    webview with IPC access can invoke any registered command. Relevant only
    if untrusted content ever gets a webview. *Closes when:* upstream lands
