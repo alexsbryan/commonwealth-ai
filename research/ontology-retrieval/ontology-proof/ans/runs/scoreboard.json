@@ -1,0 +1,182 @@
+{
+  "schema": "ei7-scoreboard/v1",
+  "runs": "research/ontology-retrieval/ontology-proof/ans/runs",
+  "generated_at_unix": 1790027444,
+  "verdict": null,
+  "refusal": null,
+  "identity": {
+    "recipe_sha256": "57412b9302f9dc80a4e41746376151cd52c8b70d362b7a3249162889f14d1064",
+    "synth_model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K",
+    "judge_model": "Qwen3.5-4B-UD-Q6_K_XL",
+    "host": "http://127.0.0.1:9841",
+    "ontology_sha256": "0201fecabc1abe1c3f8d995f598cd7124e1a09fc9aba7eac73c678f8621e6164"
+  },
+  "i3_ablation_vs_full": {
+    "verdict": "never-ran",
+    "reason": "no ablation arm under the runs dir"
+  },
+  "arms": {
+    "bare": [
+      1,
+      2,
+      3
+    ],
+    "closed-book": [
+      1
+    ],
+    "deep": [
+      1,
+      2,
+      3
+    ],
+    "full": [
+      1,
+      2,
+      3
+    ]
+  },
+  "incomplete": [],
+  "unmeasured_rows": {
+    "bare": 0,
+    "closed-book": 0,
+    "deep": 0,
+    "full": 0
+  },
+  "closed_book": {
+    "verdict": "passed",
+    "count": 5,
+    "excluded": [
+      "list-igch0081-mints",
+      "list-igch0091-mints",
+      "lookup-pozzi-stater-verdict",
+      "lookup-siphnos-modern-name",
+      "lookup-troxell-issues-per-group"
+    ],
+    "unmeasured": [],
+    "runs": 1,
+    "reason": null
+  },
+  "ungrounded_route": {
+    "verdict": "passed",
+    "count": 0,
+    "excluded": [],
+    "routes": {},
+    "unrouted": [],
+    "per_category": {},
+    "arms": [
+      "bare",
+      "deep",
+      "full"
+    ],
+    "reason": null
+  },
+  "band_arm": {
+    "verdict": "passed",
+    "runs": 3
+  },
+  "min_n": 20,
+  "categories": {
+    "k0_look_it_up": {
+      "n": 12,
+      "band": {
+        "band": 0.05,
+        "raw": 0.0,
+        "runs": 3,
+        "floored": true,
+        "verdict": "passed"
+      },
+      "arms": {
+        "closed-book": {
+          "judge": 0.0,
+          "kw": 0.0,
+          "runs_scored": 1,
+          "runs": 1,
+          "found": 0,
+          "missed": 12,
+          "verdict": "passed"
+        },
+        "bare": {
+          "judge": 0.8333333333333334,
+          "kw": 0.8333333333333334,
+          "runs_scored": 3,
+          "runs": 3,
+          "found": 30,
+          "missed": 6,
+          "verdict": "passed"
+        },
+        "deep": {
+          "judge": 0.8333333333333334,
+          "kw": 0.8333333333333334,
+          "runs_scored": 3,
+          "runs": 3,
+          "found": 30,
+          "missed": 6,
+          "verdict": "passed"
+        },
+        "full": {
+          "judge": 0.5,
+          "kw": 0.6666666666666666,
+          "runs_scored": 3,
+          "runs": 3,
+          "found": 18,
+          "missed": 18,
+          "verdict": "passed"
+        }
+      },
+      "excluded_ungrounded_route": 0,
+      "judgeable": "could-not-judge",
+      "reason": "n = 12 < 20 after closed-book exclusions"
+    },
+    "k1_list_them_all": {
+      "n": 30,
+      "band": {
+        "band": 0.05,
+        "raw": 0.011792928533333358,
+        "runs": 3,
+        "floored": true,
+        "verdict": "passed"
+      },
+      "arms": {
+        "closed-book": {
+          "judge": 0.1051318413,
+          "kw": 0.06552845476666666,
+          "runs_scored": 1,
+          "runs": 1,
+          "found": 35,
+          "missed": 307,
+          "verdict": "passed"
+        },
+        "bare": {
+          "judge": 0.37474264768888893,
+          "kw": 0.33526392099999996,
+          "runs_scored": 3,
+          "runs": 3,
+          "found": 316,
+          "missed": 710,
+          "verdict": "passed"
+        },
+        "deep": {
+          "judge": 0.3465769259777778,
+          "kw": 0.3216745162,
+          "runs_scored": 3,
+          "runs": 3,
+          "found": 284,
+          "missed": 742,
+          "verdict": "passed"
+        },
+        "full": {
+          "judge": 0.23359436,
+          "kw": 0.16471711837777778,
+          "runs_scored": 3,
+          "runs": 3,
+          "found": 262,
+          "missed": 764,
+          "verdict": "passed"
+        }
+      },
+      "excluded_ungrounded_route": 0,
+      "judgeable": "passed",
+      "reason": null
+    }
+  }
+}
