@@ -279,6 +279,25 @@ pub fn is_daemon_owned(namespace: &str) -> bool {
     REGISTERED_NAMESPACES.contains(&namespace) || namespace == commonwealth_work::WORK_NAMESPACE
 }
 
+/// Does `roster` name `pubkey` — the ONE membership test BOTH directions of
+/// ring sync decide on.
+///
+/// The sender asks it of every Online peer before it offers a namespace
+/// (`crate::ring_sync::run_one_round`); the serving route asks it of the
+/// verified principal before it answers one
+/// (`sovereign-daemon`'s `routes_internal::ring_sync`). One function so the
+/// two cannot drift on how a key is rendered — a roster's actor is
+/// `NodePubkey`'s lowercase hex `Display`, which is what
+/// [`MeshRoster::derive`] writes and what `roster.json` holds.
+///
+/// **A member with no `node_pubkey` answers `false`**, which is exactly what a
+/// DERIVED roster already does with it — [`MeshRoster::derive`] counts such a
+/// member `unidentified` and writes no row, on purpose. A key the ring cannot
+/// name cannot be on the ring: under-share, never over-share.
+pub fn roster_names(roster: &Roster, pubkey: Option<NodePubkey>) -> bool {
+    pubkey.is_some_and(|k| roster.person_for(&k.to_string()).is_some())
+}
+
 /// [`MeshRoster::from_membership`] as the rail sees it.
 ///
 /// Holds the daemon's membership WEAKLY: the rail lives beside it, so a strong

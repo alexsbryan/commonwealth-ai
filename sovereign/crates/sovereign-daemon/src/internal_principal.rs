@@ -140,6 +140,27 @@ impl AppState {
             })
     }
 
+    /// The same one membership read, the other way round: the verified key a
+    /// member signs with, or `None` when membership does not name one.
+    ///
+    /// Its caller is the ring-sync route, which holds a
+    /// [`Principal::Member`]'s `NodeId` and has to ask a ring's roster about
+    /// it — and a roster's actor is a key, never a node id. Deliberately the
+    /// inverse of [`Self::member_by_pubkey`] and not a second source of truth:
+    /// same live mesh, same tombstone exclusion, so the two cannot disagree
+    /// about who is a member.
+    ///
+    /// `None` is a reported absence — a member on a pre-identity build — and
+    /// `ring_roster::roster_names` reads it as "not on the roster", which is
+    /// the same answer a derived roster gives such a member.
+    pub async fn member_pubkey(&self, node: NodeId) -> Option<NodePubkey> {
+        let mesh = self.inner.fabric.mesh.read().await;
+        mesh.members
+            .get(&node)
+            .filter(|m| m.removed_at.is_none())
+            .and_then(|m| m.node_pubkey)
+    }
+
     /// THE internal resolver: what the acceptor said + where the connection
     /// came from → the principal this request is charged to, with the
     /// acceptor's namespace stripped from `headers` either way.

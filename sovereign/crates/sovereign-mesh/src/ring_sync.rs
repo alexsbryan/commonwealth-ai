@@ -198,8 +198,24 @@ pub fn spawn_ring_sync_loop(
     RingSyncHandle { _task: task }
 }
 
+/// An Online member of this mesh, as one round sees it.
+///
+/// Carries the key the roster filter decides on alongside the contact the
+/// transport dials, because the two are read from the same `MemberRecord` in
+/// the same pass and the filter runs per namespace, after the membership lock
+/// is gone.
+struct OnlinePeer {
+    contact: commonwealth_transport::PeerContact,
+    /// `None` for a member on a pre-identity build. Such a member is absent
+    /// from every DERIVED roster by construction (`ring_roster`'s
+    /// `unidentified` count), and [`crate::ring_roster::roster_names`] gives
+    /// it the same answer against a hand-written one.
+    pubkey: Option<commonwealth_core::ids::NodePubkey>,
+    name: String,
+}
+
 /// One anti-entropy pass over every namespace this node holds, against every
-/// online peer.
+/// online peer **its roster names**.
 pub async fn run_one_round(fabric: &FabricPart) -> RoundOutcome {
     let mut outcome = RoundOutcome::default();
     let Some(rail) = fabric.ring_rail() else {
@@ -226,14 +242,22 @@ pub async fn run_one_round(fabric: &FabricPart) -> RoundOutcome {
     let self_id = fabric.identity.current();
     let (peers, exchanged_with, skipped_offline) = {
         let mesh = fabric.mesh.read().await;
-        let mut peers: Vec<commonwealth_transport::PeerContact> = Vec::new();
+        let mut peers: Vec<OnlinePeer> = Vec::new();
         let (mut online, mut offline): (Vec<String>, Vec<String>) = (Vec::new(), Vec::new());
         for m in mesh.members.values() {
             if m.node_id == self_id {
                 continue;
             }
             if m.status == NodeStatus::Online {
-                peers.push(peer_contact(m));
+                // The key travels WITH the contact because the roster filter
+                // below is per namespace: reading membership again inside that
+                // loop would be a second walk of `mesh.members` answering the
+                // same question (ARCH principle 8).
+                peers.push(OnlinePeer {
+                    contact: peer_contact(m),
+                    pubkey: m.node_pubkey,
+                    name: m.name.clone(),
+                });
                 online.push(m.name.clone());
             } else {
                 offline.push(m.name.clone());
@@ -265,7 +289,54 @@ pub async fn run_one_round(fabric: &FabricPart) -> RoundOutcome {
                 continue;
             }
         };
-        for contact in &peers {
+        // ── A ring is OFFERED to its roster, and to nobody else.
+        //
+        // Per NAMESPACE and not per round: one peer may be on one ring and not
+        // another, so a round-level peer set cannot answer this. The roster is
+        // read through `RingRail::roster`, the rail's one reader — so a
+        // namespace whose roster is DERIVED from membership (every ring with no
+        // `roster.json`, and the seven `REGISTERED_NAMESPACES`) still names
+        // every member and this filter passes everyone, while the work plane,
+        // which is file-rostered on purpose, narrows.
+        //
+        // An UNREADABLE roster offers nothing for this namespace. Under-share,
+        // never over-share — the same posture `prune_what_the_peer_retired`
+        // takes when it cannot read one.
+        let roster = match rail.roster(&journal).await {
+            Ok(r) => r,
+            Err(e) => {
+                warn!(
+                    namespace,
+                    error = %e,
+                    "ring sync: this namespace's roster is unreadable, so it is \
+                     offered to nobody this round"
+                );
+                continue;
+            }
+        };
+        let (offered_to, skipped_not_on_roster): (Vec<&OnlinePeer>, Vec<&str>) = {
+            let mut on = Vec::new();
+            let mut off = Vec::new();
+            for p in &peers {
+                if crate::ring_roster::roster_names(&roster, p.pubkey) {
+                    on.push(p);
+                } else {
+                    off.push(p.name.as_str());
+                }
+            }
+            (on, off)
+        };
+        // GLASSBOX: the third list beside exchanged and offline. A namespace
+        // that reaches nobody because its roster names nobody looks exactly
+        // like a namespace with nothing to send.
+        debug!(
+            namespace,
+            offered_to = ?offered_to.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(),
+            skipped_not_on_roster = ?skipped_not_on_roster,
+            "ring sync: namespace roster"
+        );
+
+        for OnlinePeer { contact, .. } in offered_to {
             let endpoints = transport.endpoints(contact, TrafficClass::Gossip).await;
             let mut reached = false;
             let mut refused = false;

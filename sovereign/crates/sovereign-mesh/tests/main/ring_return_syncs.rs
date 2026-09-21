@@ -63,8 +63,33 @@ fn mesh_with(members: Vec<commonwealth_core::mesh::MemberRecord>) -> Mesh {
     }
 }
 
+/// The two keys this file's one scenario signs with. Named once because the
+/// mesh rows and the ring roster have to agree on them: since `mp-2` a round
+/// offers a namespace only to the members its roster names, and a roster names
+/// KEYS, so a member row without `node_pubkey` is on no ring at all.
+fn key_a() -> SigningKey {
+    SigningKey::from_bytes(&[11u8; 32])
+}
+fn key_b() -> SigningKey {
+    SigningKey::from_bytes(&[12u8; 32])
+}
+
+/// A member row carrying the verified key a real join gossips.
+fn keyed(
+    id: NodeId,
+    name: &str,
+    key: &SigningKey,
+    addr: std::net::SocketAddr,
+) -> commonwealth_core::mesh::MemberRecord {
+    let mut rec = common::member(id, name, addr);
+    rec.node_pubkey = Some(commonwealth_core::ids::NodePubkey(
+        key.verifying_key().to_bytes(),
+    ));
+    rec
+}
+
 /// A daemon with ring storage under `dir`, signing as `key`, on a namespace
-/// whose roster file names that key.
+/// whose roster file names BOTH nodes' keys — the two of them are the ring.
 fn node(
     dir: &std::path::Path,
     key: &SigningKey,
@@ -73,7 +98,8 @@ fn node(
 ) -> (AppState, Arc<RingRail>) {
     let rail = Arc::new(RingRail::new(dir, Arc::new(key.clone())));
     let mut members = std::collections::BTreeMap::new();
-    members.insert(Person::from("alex"), vec![key.actor()]);
+    members.insert(Person::from("alex"), vec![key_a().actor()]);
+    members.insert(Person::from("bea"), vec![key_b().actor()]);
     rail.journal(NS)
         .unwrap()
         .set_roster(&Roster::new(members))
@@ -113,10 +139,7 @@ fn held(rail: &RingRail) -> usize {
 /// the interval.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_write_made_while_the_peer_was_offline_travels_when_it_returns() {
-    let (ka, kb) = (
-        SigningKey::from_bytes(&[11u8; 32]),
-        SigningKey::from_bytes(&[12u8; 32]),
-    );
+    let (ka, kb) = (key_a(), key_b());
     let (a_id, b_id) = (NodeId::from_u128(301), NodeId::from_u128(302));
     let (da, db) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
 
@@ -125,11 +148,7 @@ async fn a_write_made_while_the_peer_was_offline_travels_when_it_returns() {
         db.path(),
         &kb,
         b_id,
-        mesh_with(vec![common::member(
-            b_id,
-            "beefy",
-            "127.0.0.1:2".parse().unwrap(),
-        )]),
+        mesh_with(vec![keyed(b_id, "beefy", &kb, "127.0.0.1:2".parse().unwrap())]),
     );
     let b_addr = common::spawn_router(internal_router(b_state)).await;
 
@@ -140,8 +159,8 @@ async fn a_write_made_while_the_peer_was_offline_travels_when_it_returns() {
         &ka,
         a_id,
         mesh_with(vec![
-            common::member(a_id, "halo", "127.0.0.1:1".parse().unwrap()),
-            common::member(b_id, "beefy", "127.0.0.1:1".parse().unwrap()),
+            keyed(a_id, "halo", &ka, "127.0.0.1:1".parse().unwrap()),
+            keyed(b_id, "beefy", &kb, "127.0.0.1:1".parse().unwrap()),
         ]),
     );
     let a_client = common::spawn_router(client_router(a_state.clone())).await;

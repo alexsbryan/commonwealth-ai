@@ -5766,6 +5766,25 @@ ops also arrive from disk. Watched: two-node partition drills at both levels
 (pure journals, and through the route), plus a half-delivered peer whose gap is
 named rather than silently totalled.
 
+**A ring is READ by its roster, offered and served** (mp-2, 2026-09-20). A
+signature answers "who may write to my journal" and says nothing about who is
+*asking*, so until this rung a mesh member on no ring's roster was sent every
+ring this node held and could have asked for any of them by name. Both halves
+now decide on `sovereign-mesh/src/ring_roster.rs::roster_names`, one test read
+through `RingRail::roster`: the sender filters its Online peers PER NAMESPACE
+inside `run_one_round`'s loop (per round is the wrong grain — a peer may be on
+one ring and not another), and `routes_internal/ring_sync.rs::roster_refusal`
+refuses a 403 naming the namespace and the asker. A ring with no `roster.json`
+— every app ring by default, and `REGISTERED_NAMESPACES` — is answered by
+membership, so every member stays on it; the file-rostered `work` plane
+narrows. An unreadable roster offers and serves nothing: under-share, never
+over-share. The asker is the verified principal `mp-1` introduced, so an
+`Unverified` caller is refused every namespace — but a caller that presented
+NOTHING is `Anonymous` and is still served, which on a PLAINTEXT mesh is every
+peer. That is an open gap, recorded rather than closed, and it is why the
+encrypted posture (loopback-only internal listener, acceptor the sole ingress)
+is the one the room runs.
+
 **One BODY has a ceiling; convergence no longer does** (measured 2026-09-04,
 cw-lift rung 2a; chunked by rung 2f the same day —
 `sovereign-daemon/tests/rail_e2e/ceiling.rs` §"the convergence ceiling, and the budget

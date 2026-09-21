@@ -44,6 +44,33 @@
 //! module header on `routes_internal`), so "who may write to my journal" is a
 //! question the signature answers and the listener cannot.
 //!
+//! # …but "who may READ my journal" is a question only this route can answer
+//!
+//! A signature binds an op to its author. It says nothing about who is
+//! *asking*, and this route answers with one budget of the journal — so a mesh
+//! member who is on no ring's roster could read every ring on this host by
+//! asking for it by name. Since `mp-2` it cannot: the route reads the verified
+//! principal `crate::internal_principal` attached (the key the iroh handshake
+//! proved, never a header the caller typed) and refuses a namespace whose
+//! roster does not name that key.
+//!
+//! The roster comes from `RingRail::roster`, the rail's one reader, so a ring
+//! with no `roster.json` — every app ring by default, and the seven
+//! `REGISTERED_NAMESPACES` — still admits every member, and the file-rostered
+//! work plane narrows. The sender applies the SAME test before it offers
+//! (`sovereign_mesh::ring_roster::roster_names`); this half is what makes the
+//! filter a rule rather than a courtesy, because a peer that skips its own
+//! filter still has to get past this one.
+//!
+//! An asker this daemon could not verify (`Principal::Unverified` — it
+//! presented an identity on a connection with no acceptor in front) is refused
+//! every namespace. An asker that presented NOTHING is `Principal::Anonymous`,
+//! and is served: on an encrypted mesh that is a local process reaching a
+//! loopback-only port, and on a plaintext one it is every peer, because a
+//! plaintext mesh has no verified key to decide on at all. **That is an open
+//! gap, not a design** — it is the same posture dependence `internal_principal`
+//! records, and it is why the encrypted posture is the one the room runs.
+//!
 //! The one thing a signature cannot answer is "may this namespace exist on my
 //! machine at all", and that is not asked here either: a peer may put a
 //! `notes-private` journal on our disk and this route will take it. It reaches
@@ -65,13 +92,110 @@ fn err(status: StatusCode, msg: impl Into<String>) -> Response {
     (status, Json(serde_json::json!({ "error": msg.into() }))).into_response()
 }
 
+/// Why this asker may not have this namespace, or `None` to serve it.
+///
+/// ONE decider, returning the sentence the refusal carries so the wire body
+/// and the tracing event cannot say different things. It names both halves —
+/// the namespace and the asker — because "forbidden" on a route that serves
+/// seven rings tells whoever reads the log nothing at all.
+///
+/// The three arms, and why each is the answer:
+///
+/// - a verified [`Principal::Member`] is asked of the roster by the KEY
+///   membership names it with, through the one test the sender uses;
+/// - [`Principal::Unverified`] is refused outright — it claimed an identity
+///   this daemon could not tie to its own acceptor, and a ring cannot check a
+///   roster against a claim (ARCH principle 6: that is not "answered: no", it
+///   is "did not answer", and a journal is not handed over on a shrug);
+/// - anything else claimed nothing. See the module header: on the encrypted
+///   posture that is a local process on a loopback-only port, and on a
+///   plaintext mesh it is every peer, which is a disclosed gap.
+///
+/// An unreadable roster refuses. Under-share, never over-share — the same
+/// posture `ring_sync`'s prune takes when it cannot read one.
+async fn roster_refusal(
+    state: &AppState,
+    attached: &Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
+    rail: &commonwealth_rail::RingRail,
+    journal: &commonwealth_rail::RingJournal,
+) -> Option<String> {
+    use sovereign_serving_host::admission::Principal;
+
+    let namespace = journal.namespace();
+    // An ABSENT extension is a request that reached this handler with no
+    // resolver in front — not a caller that presented nothing. It reads as
+    // `Anonymous` here for one reason and it is named rather than assumed:
+    // `crate::admission::requester` is the one place this absence was already
+    // decided, and it decides it the same way. On the internal router the case
+    // is unreachable — `internal_principal_layer` is that router's outermost
+    // layer (`server.rs`), so every request through it carries the extension
+    // — and the only other callers are tests driving the handler directly.
+    let who = attached
+        .as_ref()
+        .map(|axum::Extension(a)| a.0.clone())
+        .unwrap_or(Principal::Anonymous);
+    let asker = match who {
+        Principal::Member { node_id } => node_id,
+        Principal::Unverified => {
+            tracing::warn!(
+                namespace,
+                "ring sync: refused — the asker claimed a peer identity this \
+                 node could not verify, and a roster cannot be checked against \
+                 a claim"
+            );
+            return Some(format!(
+                "{namespace} is served to its roster, and this caller's identity \
+                 could not be verified"
+            ));
+        }
+        _ => {
+            tracing::debug!(
+                namespace,
+                "ring sync: the asker presented no mesh identity — served, and \
+                 checked against no roster"
+            );
+            return None;
+        }
+    };
+
+    let roster = match rail.roster(journal).await {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!(
+                namespace,
+                asker = %asker,
+                error = %e,
+                "ring sync: refused — this namespace's roster is unreadable, so \
+                 nobody can be shown to be on it"
+            );
+            return Some(format!("{namespace}'s roster is unreadable on this node"));
+        }
+    };
+    let key = state.member_pubkey(asker).await;
+    if sovereign_mesh::ring_roster::roster_names(&roster, key) {
+        tracing::debug!(namespace, asker = %asker, "ring sync: the roster names the asker");
+        return None;
+    }
+    tracing::warn!(
+        namespace,
+        asker = %asker,
+        keyed = key.is_some(),
+        "ring sync: refused — this ring's roster does not name the asker"
+    );
+    Some(format!("{asker} is not on {namespace}'s roster"))
+}
+
 /// The body arrives as raw [`Bytes`] rather than `Json<RingSyncRequest>` for
 /// exactly one reason: **the gauge below has to read the direction that can
 /// fail.** `DefaultBodyLimit` bounds the REQUEST; the response has no cap at
 /// all. Measuring the deserialised struct back would be a second answer to
 /// "how big was this" (ARCH §10.6) and would not be the number the extractor
 /// compared against anyway.
-pub async fn ring_sync(State(state): State<AppState>, body: axum::body::Bytes) -> Response {
+pub async fn ring_sync(
+    State(state): State<AppState>,
+    attached: Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
+    body: axum::body::Bytes,
+) -> Response {
     // Read before anything can fail, so a 400 still carries the size.
     let request_bytes = body.len();
     let req: RingSyncRequest = match serde_json::from_slice(&body) {
@@ -91,6 +215,15 @@ pub async fn ring_sync(State(state): State<AppState>, body: axum::body::Bytes) -
         Ok(l) => l,
         Err(e) => return err(StatusCode::BAD_REQUEST, e.to_string()),
     };
+
+    // ── A ring is SERVED to its roster, and to nobody else.
+    //
+    // Before anything is ingested or selected: a refusal that ran after the
+    // ingest would have taken the asker's ops onto this disk on its way to
+    // saying no.
+    if let Some(refusal) = roster_refusal(&state, &attached, &rail, &journal).await {
+        return err(StatusCode::FORBIDDEN, refusal);
+    }
 
     let ingested = match journal.ingest_all(&req.ops) {
         Ok(n) => n,
