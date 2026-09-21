@@ -2097,7 +2097,7 @@ mod tests {
     use std::path::PathBuf;
 
     fn bench_dir() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../bench/inner_work")
+        resolve_bench_dir(None).expect("bench/inner_work resolves from the checkout")
     }
 
     #[test]

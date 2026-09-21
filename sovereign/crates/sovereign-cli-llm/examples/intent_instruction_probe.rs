@@ -122,13 +122,22 @@ const CANDIDATES: &[(&str, &str)] = &[
 /// a `[label] examples = [...]` TOML. Measured because question 3 above
 /// turns entirely on whether a router-tuned instruction damages them.
 const BINARY_AXES: &[(&str, &str)] = &[
-    ("scope", "sovereign/router/scope_examples.toml"),
-    ("effort", "sovereign/router/effort_examples.toml"),
+    (
+        "scope",
+        "sovereign/crates/sovereign-core/data/router/scope_examples.toml",
+    ),
+    (
+        "effort",
+        "sovereign/crates/sovereign-core/data/router/effort_examples.toml",
+    ),
     (
         "current_info",
-        "sovereign/router/current_info_examples.toml",
+        "sovereign/crates/sovereign-core/data/router/current_info_examples.toml",
     ),
-    ("archive", "sovereign/router/archive_examples.toml"),
+    (
+        "archive",
+        "sovereign/crates/sovereign-core/data/router/archive_examples.toml",
+    ),
 ];
 
 const BANKS: &[(&str, &str)] = &[
@@ -179,7 +188,8 @@ fn main() {
     };
 
     let intent_rows = parse_intent_exemplars(
-        &std::fs::read_to_string("sovereign/router/exemplars.toml").expect("read exemplars"),
+        &std::fs::read_to_string("sovereign/crates/sovereign-core/data/router/exemplars.toml")
+            .expect("read exemplars"),
     );
     let banks: Vec<(&str, Vec<(String, String, Option<String>)>)> = BANKS
         .iter()

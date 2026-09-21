@@ -26,7 +26,8 @@
 //! The synthetic windows pass as one chunk with known custody.
 //!
 //! `#[ignore]`d: invoke with
-//! `cargo test -p sovereign-core --test main adversarial_read -- --ignored --nocapture`
+//! `ADVERSARIAL_DIR=research/deep-research/adversarial cargo test -p sovereign-core
+//! --test main adversarial_read -- --ignored --nocapture`
 //! with the daemon up (model `Qwen3.6-35B-A3B-MTP-UD-Q6_K` loaded).
 //! Writes `adversarial-report.json` beside the frozen instruments.
 
@@ -340,11 +341,17 @@ fn short(v: &str) -> &str {
 }
 
 fn adversarial_dir() -> PathBuf {
-    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    manifest
-        .join("../../../research/deep-research/adversarial")
+    let raw = std::env::var("ADVERSARIAL_DIR").unwrap_or_else(|_| {
+        panic!(
+            "ADVERSARIAL_DIR is required — the instruments live in the research tree, which \
+             this crate does not own. Re-run as:\n  \
+             ADVERSARIAL_DIR=research/deep-research/adversarial \\\n  \
+             cargo test -p sovereign-core --test main adversarial_read -- --ignored --nocapture"
+        )
+    });
+    PathBuf::from(&raw)
         .canonicalize()
-        .expect("research/deep-research/adversarial must exist (minted fd1fd378)")
+        .unwrap_or_else(|e| panic!("ADVERSARIAL_DIR={raw} is not readable: {e}"))
 }
 
 fn now_utc() -> String {

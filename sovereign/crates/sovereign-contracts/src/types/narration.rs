@@ -56,7 +56,7 @@ pub struct RouterClassification {
     /// Orthogonal to `primary.intent`; consumed downstream by
     /// retrieval to bias corpus selection. Today's only value is
     /// `Some("personal")` — set when the matched exemplar is tagged
-    /// with `scope = "personal"` in `sovereign/router/exemplars.toml`
+    /// with `scope = "personal"` in `sovereign/crates/sovereign-core/data/router/exemplars.toml`
     /// (conversation-history / personal-vault shapes). `None` =
     /// no scope hint (current default), retrieval uses every
     /// installed knowledge corpus.

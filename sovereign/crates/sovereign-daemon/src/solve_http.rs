@@ -503,7 +503,7 @@ impl SolveJobs {
         // is? A rebuild under a live daemon served six 2026-09-02 solve
         // attempts from a pre-dawn binary while every diagnostic on the
         // box pointed at the fresh one. Refuse, name the repair.
-        if sovereign_core::run_identity::exe_rebuilt_since_start() {
+        if sovereign_contracts::run_identity::exe_rebuilt_since_start() {
             let exe = std::env::current_exe()
                 .map(|p| p.display().to_string())
                 .unwrap_or_else(|e| format!("<unreadable: {e}>"));

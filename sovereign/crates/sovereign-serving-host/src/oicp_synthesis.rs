@@ -85,7 +85,7 @@ pub fn resolve_primary_model_name(provider: &dyn InferenceProvider) -> String {
 /// Build this node's OICP `ProviderManifest` — one `ProviderModel`
 /// entry per loaded chat slot (Fast + Slow), each with the
 /// capability profile + size_gb declared for it in
-/// `sovereign/models.toml`. Shared between the server adapter (what
+/// `sovereign/crates/sovereign-contracts/data/models.toml`. Shared between the server adapter (what
 /// peers fetch at `/oicp/v1/capabilities`) and the client-side
 /// `InferenceRouter` (what local scores itself against) so
 /// the two never disagree about our own declared capabilities.

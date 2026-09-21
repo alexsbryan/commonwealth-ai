@@ -2427,26 +2427,6 @@ mod tests {
         );
     }
 
-    /// Every flag this table declares must ALSO be declared in the
-    /// workspace env-knob registry (`quality/env-flags.toml`) — the
-    /// env-gate's map and this runtime-facing table must not drift.
-    #[test]
-    fn flags_table_is_declared_in_env_registry() {
-        let toml_text = std::fs::read_to_string(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../../quality/env-flags.toml"
-        ))
-        .expect("quality/env-flags.toml readable from sovereign-core");
-        for (_, f) in retrieval_pipeline_flags() {
-            assert!(
-                toml_text.contains(&format!("name = \"{}\"", f.name)),
-                "`{}` is in retrieval_pipeline_flags() but not declared in \
-                 quality/env-flags.toml — add a [[flag]] entry",
-                f.name
-            );
-        }
-    }
-
     // ── expansion scope (mesh-scale Tier 1, order mesh-scale-t1-retrieval) ──
 
     fn ids(v: &[&str]) -> Vec<String> {

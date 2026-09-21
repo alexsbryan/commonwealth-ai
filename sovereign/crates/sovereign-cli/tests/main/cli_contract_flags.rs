@@ -86,9 +86,9 @@ const HELP_GAP_BASELINE: usize = 11;
 /// a false positive that would have taught the next reader to distrust
 /// the gate.
 fn cli_crate_sources() -> String {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("sovereign-cli has a parent crates dir");
+    let root = sovereign_cli_shared::repo::find_checkout_root()
+        .expect("this census runs inside the checkout whose CLI crates it reads")
+        .join("sovereign/crates");
     let mut all = String::new();
     for crate_name in [
         "sovereign-cli",

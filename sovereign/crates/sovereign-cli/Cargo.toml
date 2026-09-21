@@ -6,9 +6,10 @@ license.workspace = true
 
 # Slim dispatcher binary. After slices 1–5 (2026-05-22), the only
 # code that lives here is exec-dispatch (`atos_bin`, `llm_bin`),
-# pure-FS delegators (notes, status, drift, audit, ...), and a few
-# light commands (archaeology-eval, git-archaeology, rough-edges)
-# that touch SQLite + filesystem only. Every LLM-using surface
+# pure-FS delegators (notes, status, drift, audit, ...) and light
+# commands that touch SQLite + filesystem only. The three archaeology
+# verbs left for `sovereign-cli-dev` 2026-09-21 — they are `svrn code`'s
+# and carried the only `corpus-engine-archaeology` edge. Every LLM-using surface
 # (bench, chat, eval, atlas, daemon, ...) moved to
 # `sovereign-cli-atos` or `sovereign-cli-llm` siblings.
 #
@@ -17,8 +18,9 @@ license.workspace = true
 #            sovereign-mesh, sovereign-pipeline, sovereign-work-atlas
 #   kept:    sovereign-core (light traits + types), sovereign-store
 #            (SqliteStateStore), sovereign-atos (approval helpers
-#            used by audit_cmd), sovereign-agent-bench (subprocess
-#            driver — light), corpus-engine (stores feature only).
+#            used by audit_cmd), corpus-engine (stores feature only).
+#   also removed 2026-09-21: sovereign-agent-bench — `agent-bench` execs
+#            its own `[[bin]]` sibling instead (`agent_bench_bin`).
 
 [dependencies]
 sovereign-core = { workspace = true }
@@ -39,7 +41,6 @@ sovereign-contracts = { workspace = true }
 # kernel so the four-dep budget holds for a lift of that leaf; `xtask` asks for
 # the same feature, so the workspace resolves ONE variant of kernel-types.
 kernel-types = { workspace = true, features = ["quality-registry"] }
-sovereign-agent-bench = { workspace = true, optional = true }
 sovereign-cli-shared = { workspace = true }
 # ── The work plane (cw-lift 5e) ──────────────────────────────────────
 # `svrn quality check --distribute` submits this venue's instrument rows as
@@ -113,7 +114,6 @@ corpus-engine = { workspace = true }
 # that crate's own module doc records as having stranded the daemon's
 # watched-folder writes from the CLI's reads.
 sovereign-enrichment-catalog = { workspace = true, optional = true }
-corpus-engine-archaeology = { workspace = true, optional = true }
 corpus-engine-scip = { workspace = true, optional = true }
 # The pure-HTTP OICP client — `RemoteApiProvider` for `code index`'s embed
 # calls. Depended on directly rather than through `sovereign-inference`, which
@@ -180,8 +180,6 @@ default = [
 # `sovereign-cli-dev` sibling at runtime; `deep-research` runs in-process
 # and pulls oicp-client (a pure reqwest leaf — no llama.cpp).
 dev-tools = [
-    "dep:corpus-engine-archaeology",
-    "dep:sovereign-agent-bench",
     "dep:sovereign-enrichment-catalog",
     # `svrn quality check --distribute` (cw-lift 5e). See the dep block above
     # for why each of the five is here; `rail-client` is the ONE rail client.

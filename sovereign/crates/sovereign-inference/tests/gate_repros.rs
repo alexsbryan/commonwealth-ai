@@ -53,8 +53,8 @@
 
 use std::path::PathBuf;
 
-use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::{CompletionRequest, Speed};
+use sovereign_contracts::traits::InferenceProvider;
+use sovereign_contracts::types::{CompletionRequest, Speed};
 use sovereign_inference::embedded::{kv_ops, EmbeddedLlamaCpp};
 
 /// The repros adjudicate via log lines (force-override warns, the

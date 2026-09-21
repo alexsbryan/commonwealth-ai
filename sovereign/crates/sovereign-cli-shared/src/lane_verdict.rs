@@ -247,10 +247,8 @@ mod tests {
     /// says nothing about the strictness, which is the half that matters.
     #[test]
     fn the_python_emitter_speaks_the_same_protocol() {
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../..")
-            .canonicalize()
-            .expect("the repo root is three levels above this crate");
+        let root = crate::repo::find_checkout_root()
+            .expect("this test runs inside the checkout that carries scripts/lib/judgement.py");
         let script = root.join("scripts/lib/judgement.py");
         assert!(
             script.is_file(),

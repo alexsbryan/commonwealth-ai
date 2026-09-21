@@ -34,7 +34,7 @@
 //! truncation below is exactly that failure, and this module's job is to
 //! stop guessing on the caller's behalf.
 
-use sovereign_core::error::Result;
+use sovereign_contracts::error::Result;
 
 use crate::gliner_ner::EntityMention;
 use crate::labeled::LabeledEntityExtractor;

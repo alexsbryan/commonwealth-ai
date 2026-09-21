@@ -46,6 +46,7 @@ pub use sovereign_scheduler::decision_trace; // shim: moved by domains REVIEW-bu
 pub mod deep_link;
 pub use deep_link::{parse_deep_link, DeepLink};
 pub mod gossip;
+pub mod mesh_measurements;
 pub use sovereign_serving_host::guest_lender; // shim: moved by domains REVIEW-build-serving-move-throughput-guest
 pub mod guest_source;
 pub mod guest_tunnel;
@@ -56,7 +57,6 @@ pub use sovereign_serving_host::inference_adapter; // shim: moved by domains REV
 pub mod iroh_access;
 pub mod iroh_watchdog;
 pub mod join;
-pub use sovereign_turn_client::knowledge_client; // shim: moved by domains REVIEW-build-mesh-client-pair
 pub mod measurements_rail;
 pub mod media_route;
 pub mod mesh_discovery;

@@ -39,9 +39,9 @@ use std::sync::Arc;
 use commonwealth_core::capabilities::{
     AnchorProfile, AvailableResources, HardwareProfile, NodeCapabilities,
 };
-use commonwealth_core::knowledge::{ChunkRange as CoreChunkRange, CorpusShardInfo};
 use commonwealth_discovery::hardware;
 use corpus_engine::engine::CorpusEngine;
+use oicp_types::knowledge::{ChunkRange as CoreChunkRange, CorpusShardInfo};
 use sovereign_contracts::self_claims::SelfClaims;
 
 /// Build a fresh `NodeCapabilities` describing this node right now.
@@ -290,10 +290,9 @@ async fn build_hosted_corpora(
             CorpusShardInfo {
                 corpus_id: idx.corpus_id,
                 // `corpus_engine::ChunkRange` and
-                // `commonwealth_core::knowledge::ChunkRange` are
-                // structurally identical but different types —
-                // they live in different crates by design (the
-                // engine doesn't know Commonwealth exists). Copy.
+                // `oicp_types::knowledge::ChunkRange` are structurally
+                // identical but different types — the engine's is its
+                // storage vocabulary, the other is the gossip wire's. Copy.
                 chunk_range: idx.chunk_range.map(|r| CoreChunkRange {
                     start_id: r.start_id,
                     end_id: r.end_id,

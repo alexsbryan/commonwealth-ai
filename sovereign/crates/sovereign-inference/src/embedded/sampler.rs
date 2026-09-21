@@ -25,13 +25,13 @@ use crate::llama::cpp::sampling::LlamaSampler;
 use crate::llama::cpp::token::LlamaToken;
 use crate::llama::{LlamaContextExt, LlamaModelExt};
 
-use sovereign_core::error::Error;
-use sovereign_core::model_family::{
+use sovereign_contracts::error::Error;
+use sovereign_contracts::model_family::{
     EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, RerankQuirks, ThinkingControl,
 };
-use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::*;
-use sovereign_core::Result;
+use sovereign_contracts::traits::InferenceProvider;
+use sovereign_contracts::types::*;
+use sovereign_contracts::Result;
 
 use crate::hardware::HardwareProfile;
 
@@ -332,7 +332,7 @@ pub(crate) fn build_sampler(
                     error = %e,
                     "lark grammar failed to compile — refusing the request"
                 );
-                return Err(sovereign_core::Error::InvalidInput(format!(
+                return Err(sovereign_contracts::Error::InvalidInput(format!(
                     "lark grammar failed to compile, so the requested constraint \
                      cannot be honoured: {e}. The request is refused rather than \
                      answered with unconstrained text (ARCH §18.3)."
@@ -351,7 +351,7 @@ pub(crate) fn build_sampler(
                     error = %e,
                     "response_format schema failed to compile — refusing the request"
                 );
-                return Err(sovereign_core::Error::InvalidInput(format!(
+                return Err(sovereign_contracts::Error::InvalidInput(format!(
                     "response_format schema failed to compile, so the requested \
                      constraint cannot be honoured: {e}. The request is refused \
                      rather than answered with unconstrained text (ARCH §18.3)."
@@ -498,7 +498,7 @@ pub(crate) fn build_sampler(
     // Qwen card recommends 1.0 / 0.0 / 0.0 across all modes;
     // llama-cpp tradition for other families is 1.15 / 0.1 / 0.05
     // (the historical hardcoded values, now preserved via the
-    // serde-default compat helpers in `sovereign_core::model_family`).
+    // serde-default compat helpers in `sovereign_contracts::model_family`).
     let rep_pen: f32 = quirks.default_repetition_penalty;
     let freq_pen: f32 = quirks.default_frequency_penalty;
     let min_p_threshold: f32 = quirks.default_min_p;

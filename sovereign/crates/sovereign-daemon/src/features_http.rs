@@ -22,7 +22,7 @@ use axum::routing::get;
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
-use sovereign_store::recipe_project_store::{RecipeProjectRow, RecipeProjectStore};
+use sovereign_tools::recipe_author::recipe_project_store::{RecipeProjectRow, RecipeProjectStore};
 
 use crate::daemon::EmbeddedDaemon;
 use crate::http_response::{internal_error, json_error, not_found, Absence};
@@ -189,7 +189,7 @@ async fn new_project(
                 "features_http: recipe project provisioned");
                 (StatusCode::CREATED, Json(ProjectEntry::from(row))).into_response()
             }
-            Err(sovereign_store::recipe_project_store::RecipeProjectError::InvalidInput(why)) => {
+            Err(sovereign_tools::recipe_author::recipe_project_store::RecipeProjectError::InvalidInput(why)) => {
                 // The store folds "empty id" and "already exists" into one
                 // variant. `already exists` is a CONFLICT — a retry with the
                 // same body will never succeed and the caller must pick a new

@@ -58,7 +58,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use corpus_engine::{CorpusEngine, EmbedFn};
-use sovereign_core::traits::StateStore;
+use sovereign_contracts::traits::StateStore;
 use sovereign_daemon::lc_http::lc_router;
 use sovereign_daemon::watched_folder_runtime;
 use sovereign_store::memory::InMemoryStateStore;

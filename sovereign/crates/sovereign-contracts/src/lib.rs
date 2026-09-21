@@ -78,6 +78,7 @@ pub mod memory_config;
 pub mod middleware;
 pub mod mobile_host;
 pub mod model_family;
+pub mod models_manifest;
 pub mod observer;
 pub mod peer_work;
 // The two ports a daemon speaks to its peers through — a replicated KV store
@@ -94,6 +95,7 @@ pub mod principal;
 pub mod rebrand;
 pub mod recipe;
 pub mod registry;
+pub mod run_identity;
 pub mod run_lock;
 /// What this node claims about itself — the port Fabric publishes from. A
 /// consumer in `sovereign-mesh` (Fabric) and an implementation in

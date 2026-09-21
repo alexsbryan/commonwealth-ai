@@ -37,6 +37,8 @@ sovereign-service = { workspace = true }
 sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true, features = ["treesitter"] }
 sovereign-mesh = { workspace = true, features = ["treesitter"] }
+# The dial: `knowledge_client::daemon_knowledge_source` (shared leaf).
+sovereign-turn-client = { workspace = true }
 # The mesh host cluster (domains dm-daemon-mesh-edge): the assembly root, the
 # route shells and the edge. `treesitter` because `bootstrap.rs` mounts
 # `project_router`, which reads `sovereign_mesh::reindexer`.

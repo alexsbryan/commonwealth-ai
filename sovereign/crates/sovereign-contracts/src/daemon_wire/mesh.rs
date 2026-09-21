@@ -96,7 +96,7 @@ pub struct MeshMember {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub origins: Vec<OriginKind>,
     /// Stable hash of this member's advertised hardware
-    /// (`sovereign_core::mesh_measurements::hardware_fingerprint`).
+    /// (`sovereign_mesh::mesh_measurements::hardware_fingerprint`).
     ///
     /// Part of the measurement cache key: a measured throughput number is only
     /// valid on the hardware it was measured on, so a machine change has to

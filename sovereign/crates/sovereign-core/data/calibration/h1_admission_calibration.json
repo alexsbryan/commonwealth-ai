@@ -4,7 +4,7 @@
     "curve": "sovereign/bench/calibration/h1-port/h1_rerank_margin.overall.curve.json",
     "curve_sha256": "eb1b00657d8571e96d32cd323e8b608544a8a9cabddd13cdff676564ca2116ac",
     "kill_gate_note": "582382e1",
-    "scores": "sovereign/bench/calibration/h1-port/h1_scores.jsonl",
+    "scores": "sovereign/crates/sovereign-core/data/calibration/h1_scores.jsonl",
     "scores_sha256": "594adad6f8e4a1098991f72d2f6637f72cc1fcfd3ef962a80cdd4e163d099963"
   },
   "platt": {

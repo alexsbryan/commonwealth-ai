@@ -22,11 +22,11 @@
 //! the answer smaller, not wrong.
 //!
 //! Nothing here decides *what* may travel or under what key. That policy is
-//! `sovereign_core::mesh_measurements` — shared with the daemon precisely so the
+//! `sovereign_mesh::mesh_measurements` — shared with the daemon precisely so the
 //! two cannot come to disagree about it.
 
 use serde::Deserialize;
-use sovereign_core::mesh_measurements as mm;
+use sovereign_mesh::mesh_measurements as mm;
 
 /// How long to wait on the local daemon. Generous for a loopback call, but the
 /// daemon can be mid-model-load and briefly slow to answer, and the alternative
@@ -40,7 +40,7 @@ const TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 /// than from the compiled default: a sandbox pointed at its own daemon must not
 /// silently publish into the operator's.
 fn endpoint() -> String {
-    let port = sovereign_core::setup_config::SetupConfig::load()
+    let port = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|c| c.daemon.client_port)
         .unwrap_or(9741);
     format!("http://127.0.0.1:{port}/v1/mesh/measurements")

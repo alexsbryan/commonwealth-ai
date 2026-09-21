@@ -31,10 +31,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
-use sovereign_core::error::Error;
-use sovereign_core::Result;
+use sovereign_contracts::error::Error;
+use sovereign_contracts::Result;
 
-pub(crate) use sovereign_core::time::unix_millis as now_millis;
+pub(crate) use sovereign_time::unix_millis as now_millis;
 
 /// How often an idle monitor wakes to look. Matches the cadence the
 /// `primary` and `extras` monitors already poll at, so all four slots

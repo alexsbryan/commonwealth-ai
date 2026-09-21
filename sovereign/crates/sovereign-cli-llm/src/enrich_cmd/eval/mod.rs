@@ -549,13 +549,18 @@ mod tests {
         assert!(s.f1().is_none());
     }
 
+    /// The shipped golden bank, from the INVOCATION's checkout — never from
+    /// where this crate was compiled.
+    fn goldens_dir() -> std::path::PathBuf {
+        sovereign_cli_shared::repo::find_checkout_root()
+            .expect("this test runs inside the checkout that ships the philosophy goldens")
+            .join("sovereign/bench/philosophy")
+    }
+
     #[test]
     fn golden_set_parses_real_fixture() {
-        let path = std::path::Path::new(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../bench/philosophy/free-will-debate.toml"
-        ));
-        let g = GoldenSet::load(path).expect("free-will-debate golden should parse");
+        let path = goldens_dir().join("free-will-debate.toml");
+        let g = GoldenSet::load(&path).expect("free-will-debate golden should parse");
         // v2 atlas goldens have dropped `expected_positions`
         // (legacy v1 artifact — concept-atom + claim-attribution
         // scoring covers the same ground). The load itself round-tripping
@@ -572,11 +577,7 @@ mod tests {
             "virtue-ethics-fragments",
             "stoicism-mini",
         ] {
-            let path = std::path::PathBuf::from(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/../../bench/philosophy/"
-            ))
-            .join(format!("{name}.toml"));
+            let path = goldens_dir().join(format!("{name}.toml"));
             GoldenSet::load(&path).unwrap_or_else(|e| panic!("{name}: {e}"));
         }
     }
@@ -634,11 +635,8 @@ mod tests {
 
     #[test]
     fn committed_golden_carries_typed_edges() {
-        let path = std::path::Path::new(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../bench/philosophy/free-will-debate.toml"
-        ));
-        let g = GoldenSet::load(path).expect("free-will-debate golden should parse");
+        let path = goldens_dir().join("free-will-debate.toml");
+        let g = GoldenSet::load(&path).expect("free-will-debate golden should parse");
         assert_eq!(g.expected_edges.len(), 2, "goldens already author the data");
         let grounds = g
             .expected_edges

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign/docs/retrieval-pipeline.md` is GENERATED from the live
+//! `sovereign-core/docs/retrieval-pipeline.md` is GENERATED from the live
 //! pipeline definitions (`kq_pipeline` / `deep_pipeline` /
 //! `retrieval_pipeline_flags`) so the doc cannot drift from the code —
 //! same contract as sovereign-recipes/SCHEMA.md (`recipe_schema` test).
@@ -120,7 +120,7 @@ fn render_pipeline(p: &RetrievalPipeline, title: &str) -> String {
 #[test]
 fn retrieval_pipeline_doc_is_fresh() {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let out_path = manifest.join("../../docs/retrieval-pipeline.md");
+    let out_path = manifest.join("docs/retrieval-pipeline.md");
     let generated = render();
 
     if std::env::var("UPDATE_RETRIEVAL_PIPELINE_DOC").is_ok() {
@@ -132,7 +132,7 @@ fn retrieval_pipeline_doc_is_fresh() {
     let committed = std::fs::read_to_string(&out_path).unwrap_or_default();
     assert_eq!(
         committed, generated,
-        "sovereign/docs/retrieval-pipeline.md is stale — the pipelines or the \
+        "sovereign-core/docs/retrieval-pipeline.md is stale — the pipelines or the \
          flag registry changed. Regenerate with:\n  \
          UPDATE_RETRIEVAL_PIPELINE_DOC=1 cargo test -p sovereign-core --test main retrieval_pipeline_doc"
     );

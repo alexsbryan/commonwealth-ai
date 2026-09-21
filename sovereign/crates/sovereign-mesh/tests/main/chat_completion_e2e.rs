@@ -34,13 +34,13 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use commonwealth_core::ids::NodeId;
 use futures::StreamExt;
-use serde::Deserialize;
-use sovereign_core::oicp::{
+use oicp_types::{
     CapabilityClaim, CapabilityHint, InferenceRequirements, LatencyClass, ModelStatus,
     ProviderManifest, ProviderModel, OICP_VERSION,
 };
-use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::{CompletionRequest, Speed};
+use serde::Deserialize;
+use sovereign_contracts::traits::InferenceProvider;
+use sovereign_contracts::types::{CompletionRequest, Speed};
 use sovereign_daemon::daemon::InferenceVenue;
 use sovereign_mesh::peer_inference::{InferenceRouter, VenueHost, VenueSource};
 
@@ -202,7 +202,7 @@ async fn capabilities_handler() -> impl IntoResponse {
 /// Capabilities of a peer that DOES advertise the forced-choice feature.
 async fn capabilities_handler_fc() -> impl IntoResponse {
     Json(two_slot_manifest(vec![
-        sovereign_core::oicp::features::X_FORCED_CHOICE.to_string(),
+        oicp_types::features::X_FORCED_CHOICE.to_string(),
     ]))
 }
 
@@ -510,7 +510,7 @@ async fn joiner_streams_through_mesh_and_attributes_peer() {
     let envelope = InferenceRequirements::new()
         .with_hint(CapabilityHint::general())
         .with_latency_class(LatencyClass::Extended)
-        .with_sharding(sovereign_core::oicp::ShardingPrivacy::MeshAllowed);
+        .with_sharding(oicp_types::ShardingPrivacy::MeshAllowed);
     // The OICP envelope (MeshAllowed + Extended latency) is what
     // makes this offload-eligible per SLOT_POLICY §5. The Speed
     // literal is a derived shadow and no longer gates routing — see
@@ -648,7 +648,7 @@ async fn oicp_503_fails_over_to_next_peer() {
             InferenceRequirements::new()
                 .with_hint(CapabilityHint::general())
                 .with_latency_class(LatencyClass::Extended)
-                .with_sharding(sovereign_core::oicp::ShardingPrivacy::MeshAllowed),
+                .with_sharding(oicp_types::ShardingPrivacy::MeshAllowed),
         );
 
     let (mut stream, model_id) = wrapper
@@ -727,7 +727,7 @@ async fn peer_dies_mid_stream_does_not_duplicate() {
             InferenceRequirements::new()
                 .with_hint(CapabilityHint::general())
                 .with_latency_class(LatencyClass::Extended)
-                .with_sharding(sovereign_core::oicp::ShardingPrivacy::MeshAllowed),
+                .with_sharding(oicp_types::ShardingPrivacy::MeshAllowed),
         );
 
     let (mut stream, model_id) = wrapper
@@ -780,7 +780,7 @@ async fn local_only_sharding_never_routes_to_peer() {
     let envelope = InferenceRequirements::new()
         .with_hint(CapabilityHint::general())
         .with_latency_class(LatencyClass::Extended)
-        .with_sharding(sovereign_core::oicp::ShardingPrivacy::LocalOnly);
+        .with_sharding(oicp_types::ShardingPrivacy::LocalOnly);
 
     let request = CompletionRequest::new("sensitive prompt")
         .with_speed(Speed::Slow)
@@ -841,7 +841,7 @@ async fn mesh_allowed_normal_latency_routes_to_peer_without_speed_signal() {
     let envelope = InferenceRequirements::new()
         .with_hint(CapabilityHint::general())
         .with_latency_class(LatencyClass::Normal)
-        .with_sharding(sovereign_core::oicp::ShardingPrivacy::MeshAllowed);
+        .with_sharding(oicp_types::ShardingPrivacy::MeshAllowed);
     let request = CompletionRequest::new("summarize this thread")
         .with_speed(Speed::Fast) // deliberately NOT Slow — the envelope decides.
         .with_oicp(envelope);
@@ -896,7 +896,7 @@ async fn local_only_judge_shaped_request_stays_local() {
     let envelope = InferenceRequirements::new()
         .with_hint(CapabilityHint::general())
         .with_latency_class(LatencyClass::Normal)
-        .with_sharding(sovereign_core::oicp::ShardingPrivacy::LocalOnly);
+        .with_sharding(oicp_types::ShardingPrivacy::LocalOnly);
     let request = CompletionRequest::new("grade this answer against the evidence")
         .with_speed(Speed::Slow)
         .with_oicp(envelope);
@@ -945,7 +945,7 @@ async fn latency_fast_never_routes_even_when_mesh_allowed() {
     let envelope = InferenceRequirements::new()
         .with_hint(CapabilityHint::general())
         .with_latency_class(LatencyClass::Fast)
-        .with_sharding(sovereign_core::oicp::ShardingPrivacy::MeshAllowed);
+        .with_sharding(oicp_types::ShardingPrivacy::MeshAllowed);
     let request = CompletionRequest::new("route: is this a question or a command?")
         .with_speed(Speed::Slow) // even a Slow shadow cannot override latency Fast.
         .with_oicp(envelope);
@@ -995,7 +995,7 @@ async fn forced_choice_sentinel_excludes_peer_without_feature() {
     let envelope = InferenceRequirements::new()
         .with_hint(CapabilityHint::general())
         .with_latency_class(LatencyClass::Extended)
-        .with_sharding(sovereign_core::oicp::ShardingPrivacy::MeshAllowed);
+        .with_sharding(oicp_types::ShardingPrivacy::MeshAllowed);
     let mut request = CompletionRequest::new("pick one: A or B")
         .with_speed(Speed::Slow)
         .with_oicp(envelope);
@@ -1049,7 +1049,7 @@ async fn forced_choice_sentinel_routes_to_peer_advertising_feature() {
     let envelope = InferenceRequirements::new()
         .with_hint(CapabilityHint::general())
         .with_latency_class(LatencyClass::Extended)
-        .with_sharding(sovereign_core::oicp::ShardingPrivacy::MeshAllowed);
+        .with_sharding(oicp_types::ShardingPrivacy::MeshAllowed);
     let mut request = CompletionRequest::new("pick one: A or B")
         .with_speed(Speed::Slow)
         .with_oicp(envelope);
@@ -1220,7 +1220,7 @@ async fn empty_model_id_falls_through_to_oicp_path() {
     let envelope = InferenceRequirements::new()
         .with_hint(CapabilityHint::general())
         .with_latency_class(LatencyClass::Extended)
-        .with_sharding(sovereign_core::oicp::ShardingPrivacy::MeshAllowed);
+        .with_sharding(oicp_types::ShardingPrivacy::MeshAllowed);
     let request = CompletionRequest::new("hi")
         .with_speed(Speed::Slow)
         .with_oicp(envelope)
@@ -1288,7 +1288,7 @@ async fn an_unnamed_ranked_dispatch_sends_a_model_the_peer_can_resolve() {
     let envelope = InferenceRequirements::new()
         .with_hint(CapabilityHint::general())
         .with_latency_class(LatencyClass::Normal)
-        .with_sharding(sovereign_core::oicp::ShardingPrivacy::MeshAllowed);
+        .with_sharding(oicp_types::ShardingPrivacy::MeshAllowed);
     let request = CompletionRequest::new("Summarise the argument for compatibilism.")
         .with_speed(Speed::Slow)
         .with_oicp(envelope);
@@ -1537,7 +1537,7 @@ fn mesh_allowed_envelope() -> InferenceRequirements {
     InferenceRequirements::new()
         .with_hint(CapabilityHint::general())
         .with_latency_class(LatencyClass::Normal)
-        .with_sharding(sovereign_core::oicp::ShardingPrivacy::MeshAllowed)
+        .with_sharding(oicp_types::ShardingPrivacy::MeshAllowed)
 }
 
 fn provider_with_resolving_peer(addr: SocketAddr) -> InferenceRouter {
@@ -1545,7 +1545,7 @@ fn provider_with_resolving_peer(addr: SocketAddr) -> InferenceRouter {
 }
 
 async fn drain(
-    stream: impl futures::Stream<Item = Result<String, sovereign_core::error::Error>>,
+    stream: impl futures::Stream<Item = Result<String, sovereign_contracts::error::Error>>,
 ) -> String {
     let mut collected = String::new();
     let mut stream = Box::pin(stream);
@@ -1790,7 +1790,7 @@ fn mesh_allowed_request() -> CompletionRequest {
             InferenceRequirements::new()
                 .with_hint(CapabilityHint::general())
                 .with_latency_class(LatencyClass::Extended)
-                .with_sharding(sovereign_core::oicp::ShardingPrivacy::MeshAllowed),
+                .with_sharding(oicp_types::ShardingPrivacy::MeshAllowed),
         )
 }
 

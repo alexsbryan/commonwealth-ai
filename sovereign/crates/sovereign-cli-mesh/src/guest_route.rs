@@ -25,7 +25,7 @@ pub async fn open_route(link: &GuestLink) -> Result<String, String> {
     }
     // The guest's OWN iroh posture, not the lender's: a node that severed n0
     // discovery must not be put back on it by accepting a lend.
-    let (relay_urls, discovery) = sovereign_core::setup_config::SetupConfig::load()
+    let (relay_urls, discovery) = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|c| (c.iroh.relay_urls.clone(), c.iroh.discovery.clone()))
         .unwrap_or_default();
     let tunnel =

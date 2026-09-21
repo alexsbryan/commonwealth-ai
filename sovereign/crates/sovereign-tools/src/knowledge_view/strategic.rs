@@ -15,8 +15,8 @@
 use crate::knowledge_view::timeline::{
     AtosLinkKind, CharterStatus, InteractionTimeline, TimelineEntityKind,
 };
-use sovereign_contracts::tokens::estimate_tokens;
 use crate::knowledge_view::view_kind::ViewKind;
+use sovereign_contracts::tokens::estimate_tokens;
 
 /// Recency half-life for the strategic digest, in seconds. 21 days
 /// per requirements §4.3 — initiatives have a longer shelf life

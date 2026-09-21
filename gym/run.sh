@@ -15,7 +15,9 @@
 set -euo pipefail
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
-FIXTURES_DIR="$DIR/fixtures"
+# The nine turns moved under the daemon crate so that crate stops reaching
+# out of its own root (cargo xtask boundary-gate).
+FIXTURES_DIR="$DIR/../sovereign/crates/sovereign-daemon/tests/fixtures/gym"
 DAEMON="${SOVEREIGN_DAEMON:-http://localhost:9741}"
 N=10
 FIXTURE_FILTER=""

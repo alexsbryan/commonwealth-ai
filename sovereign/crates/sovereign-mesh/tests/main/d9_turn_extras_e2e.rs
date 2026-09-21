@@ -45,9 +45,9 @@
 
 use std::sync::Arc;
 
+use sovereign_contracts::setup_config::SetupConfig;
 use sovereign_contracts::skills::{parse_skill_toml, SkillRegistry};
 use sovereign_core::runtime::TurnProvenance;
-use sovereign_core::setup_config::SetupConfig;
 use sovereign_daemon::daemon::EmbeddedDaemon;
 use sovereign_daemon::turn_extras_http::turn_extras_router;
 

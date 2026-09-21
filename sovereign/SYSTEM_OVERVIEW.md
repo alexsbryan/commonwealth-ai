@@ -184,8 +184,10 @@ crates/
 └── sovereign-tdd            # Unified TDD solver loop (HTTP + MCP transports)
 ```
 
-Top-level: `modes/` (skills), `models.toml`, `models/`, `bench/`,
-`inquiries/`, `router/`, `sovereign-server.toml`, `deploy/onprem/`.
+Top-level: `modes/` (skills), `models/`, `bench/`, `inquiries/`,
+`sovereign-server.toml`, `deploy/onprem/`. The model manifest and the
+router exemplar banks are baked data and live with the crate that bakes
+them: `crates/sovereign-core/data/`.
 
 ### commonwealth
 
@@ -208,7 +210,8 @@ their names described a family they were not in: `commonwealth-api` and
 deleted; `-knowledge` became `sovereign-grants`; `-app` became
 `sovereign-meshapp-registry`; `-test-harness` became
 `sovereign-mesh-test-harness`; `oicp-conformance` moved to a repo-root
-sibling. `contrib/` ships `install.sh`, a systemd unit and a launchd plist.
+sibling. `sovereign-service/data/` ships the systemd unit, launchd plist and
+Windows task XML `install_service` embeds.
 
 ### studio
 
@@ -582,7 +585,7 @@ without touching the trait.
 and chip phrasings, trace label, OICP `(capability hint, latency class)`,
 retrieval slot with and without evidence, output-budget floor, referential
 `Operation`, `ToolAccess`. Adding an intent is a variant, a row, and exemplars
-in `sovereign/router/exemplars.toml`. `IntentRow` has no `Default`, so a row
+in `sovereign/crates/sovereign-core/data/router/exemplars.toml`. `IntentRow` has no `Default`, so a row
 omitting a column does not compile. What did NOT move into it: handler
 dispatch (control flow over a closed set is what enums are for), payload
 guards, and `authority_guard::guard_story`.
@@ -771,7 +774,7 @@ undocumented / drifted findings. The deterministic floor runs in public CI as
 =======
 | Frontend            | Purpose                                                                              |
 |---------------------|--------------------------------------------------------------------------------------|
-| `sovereign-cli` (+ siblings) | User-facing dispatcher. `sovereign <verb>` execs into one of three siblings — `sovereign-cli-daemon`, `sovereign-cli-dev`, `sovereign-cli-llm` — based on the verb. Since 2026-08-21 one verb is the exception: `code converge` is served in-process from `sovereign-cli-dev`'s `[lib]` target (linked, `default-features = false`) — see `InProcessCodeVerb` below. Same UX as one binary; faster builds. Discovery: each sibling at `current_exe()`'s parent dir; override via `SOVEREIGN_CLI_{DAEMON,DEV,LLM}_BIN`. Unix execs into the sibling (same PID); other platforms spawn-and-wait. |
+| `sovereign-cli` (+ siblings) | User-facing dispatcher. `sovereign <verb>` execs into one of four siblings — `sovereign-cli-daemon`, `sovereign-cli-dev`, `sovereign-cli-llm`, `sovereign-cli-mesh` — based on the verb. `sovereign-cli-mesh` was lifted out of `sovereign-cli-llm` on 2026-09-21 and owns `mesh`, `ring`, `job`, `meshapp`, `guest`, `travel` and `media` (20 modules, 20.5k lines); `svrn agent-bench` execs the `sovereign-agent-bench` binary the same way rather than linking that crate. Since 2026-08-21 one verb is the exception: `code converge` is served in-process from `sovereign-cli-dev`'s `[lib]` target (linked, `default-features = false`) — see `InProcessCodeVerb` below. Same UX as one binary; faster builds. Discovery: each sibling at `current_exe()`'s parent dir; override via `SOVEREIGN_CLI_{DAEMON,DEV,LLM,MESH}_BIN` (and `SOVEREIGN_AGENT_BENCH_BIN`). Unix execs into the sibling (same PID); other platforms spawn-and-wait. |
 | `sovereign-server`  | Axum REST + WebSocket on configurable port; multi-tenant via `tenant.rs` with per-tenant isolation on corpora and uploaded documents (`ConversationContext.corpus_ceiling` scopes retrieval incl. the round-0 engine search; `DocumentAsset.owner` gates document list/get/delete/ask — the SaaS-hub hardening, 2026-07); server-side `ApprovalChannel` w/ `/v1/tasks/{id}/approve`. **`POST /v1/admin/shutdown`** (2026-09-11, sv-surface svt-2) is how this process is told to stop: inside the auth layer, so it takes the same bearer key every `/v1` route takes and mints no second credential, and REFUSED with a named 403 when `[auth]` is disabled — the layer is a pass-through then, and this binary defaults to a `0.0.0.0` bind. `axum::serve` gained `with_graceful_shutdown` on it plus a 5 s watchdog, because a held-open conversation WebSocket is in-flight for as long as the phone keeps it and would otherwise make an accepted stop indefinite. Before this the binary had NO stop path at all — no route, no signal handler, no pidfile, no run lock — and the only thing that ever stopped it was an external SIGKILL from the desktop's Mobile-access toggle holding its `Child`. **Mobile-facing surface** (`docs/specs/MOBILE.md`): WS `/v1/conversations/{id}/stream` streams `TurnFrame::Token`→`Complete` token-by-token down the requesting socket (not the shared broadcast — avoids cross-tenant leak, and since 2026-08-25 the two channels no longer share a TYPE, so that leak does not compile: per-turn frames are `sovereign_contracts::types::TurnFrame`, the executor's fan-out is the server-local `ExecutorEvent`); `sovereign_contracts::types::projection` surfaces typed `provenance` + `citations` on REST message responses — it moved out of this binary with the protocol so a daemon can project the same metadata; `GET /v1/corpora` lists `CORPUS_REF`s (Knowledge-only, with `scope`/`mesh_shared` privacy posture derived from `IndexInfo.mesh_sharing`); a `scheduler.rs` `FairScheduler` bounds concurrent turns — a weighted-fair queue + per-origin cap with live `TurnFrame::QueuePosition` over WS and `503 + Retry-After` shed (`busy.rs`) on REST, sharing its `serving_policy::fair_sched::SchedCore` policy core with the mesh peer-admission gate (so both are fair by identical rules); reciprocity weights from the contribution ledger rank a contributor's turns up. Secure by default: binds `127.0.0.1:8080`, and a non-loopback bind with `[auth]` disabled is refused at startup (`config::validate_exposure`; explicit `allow_unauthenticated_remote` opt-out) — permissive CORS is applied only when auth is on (`[server] cors = "auto"`). **Note the gap that guard does NOT close:** auth engages only when `mode == "api_key"` **and** `keys` is non-empty, so `mode = "api_key"` with an empty map serves every `/v1/*` route unauthenticated as tenant `"default"` — silently, and with a loopback bind the exposure guard never fires. **Two cargo features, both default ON, drop the surfaces whose safety rests on "one operator owns this box" (`sovereign/deploy/onprem/`).** `dev-routes` gates *privilege*: `/v1/solve` + `/v1/cycle/bdd` (client-supplied `test_command` reaches `sh -c` **inside** the authed router), `/v1/documents/upload` + `/v1/corpora/upload` (ingest an absolute server-side path), the `/mcp*` routes (registered *after* the auth layer, guarded only by `ip.is_loopback()` — which a same-host reverse proxy satisfies for every remote caller), and `ShellTool`. `net-tools` gates *egress*: the `search` tool's web fallback (DuckDuckGo → Google → DuckDuckGo Lite, fired whenever the top **local** retrieval score is thin), `web_fetch` (any URL the model emits; scheme-only validation), and `wikipedia_fetch`. Those three were registered unconditionally and fired on ordinary chat turns; `Permission::Network` does not gate them, because it is consulted at exactly one call site (the plan executor) and the chat path calls `tool.execute()` directly. Under `--no-default-features` `search` survives, built local-only via `SearchTool::new`. |
 | `sovereign-desktop` | Tauri 2 + Svelte 5. The **UX-refactor (P0–P4) reshaped the app around user intent** — rail `Ask · Library · Reflect · Workshop · ⚙`. **Ask** (the branded chat w/ streaming + provenance) is the landing. **Library** (`library/{LibraryView,AddSheet,NotebookDetail}` off the `notebook_list` command) is the knowledge home — a notebook shelf with per-notebook Ask + Explore, plus a "Libraries on the mesh" section (the `mesh_media_offers` command → `GET /v1/mesh/media` and its `?peer=` reach, polled every 10 s; a pick opens the loopback `player_url`, never shown; a library its holder is watching shows "in use right now" and carries no `player_url` at all, so the card cannot start a stream); the catalog `KnowledgeStatus` + folder/vault/import ingest fold into Library→Add; the Atlas rail is gone (the atlas surface lives inside a notebook's Explore via `AtlasSurface startingCorpusId` + as a reading deep-link target). **Workshop** (`workshop/WorkshopView`) holds the maker facets Build · Run · Test · Connect tools (MCP) · Open to apps (OpenAI endpoint), with a notebook→Workshop "use→make" bridge. **Settings** shrank to General + Operator (Mesh · Sharing · Mobile) clusters. A follow-on **elegance pass** layered craft on top: a plain-language scope bar in Ask (`AskScopeBar` — "Asking ‹notebook›", gating `CorpusFilterStrip`), per-notebook **conversation memory** (the `notebook_conversations` command → `SqliteStateStore::list_conversations_for_corpus`, a `json_each` filter on `enabled_corpora`; a notebook's Ask resumes its last thread, switched via a **Conversations ▾** dropdown), a card→detail **shared-element morph** (`lib/motion.ts` `crossfade`), and an **Ask↔Explore** Map→Ask bridge ("Ask about this" on an atom → the notebook's Ask, seeded). The per-notebook detail consolidates its chrome into **one header bar** — segmented `Ask | Explore` + a `⋯` overflow for Sources/Settings — with the scope stated by the header (the in-notebook scope bar suppressed via `ChatView hideScope`); the **Home hub was dropped** so the branded Ask flow is the first-run landing. **Layout is token-driven, not per-component.** `app.css` owns a layout scale (`--gutter` / `--gutter-top` / `--gutter-bottom` / `--measure` / `--measure-prose`) plus three global primitives — **`.page-body`** (the scroll container + gutter every surface body needs), **`.page-measure`** (the centred content column), **`.page-header`** (a header band on the same gutter). These are global rather than Svelte-scoped on purpose: the app's surface hosts (`.library-surface`, `.settings-surface`, `.nb-body`, `.app-chrome-content`) are all `height:100%; overflow:hidden` clipping boxes, so **a body that fails to establish its own scroller is clipped with no way to reach the content past the fold**. A July 2026 audit found exactly that — `ConflictsPanel` hid 2,442px of governance decisions behind an `overflow-y:auto` that could never fire (it sat on an auto-height box), and `AddSheet`'s body rendered flush to both window edges because a `padding:0` "embedded" opt-out outlived the host that used to compensate for it. `tests/e2e/specs/library-layout-audit.spec.ts` is the regression gate: it drives every Library route, measures composited geometry, and fails on unreachable content or a body inside the gutter. Do **not** re-declare padding/overflow on an element carrying `.page-body` — Svelte scoping gives the local rule higher specificity and it wins silently. Plus skill manager, `sovereign://` deep-link handler, system tray; reuses the shared `@sovereign/chat-ui` package (`packages/chat-ui`). |
 | `sovereign-mobile` (`/sovereign-mobile`) | Thin Tauri 2 client (iOS + Android) — **no local inference/Runtime/corpus**. Reaches a host's `sovereign-server` over the tailnet, authenticates as a tenant (token in keychain), renders streamed chat. Rust core owns transport (HTTP + WS), SQLite cache of the spec's cached projections, and a fail-closed connectivity monitor; re-emits the SAME `message-chunk`/`message-complete` events the shared chat FSM consumes. Conversations are cached for display and referenced as a conversation `CORPUS_REF` once host-indexed (`indexed_in_corpus`); long-context is host-side (phone sends only the new turn + conversation id, never re-uploads history or embeds); local-only sources are privacy-badged (`scope`/`mesh_shared`). **A Cargo workspace member since 2026-09-09** (`4e1f99f55`; the "written but never compiled" note was stale — the crate compiled before that change) — a census nobody can run is inventory, and `--package sovereign-mobile` resolves now. **It consumes `sovereign-turn-client` and nothing else on the wire** (sv-surface R6): the hand-copied `ServerEvent` mirror in `remote/dto.rs`, its `ProvenanceDto` / `SourceDto` / `CitationDto`, and `remote/client.rs`'s inline `Deserialize` envelopes are deleted, and every frame, prompt, notice, answer and request comes from `sovereign-contracts` through the client crate's re-exports (the direct contract dep is gone and `layer-gate --tighten` banked the fan-in cut 27 → 26 at `4a83373f4`). The `TurnFrame` match is exhaustive with no catch-all, so `Prompt`, `Notice` (`ResolveAck`, `TurnSettled`) and `QueuePosition` are handled — three capabilities the mirror could not represent — and two Tauri commands (`answer_prompt`, `cancel_turn`) plus a `SenderRegistry` give the phone a real answer path. Evidence: `src-tauri/tests/turn_wire.rs` drives a real turn over a real socket against a fixture host serializing contract frames, with the citation and provenance persisted to the cache and the post-`Complete` `ResolveAck` + `TurnSettled` bookend; `src-tauri/tests/census.rs` is the sv-one-client twin census and keeps two permanent plants so its detector stays proven. Named ceiling: the client family has no auth seam (bare `reqwest`, bare `connect_async`), so the phone reaches a DAEMON, not an api-key `sovereign-server` — daemon-first wire compatibility, recorded in `ApiClient::turn`. See `docs/specs/MOBILE.md` and `/sovereign-mobile/HANDOFF.md`. |
@@ -2107,7 +2110,7 @@ journal rather than a guess about timing. The rule and its two gates are under
 stays at thousands of ops: it is priced on journal BYTES, and the cost it was
 raised for is gone rather than smaller.
 
-**`svrn ring` is the verb** (`sovereign-cli-llm/src/ring_cmd/`, ring-deploy
+**`svrn ring` is the verb** (`sovereign-cli-mesh/src/ring_cmd/`, ring-deploy
 S4): `ring new` scaffolds an app (page, reducer, and the reducer's tests),
 `ring roster add <person> --self` binds a name to the node key it signs with,
 `ring dev <ns>` mints a `Scope::Rails` grant and serves the bundle at
@@ -2125,7 +2128,7 @@ browser tab never sees a credential and the page reaches one namespace's rail
 and nothing else on the daemon; the grant dies with the process.
 
 **`svrn job` is the other verb on the same rail**
-(`sovereign-cli-llm/src/job_cmd.rs`, cw-lift 5d): `ring` deploys an app to a
+(`sovereign-cli-mesh/src/job_cmd.rs`, cw-lift 5d): `ring` deploys an app to a
 trust ring, `job` hands that ring a unit of *compute*. `job submit --kind
 process:v1 -- <argv>` appends ONE act — a `Submit` naming the command, the git
 rev it runs at, and which nodes may take it — through `ring_cmd::rail_append`,
@@ -2245,7 +2248,7 @@ origin; `mesh media withdraw` removes all of it). Since 2026-09-19 `offer` also
 creates the READ-ONLY account members reach the library as, reads its policy
 back key by key, declares that account's token in place of the admin-equivalent
 `/Auth/Keys` key, and records its id as `[iroh] media_viewer_user`
-(`sovereign-cli-llm/src/mesh_media/viewer.rs`). It runs `daemon reload`,
+(`sovereign-cli-mesh/src/mesh_media/viewer.rs`). It runs `daemon reload`,
 which swaps the live `MediaRoute` (`sovereign-mesh/src/media_route.rs`) with no
 restart; a value that does not parse refuses the boot or the reload. The viewer asks its own daemon — `GET /v1/mesh/media?peer=<name-or-id>`,
 `svrn mesh media <peer>` — and gets back `http://127.0.0.1:<port>`: the
@@ -3295,7 +3298,7 @@ daemon lifecycle under `svrn daemon`.
 
 ### Deployment
 
-`contrib/`: `install.sh` (curl installer),
+`crates/sovereign-service/data/`: the service templates,
 `systemd/commonwealth.service`,
 `launchd/com.commonwealth.daemon.plist`.
 
@@ -3679,7 +3682,7 @@ work pins the GPU while the user is chatting. Components:
   **Four types moved DOWN to `sovereign_contracts::daemon_wire::setup_plan`**,
   each re-exported at its old path: `HardwareProfile` and `ProfileName` (from
   `sovereign-inference/src/hardware.rs`), `SlotConfig` (from
-  `sovereign-core/src/models_manifest.rs`) and `PrimaryOption` (from
+  `sovereign-contracts/src/models_manifest.rs`) and `PrimaryOption` (from
   `setup_planner.rs`). Naming one used to cost a client the inference stack or
   the runtime hub. `HardwareProfile::detect` became the free function
   `hardware::detect_hardware` at 13 sites — an inherent impl cannot cross a
@@ -4251,7 +4254,7 @@ the shared report.
 | Bundle a generated data file | `sovereign-recipes/<corpus>/data/`, append to `corpus-engine/build.rs::BUNDLED_ASSETS`, `include_bytes!` in `filters/assets.rs` |
 | Write a recipe | `sovereign-recipes/<id>/recipe.toml`, then `registry.toml` |
 | Add an investigation recipe | `enrichment.type = "investigation"` + `[[entity_types]]` + `[[relationship_types]]` + `[[patterns]]` |
-| Write a skill / tune models per hardware | `sovereign/modes/<id>/skill.toml`; `sovereign/models.toml` |
+| Write a skill / tune models per hardware | `sovereign/modes/<id>/skill.toml`; `sovereign/crates/sovereign-contracts/data/models.toml` |
 | Understand the SCIP call graph | `corpus-engine-scip/` (`scip_graph.rs`, `scip_export.rs`) |
 | Classify a symbol / detect trait dispatch | `corpus-engine-scip/src/descriptor.rs` — the ONE decider. Do NOT read `symbols.kind` (88.7% `unknown`) or `refs.ref_kind` (100% `direct`) |
 | Find a duplicated concept | IDENTITY `svrn code converge census` / `noun <Name>`; ROLE `converge roles`; SHAPE `converge shape`. Duplicated BEHAVIOUR is `code dry-report`; oversized FILES are `code suggest-seams` |
@@ -4261,7 +4264,7 @@ the shared report.
 | Understand delta updates / scope expansion | `corpus-engine/src/update/delta.rs`, `engine/expand.rs` |
 | Understand KnowledgeView | `sovereign-tools/src/knowledge_view/`; injected at `LandscapeDigestProvider::splice_landscape_digests` |
 | Understand ATOS lifecycle | `sovereign-atos/src/local/orchestrator.rs` + [`docs/ATOS.md`](./docs/ATOS.md) |
-| Run the long-running daemon | `sovereign-cli-daemon/src/daemon_cmd/` + `contrib/launchd` + `contrib/systemd` |
+| Run the long-running daemon | `sovereign-cli-daemon/src/daemon_cmd/` + `sovereign-service/data/` |
 | Serve something the desktop used to compute in-process | the client-router families in `sovereign-daemon/src/*_http.rs` — §5 |
 | Prove a deleted twin cannot come back | `scripts/twin-census.py` over `quality/twin-plants.toml` |
 | Prove desktop and CLI answer one question alike | `sovereign-desktop/tests/e2e/real/journeys/surface-parity.journey.spec.ts` |

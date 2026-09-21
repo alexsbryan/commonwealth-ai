@@ -939,22 +939,23 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     // failure, the same graceful-degrade posture the desktop's bootstrap
     // takes: the daemon still serves turns without it, and the authoring
     // tools report their own named degradation.
-    let features_store: Option<Arc<sovereign_store::recipe_project_store::RecipeProjectStore>> =
-        match sovereign_store::recipe_project_store::RecipeProjectStore::open(
-            &data_dir.join("features.db"),
-        ) {
-            Ok(s) => {
-                tracing::info!("daemon: recipe-author features.db opened");
-                Some(Arc::new(s))
-            }
-            Err(e) => {
-                tracing::warn!(
-                    error = %e,
-                    "daemon: features.db unavailable — recipe-author tooling will degrade"
-                );
-                None
-            }
-        };
+    let features_store: Option<
+        Arc<sovereign_tools::recipe_author::recipe_project_store::RecipeProjectStore>,
+    > = match sovereign_tools::recipe_author::recipe_project_store::RecipeProjectStore::open(
+        &data_dir.join("features.db"),
+    ) {
+        Ok(s) => {
+            tracing::info!("daemon: recipe-author features.db opened");
+            Some(Arc::new(s))
+        }
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                "daemon: features.db unavailable — recipe-author tooling will degrade"
+            );
+            None
+        }
+    };
 
     // ── The daemon commissions the ONE Runtime ────────────────────────────
     //
@@ -1114,7 +1115,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     let runtime = sovereign_runtime_recipe::commission(sovereign_core::RuntimeParts {
         sensitive_corpora,
         corpus_principal: Some(Arc::new(sovereign_daemon::principal::LocalOwnerPrincipal)),
-        mesh_knowledge: sovereign_mesh::knowledge_client::daemon_knowledge_source(&format!(
+        mesh_knowledge: sovereign_turn_client::knowledge_client::daemon_knowledge_source(&format!(
             "http://127.0.0.1:{}",
             config.daemon.client_port
         )),
@@ -1365,7 +1366,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
 
     // The log is append-only across restarts by design, so this line is the
     // KEY every later line in this generation joins against: which binary,
-    // built when, under which run id (sovereign_core::run_identity).
+    // built when, under which run id (sovereign_contracts::run_identity).
     // The serve task's bind is best-effort by design (the default-port
     // integration tests must not be stranded), so "running" is a claim this
     // process may make only AFTER reading the bind outcome. Until 2026-09-10
@@ -1393,12 +1394,12 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
         }
     };
 
-    let build = sovereign_core::run_identity::build();
+    let build = sovereign_contracts::run_identity::build();
     tracing::info!(
         client_addr = %client_addr,
         client_port = config.daemon.client_port,
         internal_port = config.daemon.internal_port,
-        run = sovereign_core::run_identity::run_id(),
+        run = sovereign_contracts::run_identity::run_id(),
         pid = build.pid,
         exe = %build.exe,
         exe_mtime = build.exe_mtime.as_deref().unwrap_or("unreadable"),

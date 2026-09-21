@@ -53,7 +53,7 @@ pub use commonwealth_media::{admits_no_one, MemberCheck, MemberIdentity, PeerTra
 /// `sovereign-mesh` owns both the `SetupConfig` schema and the
 /// transport types — the config crate stays free of `TrafficClass`.
 pub fn iroh_routed_classes(
-    t: &sovereign_core::setup_config::TransportSection,
+    t: &sovereign_contracts::setup_config::TransportSection,
 ) -> Vec<TrafficClass> {
     let mut out = Vec::new();
     for (class, val) in class_entries(t) {
@@ -108,14 +108,14 @@ pub fn iroh_routed_classes(
 /// startup warning: under opt-out semantics `iroh_routed_classes` is
 /// non-empty for an empty section, so the warning must key off
 /// explicit intent, not the derived class list.
-pub fn has_explicit_iroh_routes(t: &sovereign_core::setup_config::TransportSection) -> bool {
+pub fn has_explicit_iroh_routes(t: &sovereign_contracts::setup_config::TransportSection) -> bool {
     class_entries(t)
         .into_iter()
         .any(|(_, val)| val.as_deref() == Some("iroh"))
 }
 
 fn class_entries(
-    t: &sovereign_core::setup_config::TransportSection,
+    t: &sovereign_contracts::setup_config::TransportSection,
 ) -> [(TrafficClass, &Option<String>); 7] {
     [
         (TrafficClass::Gossip, &t.gossip),
@@ -959,7 +959,7 @@ impl MeshIrohAccess {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sovereign_core::setup_config::TransportSection;
+    use sovereign_contracts::setup_config::TransportSection;
 
     fn section(f: impl FnOnce(&mut TransportSection)) -> TransportSection {
         let mut t = TransportSection::default();

@@ -19,7 +19,7 @@
 
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::{MemberRecord, NodeStatus};
-use sovereign_core::setup_config::SetupConfig;
+use sovereign_contracts::setup_config::SetupConfig;
 use sovereign_daemon::daemon::{EmbeddedDaemon, MeshError};
 
 use crate::common;

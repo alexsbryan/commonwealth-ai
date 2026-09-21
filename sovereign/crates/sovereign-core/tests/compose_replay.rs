@@ -104,11 +104,15 @@ struct Report {
 }
 
 fn input_path() -> PathBuf {
-    if let Ok(p) = std::env::var("COMPOSE_INPUT") {
-        return PathBuf::from(p);
+    match std::env::var("COMPOSE_INPUT") {
+        Ok(p) => PathBuf::from(p),
+        Err(_) => panic!(
+            "COMPOSE_INPUT is required — the bed lives in the research tree, which this \
+             crate does not own. Re-run as:\n  \
+             COMPOSE_INPUT=research/deep-research/arms/bed-compose/compose-input.json \\\n  \
+             cargo test -p sovereign-core --test compose_replay -- --ignored --nocapture"
+        ),
     }
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../research/deep-research/arms/bed-compose/compose-input.json")
 }
 
 /// `"8:3,28:5,44"` → `[(8,3),(28,5),(44,cap_default)]`. A bare number sweeps

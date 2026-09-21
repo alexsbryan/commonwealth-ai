@@ -1118,23 +1118,24 @@ mod tests {
     ///
     /// Lived in `sovereign-desktop`'s `atlas_commands.rs` until 2026-09-11;
     /// it pins the on-disk fixture the ROUTE reads, not the command, and the
-    /// desktop no longer links this crate's reader. The fixture stays with
-    /// the spec that owns it, hence the relative path — and the "absent →
-    /// skip" arm: the fixture is committed, so absence means a partial
-    /// checkout, not a regression.
+    /// desktop no longer links this crate's reader. The fixture moved here
+    /// from `sovereign-desktop/tests/e2e/real/fixtures/` on 2026-09-21
+    /// (boundary-gate rule 3c — the climb out of this crate root); the
+    /// Playwright spec reads it across the repo, which nothing gates.
+    /// The "absent → skip" arm went with it: the fixture is committed, so a
+    /// gate that cannot fail was the wrong shape (ARCH §18.1).
     #[tokio::test]
     async fn numismatics_real_fixture_carries_the_census_its_spec_asserts() {
         use crate::atlas_view::{AtomFilter, PageCursor};
 
-        let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../sovereign-desktop/tests/e2e/real/fixtures/numismatics-atlas");
-        if !fixture.join("ontology.json").exists() {
-            eprintln!(
-                "[skip] numismatics real-mode fixture absent at {}",
-                fixture.display()
-            );
-            return;
-        }
+        let fixture =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/numismatics-atlas");
+        assert!(
+            fixture.join("ontology.json").exists(),
+            "numismatics fixture absent at {} — it is committed; repair the \
+             checkout, do not skip",
+            fixture.display()
+        );
 
         // Lay it out exactly as `plantNumismaticsCorpus` does: one index dir
         // with an `atlas/` holding the three overlay files.

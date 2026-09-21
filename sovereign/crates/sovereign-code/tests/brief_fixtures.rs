@@ -9,9 +9,9 @@
 //!      `tests/snapshots/<scenario>.md`.
 //!
 //! Iteration loop:
-//!   $ cargo test -p sovereign-tools --test main brief_fixtures
+//!   $ cargo test -p sovereign-code --test brief_fixtures
 //! When you intentionally change brief output:
-//!   $ UPDATE_SNAPSHOTS=1 cargo test -p sovereign-tools --test main brief_fixtures
+//!   $ UPDATE_SNAPSHOTS=1 cargo test -p sovereign-code --test brief_fixtures
 //!   then `git diff tests/snapshots/` and commit.
 //!
 //! Snapshots intentionally avoid time-varying data (no "today",
@@ -20,11 +20,11 @@
 //! so the rendered output is deterministic across machines.
 
 // The brief's principles + recent-activity sections come from
-// `corpus-engine-archaeology`, gated behind sovereign-tools' `dev-tools`
-// feature. The snapshots capture the full (dev-tools) output, so the suite
-// only runs when that feature is on (always true under `--workspace`/CI via
-// the `sovereign-cli-dev` workbench; skipped in a bare `--features treesitter`
-// build where archaeology is stubbed to empty).
+// `corpus-engine-archaeology`, gated behind this crate's `dev-tools` feature.
+// The snapshots capture the full (dev-tools) output, so the suite only runs
+// when that feature is on (always true under `--workspace`/CI via
+// `sovereign-cli-dev`, which pins `sovereign-code/dev-tools`; skipped in a
+// bare `--features treesitter` build where archaeology is stubbed to empty).
 #![cfg(feature = "dev-tools")]
 
 use std::path::{Path, PathBuf};
@@ -38,13 +38,10 @@ use sovereign_code::brief::{assemble_brief, BriefInputs};
 /// `tests/snapshots/<scenario>.md`. Set `UPDATE_SNAPSHOTS=1` to
 /// (re)write the file.
 fn assert_snapshot(scenario: &str, actual: &str) {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/snapshots")
-        .join(format!("{scenario}.md"));
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots");
+    let path = dir.join(format!("{scenario}.md"));
     if std::env::var("UPDATE_SNAPSHOTS").as_deref() == Ok("1") {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).expect("mkdir snapshots");
-        }
+        std::fs::create_dir_all(&dir).expect("mkdir snapshots");
         std::fs::write(&path, actual).expect("write snapshot");
         return;
     }

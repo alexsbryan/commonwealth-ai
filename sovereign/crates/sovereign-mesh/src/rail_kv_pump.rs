@@ -387,7 +387,7 @@ fn ack(store: &MeshStore, ids: &[i64]) {
     }
 }
 
-pub const MEASUREMENTS_NAMESPACE: &str = sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID;
+pub const MEASUREMENTS_NAMESPACE: &str = crate::mesh_measurements::MEASUREMENTS_APP_ID;
 
 /// The work plane's namespace, taken from the crate that owns the vocabulary
 /// rather than spelled again here (ARCH §10.6) — a second literal would be a
@@ -567,7 +567,7 @@ async fn snapshot(
             // for the seal/republish interaction found 2026-09-08: republish
             // AT the seal, not at the next boot, or the window between them is
             // a ring with no measurements in it.
-            let file = sovereign_core::mesh_measurements::load();
+            let file = crate::mesh_measurements::load();
             let done =
                 crate::measurements_rail::republish(journal, rail.signer(), roster, file.records());
             info!(

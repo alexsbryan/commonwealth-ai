@@ -28,8 +28,8 @@ const DEFAULT_MIN_JOINT: u32 = 5;
 const DIGEST_TOP_N: usize = 10;
 
 pub async fn run(args: &[String]) -> i32 {
-    if crate::util::help::wants_help(args) {
-        crate::util::help::print(&HELP);
+    if sovereign_cli_shared::help::wants_help(args) {
+        sovereign_cli_shared::help::print(&HELP);
         return 0;
     }
     let parsed = match parse_args(args) {
@@ -626,15 +626,15 @@ fn truncate(s: &str, max: usize) -> String {
     }
 }
 
-const HELP: crate::util::help::Help = crate::util::help::Help {
+const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
     command: "svrn git-archaeology",
     summary: "Walk a code corpus' git history and emit per-atom provenance + co-evolution edges.",
     sections: &[
-        crate::util::help::HelpSection::Usage(
+        sovereign_cli_shared::help::HelpSection::Usage(
             "svrn git-archaeology <corpus-id> [--source-path <dir>] [--output <md>] \
              [--threshold N] [--min-joint N]",
         ),
-        crate::util::help::HelpSection::Flags(&[
+        sovereign_cli_shared::help::HelpSection::Flags(&[
             (
                 "--source-path <dir>",
                 "Override the source path stamped in the corpus's _corpus_meta.json. \
@@ -658,7 +658,7 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
                  in the initial commit and never again.",
             ),
         ]),
-        crate::util::help::HelpSection::Notes(
+        sovereign_cli_shared::help::HelpSection::Notes(
             "Reads the structural atlas from ~/.svrnmesh/indexes/<corpus>/atlas/atoms.json. \
              Build it first via `svrn enrich ingest <id> --source-corpus <id>` if you \
              haven't. Standalone surface; also called from `svrn drift detect` to fold \

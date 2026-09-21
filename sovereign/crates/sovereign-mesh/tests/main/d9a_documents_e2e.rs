@@ -35,9 +35,9 @@
 
 use std::sync::Arc;
 
-use sovereign_core::setup_config::SetupConfig;
-use sovereign_core::traits::StateStore;
-use sovereign_core::types::{
+use sovereign_contracts::setup_config::SetupConfig;
+use sovereign_contracts::traits::StateStore;
+use sovereign_contracts::types::{
     AssetState, DocumentAsset, DocumentChunk, DocumentTypeTag, SourceType,
 };
 use sovereign_daemon::daemon::EmbeddedDaemon;

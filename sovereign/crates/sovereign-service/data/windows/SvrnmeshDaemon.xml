@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-16"?>
 <!--
   Scheduled Task registration for the svrnmesh daemon — the Windows
-  counterpart of contrib/launchd/com.svrnmesh.daemon.plist and
-  contrib/systemd/svrnmesh.service.
+  counterpart of ../launchd/com.svrnmesh.daemon.plist and
+  ../systemd/svrnmesh.service.
 
   WHY A TASK AND NOT A WINDOWS SERVICE. The SCM needs administrator rights
   and registers machine-wide. The daemon serves ONE person's data root

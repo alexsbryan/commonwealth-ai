@@ -72,7 +72,7 @@
 use orp::params::RuntimeParameters;
 use ort::execution_providers::{CPUExecutionProvider, ExecutionProviderDispatch};
 use ort::session::builder::SessionBuilder;
-use sovereign_core::error::{Error, Result};
+use sovereign_contracts::error::{Error, Result};
 
 /// Intra-op thread count for every session this crate builds.
 ///

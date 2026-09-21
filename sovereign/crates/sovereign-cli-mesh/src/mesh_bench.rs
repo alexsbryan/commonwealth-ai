@@ -58,7 +58,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use futures::StreamExt;
-use sovereign_core::mesh_measurements as mm;
+use sovereign_mesh::mesh_measurements as mm;
 
 // ---------------------------------------------------------------------------
 // The probe
@@ -1333,7 +1333,7 @@ mod exit {
 }
 
 async fn run_bench(args: BenchArgs) -> i32 {
-    let cfg = match sovereign_core::setup_config::SetupConfig::load() {
+    let cfg = match sovereign_contracts::setup_config::SetupConfig::load() {
         Ok(c) => c,
         Err(e) => {
             eprintln!("could not read the configuration: {e}");
@@ -1720,7 +1720,7 @@ async fn run_bench(args: BenchArgs) -> i32 {
         placement_human: human.clone(),
         nodes,
         hops: nodes.saturating_sub(1),
-        measured_at: sovereign_core::time::unix_now_u64(),
+        measured_at: sovereign_time::unix_now_u64(),
         build: env!("CARGO_PKG_VERSION").to_string(),
         backend: mesh.self_backend.clone(),
         // Still `None`, and `None` is the honest value — not zero, which would

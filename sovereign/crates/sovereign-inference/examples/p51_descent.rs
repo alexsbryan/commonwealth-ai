@@ -17,8 +17,8 @@
 //!     research/enrichment-spikes/runs/p51 [max_llm_calls] [evidence_tokens]
 
 use serde::Deserialize;
-use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::{CompletionRequest, Speed};
+use sovereign_contracts::traits::InferenceProvider;
+use sovereign_contracts::types::{CompletionRequest, Speed};
 use sovereign_inference::remote::SplitInferenceProvider;
 use std::collections::HashMap;
 use std::io::Write as _;

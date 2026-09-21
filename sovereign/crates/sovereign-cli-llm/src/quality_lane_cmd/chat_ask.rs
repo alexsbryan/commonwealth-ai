@@ -1596,11 +1596,9 @@ mod tests {
     }
 
     fn bank_text() -> String {
-        std::fs::read_to_string(
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../../bench/quality-check/chat-ask.toml"),
-        )
-        .expect("the shipped bank")
+        let root = find_repo_root().expect("this test runs inside the checkout");
+        std::fs::read_to_string(root.join("sovereign/bench/quality-check/chat-ask.toml"))
+            .expect("the shipped bank")
     }
 
     /// The SHIPPED bank parses. A bank this lane cannot read is a lane that

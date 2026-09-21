@@ -316,9 +316,9 @@ async fn run(args: Args) -> i32 {
             .reason
             .clone()
             .unwrap_or_else(|| "(no reason given)".to_string());
-        let peek_path = PathBuf::from(
-            "sovereign/bench/mechanism_fidelity/baselines/mechanism_fidelity/peek_budget.json",
-        );
+        let peek_dir =
+            PathBuf::from("sovereign/bench/mechanism_fidelity/baselines/mechanism_fidelity");
+        let peek_path = peek_dir.join("peek_budget.json");
         let mut budget = match PeekBudget::load(&peek_path) {
             Ok(b) => b,
             Err(e) => {
@@ -326,7 +326,7 @@ async fn run(args: Args) -> i32 {
                 return 1;
             }
         };
-        let n = budget.burn(reason, git_commit_hash());
+        let n = budget.burn(reason, sovereign_cli_shared::repo::head_short_in(&peek_dir));
         if let Err(e) = budget.save(&peek_path) {
             eprintln!("error: could not persist peek budget: {e}");
             return 1;
@@ -1284,17 +1284,6 @@ fn grade_thresholds(bands: &Bands, sp: &StopParams) -> GradeThresholds {
         control_max_dir_acc: sp.ctrl,
         min_cases: GradeThresholds::default().min_cases,
     }
-}
-
-fn git_commit_hash() -> Option<String> {
-    let out = std::process::Command::new("git")
-        .args(["rev-parse", "--short", "HEAD"])
-        .output()
-        .ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    Some(String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
 #[cfg(test)]

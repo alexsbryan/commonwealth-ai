@@ -19,11 +19,6 @@ kernel-types = { workspace = true }
 # rather than through `sovereign-api`'s re-export (domains row
 # dm-wire-repoint-mesh).
 oicp-types = { workspace = true }
-# The client family (domains REVIEW-build-mesh-client-pair): the knowledge and
-# landscape-digest HTTP clients moved to `sovereign-turn-client`; this crate
-# keeps `sovereign_mesh::knowledge_client` as a shim (the digest client's shim
-# was dead and went at REVIEW-audit-daemon-1).
-sovereign-turn-client = { workspace = true }
 # `features = ["iroh"]`: the daemon's dial-by-key binding (W1 of
 # TRANSPORT_MIGRATION.md) is compiled into the default build —
 # runtime-gated by `[iroh] enabled`, not cfg-gated — so the shipped
@@ -154,9 +149,6 @@ sovereign-peer-wire = { workspace = true }
 # RemoteApiProvider — synthesised at request time when routing to
 # a peer for federated inference.
 sovereign-inference = { workspace = true }
-# ONE item: `model::APP_ID_PUBLIC` in `ring_roster::REGISTERED_NAMESPACES`.
-# `MeshBroadcaster` moved to `sovereign_daemon::work_atlas_broadcaster`.
-sovereign-work-atlas = { workspace = true }
 # async_trait is needed to impl the (async) MeshKnowledgeSource
 # trait on MeshKnowledgeClient. sovereign-core already uses it.
 async-trait = { workspace = true }

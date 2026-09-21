@@ -41,8 +41,8 @@ use std::sync::Arc;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_state::MeshStore;
-use sovereign_core::in_flight::LocalInFlightGauge;
-use sovereign_core::traits::InferenceProvider;
+use sovereign_contracts::in_flight::LocalInFlightGauge;
+use sovereign_contracts::traits::InferenceProvider;
 use sovereign_daemon::server::client_router;
 use sovereign_daemon::slot_manifest::CoreSlotManifest;
 use sovereign_daemon::state::{AppState, LocalInferenceService, ServingSeed};
@@ -191,7 +191,7 @@ async fn self_claims_publishes_storage_remaining_from_the_budget() {
         .expect("10 GiB is a legal budget");
 
     // No engine → the measured usage is 0, so the whole budget remains.
-    let claims = sovereign_core::self_claims::SelfClaims::claims(&state).await;
+    let claims = sovereign_contracts::self_claims::SelfClaims::claims(&state).await;
     assert_eq!(
         claims.storage_remaining,
         Some(ten_gib),

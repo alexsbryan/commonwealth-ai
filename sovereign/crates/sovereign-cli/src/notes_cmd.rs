@@ -1310,10 +1310,23 @@ async fn cmd_rationalize(args: &[String]) -> i32 {
     // now be resolved. No churn ⇒ not a candidate (nothing suggests a fix). Only
     // the model rules resolved-vs-still-relevant; we never retire on churn alone.
     // Requires running inside the git repo the reflections describe; outside one,
-    // churn comes back empty and this section is silently absent.
+    // the section is absent and says so.
     let want_reflection_fix = only.is_none() || only == Some(MoveKind::ReflectionFix);
     let mut reflection_fixes: Vec<ReflectionFixCandidate> = Vec::new();
-    if want_reflection_fix {
+    let churn_repo = if want_reflection_fix {
+        let root = sovereign_cli_shared::repo::find_repo_root();
+        if root.is_none() {
+            eprintln!(
+                "note: reflection-fix candidates omitted — the CWD is not inside a git repo, \
+                 so there is no churn to read. Run `svrn notes rationalize` from the checkout \
+                 the reflections describe."
+            );
+        }
+        root
+    } else {
+        None
+    };
+    if let Some(repo) = churn_repo.as_deref() {
         for n in &notes {
             if n.kind != "reflection" {
                 continue;
@@ -1321,7 +1334,7 @@ async fn cmd_rationalize(args: &[String]) -> i32 {
             let Some(anchor) = reflection_anchor(n) else {
                 continue;
             };
-            let churn = git_churn_since(&anchor, &n.created_at);
+            let churn = git_churn_since(repo, &anchor, &n.created_at);
             if churn.is_empty() {
                 continue;
             }
@@ -1797,9 +1810,9 @@ fn reflection_anchor(n: &Note) -> Option<String> {
 }
 
 /// Commit subjects that changed lines matching `anchor` since `since_rfc3339`,
-/// via `git log` pickaxe in the current repo. Empty when there's no churn, git
-/// is unavailable, or we're not inside a repo — all of which correctly mean "no
-/// fix-signal, not a candidate". Capped so a hot anchor doesn't flood.
+/// via `git log` pickaxe in the repo the CALLER names. Empty when there's no
+/// churn or git is unavailable — both of which correctly mean "no fix-signal,
+/// not a candidate". Capped so a hot anchor doesn't flood.
 ///
 /// Precision: for identifier-shaped anchors we use a word-bounded regex (`-G`)
 /// so `symbols` no longer matches `symbolstable` and `build` no longer matches
@@ -1808,7 +1821,7 @@ fn reflection_anchor(n: &Note) -> Option<String> {
 /// (containing `::`, `<`, …) fall back to the literal-substring pickaxe (`-S`),
 /// where a `\b`-wrapped regex would be both unsafe and ill-defined. Anchors
 /// under 3 chars pickaxe against nearly every diff, so they yield no signal.
-fn git_churn_since(anchor: &str, since_rfc3339: &str) -> Vec<String> {
+fn git_churn_since(repo: &std::path::Path, anchor: &str, since_rfc3339: &str) -> Vec<String> {
     let anchor = anchor.trim();
     if anchor.len() < 3 {
         return Vec::new();
@@ -1820,6 +1833,7 @@ fn git_churn_since(anchor: &str, since_rfc3339: &str) -> Vec<String> {
         format!("-S{anchor}")
     };
     let output = std::process::Command::new("git")
+        .current_dir(repo)
         .args([
             "log",
             &format!("--since={since_rfc3339}"),
@@ -2126,15 +2140,19 @@ mod rationalize_tests {
         // 2099 — so the fix-signal is empty regardless of anchor. Uses a
         // >=3-char anchor so it exercises the real git path, not the
         // short-anchor floor below.
-        assert!(git_churn_since("runtime", "2099-01-01").is_empty());
+        let repo = sovereign_cli_shared::repo::find_repo_root()
+            .expect("this test runs inside the checkout it pickaxes");
+        assert!(git_churn_since(&repo, "runtime", "2099-01-01").is_empty());
     }
 
     #[test]
     fn git_churn_since_floors_out_tiny_anchors() {
         // A 1-2 char anchor pickaxes against nearly every diff — no signal.
         // Returns empty without even shelling out to git.
-        assert!(git_churn_since("fn", "1970-01-01").is_empty());
-        assert!(git_churn_since("x", "1970-01-01").is_empty());
+        let repo = sovereign_cli_shared::repo::find_repo_root()
+            .expect("this test runs inside the checkout");
+        assert!(git_churn_since(&repo, "fn", "1970-01-01").is_empty());
+        assert!(git_churn_since(&repo, "x", "1970-01-01").is_empty());
     }
 
     /// Minimal `Note` for anchor tests — only the three fields

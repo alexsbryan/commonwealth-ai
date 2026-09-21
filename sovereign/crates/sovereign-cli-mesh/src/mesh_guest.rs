@@ -45,7 +45,7 @@ use sovereign_cli_shared::guest_link::{self, GuestLink};
 /// 9741 — a sandbox pointed at its own daemon must not mint against the
 /// operator's.
 pub(crate) fn daemon_client_port() -> u16 {
-    sovereign_core::setup_config::SetupConfig::load()
+    sovereign_contracts::setup_config::SetupConfig::load()
         .map(|c| c.daemon.client_port)
         .unwrap_or(9741)
 }
@@ -53,7 +53,7 @@ pub(crate) fn daemon_client_port() -> u16 {
 /// What `[daemon] client_bind` resolves to. Loopback here means no guest can
 /// reach this node no matter what address the link carries.
 fn client_bind() -> String {
-    sovereign_core::setup_config::SetupConfig::load()
+    sovereign_contracts::setup_config::SetupConfig::load()
         .map(|c| c.daemon.client_bind)
         .unwrap_or_else(|_| "127.0.0.1".to_string())
 }

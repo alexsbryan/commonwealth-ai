@@ -60,7 +60,7 @@ pub struct WarmCacheStats {
 pub fn default_cache_dir() -> Option<PathBuf> {
     resolve_cache_dir(
         std::env::var("SOVEREIGN_RPC_CACHE_DIR").ok().as_deref(),
-        || sovereign_core::rebrand::svrnmesh_root().join("rpc-cache"),
+        || sovereign_contracts::rebrand::svrnmesh_root().join("rpc-cache"),
     )
 }
 

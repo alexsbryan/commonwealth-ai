@@ -60,6 +60,8 @@ mod amend;
 #[cfg(feature = "workbench")]
 mod arch_report_cmd;
 #[cfg(feature = "workbench")]
+mod archaeology_eval_cmd;
+#[cfg(feature = "workbench")]
 mod atlas_identity;
 #[cfg(feature = "workbench")]
 mod atos_cmd;
@@ -87,9 +89,13 @@ mod drift_cmd_orchestrator;
 #[cfg(feature = "workbench")]
 mod dry_report_cmd;
 #[cfg(feature = "workbench")]
+mod git_archaeology_cmd;
+#[cfg(feature = "workbench")]
 #[cfg(feature = "workbench")]
 #[cfg(feature = "workbench")]
 mod phases;
+#[cfg(feature = "workbench")]
+mod rough_edges_cmd;
 // UNGATED on purpose: `converge_cmd` is not behind `workbench` and reaches
 // into this. It lived under `refactor_cmd/` for one afternoon and the
 // workspace lint did not catch it — feature unification turns `workbench` on
@@ -275,6 +281,9 @@ async fn async_main() -> i32 {
         "backlog" => backlog_cmd::run_backlog(rest).await,
         "claim" => claim_cmd::run(rest).await,
         "solve" => solve_cmd::run(rest).await,
+        "rough-edges" => rough_edges_cmd::run(rest).await,
+        "git-archaeology" => git_archaeology_cmd::run(rest).await,
+        "archaeology-eval" => archaeology_eval_cmd::run(rest).await,
 
         // ── Hidden arms invoked by sovereign-cli delegators ────────
         // ATOS sub-handlers (from notes/audit/drift/milestone stubs).

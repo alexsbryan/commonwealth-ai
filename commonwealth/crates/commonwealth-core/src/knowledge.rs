@@ -4,6 +4,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::ids::{HandoffId, NodeId};
 use crate::oicp::EmbedModelInfo;
+// `ChunkRange` + `CorpusShardInfo` are gossip WIRE schema, named by sovereign
+// and commonwealth alike, so they live in the shared protocol leaf.
+use oicp_types::knowledge::ChunkRange;
 
 /// A single node's assignment for a knowledge corpus shard.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -13,121 +16,6 @@ pub struct KnowledgeShardAssignment {
     /// None means the entire corpus is on this node.
     pub chunk_range: Option<ChunkRange>,
     pub is_replica: bool,
-}
-
-/// A contiguous range of chunk IDs within a corpus.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ChunkRange {
-    /// First chunk ID (inclusive).
-    pub start_id: u64,
-    /// Last chunk ID (exclusive).
-    pub end_id: u64,
-}
-
-impl ChunkRange {
-    pub fn new(start_id: u64, end_id: u64) -> Self {
-        debug_assert!(start_id < end_id, "empty chunk range: {start_id}..{end_id}");
-        Self { start_id, end_id }
-    }
-
-    pub fn count(&self) -> u64 {
-        self.end_id - self.start_id
-    }
-}
-
-/// Information about a corpus shard hosted on a node.
-/// Used in capability reports.
-///
-/// ## Phase: canonical-sync surface (Phase 6 of the resilience track)
-///
-/// Three new fields drive the mesh's self-healing canonical sync:
-///
-/// - `chunk_count`: how many chunks this peer's canonical contains.
-///   Compared by the auto-recover path to pick the healthier peer
-///   when several have a canonical for the same id.
-/// - `canonical_fingerprint`: blake3 of the sorted content_hash list
-///   for the canonical at this peer. Two peers with byte-identical
-///   chunks arrive at the same string. The puller validates this
-///   value against the file it actually downloaded so a poisoned
-///   tarball fails closed.
-/// - `total_shards` + `processed_shards`: lets a peer compute its
-///   coverage ratio (`processed / total`) for sharded corpora.
-///   Auto-recover compares ratios — not raw chunk counts — to pick
-///   the most-complete peer, which is robust to legitimate corpus
-///   updates that shrink the chunk set.
-///
-/// All three are `Option`/`Vec`-defaulted so older peers (whose
-/// gossip blobs predate this struct) deserialize cleanly. A peer
-/// missing the fields just opts out of the new sync paths until
-/// it upgrades.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CorpusShardInfo {
-    pub corpus_id: String,
-    pub chunk_range: Option<ChunkRange>,
-    pub is_replica: bool,
-    pub last_updated: u64,
-    /// Total chunks in this peer's canonical (or partition).
-    /// Defaults to 0 for older peers; auto-recover treats `0` as
-    /// "unknown" rather than "empty" — peers with a fingerprint
-    /// but no chunk_count are eligible to pull from but not
-    /// rankable by count.
-    #[serde(default)]
-    pub chunk_count: u64,
-    /// Stable content fingerprint for the canonical. See
-    /// `corpus_engine::IndexInfo::canonical_fingerprint` for the
-    /// algorithm. `None` for partitions and for canonicals that
-    /// haven't been stamped yet (the daemon's lazy-stamp pass on
-    /// next start fills these in).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub canonical_fingerprint: Option<String>,
-    /// Total source shards this corpus expects (e.g. 38 for the
-    /// canonical Wikipedia ingest). `None` for non-sharded corpora.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub total_shards: Option<usize>,
-    /// Source shards this peer's canonical (or partition) has
-    /// processed. The auto-recover path takes the union of these
-    /// across peers to compute coverage ratios.
-    #[serde(default)]
-    pub processed_shards: Vec<usize>,
-    // ── Atlas advertisement (Phase C1) ──────────────────────────
-    //
-    // These three fields let a peer joining the mesh decide
-    // whether to pull this corpus's atlas instead of running
-    // local Tier-2 enrichment. All three default to 0 / `None` so
-    // older peers (and peers whose corpus has no atlas yet)
-    // serialise + deserialise cleanly with no protocol break.
-    /// Total atoms (entities + events + …) in this peer's
-    /// `<corpus>/atlas/atoms.json`. `0` means "no atlas yet" or
-    /// "older peer that doesn't advertise atlas state."
-    #[serde(default)]
-    pub atlas_atom_count: u64,
-    /// Entities at `enrichment_depth = "extracted"` (Tier-2
-    /// enriched). The mesh ranks atlases by this — a peer with a
-    /// higher count has done more deep-extraction work and is the
-    /// preferred atlas source for fresh nodes.
-    #[serde(default)]
-    pub atlas_tier2_count: u64,
-    /// SHA-256 of `atoms.json` (hex). Receipt the puller validates
-    /// against after fetching a peer's atlas — a corrupted /
-    /// poisoned transfer fails closed. `None` = no atlas or
-    /// fingerprint not yet stamped.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub atlas_fingerprint: Option<String>,
-}
-
-impl CorpusShardInfo {
-    /// Coverage ratio for sharded corpora — `processed_shards.len()
-    /// / total_shards`. Returns `None` for non-sharded corpora
-    /// (`total_shards.is_none()`) and for the degenerate case
-    /// `total_shards = 0`. Used by `auto_recover` to pick the
-    /// most-complete peer.
-    pub fn coverage_ratio(&self) -> Option<f64> {
-        let total = self.total_shards?;
-        if total == 0 {
-            return None;
-        }
-        Some(self.processed_shards.len() as f64 / total as f64)
-    }
 }
 
 // -----------------------------------------------------------------
@@ -455,65 +343,3 @@ impl LeasedUnit {
 }
 
 use crate::clock::unix_now_millis as now_ms;
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn chunk_range_count() {
-        let r = ChunkRange::new(0, 1000);
-        assert_eq!(r.count(), 1000);
-    }
-
-    #[test]
-    fn chunk_range_serde_roundtrip() {
-        let r = ChunkRange::new(500, 1500);
-        let json = serde_json::to_string(&r).unwrap();
-        let back: ChunkRange = serde_json::from_str(&json).unwrap();
-        assert_eq!(r, back);
-    }
-
-    #[test]
-    fn corpus_shard_info_serde_roundtrips_atlas_fields() {
-        let info = CorpusShardInfo {
-            corpus_id: "wikipedia".into(),
-            chunk_range: None,
-            is_replica: false,
-            last_updated: 0,
-            chunk_count: 1_000_000,
-            canonical_fingerprint: Some("abc123".into()),
-            total_shards: Some(38),
-            processed_shards: vec![0, 1, 2],
-            atlas_atom_count: 51_280,
-            atlas_tier2_count: 612,
-            atlas_fingerprint: Some(
-                "7c3f8e9b1f0a2d3c4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d".into(),
-            ),
-        };
-        let json = serde_json::to_string(&info).unwrap();
-        let back: CorpusShardInfo = serde_json::from_str(&json).unwrap();
-        assert_eq!(back.atlas_atom_count, 51_280);
-        assert_eq!(back.atlas_tier2_count, 612);
-        assert!(back.atlas_fingerprint.unwrap().starts_with("7c3f"));
-    }
-
-    /// A blob from an older peer (pre-C1) won't carry the atlas
-    /// fields. Deserialize must succeed with zero counts and `None`
-    /// fingerprint so the upgrade window is graceful.
-    #[test]
-    fn corpus_shard_info_back_compat_without_atlas_fields() {
-        let json = r#"{
-            "corpus_id": "wikipedia",
-            "chunk_range": null,
-            "is_replica": false,
-            "last_updated": 0,
-            "chunk_count": 0,
-            "processed_shards": []
-        }"#;
-        let back: CorpusShardInfo = serde_json::from_str(json).unwrap();
-        assert_eq!(back.atlas_atom_count, 0);
-        assert_eq!(back.atlas_tier2_count, 0);
-        assert!(back.atlas_fingerprint.is_none());
-    }
-}

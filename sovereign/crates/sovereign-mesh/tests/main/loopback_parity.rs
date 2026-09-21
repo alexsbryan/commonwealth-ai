@@ -73,10 +73,10 @@ use axum::Router;
 use corpus_engine_scip::ScipGraph;
 use reqwest::Method;
 
+use sovereign_contracts::setup_config::SetupConfig;
+use sovereign_contracts::traits::StateStore;
 use sovereign_contracts::types::projection::{project_epistemic_state, project_message_metadata};
-use sovereign_core::setup_config::SetupConfig;
-use sovereign_core::traits::StateStore;
-use sovereign_core::types::{Message, Role};
+use sovereign_contracts::types::{Message, Role};
 use sovereign_daemon::admin_http::admin_router;
 use sovereign_daemon::atlas_http::atlas_router;
 use sovereign_daemon::corpus_watch_http::corpus_watch_router;
@@ -1507,7 +1507,7 @@ async fn memory_routes_weaken_tombstone_and_404() {
     let addr = crate::common::spawn_router(turn_router(daemon)).await;
     let base = format!("http://{addr}");
 
-    use sovereign_core::types::Memory;
+    use sovereign_contracts::types::Memory;
     let seed = |id: &str, confidence: f64| Memory {
         id: id.to_string(),
         content: format!("memory {id}"),
@@ -1587,7 +1587,7 @@ async fn insight_fixture() -> (
     let tmp = tempfile::tempdir().unwrap();
     let state_store =
         sovereign_store::sqlite::SqliteStateStore::open(&tmp.path().join("sovereign.db")).unwrap();
-    let insight_store: Arc<dyn sovereign_core::traits::InsightStore> = Arc::new(
+    let insight_store: Arc<dyn sovereign_contracts::traits::InsightStore> = Arc::new(
         sovereign_store::insight_store::SqliteInsightStore::new(state_store.connection()),
     );
     let service = Arc::new(sovereign_core::insight::InsightService::new(
@@ -1628,7 +1628,7 @@ struct StubSink {
 }
 
 #[async_trait::async_trait]
-impl sovereign_core::traits::InsightSink for StubSink {
+impl sovereign_contracts::traits::InsightSink for StubSink {
     fn id(&self) -> &str {
         self.id
     }
@@ -1641,13 +1641,13 @@ impl sovereign_core::traits::InsightSink for StubSink {
     async fn push(
         &self,
         _node: &sovereign_contracts::types::InsightNode,
-    ) -> sovereign_core::error::Result<()> {
+    ) -> sovereign_contracts::error::Result<()> {
         Ok(())
     }
     async fn push_batch(
         &self,
         _nodes: &[sovereign_contracts::types::InsightNode],
-    ) -> sovereign_core::error::Result<()> {
+    ) -> sovereign_contracts::error::Result<()> {
         Ok(())
     }
 }
@@ -1675,7 +1675,7 @@ async fn insight_sink_status_names_each_sink_and_its_reachability() {
     let tmp = tempfile::tempdir().unwrap();
     let state_store =
         sovereign_store::sqlite::SqliteStateStore::open(&tmp.path().join("sovereign.db")).unwrap();
-    let insight_store: Arc<dyn sovereign_core::traits::InsightStore> = Arc::new(
+    let insight_store: Arc<dyn sovereign_contracts::traits::InsightStore> = Arc::new(
         sovereign_store::insight_store::SqliteInsightStore::new(state_store.connection()),
     );
     let mut sinks = sovereign_core::insight::InsightSinkRegistry::new();

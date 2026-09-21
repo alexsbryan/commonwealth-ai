@@ -5,7 +5,7 @@ use axum::extract::State;
 use axum::Json;
 use commonwealth_core::ids::NodeId;
 use serde::Serialize;
-use sovereign_core::run_identity::BuildStamp;
+use sovereign_contracts::run_identity::BuildStamp;
 
 use crate::state::AppState;
 
@@ -197,8 +197,8 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
         },
         process: ProcessStatus {
             pid: std::process::id(),
-            run_id: sovereign_core::run_identity::run_id(),
-            build: sovereign_core::run_identity::stamp(env!("CARGO_PKG_VERSION")),
+            run_id: sovereign_contracts::run_identity::run_id(),
+            build: sovereign_contracts::run_identity::stamp(env!("CARGO_PKG_VERSION")),
             uptime_seconds: state.inner.node.started_at.elapsed().as_secs(),
             rss_mb: current_rss_mb(),
             peak_rss_mb: peak_rss_mb(),
@@ -362,7 +362,7 @@ pub struct ProcessStatus {
     /// the port and answer in its place (2026-09-10, the desktop e2e
     /// harness; `tests/e2e/real/global-setup.ts`).
     pub pid: u32,
-    /// `sovereign_core::run_identity::run_id()` — the key every log line of
+    /// `sovereign_contracts::run_identity::run_id()` — the key every log line of
     /// this generation carries, so a reader can join `/status` to the log.
     pub run_id: &'static str,
     /// Which BINARY this generation is, and when it was built — the tuple
@@ -603,8 +603,8 @@ mod process_status_tests {
     fn process_status_serializes_and_samples() {
         let p = ProcessStatus {
             pid: std::process::id(),
-            run_id: sovereign_core::run_identity::run_id(),
-            build: sovereign_core::run_identity::stamp(env!("CARGO_PKG_VERSION")),
+            run_id: sovereign_contracts::run_identity::run_id(),
+            build: sovereign_contracts::run_identity::stamp(env!("CARGO_PKG_VERSION")),
             uptime_seconds: 42,
             rss_mb: current_rss_mb(),
             peak_rss_mb: peak_rss_mb(),

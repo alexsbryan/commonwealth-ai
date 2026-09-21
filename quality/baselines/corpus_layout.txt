@@ -28,8 +28,8 @@
 1	sovereign/crates/sovereign-cli-llm/src/corpus_snapshot_cmd.rs
 1	sovereign/crates/sovereign-cli-llm/src/enrich_cmd/capability_reconcile.rs
 5	sovereign/crates/sovereign-cli/src/code_refresh.rs
-6	sovereign/crates/sovereign-cli/src/git_archaeology_cmd.rs
-3	sovereign/crates/sovereign-cli/src/rough_edges_cmd.rs
+6	sovereign/crates/sovereign-cli-dev/src/git_archaeology_cmd.rs
+3	sovereign/crates/sovereign-cli-dev/src/rough_edges_cmd.rs
 2	sovereign/crates/sovereign-desktop/src-tauri/src/commands/corpus_install.rs
 2	sovereign/crates/sovereign-desktop/src-tauri/src/import_commands.rs
 8	sovereign/crates/sovereign-grants/src/shard_manager.rs

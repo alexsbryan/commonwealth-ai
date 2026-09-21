@@ -49,7 +49,7 @@ The rest of this folder is subsystem deep-dives and design notes, one feature or
 Subsystems:
 
 - [`inference.md`](inference.md) — slots, OICP scoring, harness adapters, cutoff legibility
-- [`retrieval-pipeline.md`](retrieval-pipeline.md) — the retrieval steps and their knobs (generated from the code)
+- [`retrieval-pipeline.md`](../crates/sovereign-core/docs/retrieval-pipeline.md) — the retrieval steps and their knobs (generated from the code)
 - [`TIERED_RETRIEVAL.md`](TIERED_RETRIEVAL.md) — the tiered retrieval surface
 - [`knowledge-view.md`](knowledge-view.md) — KnowledgeView: your terrain, not your transcript
 - [`notes-mesh.md`](notes-mesh.md) — how NoteStore propagates across the mesh

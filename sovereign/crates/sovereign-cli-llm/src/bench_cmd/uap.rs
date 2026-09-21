@@ -220,17 +220,6 @@ fn default_bench_dir() -> PathBuf {
 
 use sovereign_core::time::unix_now as now_secs;
 
-fn git_head_short() -> Option<String> {
-    std::process::Command::new("git")
-        .args(["rev-parse", "--short", "HEAD"])
-        .output()
-        .ok()
-        .filter(|o| o.status.success())
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-}
-
 // ── outcome record ───────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -453,7 +442,7 @@ async fn cmd_run(args: &[String]) -> Result<i32, String> {
         let mut budget = PeekBudget::load(&budget_path).map_err(|e| format!("peek budget: {e}"))?;
         let n = budget.burn(
             "--unseal-holdout from `svrn bench uap run`",
-            git_head_short(),
+            sovereign_cli_shared::repo::head_short_in(&parsed.bench_dir),
         );
         budget
             .save(&budget_path)

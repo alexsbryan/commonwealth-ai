@@ -29,9 +29,9 @@ use futures::Stream;
 use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
-use sovereign_core::error::{Error, Result as SovResult};
-use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::{
+use sovereign_contracts::error::{Error, Result as SovResult};
+use sovereign_contracts::traits::InferenceProvider;
+use sovereign_contracts::types::{
     CompletionRequest, CompletionResponse, ProviderCapabilities, Speed, StreamFrame,
 };
 
@@ -300,7 +300,7 @@ impl TestProvider {
                 max_context_tokens: 4_096,
                 supports_structured_output: false,
                 relative_speed: Speed::Fast,
-                relative_reasoning: sovereign_core::types::Depth::Moderate,
+                relative_reasoning: sovereign_contracts::types::Depth::Moderate,
             },
         }
     }
@@ -456,7 +456,7 @@ impl InferenceProvider for TestProvider {
         // a synthetic terminal `Stop` (unless the body already
         // emitted an `Error` terminator). Matches the documented
         // behaviour of `InferenceProvider::complete_stream_with_finish`'s
-        // default impl in `sovereign-core::traits`.
+        // default impl in `sovereign-contracts::traits`.
         use futures::StreamExt;
         use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -469,7 +469,7 @@ impl InferenceProvider for TestProvider {
                 Err(e) => {
                     body_flag.store(true, Ordering::Relaxed);
                     vec![StreamFrame::Finish {
-                        reason: sovereign_core::types::FinishReason::Error(format!("{e}")),
+                        reason: sovereign_contracts::types::FinishReason::Error(format!("{e}")),
                         usage: None,
                     }]
                 }
@@ -482,7 +482,7 @@ impl InferenceProvider for TestProvider {
                 None
             } else {
                 Some(StreamFrame::Finish {
-                    reason: sovereign_core::types::FinishReason::Stop,
+                    reason: sovereign_contracts::types::FinishReason::Stop,
                     usage: None,
                 })
             }
@@ -519,8 +519,8 @@ impl InferenceProvider for TestProvider {
     /// their own. A `TestProvider` stands in for a node that DOES hold its
     /// models, so it has to say so — inheriting the empty default would model a
     /// thin client while every other method claims to serve.
-    fn resident_slots(&self) -> Vec<sovereign_core::traits::ResidentSlot> {
-        let slot = |role: &str, model_id: String| sovereign_core::traits::ResidentSlot {
+    fn resident_slots(&self) -> Vec<sovereign_contracts::traits::ResidentSlot> {
+        let slot = |role: &str, model_id: String| sovereign_contracts::traits::ResidentSlot {
             role: role.to_string(),
             model_id,
             resident: true,
@@ -616,11 +616,12 @@ pub fn desktop_services_with_engine(
 /// lines each (ARCH §10.6). They are named here instead.
 pub struct DesktopParts {
     pub engine: Arc<corpus_engine::CorpusEngine>,
-    pub provider: Arc<dyn sovereign_core::traits::InferenceProvider>,
-    pub store: Arc<dyn sovereign_core::traits::StateStore>,
+    pub provider: Arc<dyn sovereign_contracts::traits::InferenceProvider>,
+    pub store: Arc<dyn sovereign_contracts::traits::StateStore>,
     pub runtime: Arc<sovereign_core::runtime::Runtime>,
     pub insights: Option<Arc<sovereign_core::insight::InsightService>>,
-    pub features: Option<Arc<sovereign_store::recipe_project_store::RecipeProjectStore>>,
+    pub features:
+        Option<Arc<sovereign_tools::recipe_author::recipe_project_store::RecipeProjectStore>>,
     pub mcp: sovereign_daemon::McpSurface,
 }
 
@@ -644,7 +645,7 @@ impl DesktopParts {
     /// `NoteStore` from.
     pub fn mounted(
         mut self,
-        tools: Arc<sovereign_core::ToolRegistry>,
+        tools: Arc<sovereign_contracts::ToolRegistry>,
         notes: Arc<corpus_engine_notes::NoteStore>,
     ) -> Self {
         self.mcp = sovereign_daemon::McpSurface::Mounted(sovereign_daemon::McpMount {
@@ -715,19 +716,19 @@ pub fn desktop_services_with_runtime(
 /// [`stub_runtime`] carrying the caller's `SkillRegistry` instead of an
 /// empty one — the registry `/v1/skills` serves.
 pub fn stub_runtime_with_skills(
-    provider: Arc<dyn sovereign_core::traits::InferenceProvider>,
-    skills: Arc<sovereign_core::SkillRegistry>,
+    provider: Arc<dyn sovereign_contracts::traits::InferenceProvider>,
+    skills: Arc<sovereign_contracts::skills::SkillRegistry>,
 ) -> Arc<sovereign_core::runtime::Runtime> {
     Arc::new(sovereign_core::runtime::Runtime::new(
         sovereign_core::RuntimeParts::new(
             provider,
             Box::new(sovereign_core::stubs::PassthroughRouter),
             Box::new(sovereign_core::stubs::NoOpPlanner),
-            Arc::new(sovereign_core::ToolRegistry::new()),
+            Arc::new(sovereign_contracts::ToolRegistry::new()),
             Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
             skills,
             Arc::new(sovereign_core::executor::AutoApprovalChannel),
-            sovereign_core::types::InferenceConfig::default(),
+            sovereign_contracts::types::InferenceConfig::default(),
             sovereign_core::runtime::lane::LaneSources::none(),
         ),
     ))
@@ -745,11 +746,12 @@ pub fn stub_runtime_with_skills(
 pub fn desktop_services_with_note_and_feature_stores(
     engine: Arc<corpus_engine::CorpusEngine>,
     notes: Arc<corpus_engine_notes::NoteStore>,
-    features: Option<Arc<sovereign_store::recipe_project_store::RecipeProjectStore>>,
+    features: Option<Arc<sovereign_tools::recipe_author::recipe_project_store::RecipeProjectStore>>,
 ) -> sovereign_daemon::DaemonServices {
     desktop_services(DesktopParts {
         features,
-        ..DesktopParts::new(engine).mounted(Arc::new(sovereign_core::ToolRegistry::new()), notes)
+        ..DesktopParts::new(engine)
+            .mounted(Arc::new(sovereign_contracts::ToolRegistry::new()), notes)
     })
 }
 
@@ -766,8 +768,8 @@ pub fn desktop_services_with_note_and_feature_stores(
 pub fn desktop_services_with_tool_registry(
     engine: Arc<corpus_engine::CorpusEngine>,
     notes: Arc<corpus_engine_notes::NoteStore>,
-    features: Option<Arc<sovereign_store::recipe_project_store::RecipeProjectStore>>,
-    tools: Arc<sovereign_core::ToolRegistry>,
+    features: Option<Arc<sovereign_tools::recipe_author::recipe_project_store::RecipeProjectStore>>,
+    tools: Arc<sovereign_contracts::ToolRegistry>,
 ) -> sovereign_daemon::DaemonServices {
     desktop_services(DesktopParts {
         features,
@@ -785,8 +787,8 @@ pub fn desktop_services_with_tool_registry(
 /// carries, so a test can assert on rows a turn wrote. `None` gets a private
 /// in-memory one.
 pub fn stub_runtime(
-    provider: Arc<dyn sovereign_core::traits::InferenceProvider>,
-    store: Option<Arc<dyn sovereign_core::traits::StateStore>>,
+    provider: Arc<dyn sovereign_contracts::traits::InferenceProvider>,
+    store: Option<Arc<dyn sovereign_contracts::traits::StateStore>>,
 ) -> Arc<sovereign_core::runtime::Runtime> {
     Arc::new(stub_runtime_parts(provider, store))
 }
@@ -796,8 +798,8 @@ pub fn stub_runtime(
 /// see the corpora the `ServingCore` holds — as the production recipe wires
 /// them.
 pub fn stub_runtime_with_engine(
-    provider: Arc<dyn sovereign_core::traits::InferenceProvider>,
-    store: Option<Arc<dyn sovereign_core::traits::StateStore>>,
+    provider: Arc<dyn sovereign_contracts::traits::InferenceProvider>,
+    store: Option<Arc<dyn sovereign_contracts::traits::StateStore>>,
     engine: Arc<corpus_engine::CorpusEngine>,
 ) -> Arc<sovereign_core::runtime::Runtime> {
     let mut runtime = stub_runtime_parts(provider, store);
@@ -806,8 +808,8 @@ pub fn stub_runtime_with_engine(
 }
 
 fn stub_runtime_parts(
-    provider: Arc<dyn sovereign_core::traits::InferenceProvider>,
-    store: Option<Arc<dyn sovereign_core::traits::StateStore>>,
+    provider: Arc<dyn sovereign_contracts::traits::InferenceProvider>,
+    store: Option<Arc<dyn sovereign_contracts::traits::StateStore>>,
 ) -> sovereign_core::runtime::Runtime {
     stub_runtime_parts_with_lanes(
         provider,
@@ -817,8 +819,8 @@ fn stub_runtime_parts(
 }
 
 fn stub_runtime_parts_with_lanes(
-    provider: Arc<dyn sovereign_core::traits::InferenceProvider>,
-    store: Option<Arc<dyn sovereign_core::traits::StateStore>>,
+    provider: Arc<dyn sovereign_contracts::traits::InferenceProvider>,
+    store: Option<Arc<dyn sovereign_contracts::traits::StateStore>>,
     lanes: sovereign_core::runtime::lane::LaneSources,
 ) -> sovereign_core::runtime::Runtime {
     let store =
@@ -827,11 +829,11 @@ fn stub_runtime_parts_with_lanes(
         provider,
         Box::new(sovereign_core::stubs::PassthroughRouter),
         Box::new(sovereign_core::stubs::NoOpPlanner),
-        Arc::new(sovereign_core::ToolRegistry::new()),
+        Arc::new(sovereign_contracts::ToolRegistry::new()),
         store,
-        Arc::new(sovereign_core::SkillRegistry::new()),
+        Arc::new(sovereign_contracts::skills::SkillRegistry::new()),
         Arc::new(sovereign_core::executor::AutoApprovalChannel),
-        sovereign_core::types::InferenceConfig::default(),
+        sovereign_contracts::types::InferenceConfig::default(),
         lanes,
     ))
 }
@@ -845,7 +847,7 @@ fn stub_runtime_parts_with_lanes(
 /// the path the handler takes to reach them.
 pub fn desktop_services_with_conv_reader(
     engine: Arc<corpus_engine::CorpusEngine>,
-    store: Arc<dyn sovereign_core::traits::StateStore>,
+    store: Arc<dyn sovereign_contracts::traits::StateStore>,
     conv: Arc<dyn sovereign_core::conv_tiered::ConvTieredReader>,
 ) -> sovereign_daemon::DaemonServices {
     let mut lanes = sovereign_core::runtime::lane::LaneSources::none();
@@ -872,8 +874,8 @@ pub fn desktop_services_with_conv_reader(
 /// index installed" against a daemon that had two.)
 pub fn desktop_services_with_store(
     engine: Arc<corpus_engine::CorpusEngine>,
-    store: Arc<dyn sovereign_core::traits::StateStore>,
-    provider: Arc<dyn sovereign_core::traits::InferenceProvider>,
+    store: Arc<dyn sovereign_contracts::traits::StateStore>,
+    provider: Arc<dyn sovereign_contracts::traits::InferenceProvider>,
 ) -> sovereign_daemon::DaemonServices {
     desktop_services_with_insights(engine, store, provider, None)
 }
@@ -886,9 +888,9 @@ pub fn desktop_services_with_store(
 /// stays the stub shape — the point is the seam, not the planner.
 pub fn desktop_services_with_planner(
     engine: Arc<corpus_engine::CorpusEngine>,
-    store: Arc<dyn sovereign_core::traits::StateStore>,
-    provider: Arc<dyn sovereign_core::traits::InferenceProvider>,
-    planner: Box<dyn sovereign_core::traits::Planner>,
+    store: Arc<dyn sovereign_contracts::traits::StateStore>,
+    provider: Arc<dyn sovereign_contracts::traits::InferenceProvider>,
+    planner: Box<dyn sovereign_contracts::traits::Planner>,
 ) -> sovereign_daemon::DaemonServices {
     let mut runtime = stub_runtime_parts(Arc::clone(&provider), Some(Arc::clone(&store)));
     runtime.corpus_engine = Some(Arc::clone(&engine));
@@ -908,8 +910,8 @@ pub fn desktop_services_with_planner(
 #[allow(clippy::too_many_arguments)]
 pub fn desktop_services_with_insights(
     engine: Arc<corpus_engine::CorpusEngine>,
-    store: Arc<dyn sovereign_core::traits::StateStore>,
-    provider: Arc<dyn sovereign_core::traits::InferenceProvider>,
+    store: Arc<dyn sovereign_contracts::traits::StateStore>,
+    provider: Arc<dyn sovereign_contracts::traits::InferenceProvider>,
     insights: Option<Arc<sovereign_core::insight::InsightService>>,
 ) -> sovereign_daemon::DaemonServices {
     let runtime = stub_runtime_with_engine(

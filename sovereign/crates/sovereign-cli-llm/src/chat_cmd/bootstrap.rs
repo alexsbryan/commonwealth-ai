@@ -375,7 +375,7 @@ async fn build_session_scoped(
     // policy as the desktop). A host input, not part of the recipe: inside the
     // daemon this is a loopback call to itself and dissolves (§3.5).
     let mesh_knowledge: Option<Arc<dyn sovereign_core::traits::MeshKnowledgeSource>> =
-        match sovereign_mesh::knowledge_client::MeshKnowledgeClient::new(&base) {
+        match sovereign_turn_client::knowledge_client::MeshKnowledgeClient::new(&base) {
             Ok(c) => Some(Arc::new(c)),
             Err(_) => None,
         };

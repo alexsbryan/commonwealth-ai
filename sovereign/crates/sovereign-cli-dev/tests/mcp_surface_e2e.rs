@@ -20,8 +20,21 @@
 //! — they cost every session the duplicate schema of six tools. The
 //! aliases remain accepted at dispatch via `resolve_alias`, and both
 //! halves are asserted so neither can drift away alone.
+//!
+//! # Why this crate
+//!
+//! The check has two sides: the surface LIST lives in `sovereign_tools::
+//! mcp_surface` and the tool IDS live in `sovereign-code` / `sovereign-atos`.
+//! It ran from `sovereign-tools/tests/`, which made `sovereign-code`,
+//! `sovereign-atos`, `corpus-engine-scip` and `corpus-engine-watchers`
+//! dev-dependencies of `sovereign-tools` — four edges leaving the `svrn`
+//! package closure for a test (`quality/ARCH_LAYERS.toml`, boundary-gate).
+//! `sovereign-cli-dev` already holds both sides as NORMAL dependencies and is
+//! where the registry under test is actually assembled
+//! (`src/tools_cmd/registry.rs`), so the check moved here 2026-09-21 with no
+//! assertion changed and no new dependency edge anywhere.
 
-#![cfg(feature = "treesitter")]
+#![cfg(feature = "workbench")]
 
 use std::sync::Arc;
 
@@ -31,7 +44,8 @@ use corpus_engine_scip::ScipGraph;
 use sovereign_core::registry::ToolRegistry;
 use sovereign_core::traits::Tool;
 use sovereign_tools::mcp_surface::{
-    is_mcp_exposed, render_tools_list, resolve_alias, MCP_TOOLS_ALWAYS, MCP_TOOL_ALIASES,
+    is_mcp_exposed, render_tools_list, resolve_alias, MCP_TOOLS_ALWAYS, MCP_TOOLS_RETIRED,
+    MCP_TOOL_ALIASES,
 };
 
 fn empty_graph() -> sovereign_code::ScipGraphHandle {
@@ -223,13 +237,11 @@ fn new_tools_advertise_canonical_ids() {
     assert_eq!(spec.descriptor().id, "spec");
     assert!(MCP_TOOLS_SPEC_GATED.contains(&"spec"));
 
-    // drift → SPEC_GATED tier (atos-gated tool).
-    #[cfg(feature = "atos")]
-    {
-        let drift = sovereign_atos::tools::DriftTool::new().declared();
-        assert_eq!(drift.descriptor().id, "drift");
-        assert!(MCP_TOOLS_SPEC_GATED.contains(&"drift"));
-    }
+    // drift → SPEC_GATED tier. Ran only under sovereign-tools' `atos` feature
+    // before the move; this crate pins `sovereign-atos`, so it always runs.
+    let drift = sovereign_atos::tools::DriftTool::new().declared();
+    assert_eq!(drift.descriptor().id, "drift");
+    assert!(MCP_TOOLS_SPEC_GATED.contains(&"drift"));
 
     // Phase 2 unconditionally unions the two tiers, so all three
     // are exposed today; Phase 5 will gate spec/drift on
@@ -300,5 +312,40 @@ fn plan_schema_builds_over_real_tool_descriptors() {
              copy here would be a second decider and would drift from the tool",
             d.id
         );
+    }
+}
+
+/// Each code tool's descriptor id must land on the surface list it was
+/// classified into, or the tool is advertised over MCP yet not callable
+/// (or retired yet still advertised).
+///
+/// These three assertions used to live beside each tool in
+/// `sovereign-tools/src/code/`, then in `sovereign-tools/src/mcp_surface.rs`
+/// when `code` became its own crate (FIVE_PROGRAMS §2) — a `#[cfg(test)]`
+/// module, which is still a dev-dependency edge out of the `svrn` closure.
+/// They are here because this is the one crate that holds the surface list
+/// and the tools as normal dependencies. The
+/// `assert_eq!(descriptor().id, "...")` half stayed with each tool, where it
+/// needs nothing from here.
+#[test]
+fn code_tool_descriptor_ids_land_on_their_surface_list() {
+    use sovereign_contracts::traits::Tool;
+    use std::path::PathBuf;
+
+    let capability_map =
+        sovereign_code::CapabilityMapTool::with_indexes_dir(PathBuf::from("/nonexistent"))
+            .declared();
+    assert!(MCP_TOOLS_ALWAYS.contains(&capability_map.descriptor().id.as_str()));
+
+    // Registry-only since 2026-08-31: both retired from the MCP surface on
+    // usage evidence (arch_posture 1 call in 190 sessions, arch_report 0),
+    // still reachable through `svrn tools call <id>`.
+    for retired in [
+        sovereign_code::ArchPostureTool::with_data_dir(PathBuf::from("/nonexistent")).declared(),
+        sovereign_code::ArchReportTool::with_indexes_dir(PathBuf::from("/nonexistent")).declared(),
+    ] {
+        let id = retired.descriptor().id;
+        assert!(MCP_TOOLS_RETIRED.contains(&id.as_str()), "{id} not retired");
+        assert!(!is_mcp_exposed(&id), "{id} still exposed");
     }
 }

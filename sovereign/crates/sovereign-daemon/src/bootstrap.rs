@@ -1326,7 +1326,7 @@ pub fn reconcile_local_measurements(daemon: Arc<EmbeddedDaemon>) {
         let Some(rail) = app_state.ring_rail() else {
             return;
         };
-        let namespace = sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID;
+        let namespace = sovereign_mesh::mesh_measurements::MEASUREMENTS_APP_ID;
         let journal = match rail.journal(namespace) {
             Ok(j) => j,
             Err(e) => {
@@ -1339,7 +1339,7 @@ pub fn reconcile_local_measurements(daemon: Arc<EmbeddedDaemon>) {
             app_state.self_node_id(),
             app_state.self_node_pubkey(),
         );
-        let file = sovereign_core::mesh_measurements::load();
+        let file = sovereign_mesh::mesh_measurements::load();
         sovereign_mesh::measurements_rail::republish(
             &journal,
             rail.signer(),
@@ -1375,7 +1375,7 @@ pub fn wire_note_propagation_sink(
             // reaches here. Until cw-lift 2b this was an `if
             // ev.tombstone` whose two arms both evaluated to "notes",
             // which read as a private path that does not exist.
-            let app_id = corpus_engine_notes::NOTES_APP_ID;
+            let app_id = sovereign_contracts::peer::NOTES_APP_ID;
             // Receipt stamp (order commons-fluency fix 3): the wire
             // copy carries the publication clock — the moment THIS
             // sink's set() accepted it — which is the origin end of
@@ -1579,17 +1579,18 @@ pub fn spawn_notes_ingest_poller(
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             loop {
                 interval.tick().await;
-                let entries = match mesh_for_poller.scan(corpus_engine_notes::NOTES_APP_ID, "") {
-                    Ok(e) => e,
-                    Err(err) => {
-                        tracing::debug!(
-                            target = "notes",
-                            error = %err,
-                            "notes: ingest poller scan failed"
-                        );
-                        continue;
-                    }
-                };
+                let entries =
+                    match mesh_for_poller.scan(sovereign_contracts::peer::NOTES_APP_ID, "") {
+                        Ok(e) => e,
+                        Err(err) => {
+                            tracing::debug!(
+                                target = "notes",
+                                error = %err,
+                                "notes: ingest poller scan failed"
+                            );
+                            continue;
+                        }
+                    };
                 let mut events: Vec<NotePropagationEvent> = Vec::new();
                 for entry in entries {
                     if entry.origin == self_id_for_poller {

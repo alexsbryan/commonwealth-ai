@@ -289,7 +289,7 @@ async fn cmd_fit(args: &[String]) -> i32 {
     let objective = opts.objective();
 
     let Some(root) = crate::router_cache_cmd::repo_root() else {
-        eprintln!("router fit: not inside a sovereign checkout (no sovereign/models.toml found)");
+        eprintln!("router fit: not inside a sovereign checkout (bundled models.toml not found)");
         return 2;
     };
     let tree = match crate::router_cache_cmd::read_tree(&root) {

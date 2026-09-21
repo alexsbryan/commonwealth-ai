@@ -29,8 +29,8 @@ use std::net::SocketAddr;
 use axum::routing::post;
 use axum::{Json, Router};
 use oicp_types::{KnowledgeResult, KnowledgeSearchResponse};
-use sovereign_core::traits::{MeshKnowledgeSource, UnavailabilityReason};
-use sovereign_mesh::knowledge_client::MeshKnowledgeClient;
+use sovereign_contracts::traits::{MeshKnowledgeSource, UnavailabilityReason};
+use sovereign_turn_client::knowledge_client::MeshKnowledgeClient;
 
 /// The five peer-only corpora from the §9.6 run, in the order the daemon
 /// logged them.

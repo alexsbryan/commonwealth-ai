@@ -29,7 +29,6 @@ use std::sync::Arc;
 
 use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use commonwealth_core::ids::{MeshId, NodeId, NodePubkey};
-use commonwealth_core::knowledge::CorpusShardInfo;
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
 use commonwealth_state::MeshStore;
 use commonwealth_transport::iroh::{EndpointBuilder, IrohAcceptor, IrohTransport, SecretKey, ALPN};
@@ -38,6 +37,7 @@ use commonwealth_transport::{
 };
 use corpus_engine::index::{CorpusIndex, EmbeddedChunk, InsertChunk};
 use corpus_engine::{CorpusEngine, EmbedFn};
+use oicp_types::knowledge::CorpusShardInfo;
 use sovereign_daemon::server::{client_router, internal_router};
 use sovereign_daemon::state::AppState;
 use sovereign_meshapp_registry::registry::AppRegistry;

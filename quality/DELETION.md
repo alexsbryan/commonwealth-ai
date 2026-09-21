@@ -51,7 +51,7 @@ different instruments. This campaign is the first one.**
 
 **It is not the JSON re-encode.** 2,166,456 of the repo's 2,189,222 tracked
 JSON lines are pretty-printed and collapse to zero newlines when compacted.
-`sovereign/router/router-embed-cache.json` alone is 435,030 lines of
+`sovereign/crates/sovereign-core/data/router/router-embed-cache.json` alone is 435,030 lines of
 one-float-per-line, and the round-trip is provably exact
 (`json.loads(compact) == original`, 423 entries × 1024 dims). It is
 `include_str!`'d at `sovereign-core/src/router_embed_cache.rs:87` into a plain

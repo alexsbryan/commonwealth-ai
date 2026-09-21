@@ -25,16 +25,16 @@ use crate::llama::cpp::mtp::MtpSession;
 use crate::llama::cpp::sampling::LlamaSampler;
 use crate::llama::cpp::token::LlamaToken;
 use crate::llama::{LlamaContextExt, LlamaModelExt};
-use sovereign_core::types::TurnAdmission;
+use sovereign_contracts::types::TurnAdmission;
 
 use serving_policy::fair_sched::EtaEwma;
-use sovereign_core::error::Error;
-use sovereign_core::model_family::{
+use sovereign_contracts::error::Error;
+use sovereign_contracts::model_family::{
     EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, RerankQuirks, ThinkingControl,
 };
-use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::*;
-use sovereign_core::Result;
+use sovereign_contracts::traits::InferenceProvider;
+use sovereign_contracts::types::*;
+use sovereign_contracts::Result;
 
 use crate::hardware::HardwareProfile;
 
@@ -778,7 +778,7 @@ pub(crate) fn finish_reason_from_counts(
     }
 }
 
-pub(crate) use sovereign_core::time::unix_millis as now_millis;
+pub(crate) use sovereign_time::unix_millis as now_millis;
 
 /// Hard wall-clock deadline for any single chat inference, in
 /// seconds. Defends against pathological JSON-Schema mask states
@@ -5491,7 +5491,7 @@ mod queue_gauge_tests {
     //! bound, and a counter that drifts would send that decision
     //! confidently wrong.
     use super::{acquire_with_queue_gauge, SlotQueue};
-    use sovereign_core::Error;
+    use sovereign_contracts::Error;
     use std::sync::atomic::Ordering;
     use std::sync::Arc;
 
@@ -5724,7 +5724,7 @@ mod queue_gauge_tests {
         );
         assert_eq!(q.depth(), 0, "the shed caller never parked");
 
-        let admitted = sovereign_core::types::TurnAdmission::new("turn-b");
+        let admitted = sovereign_contracts::types::TurnAdmission::new("turn-b");
         let qc = Arc::clone(&q);
         let waiter = tokio::spawn(async move {
             acquire_with_queue_gauge(&qc, "complete/lazy", Some(&admitted)).await
@@ -5764,7 +5764,7 @@ mod queue_gauge_tests {
             .await
             .expect("the stuck holder takes the permit");
 
-        let admitted = sovereign_core::types::TurnAdmission::new("turn-b");
+        let admitted = sovereign_contracts::types::TurnAdmission::new("turn-b");
         let started = std::time::Instant::now();
         let out = tokio::time::timeout(
             std::time::Duration::from_secs(3),

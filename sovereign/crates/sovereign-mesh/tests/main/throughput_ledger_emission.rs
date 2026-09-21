@@ -30,13 +30,13 @@ use commonwealth_core::contributions::LedgerEventKind;
 use commonwealth_core::ids::NodeId;
 use commonwealth_state::{ContributionEmitter, MeshStore};
 use futures::StreamExt;
-use serde::Deserialize;
-use sovereign_core::oicp::{
+use oicp_types::{
     CapabilityClaim, CapabilityHint, InferenceRequirements, LatencyClass, ModelStatus,
     ProviderManifest, ProviderModel, OICP_VERSION,
 };
-use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::{CompletionRequest, Speed};
+use serde::Deserialize;
+use sovereign_contracts::traits::InferenceProvider;
+use sovereign_contracts::types::{CompletionRequest, Speed};
 use sovereign_daemon::daemon::InferenceVenue;
 use sovereign_mesh::peer_inference::{InferenceRouter, VenueHost, VenueSource};
 use sovereign_serving_host::ledger::LedgerEmitter;
@@ -229,7 +229,7 @@ async fn peer_routed_stream_emits_inference_received_on_drop() {
     let envelope = InferenceRequirements::new()
         .with_hint(CapabilityHint::general())
         .with_latency_class(LatencyClass::Extended)
-        .with_sharding(sovereign_core::oicp::ShardingPrivacy::MeshAllowed);
+        .with_sharding(oicp_types::ShardingPrivacy::MeshAllowed);
     let request = CompletionRequest::new("ping")
         .with_speed(Speed::Slow)
         .with_oicp(envelope);
@@ -358,7 +358,7 @@ async fn peer_route_failure_without_chunks_does_not_emit_ledger_event() {
     let envelope = InferenceRequirements::new()
         .with_hint(CapabilityHint::general())
         .with_latency_class(LatencyClass::Extended)
-        .with_sharding(sovereign_core::oicp::ShardingPrivacy::MeshAllowed);
+        .with_sharding(oicp_types::ShardingPrivacy::MeshAllowed);
     let request = CompletionRequest::new("ping")
         .with_speed(Speed::Slow)
         .with_oicp(envelope);

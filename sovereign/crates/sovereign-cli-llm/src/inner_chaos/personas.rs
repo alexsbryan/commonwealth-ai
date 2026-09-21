@@ -109,7 +109,7 @@ mod tests {
     /// file's shape to the loader for as long as both live in-tree.
     #[test]
     fn committed_personas_fixture_loads() {
-        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../bench/inner_work");
+        let dir = resolve_bench_dir(None).expect("bench/inner_work resolves from the checkout");
         let personas = load_personas(&dir.join("personas.toml")).expect("personas.toml loads");
         assert!(personas.len() >= 6, "expected the full persona bank");
         let control: Vec<_> = personas.iter().filter(|p| p.control).collect();
@@ -125,7 +125,7 @@ mod tests {
 
     #[test]
     fn committed_memories_fixture_loads() {
-        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../bench/inner_work");
+        let dir = resolve_bench_dir(None).expect("bench/inner_work resolves from the checkout");
         let memories = load_memories(&dir.join("memories.toml")).expect("memories.toml loads");
         assert!(memories.len() >= 4);
         // The theme-only grief memory is load-bearing for the

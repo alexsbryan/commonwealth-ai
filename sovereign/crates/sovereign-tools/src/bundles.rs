@@ -358,8 +358,6 @@ impl ToolBundle for KnowledgeFrontDoor {
     }
 }
 
-
-
 /// Sandboxed script execution (`compute`).
 pub struct ComputeTools;
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Parser for `sovereign/models.toml`.
+//! Parser for the bundled `models.toml` (`sovereign-contracts/data/models.toml`).
 //!
 //! The workspace-root `models.toml` is the source of truth for
 //! which GGUF files ship with each hardware profile (cpu_only,
@@ -28,7 +28,7 @@ use std::sync::LazyLock;
 use serde::{Deserialize, Serialize};
 
 use crate::model_family::EmbedQuirks;
-use crate::oicp::CapabilityProfile;
+use oicp_types::CapabilityProfile;
 
 /// Root of `models.toml`. Nested exactly how TOML sees it:
 ///
@@ -75,7 +75,7 @@ pub struct ProfileConfig {
 /// shape `svrn setup --plan --json` describes a download with, and a first-run
 /// client that only parses that plan should not have to link the runtime hub
 /// to name it. One definition, two paths (ARCH principle 8).
-pub use sovereign_contracts::daemon_wire::SlotConfig;
+pub use crate::daemon_wire::SlotConfig;
 
 /// A `[[user_slots]]` entry — "bring your own model" override
 /// that replaces one slot of the active profile.
@@ -650,21 +650,20 @@ fn strip_gguf(s: &str) -> &str {
     s.strip_suffix(".gguf").unwrap_or(s)
 }
 
-/// Process-wide view of the bundled `sovereign/models.toml`.
+/// Process-wide view of the bundled `models.toml`.
 /// Parsed once on first access via `LazyLock`. Panics at startup
 /// time if the bundled file has become malformed — that's a
 /// compile-adjacent invariant, not a runtime condition.
 pub static DEFAULT_MANIFEST: LazyLock<ModelsManifest> = LazyLock::new(|| {
-    static SRC: &str = include_str!("../../../models.toml");
-    ModelsManifest::from_toml_str(SRC).expect(
-        "bundled sovereign/models.toml must parse — regression in the model manifest schema",
-    )
+    static SRC: &str = include_str!("../data/models.toml");
+    ModelsManifest::from_toml_str(SRC)
+        .expect("bundled models.toml must parse — regression in the model manifest schema")
 });
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::oicp::Capability;
+    use oicp_types::Capability;
 
     #[test]
     fn bundled_manifest_parses() {

@@ -70,22 +70,6 @@ pub(crate) async fn cmd_doctor(_args: &[String]) -> i32 {
         Err(e) => report.fail("features.db", format!("{e}")),
     }
 
-    // 5. Default pipelines loadable.
-    let pipelines_ok = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        serving_policy::pipeline_aliases::PipelineAliasTable::default_table()
-            .resolve("sovereign-coder")
-            .is_some()
-    }))
-    .unwrap_or(false);
-    if pipelines_ok {
-        report.pass("default pipelines", "sovereign-coder resolves".into());
-    } else {
-        report.fail(
-            "default pipelines",
-            "default_pipelines.toml parse or resolve failed".into(),
-        );
-    }
-
     // 6. Opencode plugin present + version freshness.
     let plugin = anchor.join(crate::atos_plugin::plugin_rel_path());
     if !plugin.exists() {

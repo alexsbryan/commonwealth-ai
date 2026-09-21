@@ -167,7 +167,7 @@ fn refuse_derived_roster(namespace: &str) -> Option<String> {
 /// Read the daemon's client port from config rather than hardcoding 9741 —
 /// a sandbox pointed at its own daemon must not act on the operator's.
 fn daemon_client_port() -> u16 {
-    sovereign_core::setup_config::SetupConfig::load()
+    sovereign_contracts::setup_config::SetupConfig::load()
         .map(|c| c.daemon.client_port)
         .unwrap_or(9741)
 }
@@ -886,7 +886,7 @@ mod tests {
         assert!(refuse_derived_roster("house-expenses").is_none());
         assert!(refuse_derived_roster("mesh-measurement").is_none());
         assert_eq!(
-            refuse_derived_roster(sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID).is_some(),
+            refuse_derived_roster(sovereign_mesh::mesh_measurements::MEASUREMENTS_APP_ID).is_some(),
             true,
             "the guard reads the ONE constant, not a second spelling of it"
         );

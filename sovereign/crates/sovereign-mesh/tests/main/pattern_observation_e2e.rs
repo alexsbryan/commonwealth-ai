@@ -19,11 +19,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use corpus_engine_notes::{NoteSource, NoteStore};
-use sovereign_core::registry::ToolRegistry;
-use sovereign_core::types::{
+use sovereign_contracts::registry::ToolRegistry;
+use sovereign_contracts::types::{
     Effect, Idempotency, Latency, Scope, StepOutput, ToolContext, ToolDescriptor,
 };
-use sovereign_core::Tool;
+use sovereign_contracts::Tool;
 use sovereign_daemon::mcp_router::{mcp_router, FeatureRoot, McpNotifier};
 
 /// Stub tool — we only care that the registry resolves the id and
@@ -41,10 +41,10 @@ impl Tool for StubTool {
         &self,
         _args: &serde_json::Value,
         _ctx: &ToolContext,
-    ) -> Result<StepOutput, sovereign_core::Error> {
+    ) -> Result<StepOutput, sovereign_contracts::Error> {
         Ok(StepOutput::Text("ok".into()))
     }
-    fn required_permissions(&self) -> Vec<sovereign_core::types::Permission> {
+    fn required_permissions(&self) -> Vec<sovereign_contracts::types::Permission> {
         Vec::new()
     }
 }

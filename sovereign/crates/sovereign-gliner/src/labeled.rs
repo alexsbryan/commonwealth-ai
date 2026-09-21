@@ -4,7 +4,7 @@
 //! Two extractor surfaces exist in this workspace and they are not the
 //! same shape:
 //!
-//! - `sovereign_core::traits::EntityExtractor` — the RETRIEVAL side.
+//! - `sovereign_contracts::traits::EntityExtractor` — the RETRIEVAL side.
 //!   Label-less, lower-cased, deduped strings; enough for jaccard
 //!   overlap on a query turn. Both backends already implement it.
 //! - [`LabeledEntityExtractor`] (this module) — the INGEST side. Needs
@@ -25,7 +25,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use sovereign_core::error::Result;
+use sovereign_contracts::error::Result;
 
 use crate::gliner2::{Gliner2Extractor, GLINER2_DEFAULT_THRESHOLD};
 use crate::gliner_ner::{

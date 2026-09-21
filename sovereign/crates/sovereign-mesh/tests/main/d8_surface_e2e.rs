@@ -62,14 +62,14 @@ use corpus_engine::oplog::{Op, Oplog};
 use corpus_engine::CorpusEngine;
 use corpus_engine_notes::NoteStore;
 use sovereign_contracts::mcp_config::{McpAuthConfig, McpServerConfig, McpTransportConfig};
-use sovereign_core::setup_config::SetupConfig;
-use sovereign_core::types::{Effect, Idempotency, Latency, Scope, StepOutput, ToolDescriptor};
-use sovereign_core::{Tool, ToolContext, ToolRegistry};
+use sovereign_contracts::setup_config::SetupConfig;
+use sovereign_contracts::types::{Effect, Idempotency, Latency, Scope, StepOutput, ToolDescriptor};
+use sovereign_contracts::{Tool, ToolContext, ToolRegistry};
 use sovereign_daemon::daemon::EmbeddedDaemon;
 use sovereign_daemon::governance_http::governance_router;
 use sovereign_daemon::mcp_config_http::mcp_config_router;
 use sovereign_daemon::recipe_project_http::recipe_project_router;
-use sovereign_store::recipe_project_store::RecipeProjectStore;
+use sovereign_tools::recipe_author::recipe_project_store::RecipeProjectStore;
 
 use crate::common;
 use crate::common::spawn_router;
@@ -549,10 +549,10 @@ impl Tool for StubTool {
         &self,
         _args: &serde_json::Value,
         _ctx: &ToolContext,
-    ) -> Result<StepOutput, sovereign_core::Error> {
+    ) -> Result<StepOutput, sovereign_contracts::Error> {
         Ok(StepOutput::Text("stub".into()))
     }
-    fn required_permissions(&self) -> Vec<sovereign_core::types::Permission> {
+    fn required_permissions(&self) -> Vec<sovereign_contracts::types::Permission> {
         Vec::new()
     }
 }

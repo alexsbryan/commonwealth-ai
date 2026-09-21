@@ -70,6 +70,16 @@ impl std::fmt::Display for ReplicatedKvError {
 
 impl std::error::Error for ReplicatedKvError {}
 
+/// Rail namespaces whose WRITER and whose roster sit in different packages.
+///
+/// An `app_id` is a wire constant: a rename the roster does not follow stops
+/// replication with no error. One definition, on the seam both sides link.
+pub const NOTES_APP_ID: &str = "notes";
+/// Work-atlas records that gossip across the mesh.
+pub const WORK_ATLAS_APP_ID_PUBLIC: &str = "work-atlas";
+/// Work-atlas records excluded from gossip — cannot leak by construction.
+pub const WORK_ATLAS_APP_ID_PRIVATE: &str = "work-atlas-private";
+
 /// One record in a [`ReplicatedKv`], as the reader sees it.
 ///
 /// `origin` is which node wrote it — the field the daemon's ingest poller

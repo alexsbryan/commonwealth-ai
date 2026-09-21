@@ -39,9 +39,9 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, OnceLock, RwLock};
 
-use sovereign_core::model_family::ModelFamily;
-use sovereign_core::setup_config::{EngineSection, SetupConfig};
-use sovereign_core::traits::InferenceProvider;
+use sovereign_contracts::model_family::ModelFamily;
+use sovereign_contracts::setup_config::{EngineSection, SetupConfig};
+use sovereign_contracts::traits::InferenceProvider;
 
 use crate::embedded::{EmbeddedLlamaCpp, SlotWindows};
 
@@ -50,7 +50,7 @@ use crate::embedded::{EmbeddedLlamaCpp, SlotWindows};
 /// definition lives one layer down, next to [`EngineSection`], because it
 /// is config vocabulary — this crate cannot own it without making the
 /// contract crate depend upward.
-pub use sovereign_core::setup_config::EngineKind;
+pub use sovereign_contracts::setup_config::EngineKind;
 
 /// A constructed engine plus the concrete handles its host still needs.
 ///
@@ -235,7 +235,7 @@ fn build_llama(config: &SetupConfig) -> Result<BuiltEngine, String> {
         .file_name()
         .and_then(|s| s.to_str())
         .and_then(|name| {
-            sovereign_core::models_manifest::DEFAULT_MANIFEST.embed_family_for_file(name)
+            sovereign_contracts::models_manifest::DEFAULT_MANIFEST.embed_family_for_file(name)
         })
         .unwrap_or(ModelFamily::Unknown);
 
@@ -355,7 +355,7 @@ fn build_remote(section: &EngineSection) -> Result<BuiltEngine, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sovereign_core::setup_config::ModelsSection;
+    use sovereign_contracts::setup_config::ModelsSection;
 
     /// The default must stay `Llama`: an existing `config.toml` names no
     /// engine, and `#[serde(default)]` on the section must therefore

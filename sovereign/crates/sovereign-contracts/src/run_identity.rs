@@ -15,7 +15,7 @@
 
 use std::sync::OnceLock;
 
-pub use sovereign_contracts::daemon_wire::{BuildStamp, Skew};
+pub use crate::daemon_wire::{BuildStamp, Skew};
 
 /// Eight hex characters, unique per process start. Short enough to grep,
 /// long enough that two generations in one log do not collide.
@@ -27,6 +27,7 @@ pub fn run_id() -> &'static str {
 /// Which binary this process is, and when it was built.
 #[derive(Debug, Clone)]
 pub struct BuildIdentity {
+    /// This process id.
     pub pid: u32,
     /// `current_exe()`, or the reason it could not be read.
     pub exe: String,
@@ -35,6 +36,7 @@ pub struct BuildIdentity {
     pub exe_mtime: Option<String>,
 }
 
+/// This generation's build identity, captured once at first call.
 pub fn build() -> &'static BuildIdentity {
     static B: OnceLock<BuildIdentity> = OnceLock::new();
     B.get_or_init(|| {

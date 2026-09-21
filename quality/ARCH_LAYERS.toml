@@ -900,6 +900,24 @@ name = "oicp-client"
 allow = ["sovereign-contracts", "oicp-types"]
 
 [[package_leaf]]
+name = "sovereign-turn-client"
+# The client half of the turn protocol. Admitted 2026-09-21 on the same terms
+# as `oicp-client` above, whose mirror its own Cargo.toml already calls it: the
+# in-repo budget is `sovereign-contracts` + `oicp-types` + `workspace-hack`,
+# identical to oicp-client's, and all three filesystem rules pass (no build.rs,
+# no `include_str!`, no `CARGO_MANIFEST_DIR`, no `Command::new("git")` —
+# checked, not assumed; `reach.rs` shells `kill`/`ps`, which rule 3d does not
+# reach).
+#
+# WHY A LEAF RATHER THAN A MEMBER. §2 composes by process: one program DIALS
+# another and none embeds another. The dial is this crate, so every package
+# must be able to name it — claiming it for one would make the other four's
+# dials red, which measures the partition rather than a boundary. It is also
+# what FIVE_PROGRAMS step 10 rests on: fourteen `EmbeddedDaemon` construction
+# sites become one dial through here.
+allow = ["sovereign-contracts", "oicp-types", "workspace-hack"]
+
+[[package_leaf]]
 name = "arch-layers"
 # The layer-map schema + evaluator. Admitted 2026-09-21, taking the closing
 # condition the `code-intel -> arch-layers` exception carried before the
@@ -923,6 +941,27 @@ name = "arch-layers"
 # cannot drift — ARCH principle 8. Making the code tools stop naming it would
 # mean a second parser, which is the defect the sharing exists to prevent.
 allow = ["workspace-hack"]
+
+[[package_leaf]]
+name = "sovereign-workflow"
+# Step/Artifact/Runner — the workflow substrate. Admitted 2026-09-21: its whole
+# in-repo budget is `sovereign-contracts` + `workspace-hack`, it carries no
+# build.rs and no path that escapes its crate root (its one
+# `CARGO_MANIFEST_DIR` join lands in its own `examples/`), and TWO packages
+# need it — `svrn` through the daemon's workflow trigger and cli-llm's
+# `workflow` verb, plus the studio and desktop binaries, which are governed by
+# nothing. Same terms as `corpus-engine-yield` below.
+allow = ["sovereign-contracts", "workspace-hack"]
+
+[[package_leaf]]
+name = "corpus-engine-atos"
+# The ATOS plan + feature stores (SQLite, schema embedded from its own
+# `assets/`). Admitted 2026-09-21 on `corpus-engine-yield`'s test — ONE in-repo
+# dep, itself a leaf — and on the same two-package finding: `code` reaches it
+# from 15 files of `sovereign-cli-dev`'s atos verbs, `svrn` from the daemon's
+# middleware and cli-llm. Unclaimed it made every one of those edges red, which
+# measures the absence of a decision rather than a boundary.
+allow = ["corpus-engine-yield", "workspace-hack"]
 
 [[package_leaf]]
 name = "corpus-engine-yield"
@@ -1071,6 +1110,11 @@ crates = [
     "sovereign-cli-shared",
     "sovereign-cli-daemon",
     "sovereign-cli-llm",
+    # The workflow runner + its HTTP router, claimed 2026-09-21. Its consumers
+    # are cli-llm's `workflow` verb, the daemon's trigger and cli-daemon's
+    # route mount; `sovereign-studio`/`sovereign-desktop` name it too and are
+    # governed by no package. Reaches only leaves plus `sovereign-tools-base`.
+    "sovereign-workflow-host",
 ]
 
 [[package]]

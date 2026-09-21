@@ -26,8 +26,8 @@ use corpus_engine_archaeology::git_archaeology::GitArchaeologyReport;
 use sovereign_cli_shared::dirs::sovereign_root;
 
 pub async fn run(args: &[String]) -> i32 {
-    if crate::util::help::wants_help(args) {
-        crate::util::help::print(&HELP);
+    if sovereign_cli_shared::help::wants_help(args) {
+        sovereign_cli_shared::help::print(&HELP);
         return 0;
     }
     let parsed = match parse_args(args) {
@@ -546,15 +546,15 @@ fn witness_label(k: WitnessKind) -> &'static str {
     }
 }
 
-const HELP: crate::util::help::Help = crate::util::help::Help {
+const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
     command: "svrn archaeology-eval",
     summary: "Eval the git-archaeology sidecar — witness checks, baseline diff, inquiry verdicts.",
     sections: &[
-        crate::util::help::HelpSection::Usage(
+        sovereign_cli_shared::help::HelpSection::Usage(
             "svrn archaeology-eval <atlas-corpus-id> [--inquiry <toml>...] \
              [--baseline <path>] [--output <md>] [--save-baseline]",
         ),
-        crate::util::help::HelpSection::Flags(&[
+        sovereign_cli_shared::help::HelpSection::Flags(&[
             (
                 "--inquiry <toml>",
                 "Path to a curated regression case (TOML). Repeat for multiple. \
@@ -578,7 +578,7 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
                  once per intentional improvement so future runs diff against it.",
             ),
         ]),
-        crate::util::help::HelpSection::Notes(
+        sovereign_cli_shared::help::HelpSection::Notes(
             "Reads `~/.svrnmesh/indexes/<atlas>/atlas/git_archaeology.json` produced by \
              `svrn git-archaeology`. Appends one CSV row per run to \
              `~/.svrnmesh/eval/history.csv` so trends are visible across iterations. \

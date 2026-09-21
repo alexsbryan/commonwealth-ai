@@ -7,8 +7,8 @@ description = "cmnwlth's CLI verbs: mesh, ring, job, media, meshapp, run, publis
 
 [dependencies]
 clap = { workspace = true }
-sovereign-core = { workspace = true }
 sovereign-contracts = { workspace = true }
+sovereign-time = { workspace = true }
 commonwealth-media = { workspace = true }
 sovereign-inference = { workspace = true }
 oicp-types = { workspace = true }
@@ -42,7 +42,6 @@ rqrr = { version = "=0.11.0", default-features = false }
 serde_json = { workspace = true }
 toml_edit = { workspace = true }
 sovereign-pods = { path = "../sovereign-pods" }
-sovereign-pipeline = { workspace = true }
 chrono = { workspace = true }
 rand = "0.9"
 fast_qr = { version = "=0.14.0", default-features = false, features = ["svg"] }

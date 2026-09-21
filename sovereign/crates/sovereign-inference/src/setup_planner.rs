@@ -12,7 +12,8 @@ use std::path::Path;
 use std::time::Duration;
 
 use futures::StreamExt as _;
-use sovereign_core::models_manifest::{SlotConfig, DEFAULT_MANIFEST};
+use sovereign_contracts::daemon_wire::SlotConfig;
+use sovereign_contracts::models_manifest::DEFAULT_MANIFEST;
 
 use crate::hardware::ProfileName;
 use crate::{validate_gguf, GgufExpectation};

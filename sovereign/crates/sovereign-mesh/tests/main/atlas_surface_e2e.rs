@@ -55,7 +55,7 @@ use std::sync::Arc;
 
 use corpus_engine::index::InsertChunk;
 use corpus_engine::{CorpusEngine, EmbedFn};
-use sovereign_core::setup_config::SetupConfig;
+use sovereign_contracts::setup_config::SetupConfig;
 use sovereign_daemon::atlas_http::atlas_router;
 use sovereign_daemon::daemon::EmbeddedDaemon;
 use sovereign_daemon::reading_http::reading_router;

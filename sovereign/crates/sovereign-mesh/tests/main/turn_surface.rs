@@ -43,11 +43,11 @@ use crate::common::{desktop_services_with_store, mesh_admin_services, spawn_rout
 use std::sync::Arc;
 
 use futures::{SinkExt, StreamExt};
+use sovereign_contracts::setup_config::SetupConfig;
+use sovereign_contracts::traits::StateStore;
 use sovereign_contracts::types::{
     ResolveOutcome, TurnAnswer, TurnFrame, TurnMode, TurnNotice, TurnRequest,
 };
-use sovereign_core::setup_config::SetupConfig;
-use sovereign_core::traits::StateStore;
 use sovereign_daemon::{
     turn_http::{turn_router, turn_router_with, SocketTimers},
     EmbeddedDaemon,
@@ -1203,13 +1203,13 @@ use sovereign_contracts::types::{ConversationContext, Plan, Step, StepKind, Tool
 
 struct AskPlanner;
 #[async_trait::async_trait]
-impl sovereign_core::traits::Planner for AskPlanner {
+impl sovereign_contracts::traits::Planner for AskPlanner {
     async fn plan(
         &self,
         goal: &str,
         _context: &ConversationContext,
         _tools: &[ToolDescriptor],
-    ) -> sovereign_core::error::Result<Plan> {
+    ) -> sovereign_contracts::error::Result<Plan> {
         Ok(Plan {
             id: "plan-ask".into(),
             goal: goal.to_string(),
@@ -1233,10 +1233,10 @@ impl sovereign_core::traits::Planner for AskPlanner {
     async fn replan(
         &self,
         original: &Plan,
-        _completed: &[(usize, sovereign_core::types::StepOutput)],
-        _failure: &sovereign_core::types::StepError,
+        _completed: &[(usize, sovereign_contracts::types::StepOutput)],
+        _failure: &sovereign_contracts::types::StepError,
         _tools: &[ToolDescriptor],
-    ) -> sovereign_core::error::Result<Plan> {
+    ) -> sovereign_contracts::error::Result<Plan> {
         Ok(original.clone())
     }
 }
@@ -1464,13 +1464,13 @@ async fn a_search_built_information_answer_folds_its_sources_into_the_conversati
 
     struct AskInfoPlanner;
     #[async_trait::async_trait]
-    impl sovereign_core::traits::Planner for AskInfoPlanner {
+    impl sovereign_contracts::traits::Planner for AskInfoPlanner {
         async fn plan(
             &self,
             goal: &str,
             _context: &sovereign_contracts::types::ConversationContext,
             _tools: &[sovereign_contracts::types::ToolDescriptor],
-        ) -> sovereign_core::error::Result<sovereign_contracts::types::Plan> {
+        ) -> sovereign_contracts::error::Result<sovereign_contracts::types::Plan> {
             Ok(sovereign_contracts::types::Plan {
                 id: "plan-info".into(),
                 goal: goal.to_string(),
@@ -1503,10 +1503,10 @@ async fn a_search_built_information_answer_folds_its_sources_into_the_conversati
         async fn replan(
             &self,
             original: &sovereign_contracts::types::Plan,
-            _completed: &[(usize, sovereign_core::types::StepOutput)],
-            _failure: &sovereign_core::types::StepError,
+            _completed: &[(usize, sovereign_contracts::types::StepOutput)],
+            _failure: &sovereign_contracts::types::StepError,
             _tools: &[sovereign_contracts::types::ToolDescriptor],
-        ) -> sovereign_core::error::Result<sovereign_contracts::types::Plan> {
+        ) -> sovereign_contracts::error::Result<sovereign_contracts::types::Plan> {
             Ok(original.clone())
         }
     }

@@ -1172,6 +1172,20 @@ status = "shipped"
 purpose = "Path override for the sovereign-cli-daemon sibling."
 
 [[flag]]
+name = "SOVEREIGN_CLI_MESH_BIN"
+cluster = "cli-binaries"
+default = "sibling of dispatcher"
+status = "shipped"
+purpose = "Path override for the sovereign-cli-mesh sibling, lifted out of sovereign-cli-llm 2026-09-21."
+
+[[flag]]
+name = "SOVEREIGN_AGENT_BENCH_BIN"
+cluster = "cli-binaries"
+default = "sibling of dispatcher"
+status = "shipped"
+purpose = "Path override for the sovereign-agent-bench sibling. `svrn agent-bench` execs it rather than linking the crate, which is how a bench-package crate left the svrn dispatcher."
+
+[[flag]]
 name = "SOVEREIGN_CLI_PATH"
 cluster = "cli-binaries"
 default = "unset"

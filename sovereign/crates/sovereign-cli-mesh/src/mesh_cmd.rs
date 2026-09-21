@@ -54,12 +54,12 @@ fn mesh_admin_services() -> sovereign_daemon::DaemonServices {
     }
 }
 
-fn one_shot_setup_config() -> sovereign_core::setup_config::SetupConfig {
-    match sovereign_core::setup_config::SetupConfig::load() {
+fn one_shot_setup_config() -> sovereign_contracts::setup_config::SetupConfig {
+    match sovereign_contracts::setup_config::SetupConfig::load() {
         Ok(cfg) => cfg,
         Err(e) => {
             eprintln!("(no usable ~/.svrnmesh/config.toml: {e} — binding the default :9741/:9742)");
-            sovereign_core::setup_config::SetupConfig::unconfigured()
+            sovereign_contracts::setup_config::SetupConfig::unconfigured()
         }
     }
 }
@@ -554,8 +554,8 @@ pub(crate) struct MeshDevice {
     /// `None` means no worker is currently discovered for this peer — the plan
     /// then cannot say how the tensor stream would travel, which is a reason to
     /// report "not measured" rather than to assume the good case. See
-    /// [`sovereign_core::mesh_measurements::LinkClass`].
-    pub(crate) link: Option<sovereign_core::mesh_measurements::LinkClass>,
+    /// [`sovereign_mesh::mesh_measurements::LinkClass`].
+    pub(crate) link: Option<sovereign_mesh::mesh_measurements::LinkClass>,
 }
 
 /// Read the live mesh from the running daemon's `/v1/mesh/status` and build the
@@ -564,7 +564,7 @@ pub(crate) struct MeshDevice {
 /// `(devices, host index)`. Prints the resolved mesh to stderr (so `--json`
 /// stays clean on stdout).
 async fn devices_from_live_mesh() -> Result<(Vec<MeshDevice>, usize, Option<String>), String> {
-    let port = sovereign_core::setup_config::SetupConfig::load()
+    let port = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|c| c.daemon.client_port)
         .unwrap_or(9741);
     let url = format!("http://127.0.0.1:{port}/v1/mesh/status");
@@ -692,7 +692,7 @@ async fn devices_from_live_mesh() -> Result<(Vec<MeshDevice>, usize, Option<Stri
                 .get("backend")
                 .and_then(|v| v.as_str())
                 .map(str::to_string),
-            link: endpoint.map(|ep| sovereign_core::mesh_measurements::link_class_of_endpoint(ep)),
+            link: endpoint.map(|ep| sovereign_mesh::mesh_measurements::link_class_of_endpoint(ep)),
         };
         let online = m.get("status").and_then(|s| s.as_str()) == Some("online");
         let can_anchor = m
@@ -792,7 +792,7 @@ async fn cmd_plan(args: &[String]) -> i32 {
     // headroom below 1.0 gates on less memory than the model needs.
     let mut headroom: f64 = sovereign_inference::embedded::rpc_headroom_from_env()
         .or_else(|| {
-            sovereign_core::setup_config::SetupConfig::load()
+            sovereign_contracts::setup_config::SetupConfig::load()
                 .ok()
                 .and_then(|c| c.shared_model.headroom)
                 .filter(|&h| h >= 1.0)
@@ -1003,7 +1003,7 @@ async fn cmd_plan(args: &[String]) -> i32 {
     // The context length the plan assumes. Same accessor the cold-start and
     // reload paths use, so a plan and the load it previews cannot disagree
     // about KV size — which is part of the measurement key.
-    let n_ctx = sovereign_core::setup_config::SetupConfig::load()
+    let n_ctx = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|c| c.effective_context_size())
         .unwrap_or(16384);
 
@@ -1057,7 +1057,7 @@ async fn cmd_plan(args: &[String]) -> i32 {
             n_ctx,
             overheads,
         },
-        &sovereign_core::mesh_measurements::load(),
+        &sovereign_mesh::mesh_measurements::load(),
         &peers.records,
         env!("CARGO_PKG_VERSION"),
     );
@@ -1150,13 +1150,13 @@ pub(crate) struct PlanInput {
 pub(crate) enum SpeedSection {
     /// A real run against exactly this configuration.
     Measured {
-        summary: Box<sovereign_core::mesh_measurements::MeasurementSummary>,
+        summary: Box<sovereign_mesh::mesh_measurements::MeasurementSummary>,
     },
     /// This configuration could be measured; nobody has. `near` names
     /// measurements of the same model in *other* configurations — as context
     /// for the operator, never as a number for this one.
     NotMeasured {
-        near: Vec<sovereign_core::mesh_measurements::NearMiss>,
+        near: Vec<sovereign_mesh::mesh_measurements::NearMiss>,
     },
     /// There is nothing here to have measured.
     NotMeasurable(NotMeasurable),
@@ -1358,7 +1358,7 @@ pub(crate) struct PlanReport {
     pub(crate) speed: SpeedSection,
     /// The measurement key this plan looked up, when it had one. Emitted in
     /// `--json` so a script can correlate a plan with a `mesh bench` record.
-    pub(crate) speed_key: Option<sovereign_core::mesh_measurements::MeasurementKey>,
+    pub(crate) speed_key: Option<sovereign_mesh::mesh_measurements::MeasurementKey>,
 }
 
 impl PlanReport {
@@ -1388,8 +1388,8 @@ impl PlanReport {
 /// disagree about where a block lands.
 pub(crate) fn build_report(
     input: PlanInput,
-    measurements: &sovereign_core::mesh_measurements::MeasurementFile,
-    peers: &[sovereign_core::mesh_measurements::ForeignRecord],
+    measurements: &sovereign_mesh::mesh_measurements::MeasurementFile,
+    peers: &[sovereign_mesh::mesh_measurements::ForeignRecord],
     current_build: &str,
 ) -> PlanReport {
     use sovereign_inference::embedded as inf;
@@ -1664,14 +1664,14 @@ fn resolve_speed(
     n_layer: u32,
     active_nodes: usize,
     n_ctx: u32,
-    measurements: &sovereign_core::mesh_measurements::MeasurementFile,
-    peers: &[sovereign_core::mesh_measurements::ForeignRecord],
+    measurements: &sovereign_mesh::mesh_measurements::MeasurementFile,
+    peers: &[sovereign_mesh::mesh_measurements::ForeignRecord],
     current_build: &str,
 ) -> (
     SpeedSection,
-    Option<sovereign_core::mesh_measurements::MeasurementKey>,
+    Option<sovereign_mesh::mesh_measurements::MeasurementKey>,
 ) {
-    use sovereign_core::mesh_measurements as mm;
+    use sovereign_mesh::mesh_measurements as mm;
 
     // A hypothetical mesh has no machines to have measured.
     let Some(mesh) = mesh else {
@@ -2374,7 +2374,7 @@ fn render_speed_human(o: &mut String, r: &PlanReport) {
             // for themselves from the rest of the output, so it is named.
             if r.speed_key
                 .as_ref()
-                .is_some_and(|k| k.link == sovereign_core::mesh_measurements::LinkClass::Unknown)
+                .is_some_and(|k| k.link == sovereign_mesh::mesh_measurements::LinkClass::Unknown)
             {
                 let _ = writeln!(
                     o,
@@ -3003,7 +3003,7 @@ async fn cmd_rotate(args: &[String]) -> i32 {
 /// The daemon's client port from `SetupConfig`, not a hardcoded 9741 — a
 /// sandbox pointed at its own daemon must not rotate the operator's mesh.
 pub(crate) fn daemon_client_port() -> u16 {
-    sovereign_core::setup_config::SetupConfig::load()
+    sovereign_contracts::setup_config::SetupConfig::load()
         .map(|c| c.daemon.client_port)
         .unwrap_or(9741)
 }
@@ -3118,7 +3118,7 @@ async fn cmd_status(args: &[String]) -> i32 {
 
     // Fetch from the daemon. Use SetupConfig for the port so a custom
     // client_port (set via `[daemon].client_port`) still works.
-    let port = sovereign_core::setup_config::SetupConfig::load()
+    let port = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|c| c.daemon.client_port)
         .unwrap_or(9741);
     let url = format!("http://127.0.0.1:{port}/v1/mesh/status");
@@ -3300,7 +3300,7 @@ async fn cmd_transport(args: &[String]) -> i32 {
     }
     let json_out = args.iter().any(|a| a == "--json");
 
-    let port = sovereign_core::setup_config::SetupConfig::load()
+    let port = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|c| c.daemon.client_port)
         .unwrap_or(9741);
     let url = format!("http://127.0.0.1:{port}/v1/mesh/status");
@@ -3684,7 +3684,7 @@ async fn cmd_fetch_model(args: &[String]) -> i32 {
     // first-boot loop.
     let dest_dir = match out_override {
         Some(p) => p,
-        None => match sovereign_core::setup_config::SetupConfig::load() {
+        None => match sovereign_contracts::setup_config::SetupConfig::load() {
             Ok(cfg) => cfg
                 .models
                 .as_ref()
@@ -3919,7 +3919,7 @@ mod plan_tests {
     fn report(i: PlanInput) -> PlanReport {
         build_report(
             i,
-            &sovereign_core::mesh_measurements::MeasurementFile::new(),
+            &sovereign_mesh::mesh_measurements::MeasurementFile::new(),
             &[],
             "test-build",
         )
@@ -4205,7 +4205,7 @@ mod plan_tests {
 
     // --- the speed section ------------------------------------------------
 
-    use sovereign_core::mesh_measurements as mm;
+    use sovereign_mesh::mesh_measurements as mm;
 
     fn mesh_devs(names: &[&str], fp: Option<u64>) -> Vec<MeshDevice> {
         mesh_devs_linked(names, fp, Some(mm::LinkClass::Direct))

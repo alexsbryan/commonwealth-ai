@@ -581,7 +581,7 @@ fn short_key(raw: &str) -> String {
 }
 
 fn now_ms() -> u64 {
-    sovereign_core::time::unix_millis()
+    sovereign_time::unix_millis()
 }
 
 // ── argv ─────────────────────────────────────────────────────

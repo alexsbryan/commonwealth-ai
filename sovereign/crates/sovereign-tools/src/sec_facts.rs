@@ -791,7 +791,7 @@ mod tests {
         let map = crate::sec_facts_render::ConceptMap::from_toml(
             &std::fs::read_to_string(
                 std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                    .join("../../../sovereign-recipes/sec-filings-company/concept-map.toml"),
+                    .join("data/sec-filings-company/concept-map.toml"),
             )
             .expect("concept map is committed"),
         )

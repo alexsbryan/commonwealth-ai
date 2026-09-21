@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use serde::{Deserialize, Serialize};
 
-use crate::knowledge::CorpusShardInfo;
 use crate::oicp::{BenchmarkResult, EmbedModelInfo};
+use oicp_types::knowledge::CorpusShardInfo;
 
 /// A node's full capability report — hardware profile plus current availability.
 #[derive(Debug, Clone, Serialize, Deserialize)]

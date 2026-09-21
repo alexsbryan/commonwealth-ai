@@ -42,7 +42,7 @@
 #
 # So: this bank was authored BEFORE a single exemplar was written, and
 # its frames were then declared off-limits to the exemplar set. Nothing
-# below may be added to `sovereign/router/exemplars.toml`. If a future
+# below may be added to `sovereign/crates/sovereign-core/data/router/exemplars.toml`. If a future
 # change needs one of these frames as an exemplar, RETIRE the case here
 # and say so — do not quietly cover both sides.
 #
@@ -63,7 +63,7 @@
 name = "intent-frames-holdout-v1"
 description = """
 Held-out generalisation probe for the intent axis. Frames deliberately
-disjoint from sovereign/router/exemplars.toml and from every bank under
+disjoint from sovereign/crates/sovereign-core/data/router/exemplars.toml and from every bank under
 sovereign/bench/routing/. Measures whether the exemplar set generalises
 past the surfaces it was written against.
 """
@@ -303,7 +303,7 @@ note = "An offer and a request in one sentence with the agent left open — the 
 # The seven missing classes are added below at five cases each.
 #
 # THE HOLD-OUT CONTRACT IS UNCHANGED AND STILL BINDING. Nothing here
-# may restate a row in `sovereign/router/exemplars.toml` OR a case in
+# may restate a row in `sovereign/crates/sovereign-core/data/router/exemplars.toml` OR a case in
 # `../axes_v1.toml`. This bank's job is to answer "does the axis work
 # on frames nobody wrote for it", and it can only do that while it
 # stays disjoint from both. If a future change needs one of these

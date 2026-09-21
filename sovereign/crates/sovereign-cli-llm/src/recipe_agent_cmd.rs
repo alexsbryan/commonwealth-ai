@@ -29,7 +29,7 @@ use std::sync::Arc;
 
 use corpus_engine_notes::NoteStore;
 use sovereign_contracts::recipe::notes::RecipeNotes;
-use sovereign_store::recipe_project_store::{RecipeProjectRow, RecipeProjectStore};
+use sovereign_tools::recipe_author::recipe_project_store::{RecipeProjectRow, RecipeProjectStore};
 use sovereign_tools::recipe_author::{
     capability_request::CapabilityRequest, maintainer_inbox_dir, situated_context, RecipeProject,
 };

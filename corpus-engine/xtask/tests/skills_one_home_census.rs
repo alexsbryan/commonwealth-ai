@@ -23,16 +23,35 @@
 //! daemon's bundle push, or re-fork the skill TOMLs into a host-local
 //! embed — each goes red naming the rule. Sabotage-verified at landing:
 //! the empty-registry spelling re-planted, watched red, reverted.
+//!
+//! # Why `xtask` and not `sovereign-cli-daemon`
+//!
+//! It reads THREE crates' sources — the daemon's, `sovereign-contracts`'s
+//! and the desktop's — so it lived in `sovereign-cli-daemon/tests/` and
+//! climbed out of that crate root to reach the other two. `sovereign-cli-daemon`
+//! is a `[[package]] svrn` member (`quality/ARCH_LAYERS.toml`), which must lift
+//! WITH ITS TESTS, and boundary-gate rule 3c read the climb as exactly that
+//! defect. Moved here 2026-09-21, same reason and same shape as
+//! `atoms_file_census.rs`: `xtask` is in no package, so nothing lifts it, and
+//! the census is std-only string matching that needs no crate it censuses.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+#[path = "shared/repo_root.rs"]
+mod repo_root;
+
+/// `sovereign/crates/` in the checkout this census is run against.
+fn crates_dir() -> PathBuf {
+    repo_root::repo_root().join("sovereign/crates")
+}
 
 fn daemon_cmd_source() -> String {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/daemon_cmd/mod.rs");
+    let path = crates_dir().join("sovereign-cli-daemon/src/daemon_cmd/mod.rs");
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
 }
 
 fn contracts_skills_source() -> String {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../sovereign-contracts/src/skills.rs");
+    let path = crates_dir().join("sovereign-contracts/src/skills.rs");
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
 }
 
@@ -44,7 +63,7 @@ fn contracts_skills_source() -> String {
 /// delegate, so the pin below is on the whole crate: no registration
 /// call, no embed, anywhere.
 fn desktop_rust_source() -> String {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../sovereign-desktop/src-tauri/src");
+    let root = crates_dir().join("sovereign-desktop/src-tauri/src");
     let mut files = Vec::new();
     walk(&root, &mut files);
     files.sort();

@@ -94,7 +94,7 @@ pub(crate) async fn render_failure(
             body
         };
     }
-    let local = sovereign_core::run_identity::stamp(env!("CARGO_PKG_VERSION"));
+    let local = sovereign_contracts::run_identity::stamp(env!("CARGO_PKG_VERSION"));
     match daemon_stamp(client, port).await {
         Ok(remote) => explain_route_missing(route, &local, remote.as_ref()),
         Err(why) => format!(
@@ -152,7 +152,7 @@ pub(crate) async fn render_kind_refusal(
         return format!("{msg}\n");
     }
     let route_works = probe_known_kind(client, port).await;
-    let local = sovereign_core::run_identity::stamp(env!("CARGO_PKG_VERSION"));
+    let local = sovereign_contracts::run_identity::stamp(env!("CARGO_PKG_VERSION"));
     let remote = daemon_stamp(client, port).await.ok().flatten();
     let builds = format!(
         "  this CLI:    {}\n  that daemon: {}\n",
