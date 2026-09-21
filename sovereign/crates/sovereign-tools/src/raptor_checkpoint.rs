@@ -375,6 +375,95 @@ impl RaptorCheckpointHandle {
         }
         Ok(out)
     }
+
+    /// Every persisted node for a CORPUS, across both on-disk layouts.
+    ///
+    /// [`load_all_nodes`](Self::load_all_nodes) reads ONE slot: the `level-*`
+    /// dirs directly beneath its own `dir`. A corpus has two shapes on disk —
+    /// the shared per-corpus slot [`at`](Self::at) resolves
+    /// (`_raptor_checkpoint/level-*`), and the per-note slots
+    /// [`at_note`](Self::at_note) writes (`_raptor_checkpoint/note-<hash>/level-*`).
+    /// Anything asking "what is this corpus's tree?" needs the union, and
+    /// reading only the shared slot is indistinguishable from "no tree at all":
+    /// `load_all_nodes` on the parent sees only `note-*` directories, matches
+    /// none of them against its `level-` prefix, and returns `Ok(vec![])`.
+    ///
+    /// That is not hypothetical. `summary_atoms::load_tree` called
+    /// `at(corpus_dir).load_all_nodes()`, so on every per-note corpus it
+    /// resolved an EMPTY tree and wrote each `Summary` atom with
+    /// `evidence: []` and `children: []` — summaries a reader cannot trace to
+    /// a source. Measured 2026-09-21 on `raptor-pilot-and-his-wife` (14 atoms,
+    /// nodes carrying 82 evidence chunk ids apiece) and `chaos-secret-agent`
+    /// (19 atoms): zero evidence on every atom of both.
+    ///
+    /// Returns nodes from the shared slot first, then each note slot in
+    /// directory order; ids are unique per node so the union needs no merge.
+    pub fn load_corpus_nodes(index_dir: &Path) -> Result<Vec<RaptorNode>> {
+        let root = index_dir.join(CHECKPOINT_SUBDIR);
+        let mut out = Self::at(index_dir, String::new()).load_all_nodes()?;
+        if !root.exists() {
+            return Ok(out);
+        }
+        let mut slots: Vec<PathBuf> = Vec::new();
+        for entry in std::fs::read_dir(&root)
+            .map_err(|e| Error::Storage(format!("raptor_checkpoint io: {e}")))?
+        {
+            let path = entry
+                .map_err(|e| Error::Storage(format!("raptor_checkpoint io: {e}")))?
+                .path();
+            if path.is_dir()
+                && path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.starts_with("note-"))
+            {
+                slots.push(path);
+            }
+        }
+        slots.sort();
+        let shared = out.len();
+        let slot_count = slots.len();
+        for slot in slots {
+            out.extend(
+                Self {
+                    dir: slot,
+                    input_hash: String::new(),
+                }
+                .load_all_nodes()?,
+            );
+        }
+        // The scan that makes the layout visible. Reading the shared slot alone
+        // returned Ok(empty) on every per-note corpus and nothing said so; a
+        // reader asking "why is this tree empty?" at debug level now gets the
+        // shape (slots found, nodes from each) instead of an unexplained zero.
+        tracing::debug!(
+            dir = %index_dir.display(),
+            note_slots = slot_count,
+            shared_slot_nodes = shared,
+            total_nodes = out.len(),
+            "raptor_checkpoint: corpus node scan"
+        );
+        Ok(out)
+    }
+
+    /// Does this corpus have any checkpoint slot on disk at all?
+    ///
+    /// The honest difference between "this corpus never had a tree" and "a
+    /// tree is there and we failed to read it" — the two that an empty
+    /// [`load_corpus_nodes`](Self::load_corpus_nodes) otherwise collapses.
+    pub fn corpus_has_slots(index_dir: &Path) -> bool {
+        let root = index_dir.join(CHECKPOINT_SUBDIR);
+        let Ok(entries) = std::fs::read_dir(&root) else {
+            return false;
+        };
+        entries.flatten().any(|e| {
+            e.path().is_dir()
+                && e.path()
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.starts_with("note-") || n.starts_with("level-"))
+        })
+    }
 }
 
 #[derive(Debug)]
@@ -543,6 +632,64 @@ mod tests {
         assert_eq!(all[0].node_id, "L0-N0");
         assert_eq!(all[1].node_id, "L0-N2");
         assert_eq!(all[2].node_id, "L1-N0");
+    }
+
+    /// The defect: nodes written to a PER-NOTE slot are invisible to the
+    /// shared-slot reader, and the miss is shaped exactly like "no tree".
+    /// `summary_atoms::load_tree` read the shared slot, so every `Summary`
+    /// atom on a per-note corpus was projected with `evidence: []` and
+    /// `children: []` — uncitable — and said so under a wrong explanation.
+    #[test]
+    fn per_note_nodes_are_invisible_to_the_shared_slot_and_found_by_the_corpus_reader() {
+        let tmp = tempfile::tempdir().unwrap();
+        let note = RaptorCheckpointHandle::at_note(tmp.path(), "The Pilot and His Wife.txt", "h");
+        note.ensure_manifest().unwrap();
+        note.write_cluster_node(0, 0, &dummy_node(0, 0)).unwrap();
+        note.write_cluster_node(1, 0, &dummy_node(1, 0)).unwrap();
+
+        // The old reader: a directory full of `note-*` matches no `level-`
+        // prefix, so this is Ok(empty) — not an error, just silence.
+        let shared = RaptorCheckpointHandle::at(tmp.path(), String::new())
+            .load_all_nodes()
+            .unwrap();
+        assert!(
+            shared.is_empty(),
+            "shared slot must not see per-note nodes — that is the trap, not a bug to fix here"
+        );
+
+        let all = RaptorCheckpointHandle::load_corpus_nodes(tmp.path()).unwrap();
+        assert_eq!(
+            all.len(),
+            2,
+            "the corpus reader must find both per-note nodes"
+        );
+        assert!(RaptorCheckpointHandle::corpus_has_slots(tmp.path()));
+    }
+
+    #[test]
+    fn a_corpus_with_no_checkpoint_at_all_has_no_slots() {
+        let tmp = tempfile::tempdir().unwrap();
+        assert!(!RaptorCheckpointHandle::corpus_has_slots(tmp.path()));
+        assert!(RaptorCheckpointHandle::load_corpus_nodes(tmp.path())
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn the_corpus_reader_unions_both_layouts() {
+        let tmp = tempfile::tempdir().unwrap();
+        let shared = RaptorCheckpointHandle::at(tmp.path(), "h");
+        shared.ensure_manifest().unwrap();
+        shared.write_cluster_node(0, 0, &dummy_node(0, 0)).unwrap();
+        let note = RaptorCheckpointHandle::at_note(tmp.path(), "b.md", "h");
+        note.ensure_manifest().unwrap();
+        note.write_cluster_node(1, 0, &dummy_node(1, 0)).unwrap();
+        assert_eq!(
+            RaptorCheckpointHandle::load_corpus_nodes(tmp.path())
+                .unwrap()
+                .len(),
+            2
+        );
     }
 
     #[test]

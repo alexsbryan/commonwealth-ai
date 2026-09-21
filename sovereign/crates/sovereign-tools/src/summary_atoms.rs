@@ -153,11 +153,14 @@ fn atlas_dir_for(index_root: &Path, corpus_id: &str, title: &str) -> Option<Path
 /// shape, not an error, and shows up in the report as `no_tree_row` for every
 /// row.
 fn load_tree(corpus_dir: &Path) -> BTreeMap<String, (Vec<u32>, Vec<String>)> {
-    // `load_all_nodes` walks `level-*/cluster-*.json` and never consults the
-    // manifest's input hash, so the empty hash here is not a lie about
-    // freshness — it is simply unused on this path.
-    let handle = RaptorCheckpointHandle::at(corpus_dir, String::new());
-    match handle.load_all_nodes() {
+    // `load_corpus_nodes`, NOT `at(..).load_all_nodes()`: the latter reads only
+    // the shared per-corpus slot, and a corpus built per-note keeps its nodes
+    // in `_raptor_checkpoint/note-<hash>/`. Reading the parent matched no
+    // `level-` dir and returned Ok(empty), which is indistinguishable from
+    // "this corpus has no tree" — so every Summary atom was written with
+    // `evidence: []` and `children: []`. Neither hash is consulted on this
+    // path, so the empty one is unused rather than a freshness claim.
+    match RaptorCheckpointHandle::load_corpus_nodes(corpus_dir) {
         Ok(nodes) => nodes
             .into_iter()
             .map(|n| (n.node_id, (n.evidence_chunk_ids, n.children_node_ids)))
@@ -209,8 +212,42 @@ pub async fn write_summary_atoms(
 
     let tree = load_tree(&corpus_dir);
     if tree.is_empty() {
+        // Two situations wear the same empty map, and they are not the same
+        // thing. If slots exist on disk, the tree is THERE and we failed to
+        // read it — refuse, before a single atom is written, rather than emit
+        // a corpus of summaries no reader can trace to a source. That failure
+        // shipped until 2026-09-21: `load_tree` read the shared per-corpus
+        // slot while the nodes lived in per-note slots one directory down, so
+        // `raptor-pilot-and-his-wife` (14 atoms) and `chaos-secret-agent` (19)
+        // were both projected entirely uncitable, under a degradation line
+        // that blamed an empty `conv_raptor_nodes` — which held 14 rows.
+        //
+        // Refusing here and not after the write loop is deliberate: an Err
+        // returned once the atlas is on disk leaves the damage behind and
+        // still calls itself a failure.
+        if RaptorCheckpointHandle::corpus_has_slots(&corpus_dir) {
+            // This return is before the projection ledger at the end of the
+            // function, so without this event a refusal is invisible at
+            // `tracing=debug` — the decision that stops the whole projection
+            // would be the one decision that left no trace.
+            tracing::warn!(
+                corpus = corpus_id,
+                dir = %corpus_dir.display(),
+                rows = report.rows_read,
+                "summary-atoms: refusing — checkpoint slots present but tree read empty"
+            );
+            return Err(format!(
+                "summary-atoms: {}/_raptor_checkpoint has node slots on disk, but the \
+                 tree read back empty. Every one of the {} summaries would be written \
+                 without evidence chunks and without Composes edges — uncitable. \
+                 This is a tree-READ failure, not an absent tree; refusing rather than \
+                 projecting provenance-free summaries.",
+                corpus_dir.display(),
+                report.rows_read
+            ));
+        }
         report.degradations.push(format!(
-            "no readable RAPTOR checkpoint under {} — every Summary atom is written \
+            "no RAPTOR checkpoint under {} at all — every Summary atom is written \
              WITHOUT evidence chunks and without Composes edges",
             corpus_dir.display()
         ));
@@ -383,10 +420,15 @@ pub async fn write_summary_atoms(
         ));
     }
     if report.no_tree_row > 0 {
+        // The tree's children + evidence chunk ids live ONLY in
+        // `_raptor_checkpoint` — `conv_raptor_nodes` does not carry them — so a
+        // summary with no checkpoint node is a summary a reader cannot trace
+        // back to a source. Say which of the two situations this is; the
+        // previous wording asserted "`conv_raptor_nodes` is empty", which was
+        // not checked and was false on both corpora that hit it.
         report.degradations.push(format!(
-            "{} of {} summaries have no checkpoint node, so they carry no evidence \
-             chunks and no Composes edges (the RAPTOR tree survives only in \
-             `_raptor_checkpoint`, and `conv_raptor_nodes` is empty)",
+            "{} of {} summaries resolved no checkpoint node, so they carry no \
+             evidence chunks and no Composes edges — they are uncitable",
             report.no_tree_row, report.rows_read
         ));
     }
