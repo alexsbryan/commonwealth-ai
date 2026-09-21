@@ -47,11 +47,11 @@
 use std::path::{Path, PathBuf};
 
 fn repo_root() -> PathBuf {
-    // .../sovereign/crates/sovereign-mesh -> repo root
+    // .../sovereign/crates/sovereign-daemon -> repo root
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .ancestors()
         .nth(3)
-        .expect("sovereign-mesh lives three levels under the repo root")
+        .expect("sovereign-daemon lives three levels under the repo root")
         .to_path_buf()
 }
 
