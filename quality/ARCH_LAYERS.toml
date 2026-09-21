@@ -900,6 +900,27 @@ name = "oicp-client"
 allow = ["sovereign-contracts", "oicp-types"]
 
 [[package_leaf]]
+name = "arch-layers"
+# The layer-map schema + evaluator. Admitted 2026-09-21, taking the closing
+# condition the `code-intel -> arch-layers` exception carried before the
+# five-program declaration deleted it: "promote `arch-layers` to a
+# [[package_leaf]]; it is leaf-shaped already, and widening a leaf budget
+# widens every package, so it is a deliberate decision rather than a fix."
+#
+# It qualifies on the same terms as `sovereign-time` and `kernel-types`: ZERO
+# internal deps, and a third-party budget of `serde` + `toml`, both already
+# inside admitted leaves. All three filesystem rules pass — no `build.rs`, no
+# `include_str!`, no `CARGO_MANIFEST_DIR` and no `Command::new` anywhere in
+# `src/` (checked, not assumed).
+#
+# WHY IT IS A LEAF RATHER THAN A FIX. `arch_report` and `arch_posture`
+# evaluate `quality/ARCH_LAYERS.toml` itself and share this parser with the
+# xtask gates, so the DECLARED half (CI) and the OBSERVED half (arch_report)
+# cannot drift — ARCH principle 8. Making the code tools stop naming it would
+# mean a second parser, which is the defect the sharing exists to prevent.
+allow = []
+
+[[package_leaf]]
 name = "oplog"
 # The append-only signed journal. Admitted 2026-09-04 (cw-lift phase 1b/1d),
 # so `commonwealth-rail{,-core}` can join the `commonwealth` package below —

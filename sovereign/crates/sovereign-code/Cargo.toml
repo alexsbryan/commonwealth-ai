@@ -23,7 +23,6 @@ corpus-engine-archaeology = { workspace = true, optional = true }
 corpus-engine-watchers = { workspace = true }
 code-facts = { workspace = true }
 arch-layers = { workspace = true }
-commonwealth-core = { workspace = true }
 
 arc-swap = { workspace = true }
 async-trait = { workspace = true }

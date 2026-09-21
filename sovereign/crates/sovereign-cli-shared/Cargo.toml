@@ -47,7 +47,6 @@ dirs = "5"
 clap = { workspace = true }
 # The rebrand-aware path SSOT — `dirs.rs` delegates to it instead of
 # mirroring `resolve_branded_dir` by hand (the mirror drifted risk).
-sovereign-code = { workspace = true }
 sovereign-contracts = { workspace = true }
 # The neutral kernel — `NightlyPosture::judgement` maps the lane's word onto
 # the four verdicts and hands off age, formatting and the staleness band, so
