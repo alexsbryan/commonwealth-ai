@@ -208,6 +208,11 @@ pub struct FoldRecovery {
     pub local_node_id: NodeId,
     /// One ControlPlane base URL per peer, from `peer_control_urls`.
     pub peer_shard_base_urls: Vec<(NodeId, String)>,
+    /// This node's mesh-proof header pair, owned because it crosses the
+    /// boundary as data. `None` on a mesh with no credential. See
+    /// [`crate::shard_manager::MergePlan::mesh_proof`] — the reads this struct
+    /// exists to make on the caller's side include this one.
+    pub mesh_proof: Option<(String, String)>,
 }
 
 /// Merge one corpus from the participant set the `work` fold reported
@@ -268,6 +273,7 @@ pub async fn merge_from_fold_coverage(
         contribution_emitter,
         local_node_id,
         peer_shard_base_urls,
+        mesh_proof: node_mesh_proof,
     } = node;
     let Some(engine) = corpus_engine.as_ref() else {
         return RecoveryOutcome::Failed("no corpus engine on this node".to_string());
@@ -294,6 +300,7 @@ pub async fn merge_from_fold_coverage(
         local_node_id,
         participants,
         peer_shard_base_urls: peer_urls,
+        mesh_proof: node_mesh_proof.as_ref().map(|(n, v)| (n.as_str(), v.as_str())),
         // The fold carries no ephemeral flag. An ephemeral grant is the corpus
         // OWNER's lifecycle and lives in `EphemeralGrantStore`, which cw-lift
         // 5g part 1 established the consent pair does not speak for.

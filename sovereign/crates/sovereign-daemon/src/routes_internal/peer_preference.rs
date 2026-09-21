@@ -201,7 +201,21 @@ mod tests {
     /// subject cannot author). Driving `internal_router` means the MOUNT is
     /// under test, not just the handler.
     fn router(state: &AppState) -> axum::Router {
-        internal_router(state.clone())
+        // `internal_gate` reads a MISSING `ConnectInfo` as "not loopback" and
+        // refuses. The real listener supplies one
+        // (`into_make_service_with_connect_info`); `oneshot` does not. This
+        // layer sits OUTSIDE `internal_router`, therefore ahead of the gate,
+        // and says the local address the real listener would.
+        internal_router(state.clone()).layer(axum::middleware::from_fn(
+            |mut req: axum::extract::Request, next: axum::middleware::Next| async move {
+                req.extensions_mut()
+                    .insert(axum::extract::ConnectInfo(std::net::SocketAddr::from((
+                        [127, 0, 0, 1],
+                        54321,
+                    ))));
+                next.run(req).await
+            },
+        ))
     }
 
     async fn body_string(resp: axum::response::Response) -> String {

@@ -1368,7 +1368,7 @@ pub struct DaemonSection {
     /// non-loopback caller (auto-generated to `<data.dir>/client-token`
     /// unless `client_token` is set) — see `client_token` and
     /// `sovereign_daemon::client_auth`. The internal mesh port
-    /// (`:9742`, mTLS) always binds `0.0.0.0` independently of this.
+    /// (`:9742`, see `internal_auth` — never mTLS) always binds `0.0.0.0`.
     #[serde(default = "default_client_bind")]
     pub client_bind: String,
 
@@ -1429,12 +1429,20 @@ pub struct DaemonSection {
     /// `0.0.0.0` (every interface) — the historical behaviour, and the
     /// right choice when a cloud firewall / security group already scopes
     /// who can reach the port. Pin it to a specific private address (e.g.
-    /// the VPC NIC `10.0.1.4`) to keep the **unauthenticated** internal API
-    /// off any other interface — defense-in-depth on a multi-homed host.
+    /// the VPC NIC `10.0.1.4`) to keep the internal API off any other
+    /// interface — defense-in-depth beside `internal_auth`, not instead of it.
     /// Ignored under `require_encryption`, which forces the internal router
     /// loopback-only (the iroh acceptor is then the sole network ingress).
     #[serde(default = "default_internal_bind")]
     pub internal_bind: String,
+
+    /// What the internal mesh API (`:9742`) requires of a caller: `None`
+    /// (default) is `"member"`, and `"perimeter"` is the pre-knob behaviour
+    /// where any caller that can route to the port is served. A CLOSED SET —
+    /// `sovereign_daemon::internal_gate::InternalAuth` is its one reader and
+    /// carries the whole contract, including which routes are exempt.
+    #[serde(default)]
+    pub internal_auth: Option<String>,
 
     /// `[daemon.guest_pages]` — one wall, more than one app: rail namespace
     /// → bundle directory, served at `/ring/<namespace>/`. Registering an app
@@ -1478,6 +1486,7 @@ impl Default for DaemonSection {
             guest_sessions: None,
             guest_pages: std::collections::BTreeMap::new(),
             internal_bind: default_internal_bind(),
+            internal_auth: None,
             local_only: default_local_only(),
         }
     }

@@ -85,7 +85,13 @@ async fn spawn_router(state: AppState) -> SocketAddr {
     let addr = listener.local_addr().unwrap();
     let router = internal_router(state);
     tokio::spawn(async move {
-        let _ = axum::serve(listener, router).await;
+        // `into_make_service_with_connect_info` as `server::serve` does —
+        // `internal_gate` refuses a hop with no peer address.
+        let _ = axum::serve(
+            listener,
+            router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+        )
+        .await;
     });
     // Brief beat so axum starts accepting before the test issues
     // its first request.
@@ -147,6 +153,7 @@ async fn canonical_pull_round_trip_via_internal_router() {
         "wiki-mini",
         &client_index_dir,
         Some(&expected_fp),
+        None,
     )
     .await
     .expect("pull should succeed");
@@ -188,6 +195,7 @@ async fn canonical_pull_rejects_wrong_expected_fingerprint() {
         "wiki-mini",
         &client_index_dir,
         Some("0".repeat(64).as_str()),
+        None,
     )
     .await;
     match r {
@@ -229,6 +237,7 @@ async fn canonical_pull_falls_through_on_unreachable_first_url() {
         "wiki-mini",
         tempdir().unwrap().path(),
         Some(&expected_fp),
+        None,
     )
     .await
     .expect("pull should succeed via fallthrough");
@@ -254,7 +263,7 @@ async fn canonical_pull_returns_404_when_corpus_absent() {
     let client_index_dir = client_dir.path().to_path_buf();
 
     let candidates = vec![peer_url];
-    let r = pull_canonical_from_peer(&candidates, "missing-corpus", &client_index_dir, None).await;
+    let r = pull_canonical_from_peer(&candidates, "missing-corpus", &client_index_dir, None, None).await;
     match r {
         Err(PullError::PeerHttpError { status, .. }) => {
             assert_eq!(status, 404, "expected 404 for missing canonical");

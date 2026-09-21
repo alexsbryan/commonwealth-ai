@@ -47,6 +47,16 @@ pub struct MergePlan<'a> {
     /// Every node that produced a partition for this corpus, LOCAL INCLUDED.
     pub participants: &'a [NodeId],
     pub peer_shard_base_urls: &'a [(NodeId, String)],
+    /// This node's mesh-proof header pair, or `None` on a mesh with no
+    /// credential. Every request this merge builds reaches a PEER's internal
+    /// port, where on a plain-IP hop the header is the only thing that tells a
+    /// member from a stranger.
+    ///
+    /// Carried as the PAIR rather than the minting type because this crate
+    /// cannot name `commonwealth_transport::mesh_proof::MeshProofStamp` and
+    /// must not re-derive a proof of its own: the value is minted once, by
+    /// `AppState::mesh_proof_stamp`, and handed in.
+    pub mesh_proof: Option<(&'a str, &'a str)>,
     /// Ephemeral grant-scoped ingest: wipe-after-pull.
     pub ephemeral: bool,
     /// How many partitions this merge must cover to be honest. `None` keeps
@@ -214,6 +224,7 @@ impl ShardManager {
         handoff_id: HandoffId,
         local_node_id: NodeId,
         peer_shard_base_urls: &[(NodeId, String)],
+        mesh_proof: Option<(&str, &str)>,
     ) -> corpus_engine::Result<Option<IndexInfo>> {
         const PARTITION_POLL_INTERVAL: Duration = Duration::from_secs(30);
         const MAX_WAIT_SECS: u64 = 3600; // 1 hour
@@ -414,6 +425,7 @@ impl ShardManager {
             local_node_id,
             participants: &participants,
             peer_shard_base_urls,
+            mesh_proof,
             ephemeral: handoff.ephemeral,
             // Legacy behaviour: merge whatever is present. Setting a
             // coverage bar is the fold-side collector's call, not this
@@ -478,6 +490,7 @@ impl ShardManager {
             local_node_id,
             participants,
             peer_shard_base_urls,
+            mesh_proof,
             ephemeral,
             expected_partitions,
         } = plan;
@@ -541,7 +554,7 @@ impl ShardManager {
                 .join(format!("{}-partition-{}", corpus_id, node_id));
 
             match self
-                .fetch_remote_shard(corpus_id, &base_url, &dest_dir, local_node_id)
+                .fetch_remote_shard(corpus_id, &base_url, &dest_dir, local_node_id, mesh_proof)
                 .await
             {
                 Ok(bytes_received) => {
@@ -572,15 +585,20 @@ impl ShardManager {
                         let evict_url = format!("{base_url}/internal/corpus/partition_evict");
                         let corpus = corpus_id.to_string();
                         let hid = handoff_id;
+                        // Owned before the spawn: the pair borrows from the
+                        // plan, which does not outlive this function.
+                        let proof = mesh_proof.map(|(n, v)| (n.to_string(), v.to_string()));
                         tokio::spawn(async move {
-                            let _ = reqwest::Client::new()
+                            let mut request = reqwest::Client::new()
                                 .post(&evict_url)
                                 .json(&serde_json::json!({
                                     "corpus_id": corpus,
                                     "handoff_id": hid,
-                                }))
-                                .send()
-                                .await;
+                                }));
+                            if let Some((name, value)) = &proof {
+                                request = request.header(name, value);
+                            }
+                            let _ = request.send().await;
                         });
                     }
                 }
@@ -732,6 +750,9 @@ impl ShardManager {
         base_url: &str,
         dest_dir: &Path,
         local_node_id: NodeId,
+        // See [`MergePlan::mesh_proof`]. `X-Node-Id` below is a LABEL for the
+        // peer's logs and proves nothing; this pair is the credential.
+        mesh_proof: Option<(&str, &str)>,
     ) -> anyhow::Result<u64> {
         // GET /internal/index/serve, NOT POST /internal/index/transfer.
         // The transfer endpoint reads the request body (upload
@@ -742,12 +763,14 @@ impl ShardManager {
         // see `routes_internal::index_serve` for the full story.
         let serve_url = format!("{base_url}/internal/index/serve");
         let client = reqwest::Client::new();
-        let resp = client
+        let mut request = client
             .get(&serve_url)
             .header("X-Corpus-Id", corpus_id)
-            .header("X-Node-Id", local_node_id.to_string())
-            .send()
-            .await?;
+            .header("X-Node-Id", local_node_id.to_string());
+        if let Some((name, value)) = mesh_proof {
+            request = request.header(name, value);
+        }
+        let resp = request.send().await?;
 
         if !resp.status().is_success() {
             anyhow::bail!("index/serve returned {} from {base_url}", resp.status());

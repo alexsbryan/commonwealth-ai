@@ -15,6 +15,8 @@ use commonwealth_state::ActivityEmitter;
 use corpus_engine::CorpusEngine;
 use sovereign_grants::{GuestGrantStore, GuestSessionBinding, GuestSessionStore};
 
+use crate::internal_gate::InternalAuth;
+
 /// Everything the node's part is constructed with (DC §4.2 "Construction is
 /// staged, and parts are total"): the values that exist before the part is
 /// built. The daemon resolves the client-token posture before the listeners
@@ -38,6 +40,11 @@ pub struct NodeSeed {
     /// two cannot disagree, because there is one registry and it is decided
     /// before either exists.
     pub guest_pages: crate::guest_door::GuestPages,
+    /// What the internal port (`:9742`) requires of a caller, resolved from
+    /// `[daemon] internal_auth` before the listeners bind. The default
+    /// ([`InternalAuth::Member`]) refuses a caller that is neither a member of
+    /// this mesh nor a local process — see `crate::internal_gate`.
+    pub internal_auth: InternalAuth,
 }
 
 impl NodeSeed {
@@ -65,15 +72,34 @@ impl NodeSeed {
             Some(raw) => GuestSessionBinding::parse(raw)?,
         };
         let guest_pages = crate::guest_door::GuestPages::from_config(&daemon)?;
+        let internal_auth = match daemon.internal_auth.as_deref() {
+            None => InternalAuth::default(),
+            Some(raw) => InternalAuth::parse(raw)?,
+        };
+        if internal_auth == InternalAuth::Perimeter {
+            // ONCE, here, and never per request: the weaker posture is
+            // disclosed at the moment it is chosen. Under it the internal port
+            // serves any caller that can route to it, which is what every
+            // build before `internal_auth` existed did.
+            tracing::warn!(
+                "node seed: [daemon] internal_auth = \"perimeter\" — the internal \
+                 mesh API serves EVERY caller that can route to it, including one \
+                 holding no mesh credential. Correct only where something else \
+                 scopes reachability (a firewall, an `internal_bind` on a private \
+                 NIC, or `require_encryption`, which binds it loopback-only)."
+            );
+        }
         tracing::debug!(
             guest_sessions = guest_sessions.as_str(),
             guest_pages = ?guest_pages,
-            "node seed: guest session binding and page registry resolved"
+            internal_auth = internal_auth.as_str(),
+            "node seed: guest session binding, page registry and internal-port posture resolved"
         );
         Ok(Self {
             client_token: client_token.map(Into::into),
             guest_sessions,
             guest_pages,
+            internal_auth,
         })
     }
 }
@@ -104,6 +130,11 @@ pub struct NodePart {
     /// touches `Mesh` — a guest is not a member and cannot become one.
     /// See `commonwealth-knowledge::guest_grant`.
     pub guest_grants: Arc<GuestGrantStore>,
+    /// What the internal port requires of a caller — the ONE reader is
+    /// `crate::internal_gate::internal_gate_layer`. A construction argument
+    /// ([`NodeSeed::internal_auth`]), not an install: the posture is decided
+    /// before the listeners bind, so no request path reads config.
+    pub internal_auth: InternalAuth,
     /// The NAMES claimed at this door — one QR serves a room, so the grant
     /// cannot say which phone is asking and the session does. A session is not
     /// a second credential: it names no scope, `GuestGrant::permits_path` on

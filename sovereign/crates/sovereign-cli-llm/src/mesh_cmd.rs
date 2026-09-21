@@ -3746,7 +3746,7 @@ async fn cmd_fetch_model(args: &[String]) -> i32 {
         // Probe the peer's listing first so we can pick the one
         // that actually advertises `name` before committing to
         // the download.
-        let listing = match sovereign_mesh::model_fetch::list_peer_files(&client, peer_url).await {
+        let listing = match sovereign_mesh::model_fetch::list_peer_files(&client, peer_url, None).await {
             Ok(l) => l,
             Err(e) => {
                 eprintln!("  ✗ {peer_url}: list failed ({e})");
@@ -3778,7 +3778,11 @@ async fn cmd_fetch_model(args: &[String]) -> i32 {
             );
         };
         match sovereign_mesh::model_fetch::fetch_model_to_dir(
-            &client, peer_url, &info, &dest_dir, progress,
+            // Unstamped: the CLI holds no `Mesh`, so it has nothing to mint
+            // a proof from. Against a peer on the default `internal_auth` this
+            // reaches only a loopback daemon; the fix is for the CLI to ask its
+            // own daemon to fetch, not to forge a credential it does not hold.
+            &client, peer_url, &info, &dest_dir, None, progress,
         )
         .await
         {

@@ -116,6 +116,14 @@ pub(super) async fn cmd_corpus_pull(args: &[String]) -> i32 {
         &corpus_id,
         &index_dir,
         expected_fingerprint.as_deref(),
+        // Unstamped: this is a person naming a peer's URL, not a member
+        // dialing one. The CLI holds no `Mesh`, so it has nothing to mint a
+        // proof from — and against a peer running the default
+        // `internal_auth = "member"` this pull is refused unless it is
+        // loopback. Reported here rather than papered over: the fix is for the
+        // CLI to ask its own daemon to pull, not for this file to forge a
+        // credential it does not hold.
+        None,
     )
     .await
     {

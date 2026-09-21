@@ -2856,6 +2856,23 @@ impl EmbeddedDaemon {
             .await
     }
 
+    /// This daemon's own outbound mesh proof — see
+    /// [`AppState::mesh_proof_stamp`](crate::state::AppState::mesh_proof_stamp).
+    ///
+    /// Delegated rather than re-derived: the rpc-warm orchestrator holds this
+    /// handle and no `AppState`, and there is exactly one minter. `None` on a
+    /// stopped daemon or a mesh with no credential, which is the same reported
+    /// absence the accessor itself gives.
+    pub async fn mesh_proof_stamp(
+        &self,
+    ) -> Option<commonwealth_transport::mesh_proof::MeshProofStamp> {
+        let state = self.state.read().await;
+        match &*state {
+            DaemonState::Running { app_state, .. } => app_state.mesh_proof_stamp().await,
+            DaemonState::Stopped => None,
+        }
+    }
+
     /// Feedback that `endpoint` carried a successful ModelTransfer call to
     /// `node` — lets the transport promote it for future dials (the same
     /// last-working cache gossip benefits from).
@@ -3170,7 +3187,8 @@ impl EmbeddedDaemon {
         // argument of the node's part (DC §4.2 "Construction is staged, and
         // parts are total") — the layer reads it off `AppState` before the
         // listener binds, and nothing installs it afterwards. The internal
-        // port (`:9742`, mTLS) is unrelated and always binds `0.0.0.0`.
+        // port (`:9742`) is unrelated, always binds `0.0.0.0`, and is not and
+        // never was mTLS: what it requires of a caller is `internal_auth`.
         let (mut client_bind, configured_token, internal_bind) = {
             let c = self.setup_config.read().await;
             (

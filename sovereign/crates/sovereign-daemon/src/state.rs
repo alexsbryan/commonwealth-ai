@@ -1152,6 +1152,7 @@ impl AppState {
                     corpus_engine,
                     started_at: std::time::Instant::now(),
                     guest_grants: Arc::new(GuestGrantStore::new()),
+                    internal_auth: node_seed.internal_auth,
                     guest_sessions: Arc::new(GuestSessionStore::new(node_seed.guest_sessions)),
                     guest_pages: Arc::new(node_seed.guest_pages),
                     // 0 sentinel = no foreground activity observed yet.

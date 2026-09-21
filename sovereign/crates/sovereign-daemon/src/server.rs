@@ -488,10 +488,10 @@ pub fn internal_router(state: AppState) -> Router {
             axum::routing::post(routes_internal::newsworthy_tick),
         )
         // Phase 6 canonical-sync: peers fetch this node's canonical
-        // index for `<corpus_id>` as a streaming tar.zst. Loopback-
-        // gated like the other internal routes; the auth path is the
-        // same one peers already use for `/internal/knowledge/search`
-        // and friends.
+        // index for `<corpus_id>` as a streaming tar.zst. There has never
+        // been a loopback gate on this router; what admits a caller is
+        // `internal_gate` — a verified member, a plain-IP holder of the mesh
+        // secret, or a local process.
         .route(
             "/internal/corpus/canonical/{corpus_id}",
             get(routes_internal::corpus_canonical_stream),
@@ -533,7 +533,8 @@ pub fn internal_router(state: AppState) -> Router {
         //
         // Contribution controls (W2). Read by the Settings panel and
         // the tray status chip; mutated by the pause/ceiling controls.
-        // Loopback-only — the same guard that protects /internal/*.
+        // Local callers, admitted by `internal_gate` as loopback — not by a
+        // loopback-only bind, which this router has never had.
         .route(
             "/internal/contribution/status",
             get(routes_internal::contribution_status),
@@ -581,8 +582,9 @@ pub fn internal_router(state: AppState) -> Router {
             post(routes_internal::peer_preference_clear),
         )
         // Local Activity ledger — the glassbox "what is my daemon
-        // doing?" surface. Local-only namespace; loopback-only like
-        // the rest of /internal/*. `summary` is the totals card;
+        // doing?" surface. Local-only namespace, admitted as loopback by
+        // `internal_gate` — nothing binds this router loopback-only.
+        // `summary` is the totals card;
         // `recent` is the unified feed. Read by Settings → Activity &
         // Sharing.
         .route(
@@ -639,6 +641,12 @@ pub fn internal_router(state: AppState) -> Router {
             REQUEST_BODY_READ_TIMEOUT,
         ))
         .layer(axum::extract::DefaultBodyLimit::max(MAX_REQUEST_BODY_BYTES))
+        // INSIDE the resolver, so it reads what the resolver attached: whether
+        // this caller may reach the port at all (`internal_gate`).
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            crate::internal_gate::internal_gate_layer,
+        ))
         // OUTERMOST: no handler reads `x-mesh-*` before this decides whether
         // the connection is this daemon's own acceptor's (`internal_principal`).
         .layer(axum::middleware::from_fn_with_state(
@@ -1074,6 +1082,12 @@ mod tests {
         let response = app
             .oneshot(
                 Request::get("/internal/latency/probe")
+                    // `internal_gate` reads a missing `ConnectInfo` as "not
+                    // loopback" and refuses; the real listener attaches one.
+                    .extension(axum::extract::ConnectInfo(SocketAddr::from((
+                        [127, 0, 0, 1],
+                        54321,
+                    ))))
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -1113,6 +1127,10 @@ mod tests {
             .oneshot(
                 Request::post("/internal/inference/warmup")
                     .header("content-type", "application/json")
+                    .extension(axum::extract::ConnectInfo(SocketAddr::from((
+                        [127, 0, 0, 1],
+                        54321,
+                    ))))
                     .body(Body::from("{}"))
                     .unwrap(),
             )

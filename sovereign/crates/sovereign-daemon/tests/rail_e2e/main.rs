@@ -92,6 +92,7 @@ fn bare_state_with_seed(
             client_token: Some(Arc::<str>::from(TOKEN)),
             guest_sessions: sessions,
             guest_pages: pages,
+            internal_auth: Default::default(),
         },
     )
 }
@@ -572,6 +573,10 @@ async fn sync_raw(
         .method("POST")
         .uri("/internal/ring/sync")
         .header(axum::http::header::CONTENT_TYPE, "application/json")
+        // `internal_gate` reads a MISSING `ConnectInfo` as "not loopback" and
+        // refuses. Both internal listeners attach one in production, so a
+        // driver without it is a shape that never occurs; say the local one.
+        .extension(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 54321))))
         .body(Body::from(serde_json::to_vec(req).unwrap()))
         .unwrap();
     let resp = sovereign_daemon::server::internal_router(responder)
@@ -723,6 +728,7 @@ async fn a_node_without_ring_storage_refuses_the_exchange() {
         .method("POST")
         .uri("/internal/ring/sync")
         .header(axum::http::header::CONTENT_TYPE, "application/json")
+        .extension(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 54321))))
         .body(Body::from(
             serde_json::to_vec(&serde_json::json!({ "namespace": NS })).unwrap(),
         ))

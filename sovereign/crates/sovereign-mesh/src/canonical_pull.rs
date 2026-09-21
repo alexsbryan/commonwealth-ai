@@ -123,6 +123,13 @@ pub async fn pull_canonical_from_peer(
     corpus_id: &str,
     index_dir: &Path,
     expected_fingerprint: Option<&str>,
+    // This node's proof that it holds the mesh secret, or `None` on a mesh
+    // with no credential (and on the CLI's `corpus pull`, which is a person
+    // naming a URL, not a member dialing a peer). Carried through rather than
+    // minted here: one function mints it, and this crate has no `AppState` to
+    // mint from. On a plain-IP hop it is the only thing that tells the peer's
+    // internal port a member is asking rather than a stranger.
+    stamp: Option<&commonwealth_transport::mesh_proof::MeshProofStamp>,
 ) -> Result<CanonicalPullReport, PullError> {
     if peer_urls.is_empty() {
         return Err(PullError::Transport(
@@ -181,7 +188,11 @@ pub async fn pull_canonical_from_peer(
             temp = %temp_path.display(),
             "canonical_pull: attempting"
         );
-        match client.get(&url).send().await {
+        let mut request = client.get(&url);
+        if let Some((name, value)) = stamp.map(|s| s.pair()) {
+            request = request.header(name, value);
+        }
+        match request.send().await {
             Ok(resp) => {
                 let status = resp.status();
                 if status.is_success() {

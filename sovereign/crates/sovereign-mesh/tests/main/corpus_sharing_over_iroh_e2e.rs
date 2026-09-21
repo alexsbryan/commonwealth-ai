@@ -427,7 +427,7 @@ async fn canonical_pull_over_iroh_from_peer_with_no_ip() {
     let tmp_b = tempfile::tempdir().unwrap();
     let dest = tmp_b.path().join("indexes");
     std::fs::create_dir_all(&dest).unwrap();
-    let report = pull_canonical_from_peer(&[base], corpus_id, &dest, Some(fingerprint.as_str()))
+    let report = pull_canonical_from_peer(&[base], corpus_id, &dest, Some(fingerprint.as_str()), None)
         .await
         .expect("canonical pull over iroh must succeed");
 

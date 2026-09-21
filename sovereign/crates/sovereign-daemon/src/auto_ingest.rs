@@ -356,6 +356,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
                     corpus_id,
                     engine.index_dir(),
                     Some(&lead.fingerprint),
+                    state.mesh_proof_stamp().await.as_ref(),
                 )
                 .await
                 {
@@ -978,9 +979,16 @@ async fn pull_loop(
             "handoff_id": handoff_id,
             "peer_id": self_id,
         });
-        let resp = match client
-            .post(format!("{coordinator_url}/internal/corpus/next_unit"))
-            .json(&next_req)
+        // Stamped: the coordinator is a PEER, so on a plain-IP hop its
+        // internal-port gate has nothing else to tell a member from a
+        // stranger. Minted per request — the loop outlives the proof window.
+        let resp = match state
+            .stamped(
+                client
+                    .post(format!("{coordinator_url}/internal/corpus/next_unit"))
+                    .json(&next_req),
+            )
+            .await
             .send()
             .await
         {
@@ -1098,6 +1106,7 @@ async fn pull_loop(
         // trigger abort if the coordinator reclaims our lease (410 Gone).
         let cancel_flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let hb_task = spawn_heartbeat(
+            state.clone(),
             client.clone(),
             coordinator_url.clone(),
             handoff_id,
@@ -1192,9 +1201,13 @@ async fn pull_loop(
             "outcome": outcome,
             "reason": reason,
         });
-        match client
-            .post(format!("{coordinator_url}/internal/corpus/complete_unit"))
-            .json(&complete_req)
+        match state
+            .stamped(
+                client
+                    .post(format!("{coordinator_url}/internal/corpus/complete_unit"))
+                    .json(&complete_req),
+            )
+            .await
             .send()
             .await
         {
@@ -1274,6 +1287,10 @@ use self::heartbeat_verdict::{heartbeat_verdict, AbortCause, HeartbeatOutcome, H
 /// A thin loop over [`heartbeat_verdict`]; on any `Abort` it sets the
 /// cancellation flag so the ingest loop stops.
 fn spawn_heartbeat(
+    // Taken whole rather than a minted stamp: a unit's ingest runs for minutes
+    // and `PROOF_WINDOW_SECS` is 30 s, so one stamp handed in here would go
+    // stale mid-unit and every later beat would be refused.
+    state: AppState,
     client: reqwest::Client,
     coordinator_url: String,
     handoff_id: HandoffId,
@@ -1298,9 +1315,13 @@ fn spawn_heartbeat(
                 "peer_id": peer_id,
                 "unit_id": unit_id,
             });
-            let outcome = match client
-                .post(format!("{coordinator_url}/internal/corpus/heartbeat"))
-                .json(&body)
+            let outcome = match state
+                .stamped(
+                    client
+                        .post(format!("{coordinator_url}/internal/corpus/heartbeat"))
+                        .json(&body),
+                )
+                .await
                 .send()
                 .await
             {

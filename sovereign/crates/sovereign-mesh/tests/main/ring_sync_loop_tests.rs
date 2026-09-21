@@ -144,7 +144,15 @@ pub async fn serve_at(router: axum::Router) -> std::net::SocketAddr {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
-        let _ = axum::serve(listener, router).await;
+        // `into_make_service_with_connect_info` exactly as `server::serve`
+        // does: `internal_gate` reads a missing `ConnectInfo` as "not
+        // loopback" and refuses, so a bare `axum::serve` here would test a
+        // listener production does not have.
+        let _ = axum::serve(
+            listener,
+            router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+        )
+        .await;
     });
     tokio::time::sleep(Duration::from_millis(20)).await;
     addr
@@ -437,6 +445,32 @@ async fn a_second_call_that_fails_still_reports_what_the_first_call_pulled() {
     );
 }
 
+/// A peer that REFUSES this ring answers 403, and that is an answer too. It
+/// had the same collapse the 413 did until `tg-2-strangers-are-refused`: the
+/// status the new internal-port gate and `roster_refusal` both use was filed
+/// under `peers_unreachable` at DEBUG, so a mesh refusing us for identity read
+/// as a partitioned one.
+#[tokio::test]
+async fn a_peer_that_answers_403_is_refused_rather_than_unreachable() {
+    let router = axum::Router::new().route(
+        "/internal/ring/sync",
+        axum::routing::post(|| async { axum::http::StatusCode::FORBIDDEN }),
+    );
+    let url = serve(router).await;
+    let dir = tempfile::tempdir().unwrap();
+    let key = SigningKey::from_bytes(&[1u8; 32]);
+    let (_state, journal, rail) = node(dir.path(), &key, 3);
+
+    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal, None).await;
+    match out.stop {
+        Some(ExchangeStop::Refused { sent_bytes, status }) => {
+            assert_eq!(status, 403);
+            assert!(sent_bytes > 0);
+        }
+        other => panic!("expected Refused, got {other:?}"),
+    }
+}
+
 /// A peer that answers nothing but 413 is REFUSED, not unreachable —
 /// the distinction the round counts on, and the one whose absence made
 /// the ceiling silent.
@@ -453,11 +487,12 @@ async fn a_peer_that_answers_413_is_refused_rather_than_unreachable() {
 
     let out = exchange(&reqwest::Client::new(), &url, &rail, &journal, None).await;
     match out.stop {
-        Some(ExchangeStop::Refused { sent_bytes }) => {
+        Some(ExchangeStop::Refused { sent_bytes, status }) => {
             assert!(
                 sent_bytes > 0,
                 "the refused size is what makes it actionable"
-            )
+            );
+            assert_eq!(status, 413, "the status is what picks the sentence");
         }
         other => panic!("expected Refused, got {other:?}"),
     }

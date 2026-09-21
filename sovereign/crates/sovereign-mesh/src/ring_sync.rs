@@ -362,16 +362,20 @@ pub async fn run_one_round(fabric: &FabricPart) -> RoundOutcome {
                         reached = true;
                         break; // one working address is enough
                     }
-                    Some(ExchangeStop::Refused { sent_bytes }) => {
+                    Some(ExchangeStop::Refused { sent_bytes, status }) => {
                         refused = true;
                         warn!(
                             peer = %contact.node_id,
                             url = %url,
                             sent_bytes,
+                            status,
                             budget_bytes = RING_SYNC_OPS_BUDGET_BYTES,
-                            "ring sync: peer refused the body as too large — it \
-                             ANSWERED, so this is not an unreachable peer: its \
-                             body limit is below this build's exchange budget"
+                            "ring sync: peer REFUSED — it answered, so this is \
+                             not an unreachable peer. 413: its body limit is \
+                             below this build's exchange budget. 403: it does \
+                             not serve this ring to us — either this node holds \
+                             no mesh credential the peer accepts, or the ring's \
+                             roster does not name us"
                         );
                     }
                     Some(ExchangeStop::Failed(detail)) => {
@@ -423,13 +427,23 @@ pub async fn run_one_round(fabric: &FabricPart) -> RoundOutcome {
 /// Why an exchange with one peer address stopped.
 #[derive(Debug)]
 pub enum ExchangeStop {
-    /// The peer **answered**, and refused our body as too large.
+    /// The peer **answered**, and refused. Two statuses arrive here and both
+    /// are answers rather than reachability: `413`, our body was too large,
+    /// and `403`, this ring is not served to us.
     ///
     /// Its own variant because the alternative is the collapse this rung
     /// exists to undo: a 413 came back as `Err("HTTP 413")`, indistinguishable
     /// from a dead socket, and the round filed a reachable peer under
-    /// `peers_unreachable` at DEBUG.
-    Refused { sent_bytes: usize },
+    /// `peers_unreachable` at DEBUG. The 403 had exactly the same shape until
+    /// `tg-2-strangers-are-refused`, and it is the status the new internal-port
+    /// gate and `roster_refusal` both answer with — so a round refused for
+    /// identity would have read as a partitioned mesh.
+    ///
+    /// `status` is carried because the two need different sentences: a 413
+    /// names a body limit below this build's budget, a 403 names a refusal to
+    /// serve. `sent_bytes` is honest for both — it is what THIS side put on
+    /// the wire, measured before the send.
+    Refused { sent_bytes: usize, status: u16 },
     /// Everything else this address could stop on: no route, a timeout, a
     /// 5xx, an answer this build could not read, or **this node's own journal
     /// refusing to read**. They are one variant because the round does the
@@ -687,8 +701,13 @@ async fn post(
         .await
         .map_err(|e| ExchangeStop::Failed(e.to_string()))?;
     let status = resp.status();
-    if status == reqwest::StatusCode::PAYLOAD_TOO_LARGE {
-        return Err(ExchangeStop::Refused { sent_bytes });
+    if status == reqwest::StatusCode::PAYLOAD_TOO_LARGE
+        || status == reqwest::StatusCode::FORBIDDEN
+    {
+        return Err(ExchangeStop::Refused {
+            sent_bytes,
+            status: status.as_u16(),
+        });
     }
     if !status.is_success() {
         return Err(ExchangeStop::Failed(format!("HTTP {status}")));

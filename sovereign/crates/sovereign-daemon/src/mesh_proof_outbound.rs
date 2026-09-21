@@ -32,4 +32,26 @@ impl AppState {
         let mesh = self.inner.fabric.mesh.read().await;
         mesh_proof_stamp(&mesh, self_id, now)
     }
+
+    /// Apply this node's proof to an outbound internal-port request, or leave
+    /// it unstamped on a mesh with no credential.
+    ///
+    /// THE one applier for a request this daemon builds itself. Minted per
+    /// request, not once per loop: `PROOF_WINDOW_SECS` is 30 s and the callers
+    /// are long-lived loops (a pull loop, a heartbeat, a warm orchestrator),
+    /// so a proof hoisted out of the loop would go stale and earn the 401 the
+    /// peer's gate is right to give.
+    ///
+    /// Builders in crates that cannot name `AppState` take the pair from
+    /// [`Self::mesh_proof_stamp`] instead — see `sovereign_grants::ShardManager`
+    /// and `sovereign_serving_host::model_fetch`.
+    pub async fn stamped(&self, request: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+        match self.mesh_proof_stamp().await {
+            Some(stamp) => {
+                let (name, value) = stamp.pair();
+                request.header(name, value)
+            }
+            None => request,
+        }
+    }
 }

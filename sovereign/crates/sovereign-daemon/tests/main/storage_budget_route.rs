@@ -41,6 +41,15 @@ async fn get_storage_budget(state: AppState) -> (StatusCode, serde_json::Value) 
     let app = internal_router(state);
     let req = Request::builder()
         .method("GET")
+        // Both internal listeners attach `ConnectInfo`
+        // (`daemon.rs`/`server.rs`), and `internal_gate` reads a MISSING one as
+        // "not loopback" and refuses — the same fail-closed reading
+        // `internal_principal` takes. A driver with no peer address is a shape
+        // production never has, so say the local one here.
+        .extension(axum::extract::ConnectInfo(std::net::SocketAddr::from((
+            [127, 0, 0, 1],
+            54321,
+        ))))
         .uri("/internal/storage/budget")
         .body(Body::empty())
         .unwrap();
@@ -59,6 +68,10 @@ async fn post_storage_budget(
     let req = Request::builder()
         .method("POST")
         .uri("/internal/storage/budget")
+        .extension(axum::extract::ConnectInfo(std::net::SocketAddr::from((
+            [127, 0, 0, 1],
+            54321,
+        ))))
         .header("content-type", "application/json")
         .body(Body::from(body.to_string()))
         .unwrap();

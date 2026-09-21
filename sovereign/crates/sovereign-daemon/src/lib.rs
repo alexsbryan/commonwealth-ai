@@ -163,6 +163,9 @@ pub mod client_auth;
 pub mod client_principal;
 pub mod client_surface;
 pub mod frontdoor;
+/// Whether a caller may reach `:9742` at all — the refusal
+/// [`internal_principal`] deliberately does not make.
+pub mod internal_gate;
 pub mod internal_principal;
 /// The test that keeps `x-node-id` out of every decider — see the module.
 pub mod mesh_principal_gate;

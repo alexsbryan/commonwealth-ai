@@ -45,12 +45,22 @@ pub enum FetchError {
 /// `GET /internal/v1/models/list` against a peer's internal port.
 /// The `peer_base` must be the form `http://<host>:9742` — the
 /// `/internal/v1/...` suffix is appended here.
+/// `mesh_proof` is this node's proof that it holds the mesh secret, as the
+/// header PAIR — `None` on a mesh with no credential, and on a caller that
+/// holds no `Mesh` at all (the CLI). Carried as a pair rather than the minting
+/// type because this crate cannot name
+/// `commonwealth_transport::mesh_proof::MeshProofStamp`, and it must never
+/// re-derive a proof: the value is minted once, by
+/// `sovereign_daemon::AppState::mesh_proof_stamp`, and handed in. Without it a
+/// peer running the default `internal_auth = "member"` answers 401 on a
+/// plain-IP hop.
 pub async fn list_peer_files(
     http: &reqwest::Client,
     peer_base: &str,
+    mesh_proof: Option<(&str, &str)>,
 ) -> Result<ModelFileListing, FetchError> {
     let url = commonwealth_core::model::models_list_url(peer_base);
-    let resp = http.get(&url).send().await?;
+    let resp = stamped(http.get(&url), mesh_proof).send().await?;
     if !resp.status().is_success() {
         return Err(FetchError::HttpStatus(resp.status()));
     }
@@ -74,6 +84,7 @@ pub async fn fetch_model_to_dir(
     peer_base: &str,
     info: &ModelFileInfo,
     dest_dir: &Path,
+    mesh_proof: Option<(&str, &str)>,
     mut progress: impl FnMut(u64, u64),
 ) -> Result<PathBuf, FetchError> {
     use futures::StreamExt;
@@ -84,7 +95,7 @@ pub async fn fetch_model_to_dir(
     let partial_path = dest_dir.join(format!(".{}.{}.partial", info.name, std::process::id()));
 
     let url = commonwealth_core::model::model_file_url(peer_base, &urlencoding::encode(&info.name));
-    let resp = http.get(&url).send().await?;
+    let resp = stamped(http.get(&url), mesh_proof).send().await?;
     if !resp.status().is_success() {
         return Err(FetchError::HttpStatus(resp.status()));
     }
@@ -133,15 +144,28 @@ pub async fn fetch_named_model_from_peer(
     peer_base: &str,
     name: &str,
     dest_dir: &Path,
+    mesh_proof: Option<(&str, &str)>,
     progress: impl FnMut(u64, u64),
 ) -> Result<PathBuf, FetchError> {
-    let listing = list_peer_files(http, peer_base).await?;
+    let listing = list_peer_files(http, peer_base, mesh_proof).await?;
     let info = listing
         .files
         .into_iter()
         .find(|f| f.name == name)
         .ok_or_else(|| FetchError::NotAdvertised(name.to_string()))?;
-    fetch_model_to_dir(http, peer_base, &info, dest_dir, progress).await
+    fetch_model_to_dir(http, peer_base, &info, dest_dir, mesh_proof, progress).await
+}
+
+/// Apply the pair to a request, or leave it alone. The ONE place this crate
+/// touches the header, so there is nowhere for a second spelling to appear.
+fn stamped(
+    request: reqwest::RequestBuilder,
+    mesh_proof: Option<(&str, &str)>,
+) -> reqwest::RequestBuilder {
+    match mesh_proof {
+        Some((name, value)) => request.header(name, value),
+        None => request,
+    }
 }
 
 #[cfg(test)]
@@ -230,7 +254,7 @@ mod tests {
         let (base, _h) = spawn_test_server(tmp.path()).await;
 
         let client = reqwest::Client::new();
-        let listing = list_peer_files(&client, &base).await.unwrap();
+        let listing = list_peer_files(&client, &base, None).await.unwrap();
         let names: Vec<_> = listing.files.iter().map(|f| f.name.as_str()).collect();
         assert!(names.contains(&"a.gguf"));
         assert!(names.contains(&"b.gguf"));
@@ -250,9 +274,9 @@ mod tests {
         let (base, _h) = spawn_test_server(src.path()).await;
 
         let client = reqwest::Client::new();
-        let listing = list_peer_files(&client, &base).await.unwrap();
+        let listing = list_peer_files(&client, &base, None).await.unwrap();
         let info = listing.files.into_iter().next().unwrap();
-        let got_path = fetch_model_to_dir(&client, &base, &info, dest.path(), |_, _| {})
+        let got_path = fetch_model_to_dir(&client, &base, &info, dest.path(), None, |_, _| {})
             .await
             .unwrap();
 
@@ -286,7 +310,7 @@ mod tests {
             sha256: "0000000000000000000000000000000000000000000000000000000000000000".into(),
         };
         let client = reqwest::Client::new();
-        let err = fetch_model_to_dir(&client, &base, &bogus, dest.path(), |_, _| {})
+        let err = fetch_model_to_dir(&client, &base, &bogus, dest.path(), None, |_, _| {})
             .await
             .unwrap_err();
         match err {
@@ -308,7 +332,7 @@ mod tests {
 
         let client = reqwest::Client::new();
         let err =
-            fetch_named_model_from_peer(&client, &base, "missing.gguf", dest.path(), |_, _| {})
+            fetch_named_model_from_peer(&client, &base, "missing.gguf", dest.path(), None, |_, _| {})
                 .await
                 .unwrap_err();
         assert!(matches!(err, FetchError::NotAdvertised(ref n) if n == "missing.gguf"));

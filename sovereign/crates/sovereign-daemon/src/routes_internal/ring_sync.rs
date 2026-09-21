@@ -40,8 +40,8 @@
 //! (ARCH §10.6), and the fold's is the one that has to be right anyway,
 //! because ops also arrive from disk.
 //!
-//! This port is reachable by any peer that can route to this host (see the
-//! module header on `routes_internal`), so "who may write to my journal" is a
+//! This port is reachable by any holder of this mesh's secret (see the module
+//! header on `routes_internal`), so "who may write to my journal" is a
 //! question the signature answers and the listener cannot.
 //!
 //! # …but "who may READ my journal" is a question only this route can answer
@@ -65,11 +65,25 @@
 //! An asker this daemon could not verify (`Principal::Unverified` — it
 //! presented an identity on a connection with no acceptor in front) is refused
 //! every namespace. An asker that presented NOTHING is `Principal::Anonymous`,
-//! and is served: on an encrypted mesh that is a local process reaching a
-//! loopback-only port, and on a plaintext one it is every peer, because a
-//! plaintext mesh has no verified key to decide on at all. **That is an open
-//! gap, not a design** — it is the same posture dependence `internal_principal`
-//! records, and it is why the encrypted posture is the one the room runs.
+//! and what happens next narrowed at `tg-2-strangers-are-refused`:
+//!
+//! * A non-loopback asker with no principal AND no mesh proof is now REFUSED
+//!   by name, here, in `roster_refusal`'s catch-all — not only by the layer in
+//!   front. The route must not depend on a layer for what this header
+//!   discloses, and the test that keeps it honest restores the old catch-all
+//!   as a plant.
+//! * A MARKED asker — a holder of this mesh's secret on a plain-IP hop — is
+//!   SERVED, roster or no roster, exactly as `Anonymous` was served before.
+//!   That is the half still open: a plaintext mesh has no verified key, so the
+//!   roster cannot be checked against the asker at all, and refusing instead
+//!   would stop every file-rostered ring (the work plane among them) from
+//!   replicating on every deployed plaintext mesh. **Still an open gap, not a
+//!   design.** Narrowing it from "every peer that can route here" to "every
+//!   holder of the mesh secret" is what this route can do on its own; closing
+//!   it is the encrypted posture, where the QUIC handshake proves a key and
+//!   the `Principal::Member` arm above does the work. Whether to refuse a
+//!   marked asker a file-rostered ring is the operator's call, not this
+//!   route's.
 //!
 //! The one thing a signature cannot answer is "may this namespace exist on my
 //! machine at all", and that is not asked here either: a peer may put a
@@ -107,18 +121,24 @@ fn err(status: StatusCode, msg: impl Into<String>) -> Response {
 ///   this daemon could not tie to its own acceptor, and a ring cannot check a
 ///   roster against a claim (ARCH principle 6: that is not "answered: no", it
 ///   is "did not answer", and a journal is not handed over on a shrug);
-/// - anything else claimed nothing. See the module header: on the encrypted
-///   posture that is a local process on a loopback-only port, and on a
-///   plaintext mesh it is every peer, which is a disclosed gap.
+/// - anything else claimed nothing, and is served only if
+///   [`crate::internal_gate::admitted_without_a_principal`] says so — it holds
+///   this mesh's secret, or it is on this machine. A marked holder is served
+///   without a roster check, which is the half still open; see the module
+///   header.
 ///
 /// An unreadable roster refuses. Under-share, never over-share — the same
 /// posture `ring_sync`'s prune takes when it cannot read one.
 async fn roster_refusal(
     state: &AppState,
     attached: &Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
+    proved: bool,
+    peer: Option<std::net::SocketAddr>,
     rail: &commonwealth_rail::RingRail,
     journal: &commonwealth_rail::RingJournal,
 ) -> Option<String> {
+    use crate::internal_gate::admitted_without_a_principal;
+
     use sovereign_serving_host::admission::Principal;
 
     let namespace = journal.namespace();
@@ -149,10 +169,33 @@ async fn roster_refusal(
             ));
         }
         _ => {
+            // A caller that presented nothing. `internal_gate` has already
+            // refused this request unless it is local or carries
+            // `ProvedMeshMember`, so the arm is reached by a member of the
+            // group or by a local process — but the route must not depend on
+            // a LAYER for what this header discloses (ARCH principle 5: a
+            // route whose own module says "served to its roster" and whose
+            // own code says "served to anyone" is a guard nobody has watched
+            // fail). So the same two facts are read here, by name.
+            if !admitted_without_a_principal(proved, peer) {
+                tracing::warn!(
+                    namespace,
+                    peer = ?peer,
+                    "ring sync: refused — the asker presented no mesh identity, \
+                     is not on this machine, and carries no proof that it holds \
+                     this mesh's secret"
+                );
+                return Some(format!(
+                    "{namespace} is served to holders of this mesh's secret, and \
+                     this caller proved nothing"
+                ));
+            }
             tracing::debug!(
                 namespace,
-                "ring sync: the asker presented no mesh identity — served, and \
-                 checked against no roster"
+                proved,
+                "ring sync: the asker presented no mesh identity but is a holder \
+                 of this mesh's secret or a local process — served, and checked \
+                 against no roster"
             );
             return None;
         }
@@ -194,6 +237,13 @@ async fn roster_refusal(
 pub async fn ring_sync(
     State(state): State<AppState>,
     attached: Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
+    // Read for the SAME reason `attached` is: the refusal below names both
+    // halves of what admits a caller with no principal, rather than trusting
+    // the layer in front to have named them. Both are `Option` because the
+    // handler is driven directly by tests and by `internal_router`'s own
+    // listener, and an absent one is the closed reading.
+    proved: Option<axum::Extension<crate::internal_principal::ProvedMeshMember>>,
+    peer: Option<axum::Extension<axum::extract::ConnectInfo<std::net::SocketAddr>>>,
     body: axum::body::Bytes,
 ) -> Response {
     // Read before anything can fail, so a 400 still carries the size.
@@ -221,7 +271,16 @@ pub async fn ring_sync(
     // Before anything is ingested or selected: a refusal that ran after the
     // ingest would have taken the asker's ops onto this disk on its way to
     // saying no.
-    if let Some(refusal) = roster_refusal(&state, &attached, &rail, &journal).await {
+    if let Some(refusal) = roster_refusal(
+        &state,
+        &attached,
+        proved.is_some(),
+        peer.map(|axum::Extension(c)| c.0),
+        &rail,
+        &journal,
+    )
+    .await
+    {
         return err(StatusCode::FORBIDDEN, refusal);
     }
 
