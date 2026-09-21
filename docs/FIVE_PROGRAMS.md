@@ -361,3 +361,233 @@ is cut and restored when `cargo-xwin check` goes red. Unreached means not
 exercised, not unnecessary; step 7's reached-caller rule and step 3's failure
 journeys are the only protection, and they are named so nobody believes the
 cut proved more than it did.
+
+## 11. The burn-down, as a checklist
+
+Written 2026-09-21 at `boundary-gate` **121** (from 232 at declaration, 199 at the
+start of that day's session). Every number here was measured on the tree at
+`f92667f5e`, not estimated. `boundary-gate 0` is necessary and **not**
+sufficient — the three finish conditions are at the bottom.
+
+**Read the remaining lines by TARGET, not by source.** Per-source the list says
+`sovereign-daemon` 32, which reads like 32 problems; 18 of those are one
+problem. By target, the 119 dependency edges are:
+
+| Target family | Edges | Reached by |
+|---|---|---|
+| `corpus-engine` 13 + `-scip` 8 + `-notes` 8 + `-watchers` 3 | 32 | daemon 8, cli-llm 8, mesh 5, cli-daemon 5, tools 4, cli 4, core 3, … |
+| cmnwlth (serving cluster + `commonwealth-*`) | 40 | daemon 18, cli-llm 11, cli-daemon 4, cli-dev 3, cli 2 |
+| ingest orchestration (`enrichment-*`, gliner, recipe, pipeline) | 16 | spread |
+| svrn crates, reached from outside | 16 | mesh's test harness, cli-dev, gliner |
+| `code` + unassigned (`work-atlas`, `atos`) | 11 | daemon, cli-dev, cli-llm |
+| bench (`authoring-harness`, `eval`, `tdd`) | 4 | daemon, cli-llm |
+
+Plus two filesystem rules: `corpus-engine/build.rs` and
+`sovereign-core/src/router_calibration.rs:1253`.
+
+### The measurement that reprices half of it
+
+`corpus-index` is **already a declared `[[package_leaf]]`**, and `corpus-engine`
+shims eight modules into it: `error`, `corpus`, `stream_axes`, `filters`,
+`types`, `index::*`, `chunkers::CommittedChunk`, and two `recipe` items.
+`ScoredChunk`, `CorpusKind`, `IndexInfo`, `CorpusIndex`, `Corpus`, `Evidence`,
+`EmbedFn` and `DEFAULT_EMBED_DIM` all live in the leaf. `sovereign-core` names
+`corpus_engine::` 290 times and **195 of those resolve into the leaf**
+(`ScoredChunk` 111, `index` 41, `CorpusKind` 17, `IndexInfo` 15, `Result` 11).
+Two thirds of the turn path's apparent coupling to the ingest engine is a
+spelling. Engine-owned and therefore real: `CorpusEngine`, `enrichment::*`,
+`CorpusSpec`, `IngestResult`, `SovereignConfig`, `InferenceFn`, `ChatPrompt`,
+`progress`, `update`, `snapshot`, the canonical-merge functions.
+
+### Phase 1 — the corpus-index sweep (mechanical, 3 cutters, no decisions)
+
+Do this FIRST, not for the edge count but because phases 3 and 6 cannot be
+priced until it has run.
+
+- [ ] Rewrite every `corpus_engine::<re-exported module>` path to `corpus_index::`
+      across all consumers; drop the `corpus-engine` dep wherever the residue empties.
+- [ ] Closes outright: `sovereign-cli` (4 refs), `sovereign-cli-shared` (7),
+      `sovereign-code` (7, dev), `sovereign-cli-daemon` (7) — all mostly
+      `Error`/`EmbedFn`/`DEFAULT_EMBED_DIM`.
+- [ ] Report the per-crate residue for the five deep consumers: core 290,
+      tools 339, cli-llm 396, daemon 135, mesh 85.
+
+### Phase 2 — the recipes tree (mechanical, 1 cutter, 1 pass)
+
+- [ ] `sovereign-recipes/` → `corpus-engine/recipes/`: **106 files, 1.7 MB,
+      54 recipes, 145 files outside the tree citing the path.**
+- [ ] Delete `corpus-engine/build.rs`; `include_str!` directly instead of via `OUT_DIR`.
+- [ ] Closes the last rule-3a violation in the workspace.
+
+### Phase 3 — the atlas read surface (the long pole; a campaign)
+
+After phase 1 the residue across three packages is ONE module:
+`corpus_engine::enrichment`, **~490 references** — tools 171, cli-llm 214,
+core 39, corpus-mcp 16, meshapp 10.
+
+- [ ] §2 already states the answer ("the atlas is written here and read there,
+      through the index"), so the shape is an atlas READER in a leaf, the way
+      `corpus-index` is the reader for the index.
+- [ ] Decide: a new thin reader leaf, or widen `understanding-vocab`
+      (already a leaf) / lift from `understanding-atlas` (an ingest member).
+
+### Phase 4 — step 10, the de-embed (40 edges, the biggest single win)
+
+- [ ] Fourteen `EmbeddedDaemon` construction sites become one dial.
+      **Unblocked 2026-09-21:** `sovereign-turn-client` became a
+      `[[package_leaf]]`, so the dial is now nameable from every package —
+      before that, step 10 had nowhere to dial from.
+- [ ] Sources: daemon 18, cli-llm 11, cli-daemon 4, cli-dev 3, cli 2.
+- [ ] Done when `grep -rn EmbeddedDaemon sovereign/crates --include=*.rs`
+      returns only the `cmnwlth` binary's own main.
+
+### Phase 5 — the cli-llm split (23 edges; phase 4 unblocks it)
+
+- [ ] 60.6k lines of bench, 44.7k of ingest, 18.8k of svrn in one crate.
+- [ ] The blocker was always `chat_cmd/bootstrap.rs`'s `build_session`, which
+      §2 says should be a dialled URL — after phase 4 it IS a dial, so the
+      split stops needing a new mechanism and becomes `git mv` waves.
+
+### Phase 6 — the ports (independent of each other; 3 cutters in parallel)
+
+- [ ] NoteStore, 8 edges. `sovereign_contracts::recipe::notes::RecipeNotes` is
+      the partial port that already exists. The blocker is the three
+      `NoteStore::open` sites in `sovereign-tools`: construction moves up to
+      whichever bootstrap already knows the data root.
+- [ ] SCIP, 8 edges. Two cheap pieces first: `sovereign_cli_shared::scip`
+      (109 lines) has **exactly one consumer workspace-wide** —
+      `sovereign-cli-dev/src/project_cmd/mod.rs:410`, in the package that owns
+      `corpus-engine-scip` — so moving the file there is free; and after that
+      the entire remaining reason for `sovereign-cli-shared → corpus-engine-scip`
+      is ONE call, `observation.rs:160 scip_export::all_exporters()`, a static
+      `&'static [ScipExporterConfig]` table — data, not program (§9).
+      Also: `sovereign-cli-{daemon,llm,mesh}` all enable `features = ["scip"]`
+      and none of them uses the module.
+- [ ] Watchers, 3 edges. Note deleting the two `pub use` shims in
+      `sovereign-mesh/src/lib.rs` is **−1/+2** (13 consumers, and mesh's own
+      test keeps the dev-dep) — it needs the reindexer's real owner, not a shim cut.
+- [ ] Enrichment catalog + build, 10 edges. `DaemonInferenceClient`
+      (32 consumer files) is THE dial and belongs in a leaf; blocked on four
+      corpus-engine types it names: `ChatPrompt`, `error::{Error,Result}`,
+      `EmbedFn`, `InferenceFn`.
+- [ ] `sovereign-cli-shared` splits cleanly and the thin half is leaf-shaped:
+      18 modules / ~3.3k lines / **zero escapes**, budget = `sovereign-contracts`
+      + `sovereign-time` + `kernel-types`, all already leaves
+      (`args cli_contract cli_contract_report deprecation dirs dispatcher
+      flag_surface guest_link help host_load lane_verdict models project_toml
+      prompts repo tracing_init urls mcp_client`). Promoting it would also close
+      `[code] sovereign-cli-dev → sovereign-cli-shared`. Fat half, 4 modules /
+      ~2.4k lines, spans three packages and belongs to none: `code_index` +
+      `code_index_incremental`, `scip`, `observation`, `rail`.
+
+### Phase 7 — decisions, not cuts
+
+- [x] **`atos` is CUT COMPLETELY** (operator, 2026-09-21). Footprint:
+      `sovereign-atos` 6,467 lines + `corpus-engine-atos` 2,850 +
+      `sovereign-cli-dev/src/atos_cmd/` 8,256 = **17,573 lines**, plus the
+      daemon's ATOS middleware chain (`middleware/`, `routes_inference.rs`,
+      `routes_responses.rs`, `frontdoor.rs`, `state.rs`, `tool_registry.rs`),
+      `sovereign-tools`'s `mcp_surface`/`lib`/`knowledge_view::strategic`
+      surfaces, and `serving-policy`'s `default_pipelines.toml` pipeline aliases.
+      Closes ~6 red lines: `cli-dev → {sovereign-atos, corpus-engine-atos,
+      commonwealth-state}`, `daemon → {sovereign-atos, corpus-engine-atos}`,
+      `cli-llm → corpus-engine-atos`.
+      **Also DELETE the `[[package_leaf]] corpus-engine-atos` row in
+      `quality/ARCH_LAYERS.toml`** — it was admitted 2026-09-21 and is the
+      weakest of the four promotions from that day (a store, not vocabulary;
+      it survived only because no program claimed ATOS).
+- [ ] **`sovereign-work-atlas`** — what it is, since the question came up:
+      2,344 lines, "coordination layer for agents sharing a mesh repo". Sessions
+      + Claims over a `sovereign_contracts::peer::ReplicatedKv`, a TTL GC task
+      the daemon spawns, and the three MCP tools `declare_scope` /
+      `release_scope` / `work_in_flight` that `AGENTS.md` makes a pre-flight
+      ("is anyone else on the mesh touching this?"). Phase 1 of a v0.1 spec —
+      Observations are not implemented. Consumers: `sovereign-cli-dev` 4 files,
+      `sovereign-daemon` 3, `sovereign-code` 1.
+      **It is agent-facing, which makes it `code`'s** by the same argument that
+      puts `symbols`/`callers` there. Blocked on its own deps: `sovereign-core`
+      (svrn — may be re-export-only after phase 1) and `commonwealth-state`
+      (dev, cmnwlth). Decide after phase 1 re-measures it. The live alternative
+      is that nothing on this mesh has more than one agent at a time and the
+      crate is inventory, in which case it joins atos.
+- [ ] **`corpus-mcp`'s membership.** §2's table puts it in svrn; its 32
+      `corpus-engine` sites are `corpus ingest` + atlas reads, which are
+      ingest's work. Its own manifest defends the `sovereign-enrichment-build`
+      edge: "without it a person needs our daemon to build a corpus, and the
+      binary's whole claim is that they do not."
+- [ ] **`bench`'s leaf budget.** The one `[[forbid]]` row §9 admits it cannot
+      express — `bench -> *` except `oicp-types` and `sovereign-contracts` —
+      needs a per-package leaf budget in `quality/arch-layers/src/packages.rs`,
+      not a hand-copied membership list.
+- [ ] **`sovereign-cli → commonwealth-{work,rail}`, priced and refused twice.**
+      `oicp-types` cannot serve `quality_check_cmd/distribute.rs` (1,502 lines):
+      it needs 15 names that are cmnwlth's work MODEL, fold and refusal decider
+      (`Submission`, `WorkAct`, `ProcessPayload`, `may_take`, `WORK_NAMESPACE`,
+      `RailAct`, …), and pushing those into a leaf widens every package — a
+      bigger violation than the one it closes. Moving the verb to
+      `sovereign-cli-dev` buys two new red lines for two; to `sovereign-cli-llm`
+      forks the 3,885-line verdict roll-up. **Recommended: the wire boundary.**
+      `sovereign-daemon` is already red on both, is already the work donor
+      (`src/work_donor.rs`), already mounts `/v1/rail/{log,append,live}`, and
+      `sovereign-cli` already dials loopback elsewhere to avoid a link. A
+      submitter route plus `daemon_wire` types closes BOTH lines at zero new ones.
+- [ ] **`sovereign-cli → sovereign-cli-dev`: keep the link.** Measured on the
+      Halo: `sovereign-cli-dev` 576 MB, `sovereign-cli` 507 MB. Exec'ing instead
+      closes the line and re-acquires exactly the failure `AGENTS.md` names —
+      a rebuild of the dispatcher alone silently execs a stale sibling — on
+      `code converge noun`, which `AGENTS.md` makes a MANDATORY pre-flight
+      before minting any type. `sibling::warn_if_stale` softens it, it does not
+      fix it. One red line is cheaper than a stale mandatory gate; grandfather
+      it if the count matters.
+
+### Phase 8 — singletons
+
+- [ ] `sovereign-core/src/router_calibration.rs:1253` embeds
+      `bench/routing/calibration/axes_v1.toml`. Moving the bank breaks
+      `router fit`'s `DEFAULT_BANK_DIR` `read_dir` plus two committed baselines
+      and a python fitter; moving the check to `xtask` means a second
+      `parse_bank` (§8). Third option: relocate the whole routing-calibration
+      corpus into `sovereign-core/data/calibration/` and repoint
+      `DEFAULT_BANK_DIR` — `baseline_dir_for_bank` keeps yielding
+      `calibration-fit/` if the directory keeps the name `calibration`.
+- [ ] `sovereign-code → corpus-engine` (dev) is `tests/e2e_code_intel.rs`
+      building a real `CorpusEngine` and ingesting a recipe. Faking it makes the
+      e2e vacuous, and §18.1 says that is worse than the red line. It needs a
+      package decision, not a cut.
+- [ ] Two `ScoredChunk` structs: `sovereign-contracts::types`
+      (`{chunk: DocumentChunk, score}`, deliberately not serializable) and
+      `corpus-index::types` (flattened, serializable). Possibly a deliberate
+      wire/in-process split; name it either way (§8).
+- [ ] `sovereign-cli → corpus-engine` via `project_init` is NOT a fork of
+      `cli_shared::code_index::rebuild_code_corpus`: init deliberately does
+      FTS-only with a zero-vector `EmbedFn` so a `curl | sh` install can index
+      its own repo with no daemon. Collapsing them needs a daemon at init (a
+      regression) or a zero-vector fallback in `code_index` (§18.3 substitution).
+      Closing condition: route init's index step through the daemon, as
+      `project register` already does.
+
+### Dependency order
+
+Phase 1 before everything — it reprices 3 and 6. Phase 4 before 5. Phases 2, 6,
+7 and 8 are independent. Phase 3 is the long pole and should not start until
+phase 1 has re-measured it.
+
+### The risk this checklist has to hold
+
+The shared-leaf set went from **10 at declaration to 15 on 2026-09-21**
+(`sovereign-turn-client`, `sovereign-workflow`, `corpus-engine-atos` — that last
+one now deleted with atos — plus two already in flight). Leaves are 21% of the
+governed set, and every promotion widens all five packages at once. **A path to
+zero that promotes another twenty leaves reaches a number that means nothing.**
+The test, applied on the day and to be applied again: a leaf is shared
+VOCABULARY or a thin reader with a one-or-two-crate in-repo budget, never a
+store a program owns on disk. That is why `corpus-engine-notes` was NOT
+promoted even though one row would have closed eight edges.
+
+### Done is three conditions, not one
+
+- [ ] `cd corpus-engine && cargo xtask boundary-gate` exits 0.
+- [ ] `grep -rn EmbeddedDaemon sovereign/crates --include=*.rs` returns only the
+      `cmnwlth` binary's own main (step 10).
+- [ ] `bench`'s per-package leaf budget exists and the row is expressed
+      (phase 7), so the evaluator cannot link the thing it measures.
