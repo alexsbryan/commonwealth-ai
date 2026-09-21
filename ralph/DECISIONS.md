@@ -301,6 +301,10 @@ exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 - Needed: the row's work landed (`7ca09f8c9`: a wire fixture, three tests, the writer/reader report; nothing deleted) and it stopped on a PLANT that cannot go red and an api-gate that was red before it ran. The worker dropped `#[serde(default)]` from `estimated_load_time_sec` and the suite stayed 197/0 with the crate rebuilt: serde reads a missing `Option` field as `None` with or without the attribute. The plant that does bite — dropping `skip_serializing_if` — turns `model_status_with_no_estimates_serialises_two_keys_and_no_nulls` red (196/1, output in the package). api-gate reads +2374/-25, +50/-10 and +10978/-623 items on three crates against snapshots dated nightly-2026-07-01, byte-identical with the row's change stashed.
 - Chose: the PLANT clause is rewritten to the one that bites, in the row, saying what it said before. api-gate leaves this row's check list; no baseline touched. The row is marked `[x] 7ca09f8c9` and the loop goes on to `REVIEW-DEMO-mp-run`, which is the ROOM regression over the rr-2 and rg-* bars and stamps nothing on any mp-* bar. TO THE OPERATOR, undecided: (1) bar `mp-dead-wire-is-gone` has a false `derives_from` on all three fields — retire it, or restate it on the one slot two measurements agree is dead, the selector's `benchmark` (`sovereign-inference/src/selector.rs:49`, constructed `None` at :64 and :87, no writer, read into `score_with_adjustments` at :268, doc at :41-48 claims a startup probe that does not exist); no datum exists; (2) the api-gate re-pin and who owns it; (3) A61 is still open — if it is approved after this demo, the room regression runs once more.
 - Because: a check with no failing input is not a check (ARCH 5), and the worker proved that about its own row rather than pasting a green. A gate that was red before a row started is not that row's evidence either way.
+**A63 · 2026-09-21 · mesh-principal closes; one owner line corrected · director (seat)** — this commit
+- Needed: every row of `ralph/next/mesh-verified-principal/STATE.md` is `[x]`; the supervisor wrote `ralph/DONE` and exited. The audit (`615cec34f`) raised no package: TESTALL 13569 pass / 1 fail (the absent gitignored doc, third campaign to report it; one 10 s load flake passed alone three times and in the second run), PREPUSH red on arch-gate only, of which the audit measures this campaign's share at nine lines in `server.rs`. It fixed three gate defects the product rows' checks could not see, struck THREAT_MODEL entry 7 citing `0f190bc47`, NARROWED entry 6 to the client plane in A61's terms, and added entries 8 and 9. It marked entry 8 `unowned`.
+- Chose: entry 8 (an asker with no verified key is served every ring on a plaintext mesh) is owned by campaign `threat-gaps`, bar `tg-stranger-refused-9742`: the product decision the entry says is missing was taken at A58 (member-only default on `:9742`, mesh proof for a plain-IP member, a `perimeter` knob), and clause (c) of that bar is that a member's ring sync completes in the run that refuses the stranger. The five `threat-gaps` owner lines now say it is next in the queue. Entry 6 stays `unowned`: A61 is the operator's and is not approved.
+- Because: the worker could not see the gitignored order, so it could not know the decision existed; an entry that says a decision is missing when the ledger holds it is the false kind of `unowned`. Predictions, unsoftened, from the audit: `sovereign-daemon` +1068/-217 against under ~200; `oicp-types` +150 where a deletion was predicted (the bar's premise was false, A62); `sovereign-serving-host` and `oicp-client` were never predicted (the inventory's nine-not-four); rail crates 0 as predicted.
 
 **A44 · 2026-09-19 · rr-2-gossip-claim-one-decider · director (supervisor resolution, attempt 1)** — commit: this one
 - Needed: A43 wrote the row on the premise that a SECOND site builds the claim gossip sends. The worker measured the send path and found one, stopped at the premise check without improvising a target, and asked whether to rewrite or strike the row.
@@ -7689,5 +7693,14 @@ Not run: no two-daemon test types C on an inference turn today, so "moves for C"
 <details>
 
 Not re-run by the seat: api-gate needs the nightly toolchain and minutes of cargo; the claim rests on the worker's pasted counts and the snapshot date in the gate's own banner. The package is archived at `target/ralph/mp4-NEEDS_HUMAN.md`.
+
+</details>
+
+
+## A63 · 2026-09-21 — mesh-principal's machine rows are done
+
+<details>
+
+Open with the operator from this campaign: A61 (client plane), bar `mp-dead-wire-is-gone` (false premise), the api-gate re-pin, `X-Mesh-Acceptor` as a new header (the audit reports it as a judgment call: a per-process mark, not an identity), and `Principal::Unverified` as a new arm on a published type. Demo evidence: room 11/11 cold, rr-1 at its standing baseline, offline convergence 16 s with the roster filter in the round.
 
 </details>

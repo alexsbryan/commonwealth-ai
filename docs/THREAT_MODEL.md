@@ -200,7 +200,7 @@ it.
    published research — see `commonwealth/ARCHITECTURE.md` §9.)
    *Closes when:* the RPC stream rides an authenticated, encrypted transport
    (the iroh path the rest of the mesh uses) or the port refuses a peer it
-   cannot verify. *Owner:* campaign `threat-gaps` (order `threat-gaps-close`), approved 2026-09-20, queued behind `mesh-principal`. Measured for that order: the member-only encrypted
+   cannot verify. *Owner:* campaign `threat-gaps` (order `threat-gaps-close`), approved 2026-09-20, next in the queue (`mesh-principal` finished 2026-09-21). Measured for that order: the member-only encrypted
    tunnel for this traffic already exists and is in use; what is open is the
    `0.0.0.0` default bind.
 2. **The internal API `:9742` has no blanket auth, in either mode.** Join
@@ -222,24 +222,24 @@ it.
    neither was true. Until closed: keep `:9742` off any network you do not
    control. *Closes when:* a non-member reaches only the join route, over
    iroh and over plain IP, and everything else requires a verified member.
-   *Owner:* campaign `threat-gaps` (order `threat-gaps-close`), approved 2026-09-20, queued behind `mesh-principal`.
+   *Owner:* campaign `threat-gaps` (order `threat-gaps-close`), approved 2026-09-20, next in the queue (`mesh-principal` finished 2026-09-21).
 3. **One shared client token, not per-user tenancy, on `:9741`.** Every
    remote holder of the client token has the same authority.
    (`sovereign-server` on `:8080` does have per-key tenants; guest grants are
    per-bearer, scoped and expiring.) *Closes when:* a remote client holds a
    credential of its own that can be revoked without rotating everyone's.
-   *Owner:* campaign `threat-gaps` (order `threat-gaps-close`), approved 2026-09-20, queued behind `mesh-principal`.
+   *Owner:* campaign `threat-gaps` (order `threat-gaps-close`), approved 2026-09-20, next in the queue (`mesh-principal` finished 2026-09-21).
 4. **The standalone `commonwealth` binary hardcodes `0.0.0.0:9741`**
    (bearer-gated, loopback-exempt) rather than following the embedded
    daemon's loopback-first default. *Closes when:* it binds loopback unless
-   configured otherwise, as the embedded daemon does. *Owner:* campaign `threat-gaps` (order `threat-gaps-close`), approved 2026-09-20, queued behind `mesh-principal`.
+   configured otherwise, as the embedded daemon does. *Owner:* campaign `threat-gaps` (order `threat-gaps-close`), approved 2026-09-20, next in the queue (`mesh-principal` finished 2026-09-21).
    Measured for that order: the binary was deleted on 2026-08-26, so this
    entry is expected to be struck, not built.
 5. **Tauri v2 does not gate app commands per-window** (tauri#9227): a
    webview with IPC access can invoke any registered command. Relevant only
    if untrusted content ever gets a webview. *Closes when:* upstream lands
    per-window gating, or the desktop gains its own per-window command
-   allowlist. *Owner:* campaign `threat-gaps` (order `threat-gaps-close`), approved 2026-09-20, queued behind `mesh-principal`. Measured for that order: the
+   allowlist. *Owner:* campaign `threat-gaps` (order `threat-gaps-close`), approved 2026-09-20, next in the queue (`mesh-principal` finished 2026-09-21). Measured for that order: the
    desktop ships no app-command manifest, so a mesh-app window can invoke
    every host command, not only the bridge's.
 6. **A mesh member can act as any other member on the CLIENT plane** —
@@ -284,7 +284,13 @@ it.
    module header. *Closes when:* a plaintext mesh either carries a per-caller
    identity on the internal port or the roster filter refuses an unkeyed
    asker there too — which is a product decision, because it breaks a
-   deployed plaintext mesh. *Owner:* unowned.
+   deployed plaintext mesh. *Owner:* campaign `threat-gaps`, bar
+   `tg-stranger-refused-9742`. The product decision was taken 2026-09-20
+   (ledger A58): `:9742` defaults to member-only, a plain-IP member proves
+   membership with the mesh proof gossip already carries, so a plaintext mesh
+   keeps working, and `internal_auth = "perimeter"` restores today's
+   behaviour. Its clause (c) is that a member's ring sync completes unchanged
+   in the same run that refuses the stranger.
 9. **The internal API's other 54 routes still answer an unverified caller.**
    `internal_principal_layer` resolves a principal for every request on
    `:9742`, but `/internal/ring/sync` is the only route that refuses on it.
