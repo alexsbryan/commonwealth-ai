@@ -951,6 +951,18 @@ name = "sovereign-workflow"
 allow = ["sovereign-contracts", "workspace-hack"]
 
 [[package_leaf]]
+name = "corpus-engine-scip"
+# SCIP call-graph store + language-agnostic exporter dispatch. Admitted
+# 2026-09-21: zero in-repo deps (workspace-hack alone), no build.rs, no path
+# escaping the crate root. It reads AND writes the SCIP index, but owns no data
+# directory — every path is caller-supplied — and its carve-out rationale is
+# corpus-index's exactly ("so consumers don't drag the rest of corpus-engine"),
+# and corpus-index is a leaf. It is a format/port library, not a program's
+# lifecycle or unique machinery. Reverse this row if the exporter dispatch
+# (tool_path::resolve, which::which) is read as policy rather than format.
+allow = ["sovereign-contracts", "workspace-hack"]
+
+[[package_leaf]]
 name = "corpus-engine-yield"
 # Backpressure + wall-clock utilities. Zero internal deps; 12 import sites in
 # corpus-engine and 86 use sites across engine, enrichment, meta-atlas,
@@ -1219,7 +1231,6 @@ doc = "docs/FIVE_PROGRAMS.md"
 crates = [
     "sovereign-code",
     "sovereign-cli-dev",
-    "corpus-engine-scip",
     "corpus-engine-notes",
     "corpus-engine-watchers",
     "corpus-engine-archaeology",
